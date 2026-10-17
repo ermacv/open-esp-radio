@@ -854,7 +854,7 @@ pub enum PhyTxCapSearchAction {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
     ToneSar(PhyToneSarAction),
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -867,7 +867,7 @@ pub enum PhyTxCapSearchCompletion {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
     ToneSar(PhyToneSarCompletion),
 }
 
@@ -880,9 +880,9 @@ pub enum PhyTxCapSearchTransitionError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TxCapSearchStep {
     ConfigureTone,
-    WriteCandidate(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    WriteCandidate(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     Measure(PhyToneSarTransition),
-    WriteBest(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    WriteBest(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     StopTone,
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -925,7 +925,7 @@ impl PhyTxCapSearchTransition {
     const fn write(
         self,
         value: u8,
-    ) -> oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress> {
+    ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress> {
         crate::analog::i2c::field_write(tx_cap_field(self.bank), value)
     }
 
@@ -977,7 +977,7 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_radio_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     TxCapSearchStep::Measure(
                         PhyToneSarTransition::new(PhyToneSarRequest {
                             measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
@@ -1026,7 +1026,7 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                if transition.action() == oer_radio_analog::Action::Complete(()) {
+                if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     if self.bank == 0 {
                         self.bank = 1;
                         self.candidate = tx_cap_max(1);
@@ -1089,7 +1089,7 @@ pub enum PhyTxCapFailure {
 pub enum PhyTxCapAction {
     Environment(PhyTxCalibrationEnvironmentAction),
     Rfpll(RfpllFrequencyAction),
-    I2c(oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
     Attenuation(PhyPowerAttenuationAction),
     Search(PhyTxCapSearchAction),
     Complete(PhyTxCapOutcome),
@@ -1100,7 +1100,7 @@ pub enum PhyTxCapAction {
 pub enum PhyTxCapCompletion {
     Environment(PhyTxCalibrationEnvironmentCompletion),
     Rfpll(RfpllFrequencyCompletion),
-    I2c(oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
     Attenuation(PhyPowerAttenuationCompletion),
     Search(PhyTxCapSearchCompletion),
 }
@@ -1121,8 +1121,8 @@ enum TxCapTerminal {
 enum TxCapStep {
     Enter(PhyTxCalibrationEnvironmentTransition),
     Rfpll(RfpllFrequencyTransition),
-    SetLow(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
-    SetHigh(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SetLow(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SetHigh(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     Attenuation(PhyPowerAttenuationTransition),
     Search(PhyTxCapSearchTransition),
     Exit {
@@ -1233,7 +1233,7 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_radio_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     TxCapStep::SetHigh(crate::analog::i2c::field_write(
                         analog_registers::TX_CAPACITOR_HIGH,
                         13,
@@ -1246,7 +1246,7 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                if transition.action() == oer_radio_analog::Action::Complete(()) {
+                if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     self.step = if self.channel == 0 {
                         TxCapStep::Attenuation(PhyPowerAttenuationTransition::new(
                             PhyPowerAttenuationRequest {

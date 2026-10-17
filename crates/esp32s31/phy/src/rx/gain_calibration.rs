@@ -889,7 +889,7 @@ pub enum PhyRxGainDcAction {
         selector: u8,
         path: u8,
     },
-    I2c(oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
     Calibration(PhyRxDcCalibrationAction),
     ConfigurePbusWorkMode,
     DelayMicros {
@@ -926,7 +926,7 @@ pub enum PhyRxGainDcCompletion {
         path: u8,
         value: u32,
     },
-    I2c(oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
     Calibration(PhyRxDcCalibrationCompletion),
     PbusWorkModeConfigured {
         settle_required: bool,
@@ -971,7 +971,7 @@ enum DcStep {
     SharedForcePbus {
         value: u16,
     },
-    SharedI2c(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SharedI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     FineCode {
         index: u8,
     },
@@ -1011,7 +1011,7 @@ enum DcStep {
         index: u8,
         transition: PhyRxDcCalibrationTransition,
     },
-    SharedRestoreI2c(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    SharedRestoreI2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     WifiRxOn {
         index: u8,
     },
@@ -1600,7 +1600,7 @@ impl PhyRxGainDcTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyRxGainDcTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_radio_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     DcStep::SetupRadioI {
                         bank: PhyRxGainDcBank::Shared,
                         index: 0,
@@ -1724,7 +1724,7 @@ impl PhyRxGainDcTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyRxGainDcTransitionError::WrongCompletion)?;
-                if transition.action() == oer_radio_analog::Action::Complete(()) {
+                if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     self.cleanup(DcTerminal::ContinueWifi);
                 } else {
                     self.step = DcStep::SharedRestoreI2c(transition);

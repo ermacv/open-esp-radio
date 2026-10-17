@@ -58826,7 +58826,7 @@ impl core::fmt::Debug for WifiMacInterfaceAddress {
     }
 }
 #[doc = "Register block shared with other chips; its layout comes from a register library."]
-pub use oer_ieee80211_pac_raw::wifi_mac_interface_address;
+pub use oer_espressif_ieee80211_pac_raw::wifi_mac_interface_address;
 #[unsafe(no_mangle)]
 static mut DEVICE_PERIPHERALS: bool = false;
 #[doc = r" All the peripherals."]

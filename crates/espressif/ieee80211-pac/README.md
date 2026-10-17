@@ -1,7 +1,7 @@
 # Shared Wi-Fi MAC register transactions
 
-`oer-ieee80211-pac` composes reviewed transactions over the Wi-Fi MAC register
-blocks that several chips share; `raw/` is `oer-ieee80211-pac-raw`, the
+`oer-espressif-ieee80211-pac` composes reviewed transactions over the Wi-Fi MAC register
+blocks that several chips share; `raw/` is `oer-espressif-ieee80211-pac-raw`, the
 generated blocks and transactions of the
 [register library](../../../registers/ieee80211/README.md). Neither crate
 contains an address.

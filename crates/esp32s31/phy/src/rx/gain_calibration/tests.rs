@@ -411,14 +411,15 @@ fn every_fallible_dc_child_rejects_without_changing_accumulated_results() {
     let pll_invalid = PhyRxGainDcCompletion::Rfpll(RfpllFrequencyCompletion::DelayElapsed(0));
     let i2c =
         crate::analog::i2c::field_write(analog_registers::SHARED_RX_GAIN_CALIBRATION_ENABLE, 0);
-    let oer_radio_analog::Action::Read { address } = i2c.action() else {
+    let oer_espressif_analog::Action::Read { address } = i2c.action() else {
         panic!("I2C read");
     };
-    let i2c_valid = PhyRxGainDcCompletion::I2c(oer_radio_analog::Completion::Read {
+    let i2c_valid = PhyRxGainDcCompletion::I2c(oer_espressif_analog::Completion::Read {
         address,
         value: 0x5a,
     });
-    let i2c_invalid = PhyRxGainDcCompletion::I2c(oer_radio_analog::Completion::Written { address });
+    let i2c_invalid =
+        PhyRxGainDcCompletion::I2c(oer_espressif_analog::Completion::Written { address });
     let minimum = PhyRxDcMinimumTransition::new(
         PhyRxDcCalibrationTransition::new(RADIO).minimum_request(false),
     );

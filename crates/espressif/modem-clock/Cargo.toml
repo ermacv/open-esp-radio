@@ -1,5 +1,5 @@
 [package]
-name = "oer-radio-clock"
+name = "oer-espressif-modem-clock"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1016,6 +1016,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-deadline"
+version = "0.1.0"
+
+[[package]]
 name = "oer-esp32s31-platform-board"
 version = "0.1.0"
 dependencies = [
@@ -1051,10 +1055,10 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "esp-hal",
+ "oer-deadline",
  "oer-espressif-interrupt-table-esp-hal",
  "oer-interrupt-table",
  "oer-memory",
- "oer-soc-deadline",
 ]
 
 [[package]]
@@ -1097,10 +1101,6 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
 ]
-
-[[package]]
-name = "oer-soc-deadline"
-version = "0.1.0"
 
 [[package]]
 name = "paste"

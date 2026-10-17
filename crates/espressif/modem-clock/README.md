@@ -1,6 +1,6 @@
 # Shared modem clock planner
 
-`oer-radio-clock` is the reference-count planner of ESP-IDF's
+`oer-espressif-modem-clock` is the reference-count planner of ESP-IDF's
 `components/esp_hw_support/modem/modem_clock.c`, which every chip shares.
 Radio modules (Wi-Fi, Bluetooth, IEEE 802.15.4, PHY, coexistence, ...)
 request fixed sets of modem clock dependencies; the planner counts each

@@ -66,13 +66,13 @@ pub struct PhyWifiI2cTrackingOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingAction {
-    MaskedWrite(oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    MaskedWrite(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
     Complete(PhyWifiI2cTrackingOutcome),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWifiI2cTrackingCompletion {
-    MaskedWrite(oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    MaskedWrite(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,7 +88,7 @@ pub struct PhyWifiI2cTrackingTransition {
     target_band: PhyWifiI2cTrackingBand,
     changed: bool,
     write_index: u8,
-    write: Option<oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>>,
+    write: Option<oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>>,
 }
 
 impl PhyWifiI2cTrackingTransition {
@@ -106,7 +106,7 @@ impl PhyWifiI2cTrackingTransition {
     fn write(
         band: PhyWifiI2cTrackingBand,
         index: u8,
-    ) -> oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress> {
+    ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress> {
         let (first, second) = band.values();
         let (field, value) = if index == 0 {
             (analog_registers::WIFI_TX_TEMPERATURE_TRACKING_0, first)
@@ -135,15 +135,15 @@ impl PhyWifiI2cTrackingTransition {
         };
         let PhyWifiI2cTrackingCompletion::MaskedWrite(completion) = completion;
         write.advance(completion).map_err(|error| match error {
-            oer_radio_analog::TransitionError::WrongCompletion => {
+            oer_espressif_analog::TransitionError::WrongCompletion => {
                 PhyWifiI2cTrackingTransitionError::WrongCompletion
             }
-            oer_radio_analog::TransitionError::AlreadyComplete => {
+            oer_espressif_analog::TransitionError::AlreadyComplete => {
                 PhyWifiI2cTrackingTransitionError::AlreadyComplete
             }
         })?;
 
-        if write.action() == oer_radio_analog::Action::Complete(()) {
+        if write.action() == oer_espressif_analog::Action::Complete(()) {
             self.write_index += 1;
             self.write = (self.write_index < 2).then(|| Self::write(self.target_band, 1));
         } else {

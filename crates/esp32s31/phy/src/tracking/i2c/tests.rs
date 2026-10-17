@@ -79,11 +79,11 @@ fn complete_write(
 ) {
     assert_eq!(
         transition.action(),
-        PhyWifiI2cTrackingAction::MaskedWrite(oer_radio_analog::Action::Read { address })
+        PhyWifiI2cTrackingAction::MaskedWrite(oer_espressif_analog::Action::Read { address })
     );
     transition
         .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(
-            oer_radio_analog::Completion::Read {
+            oer_espressif_analog::Completion::Read {
                 address,
                 value: read_value,
             },
@@ -91,14 +91,14 @@ fn complete_write(
         .unwrap();
     assert_eq!(
         transition.action(),
-        PhyWifiI2cTrackingAction::MaskedWrite(oer_radio_analog::Action::Write {
+        PhyWifiI2cTrackingAction::MaskedWrite(oer_espressif_analog::Action::Write {
             address,
             value: written_value,
         })
     );
     transition
         .advance(PhyWifiI2cTrackingCompletion::MaskedWrite(
-            oer_radio_analog::Completion::Written { address },
+            oer_espressif_analog::Completion::Written { address },
         ))
         .unwrap();
 }

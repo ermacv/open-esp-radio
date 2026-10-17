@@ -1,6 +1,6 @@
 # Analog register bus
 
-`oer-radio-analog` is the chip-neutral contract the Espressif PHY uses to
+`oer-espressif-analog` is the chip-neutral contract the Espressif PHY uses to
 reach its analog blocks: byte registers behind an analog I2C master. Where
 the vendor leaves `phy_chip_i2c_readReg` and `phy_chip_i2c_writeReg`
 busy-wait, this crate separates what a transaction does from how an

@@ -307,7 +307,8 @@ macro_rules! define_i2c_executor {
 pub fn complete_rx_gain_i2c(
     mut binding: MaskedI2cWriteBinding,
     registers: &mut impl SharedPhyAccess,
-) -> Result<oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError> {
+) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError>
+{
     let completed = crate::executor::wait::poll::bounded(|| {
         match binding.action() {
             PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
@@ -489,7 +490,7 @@ define_i2c_executor!(
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,
-    oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>
+    oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>
 );
 define_i2c_executor!(
     complete_temperature_i2c,

@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee802154-pac"
+name = "oer-espressif-ieee802154-pac"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -27,7 +27,7 @@ package identities to source owners.
 ## Generated access and trusted handwritten code
 
 `esp32s31/pac-raw/` is the `oer-esp32s31-pac-raw` package and
-`espressif/ieee80211-pac-raw/` the `oer-ieee80211-pac-raw` package of the
+`espressif/ieee80211-pac-raw/` the `oer-espressif-ieee80211-pac-raw` package of the
 Wi-Fi MAC register blocks a chip places at its own addresses. Each
 contains only SVD-generated register access, checked through the
 generator/publisher pipeline; the shared package contains no address. The

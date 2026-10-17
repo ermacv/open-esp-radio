@@ -1664,6 +1664,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-deadline"
+version = "0.1.0"
+
+[[package]]
 name = "oer-durable"
 version = "0.1.0"
 dependencies = [
@@ -1700,11 +1704,11 @@ version = "0.1.0"
 dependencies = [
  "critical-section",
  "oer-esp32s31-pac",
+ "oer-espressif-analog",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
+ "oer-espressif-modem-clock",
  "oer-memory",
- "oer-radio-analog",
- "oer-radio-clock",
  "oer-radio-coex",
 ]
 
@@ -1762,8 +1766,8 @@ name = "oer-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-pac-raw",
- "oer-ieee80211-pac",
- "oer-ieee802154-pac",
+ "oer-espressif-ieee80211-pac",
+ "oer-espressif-ieee802154-pac",
  "oer-memory",
 ]
 
@@ -1772,7 +1776,7 @@ name = "oer-esp32s31-pac-raw"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "oer-ieee80211-pac-raw",
+ "oer-espressif-ieee80211-pac-raw",
  "vcell",
 ]
 
@@ -1781,7 +1785,7 @@ name = "oer-esp32s31-phy"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
- "oer-radio-analog",
+ "oer-espressif-analog",
  "oer-time",
  "oer-time-virtual",
  "pin-project-lite",
@@ -1795,11 +1799,15 @@ dependencies = [
  "bytemuck",
  "critical-section",
  "esp-hal",
+ "oer-deadline",
  "oer-espressif-interrupt-table-esp-hal",
  "oer-interrupt-table",
  "oer-memory",
- "oer-soc-deadline",
 ]
+
+[[package]]
+name = "oer-espressif-analog"
+version = "0.1.0"
 
 [[package]]
 name = "oer-espressif-coex"
@@ -1826,6 +1834,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif-ieee80211-pac"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-ieee80211-pac-raw",
+]
+
+[[package]]
+name = "oer-espressif-ieee80211-pac-raw"
+version = "0.1.0"
+dependencies = [
+ "vcell",
+]
+
+[[package]]
 name = "oer-espressif-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
@@ -1847,12 +1869,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif-ieee802154-pac"
+version = "0.1.0"
+
+[[package]]
 name = "oer-espressif-interrupt-table-esp-hal"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-interrupt-table",
 ]
+
+[[package]]
+name = "oer-espressif-modem-clock"
+version = "0.1.0"
 
 [[package]]
 name = "oer-ieee80211-ap"
@@ -1899,20 +1929,6 @@ version = "0.1.0"
 dependencies = [
  "oer-time",
  "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-pac"
-version = "0.1.0"
-dependencies = [
- "oer-ieee80211-pac-raw",
-]
-
-[[package]]
-name = "oer-ieee80211-pac-raw"
-version = "0.1.0"
-dependencies = [
- "vcell",
 ]
 
 [[package]]
@@ -2010,10 +2026,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee802154-pac"
-version = "0.1.0"
-
-[[package]]
 name = "oer-interrupt-table"
 version = "0.1.0"
 
@@ -2038,14 +2050,6 @@ dependencies = [
  "signal-hook",
  "tempfile",
 ]
-
-[[package]]
-name = "oer-radio-analog"
-version = "0.1.0"
-
-[[package]]
-name = "oer-radio-clock"
-version = "0.1.0"
 
 [[package]]
 name = "oer-radio-coex"
@@ -2136,10 +2140,6 @@ dependencies = [
  "toml",
  "toml_edit",
 ]
-
-[[package]]
-name = "oer-soc-deadline"
-version = "0.1.0"
 
 [[package]]
 name = "oer-time"

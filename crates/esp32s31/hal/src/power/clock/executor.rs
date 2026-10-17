@@ -368,7 +368,7 @@ pub(crate) fn execute_acquire<'identity>(
     (ModemClockPlanner<'identity>, ModemClockLease<'identity>),
     PoisonedModemClockAcquire<'identity>,
 > {
-    oer_radio_clock::execute_acquire(prepared, |dependency| {
+    oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
         perform_acquire(dependency, port, held, platform)
     })
 }
@@ -388,7 +388,7 @@ pub(crate) fn execute_release<'planner, 'lease>(
     port: &mut impl ModemClockPort,
     held: &mut ModemPlatformClocks,
 ) -> Result<ModemClockPlanner<'planner>, PoisonedModemClockRelease<'planner, 'lease>> {
-    oer_radio_clock::execute_release(prepared, |dependency| {
+    oer_espressif_modem_clock::execute_release(prepared, |dependency| {
         perform_release(dependency, port, held)
     })
 }
