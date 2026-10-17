@@ -144,11 +144,14 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
     use crate::analog::i2c;
 
     match action {
-        PhyTxIqLoopbackAction::I2c(oer_radio_analog::Action::Read { address }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_radio_analog::Completion::Read { address, value: 0 })
+        PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Read { address }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_espressif_analog::Completion::Read {
+                address,
+                value: 0,
+            })
         }
-        PhyTxIqLoopbackAction::I2c(oer_radio_analog::Action::Write { address, .. }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_radio_analog::Completion::Written { address })
+        PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Write { address, .. }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_espressif_analog::Completion::Written { address })
         }
         PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
             PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }

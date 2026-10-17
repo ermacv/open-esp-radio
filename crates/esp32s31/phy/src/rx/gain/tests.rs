@@ -485,8 +485,8 @@ fn root_at_minimum() -> PhyRxGainInitTransition {
         i2c,
         rfpll::{RfpllFrequencyAction as R, RfpllFrequencyCompletion as RC},
     };
-    use oer_radio_analog::Action as I;
-    use oer_radio_analog::Completion as IC;
+    use oer_espressif_analog::Action as I;
+    use oer_espressif_analog::Completion as IC;
     let mut root = PhyRxGainInitTransition::new(init_parameters());
     for _ in 0..100 {
         if root.minimum_mut().is_some() {

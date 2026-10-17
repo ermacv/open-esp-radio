@@ -1,5 +1,5 @@
 [package]
-name = "oer-soc-deadline"
+name = "oer-deadline"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

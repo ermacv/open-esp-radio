@@ -1,6 +1,6 @@
 //! ESP32-S31 table of the shared modem clock planner.
 //!
-//! The chip-neutral reference-count planner is [`oer_radio_clock`]; this
+//! The chip-neutral reference-count planner is [`oer_espressif_modem_clock`]; this
 //! module supplies the ESP32-S31 vendor device order and module dependency
 //! sets, and its executor performs each edge. The analog-I2C master clock is
 //! not refcounted here, because the vendor keeps that refcount in the platform
@@ -27,9 +27,9 @@
 
 #![forbid(unsafe_code)]
 
-use oer_radio_clock::{DependencySet, ModemClockDependency};
+use oer_espressif_modem_clock::{DependencySet, ModemClockDependency};
 
-pub(crate) use oer_radio_clock::ModemClockPlannerIdentity;
+pub(crate) use oer_espressif_modem_clock::ModemClockPlannerIdentity;
 
 /// Exact low-bit-first dependency identities, in the vendor device order.
 ///
@@ -98,17 +98,17 @@ impl ModemClockDependency for Dependency {
 }
 
 pub(crate) type ModemClockPlanner<'identity> =
-    oer_radio_clock::ModemClockPlanner<'identity, Dependency>;
+    oer_espressif_modem_clock::ModemClockPlanner<'identity, Dependency>;
 pub(crate) type ModemClockLease<'identity> =
-    oer_radio_clock::ModemClockLease<'identity, Dependency>;
+    oer_espressif_modem_clock::ModemClockLease<'identity, Dependency>;
 pub(crate) type PreparedModemClockAcquire<'identity> =
-    oer_radio_clock::PreparedModemClockAcquire<'identity, Dependency>;
+    oer_espressif_modem_clock::PreparedModemClockAcquire<'identity, Dependency>;
 pub(crate) type PreparedModemClockRelease<'planner, 'lease> =
-    oer_radio_clock::PreparedModemClockRelease<'planner, 'lease, Dependency>;
+    oer_espressif_modem_clock::PreparedModemClockRelease<'planner, 'lease, Dependency>;
 pub(crate) type PoisonedModemClockAcquire<'identity> =
-    oer_radio_clock::PoisonedModemClockAcquire<'identity, Dependency>;
+    oer_espressif_modem_clock::PoisonedModemClockAcquire<'identity, Dependency>;
 pub(crate) type PoisonedModemClockRelease<'planner, 'lease> =
-    oer_radio_clock::PoisonedModemClockRelease<'planner, 'lease, Dependency>;
+    oer_espressif_modem_clock::PoisonedModemClockRelease<'planner, 'lease, Dependency>;
 
 /// Radio modules that request modem clocks, with their vendor dependency sets.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

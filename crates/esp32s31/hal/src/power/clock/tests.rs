@@ -3,7 +3,9 @@
 
 use std::vec::Vec;
 
-use oer_radio_clock::{DependencySet, execute_acquire, execute_release, table_is_consistent};
+use oer_espressif_modem_clock::{
+    DependencySet, execute_acquire, execute_release, table_is_consistent,
+};
 
 use super::*;
 

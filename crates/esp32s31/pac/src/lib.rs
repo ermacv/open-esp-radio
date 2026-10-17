@@ -111,7 +111,7 @@ pub use frequency::PhyFrequencyI2cNumberAddresses;
 #[doc(hidden)]
 pub use ieee802154::mac::{Ieee802154PolledRegisterLease, Ieee802154RegisterLease};
 
-pub use oer_ieee80211_pac::MacInterface;
+pub use oer_espressif_ieee80211_pac::MacInterface;
 
 pub use generated::{
     BluetoothDeviceTableEntryCount, CoexTimerClientValue, CoexTimerClockDividerMinusOne,

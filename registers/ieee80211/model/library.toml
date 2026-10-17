@@ -2,7 +2,7 @@
 # base addresses. Chips review each layout in their own review files.
 schema = 1
 name = "ieee80211"
-crate-name = "oer_ieee80211_pac_raw"
+crate-name = "oer_espressif_ieee80211_pac_raw"
 fragments = [
     "peripherals/wifi-mac-interface-address.toml",
 ]

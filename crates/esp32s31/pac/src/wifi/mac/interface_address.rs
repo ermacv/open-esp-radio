@@ -8,9 +8,9 @@ impl WifiRadioRegisters {
     /// Publish one MAC address and enable it for receive-policy matching.
     ///
     /// The shared transaction of
-    /// [`oer_ieee80211_pac::interface_address::program_receive_interface_address`].
+    /// [`oer_espressif_ieee80211_pac::interface_address::program_receive_interface_address`].
     pub fn program_receive_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {
-        oer_ieee80211_pac::interface_address::program_receive_interface_address(
+        oer_espressif_ieee80211_pac::interface_address::program_receive_interface_address(
             &self.peripherals.wifi_mac.wifi_mac_interface_address,
             interface,
             address,

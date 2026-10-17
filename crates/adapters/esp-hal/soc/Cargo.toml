@@ -18,7 +18,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 oer-memory = { path = "../../../base/memory" }
 atomic-waker = { version = "1.1.2", optional = true }
 critical-section = "1.2.0"
-oer-soc-deadline = { path = "../../../base/deadline" }
+oer-deadline = { path = "../../../base/deadline" }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
 oer-interrupt-table = { path = "../../../exec/interrupt-table" }
 oer-espressif-interrupt-table-esp-hal = { path = "../../../exec/esp-hal-irq", features = ["esp32s31"], optional = true }

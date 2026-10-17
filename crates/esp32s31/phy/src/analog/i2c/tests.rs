@@ -638,29 +638,32 @@ fn masked_i2c_write_owns_read_transform_and_write_edges() {
     let mut transition = crate::analog::i2c::field_write(field, 3);
     assert_eq!(
         transition.action(),
-        oer_radio_analog::Action::Read { address }
+        oer_espressif_analog::Action::Read { address }
     );
     assert_eq!(
-        transition.advance(oer_radio_analog::Completion::Written { address }),
-        Err(oer_radio_analog::TransitionError::WrongCompletion)
+        transition.advance(oer_espressif_analog::Completion::Written { address }),
+        Err(oer_espressif_analog::TransitionError::WrongCompletion)
     );
     transition
-        .advance(oer_radio_analog::Completion::Read {
+        .advance(oer_espressif_analog::Completion::Read {
             address,
             value: 0x0f,
         })
         .unwrap();
     assert_eq!(
         transition.action(),
-        oer_radio_analog::Action::Write {
+        oer_espressif_analog::Action::Write {
             address,
             value: 0x03,
         }
     );
     transition
-        .advance(oer_radio_analog::Completion::Written { address })
+        .advance(oer_espressif_analog::Completion::Written { address })
         .unwrap();
-    assert_eq!(transition.action(), oer_radio_analog::Action::Complete(()));
+    assert_eq!(
+        transition.action(),
+        oer_espressif_analog::Action::Complete(())
+    );
 }
 
 #[test]

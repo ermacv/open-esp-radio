@@ -16,7 +16,7 @@ registration-diagnostics = []
 tracking-diagnostics = []
 
 [dependencies]
-oer-radio-analog = { path = "../../espressif/analog" }
+oer-espressif-analog = { path = "../../espressif/analog" }
 oer-time = { path = "../../base/time" }
 oer-esp32s31-hal = { path = "../hal" }
 

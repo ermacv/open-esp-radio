@@ -12,12 +12,12 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 test-support = ["oer-esp32s31-pac/test-support"]
 
 [dependencies]
-oer-radio-analog = { path = "../../espressif/analog" }
+oer-espressif-analog = { path = "../../espressif/analog" }
 oer-memory = { path = "../../base/memory" }
 oer-esp32s31-pac = { path = "../pac" }
 oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
-oer-radio-clock = { path = "../../espressif/modem-clock" }
+oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 oer-radio-coex = { path = "../../radio/coex" }
 
 [dev-dependencies]

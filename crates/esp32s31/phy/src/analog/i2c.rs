@@ -371,7 +371,7 @@ impl AdcRateTransition {
 }
 
 /// One owned replacement for ROM `phy_i2c_writeReg_Mask`: the portable
-/// [`oer_radio_analog::FieldWriteTransition`] over this chip's analog
+/// [`oer_espressif_analog::FieldWriteTransition`] over this chip's analog
 /// identities. The current byte crosses the async read edge as a completion
 /// value, is transformed in Rust, and is then owned until the separately
 /// completed write.
@@ -381,12 +381,12 @@ impl AdcRateTransition {
 pub const fn field_write(
     field: PhyI2cField,
     value: u8,
-) -> oer_radio_analog::FieldWriteTransition<PhyI2cAddress> {
+) -> oer_espressif_analog::FieldWriteTransition<PhyI2cAddress> {
     let (msb, lsb) = field.bit_range();
-    let Some(field) = oer_radio_analog::AnalogField::new(field.address(), msb, lsb) else {
+    let Some(field) = oer_espressif_analog::AnalogField::new(field.address(), msb, lsb) else {
         panic!("a reviewed analog field lies within its byte");
     };
-    match oer_radio_analog::FieldWriteTransition::new(field, value) {
+    match oer_espressif_analog::FieldWriteTransition::new(field, value) {
         Ok(write) => write,
         Err(_) => panic!("a production value fits its analog field"),
     }
@@ -400,25 +400,25 @@ pub enum MaskedI2cWriteBindingError {
 }
 
 /// Non-cloneable lowering for one explicit read or write emitted by
-/// [`oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>`].
+/// [`oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>`].
 #[derive(Debug, Eq, PartialEq)]
 pub struct MaskedI2cWriteBinding {
-    outer_action: oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
+    outer_action: oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
 impl MaskedI2cWriteBinding {
     pub fn new(
-        action: oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
+        action: oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>,
     ) -> Result<Self, MaskedI2cWriteBindingError> {
         let request = match action {
-            oer_radio_analog::Action::Read { address } => {
+            oer_espressif_analog::Action::Read { address } => {
                 crate::calibration::cold::PhyColdI2cRequest::read_byte(address)
             }
-            oer_radio_analog::Action::Write { address, value } => {
+            oer_espressif_analog::Action::Write { address, value } => {
                 crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value)
             }
-            oer_radio_analog::Action::Complete(()) => {
+            oer_espressif_analog::Action::Complete(()) => {
                 return Err(MaskedI2cWriteBindingError::UnsupportedAction);
             }
         };
@@ -486,12 +486,12 @@ impl MaskedI2cWriteBinding {
     pub fn into_completion(
         self,
     ) -> Result<
-        oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>,
+        oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>,
         MaskedI2cWriteBindingError,
     > {
         match (self.outer_action, self.transaction.action()) {
             (
-                oer_radio_analog::Action::Read { address },
+                oer_espressif_analog::Action::Read { address },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Read {
                         address: completed_address,
@@ -499,17 +499,17 @@ impl MaskedI2cWriteBinding {
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_radio_analog::Completion::Read { address, value })
+                Ok(oer_espressif_analog::Completion::Read { address, value })
             }
             (
-                oer_radio_analog::Action::Write { address, .. },
+                oer_espressif_analog::Action::Write { address, .. },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Written {
                         address: completed_address,
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_radio_analog::Completion::Written { address })
+                Ok(oer_espressif_analog::Completion::Written { address })
             }
             (_, crate::calibration::cold::PhyColdI2cAction::Complete(_)) => {
                 Err(MaskedI2cWriteBindingError::UnexpectedOutcome)

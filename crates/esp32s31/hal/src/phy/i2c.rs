@@ -43,7 +43,7 @@ fn configure_initialization_stage_two_with(
     inputs: PhyI2cCommandMemoryInputs,
     maximum_observations: u32,
 ) -> Result<(), PhyI2cInitializationStageTwoError> {
-    use oer_radio_analog::{ParallelAction, ParallelHost, ParallelTransition};
+    use oer_espressif_analog::{ParallelAction, ParallelHost, ParallelTransition};
     let host = |host| match host {
         ParallelHost::First => PhyI2cHost::Host0,
         ParallelHost::Second => PhyI2cHost::Host1,
@@ -123,42 +123,42 @@ pub enum PhyI2cConfigurationError {
 /// with its read mask.
 struct PacAnalogBus<'a>(&'a mut RadioPhyRegisters);
 
-impl oer_radio_analog::AnalogRegisterBus for PacAnalogBus<'_> {
+impl oer_espressif_analog::AnalogRegisterBus for PacAnalogBus<'_> {
     type Address = PhyI2cAddress;
 
-    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), oer_radio_analog::Busy> {
+    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_start_phy_i2c_read(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_radio_analog::Busy)
+            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
     }
 
-    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, oer_radio_analog::Busy> {
+    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, oer_espressif_analog::Busy> {
         self.0
             .try_finish_phy_i2c_read(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_radio_analog::Busy)
+            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
     }
 
     fn try_start_write(
         &mut self,
         address: PhyI2cAddress,
         value: u8,
-    ) -> Result<(), oer_radio_analog::Busy> {
+    ) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_start_phy_i2c_write(address, value)
-            .map_err(|PhyI2cAccessError::Busy| oer_radio_analog::Busy)
+            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
     }
 
-    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), oer_radio_analog::Busy> {
+    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
         self.0
             .try_finish_phy_i2c_write(address)
-            .map_err(|PhyI2cAccessError::Busy| oer_radio_analog::Busy)
+            .map_err(|PhyI2cAccessError::Busy| oer_espressif_analog::Busy)
     }
 }
 
 /// The analog field of a reviewed PAC field.
-pub const fn analog_field(field: PhyI2cField) -> oer_radio_analog::AnalogField<PhyI2cAddress> {
+pub const fn analog_field(field: PhyI2cField) -> oer_espressif_analog::AnalogField<PhyI2cAddress> {
     let (msb, lsb) = field.bit_range();
-    match oer_radio_analog::AnalogField::new(field.address(), msb, lsb) {
+    match oer_espressif_analog::AnalogField::new(field.address(), msb, lsb) {
         Some(field) => field,
         None => panic!("a reviewed analog field lies within its byte"),
     }
@@ -168,14 +168,14 @@ pub const fn analog_field(field: PhyI2cField) -> oer_radio_analog::AnalogField<P
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OperationCommands(PhyI2cConfigurationOperation);
 
-impl oer_radio_analog::ConfigurationCommands for OperationCommands {
+impl oer_espressif_analog::ConfigurationCommands for OperationCommands {
     type Address = PhyI2cAddress;
 
     fn command(
         &self,
         index: usize,
-    ) -> Option<oer_radio_analog::ConfigurationCommand<PhyI2cAddress>> {
-        use oer_radio_analog::ConfigurationCommand;
+    ) -> Option<oer_espressif_analog::ConfigurationCommand<PhyI2cAddress>> {
+        use oer_espressif_analog::ConfigurationCommand;
         let index = u8::try_from(index).ok()?;
         Some(match self.0.command(index)? {
             PhyI2cConfigurationCommand::Read(address) => ConfigurationCommand::Read(address),
@@ -192,19 +192,19 @@ impl oer_radio_analog::ConfigurationCommands for OperationCommands {
 /// Non-cloneable owner of one complete recovered PHY-I²C write plan.
 ///
 /// The PAC supplies the operation's commands with opaque analog identities;
-/// the portable [`oer_radio_analog::ConfigurationTransition`] owns the
+/// the portable [`oer_espressif_analog::ConfigurationTransition`] owns the
 /// command order and read-modify-write value, and this transaction owns the
 /// start and completion edges of each byte command.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyI2cConfigurationTransaction {
-    transition: oer_radio_analog::ConfigurationTransition<OperationCommands, PhyI2cAddress>,
+    transition: oer_espressif_analog::ConfigurationTransition<OperationCommands, PhyI2cAddress>,
     started: bool,
 }
 
 impl PhyI2cConfigurationTransaction {
     pub fn new(operation: PhyI2cConfigurationOperation) -> Self {
         Self {
-            transition: oer_radio_analog::ConfigurationTransition::new(OperationCommands(
+            transition: oer_espressif_analog::ConfigurationTransition::new(OperationCommands(
                 operation,
             )),
             started: false,
@@ -212,9 +212,9 @@ impl PhyI2cConfigurationTransaction {
     }
 
     pub fn action(&self) -> PhyI2cConfigurationAction {
-        use oer_radio_analog::ByteTransition;
+        use oer_espressif_analog::ByteTransition;
         match self.transition.action() {
-            oer_radio_analog::Action::Complete(_) => PhyI2cConfigurationAction::Complete,
+            oer_espressif_analog::Action::Complete(_) => PhyI2cConfigurationAction::Complete,
             _ if self.started => PhyI2cConfigurationAction::AwaitCompletionEdge,
             _ => PhyI2cConfigurationAction::StartCommand,
         }
@@ -222,9 +222,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn start_with(
         &mut self,
-        bus: &mut impl oer_radio_analog::AnalogRegisterBus<Address = PhyI2cAddress>,
+        bus: &mut impl oer_espressif_analog::AnalogRegisterBus<Address = PhyI2cAddress>,
     ) -> Result<(), PhyI2cConfigurationError> {
-        use oer_radio_analog::{Action, ByteTransition};
+        use oer_espressif_analog::{Action, ByteTransition};
         if self.started {
             return Err(PhyI2cConfigurationError::WrongAction);
         }
@@ -234,16 +234,16 @@ impl PhyI2cConfigurationTransaction {
             Action::Complete(Ok(())) => return Err(PhyI2cConfigurationError::AlreadyComplete),
             Action::Complete(Err(_)) => return Err(PhyI2cConfigurationError::InvalidCommand),
         };
-        started.map_err(|oer_radio_analog::Busy| PhyI2cConfigurationError::BusyAtStart)?;
+        started.map_err(|oer_espressif_analog::Busy| PhyI2cConfigurationError::BusyAtStart)?;
         self.started = true;
         Ok(())
     }
 
     fn observe_with(
         &mut self,
-        bus: &impl oer_radio_analog::AnalogRegisterBus<Address = PhyI2cAddress>,
+        bus: &impl oer_espressif_analog::AnalogRegisterBus<Address = PhyI2cAddress>,
     ) -> Result<PhyI2cConfigurationObservation, PhyI2cConfigurationError> {
-        use oer_radio_analog::{Action, ByteTransition, Completion};
+        use oer_espressif_analog::{Action, ByteTransition, Completion};
         if !self.started {
             return Err(match self.transition.action() {
                 Action::Complete(_) => PhyI2cConfigurationError::AlreadyComplete,
@@ -253,13 +253,13 @@ impl PhyI2cConfigurationTransaction {
         let completion = match self.transition.action() {
             Action::Read { address } => match bus.try_finish_read(address) {
                 Ok(value) => Completion::Read { address, value },
-                Err(oer_radio_analog::Busy) => {
+                Err(oer_espressif_analog::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
                 }
             },
             Action::Write { address, .. } => match bus.try_finish_write(address) {
                 Ok(()) => Completion::Written { address },
-                Err(oer_radio_analog::Busy) => {
+                Err(oer_espressif_analog::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
                 }
             },

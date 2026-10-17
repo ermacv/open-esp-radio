@@ -698,7 +698,7 @@ impl PhyTxIqCoverTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackAction {
-    I2c(oer_radio_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
+    I2c(oer_espressif_analog::Action<crate::analog::i2c::PhyI2cAddress, ()>),
     ConfigureTxClock { enabled: bool },
     ConfigureRxClock { enabled: bool },
     Complete { enabled: bool },
@@ -706,7 +706,7 @@ pub enum PhyTxIqLoopbackAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackCompletion {
-    I2c(oer_radio_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>),
     TxClockConfigured { enabled: bool },
     RxClockConfigured { enabled: bool },
 }
@@ -719,7 +719,7 @@ pub enum PhyTxIqLoopbackTransitionError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LoopbackStep {
-    I2c(oer_radio_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
+    I2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::PhyI2cAddress>),
     TxClock,
     RxClock,
     Complete,
@@ -766,7 +766,7 @@ impl PhyTxIqLoopbackTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxIqLoopbackTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_radio_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
                     LoopbackStep::TxClock
                 } else {
                     LoopbackStep::I2c(transition)

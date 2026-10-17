@@ -1,6 +1,6 @@
 # Shared IEEE 802.15.4 MAC values and transactions
 
-`oer-ieee802154-pac` holds the parts of the typed IEEE 802.15.4 MAC surface
+`oer-espressif-ieee802154-pac` holds the parts of the typed IEEE 802.15.4 MAC surface
 that the ESP32-S31 and ESP32-C5 share: configuration values and commands, the
 event vocabulary with its enable and observation states, receive and transmit
 abort reasons, state observations, the public LL enable sets, and the ordered

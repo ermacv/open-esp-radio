@@ -230,13 +230,13 @@ struct FakeConfigurationI2c {
     observed: core::cell::RefCell<std::vec::Vec<PhyI2cAddress>>,
 }
 
-impl oer_radio_analog::AnalogRegisterBus for FakeConfigurationI2c {
+impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
     type Address = PhyI2cAddress;
 
-    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), oer_radio_analog::Busy> {
+    fn try_start_read(&mut self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_radio_analog::Busy);
+            return Err(oer_espressif_analog::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
@@ -247,33 +247,33 @@ impl oer_radio_analog::AnalogRegisterBus for FakeConfigurationI2c {
         &mut self,
         address: PhyI2cAddress,
         _value: u8,
-    ) -> Result<(), oer_radio_analog::Busy> {
+    ) -> Result<(), oer_espressif_analog::Busy> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_radio_analog::Busy);
+            return Err(oer_espressif_analog::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
         Ok(())
     }
 
-    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, oer_radio_analog::Busy> {
+    fn try_finish_read(&self, address: PhyI2cAddress) -> Result<u8, oer_espressif_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(0xa0)
         } else {
-            Err(oer_radio_analog::Busy)
+            Err(oer_espressif_analog::Busy)
         }
     }
 
-    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), oer_radio_analog::Busy> {
+    fn try_finish_write(&self, address: PhyI2cAddress) -> Result<(), oer_espressif_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(())
         } else {
-            Err(oer_radio_analog::Busy)
+            Err(oer_espressif_analog::Busy)
         }
     }
 }
