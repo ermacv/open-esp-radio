@@ -30,7 +30,7 @@ fn association_security_binding_commits_to_every_byte_and_the_pmk() {
 
 #[test]
 fn association_security_binding_uses_its_domain_label() {
-    // SOURCE: Python hmac, HMAC-SHA1(PMK, label || u64be(len) || IEs)[..16].
+    // Expected value computed independently: HMAC-SHA1(PMK, label || u64be(len) || IEs)[..16].
     let pmk = Pmk::from_bytes([0x11; 32]);
     let association_security_ies = [0x30, 2, 1, 0, 0xf4, 1, 0x20];
     let binding = pmk.bind_association_security_ies(&association_security_ies);
