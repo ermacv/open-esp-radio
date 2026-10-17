@@ -13,8 +13,7 @@ use crate::{
 
 /// An arbiter whose domain is registered in the arbiter's own epoch.
 fn registered_arbiter() -> SharedRadio<ConcurrentPhy> {
-    let (radio, _partitions) =
-        RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let mut lease = radio
             .try_acquire()
@@ -30,8 +29,7 @@ fn registered_arbiter() -> SharedRadio<ConcurrentPhy> {
 
 /// An arbiter whose registered domain has RF closed.
 fn rf_closed_arbiter() -> SharedRadio<ConcurrentPhy> {
-    let (radio, _partitions) =
-        RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let mut lease = radio
             .try_acquire()
@@ -84,8 +82,7 @@ fn clients_share_one_domain_and_leave_it_one_by_one() {
 
 #[test]
 fn an_unregistered_domain_rejects_every_client_operation() {
-    let (radio, _partitions) =
-        RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
@@ -210,8 +207,7 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
         base_mac_address: [2, 3, 5, 7, 11, 13],
         mac_extension: 17,
     };
-    let (radio, _partitions) =
-        RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let lease = radio
             .try_acquire()

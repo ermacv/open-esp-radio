@@ -50,8 +50,8 @@ impl FakeRegisters {
         Self {
             operations: Vec::new(),
             state: Ieee802154StateSnapshot::new(
-                Ieee802154RxStateCode::for_validation(rx).expect("three-bit RX state"),
-                Ieee802154TxStateCode::for_validation(tx).expect("four-bit TX state"),
+                Ieee802154RxStateCode::for_host_test(rx).expect("three-bit RX state"),
+                Ieee802154TxStateCode::for_host_test(tx).expect("four-bit TX state"),
             ),
             foundation: Ieee802154FoundationSnapshot::new(
                 true,
@@ -261,7 +261,7 @@ fn state_predicate_samples_once_and_makes_no_idle_claim() {
 
 #[test]
 fn production_hal_borrows_the_ieee802154_task_partition() {
-    let RadioPartitions { ieee802154, .. } = RadioPartitions::for_validation();
+    let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
     let (mut task, mut interrupts) = Ieee802154TaskRegisters::new(ieee802154);
     {
         let mut hal = Ieee802154PacHal::from_owned(&mut task, &mut interrupts);

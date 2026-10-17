@@ -8,7 +8,7 @@ fn arbiter() -> SharedRadio {
         coexistence,
         shared_radio,
         ..
-    } = RadioPartitions::for_validation();
+    } = RadioPartitions::for_host_test();
     SharedRadio::new(
         SharedRadioRegisters::new(SharedRadioParts {
             radio_phy,
@@ -42,12 +42,12 @@ fn only_one_lease_exists_at_a_time() {
 )]
 fn a_validation_lease_holds_and_releases_the_arbiter() {
     let mut radio = arbiter();
-    core::mem::forget(radio.lease_for_validation());
+    core::mem::forget(radio.lease_for_host_test());
     assert!(radio.is_held());
     assert_eq!(radio.try_acquire().err(), Some(SharedRadioBusy));
 
     let mut radio = arbiter();
-    drop(radio.lease_for_validation());
+    drop(radio.lease_for_host_test());
     assert!(!radio.is_held());
     let _again = radio
         .try_acquire()
@@ -101,7 +101,7 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
         bluetooth,
         ieee802154,
         ..
-    } = RadioPartitions::for_validation();
+    } = RadioPartitions::for_host_test();
     let bluetooth = oer_esp32s31_pac::BluetoothTaskRegisters::new(bluetooth);
     let (ieee802154, _interrupts) = Ieee802154TaskRegisters::new(ieee802154);
     let mut radio = arbiter();
@@ -150,8 +150,7 @@ fn the_arbiter_stays_while_btbb_is_held() {
 
 #[test]
 fn a_client_cannot_disable_modem_clocks_it_never_enabled() {
-    let wifi =
-        oer_esp32s31_pac::WifiRadioRegisters::new(RadioPartitions::for_validation().wifi_mac);
+    let wifi = oer_esp32s31_pac::WifiRadioRegisters::new(RadioPartitions::for_host_test().wifi_mac);
     let radio = arbiter();
     let mut lease = radio
         .try_acquire()
@@ -226,15 +225,15 @@ fn the_phy_grant_protect_request_cannot_be_withdrawn_before_it_is_programmed() {
 fn a_held_validation_grant_protect_is_owned_by_the_lease() {
     let mut radio = arbiter();
     {
-        let mut lease = radio.lease_for_validation();
+        let mut lease = radio.lease_for_host_test();
         assert!(!lease.phy_grant_protected());
         assert_eq!(
             lease.release_phy_grant_protect(),
             Err(PhyGrantProtectError::NotProtected)
         );
     }
-    radio.hold_phy_grant_protect_for_validation();
-    let mut lease = radio.lease_for_validation();
+    radio.hold_phy_grant_protect_for_host_test();
+    let mut lease = radio.lease_for_host_test();
     assert!(lease.phy_grant_protected());
     assert_eq!(
         lease.acquire_phy_grant_protect(),

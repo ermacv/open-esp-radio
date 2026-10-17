@@ -53,7 +53,7 @@ fn register(shared: &SharedRadio<()>) -> crate::owner::PhyRegistrationEpoch {
 #[test]
 fn every_pending_restore_blocks_the_reunion() {
     for restore in Restore::ALL {
-        let (mut shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+        let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
         restore.occupy(shared.phy_state_mut_for_test());
         let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
             panic!("the split reunited over a pending restore");
@@ -69,7 +69,7 @@ fn every_pending_restore_blocks_the_reunion() {
 
 #[test]
 fn a_concurrent_split_reunites_and_retires_the_registration() {
-    let (shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+    let (shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
     let first = register(&shared);
     let second = register(&shared);
     assert_ne!(first, second);
@@ -95,7 +95,7 @@ fn a_concurrent_split_reunites_and_retires_the_registration() {
 fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
     use crate::power::{PlatformClock, test_clocks::CountingPlatformClocks};
     let platform = CountingPlatformClocks::new();
-    let (mut shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+    let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
     shared.hold_platform_clock_for_test(PlatformClock::Pll160m, &platform);
     let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
         panic!("common power still holds the 160 MHz source");
@@ -115,7 +115,7 @@ fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
 #[test]
 fn reunion_waits_for_common_power() {
     use crate::shared_radio::RadioClient;
-    let (mut shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+    let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
     shared.hold_common_power_for_test(RadioClient::Bluetooth);
     let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
         panic!("a client still holds common power");

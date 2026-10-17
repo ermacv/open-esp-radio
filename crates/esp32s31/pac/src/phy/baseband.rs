@@ -49,7 +49,7 @@ impl RxDcoControlField {
     /// Construct one distinguishable capture for a host test.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub const fn for_validation(value: u8) -> Self {
+    pub const fn for_host_test(value: u8) -> Self {
         Self(value)
     }
 }
@@ -58,7 +58,7 @@ impl TxDcPwdetFields {
     /// Construct one distinguishable capture for a host test.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn for_validation(table_low: u8, calibration: u8) -> Self {
+    pub const fn for_host_test(table_low: u8, calibration: u8) -> Self {
         Self {
             table_low,
             calibration,

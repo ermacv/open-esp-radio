@@ -22,7 +22,7 @@ type Others = (
 
 /// A concurrent split whose Bluetooth partition is assumed clocked.
 fn clocked() -> (SharedRadio, Others, ClockedOwner) {
-    let (shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+    let (shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
     let ConcurrentPartitions {
         wifi,
         wifi_coex,
@@ -34,7 +34,7 @@ fn clocked() -> (SharedRadio, Others, ClockedOwner) {
     (
         shared,
         (wifi, ieee802154, wifi_coex, bluetooth_coex, ieee802154_coex),
-        ClockedOwner::for_validation(bluetooth),
+        ClockedOwner::for_host_test(bluetooth),
     )
 }
 
@@ -142,7 +142,7 @@ fn untouched_task_owner_returns_the_partition_to_the_neutral_root() {
     let partitions = ConcurrentPartitions {
         wifi,
         wifi_coex,
-        bluetooth: clocked.into_partition_for_validation(),
+        bluetooth: clocked.into_partition_for_host_test(),
         bluetooth_coex,
         ieee802154,
         ieee802154_coex,

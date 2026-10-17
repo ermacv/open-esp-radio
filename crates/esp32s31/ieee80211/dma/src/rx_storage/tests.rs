@@ -27,7 +27,7 @@ impl RxDma for MockRxDma {
     }
 
     fn next_descriptor(&mut self) -> crate::rx_dma::RxDmaNextDescriptor {
-        crate::rx_dma::RxDmaNextDescriptor::validation(self.next_descriptor_low, false)
+        crate::rx_dma::RxDmaNextDescriptor::for_host_test(self.next_descriptor_low, false)
     }
 
     fn with_ordered_cursor<R>(
@@ -40,7 +40,7 @@ impl RxDma for MockRxDma {
         self.fence();
         let next = self.next_descriptor_low();
         self.fence();
-        observed(crate::rx_dma::RxDmaCursorObservation::validation(
+        observed(crate::rx_dma::RxDmaCursorObservation::for_host_test(
             last, next,
         ))
     }
@@ -57,7 +57,8 @@ impl RxDma for MockRxDma {
         &mut self,
         settled: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaReloadSettled<'confirmation>) -> R,
     ) -> Option<R> {
-        (!self.reload_pending()).then(|| settled(crate::rx_dma::RxDmaReloadSettled::validation()))
+        (!self.reload_pending())
+            .then(|| settled(crate::rx_dma::RxDmaReloadSettled::for_host_test()))
     }
 
     fn configure_descriptor_window(&mut self, _: &RxDmaBinding<'_>) {}
@@ -81,7 +82,8 @@ impl RxDma for MockRxDma {
         enabled: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaWalkerEnabled<'confirmation>) -> R,
     ) -> Option<R> {
         self.walker = true;
-        (!self.ambiguous_enable).then(|| enabled(crate::rx_dma::RxDmaWalkerEnabled::validation()))
+        (!self.ambiguous_enable)
+            .then(|| enabled(crate::rx_dma::RxDmaWalkerEnabled::for_host_test()))
     }
 
     fn try_with_walker_stopped<R>(
@@ -93,7 +95,7 @@ impl RxDma for MockRxDma {
             return None;
         }
         self.walker = false;
-        Some(stopped(crate::rx_dma::RxDmaWalkerStopped::validation()))
+        Some(stopped(crate::rx_dma::RxDmaWalkerStopped::for_host_test()))
     }
 
     fn fence(&mut self) {}
@@ -128,7 +130,7 @@ fn accepted_list_pressure_projects_next_to_the_current_tail() {
         .expect("live pressure model");
 
     let next = |index: u32| {
-        crate::rx_dma::RxDmaNextDescriptor::validation(
+        crate::rx_dma::RxDmaNextDescriptor::for_host_test(
             (BASE + index * crate::descriptor::DESCRIPTOR_BYTES) & LOW_MASK,
             false,
         )
@@ -137,20 +139,20 @@ fn accepted_list_pressure_projects_next_to_the_current_tail() {
     assert_eq!(live.accepted_list_remaining_from_next(next(1)), Some(3));
     assert_eq!(live.accepted_list_remaining_from_next(next(3)), Some(1));
     assert_eq!(
-        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::validation(
+        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::for_host_test(
             0, false
         )),
         Some(0)
     );
     assert_eq!(
-        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::validation(
+        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::for_host_test(
             0, true
         )),
         None,
         "upper-only NEXT is not an exhausted-list proof"
     );
     assert_eq!(
-        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::validation(
+        live.accepted_list_remaining_from_next(crate::rx_dma::RxDmaNextDescriptor::for_host_test(
             (BASE + COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES) & LOW_MASK,
             false,
         )),

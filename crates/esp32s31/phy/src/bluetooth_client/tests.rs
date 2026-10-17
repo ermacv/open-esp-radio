@@ -18,7 +18,7 @@ use crate::{
 /// An arbiter whose domain is registered in the arbiter's current epoch, or,
 /// when `stale`, in an epoch a later registration retired.
 fn arbiter(stale: bool) -> (SharedRadio<ConcurrentPhy>, ConcurrentPartitions) {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let mut lease = radio
             .try_acquire()
@@ -37,7 +37,7 @@ fn arbiter(stale: bool) -> (SharedRadio<ConcurrentPhy>, ConcurrentPartitions) {
 
 fn task(partitions: ConcurrentPartitions) -> TaskOwner {
     let (task, _interrupts) =
-        ClockedOwner::for_validation(partitions.bluetooth).separate_interrupt_owner();
+        ClockedOwner::for_host_test(partitions.bluetooth).separate_interrupt_owner();
     task
 }
 
@@ -50,7 +50,7 @@ fn bluetooth_is_client(lease: &SharedRadioLease<'_, ConcurrentPhy>) -> bool {
 
 #[test]
 fn joining_an_unregistered_domain_changes_nothing() {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     let task = task(partitions);
     let mut lease = radio
         .try_acquire()

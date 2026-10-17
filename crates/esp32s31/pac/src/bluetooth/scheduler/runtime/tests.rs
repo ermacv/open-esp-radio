@@ -214,14 +214,14 @@ fn software_list_removal_finish_preserves_short_circuit_reads() {
 
 #[test]
 fn busy_scheduler_cannot_authorize_task_side_command_reads() {
-    let step = super::BluetoothSchedulerBusyObservation::from_busy_for_validation(true)
+    let step = super::BluetoothSchedulerBusyObservation::from_busy_for_host_test(true)
         .into_software_list_removal_gate();
     assert_eq!(
         step,
         BluetoothSchedulerSoftwareListRemovalInterruptStep::Pending
     );
 
-    let step = super::BluetoothSchedulerBusyObservation::from_busy_for_validation(false)
+    let step = super::BluetoothSchedulerBusyObservation::from_busy_for_host_test(false)
         .into_software_list_removal_gate();
     assert!(matches!(
         step,

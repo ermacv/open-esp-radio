@@ -340,7 +340,7 @@ impl<T> SharedRadio<T> {
     /// without an atomic exchange; dropping the lease releases it normally.
     #[cfg(test)]
     #[doc(hidden)]
-    pub fn lease_for_validation(&mut self) -> SharedRadioLease<'_, T> {
+    pub fn lease_for_host_test(&mut self) -> SharedRadioLease<'_, T> {
         *self.held.get_mut() = true;
         SharedRadioLease { radio: self }
     }
@@ -434,7 +434,7 @@ impl<T> SharedRadio<T> {
     /// access, so a host test can check the release alone.
     #[cfg(test)]
     #[doc(hidden)]
-    pub fn hold_phy_grant_protect_for_validation(&mut self) {
+    pub fn hold_phy_grant_protect_for_host_test(&mut self) {
         self.state.get_mut().phy_grant_protected = true;
     }
 

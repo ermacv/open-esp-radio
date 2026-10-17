@@ -62,7 +62,7 @@ impl BluetoothSchedulerWorkObservation {
     /// Construct semantic deferred-work fields for upper-layer validation.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn from_fields_for_validation(
+    pub const fn from_fields_for_host_test(
         busy: bool,
         state_29: bool,
         current_hardware_list: u8,
@@ -112,7 +112,7 @@ impl BluetoothSchedulerBusyObservation {
     /// Construct a semantic BUSY sample for upper-layer validation.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn from_busy_for_validation(busy: bool) -> Self {
+    pub const fn from_busy_for_host_test(busy: bool) -> Self {
         Self::new(busy)
     }
 

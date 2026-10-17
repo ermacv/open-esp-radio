@@ -30,7 +30,7 @@ impl BluetoothControllerReset {
     /// Mint a proof for a host model of controller memory.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn for_validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self { _private: () }
     }
 }

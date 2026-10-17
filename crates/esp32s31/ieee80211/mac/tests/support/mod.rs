@@ -145,7 +145,7 @@ impl RxDma for MockMmio {
     }
 
     fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
-        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::validation(
+        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::for_host_test(
             self.next_descriptor_low(),
             false,
         )
@@ -159,7 +159,7 @@ impl RxDma for MockMmio {
         self.record_fence();
         let next = self.next_descriptor_low();
         self.record_fence();
-        observed(RxDmaCursorObservation::validation(last, next))
+        observed(RxDmaCursorObservation::for_host_test(last, next))
     }
 
     fn walker_enabled(&mut self) -> bool {
@@ -179,7 +179,7 @@ impl RxDma for MockMmio {
         ) -> R,
     ) -> Option<R> {
         (!self.reload_pending())
-            .then(|| settled(oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled::validation()))
+            .then(|| settled(oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled::for_host_test()))
     }
 
     fn configure_descriptor_window(&mut self, _: &RxDmaBinding) {
@@ -218,7 +218,7 @@ impl RxDma for MockMmio {
         self.record_fence();
         self.operations.push(Operation::ObserveRxWalkerEnabled);
         self.rx_walker_enabled
-            .then(|| enabled(oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled::validation()))
+            .then(|| enabled(oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled::for_host_test()))
     }
 
     fn try_with_walker_stopped<R>(
@@ -229,7 +229,7 @@ impl RxDma for MockMmio {
         self.operations.push(Operation::StopRxWalker);
         self.record_fence();
         self.operations.push(Operation::ObserveRxWalkerEnabled);
-        (!self.rx_walker_enabled).then(|| stopped(RxDmaWalkerStopped::validation()))
+        (!self.rx_walker_enabled).then(|| stopped(RxDmaWalkerStopped::for_host_test()))
     }
 
     fn fence(&mut self) {

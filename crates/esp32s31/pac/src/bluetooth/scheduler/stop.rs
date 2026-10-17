@@ -18,7 +18,7 @@ impl BluetoothSchedulerStopped {
     /// Construct a stopped receipt for host validation of its owners.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn for_validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self { _private: () }
     }
 }

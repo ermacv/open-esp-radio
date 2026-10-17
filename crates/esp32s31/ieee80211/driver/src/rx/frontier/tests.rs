@@ -42,7 +42,7 @@ impl RxDma for Hardware {
         self.next_descriptor_low
     }
     fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
-        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::validation(
+        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::for_host_test(
             self.next_descriptor_low,
             false,
         )
@@ -57,7 +57,7 @@ impl RxDma for Hardware {
         self.fence();
         let next = self.next_descriptor_low();
         self.fence();
-        observed(oer_esp32s31_ieee80211_mac::rx::RxDmaCursorObservation::validation(last, next))
+        observed(oer_esp32s31_ieee80211_mac::rx::RxDmaCursorObservation::for_host_test(last, next))
     }
     fn walker_enabled(&mut self) -> bool {
         self.walker
@@ -72,7 +72,7 @@ impl RxDma for Hardware {
         ) -> R,
     ) -> Option<R> {
         (!self.reload_pending())
-            .then(|| settled(oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled::validation()))
+            .then(|| settled(oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled::for_host_test()))
     }
     fn configure_descriptor_window(&mut self, _: &RxDmaBinding) {}
     fn write_descriptor_base(&mut self, _: &RxDmaBinding, address: u32) {
@@ -103,7 +103,7 @@ impl RxDma for Hardware {
             }
             self.enable_count += 1;
             Some(enabled(
-                oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled::validation(),
+                oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled::for_host_test(),
             ))
         }
     }
@@ -114,7 +114,7 @@ impl RxDma for Hardware {
         if self.walker {
             self.walker = false;
             self.disable_count += 1;
-            Some(stopped(RxDmaWalkerStopped::validation()))
+            Some(stopped(RxDmaWalkerStopped::for_host_test()))
         } else {
             None
         }

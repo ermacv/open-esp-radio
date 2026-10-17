@@ -15,7 +15,7 @@ fn wait_requires_busy_and_start_simultaneously() {
         (true, true, true),
     ] {
         assert_eq!(
-            BluetoothSchedulerLockModifyObservation::from_fields_for_validation(busy, start, 0,)
+            BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(busy, start, 0,)
                 .wait_active(),
             expected
         );
@@ -25,12 +25,12 @@ fn wait_requires_busy_and_start_simultaneously() {
 #[test]
 fn result_projection_uses_idle_zero_or_busy_result_nibble() {
     assert_eq!(
-        BluetoothSchedulerLockModifyObservation::from_fields_for_validation(false, true, 15)
+        BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(false, true, 15)
             .result_code_after_publication(),
         0
     );
     assert_eq!(
-        BluetoothSchedulerLockModifyObservation::from_fields_for_validation(true, false, 11)
+        BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(true, false, 11)
             .result_code_after_publication(),
         0x0b
     );

@@ -224,7 +224,7 @@ impl<K: RadioClientKind> CommonPower<K> {
     /// A proof without entering power, for host tests of the later stages.
     /// It proves no power, so only test builds have it.
     #[cfg(test)]
-    pub const fn for_validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self::entered()
     }
 }

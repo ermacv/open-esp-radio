@@ -33,7 +33,7 @@ struct Port {
 impl Port {
     fn new(log: &Log) -> Self {
         Self {
-            power: WifiPowerBaseline::for_validation(false),
+            power: WifiPowerBaseline::for_host_test(false),
             power_readback: Ok(()),
             power_sequence_failure: None,
             log: log.clone(),
@@ -112,8 +112,8 @@ const COMMON: [PlatformClock; 3] = [
 
 #[test]
 fn power_retry_preserves_the_original_cold_baseline_until_commit() {
-    let original = WifiPowerBaseline::for_validation(false);
-    let retry_observation = WifiPowerBaseline::for_validation(true);
+    let original = WifiPowerBaseline::for_host_test(false);
+    let retry_observation = WifiPowerBaseline::for_host_test(true);
     let (log, mut port, _) = setup();
     port.power = original;
     let mut epoch = PowerEpoch::default();
@@ -150,14 +150,14 @@ fn power_restore_failure_retains_the_baseline_for_retry() {
 
 #[test]
 fn common_power_holds_one_platform_reference_of_each_shared_gate() {
-    let cold = WifiPowerBaseline::for_validation(false);
+    let cold = WifiPowerBaseline::for_host_test(false);
     let (log, mut port, platform) = setup();
     port.power = cold;
     let mut power = CommonRadioPower::default();
 
     let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
     // A later protocol must not pulse the Wi-Fi resets or take references.
-    port.power = WifiPowerBaseline::for_validation(true);
+    port.power = WifiPowerBaseline::for_host_test(true);
     let bluetooth = entered::<BluetoothClient>(&mut power, &mut port, &platform);
     assert_eq!(
         *log.borrow(),

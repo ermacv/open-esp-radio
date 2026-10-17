@@ -2527,7 +2527,7 @@ pub fn publish_cold_ring<M: RxDma>(
     descriptor_dma_base: u32,
     enable_rx: bool,
 ) -> Result<(), RxRingError> {
-    let binding = RxDmaBinding::raw_validation(descriptor_dma_base);
+    let binding = RxDmaBinding::raw_for_host_test(descriptor_dma_base);
     publish_cold_ring_inner(mmio, &binding, descriptor_dma_base, enable_rx)
 }
 
@@ -2559,7 +2559,7 @@ fn publish_cold_ring_inner<M: RxDma>(
 /// settle while the caller completes channel/MAC setup.
 #[cfg(any(test, feature = "test-support"))]
 pub fn enable_receive<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
-    enable_receive_inner(mmio, &RxDmaBinding::raw_validation(0))
+    enable_receive_inner(mmio, &RxDmaBinding::raw_for_host_test(0))
 }
 
 fn enable_receive_inner<M: RxDma>(

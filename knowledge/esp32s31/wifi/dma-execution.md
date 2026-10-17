@@ -44,3 +44,40 @@ checklist: W1 is the first step where receive DMA runs.
 Starting real DMA and proving its terminal on hardware, multi-descriptor MPDUs
 and CCMP on a descriptor chain were never shown on the S31 in the form; the
 model had no MMIO. Which register reads prove DMA quiescence is still open.
+
+## Host-test paths
+
+The DMA crates derive a descriptor or buffer address from a pointer as a
+`u32`, which does not fit on a 64-bit host. Host tests therefore swap or bypass
+product code under `cfg(any(test, feature = "test-support"))`:
+
+- A2: `dma/src/rx_storage.rs` `validate_descriptor_base` and
+  `validate_buffer_addresses` skip the address checks.
+- A3: `dma/src/rx_storage.rs` `prepare_halted` accepts a raw ring over a
+  `Reusable` arena; production returns `Busy`.
+- A4: `dma/src/tx_ampdu_storage.rs` `external_dma_address` truncates the
+  address without the range check.
+- A5: `mac/src/tx/ampdu.rs` gives `HtAmpduTxStorage` inline buffers and an
+  upper-only write path (`commit_*`, `can_commit_*`, `next_frame_buffer`,
+  `retry::{completed_frame, retain_for_ampdu_retry}`, `ampdu::model`);
+  production writes through `HtAmpduTxResources` and the DMA backing.
+- B: raw test entries into product types: `dma/src/rx_ring.rs`
+  `RxRingHalted::prepare`, `RxRingStopped::prepare`, `take_completed*`,
+  `recycle_completed_*`, `observe_completed_unit_link_release`,
+  `build_cold_ring`, `publish_cold_ring`, `enable_receive`, `disable_receive`,
+  `rearm_descriptor`; `dma/src/descriptor.rs` `publish`, `write_word0`;
+  `mac/src/tx.rs` `mark_hardware_owned`; `driver/src/rx/frontier/lifecycle.rs`
+  `start`.
+
+At W1 the tests of `dma`, `mac` and `driver` run through the product path. The
+choice of how is made then: (1) a DMA address-space type parameter whose
+default is the product's pointer-to-`u32` and range check, with a host space
+of synthetic low addresses; or (2) running the DMA crates' tests on a 32-bit
+host target (for example `i686-unknown-linux-gnu`), where a pointer fits a
+`u32` and only the range checks still differ.
+
+A separate layout question, A1: `dma/src/rx_ring.rs` keeps the reload-repair
+evidence in six global `AtomicU32` in production, outside the movable ring
+token so as not to grow nested async state, but in a token field in tests so
+parallel tests cannot race. Whether it moves into the arena next to the
+lifecycle word is decided with the same change.

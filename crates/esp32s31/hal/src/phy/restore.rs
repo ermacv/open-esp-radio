@@ -109,7 +109,7 @@ impl PhyRouteState {
 
     /// Fresh state for a host test.
     #[cfg(test)]
-    pub(crate) const fn for_validation() -> Self {
+    pub(crate) const fn for_host_test() -> Self {
         Self::new(PhyRegistration::new())
     }
 

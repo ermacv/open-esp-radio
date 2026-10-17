@@ -785,7 +785,7 @@ mod schedule;
 fn only_the_minting_registration_describes_a_detached_client_set() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
     let (radio, _partitions) =
-        oer_esp32s31_hal::root::RadioHardware::for_validation().into_concurrent(());
+        oer_esp32s31_hal::root::RadioHardware::for_host_test().into_concurrent(());
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
