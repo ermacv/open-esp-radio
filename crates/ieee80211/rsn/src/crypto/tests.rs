@@ -29,6 +29,26 @@ fn association_security_binding_commits_to_every_byte_and_the_pmk() {
 }
 
 #[test]
+fn association_security_binding_uses_its_domain_label() {
+    // SOURCE: Python hmac, HMAC-SHA1(PMK, label || u64be(len) || IEs)[..16].
+    let pmk = Pmk::from_bytes([0x11; 32]);
+    let association_security_ies = [0x30, 2, 1, 0, 0xf4, 1, 0x20];
+    let binding = pmk.bind_association_security_ies(&association_security_ies);
+
+    assert_eq!(
+        RSN_ASSOCIATION_SECURITY_BINDING_LABEL,
+        b"open-esp-radio AP association security IEs"
+    );
+    assert_eq!(
+        binding.0,
+        [
+            0x99, 0x9e, 0xdf, 0xb6, 0x70, 0x1f, 0x68, 0x58, 0xf9, 0x34, 0x59, 0x53, 0xd5, 0x3e,
+            0x59, 0x59,
+        ]
+    );
+}
+
+#[test]
 fn derives_known_ptk_and_builds_message_2() {
     let pmk = Pmk(core::array::from_fn(|index| index as u8));
     let context = PtkContext {
