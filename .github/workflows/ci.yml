@@ -22,7 +22,30 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked
+        run: |
+          # One JSON run: its errors fail the step, its warnings are only
+          # counted per package.
+          status=0
+          cargo clippy --workspace --all-targets --locked --message-format=json \
+            > "$RUNNER_TEMP/clippy.json" || status=$?
+          jq -rs '[.[] | select(.reason == "compiler-message") | .message.rendered]
+            | unique | .[]' "$RUNNER_TEMP/clippy.json" || true
+          echo "Clippy warnings per package:"
+          jq -rs '
+            [ .[]
+              | select(.reason == "compiler-message" and .message.level == "warning")
+              | { package: (.package_id
+                            | (capture("#(?<name>[^@]+)@").name
+                               // (split("#")[0] | split("/") | last))),
+                  message: .message.rendered } ]
+            | unique
+            | group_by(.package)
+            | map([.[0].package, length])
+            | sort_by(-.[1], .[0])
+            | (["package", "warnings"], .[], ["total", (map(.[1]) | add // 0)])
+            | @tsv' "$RUNNER_TEMP/clippy.json" \
+            | awk -F '\t' '{ printf "%-40s %s\n", $1, $2 }' || true
+          exit "$status"
       - name: Tests
         run: cargo test --workspace --locked
 

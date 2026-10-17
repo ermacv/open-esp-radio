@@ -21,8 +21,12 @@ IEEE 802.15.4, without vendor radio binaries. Owner decisions are in
   `// SAFETY:` ([crates/UNSAFE.md](crates/UNSAFE.md)).
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor.
-- **Panics.** New code does not panic on input from the air or from hardware;
-  it returns an error. Existing panic sites are warnings until fixed.
+- **Panics.** Input from outside never panics: frames from the air, any peer
+  value (counters, PNs, sequence numbers, lengths, indices), host and API
+  input return a handled error. Elsewhere, during development, `todo!`,
+  `unreachable!`, `panic!` and `expect` (never a bare `unwrap()`) are allowed,
+  each with a static message. Panic lints warn; a crate moves to `deny` when
+  its contract freezes ([docs/decisions.md](docs/decisions.md)).
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
   `registers/*/published/*`, `knowledge/*/vendor/facts/**`) are never read
   whole or edited by hand: grep them by path, regenerate them.

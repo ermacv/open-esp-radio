@@ -22,10 +22,18 @@ tree is a selection of a predecessor repository, without its history.
 - **Features.** Diagnostic features of the old test setup are removed;
   `validation-probes` and `validation-raw-dma` go in their own change right
   after the start; `test-support` product swaps are a separate task.
-- **Panics.** The start changes no panic site. The workspace warns on
-  `unwrap_used`, `expect_used`, `panic`, `unreachable`, `indexing_slicing`;
-  fixes go air-input parsers first, then sites hardware can reach, then state
-  invariants; a clean crate moves to `deny`.
+- **Panics** (clarified by the owner the same day). During active
+  development our code may panic: `todo!` for an unwritten path,
+  `unreachable!` for an invariant, `panic!` for unexpected hardware, `expect`
+  instead of a bare `unwrap()`, each with a static message, since the panic
+  record keeps only its start. Input from outside never panics: frames from
+  the air, any peer value (counters, PNs, sequence numbers, lengths, indices),
+  host and application input through an API; a wrong or impossible value is
+  a handled error. The workspace warns on `unwrap_used`, `expect_used`,
+  `panic`, `unreachable`, `indexing_slicing`; a crate moves to `deny` when its
+  contract freezes: the `ieee80211/mac` and `rsn` parsers before W1, the PHY
+  and radio system after R1, `lower-mac`, `sta`, `arbiter`, `runtime` and the
+  Wi-Fi driver after W4, IEEE 802.15.4 and BLE when their slices freeze.
 - **First vertical slice.** Wi-Fi station in steps, each with an observable
   hardware criterion: W0 boot, PHY and MAC up; W1 receive, passive scan; W2
   transmit, probe; W3 open association and ping on a hostapd access point; W4
