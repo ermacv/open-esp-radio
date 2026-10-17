@@ -2138,11 +2138,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-radio-client"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "embassy-futures",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-phy",
+ "oer-ieee80211-mac",
+ "oer-time",
+]
+
+[[package]]
 name = "oer-esp32s31-radio-esp-hal"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-esp32s31-hal",
+]
+
+[[package]]
+name = "oer-esp32s31-radio-system"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-client",
+ "oer-ieee80211-mac",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]

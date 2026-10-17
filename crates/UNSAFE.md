@@ -57,6 +57,7 @@ packages. Prefixes below omit `oer-` only to keep the mapping readable.
 | `esp32s31-phy` | `esp32s31/phy/` |
 | `espressif-ieee802154-engine` | `espressif/ieee802154-engine/` |
 | `esp32s31-ieee80211-dma` | `esp32s31/ieee80211/dma/` |
+| `esp32s31-radio-client` | `esp32s31/radio/client/` |
 | `espressif-executor-embassy` | `exec/executor/` |
 | `espressif-interrupt-table-esp-hal` | `exec/esp-hal-irq/` |
 | `interrupt-table` | `exec/interrupt-table/` |
@@ -70,6 +71,12 @@ and `adopt`) and returns the slot through `release_adopted` when the packet
 drops. A slot is adopted again only after that release returned, because the
 radio must first claim the slot the release freed. Preserve the proof at the
 smallest operation; a safe state machine in an audited crate remains safe.
+
+`esp32s31-radio-client` has one unsafe module, `cell`: the one-request slot
+between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
+`WORKING`, `ANSWERED`) admits exactly one accessor to each payload place, a
+Release store hands the place over and the other side's Acquire CAS takes it;
+the client posts only with the slot's token, which the answer returns.
 
 `oer-memory` holds the shared proofs for executor-crossing storage.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
