@@ -1,0 +1,30 @@
+[package]
+name = "oer-esp32s31-radio-esp-hal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Hands the ESP32-S31 radio blocks from esp-hal to the radio HAL and supplies its platform clocks"
+
+[features]
+default = []
+esp32s31 = ["dep:esp-hal"]
+
+[dependencies]
+oer-esp32s31-hal = { path = "../../../esp32s31/hal" }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# The handoff exists only for the chip target; document it there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+features = ["esp32s31"]
+
+[package.metadata.open-radio]
+layer = "adapter"
+platform = "chip"
+chip = "esp32s31"

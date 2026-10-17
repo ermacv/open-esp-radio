@@ -2138,6 +2138,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-radio-esp-hal"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-hal",
+]
+
+[[package]]
 name = "oer-esp32s31-soc-esp-hal"
 version = "0.1.0"
 dependencies = [

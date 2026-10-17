@@ -13,6 +13,7 @@ members = [
     "platform/esp32s31/bootstrap",
     "platform/esp32s31/layout",
     "apps/boot-smoke",
+    "apps/radio-root",
 ]
 
 [workspace.package]

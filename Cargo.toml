@@ -12,6 +12,7 @@ members = [
     "crates/exec/executor",
     "crates/adapters/embassy/net",
     "crates/base/time-virtual",
+    "crates/adapters/esp-hal/radio",
     "crates/adapters/esp-hal/soc",
     "crates/exec/esp-hal-irq",
     "crates/bluetooth/hci",

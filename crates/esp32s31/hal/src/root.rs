@@ -27,9 +27,9 @@ use crate::{
 /// Proof that its holder owns the chip's analog-I2C master (regi2c) for the
 /// rest of the program, as [`RadioHardware::take`] requires.
 ///
-/// The platform that owns the master hands it out once: on ESP-HAL, the radio
-/// platform holding the `I2C_ANA_MST` singleton. Without it there is no radio
-/// root:
+/// The platform that owns the master hands it out once: on ESP-HAL,
+/// `oer-esp32s31-radio-esp-hal`'s `take_radio`, which consumes the
+/// `I2C_ANA_MST` singleton. Without it there is no radio root:
 ///
 /// ```compile_fail
 /// use oer_esp32s31_hal::root::RadioHardware;
