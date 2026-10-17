@@ -1,17 +1,17 @@
-//! Wi-Fi as a client of the shared radio arbiter.
+//! Wi-Fi as a client of the shared radio domain.
 //!
 //! The concurrent split hands Wi-Fi its MAC partition and interrupt setup;
 //! common radio power, the modem clocks and every shared register stay with
-//! the arbiter. These owners follow ESP-IDF's bring-up: common power, then
+//! the radio domain. These owners follow ESP-IDF's bring-up: common power, then
 //! `modem_clock_module_enable(PERIPH_WIFI_MODULE)`, then the Wi-Fi
 //! initialized status that keeps the Wi-Fi clocks enabled while Wi-Fi is
 //! initialized. Each stage proves only its own step; MAC, PHY and RF
 //! readiness are later stages.
 //!
-//! A clocked client borrows its capabilities with the arbiter lease: the
-//! cold MAC HAL and the channel HAL take the shared registers from the lease
+//! A clocked client borrows its capabilities with the radio domain: the
+//! cold MAC HAL and the channel HAL take the shared registers from the radio domain
 //! for one transaction, the MAC reset pulses through it, and the runtime MAC
-//! HAL needs no lease because the Wi-Fi hot path touches Wi-Fi registers
+//! HAL needs no radio domain because the Wi-Fi hot path touches Wi-Fi registers
 //! only. After cold MAC setup [`WifiClocked::into_running`] splits the client
 //! into the task-side [`RadioRuntimeOwner`] and the MAC interrupt setup;
 //! [`WifiClocked::from_running`] reunites a stopped runtime epoch.
@@ -23,6 +23,10 @@ use oer_esp32s31_pac::{MacInterruptSetup, WifiRadioRegisters};
 use crate::types::MacInterruptEnableState;
 
 use crate::{
+    domain::{
+        CoexAbsent, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, ModemClockError,
+        PlatformClockProvider, RadioDomain, WifiClient,
+    },
     ieee80211::{
         channel::RadioChannelHal,
         mac::{WifiMacColdHal, WifiMacHal},
@@ -30,10 +34,6 @@ use crate::{
     },
     owner::RadioRuntimeOwner,
     root::WifiPartition,
-    shared_radio::{
-        CoexAbsent, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, ModemClockError,
-        PlatformClockProvider, SharedRadioLease, WifiClient,
-    },
 };
 
 /// The Wi-Fi MAC register set and its interrupt setup.
@@ -138,13 +138,13 @@ impl WifiCold {
     /// a read-back checkpoint; the unchanged owner is returned.
     pub fn power_up<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         clocks: &impl PlatformClockProvider,
     ) -> Result<
         (WifiPowered, CommonPower<WifiClient>),
         WifiTransitionFailure<Self, CommonRadioPowerError>,
     > {
-        match lease.enter_common_power(&self.registers.mac, clocks) {
+        match radio.enter_common_power(&self.registers.mac, clocks) {
             Ok(power) => Ok((
                 WifiPowered {
                     registers: self.registers,
@@ -170,14 +170,14 @@ impl WifiPowered {
     )]
     pub fn power_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         power: CommonPower<WifiClient>,
         coex: &CoexAbsent<WifiClient>,
     ) -> Result<
         WifiCold,
         WifiTransitionFailure<(Self, CommonPower<WifiClient>), CommonRadioPowerError>,
     > {
-        match lease.exit_common_power(&self.registers.mac, power, coex) {
+        match radio.exit_common_power(&self.registers.mac, power, coex) {
             Ok(()) => Ok(WifiCold {
                 registers: self.registers,
             }),
@@ -198,10 +198,10 @@ impl WifiPowered {
     /// request failed and poisoned the modem clocks.
     pub fn enable_clocks<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         platform: &impl PlatformClockProvider,
     ) -> Result<WifiClocked, WifiTransitionFailure<Self, ModemClockError>> {
-        match lease.enable_modem_clocks(&self.registers.mac, platform) {
+        match radio.enable_modem_clocks(&self.registers.mac, platform) {
             Ok(()) => Ok(WifiClocked {
                 registers: self.registers,
                 initialized: false,
@@ -223,10 +223,10 @@ impl WifiClocked {
     /// The modem clocks are poisoned.
     pub fn set_initialized<T>(
         &mut self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         initialized: bool,
     ) -> Result<(), ModemClockError> {
-        lease.set_wifi_initialized(&self.registers.mac, initialized)?;
+        radio.set_wifi_initialized(&self.registers.mac, initialized)?;
         self.initialized = initialized;
         Ok(())
     }
@@ -257,23 +257,23 @@ impl WifiClocked {
     /// Pulse the Wi-Fi MAC reset, as
     /// `modem_clock_module_mac_reset(PERIPH_WIFI_MODULE)` does through
     /// `modem_syscon_ll_reset_wifimac`.
-    pub fn reset_mac<T>(&mut self, lease: &mut SharedRadioLease<'_, T>) {
-        let phy = lease.registers_mut().radio_phy_mut();
+    pub fn reset_mac<T>(&mut self, radio: &mut RadioDomain<T>) {
+        let phy = radio.registers_mut().radio_phy_mut();
         phy.set_wifi_mac_reset(true);
         phy.set_wifi_mac_reset(false);
     }
 
     /// Borrow the cold MAC HAL for one transaction, with the shared radio
-    /// owner borrowed from the arbiter lease.
+    /// owner borrowed from the radio domain.
     ///
     /// Clock and modem-source configuration of the exclusive route are
-    /// no-ops here: the arbiter enabled the Wi-Fi module clocks already.
+    /// no-ops here: the radio domain enabled the Wi-Fi module clocks already.
     pub fn cold_mac_hal<'hal, T>(
         &'hal mut self,
-        lease: &'hal mut SharedRadioLease<'_, T>,
+        radio: &'hal mut RadioDomain<T>,
     ) -> WifiMacColdHal<'hal> {
         let WifiClientRegisters { mac, interrupts } = &mut self.registers;
-        WifiMacColdHal::from_leased(mac, interrupts, lease.registers_mut())
+        WifiMacColdHal::from_leased(mac, interrupts, radio.registers_mut())
     }
 
     /// Borrow the runtime MAC HAL over the MAC alone.
@@ -282,24 +282,24 @@ impl WifiClocked {
     }
 
     /// Borrow the channel HAL for one channel transaction, with the shared
-    /// PHY borrowed from the arbiter lease.
+    /// PHY borrowed from the radio domain.
     pub fn channel_hal<'hal, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        lease: &'hal mut SharedRadioLease<'_, T>,
+        radio: &'hal mut RadioDomain<T>,
     ) -> RadioChannelHal<'hal, P> {
-        let (phy, restore) = lease.phy_parts_mut();
+        let (phy, restore) = radio.phy_parts_mut();
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
     }
 
-    /// Borrow the channel HAL together with the arbiter's attachment, for a
+    /// Borrow the channel HAL together with the domain's attachment, for a
     /// PHY channel operation that updates the shared domain's state.
     pub fn channel_hal_with_attachment<'hal, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        lease: &'hal mut SharedRadioLease<'_, T>,
+        radio: &'hal mut RadioDomain<T>,
     ) -> (RadioChannelHal<'hal, P>, &'hal mut T) {
-        let (phy, restore, attachment) = lease.phy_parts_with_attachment();
+        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
         (
             RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore),
             attachment,
@@ -371,11 +371,11 @@ impl WifiClocked {
     )]
     pub fn release_clocks<T>(
         mut self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
     ) -> Result<ClockReleased, (StoppedInstallation, ClockPoisoned)> {
         let release = self
-            .set_initialized(lease, false)
-            .and_then(|()| lease.disable_modem_clocks(&self.registers.mac));
+            .set_initialized(radio, false)
+            .and_then(|()| radio.disable_modem_clocks(&self.registers.mac));
         self.finish_clock_release(release)
     }
 

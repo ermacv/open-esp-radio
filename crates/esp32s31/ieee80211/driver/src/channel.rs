@@ -1,7 +1,7 @@
 //! ESP32-S31 lowering of portable Wi-Fi channel definitions.
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::{owner::RadioRuntimeOwner, shared_radio::SharedRadioLease};
+use oer_esp32s31_hal::{domain::RadioDomain, owner::RadioRuntimeOwner};
 #[cfg(target_arch = "riscv32")]
 use oer_esp32s31_phy::{
     ConcurrentWifiChannelError, PhyShortDelay, PhyTargetObserver, concurrent::ConcurrentPhy,
@@ -37,19 +37,19 @@ pub const fn lower_wifi_channel(channel: WifiChannel) -> PhyChannel {
 /// Retune an initialized Wi-Fi MAC while its role-specific DMA/IRQ service is
 /// stopped and therefore owns no asynchronous access to these registers.
 ///
-/// The shared PHY domain is retuned under the arbiter lease; `platform` is
+/// The shared PHY domain is retuned under the radio domain; `platform` is
 /// the PHY platform token of the shared radio's owner.
 #[cfg(target_arch = "riscv32")]
 pub async fn switch_esp32s31_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    domain: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     radio: &mut RadioRuntimeOwner,
     channel: WifiChannel,
     observer: &mut O,
 ) -> Result<(), ConcurrentWifiChannelError> {
     let channel = lower_wifi_channel(channel);
-    let (mut hardware, phy) = radio.channel_hal_with_attachment(platform, lease);
+    let (mut hardware, phy) = radio.channel_hal_with_attachment(platform, domain);
     switch_concurrent_wifi_channel::<D, _, _>(
         timer,
         phy,
@@ -69,7 +69,7 @@ pub async fn switch_esp32s31_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObser
 #[cfg(target_arch = "riscv32")]
 pub async fn switch_published_esp32s31_wifi_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     registers: &oer_esp32s31_hal::ieee80211::arena::RadioAccess<'_>,
     channel: WifiChannel,
@@ -77,7 +77,7 @@ pub async fn switch_published_esp32s31_wifi_channel<D: PhyShortDelay, P, O: PhyT
 ) -> Result<(), PublishedWifiChannelError> {
     let channel = lower_wifi_channel(channel);
     let (mut hardware, phy) = registers
-        .try_channel_hal_with_attachment(platform, lease)
+        .try_channel_hal_with_attachment(platform, radio)
         .map_err(PublishedWifiChannelError::Registers)?;
     switch_concurrent_wifi_channel::<D, _, _>(
         timer,

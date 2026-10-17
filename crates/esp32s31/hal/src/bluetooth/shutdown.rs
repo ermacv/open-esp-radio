@@ -9,7 +9,7 @@
 use oer_esp32s31_pac::{BluetoothInterruptSetup, BluetoothModemLpTimerRegisters};
 
 use super::{ClockedOwner, Partition, TaskOwner};
-use crate::shared_radio::{RadioClient, SharedRadioLease};
+use crate::domain::{RadioClient, RadioDomain};
 
 /// Proof that the Bluetooth Controller domains were reset.
 ///
@@ -100,13 +100,13 @@ fn prepare(control: &mut impl Control) -> Result<(), BluetoothShutdownError> {
     Ok(())
 }
 
-struct Hardware<'a, 'radio, T> {
+struct Hardware<'a, T> {
     task: &'a mut TaskOwner,
-    lease: &'a mut SharedRadioLease<'radio, T>,
+    radio: &'a mut RadioDomain<T>,
     timer: &'a mut BluetoothModemLpTimerRegisters,
 }
 
-impl<T> Control for Hardware<'_, '_, T> {
+impl<T> Control for Hardware<'_, T> {
     fn time_pending(&self) -> bool {
         self.task.time_latch.in_flight()
     }
@@ -114,7 +114,7 @@ impl<T> Control for Hardware<'_, '_, T> {
         self.task.modem_lp_timer.is_none()
     }
     fn btbb_held(&self) -> bool {
-        self.lease.holds_btbb(RadioClient::Bluetooth)
+        self.radio.holds_btbb(RadioClient::Bluetooth)
     }
     fn disable_compare(&mut self) {
         // The outer retired Controller owns inactive CPU routes and a drained
@@ -125,12 +125,12 @@ impl<T> Control for Hardware<'_, '_, T> {
     fn reset_controller(&mut self) {
         self.task
             .registers
-            .reset_controller_domains(self.lease.registers_mut());
+            .reset_controller_domains(self.radio.registers_mut());
     }
     fn reset_released(&self) -> bool {
         self.task
             .registers
-            .controller_resets_released(self.lease.registers())
+            .controller_resets_released(self.radio.registers())
     }
 }
 
@@ -141,13 +141,13 @@ impl<T> Control for Hardware<'_, '_, T> {
 /// hardware escape.
 pub(super) fn shut_down<T>(
     mut task: TaskOwner,
-    lease: &mut SharedRadioLease<'_, T>,
+    radio: &mut RadioDomain<T>,
     output: BluetoothInterruptSetup,
     mut timer: BluetoothModemLpTimerRegisters,
 ) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {
     if let Err(error) = prepare(&mut Hardware {
         task: &mut task,
-        lease,
+        radio,
         timer: &mut timer,
     }) {
         return Err(BluetoothShutdownFailure {

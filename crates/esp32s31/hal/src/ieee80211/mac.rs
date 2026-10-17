@@ -300,7 +300,7 @@ impl WifiMacColdHal<'_> {
 ///
 /// It borrows the Wi-Fi MAC registers alone and exposes neither them nor
 /// `Deref`. LMAC code can request only the finite operations defined here;
-/// shared radio registers are reached through the arbiter lease instead.
+/// shared radio registers are reached through the radio domain instead.
 pub struct WifiMacHal<'registers> {
     registers: MacBorrow<'registers>,
 }

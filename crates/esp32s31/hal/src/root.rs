@@ -1,11 +1,11 @@
-//! Protocol-neutral radio root and its concurrent split.
+//! Protocol-neutral radio root and its split.
 //!
 //! The restricted PAC supplies opaque register partitions and register sets
 //! without any route policy. This module owns the complete neutral root.
-//! [`RadioHardware::into_concurrent`] hands every protocol partition out at
-//! once and places the shared partitions under the [`SharedRadio`] arbiter;
-//! [`RadioHardware::from_concurrent`] reunites them only after the shared
-//! restore obligations are complete.
+//! [`RadioHardware::split`] hands every protocol partition out at once and
+//! places the shared partitions in one [`RadioDomain`];
+//! [`RadioHardware::reunite`] reunites them only after the shared restore
+//! obligations are complete.
 
 /// The read-only Wi-Fi MAC local-time capability a [`WifiPartition`]
 /// lends.
@@ -17,11 +17,11 @@ use oer_esp32s31_pac::{
 };
 
 use crate::{
-    phy::{registration::PhyRegistration, restore::PhyRouteState},
-    shared_radio::{
-        BluetoothClient, CoexAbsent, Ieee802154Client, SharedRadio, SharedRadioReleaseError,
+    domain::{
+        BluetoothClient, CoexAbsent, Ieee802154Client, RadioDomain, RadioDomainReleaseError,
         WifiClient,
     },
+    phy::{registration::PhyRegistration, restore::PhyRouteState},
 };
 
 /// Proof that its holder owns the chip's analog-I2C master (regi2c) for the
@@ -61,7 +61,7 @@ impl AnalogBusOwnership {
 ///
 /// This is the sole production acquisition root. It can be consumed by
 /// exactly one concurrent split, which cannot manufacture a second owner. The
-/// split returns the complete root after every partition and the arbiter
+/// split returns the complete root after every partition and the domain
 /// have been reunited. Protocol-specific cached state is
 /// deliberately not retained in this neutral owner.
 ///
@@ -71,8 +71,8 @@ impl AnalogBusOwnership {
 /// # use oer_esp32s31_hal::root::AnalogBusOwnership;
 /// // SAFETY: a doctest that never runs on hardware.
 /// let hardware = RadioHardware::take(unsafe { AnalogBusOwnership::assume_exclusive() }).unwrap();
-/// let _first = hardware.into_concurrent(());
-/// let _second = hardware.into_concurrent(());
+/// let _first = hardware.split(());
+/// let _second = hardware.split(());
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
 pub struct RadioHardware {
@@ -187,13 +187,13 @@ impl Ieee802154RadioPartition {
     }
 }
 
-/// Protocol partitions of a concurrently split radio root.
+/// Protocol partitions of a split radio root.
 ///
-/// Each field can move to its own protocol route; the shared radio stays with
-/// the [`SharedRadio`] arbiter returned beside it.
+/// Each field can move to its own protocol driver; the shared radio stays in
+/// the [`RadioDomain`] returned beside it.
 /// Each protocol also receives its coexistence state, outside coexistence;
 /// it returns with the partition when the split reunites.
-pub struct ConcurrentPartitions {
+pub struct ProtocolPartitions {
     pub wifi: WifiPartition,
     pub wifi_coex: CoexAbsent<WifiClient>,
     pub bluetooth: BluetoothPartition,
@@ -202,26 +202,26 @@ pub struct ConcurrentPartitions {
     pub ieee802154_coex: CoexAbsent<Ieee802154Client>,
 }
 
-/// Why a concurrent split cannot become the neutral root again.
+/// Why a split cannot become the neutral root again.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConcurrentReunionError {
-    Shared(SharedRadioReleaseError),
+pub enum ReunionError {
+    Shared(RadioDomainReleaseError),
 }
 
 /// Rejected reunion returning both unchanged owners.
-#[must_use = "a rejected reunion still owns the arbiter and every partition"]
-pub struct ConcurrentReunionFailure<T = ()> {
-    shared: SharedRadio<T>,
-    partitions: ConcurrentPartitions,
-    error: ConcurrentReunionError,
+#[must_use = "a rejected reunion still owns the domain and every partition"]
+pub struct ReunionFailure<T = ()> {
+    shared: RadioDomain<T>,
+    partitions: ProtocolPartitions,
+    error: ReunionError,
 }
 
-impl<T> ConcurrentReunionFailure<T> {
-    pub const fn error(&self) -> ConcurrentReunionError {
+impl<T> ReunionFailure<T> {
+    pub const fn error(&self) -> ReunionError {
         self.error
     }
 
-    pub fn into_parts(self) -> (SharedRadio<T>, ConcurrentPartitions) {
+    pub fn into_parts(self) -> (RadioDomain<T>, ProtocolPartitions) {
         (self.shared, self.partitions)
     }
 }
@@ -231,13 +231,13 @@ impl RadioHardware {
     /// MMIO.
     ///
     /// The shared radio partitions and the shared PHY state go to the
-    /// returned [`SharedRadio`] arbiter, and every protocol partition to
-    /// [`ConcurrentPartitions`]. The two are separate owners so a protocol
-    /// can take its partition while other routes hold arbiter leases.
+    /// returned [`RadioDomain`], and every protocol partition to
+    /// [`ProtocolPartitions`]. The two are separate owners, so a protocol
+    /// driver takes its partition while the radio system owns the domain.
     ///
-    /// `attachment` is the upper layer's state kept under the same
-    /// arbitration, such as the PHY layer's registered domain slot.
-    pub fn into_concurrent<T>(self, attachment: T) -> (SharedRadio<T>, ConcurrentPartitions) {
+    /// `attachment` is the upper layer's state kept with the domain, such
+    /// as the PHY layer's registered domain slot.
+    pub fn split<T>(self, attachment: T) -> (RadioDomain<T>, ProtocolPartitions) {
         let RadioPartitions {
             wifi_mac,
             wifi_interrupts,
@@ -250,7 +250,7 @@ impl RadioHardware {
             ieee802154,
         } = self.partitions;
         (
-            SharedRadio::new(
+            RadioDomain::new(
                 SharedRadioRegisters::new(SharedRadioParts {
                     radio_phy,
                     coexistence,
@@ -259,7 +259,7 @@ impl RadioHardware {
                 PhyRouteState::new(self.phy_registration),
                 attachment,
             ),
-            ConcurrentPartitions {
+            ProtocolPartitions {
                 wifi: WifiPartition {
                     mac: wifi_mac,
                     interrupts: wifi_interrupts,
@@ -277,11 +277,9 @@ impl RadioHardware {
         )
     }
 
-    /// Reunite a concurrent split into the neutral root. This performs no
-    /// MMIO.
+    /// Reunite a split into the neutral root. This performs no MMIO.
     ///
-    /// Consuming the arbiter proves no lease is alive. Leaving retires the
-    /// PHY registration, as every route return does.
+    /// Leaving retires the PHY registration, as every route return does.
     ///
     /// # Errors
     ///
@@ -289,19 +287,19 @@ impl RadioHardware {
     /// calibration still owns a restore obligation.
     #[allow(
         clippy::result_large_err,
-        reason = "rejection returns the arbiter and every partition without allocation"
+        reason = "rejection returns the domain and every partition without allocation"
     )]
-    pub fn from_concurrent<T>(
-        shared: SharedRadio<T>,
-        partitions: ConcurrentPartitions,
-    ) -> Result<(Self, T), ConcurrentReunionFailure<T>> {
+    pub fn reunite<T>(
+        shared: RadioDomain<T>,
+        partitions: ProtocolPartitions,
+    ) -> Result<(Self, T), ReunionFailure<T>> {
         let (registers, phy, attachment) = match shared.into_parts() {
             Ok(parts) => parts,
             Err((shared, error)) => {
-                return Err(ConcurrentReunionFailure {
+                return Err(ReunionFailure {
                     shared,
                     partitions,
-                    error: ConcurrentReunionError::Shared(error),
+                    error: ReunionError::Shared(error),
                 });
             }
         };
@@ -310,7 +308,7 @@ impl RadioHardware {
             coexistence,
             shared_radio,
         } = registers.into_parts();
-        let ConcurrentPartitions {
+        let ProtocolPartitions {
             wifi,
             wifi_coex: _,
             bluetooth,

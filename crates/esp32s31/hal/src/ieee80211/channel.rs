@@ -7,7 +7,7 @@ use crate::{ieee80211::MacBorrow, owner::SharedPhyAccess, phy::restore::PhyRoute
 use oer_esp32s31_pac::{RadioPhyRegisters, WifiRadioRegisters};
 
 /// Temporary channel-programming borrow: the Wi-Fi client's MAC with the
-/// shared PHY and route restore state borrowed from the arbiter lease.
+/// shared PHY and route restore state borrowed from the radio domain.
 ///
 /// Dropping this value ends every borrow; no PAC owner or generic register
 /// accessor is exposed.

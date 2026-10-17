@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "ESP32-S31 binding of the Espressif coexistence policy to the radio arbiter"
+description = "ESP32-S31 binding of the Espressif coexistence policy to the radio domain"
 
 [dependencies]
 oer-esp32s31-hal = { path = "../../hal" }

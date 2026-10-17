@@ -6,17 +6,16 @@
 //! The policy itself — [`CoexCore`], [`CoexSchedule`], [`CoexScheduleExecutor`]
 //! and the priority table — is the chip-neutral `oer-espressif-coex`, which
 //! this crate re-exports. Register ownership deliberately lives outside both
-//! crates: the radio arbiter owns the COEX timer bank, the event priority
-//! table and the reviewed shared modem clock fields. [`CoexArbiterPorts`]
-//! lends an arbiter lease to the core as its timer and clock ports, and
+//! crates: the radio domain owns the COEX timer bank, the event priority
+//! table and the reviewed shared modem clock fields. [`CoexDomainPorts`]
+//! lends a radio domain to the core as its timer and clock ports, and
 //! `oer_esp32s31_hal::coex::timer_clock` decodes the HAL's clock observation
 //! for them. The radio
 //! runtime composes both; Wi-Fi and Bluetooth LE publish their status to it,
 //! and Wi-Fi reacts to its phases.
 
-mod arbiter;
+mod ports;
 
-pub use arbiter::{CoexArbiterClock, CoexArbiterPorts, CoexArbiterTimer};
 pub use oer_espressif_coex::{
     COEX_EVENT_COUNT, COEX_TIMER_COUNT, CoexClient, CoexClientRequest, CoexClockHardware,
     CoexClockSelector, CoexCore, CoexError, CoexEventDurations, CoexEventId, CoexExpiry, CoexPhase,
@@ -25,3 +24,4 @@ pub use oer_espressif_coex::{
     CoexStatusWords, CoexTimerClock, CoexTimerHardware, CoexTimerIndex, NoRequestKind,
     program_timer, timer_index, wifi_status,
 };
+pub use ports::{CoexDomainClock, CoexDomainPorts, CoexDomainTimer};

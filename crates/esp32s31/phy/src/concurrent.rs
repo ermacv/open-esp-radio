@@ -1,10 +1,9 @@
 //! One registered PHY domain shared by concurrently running protocol clients.
 //!
-//! [`ConcurrentPhy`] is the PHY layer's attachment to the HAL shared radio
-//! arbiter (`SharedRadio<ConcurrentPhy>`). Every operation takes the arbiter's
-//! lease, so access to the domain is serialized by the same mechanism that
-//! serializes the shared registers, and PHY work always runs on the lease's
-//! shared-PHY borrow.
+//! [`ConcurrentPhy`] is the PHY layer's attachment to the HAL radio domain
+//! (`RadioDomain<ConcurrentPhy>`). Every operation borrows that domain
+//! mutably, so access to the PHY state is serialized with the shared
+//! registers, and PHY work always runs on the domain's shared-PHY borrow.
 //!
 //! The domain is registered once. Wi-Fi, Bluetooth and IEEE 802.15.4 enter and
 //! leave it as clients of the one client set. Scheduled tracking and a first
@@ -15,7 +14,7 @@
 //! Pending tracking starts as ESP-IDF's does: `phy_param_track_tot` runs
 //! from a periodic timer under the PHY lock alone, without pausing any
 //! protocol, and its RF-sensitive regions carry the grant-protect request.
-//! Here the arbiter lease is that lock and the tracking graph emits the grant
+//! Here the exclusive borrow of the radio domain is that lock and the tracking graph emits the grant
 //! brackets; a protocol operation that loses RF to it ends with its ordinary
 //! outcome.
 //!
@@ -24,7 +23,7 @@
 //! `PHY_CALIBRATION` only while registration or RF wake runs. After the last
 //! client leaves, closing RF releases `PHY`; waking RF takes it again.
 
-use oer_esp32s31_hal::shared_radio::{ModemClockError, RadioClient, SharedRadioLease};
+use oer_esp32s31_hal::domain::{ModemClockError, RadioClient, RadioDomain};
 
 use crate::{
     PhyState, RegisteredPhyState,
@@ -35,7 +34,7 @@ use crate::{
     },
 };
 
-/// State of the shared PHY domain kept under the arbiter.
+/// State of the shared PHY domain kept in the radio domain.
 #[derive(Default)]
 pub struct ConcurrentPhy {
     slot: Slot,
@@ -104,7 +103,7 @@ pub enum ConcurrentAcquire {
 }
 
 impl ConcurrentPhy {
-    /// An empty slot for a fresh arbiter.
+    /// An empty slot for a fresh radio domain.
     pub const fn new() -> Self {
         Self { slot: Slot::Empty }
     }
@@ -270,69 +269,69 @@ impl ConcurrentPhy {
 
 /// Proof that the shared PHY domain is ready for a client to enter it:
 /// registered, RF open and settled, and its registration describes the
-/// lease. It borrows that lease exclusively, so nothing can close RF or start
-/// tracking before the client's join consumes it; the join gives the lease
-/// back. Whoever prepared the domain (the shared radio's owner, or another
+/// domain. It borrows that domain exclusively, so nothing can close RF or
+/// start tracking before the client's join consumes it; the join gives the
+/// domain back. Whoever prepared the domain (the shared radio's owner, or another
 /// client before), a client enters only a domain that is ready.
 ///
 /// It cannot be copied for a second client:
 ///
 /// ```compile_fail,E0599
 /// use oer_esp32s31_phy::concurrent::PhyReady;
-/// fn clone<'l, 'r>(ready: &PhyReady<'l, 'r>) -> PhyReady<'l, 'r> {
+/// fn clone<'l>(ready: &PhyReady<'l>) -> PhyReady<'l> {
 ///     ready.clone()
 /// }
 /// ```
 ///
-/// And a client cannot make one from a lease without the check:
+/// And a client cannot make one from a domain without the check:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::shared_radio::SharedRadioLease;
+/// use oer_esp32s31_hal::domain::RadioDomain;
 /// use oer_esp32s31_phy::concurrent::{ConcurrentPhy, PhyReady};
-/// fn forge<'l, 'r>(lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>) -> PhyReady<'l, 'r> {
-///     PhyReady { lease }
+/// fn forge<'l>(radio: &'l mut RadioDomain<ConcurrentPhy>) -> PhyReady<'l> {
+///     PhyReady { radio }
 /// }
 /// ```
 #[must_use = "a ready PHY is consumed by the client's join"]
-pub struct PhyReady<'l, 'r> {
-    lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>,
+pub struct PhyReady<'l> {
+    radio: &'l mut RadioDomain<ConcurrentPhy>,
 }
 
-impl core::fmt::Debug for PhyReady<'_, '_> {
+impl core::fmt::Debug for PhyReady<'_> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("PhyReady")
     }
 }
 
-impl<'l, 'r> PhyReady<'l, 'r> {
+impl<'l> PhyReady<'l> {
     #[cfg(test)]
-    pub(crate) fn for_test(lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>) -> Self {
-        Self { lease }
+    pub(crate) fn for_test(radio: &'l mut RadioDomain<ConcurrentPhy>) -> Self {
+        Self { radio }
     }
 
-    /// The lease, for the join that consumes the proof.
-    pub(crate) fn into_lease(self) -> &'l mut SharedRadioLease<'r, ConcurrentPhy> {
-        self.lease
+    /// The radio, for the join that consumes the proof.
+    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<ConcurrentPhy> {
+        self.radio
     }
 }
 
-/// A client entered the shared domain; the lease its [`PhyReady`] borrowed
+/// A client entered the shared domain; the radio its [`PhyReady`] borrowed
 /// comes back. [`ConcurrentAcquire::TrackingDue`] means the domain must run
 /// its tracking before the client uses RF.
 #[must_use = "the membership must be kept and left"]
-pub struct Joined<'l, 'r, M> {
+pub struct Joined<'l, M> {
     pub membership: M,
     pub acquired: ConcurrentAcquire,
-    pub lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>,
+    pub radio: &'l mut RadioDomain<ConcurrentPhy>,
 }
 
-/// The domain refused the client; nothing changed and the lease comes back.
-pub struct JoinRefused<'l, 'r, E> {
+/// The domain refused the client; nothing changed and the radio comes back.
+pub struct JoinRefused<'l, E> {
     pub error: E,
-    pub lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>,
+    pub radio: &'l mut RadioDomain<ConcurrentPhy>,
 }
 
-impl<E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, '_, E> {
+impl<E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, E> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("JoinRefused")
@@ -341,21 +340,21 @@ impl<E: core::fmt::Debug> core::fmt::Debug for JoinRefused<'_, '_, E> {
     }
 }
 
-/// Prove the shared domain ready for a client under `lease`.
+/// Prove the shared domain ready for a client under `radio`.
 ///
 /// # Errors
 ///
 /// The domain is not registered, RF is closed, tracking is pending, the
-/// domain is poisoned, or its registration no longer describes the lease.
-pub fn phy_ready<'l, 'r>(
-    lease: &'l mut SharedRadioLease<'r, ConcurrentPhy>,
-) -> Result<PhyReady<'l, 'r>, ConcurrentPhyError> {
-    let epoch = lease.registration_epoch();
-    let domain = lease.attachment().settled()?;
+/// domain is poisoned, or its registration no longer describes the radio.
+pub fn phy_ready<'l>(
+    radio: &'l mut RadioDomain<ConcurrentPhy>,
+) -> Result<PhyReady<'l>, ConcurrentPhyError> {
+    let epoch = radio.registration_epoch();
+    let domain = radio.attachment().settled()?;
     if !domain.clients.describes_epoch(epoch) {
         return Err(ConcurrentPhyError::EpochMismatch);
     }
-    Ok(PhyReady { lease })
+    Ok(PhyReady { radio })
 }
 
 /// Enter `client` into the shared domain `ready` proves ready.
@@ -365,11 +364,11 @@ pub fn phy_ready<'l, 'r>(
 /// The client set rejects the client (already acquired, clock error). The
 /// domain is unchanged.
 pub(crate) fn acquire_client(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     client: RadioClient,
     clock: &impl oer_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
-    let phy = lease.attachment_mut();
+    let phy = radio.attachment_mut();
     let PhyDomain {
         registered,
         clients,
@@ -403,10 +402,10 @@ pub(crate) fn acquire_client(
 /// The domain is not registered and settled, or the client was not acquired.
 /// The domain is unchanged.
 pub fn release_client(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     client: RadioClient,
 ) -> Result<bool, ConcurrentPhyError> {
-    let phy = lease.attachment_mut();
+    let phy = radio.attachment_mut();
     let PhyDomain {
         registered,
         clients,
@@ -433,10 +432,10 @@ pub fn release_client(
 /// The domain is not registered and settled, or the clock was rejected; the
 /// domain is unchanged.
 pub fn evaluate_periodic_tracking(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clock: &impl oer_time::Clock,
 ) -> Result<bool, ConcurrentPhyError> {
-    let phy = lease.attachment_mut();
+    let phy = radio.attachment_mut();
     let PhyDomain {
         registered,
         clients,
@@ -470,10 +469,8 @@ pub fn evaluate_periodic_tracking(
 ///
 /// No tracking is pending, or the domain is not registered, RF is closed or
 /// the domain is poisoned.
-pub fn admit_maintenance(
-    lease: &SharedRadioLease<'_, ConcurrentPhy>,
-) -> Result<(), ConcurrentPhyError> {
-    match &lease.attachment().slot {
+pub fn admit_maintenance(radio: &RadioDomain<ConcurrentPhy>) -> Result<(), ConcurrentPhyError> {
+    match &radio.attachment().slot {
         Slot::Pending { .. } => Ok(()),
         Slot::Poisoned => Err(ConcurrentPhyError::Poisoned),
         Slot::RfClosed(_) => Err(ConcurrentPhyError::RfClosed),

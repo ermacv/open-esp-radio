@@ -1,6 +1,6 @@
 //! The stopped Wi-Fi MAC check.
 //!
-//! Every protocol reaches the shared PHY through the radio arbiter lease.
+//! Every protocol reaches the shared PHY through the radio domain.
 //! Wi-Fi's stopped-MAC check confirms the final-client shutdown boundary: MAC
 //! and walker readbacks check that the caller drained active TX and stopped
 //! its RX descriptor epoch; they do not retire software DMA leases.

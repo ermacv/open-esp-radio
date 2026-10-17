@@ -1,10 +1,10 @@
-//! IEEE 802.15.4 lifecycle as a client of the shared radio arbiter.
+//! IEEE 802.15.4 lifecycle as a client of the shared radio domain.
 //!
 //! The chain starts from the [`Ieee802154RadioPartition`] of a concurrent
 //! split and holds only the MAC, its interrupt route and its ETM channels.
 //! Common radio power, the module clocks and the private MAC resets live in
 //! the shared radio registers, so each of those transitions borrows the
-//! arbiter's [`SharedRadioLease`] for its duration and never retains it. The
+//! [`RadioDomain`] for its duration and never retains it. The
 //! MAC foundation and policy touch only the partition.
 //!
 //! The public ESP-IDF enable order is `ieee802154_enable` (module clocks),
@@ -24,6 +24,11 @@ use oer_esp32s31_pac::{
 };
 
 use crate::{
+    domain::{
+        BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
+        CommonRadioPowerError, Ieee802154Client, ModemClockError, PlatformClockProvider,
+        RadioDomain,
+    },
     ieee802154::{
         backend::Ieee802154PacHal,
         lifecycle::{
@@ -41,11 +46,6 @@ use crate::{
         },
     },
     root::Ieee802154RadioPartition,
-    shared_radio::{
-        BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
-        CommonRadioPowerError, Ieee802154Client, ModemClockError, PlatformClockProvider,
-        SharedRadioLease,
-    },
 };
 
 /// The IEEE 802.15.4 partition split into its task and inactive interrupt
@@ -158,13 +158,13 @@ impl Ieee802154Cold {
     /// read-back checkpoint; the unchanged owner is returned.
     pub fn power_up<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         clocks: &impl PlatformClockProvider,
     ) -> Result<
         (Ieee802154Powered, CommonPower<Ieee802154Client>),
         Ieee802154PowerTransitionFailure<Self>,
     > {
-        match lease.enter_common_power(&self.mac.task, clocks) {
+        match radio.enter_common_power(&self.mac.task, clocks) {
             Ok(power) => Ok((Ieee802154Powered { mac: self.mac }, power)),
             Err(error) => Err(Ieee802154PowerTransitionFailure { owner: self, error }),
         }
@@ -194,14 +194,14 @@ impl Ieee802154Powered {
     )]
     pub fn power_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         power: CommonPower<Ieee802154Client>,
         coex: &CoexAbsent<Ieee802154Client>,
     ) -> Result<
         Ieee802154Cold,
         Ieee802154PowerTransitionFailure<(Self, CommonPower<Ieee802154Client>)>,
     > {
-        match lease.exit_common_power(&self.mac.task, power, coex) {
+        match radio.exit_common_power(&self.mac.task, power, coex) {
             Ok(()) => Ok(Ieee802154Cold { mac: self.mac }),
             Err(CommonPowerExitFailure { power, error }) => Err(Ieee802154PowerTransitionFailure {
                 owner: (self, power),
@@ -224,10 +224,10 @@ impl Ieee802154Powered {
     /// request failed and poisoned the modem clocks; the owner is returned.
     pub fn enable_clocks<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         platform: &impl PlatformClockProvider,
     ) -> Result<Ieee802154Clocked, Ieee802154ClockTransitionFailure<Self>> {
-        match lease.enable_modem_clocks(&self.mac.task, platform) {
+        match radio.enable_modem_clocks(&self.mac.task, platform) {
             Ok(()) => Ok(Ieee802154Clocked {
                 inner: Ieee802154Lifecycle::clocked(self.mac),
             }),
@@ -488,9 +488,9 @@ impl Ieee802154Clocked {
     /// request failed and poisoned the modem clocks; the owner is returned.
     pub fn disable_clocks<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
     ) -> Result<Ieee802154Powered, Ieee802154ClockTransitionFailure<Self>> {
-        match lease.disable_modem_clocks(&self.inner.backend().task) {
+        match radio.disable_modem_clocks(&self.inner.backend().task) {
             Ok(()) => Ok(Ieee802154Powered {
                 mac: self.inner.into_backend(),
             }),
@@ -506,10 +506,10 @@ impl Ieee802154Clocked {
     /// retained for a retry.
     pub fn reset_mac<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
     ) -> Result<Ieee802154Reset, Ieee802154ResetTransitionFailure> {
         let mut port = LeasedResetPort {
-            radio_phy: lease.registers_mut().radio_phy_mut(),
+            radio_phy: radio.registers_mut().radio_phy_mut(),
         };
         self.inner
             .reset_mac(&mut port)
@@ -535,17 +535,17 @@ impl Ieee802154Clocked {
     /// clocked owner.
     #[allow(
         unsafe_code,
-        reason = "the unsafe signature carries the arbiter's common-PHY prerequisite"
+        reason = "the unsafe signature carries the domain's common-PHY prerequisite"
     )]
     pub unsafe fn acquire_btbb<T>(
         &self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         gain_parameter: u8,
     ) -> Result<BtbbAcquired, BtbbError> {
         // SAFETY: this owner holds the IEEE 802.15.4 module clocks, which
         // include the BTBB clocks; the caller upholds the registration and
         // gain provenance.
-        unsafe { lease.btbb_acquire(&self.inner.backend().task, gain_parameter) }
+        unsafe { radio.btbb_acquire(&self.inner.backend().task, gain_parameter) }
     }
 
     /// Leave the shared BTBB baseband. This performs no register access.
@@ -553,8 +553,8 @@ impl Ieee802154Clocked {
     /// # Errors
     ///
     /// IEEE 802.15.4 does not hold BTBB.
-    pub fn release_btbb<T>(&self, lease: &mut SharedRadioLease<'_, T>) -> Result<(), BtbbError> {
-        lease.btbb_release(&self.inner.backend().task)
+    pub fn release_btbb<T>(&self, radio: &mut RadioDomain<T>) -> Result<(), BtbbError> {
+        radio.btbb_release(&self.inner.backend().task)
     }
 }
 

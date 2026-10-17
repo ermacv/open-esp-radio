@@ -1,7 +1,7 @@
 //! Wi-Fi as a client of the shared PHY domain.
 //!
 //! The HAL chain holds the Wi-Fi partition; the registered PHY domain lives
-//! under the arbiter as [`ConcurrentPhy`]. After its module clocks, ESP-IDF's
+//! in the radio domain as [`ConcurrentPhy`]. After its module clocks, ESP-IDF's
 //! Wi-Fi start runs `esp_phy_enable(PHY_MODEM_WIFI)`. [`join_wifi`] records
 //! that on the [`WifiClocked`] owner and issues the affine
 //! [`WifiPhyMembership`]; [`leave_wifi`] consumes it again. While it holds
@@ -14,8 +14,8 @@
 use core::fmt;
 
 use oer_esp32s31_hal::{
+    domain::RadioDomain,
     ieee80211::client::{WifiClocked, WifiClocksOn},
-    shared_radio::SharedRadioLease,
 };
 
 use crate::{
@@ -54,20 +54,20 @@ impl fmt::Debug for WifiPhyMembership {
 /// # Errors
 ///
 /// The client set rejects the client; nothing changed.
-pub fn join_wifi<'l, 'r>(
-    ready: PhyReady<'l, 'r>,
+pub fn join_wifi<'l>(
+    ready: PhyReady<'l>,
     clocked: &WifiClocked,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, 'r, WifiPhyMembership>, JoinRefused<'l, 'r, ConcurrentPhyError>> {
+) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, ConcurrentPhyError>> {
     let _ = clocked;
-    let lease = ready.into_lease();
-    match acquire_client(lease, RadioClient::Wifi, clock) {
+    let radio = ready.into_radio();
+    match acquire_client(radio, RadioClient::Wifi, clock) {
         Ok(acquired) => Ok(Joined {
             membership: WifiPhyMembership { _private: () },
             acquired,
-            lease,
+            radio,
         }),
-        Err(error) => Err(JoinRefused { error, lease }),
+        Err(error) => Err(JoinRefused { error, radio }),
     }
 }
 
@@ -77,12 +77,12 @@ pub fn join_wifi<'l, 'r>(
 /// Wi-Fi client clears before it leaves.
 #[cfg(target_arch = "riscv32")]
 pub fn set_wifi_rx(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     membership: &WifiPhyMembership,
     enabled: bool,
 ) {
     let _ = membership;
-    oer_esp32s31_hal::phy::frequency::set_wifi_enabled(&mut lease.phy_hal(), enabled);
+    oer_esp32s31_hal::phy::frequency::set_wifi_enabled(&mut radio.phy_hal(), enabled);
 }
 
 /// Failed leave retaining the membership.
@@ -121,12 +121,12 @@ impl fmt::Debug for WifiPhyLeaveFailure {
 /// The domain rejects the release (tracking pending, poisoned); nothing
 /// changed and the membership is returned.
 pub fn leave_wifi(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocked: &WifiClocked,
     membership: WifiPhyMembership,
 ) -> Result<bool, WifiPhyLeaveFailure> {
     let _ = clocked;
-    match release_client(lease, RadioClient::Wifi) {
+    match release_client(radio, RadioClient::Wifi) {
         Ok(last) => {
             let WifiPhyMembership { _private: () } = membership;
             Ok(last)
@@ -193,12 +193,12 @@ impl fmt::Debug for WifiPhySuspendedFailure {
 /// A running role proves its clocks with the [`WifiClocksOn`] its clocked
 /// client handed out beside the runtime epoch.
 pub fn suspend_wifi(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &WifiClocksOn,
     membership: WifiPhyMembership,
 ) -> Result<(WifiPhySuspended, bool), WifiPhyLeaveFailure> {
     let _ = clocks;
-    match release_client(lease, RadioClient::Wifi) {
+    match release_client(radio, RadioClient::Wifi) {
         Ok(last) => {
             let WifiPhyMembership { _private: () } = membership;
             Ok((WifiPhySuspended { _private: () }, last))
@@ -216,26 +216,26 @@ pub fn suspend_wifi(
 /// # Errors
 ///
 /// As [`join_wifi`]; the suspended client is returned.
-pub fn resume_wifi<'l, 'r>(
-    ready: PhyReady<'l, 'r>,
+pub fn resume_wifi<'l>(
+    ready: PhyReady<'l>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, 'r, WifiPhyMembership>, JoinRefused<'l, 'r, WifiPhySuspendedFailure>> {
+) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, WifiPhySuspendedFailure>> {
     let _ = clocks;
-    let lease = ready.into_lease();
-    match acquire_client(lease, RadioClient::Wifi, clock) {
+    let radio = ready.into_radio();
+    match acquire_client(radio, RadioClient::Wifi, clock) {
         Ok(acquired) => {
             let WifiPhySuspended { _private: () } = suspended;
             Ok(Joined {
                 membership: WifiPhyMembership { _private: () },
                 acquired,
-                lease,
+                radio,
             })
         }
         Err(error) => Err(JoinRefused {
             error: WifiPhySuspendedFailure { suspended, error },
-            lease,
+            radio,
         }),
     }
 }

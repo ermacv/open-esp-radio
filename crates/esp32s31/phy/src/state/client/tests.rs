@@ -784,13 +784,10 @@ mod schedule;
 #[test]
 fn only_the_minting_registration_describes_a_detached_client_set() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
-    let (radio, _partitions) =
-        oer_esp32s31_hal::root::RadioHardware::for_host_test().into_concurrent(());
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-    let first = lease.phy_hal().begin_registration_epoch();
-    let second = lease.phy_hal().begin_registration_epoch();
+    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test().split(());
+    let domain = &mut radio;
+    let first = domain.phy_hal().begin_registration_epoch();
+    let second = domain.phy_hal().begin_registration_epoch();
     let clients = PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, first);
 
     assert!(clients.describes_epoch(Some(first)));

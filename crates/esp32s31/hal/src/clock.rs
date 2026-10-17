@@ -161,45 +161,45 @@ impl RadioClientKind for Ieee802154Client {
 ///
 /// Only entering common power creates it, and leaving consumes it, so a
 /// client leaves only power it holds, and only outside coexistence
-/// ([`crate::shared_radio::CoexAbsent`]). Dropping it keeps the client in
+/// ([`crate::domain::CoexAbsent`]). Dropping it keeps the client in
 /// common power until a chip reset.
 ///
 /// A client leaves with its own proof:
 ///
 /// ```
-/// use oer_esp32s31_hal::shared_radio::{CoexAbsent, CommonPower, SharedRadioLease, WifiClient};
+/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_pac::WifiRadioRegisters;
 ///
 /// fn leave(
-///     lease: &mut SharedRadioLease<'_>,
+///     radio: &mut RadioDomain,
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
 /// ) {
-///     let _ = lease.exit_common_power(wifi, power, coex);
+///     let _ = radio.exit_common_power(wifi, power, coex);
 /// }
 /// ```
 ///
 /// Not with another client's:
 ///
 /// ```compile_fail,E0308
-/// use oer_esp32s31_hal::shared_radio::{CoexAbsent, CommonPower, SharedRadioLease, WifiClient};
+/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_pac::BluetoothTaskRegisters;
 ///
 /// fn leave(
-///     lease: &mut SharedRadioLease<'_>,
+///     radio: &mut RadioDomain,
 ///     bluetooth: &BluetoothTaskRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
 /// ) {
-///     let _ = lease.exit_common_power(bluetooth, power, coex);
+///     let _ = radio.exit_common_power(bluetooth, power, coex);
 /// }
 /// ```
 ///
 /// And a proof cannot be made without entering power:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::shared_radio::{CommonPower, WifiClient};
+/// use oer_esp32s31_hal::domain::{CommonPower, WifiClient};
 ///
 /// let _power: CommonPower<WifiClient> = CommonPower { _client: core::marker::PhantomData };
 /// ```

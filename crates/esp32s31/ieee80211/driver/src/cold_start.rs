@@ -1,7 +1,7 @@
-//! Reusable role-neutral Wi-Fi bring-up as a client of the radio arbiter.
+//! Reusable role-neutral Wi-Fi bring-up as a client of the radio domain.
 //!
 //! This boundary owns the production ordering shared by all firmware, in two
-//! halves. The radio system that owns the arbiter first
+//! halves. The radio system that owns the radio domain first
 //! prepares the shared PHY (registration, or wake of closed RF) and enables
 //! coexistence. [`power_up_esp32s31_wifi`] then enters common radio power and
 //! enables the Wi-Fi module clocks and initialized status, and
@@ -14,12 +14,12 @@
 use crate::channel::lower_wifi_channel;
 
 use oer_esp32s31_hal::{
+    domain::{
+        CommonPower, CommonRadioPowerError, ModemClockError, PlatformClockProvider, RadioDomain,
+        WifiClient,
+    },
     ieee80211::client::{WifiClocked, WifiCold, WifiPowered},
     root::WifiPartition,
-    shared_radio::{
-        CommonPower, CommonRadioPowerError, ModemClockError, PlatformClockProvider,
-        SharedRadioLease, WifiClient,
-    },
 };
 
 use oer_esp32s31_phy::{
@@ -201,12 +201,12 @@ impl<W> WifiColdStartFailure<W> {
     reason = "failure must return the complete Wi-Fi frontier"
 )]
 pub fn power_up_esp32s31_wifi<W>(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &impl PlatformClockProvider,
     partition: WifiPartition,
     wifi_platform: W,
 ) -> Result<(WifiInitialized<W>, CommonPower<WifiClient>), WifiPowerUpFailure<W>> {
-    let (powered, power) = match WifiCold::from_partition(partition).power_up(lease, clocks) {
+    let (powered, power) = match WifiCold::from_partition(partition).power_up(radio, clocks) {
         Ok(powered) => powered,
         Err(failure) => {
             return Err(WifiPowerUpFailure {
@@ -218,7 +218,7 @@ pub fn power_up_esp32s31_wifi<W>(
             });
         }
     };
-    let mut clocked = match powered.enable_clocks(lease, clocks) {
+    let mut clocked = match powered.enable_clocks(radio, clocks) {
         Ok(clocked) => clocked,
         Err(failure) => {
             return Err(WifiPowerUpFailure {
@@ -231,7 +231,7 @@ pub fn power_up_esp32s31_wifi<W>(
             });
         }
     };
-    if let Err(error) = clocked.set_initialized(lease, true) {
+    if let Err(error) = clocked.set_initialized(radio, true) {
         return Err(WifiPowerUpFailure {
             error: WifiColdStartError::Clocks(error),
             frontier: WifiPowerUpFrontier::Clocked {
@@ -262,7 +262,7 @@ pub fn power_up_esp32s31_wifi<W>(
 /// tracking or the channel transaction leaves the shared PHY ambiguous.
 #[must_use = "Wi-Fi bring-up must be driven to a terminal result"]
 pub async fn start_esp32s31_wifi<P, W, D, O>(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio_domain: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     initialized: WifiInitialized<W>,
     config: WifiColdStartConfig,
@@ -278,8 +278,8 @@ where
         platform: wifi_platform,
     } = initialized;
     // The shared radio's owner prepared the domain; prove it ready under the
-    // lease the join uses.
-    let joined = match phy_ready(lease) {
+    // radio_domain the join uses.
+    let joined = match phy_ready(radio_domain) {
         Ok(ready) => join_wifi(ready, &clocked, timer)
             .map(|joined| (joined.membership, joined.acquired))
             .map_err(|refused| refused.error),
@@ -298,7 +298,9 @@ where
         }
     };
     let initial_tracking = if acquired == ConcurrentAcquire::TrackingDue {
-        match maintain_concurrent_phy::<P, D, _>(timer, lease, platform, observer.clone()).await {
+        match maintain_concurrent_phy::<P, D, _>(timer, radio_domain, platform, observer.clone())
+            .await
+        {
             Ok(outcome) => Some(outcome),
             Err(error) => {
                 return Err(WifiColdStartFailure {
@@ -315,10 +317,10 @@ where
         None
     };
 
-    set_wifi_rx(lease, &membership, true);
+    set_wifi_rx(radio_domain, &membership, true);
     let initial_channel = lower_wifi_channel(config.initial_channel);
     let selected = {
-        let (mut channel, phy) = clocked.channel_hal_with_attachment(platform, lease);
+        let (mut channel, phy) = clocked.channel_hal_with_attachment(platform, radio_domain);
         select_concurrent_wifi_channel::<D, _, _>(
             timer,
             phy,
@@ -333,7 +335,7 @@ where
         if matches!(error, ConcurrentWifiChannelError::Rejected(_)) {
             // Nothing started; restore the receive path the joined frontier
             // reports.
-            set_wifi_rx(lease, &membership, false);
+            set_wifi_rx(radio_domain, &membership, false);
         }
         return Err(WifiColdStartFailure {
             error: WifiColdStartError::InitialChannel(error),
@@ -345,12 +347,12 @@ where
         });
     }
 
-    let tx_power = match lease.attachment().phy_state() {
+    let tx_power = match radio_domain.attachment().phy_state() {
         Ok(state) => state
             .tx_target_power_profile()
             .with_maximum_quarter_dbm(config.maximum_tx_power_quarter_dbm),
         Err(error) => {
-            set_wifi_rx(lease, &membership, false);
+            set_wifi_rx(radio_domain, &membership, false);
             return Err(WifiColdStartFailure {
                 error: WifiColdStartError::InitialChannel(ConcurrentWifiChannelError::Rejected(
                     error,

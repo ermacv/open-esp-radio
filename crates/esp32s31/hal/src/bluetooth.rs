@@ -4,7 +4,7 @@
 //! holds only the controller, its modem low-power timer and its interrupt
 //! bank. Common radio power, the module clocks, the controller domain resets
 //! and the low-power timer clock live in the shared radio registers, so each
-//! of those transitions borrows the arbiter's [`SharedRadioLease`] for its
+//! of those transitions borrows the [`RadioDomain`] for its
 //! duration and never retains it.
 //!
 //! [`ColdOwner`] enters common power as [`PoweredOwner`], which enables the
@@ -25,12 +25,12 @@ use oer_esp32s31_pac::{
 };
 
 use crate::{
-    root::BluetoothPartition,
-    shared_radio::{
+    domain::{
         BluetoothClient, BtbbAcquired, BtbbError, CoexAbsent, CommonPower, CommonPowerExitFailure,
         CommonRadioPowerError, LowPowerClockError, ModemClockError, PlatformClockProvider,
-        SharedRadioLease,
+        RadioDomain,
     },
+    root::BluetoothPartition,
 };
 
 mod controller_time;
@@ -132,10 +132,10 @@ impl ColdOwner {
     /// read-back checkpoint; the unchanged owner is returned.
     pub fn power_up<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         clocks: &impl PlatformClockProvider,
     ) -> Result<(PoweredOwner, CommonPower<BluetoothClient>), PowerTransitionFailure<Self>> {
-        match lease.enter_common_power(&self.partition.task, clocks) {
+        match radio.enter_common_power(&self.partition.task, clocks) {
             Ok(power) => Ok((
                 PoweredOwner {
                     partition: self.partition,
@@ -167,11 +167,11 @@ impl PoweredOwner {
     /// unchanged owner and proof are returned for a retry.
     pub fn power_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         power: CommonPower<BluetoothClient>,
         coex: &CoexAbsent<BluetoothClient>,
     ) -> Result<ColdOwner, PowerTransitionFailure<(Self, CommonPower<BluetoothClient>)>> {
-        match lease.exit_common_power(&self.partition.task, power, coex) {
+        match radio.exit_common_power(&self.partition.task, power, coex) {
             Ok(()) => Ok(ColdOwner {
                 partition: self.partition,
             }),
@@ -200,11 +200,11 @@ impl PoweredOwner {
     /// clock change succeeds until reset.
     pub fn enable_clocks<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         platform: &impl PlatformClockProvider,
     ) -> Result<ClockedOwner, ClockTransitionFailure<Self>> {
         let task = &self.partition.task;
-        if let Err(error) = lease.enable_modem_clocks(task, platform) {
+        if let Err(error) = radio.enable_modem_clocks(task, platform) {
             return Err(ClockTransitionFailure {
                 owner: self,
                 error: BluetoothClockError::ModemClocks(error),
@@ -213,21 +213,21 @@ impl PoweredOwner {
         let mut partition = self.partition;
         partition
             .task
-            .reset_controller_domains(lease.registers_mut());
+            .reset_controller_domains(radio.registers_mut());
         let task = &partition.task;
-        if let Err(error) = lease.select_bluetooth_low_power_clock(task, platform) {
-            let _ = lease.disable_modem_clocks(task);
+        if let Err(error) = radio.select_bluetooth_low_power_clock(task, platform) {
+            let _ = radio.disable_modem_clocks(task);
             return Err(ClockTransitionFailure {
                 owner: Self { partition },
                 error: BluetoothClockError::LowPowerClock(error),
             });
         }
-        let shared = lease.registers_mut();
+        let shared = radio.registers_mut();
         let clocks = task.controller_clock_observation(shared);
         let (_, low_power) = task.bluetooth_shared_clock_observation(shared);
         if let Some(checkpoint) = clock_checkpoint(clocks, low_power) {
-            let _ = lease.deselect_bluetooth_low_power_clock(task);
-            let _ = lease.disable_modem_clocks(task);
+            let _ = radio.deselect_bluetooth_low_power_clock(task);
+            let _ = radio.disable_modem_clocks(task);
             return Err(ClockTransitionFailure {
                 owner: Self { partition },
                 error: BluetoothClockError::Readback(checkpoint),
@@ -304,19 +304,19 @@ impl ClockedOwner {
     /// with the module clocks.
     pub fn disable_clocks<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
     ) -> Result<PoweredOwner, ClockTransitionFailure<Self>> {
         let task = &self.partition.task;
         // A retry after a planner failure finds the clock already deselected.
-        if lease.bluetooth_low_power_clock_selected()
-            && let Err(error) = lease.deselect_bluetooth_low_power_clock(task)
+        if radio.bluetooth_low_power_clock_selected()
+            && let Err(error) = radio.deselect_bluetooth_low_power_clock(task)
         {
             return Err(ClockTransitionFailure {
                 owner: self,
                 error: BluetoothClockError::LowPowerClock(error),
             });
         }
-        match lease.disable_modem_clocks(task) {
+        match radio.disable_modem_clocks(task) {
             Ok(()) => Ok(PoweredOwner {
                 partition: self.partition,
             }),
@@ -448,11 +448,11 @@ impl TaskOwner {
     #[doc(hidden)]
     pub fn shut_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         output: InterruptOutputReleasedOwner,
         timer: ModemLpTimerInterruptReadyOwner,
     ) -> Result<(ClockedOwner, BluetoothControllerReset), BluetoothShutdownFailure> {
-        shutdown::shut_down(self, lease, output.registers, timer.timer)
+        shutdown::shut_down(self, radio, output.registers, timer.timer)
     }
 
     /// Reunite a quiescent, untouched task with the exact inactive interrupt
@@ -515,7 +515,7 @@ impl TaskOwner {
     ///
     /// # Errors
     ///
-    /// As [`SharedRadioLease::btbb_acquire`].
+    /// As [`RadioDomain::btbb_acquire`].
     ///
     /// # Safety
     ///
@@ -524,16 +524,16 @@ impl TaskOwner {
     /// state.
     #[allow(
         unsafe_code,
-        reason = "the unsafe signature carries the arbiter's common-PHY prerequisite"
+        reason = "the unsafe signature carries the domain's common-PHY prerequisite"
     )]
     pub unsafe fn acquire_btbb<T>(
         &self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         gain_parameter: u8,
     ) -> Result<BtbbAcquired, BtbbError> {
         // SAFETY: this owner holds the Bluetooth module clocks; the caller
         // upholds the registration and gain provenance.
-        unsafe { lease.btbb_acquire(&self.registers, gain_parameter) }
+        unsafe { radio.btbb_acquire(&self.registers, gain_parameter) }
     }
 
     /// Leave the shared BTBB baseband.
@@ -541,8 +541,8 @@ impl TaskOwner {
     /// # Errors
     ///
     /// Bluetooth does not hold BTBB.
-    pub fn release_btbb<T>(&self, lease: &mut SharedRadioLease<'_, T>) -> Result<(), BtbbError> {
-        lease.btbb_release(&self.registers)
+    pub fn release_btbb<T>(&self, radio: &mut RadioDomain<T>) -> Result<(), BtbbError> {
+        radio.btbb_release(&self.registers)
     }
 
     /// Apply the exact modem low-power timer register prefix before source 127

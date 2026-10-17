@@ -2,7 +2,7 @@
 // The `bluetooth_client` and `ieee802154_client` modules hold the only scoped
 // overrides.
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-// A forgotten owner never releases what it holds, such as an arbiter lease,
+// A forgotten owner never releases what it holds, such as a modem clock lease,
 // so radio ownership must end in `Drop`.
 #![deny(clippy::mem_forget)]
 // The registration and tracking graphs run only through the chip target
@@ -28,7 +28,7 @@
 //! live above this layer.
 //!
 //! Start with [`PhyConfig`] and the registration state machine. Every
-//! protocol shares one PHY domain through the radio arbiter:
+//! protocol shares one PHY domain through the radio domain:
 //! [`register_concurrent_phy`] registers it for the first client, and
 //! [`wifi_client`], [`bluetooth_client`] and [`ieee802154_client`] join and
 //! leave it. Releasing a non-final client keeps the domain powered; only the

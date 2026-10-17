@@ -3,7 +3,7 @@
 //! The vendor Wi-Fi library tells the schedule what Wi-Fi is doing through
 //! one status word and a schedule interval, and restarts the phases after a
 //! change while another radio shares the schedule. This module holds that
-//! policy as values; the runtime applies them under the radio arbiter lease.
+//! policy as values; the runtime applies them on the radio domain.
 //!
 //! SOURCE: complete pinned `libpp.a[pm.o]::pm_on_coex_schm_status_config`,
 //! `pm_start` and `pm_on_coex_start`, and `libnet80211.a[ieee80211_scan.o]::

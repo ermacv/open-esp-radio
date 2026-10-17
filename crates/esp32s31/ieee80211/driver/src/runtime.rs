@@ -3,12 +3,12 @@
 use crate::mac_start::{WifiMacReady, WifiMacStartReport};
 
 use oer_esp32s31_hal::{
+    domain::{CoexAbsent, CommonPower, CommonRadioPowerError, RadioDomain, WifiClient},
     ieee80211::client::{
         ClockPoisoned, StoppedInstallation, WifiClocked, WifiClocksOn, WifiPowered,
     },
     owner::{MacInterruptSetup, RadioRuntimeOwner},
     root::WifiPartition,
-    shared_radio::{CoexAbsent, CommonPower, CommonRadioPowerError, SharedRadioLease, WifiClient},
     types::MacInterruptEnableState,
 };
 
@@ -56,8 +56,8 @@ pub enum WifiRfSleepError {
 /// both DMA and interrupt routing have acknowledged their stopped edges.
 ///
 /// `W` is Wi-Fi's own MAC platform. The shared PHY, its platform token and
-/// the clock sources stay with the radio arbiter; operations that touch them
-/// take the arbiter lease.
+/// the clock sources stay with the radio domain; operations that touch them
+/// take the radio domain.
 ///
 /// `M` is the radio system's memberships of the shared radio that travel with
 /// the client, opaque here (its part in coexistence). The bring-up returns
@@ -109,16 +109,16 @@ pub enum WifiRfSleepError {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_hal::shared_radio::{CoexAbsent, CommonPower, SharedRadioLease, WifiClient};
+/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_ieee80211::runtime::WifiStopped;
 /// use oer_esp32s31_phy::concurrent::ConcurrentPhy;
 /// fn leave(
 ///     stopped: WifiStopped<(), ()>,
-///     lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+///     radio: &mut RadioDomain<ConcurrentPhy>,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
 /// ) {
-///     let _ = stopped.release(lease, power, coex);
+///     let _ = stopped.release(radio, power, coex);
 /// }
 /// ```
 ///
@@ -130,16 +130,16 @@ pub enum WifiRfSleepError {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_hal::shared_radio::{CoexAbsent, CommonPower, SharedRadioLease, WifiClient};
+/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_esp32s31_ieee80211::runtime::WifiStopped;
 /// use oer_esp32s31_phy::concurrent::ConcurrentPhy;
 /// fn leave(
 ///     stopped: WifiStopped<(), u8>,
-///     lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+///     radio: &mut RadioDomain<ConcurrentPhy>,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
 /// ) {
-///     let _ = stopped.release(lease, power, coex);
+///     let _ = stopped.release(radio, power, coex);
 /// }
 /// ```
 pub struct WifiStopped<W, M> {
@@ -253,7 +253,7 @@ impl<W> WifiStopped<W, ()> {
     )]
     pub fn release(
         self,
-        lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+        radio: &mut RadioDomain<ConcurrentPhy>,
         power: CommonPower<WifiClient>,
         coex: &CoexAbsent<WifiClient>,
     ) -> Result<WifiReleased<W>, WifiReleaseFailure<W>> {
@@ -298,13 +298,13 @@ impl<W> WifiStopped<W, ()> {
                 false
             }
             WifiPhyClient::Member(membership) => {
-                set_wifi_rx(lease, &membership, false);
-                match leave_wifi(lease, &clocked, membership) {
+                set_wifi_rx(radio, &membership, false);
+                match leave_wifi(radio, &clocked, membership) {
                     Ok(last) => last,
                     Err(failure) => {
                         let error = WifiReleaseError::Phy(failure.error());
                         let membership = failure.into_membership();
-                        set_wifi_rx(lease, &membership, true);
+                        set_wifi_rx(radio, &membership, true);
                         let (registers, interrupt_setup, clocks_on) = clocked.into_running();
                         return Err(WifiReleaseFailure {
                             power,
@@ -325,7 +325,7 @@ impl<W> WifiStopped<W, ()> {
                 }
             }
         };
-        let powered = match clocked.release_clocks(lease) {
+        let powered = match clocked.release_clocks(radio) {
             Ok(released) => released.into_powered(),
             Err((stopped, obligation)) => {
                 return Err(WifiReleaseFailure {
@@ -339,7 +339,7 @@ impl<W> WifiStopped<W, ()> {
                 });
             }
         };
-        match powered.power_down(lease, power, coex) {
+        match powered.power_down(radio, power, coex) {
             Ok(cold) => Ok(WifiReleased {
                 partition: cold.into_partition(),
                 platform,
@@ -475,7 +475,7 @@ impl<M> WifiRuntimeContext<M> {
     /// receive path is restored and nothing changed.
     pub fn suspend_rf(
         &mut self,
-        lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+        radio: &mut RadioDomain<ConcurrentPhy>,
     ) -> Result<bool, WifiRfSleepError> {
         let membership = match self.phy.take() {
             Some(WifiPhyClient::Member(membership)) => membership,
@@ -484,8 +484,8 @@ impl<M> WifiRuntimeContext<M> {
                 return Err(WifiRfSleepError::State);
             }
         };
-        set_wifi_rx(lease, &membership, false);
-        match suspend_wifi(lease, &self.clocks, membership) {
+        set_wifi_rx(radio, &membership, false);
+        match suspend_wifi(radio, &self.clocks, membership) {
             Ok((suspended, last)) => {
                 self.phy = Some(WifiPhyClient::Suspended(suspended));
                 Ok(last)
@@ -493,7 +493,7 @@ impl<M> WifiRuntimeContext<M> {
             Err(failure) => {
                 let error = failure.error();
                 let membership = failure.into_membership();
-                set_wifi_rx(lease, &membership, true);
+                set_wifi_rx(radio, &membership, true);
                 self.phy = Some(WifiPhyClient::Member(membership));
                 Err(WifiRfSleepError::Phy(error))
             }
@@ -512,7 +512,7 @@ impl<M> WifiRuntimeContext<M> {
     /// changed.
     pub fn resume_rf(
         &mut self,
-        ready: PhyReady<'_, '_>,
+        ready: PhyReady<'_>,
         clock: &impl oer_time::Clock,
     ) -> Result<ConcurrentAcquire, WifiRfSleepError> {
         let suspended = match self.phy.take() {
@@ -524,7 +524,7 @@ impl<M> WifiRuntimeContext<M> {
         };
         match resume_wifi(ready, &self.clocks, suspended, clock) {
             Ok(joined) => {
-                set_wifi_rx(joined.lease, &joined.membership, true);
+                set_wifi_rx(joined.radio, &joined.membership, true);
                 self.phy = Some(WifiPhyClient::Member(joined.membership));
                 Ok(joined.acquired)
             }
@@ -673,7 +673,7 @@ pub fn materialize_esp32s31_wifi_role<W, L, M>(
 /// This is the only normal conversion from [`WifiMacReady`]. It masks
 /// and acknowledges cold interrupt state before exposing the setup token used
 /// by a finite task-owned interrupt epoch. It touches Wi-Fi MAC registers
-/// only and needs no arbiter lease.
+/// only and needs no radio domain.
 pub fn enter_esp32s31_wifi_runtime<W>(mac: WifiMacReady<W>) -> WifiStopped<W, ()> {
     let start_report = mac.report();
     let WifiMacReady {
