@@ -68,6 +68,19 @@ jobs:
           : > "$RUNNER_TEMP/empty-runtime.bin"
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
             cargo check --locked --target riscv32imafc-unknown-none-elf --workspace
+      - name: Shared words with esp-hal
+        # Every MMIO word the radio PAC and the pinned esp-hal both write has a
+        # reviewed entry (registers/esp32s31/shared-words.toml). Cargo resolves
+        # the pinned esp-hal and PAC sources of the firmware workspace.
+        run: |
+          meta="$RUNNER_TEMP/firmware-metadata.json"
+          cargo metadata --locked --format-version 1 --manifest-path firmware/Cargo.toml > "$meta"
+          source_of() {
+            dirname "$(jq -er --arg name "$1" '.packages[] | select(.name == $name) | .manifest_path' "$meta")"
+          }
+          cargo registers check shared-words --chip esp32s31 \
+            --esp-hal-src "$(source_of esp-hal)/src" \
+            --pac-src "$(source_of esp32s31)/src"
       - name: Image build
         # The whole staged pipeline without a board: runtime, packing,
         # bootstrap and flash encoding.
