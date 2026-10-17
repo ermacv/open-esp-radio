@@ -6,14 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-[features]
-# Stage two's adoption of the bootstrap's mapping (`adopt_psram`), which
-# links the staged runtime; the bootstrap does not enable it.
-stage-two = ["dep:oer-espressif-staged-runtime"]
-
 [dependencies]
 oer-esp32s31-platform-layout.workspace = true
-oer-espressif-staged-runtime = { path = "../../espressif/staged-runtime", features = ["esp32s31", "two-harts"], optional = true }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unstable"] }
 
 [lints]

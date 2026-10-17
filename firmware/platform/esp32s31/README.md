@@ -27,13 +27,10 @@ Interrupt-context panics retain hart and interrupted PC, but omit location and
 message: compiler metadata can live in cached PSRAM. Task-context panics keep
 their metadata because their code and stack already require the live mapping.
 The hook and all state it reads must stay in SRAM or retained memory and take
-no locks. The final-image gate checks compiler panic entries, the handler,
-the hook and their resolved callees for cached code.
-The hook's static data references, including compiler-created constants, are
-checked through the ELF relocations as well.
+no locks.
 
-The image build tooling is not part of this repository; no
-`.cargo/config.toml` adds Rust flags.
+Images are built, written and run by [`cargo fw`](../../../tools/fw/README.md);
+no `.cargo/config.toml` adds Rust flags.
 
 The boot sequence is ROM → ESP-IDF bootloader → Flash bootstrap → application.
 The ROM image uses DIO at 80 MHz; ESP-IDF enables QIO for the application.
@@ -55,12 +52,15 @@ It does not return or carry Rust peripheral owners across the image boundary.
 
 Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`. The application calls `esp_hal::init`, then
-unsafely adopts the bootstrap mapping through `oer_esp32s31_platform_runtime::adopt_psram`
-with its unique PSRAM token. This also reinitializes vectoring and installs the
-per-core SRAM interrupt stack. Global interrupts remain disabled until the
-application binds its timers and executor handlers; it then calls the unsafe
-`oer_esp32s31_platform_runtime::enable_interrupts_after_handoff` once per hart. PSRAM
-must not be reset or remapped after handoff.
+unsafely calls the staged runtime's `oer_espressif_staged_runtime::adopt` with
+its `INTERRUPT_TABLE` and, as the mapping closure, the board's
+`adopt_psram_mapping` with its unique PSRAM token. The image composes the two
+itself: the board does not link the runtime, whose panic entry would otherwise
+reach the bootstrap through the board. `adopt` also reinitializes vectoring and
+installs the per-core SRAM interrupt stack. Global interrupts remain disabled
+until the application binds its timers and executor handlers; it then calls
+the unsafe `oer_espressif_staged_runtime::enable_interrupts_after_handoff` once
+per hart. PSRAM must not be reset or remapped after handoff.
 The runtime is the only owner of each hart's active vector table (MTVT):
 every CPU interrupt enters through its stack-switching vector entry and
 esp-hal's shared dispatcher. The esp-hal fork only vectors the
@@ -71,24 +71,20 @@ differs from the runtime's entries, so a later direct binding cannot run on
 the interrupted stack.
 
 Each image declares its peripheral interrupt sources once with
-`oer_esp32s31_platform_runtime::interrupt_table!` (source, handler, level,
+`oer_espressif_staged_runtime::interrupt_table!` (source, handler, level,
 core; see [`oer-interrupt-table`](../../../crates/exec/interrupt-table/README.md)):
 the macro links each handler into its source's slot of esp-hal's
-`__EXTERNAL_INTERRUPTS` and creates one token per source; the image hands its `INTERRUPT_TABLE` to
-`adopt_psram`. Each 12-byte entry holds the `Interrupt` (`u16`), the
+`__EXTERNAL_INTERRUPTS` and creates one token per source; the image hands its
+`INTERRUPT_TABLE` to the runtime's `adopt`. Each 12-byte entry holds the `Interrupt` (`u16`), the
 `Priority` (`u8`), the `Cpu` (a 4-byte C enum at offset 4) and the handler
 address at offset 8 (zero for an entry a `cfg` leaves out); compile-time
-assertions in `interrupts.rs` keep that layout, which the stack analysis
-reads. The interrupt-stack gate requires every entry's slot
-symbol, and the handler it calls unless the handler is inlined into it, in
-SRAM. Installing a hart's
+assertions in `interrupts.rs` keep that layout. Installing a hart's
 interrupt stack silences every source of that hart's entries and checks the
 slots; `enable_interrupts_after_handoff` checks again that every slot holds its
 handler and every table source is silent or routed to its level. An owner
 routes its source with `oer_esp32s31_soc_esp_hal::interrupt_table::enable` and
 its token, on the table's core only, and silences it with `disable`; the
-matrix lives in that adapter so that owners in `crates/` reach it. The stack analysis does not
-yet fail a table entry whose `enable` no root of the image reaches. esp-hal's PMP region setup
+matrix lives in that adapter so that owners in `crates/` reach it. esp-hal's PMP region setup
 (`ESP_HAL_CONFIG_ENABLE_PMP`) is off in the root Cargo configuration, because
 its single no-execute data region would span stage two's PSRAM code.
 
@@ -166,20 +162,12 @@ can sample only their current hart through
 for the bounded SRAM scan and restores their prior enable state. It rejects
 sampling from the IRQ stack or before initialization. Measurements describe
 observed writes, not the maximum possible depth or unwritten stack reservations.
-The maximum is the image build's interrupt-stack gate: a static bound per hart
-from the image's interrupt table, under the contract `layout`'s `interrupts`
-module states. A watermark above that bound means a path the analysis missed.
-A hart the analysis leaves `partial + ?` (a diagnostic image) is only observed:
-that number is no bound to hold a watermark to.
 
-Each image build retains a separate image bundle: `application.bin`, ROM
-`bootloader.bin`, `partitions.bin`, `otadata.bin`, the slot partition table,
-packed runtime, `runtime.elf`, `bootstrap.elf`, both resolved lockfiles,
-`source-inputs.json` and placement/stack reports. The build rejects invalid placement and a
-stack whose root's call-chain bound does not fit its storage less its reserve
-before flash. A task stack's bound may be partial (the executor's task polls
-are indirect calls the analysis does not resolve); its report names every
-unresolved site, and runtime stack painting and boundary watchpoints check
-the exercised chains. No example application exists.
+Each image build leaves its parts in `target/fw/<image>/`: `bootloader.bin`,
+`partition-table.bin`, `application.bin`, `otadata.bin` (listed in write order
+by `segments.toml`), the packed `runtime.bin`, `runtime.elf`, `bootstrap.elf`
+and `placement.txt`. The minimal SRAM placement check runs in `cargo fw` and
+only warns: interrupt-table handlers, the panic entry and hook, and the
+`.dma.*` and `.critical.*` sections outside internal SRAM.
 
 Source or image checks alone do not establish RF behavior on hardware.

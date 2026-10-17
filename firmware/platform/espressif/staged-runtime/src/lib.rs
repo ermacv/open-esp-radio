@@ -5,8 +5,8 @@
 //! The bootstrap copies stage two into PSRAM and jumps to `_runtime_start`
 //! ([`entry`](crate::entry)), which initializes the SRAM sections, switches to
 //! the CPU0 PSRAM task stack, installs the vectors and enters the image's
-//! `runtime_main`. The image adopts the bootstrap's PSRAM mapping through its
-//! board (`platform/<chip>/board`), which calls [`adopt`], and enables
+//! `runtime_main`. The image calls [`adopt`] with its board's adoption of the
+//! bootstrap's PSRAM mapping (`platform/<chip>/board`) and enables
 //! interrupts with [`enable_interrupts_after_handoff`] once its handlers are
 //! bound. A chip feature selects the chip of esp-hal; `two-harts` adds the
 //! second hart's interrupt stack.

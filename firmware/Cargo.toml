@@ -12,6 +12,7 @@ members = [
     "platform/esp32s31/board",
     "platform/esp32s31/bootstrap",
     "platform/esp32s31/layout",
+    "apps/boot-smoke",
 ]
 
 [workspace.package]

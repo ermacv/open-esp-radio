@@ -68,3 +68,7 @@ jobs:
           : > "$RUNNER_TEMP/empty-runtime.bin"
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
             cargo check --locked --target riscv32imafc-unknown-none-elf --workspace
+      - name: Image build
+        # The whole staged pipeline without a board: runtime, packing,
+        # bootstrap and flash encoding.
+        run: cargo fw build boot-smoke
