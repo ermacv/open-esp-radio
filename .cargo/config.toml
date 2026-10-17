@@ -2,6 +2,9 @@
 # The register tool: validate the register model and generate SVD, PAC and
 # bindings (tools/registers/README.md).
 registers = "run --quiet --profile tools -p oer-register-tool --"
+# The firmware tool: build, flash and run staged images on the stand's
+# boards (tools/fw/README.md).
+fw = "run --quiet --profile tools -p oer-fw --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git

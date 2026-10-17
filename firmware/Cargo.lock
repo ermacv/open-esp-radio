@@ -1020,12 +1020,21 @@ name = "oer-deadline"
 version = "0.1.0"
 
 [[package]]
+name = "oer-esp32s31-boot-smoke"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-espressif-staged-runtime",
+]
+
+[[package]]
 name = "oer-esp32s31-platform-board"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-esp32s31-platform-layout",
- "oer-espressif-staged-runtime",
 ]
 
 [[package]]

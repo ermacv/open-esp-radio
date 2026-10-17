@@ -15,5 +15,9 @@ PSRAM_RUNTIME_BIN=/path/to/empty.bin \
   cargo check --target riscv32imafc-unknown-none-elf --workspace
 ```
 
-Building, packing and flashing images is the job of `tools/fw`, which arrives
-with the first image.
+Images live in `apps/`; `boot-smoke` is the smallest. Building, packing,
+flashing and running them is the job of [`cargo fw`](../tools/fw/README.md):
+
+```console
+cargo fw run boot-smoke --board s31-a
+```
