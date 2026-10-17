@@ -44,7 +44,10 @@ tree is a selection of a predecessor repository, without its history.
 - **Hardware ownership root.** Two roots split by phase: esp-hal owns the SoC
   and everything before the radio handoff, our HAL the radio blocks after it.
   The handoff is a safe constructor consuming esp-hal's radio singletons
-  (`I2C_ANA_MST`, `MODEM_SYSCON`, `MODEM_LPCON`, `LP_ANA`). Each shared word
+  (`I2C_ANA_MST`, `MODEM_SYSCON`, `MODEM_LPCON`, `WIFI`, `BT`, `IEEE802154`,
+  `LP_TSENS`: the blocks the radio owns whole; `LP_ANA` dropped from the list,
+  architect's clarification against the owned ranges: no radio range lies in
+  it) and requiring the adopted PSRAM. Each shared word
   has one runtime writer (`registers/esp32s31/shared-words.toml`):
   `MODEM_LPCON.CLK_CONF` belongs to esp-hal and our HAL requests its gates
   through `clock::ll`; the other shared words belong to our HAL. The review is

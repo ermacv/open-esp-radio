@@ -21,6 +21,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-waker"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1030,6 +1036,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-hal"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-pac",
+ "oer-espressif-analog",
+ "oer-espressif-coex",
+ "oer-espressif-ieee802154-engine",
+ "oer-espressif-modem-clock",
+ "oer-memory",
+ "oer-radio-coex",
+]
+
+[[package]]
+name = "oer-esp32s31-pac"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-pac-raw",
+ "oer-espressif-ieee80211-pac",
+ "oer-espressif-ieee802154-pac",
+ "oer-memory",
+]
+
+[[package]]
+name = "oer-esp32s31-pac-raw"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "oer-espressif-ieee80211-pac-raw",
+ "vcell",
+]
+
+[[package]]
 name = "oer-esp32s31-platform-board"
 version = "0.1.0"
 dependencies = [
@@ -1058,6 +1096,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-radio-esp-hal"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-hal",
+]
+
+[[package]]
+name = "oer-esp32s31-radio-root"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-esp32s31-radio-esp-hal",
+ "oer-espressif-staged-runtime",
+]
+
+[[package]]
 name = "oer-esp32s31-soc-esp-hal"
 version = "0.1.0"
 dependencies = [
@@ -1071,12 +1129,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif-analog"
+version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-coex"
+version = "0.1.0"
+dependencies = [
+ "oer-radio-coex",
+]
+
+[[package]]
+name = "oer-espressif-ieee80211-pac"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-ieee80211-pac-raw",
+]
+
+[[package]]
+name = "oer-espressif-ieee80211-pac-raw"
+version = "0.1.0"
+dependencies = [
+ "vcell",
+]
+
+[[package]]
+name = "oer-espressif-ieee802154-engine"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "oer-espressif-coex",
+ "oer-ieee802154",
+]
+
+[[package]]
+name = "oer-espressif-ieee802154-pac"
+version = "0.1.0"
+
+[[package]]
 name = "oer-espressif-interrupt-table-esp-hal"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-interrupt-table",
 ]
+
+[[package]]
+name = "oer-espressif-modem-clock"
+version = "0.1.0"
 
 [[package]]
 name = "oer-espressif-staged-bootstrap"
@@ -1101,6 +1201,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-ieee802154"
+version = "0.1.0"
+dependencies = [
+ "oer-radio-port",
+ "oer-time",
+ "scopeguard",
+]
+
+[[package]]
 name = "oer-interrupt-table"
 version = "0.1.0"
 
@@ -1110,6 +1219,23 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "oer-radio-coex"
+version = "0.1.0"
+
+[[package]]
+name = "oer-radio-port"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "oer-time",
+ "scopeguard",
+]
+
+[[package]]
+name = "oer-time"
+version = "0.1.0"
 
 [[package]]
 name = "paste"
@@ -1253,6 +1379,12 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "scopeguard"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sdio"

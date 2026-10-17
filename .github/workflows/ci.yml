@@ -60,6 +60,16 @@ jobs:
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | contains("/crates/")) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
+      - name: Clippy for the chip target
+        # The esp-hal halves of the adapters exist only for the chip, so the
+        # host clippy never sees them, nor the firmware images.
+        run: |
+          cargo clippy --locked --target riscv32imafc-unknown-none-elf \
+            -p oer-esp32s31-radio-esp-hal --features esp32s31
+          : > "$RUNNER_TEMP/empty-runtime.bin"
+          cd firmware
+          PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
+            cargo clippy --locked --target riscv32imafc-unknown-none-elf --workspace
       - name: Firmware workspace
         working-directory: firmware
         run: |
@@ -84,4 +94,6 @@ jobs:
       - name: Image build
         # The whole staged pipeline without a board: runtime, packing,
         # bootstrap and flash encoding.
-        run: cargo fw build boot-smoke
+        run: |
+          cargo fw build boot-smoke
+          cargo fw build radio-root
