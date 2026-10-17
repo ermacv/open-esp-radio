@@ -165,8 +165,8 @@ impl BluetoothClockBaseline {
         self.0[clock as usize] = enabled;
     }
 
-    /// A baseline with every physical gate enabled, for validation images.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// A baseline with every physical gate enabled, for host tests.
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn all_enabled_for_validation() -> Self {
         Self([true; BLUETOOTH_PHYSICAL_CLOCK_COUNT])

@@ -105,8 +105,8 @@ impl RadioHardware {
         })
     }
 
-    /// Construct the complete root inside one isolated validation image.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// Construct a fictitious complete root for one host test.
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn for_validation() -> Self {
         Self {

@@ -16,7 +16,7 @@
 //! retained wake. The ROM `memcpy` calls and `phy_param` ABI cell remain
 //! unnecessary.
 
-#[cfg(any(test, feature = "validation-probes"))]
+#[cfg(test)]
 pub const PHY_PBUS_MEMORY_ENTRY_COUNT: u8 = 60;
 
 const GROUP_COUNT: u8 = 12;
@@ -486,11 +486,6 @@ impl PhyPbusMemoryMmioBinding {
             PhyPbusMemoryAction::Program(_) => Ok(Self { action }),
             PhyPbusMemoryAction::Complete(_) => Err(PhyPbusMemoryBindingError::UnsupportedAction),
         }
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub const fn action(&self) -> PhyPbusMemoryAction {
-        self.action
     }
 
     #[cfg(target_arch = "riscv32")]

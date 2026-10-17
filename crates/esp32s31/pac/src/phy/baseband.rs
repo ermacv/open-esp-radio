@@ -46,8 +46,8 @@ impl RxDcoControlField {
         self.0
     }
 
-    /// Construct one distinguishable capture inside a validation image.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// Construct one distinguishable capture for a host test.
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_validation(value: u8) -> Self {
         Self(value)
@@ -55,8 +55,8 @@ impl RxDcoControlField {
 }
 
 impl TxDcPwdetFields {
-    /// Construct one distinguishable capture inside a validation image.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// Construct one distinguishable capture for a host test.
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn for_validation(table_low: u8, calibration: u8) -> Self {
         Self {

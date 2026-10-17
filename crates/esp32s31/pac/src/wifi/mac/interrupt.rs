@@ -369,11 +369,6 @@ impl MacPowerInterruptRegisters {
         interrupt_snapshot::acknowledge_mac_power_interrupt(&self.peripheral, snapshot.0);
         device_fence();
     }
-
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn from_peripheral_for_validation(peripheral: svd::WifiMacPowerInterrupt) -> Self {
-        Self { peripheral }
-    }
 }
 
 /// Disjoint generated register capability intended for the hard MAC ISR.
@@ -481,11 +476,6 @@ impl MacInterruptRegisters {
             peripheral: self.peripheral,
             power_peripheral: power.peripheral,
         }
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn from_peripheral_for_validation(peripheral: svd::WifiMacInterrupt) -> Self {
-        Self { peripheral }
     }
 }
 

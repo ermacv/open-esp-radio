@@ -61,7 +61,7 @@ pub enum PhyRxSaturationCompletion {
         active: bool,
     },
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(
             dead_code,
             reason = "only the validation binding constructs this timeout"
@@ -304,17 +304,17 @@ impl PhyRxSaturationPbusBinding {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,

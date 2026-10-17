@@ -10,10 +10,6 @@ pub mod client;
 
 pub mod mac;
 
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub mod phy_rate;
-
 pub mod station_wake;
 
 /// The Wi-Fi MAC registers borrowed by one HAL capability: from the runtime

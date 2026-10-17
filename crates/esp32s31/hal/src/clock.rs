@@ -111,7 +111,7 @@ impl PlatformClockRefs {
     }
 
     /// Keep every reference still held on, and forget it.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     fn abandon(self) {
         for guard in [self.pll_f160m, self.analog_i2c, self.mpll]
             .into_iter()
@@ -222,8 +222,8 @@ impl<K: RadioClientKind> CommonPower<K> {
     }
 
     /// A proof without entering power, for host tests of the later stages.
-    /// It proves no power, so only test and validation builds have it.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// It proves no power, so only test builds have it.
+    #[cfg(test)]
     pub const fn for_validation() -> Self {
         Self::entered()
     }
@@ -289,7 +289,7 @@ impl CommonRadioPower {
 
     /// Keep every platform reference still held on until a chip reset, and
     /// forget it: common power is fail-stop from here.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub(crate) fn abandon_platform_clocks(&mut self) {
         core::mem::take(&mut self.refs).abandon();
     }

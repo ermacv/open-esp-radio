@@ -493,27 +493,6 @@ impl CoexSchedule {
         }
     }
 
-    /// A schedule in an arbitrary state, for comparison with the vendor
-    /// state it mirrors. Production reaches every state through the
-    /// transitions only.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn for_validation(
-        status: CoexStatusWords,
-        scheme: CoexSchemeId,
-        phase_index: u8,
-        interval: u32,
-        flexible_period: u8,
-    ) -> Self {
-        Self {
-            status,
-            scheme,
-            phase_index,
-            interval,
-            flexible_period,
-        }
-    }
-
     pub const fn status(&self) -> CoexStatusWords {
         self.status
     }

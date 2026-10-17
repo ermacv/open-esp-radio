@@ -68,7 +68,7 @@ impl Descriptor {
     }
 
     /// Model a complete descriptor publication without a hardware actor.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     #[inline]
     pub fn publish(&self, word0: u32, buffer_address: u32, next_address: u32) {
         self.publish_owned(word0, buffer_address, next_address);
@@ -80,7 +80,7 @@ impl Descriptor {
     /// mutation belongs exclusively to the ring owner and the DMA actor. It
     /// exists only for native models and the explicit raw-DMA validation
     /// feature used by compiled vendor probes.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     #[inline]
     pub fn write_word0(&self, word0: u32) {
         self.word0.set(word0);

@@ -13,49 +13,6 @@
 //! installed around those ROM leaves. Neither oracle is linked into the
 //! firmware.
 
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_get_i2c_data() {}
-
-/// Complete pinned target hook; the ESP32-S31 archive body is one `ret`.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_i2c_enter_critical() {}
-
-/// Complete pinned target hook; the ESP32-S31 archive body is one `ret`.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_i2c_exit_critical() {}
-
-/// Initialize the six-byte master-memory descriptor exactly as the pinned
-/// archive leaf.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub fn phy_i2c_master_mem_cfg(configuration: &mut [u8; 6]) {
-    configuration[0] = 0;
-    configuration[1] = 0;
-    configuration[3] = 1;
-    configuration[4] = 0x2c;
-    configuration[2] = 1;
-    configuration[5] = 1;
-}
-
-/// Initialize the command-memory descriptor and its two-word mode value.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub fn phy_i2c_master_command_mem_cfg(configuration: &mut [u8; 8], mode: &mut u32) {
-    configuration[3] = 1;
-    configuration[4] = 1;
-    configuration[5] = 1;
-    configuration[7] = 1;
-    configuration[0] = 0;
-    configuration[1] = 0;
-    configuration[2] = 0;
-    configuration[6] = 0x2c;
-    *mode = 2;
-}
-
 use crate::analog::{
     crystal_duty::{
         XtalDutyCalibrationAction, XtalDutyCalibrationCompletion, XtalDutyCalibrationOutcome,
@@ -76,8 +33,6 @@ use crate::analog::{
 use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
-#[cfg(all(feature = "validation-probes", target_arch = "riscv32"))]
-pub(crate) use oer_esp32s31_hal::phy::i2c::PhyI2cBlock;
 
 pub(crate) use oer_esp32s31_hal::phy::i2c::{PhyI2cAddress, PhyI2cField, analog_registers};
 #[cfg(target_arch = "riscv32")]
@@ -299,7 +254,7 @@ impl OpenI2cXpdTransition {
         }
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn samples(self) -> u16 {
         self.samples
     }
@@ -477,17 +432,17 @@ impl MaskedI2cWriteBinding {
         self.transaction.action()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, PhyI2cError>,
@@ -498,7 +453,7 @@ impl MaskedI2cWriteBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), PhyI2cError>,

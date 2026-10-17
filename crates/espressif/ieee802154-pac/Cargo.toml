@@ -8,8 +8,8 @@ repository.workspace = true
 description = "Closed typed IEEE 802.15.4 MAC values and transactions shared between chips"
 
 [features]
-# Hidden constructors of the validation probes.
-validation-probes = []
+# Host-test constructors of fictitious observations.
+test-support = []
 
 [lints]
 workspace = true

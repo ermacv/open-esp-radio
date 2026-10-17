@@ -14,12 +14,6 @@
 //! transaction and timer interval as an identity-bound external completion.
 //! A missed lock remains ordinary outcome data.
 
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the ESP32-S31 body is one
-/// `ret` and does not touch shared RFPLL state.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_bbpll_en_usb() {}
-
 /// Return the exact RF-calibration data version of the pinned archive's
 /// `phy_get_rf_cal_version`.
 #[inline]
@@ -766,11 +760,6 @@ impl RfpllFrequencyTransition {
         };
         Ok(())
     }
-
-    #[cfg(feature = "validation-probes")]
-    pub const fn request(self) -> RfpllFrequencyRequest {
-        self.request
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -825,17 +814,17 @@ impl RfpllFrequencyI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,
@@ -846,7 +835,7 @@ impl RfpllFrequencyI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), crate::analog::i2c::PhyI2cError>,

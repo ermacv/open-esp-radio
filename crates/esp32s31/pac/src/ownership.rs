@@ -273,11 +273,17 @@ impl RadioPartitions {
         }
     }
 
-    /// Construct every partition inside one isolated validation image.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// Construct every partition as a fictitious root for one host test.
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "a host-test root is fictitious; each test needs its own fresh singleton"
+    )]
     pub fn for_validation() -> Self {
-        Self::from_peripherals(svd::peripheral_ownership::peripherals_for_validation())
+        // SAFETY: only host tests build this root. It is fictitious: no real
+        // MMIO exists behind it, so the singleton need not be unique.
+        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
     }
 }
 
@@ -439,18 +445,6 @@ impl MacInterruptSnapshot {
             || self.0.bits_29_31_opaque() != 0;
         MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
     }
-
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn validation_bits(&self) -> u32 {
-        self.0.bits()
-    }
-
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn for_validation(bits: u32) -> Self {
-        Self(svd::interrupt_snapshot::mac_interrupt_for_validation(bits))
-    }
 }
 
 /// One sampled power-interrupt image with intentionally opaque bit semantics.
@@ -467,20 +461,6 @@ impl MacPowerInterruptSnapshot {
             // Only the station TSF's TBTT is ever enabled.
             self.0.tbtt_1() || self.0.tbtt_2() || self.0.tbtt_3() || self.0.bits_8_31_opaque() != 0,
         )
-    }
-
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn validation_bits(&self) -> u32 {
-        self.0.bits()
-    }
-
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn for_validation(bits: u32) -> Self {
-        Self(svd::interrupt_snapshot::mac_power_interrupt_for_validation(
-            bits,
-        ))
     }
 }
 

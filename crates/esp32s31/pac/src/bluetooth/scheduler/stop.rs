@@ -16,7 +16,7 @@ pub struct BluetoothSchedulerStopped {
 
 impl BluetoothSchedulerStopped {
     /// Construct a stopped receipt for host validation of its owners.
-    #[cfg(any(feature = "validation-probes", test))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn for_validation() -> Self {
         Self { _private: () }
@@ -36,13 +36,6 @@ impl BluetoothSchedulerStoppedItem {
     }
     pub fn into_head(self) -> crate::BluetoothSchedulerHardwareListHeadEmptyObserved {
         self.head
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn from_head_for_validation(
-        head: crate::BluetoothSchedulerHardwareListHeadEmptyObserved,
-    ) -> Self {
-        Self { head }
     }
 }
 

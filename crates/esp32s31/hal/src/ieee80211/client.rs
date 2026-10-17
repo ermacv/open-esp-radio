@@ -231,9 +231,9 @@ impl WifiClocked {
         Ok(())
     }
 
-    /// A clocked owner over an isolated validation partition, without MMIO
-    /// and without claiming any clock state.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// A clocked owner over a host-test partition, without MMIO and without
+    /// claiming any clock state.
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn for_validation(cold: WifiCold) -> Self {
         Self {

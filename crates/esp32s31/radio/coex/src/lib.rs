@@ -25,7 +25,3 @@ pub use oer_espressif_coex::{
     CoexStatusWords, CoexTimerClock, CoexTimerHardware, CoexTimerIndex, NoRequestKind,
     program_timer, timer_index, wifi_status,
 };
-
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub mod validation;

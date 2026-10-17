@@ -25,8 +25,6 @@ pub use phy::pbus;
 pub mod phy;
 
 pub(crate) use phy::table_memory;
-#[cfg(feature = "validation-probes")]
-pub mod validation;
 
 /// Reviewed writable MAC interrupt mask.
 ///

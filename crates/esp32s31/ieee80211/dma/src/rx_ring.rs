@@ -549,7 +549,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     /// Production code must use `RxDmaStorage::prepare_halted`, which binds
     /// every descriptor to the matching arena buffer and restores its guard
     /// words before publication.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn prepare<M, F>(
         self,
         mmio: &mut M,
@@ -597,45 +597,6 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// the rebuilt zero-terminated list is rotated to that exact descriptor.
     #[cfg(any(test, feature = "test-support"))]
     pub fn prepare<M, F>(
-        mmio: &mut M,
-        descriptors: &'a [Descriptor; COUNT],
-        descriptor_base: u32,
-        buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
-        buffer_size: u32,
-        prepare_buffer: F,
-    ) -> Result<Self, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        Self::prepare_inner(
-            mmio,
-            descriptors,
-            descriptor_base,
-            buffer_addresses,
-            buffer_size,
-            prepare_buffer,
-            None,
-        )
-    }
-
-    /// Build a ring from raw addresses for a target-only validation harness.
-    ///
-    /// # Safety
-    ///
-    /// Every descriptor and addressed buffer must remain allocated, aligned
-    /// and exclusively DMA-owned until the returned ring is confirmed halted.
-    /// Shipping code must use [`crate::rx_storage::RxDmaStorage::prepare_ring`]
-    /// instead, which establishes that proof from a static arena.
-    #[cfg(all(
-        not(any(test, feature = "test-support")),
-        feature = "validation-raw-dma"
-    ))]
-    #[allow(
-        unsafe_code,
-        reason = "raw target constructor makes its DMA lifetime contract explicit"
-    )]
-    pub unsafe fn prepare<M, F>(
         mmio: &mut M,
         descriptors: &'a [Descriptor; COUNT],
         descriptor_base: u32,
@@ -1406,7 +1367,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     /// Raw/model completion transfer without a storage-bound buffer owner.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn take_completed_unit(
         &mut self,
         descriptor_limit: usize,
@@ -1446,7 +1407,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }}
 
     /// Raw/model descriptor transfer without a storage-bound buffer owner.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn take_completed(&mut self, index: usize) -> Option<RxCompletedDescriptor> {
         self.take_completed_owned(index)
     }
@@ -1517,7 +1478,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }}
 
     /// Raw/model half-ring recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn recycle_completed_half<M, F>(
         &mut self,
         mmio: &mut M,
@@ -1543,7 +1504,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// successful append. This deliberately preserves the ROM doorbell/base
     /// repair ordering without hiding a wait in this finite operation.
     #[inline(never)]
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn recycle_completed_batch<const BATCH: usize, M, F>(
         &mut self,
         mmio: &mut M,
@@ -1624,7 +1585,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }}
 
     /// Raw/model prefix recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn recycle_completed_prefix<const MAX_BATCH: usize, M, F>(
         &mut self,
         mmio: &mut M,
@@ -1721,7 +1682,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     /// Raw/model unit recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn recycle_completed_unit<M, F>(
         &mut self,
         mmio: &mut M,
@@ -2045,7 +2006,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     /// Raw/model release proof from an explicitly supplied LAST snapshot.
-    #[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn observe_completed_unit_link_release<M: RxDma>(
         &mut self,
         mmio: &mut M,
@@ -2539,13 +2500,12 @@ fn build_cold_ring_inner(
     Ok(())
 }
 
-/// Build a synthetic cold descriptor list for native models or an explicit
-/// raw-DMA validation probe.
+/// Build a synthetic cold descriptor list for native models.
 ///
 /// Ordinary target code must construct a ring through [`RxRingStopped`],
 /// which couples mutation to the arena lifecycle instead of accepting a bare
 /// descriptor slice.
-#[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+#[cfg(any(test, feature = "test-support"))]
 pub fn build_cold_ring(
     descriptors: &[Descriptor],
     descriptor_dma_base: u32,
@@ -2563,30 +2523,6 @@ pub fn build_cold_ring(
 /// Publish a synthetic cold ring in a native model with no DMA actor.
 #[cfg(any(test, feature = "test-support"))]
 pub fn publish_cold_ring<M: RxDma>(
-    mmio: &mut M,
-    descriptor_dma_base: u32,
-    enable_rx: bool,
-) -> Result<(), RxRingError> {
-    let binding = RxDmaBinding::raw_validation(descriptor_dma_base);
-    publish_cold_ring_inner(mmio, &binding, descriptor_dma_base, enable_rx)
-}
-
-/// Publish raw target addresses outside the owned storage path.
-///
-/// # Safety
-///
-/// `descriptor_dma_base` must identify a fully initialized static descriptor
-/// chain whose buffers remain exclusively available to DMA until the walker
-/// is confirmed stopped.
-#[cfg(all(
-    not(any(test, feature = "test-support")),
-    feature = "validation-raw-dma"
-))]
-#[allow(
-    unsafe_code,
-    reason = "raw target publication makes its DMA lifetime contract explicit"
-)]
-pub unsafe fn publish_cold_ring<M: RxDma>(
     mmio: &mut M,
     descriptor_dma_base: u32,
     enable_rx: bool,
@@ -2649,13 +2585,13 @@ fn disable_receive_inner<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
 ///
 /// Production target lifecycle code must consume [`RxRingLive::try_stop`], so
 /// the register edge and the Rust ownership state cannot diverge.
-#[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+#[cfg(any(test, feature = "test-support"))]
 pub fn disable_receive<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
     disable_receive_inner(mmio)
 }
 
 /// Returns one CPU-owned completed descriptor to the cold/live ring.
-#[cfg(any(test, feature = "test-support", feature = "validation-raw-dma"))]
+#[cfg(any(test, feature = "test-support"))]
 pub fn rearm_descriptor(
     descriptor: &Descriptor,
     expected_buffer_address: u32,

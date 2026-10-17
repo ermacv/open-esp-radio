@@ -13,8 +13,6 @@ test-support = ["oer-esp32s31-hal/test-support", "oer-esp32s31-ieee80211-dma/tes
 default = []
 large-rx-pool-48 = []
 rx-ba-window-8 = []
-validation-raw-dma = ["oer-esp32s31-ieee80211-dma/validation-raw-dma"]
-validation-probes = ["oer-esp32s31-hal/validation-probes"]
 
 [dependencies]
 atomic-waker = "1.1.2"

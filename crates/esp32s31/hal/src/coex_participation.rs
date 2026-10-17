@@ -77,7 +77,7 @@ impl<K: RadioClientKind> CoexAbsent<K> {
     }
 
     /// A state outside a radio split, for host tests of the later stages.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn for_validation() -> Self {
         Self::issued()
     }

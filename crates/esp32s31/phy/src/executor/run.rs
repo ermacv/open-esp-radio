@@ -1,6 +1,6 @@
 //! Port traits and async drivers for the registration and tracking graphs.
 //!
-//! Only the crate's target ports and validation probes drive these graphs;
+//! Only the crate's target ports drive these graphs;
 //! protocol code reaches them through the registered owners.
 
 use crate::tracking::observation::{Event, Operation};

@@ -14,9 +14,6 @@ writes S31 registers:
 - The clock port decodes the HAL's coexistence low-power clock observation
   into the core's `CoexTimerClock`, with the 40 MHz crystal of every
   supported board profile.
-- `validation` (feature `validation-probes`) runs the production core and
-  timer sequence against an isolated validation radio for the compiled
-  vendor comparison.
 
 No runtime composes the core and the schedule under the arbiter lease now;
 the policy the former radio runtime ran is recorded in the

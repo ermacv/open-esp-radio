@@ -11,7 +11,6 @@ description = "Audited ESP32-S31 Wi-Fi MAC DMA ownership and descriptor ring"
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
 test-support = ["oer-esp32s31-hal/test-support"]
 default = []
-validation-raw-dma = []
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }

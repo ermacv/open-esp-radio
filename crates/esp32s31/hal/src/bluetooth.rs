@@ -37,8 +37,6 @@ mod controller_time;
 mod diagnostic;
 mod scheduler_stop;
 mod shutdown;
-#[cfg(feature = "validation-probes")]
-pub mod validation;
 
 use controller_time::ControllerTimeLatch;
 pub use controller_time::{
@@ -354,10 +352,9 @@ impl ClockedOwner {
     }
 }
 
-#[cfg(any(test, feature = "validation-probes"))]
+#[cfg(any(test, feature = "test-support"))]
 impl ClockedOwner {
-    /// Assume the clock stage for a validation or host-test image, without
-    /// any MMIO.
+    /// Assume the clock stage for a host test, without any MMIO.
     #[doc(hidden)]
     pub fn for_validation(partition: BluetoothPartition) -> Self {
         Self {
@@ -1208,16 +1205,6 @@ pub struct DirectionFindingDisabledBaselineOwner {
 }
 
 impl RxMemoryListPublished {
-    /// Construct a semantic publication proof for host ownership validation.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn from_parts_for_validation(
-        selector: BluetoothMemoryListSelector,
-        head: BluetoothControllerSramAddress,
-    ) -> Self {
-        Self { selector, head }
-    }
-
     /// Return the positional hardware-list selector chosen by the memory
     /// layer.
     pub const fn selector(&self) -> BluetoothMemoryListSelector {

@@ -509,7 +509,7 @@ pub enum XtalDutyPrepareCompletion {
     PbusDebugModeConfigured,
     PbusForceCompleted(PhyPbusForceTest),
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(dead_code, reason = "only validation bindings construct this variant")
     )]
     PbusForceTimedOut(PhyPbusForceTest),
@@ -744,7 +744,7 @@ pub enum XtalDutyRestoreCompletion {
     },
     PbusForceCompleted(PhyPbusForceTest),
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(dead_code, reason = "only validation bindings construct this variant")
     )]
     PbusForceTimedOut(PhyPbusForceTest),

@@ -163,12 +163,12 @@ impl PhyClientState {
     /// Host models and validation fixtures use this constructor. The result
     /// never describes a hardware partition, so it cannot authorize a hardware
     /// operation that checks [`Self::describes`].
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub(crate) const fn without_registration(period_micros: u64) -> Self {
         Self::empty(period_micros, None)
     }
 
-    #[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+    #[cfg(any(target_arch = "riscv32", test))]
     const fn empty(
         period_micros: u64,
         epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
@@ -614,27 +614,6 @@ impl PhyPendingTracking {
         hardware: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
     ) -> bool {
         self.owner.describes(hardware)
-    }
-
-    /// Ordinary model fixture; no registration or physical admission proof.
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn for_validation(
-        request: PhyParamTrackRequest,
-        policy: PhyParamTrackingPolicy,
-    ) -> Self {
-        let mut owner = PhyClientState::without_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS);
-        owner.bits = if request.wifi() { WIFI_BIT } else { 0 }
-            | if request.bluetooth_ieee802154() {
-                BLUETOOTH_BIT
-            } else {
-                0
-            };
-        owner.tracker_model_armed = owner.bits != 0;
-        Self {
-            owner,
-            request,
-            transition: PhyParamTrackingTransition::new(request, policy),
-        }
     }
 
     #[cfg(test)]
