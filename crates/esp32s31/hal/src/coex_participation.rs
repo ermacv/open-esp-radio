@@ -6,7 +6,7 @@
 //! cannot be unbalanced. A client leaves common power only while it shows
 //! its [`CoexAbsent`]: it cannot leave power while it takes part. External
 //! coexistence takes part with its own [`ExternalCoexistence`]. The
-//! arbiter's participant set follows these states; the coexistence policy
+//! domain's participant set follows these states; the coexistence policy
 //! acts on it in the shared radio's owner (the `oer-espressif-coex` README
 //! records the participant policy).
 //!
@@ -25,16 +25,16 @@ use crate::clock::{RadioClient, RadioClientKind};
 /// ```
 /// use oer_esp32s31_hal::{
 ///     ieee802154::Ieee802154Powered,
-///     shared_radio::{CoexAbsent, CommonPower, Ieee802154Client, SharedRadioLease},
+///     domain::{CoexAbsent, CommonPower, Ieee802154Client, RadioDomain},
 /// };
 ///
 /// fn leave(
-///     lease: &mut SharedRadioLease<'_>,
+///     radio: &mut RadioDomain,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
 ///     coex: &CoexAbsent<Ieee802154Client>,
 /// ) {
-///     let _ = powered.power_down(lease, power, coex);
+///     let _ = powered.power_down(radio, power, coex);
 /// }
 /// ```
 ///
@@ -43,23 +43,23 @@ use crate::clock::{RadioClient, RadioClientKind};
 /// ```compile_fail,E0308
 /// use oer_esp32s31_hal::{
 ///     ieee802154::Ieee802154Powered,
-///     shared_radio::{CommonPower, Coexisting, Ieee802154Client, SharedRadioLease},
+///     domain::{CommonPower, Coexisting, Ieee802154Client, RadioDomain},
 /// };
 ///
 /// fn leave(
-///     lease: &mut SharedRadioLease<'_>,
+///     radio: &mut RadioDomain,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
 ///     coex: &Coexisting<Ieee802154Client>,
 /// ) {
-///     let _ = powered.power_down(lease, power, coex);
+///     let _ = powered.power_down(radio, power, coex);
 /// }
 /// ```
 ///
 /// And the state cannot be made outside the radio split:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::shared_radio::{CoexAbsent, WifiClient};
+/// use oer_esp32s31_hal::domain::{CoexAbsent, WifiClient};
 ///
 /// let _coex: CoexAbsent<WifiClient> = CoexAbsent { _client: core::marker::PhantomData };
 /// ```

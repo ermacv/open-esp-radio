@@ -17,7 +17,7 @@ use crate::{
     runtime::{WifiStopped, enter_esp32s31_wifi_runtime},
 };
 
-use oer_esp32s31_hal::shared_radio::SharedRadioLease;
+use oer_esp32s31_hal::domain::RadioDomain;
 
 use oer_esp32s31_phy::{PhyShortDelay, PhyTargetObserver, concurrent::ConcurrentPhy};
 
@@ -66,7 +66,7 @@ impl<W> RadioStartFailure<W> {
 ///
 /// Once polled, drive this future to a terminal result.
 pub async fn start_esp32s31_radio<P, W, D, O>(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     initialized: WifiInitialized<W>,
     config: RadioStartConfig,
@@ -79,7 +79,7 @@ where
     O: PhyTargetObserver + Clone,
 {
     let wifi = start_esp32s31_wifi::<P, W, D, O>(
-        lease,
+        radio,
         platform,
         initialized,
         config.wifi,
@@ -88,6 +88,6 @@ where
     )
     .await
     .map_err(RadioStartFailure::Wifi)?;
-    let mac = start_esp32s31_wifi_mac(wifi, lease, config.mac).map_err(RadioStartFailure::Mac)?;
+    let mac = start_esp32s31_wifi_mac(wifi, radio, config.mac).map_err(RadioStartFailure::Mac)?;
     Ok(enter_esp32s31_wifi_runtime(mac))
 }

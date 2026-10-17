@@ -1,7 +1,7 @@
 use oer_esp32s31_hal::{
+    domain::{RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::RadioHardware,
-    shared_radio::{RadioClient, SharedRadio},
 };
 use oer_time_virtual::VirtualClock;
 
@@ -11,15 +11,13 @@ use crate::{
     state::client::{DEFAULT_PLL_TRACK_PERIOD_MICROS, PhyClientState},
 };
 
-/// An arbiter whose domain is registered in the arbiter's own epoch.
-fn registered_arbiter() -> SharedRadio<ConcurrentPhy> {
-    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
+/// A radio domain whose PHY is registered in the domain's own epoch.
+fn registered_domain() -> RadioDomain<ConcurrentPhy> {
+    let (mut radio, _partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
     {
-        let mut lease = radio
-            .try_acquire()
-            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-        let epoch = lease.phy_hal().begin_registration_epoch();
-        *lease.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
+        let domain = &mut radio;
+        let epoch = domain.phy_hal().begin_registration_epoch();
+        *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
             RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
@@ -27,15 +25,13 @@ fn registered_arbiter() -> SharedRadio<ConcurrentPhy> {
     radio
 }
 
-/// An arbiter whose registered domain has RF closed.
-fn rf_closed_arbiter() -> SharedRadio<ConcurrentPhy> {
-    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
+/// A radio domain whose registered PHY has RF closed.
+fn rf_closed_domain() -> RadioDomain<ConcurrentPhy> {
+    let (mut radio, _partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
     {
-        let mut lease = radio
-            .try_acquire()
-            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-        let epoch = lease.phy_hal().begin_registration_epoch();
-        *lease.attachment_mut() = ConcurrentPhy::rf_closed_for_test(PhyDomain::new(
+        let domain = &mut radio;
+        let epoch = domain.phy_hal().begin_registration_epoch();
+        *domain.attachment_mut() = ConcurrentPhy::rf_closed_for_test(PhyDomain::new(
             RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
@@ -45,159 +41,133 @@ fn rf_closed_arbiter() -> SharedRadio<ConcurrentPhy> {
 
 #[test]
 fn clients_share_one_domain_and_leave_it_one_by_one() {
-    let radio = registered_arbiter();
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let mut radio = registered_domain();
+    let radio = &mut radio;
     assert_eq!(
-        enter_client(&mut lease, RadioClient::Wifi, &VirtualClock::<8>::new()),
+        enter_client(radio, RadioClient::Wifi, &VirtualClock::<8>::new()),
         Ok(ConcurrentAcquire::Settled)
     );
     assert_eq!(
-        enter_client(
-            &mut lease,
-            RadioClient::Bluetooth,
-            &VirtualClock::<8>::new()
-        ),
+        enter_client(radio, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
         Ok(ConcurrentAcquire::Settled)
     );
-    let snapshot = lease
+    let snapshot = radio
         .attachment()
         .client_snapshot()
         .unwrap_or_else(|| panic!("a registered domain has a client set"));
     assert!(snapshot.contains(RadioClient::Wifi));
     assert!(snapshot.contains(RadioClient::Bluetooth));
     assert!(matches!(
-        enter_client(&mut lease, RadioClient::Wifi, &VirtualClock::<8>::new()),
+        enter_client(radio, RadioClient::Wifi, &VirtualClock::<8>::new()),
         Err(ConcurrentPhyError::Acquire(_))
     ));
 
-    assert_eq!(release_client(&mut lease, RadioClient::Wifi), Ok(false));
-    assert_eq!(release_client(&mut lease, RadioClient::Bluetooth), Ok(true));
+    assert_eq!(release_client(radio, RadioClient::Wifi), Ok(false));
+    assert_eq!(release_client(radio, RadioClient::Bluetooth), Ok(true));
     assert!(matches!(
-        release_client(&mut lease, RadioClient::Bluetooth),
+        release_client(radio, RadioClient::Bluetooth),
         Err(ConcurrentPhyError::Release(_))
     ));
 }
 
 #[test]
 fn an_unregistered_domain_rejects_every_client_operation() {
-    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
+    let (mut radio, _partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
+    let domain = &mut radio;
     assert_eq!(
-        phy_ready(&mut lease).map(|_| ()),
+        phy_ready(domain).map(|_| ()),
         Err(ConcurrentPhyError::NotRegistered)
     );
     assert_eq!(
-        evaluate_periodic_tracking(&mut lease, &VirtualClock::<8>::new()),
+        evaluate_periodic_tracking(domain, &VirtualClock::<8>::new()),
         Err(ConcurrentPhyError::NotRegistered)
     );
     assert_eq!(
-        admit_maintenance(&lease),
+        admit_maintenance(&domain),
         Err(ConcurrentPhyError::NotRegistered)
     );
 }
 
 #[test]
 fn due_tracking_blocks_clients_until_maintenance_is_admitted() {
-    let radio = registered_arbiter();
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let mut radio = registered_domain();
+    let domain = &mut radio;
     assert_eq!(
-        enter_client(&mut lease, RadioClient::Wifi, &VirtualClock::<8>::new()),
+        enter_client(domain, RadioClient::Wifi, &VirtualClock::<8>::new()),
         Ok(ConcurrentAcquire::Settled)
     );
     assert_eq!(
-        admit_maintenance(&lease),
+        admit_maintenance(&domain),
         Err(ConcurrentPhyError::NoTrackingPending)
     );
     // One period later the periodic callback requests tracking.
     assert_eq!(
         evaluate_periodic_tracking(
-            &mut lease,
+            domain,
             &VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(
                 DEFAULT_PLL_TRACK_PERIOD_MICROS
             ))
         ),
         Ok(true)
     );
-    assert!(lease.attachment().tracking_pending());
+    assert!(domain.attachment().tracking_pending());
     assert_eq!(
-        enter_client(
-            &mut lease,
-            RadioClient::Bluetooth,
-            &VirtualClock::<8>::new()
-        ),
+        enter_client(domain, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
         Err(ConcurrentPhyError::TrackingPending)
     );
     // Pending tracking is admitted with the client running, as the vendor's.
-    assert_eq!(admit_maintenance(&lease), Ok(()));
+    assert_eq!(admit_maintenance(&domain), Ok(()));
 }
 
 #[test]
 fn a_closed_domain_admits_no_client_until_rf_wakes() {
-    let radio = rf_closed_arbiter();
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
-    assert!(lease.attachment().rf_closed());
+    let mut radio = rf_closed_domain();
+    let radio = &mut radio;
+    assert!(radio.attachment().rf_closed());
     assert_eq!(
-        lease
+        radio
             .attachment()
             .client_snapshot()
             .map(|set| set.is_empty()),
         Some(true)
     );
     assert_eq!(
-        enter_client(
-            &mut lease,
-            RadioClient::Ieee802154,
-            &VirtualClock::<8>::new()
-        ),
+        enter_client(radio, RadioClient::Ieee802154, &VirtualClock::<8>::new()),
         Err(ConcurrentPhyError::RfClosed)
     );
     assert_eq!(
-        evaluate_periodic_tracking(&mut lease, &VirtualClock::<8>::new()),
+        evaluate_periodic_tracking(radio, &VirtualClock::<8>::new()),
         Err(ConcurrentPhyError::RfClosed)
     );
-    assert_eq!(admit_maintenance(&lease), Err(ConcurrentPhyError::RfClosed));
+    assert_eq!(admit_maintenance(&radio), Err(ConcurrentPhyError::RfClosed));
     // RF close takes only an open domain; the closed one stays closed.
     assert!(matches!(
-        lease.attachment_mut().idle_domain(),
+        radio.attachment_mut().idle_domain(),
         Err(ConcurrentPhyError::RfClosed)
     ));
-    assert!(lease.attachment().rf_closed());
-    assert!(lease.attachment_mut().closed_domain().is_ok());
+    assert!(radio.attachment().rf_closed());
+    assert!(radio.attachment_mut().closed_domain().is_ok());
 }
 
 #[test]
 fn rf_closes_only_after_the_last_client_left() {
-    let radio = registered_arbiter();
-    let mut lease = radio
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let mut radio = registered_domain();
+    let radio = &mut radio;
     assert!(matches!(
-        lease.attachment_mut().closed_domain(),
+        radio.attachment_mut().closed_domain(),
         Err(ConcurrentPhyError::RfOpen)
     ));
     assert_eq!(
-        enter_client(
-            &mut lease,
-            RadioClient::Bluetooth,
-            &VirtualClock::<8>::new()
-        ),
+        enter_client(radio, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
         Ok(ConcurrentAcquire::Settled)
     );
     assert!(matches!(
-        lease.attachment_mut().idle_domain(),
+        radio.attachment_mut().idle_domain(),
         Err(ConcurrentPhyError::ClientsActive)
     ));
     // The rejected close leaves the client in the open domain.
-    assert_eq!(release_client(&mut lease, RadioClient::Bluetooth), Ok(true));
-    assert!(lease.attachment_mut().idle_domain().is_ok());
+    assert_eq!(release_client(radio, RadioClient::Bluetooth), Ok(true));
+    assert!(radio.attachment_mut().idle_domain().is_ok());
 }
 
 #[test]
@@ -207,21 +177,17 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
         base_mac_address: [2, 3, 5, 7, 11, 13],
         mac_extension: 17,
     };
-    let (radio, _partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
+    let (mut radio, _partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
     {
-        let lease = radio
-            .try_acquire()
-            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
+        let radio = &mut radio;
         assert!(matches!(
-            lease.attachment().calibration_cache(identity),
+            radio.attachment().calibration_cache(identity),
             Err(ConcurrentPhyError::NotRegistered)
         ));
     }
-    for radio in [registered_arbiter(), rf_closed_arbiter()] {
-        let lease = radio
-            .try_acquire()
-            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-        let cache = lease
+    for mut radio in [registered_domain(), rf_closed_domain()] {
+        let radio = &mut radio;
+        let cache = radio
             .attachment()
             .calibration_cache(identity)
             .unwrap_or_else(|_| panic!("a registered domain exports its state"));
@@ -229,14 +195,11 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
     }
 }
 
-/// Enter `client` with a proof for the lease's registration.
+/// Enter `client` with a proof for the domain's registration.
 fn enter_client(
-    lease: &mut oer_esp32s31_hal::shared_radio::SharedRadioLease<
-        '_,
-        crate::concurrent::ConcurrentPhy,
-    >,
-    client: oer_esp32s31_hal::shared_radio::RadioClient,
+    radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
+    client: oer_esp32s31_hal::domain::RadioClient,
     clock: &impl oer_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
-    crate::concurrent::acquire_client(lease, client, clock)
+    crate::concurrent::acquire_client(radio, client, clock)
 }

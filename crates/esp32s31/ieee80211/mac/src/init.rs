@@ -94,7 +94,7 @@ impl MacRuntimeStopHardware for oer_esp32s31_hal::owner::RadioRuntimeOwner {
 /// The Wi-Fi MAC reset pulse, which runs through the shared radio owner.
 ///
 /// The Wi-Fi module clocks (`wifi_clock_enable()`) are already on: the
-/// clocked Wi-Fi client of the radio arbiter proves them.
+/// clocked Wi-Fi client of the radio domain proves them.
 pub trait MacResetHardware {
     fn set_wifi_mac_reset(&mut self, asserted: bool);
 }

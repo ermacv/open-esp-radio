@@ -1,5 +1,5 @@
-//! Target registration and tracking of the shared PHY domain under the radio
-//! arbiter.
+//! Target registration and tracking of the shared PHY domain in the radio
+//! domain.
 
 use super::*;
 use crate::{
@@ -9,8 +9,8 @@ use crate::{
     domain::PhyDomain,
     state::client::RadioClient,
 };
-use oer_esp32s31_hal::shared_radio::{
-    ModemClockError, PhyClockModule, PlatformClockProvider, SharedRadioLease,
+use oer_esp32s31_hal::domain::{
+    ModemClockError, PhyClockModule, PlatformClockProvider, RadioDomain,
 };
 
 /// Outputs of the shared domain's registration.
@@ -85,12 +85,12 @@ pub enum ConcurrentRfError {
 /// Take `PHY`, then `PHY_CALIBRATION`, as `esp_phy_enable` does before
 /// calibration or RF wake.
 fn enable_phy_clocks(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &impl PlatformClockProvider,
 ) -> Result<(), ModemClockError> {
-    lease.enable_phy_modem_clocks(PhyClockModule::Phy, clocks)?;
-    if let Err(error) = lease.enable_phy_modem_clocks(PhyClockModule::Calibration, clocks) {
-        return Err(match lease.disable_phy_modem_clocks(PhyClockModule::Phy) {
+    radio.enable_phy_modem_clocks(PhyClockModule::Phy, clocks)?;
+    if let Err(error) = radio.enable_phy_modem_clocks(PhyClockModule::Calibration, clocks) {
+        return Err(match radio.disable_phy_modem_clocks(PhyClockModule::Phy) {
             Ok(()) => error,
             Err(rollback) => rollback,
         });
@@ -99,11 +99,9 @@ fn enable_phy_clocks(
 }
 
 /// Release both modules after a registration that did not complete.
-fn release_phy_clocks(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
-) -> Result<(), ModemClockError> {
-    let calibration = lease.disable_phy_modem_clocks(PhyClockModule::Calibration);
-    let phy = lease.disable_phy_modem_clocks(PhyClockModule::Phy);
+fn release_phy_clocks(radio: &mut RadioDomain<ConcurrentPhy>) -> Result<(), ModemClockError> {
+    let calibration = radio.disable_phy_modem_clocks(PhyClockModule::Calibration);
+    let phy = radio.disable_phy_modem_clocks(PhyClockModule::Phy);
     calibration.and(phy)
 }
 
@@ -116,10 +114,10 @@ pub enum ConcurrentPhyTrackingError {
     Failed(TargetPhyParamTrackingError),
 }
 
-/// Register the shared PHY domain through the arbiter's shared-PHY borrow.
+/// Register the shared PHY domain through the radio domain's shared-PHY borrow.
 ///
 /// This is the calibrating first `esp_phy_enable`: `PHY` and
-/// `PHY_CALIBRATION` are enabled through the arbiter before calibration, and
+/// `PHY_CALIBRATION` are enabled through the radio domain before calibration, and
 /// `PHY_CALIBRATION` is released after it. `PHY` stays held while RF is open.
 ///
 /// # Cancellation
@@ -134,7 +132,7 @@ pub enum ConcurrentPhyTrackingError {
 )]
 pub async fn register_concurrent_phy<P, D, O>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     clocks: &impl PlatformClockProvider,
     config: PhyRegisterConfig,
@@ -144,7 +142,7 @@ where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    match lease.attachment_mut().slot_mut() {
+    match radio.attachment_mut().slot_mut() {
         Slot::Empty => {}
         Slot::Poisoned => {
             return Err(ConcurrentPhyRegisterFailure::Rejected(
@@ -157,10 +155,10 @@ where
             ));
         }
     }
-    enable_phy_clocks(lease, clocks).map_err(|error| {
+    enable_phy_clocks(radio, clocks).map_err(|error| {
         ConcurrentPhyRegisterFailure::Rejected(ConcurrentPhyError::Clock(error))
     })?;
-    let (mut registers, phy) = lease.phy_hal_with_attachment();
+    let (mut registers, phy) = radio.phy_hal_with_attachment();
     match PhyDomain::register::<P, _, D, O>(timer, platform, &mut registers, config, observer).await
     {
         Ok(registered) => {
@@ -171,7 +169,7 @@ where
                 outcome,
                 counters,
             };
-            match lease.disable_phy_modem_clocks(PhyClockModule::Calibration) {
+            match radio.disable_phy_modem_clocks(PhyClockModule::Calibration) {
                 Ok(()) => Ok(registration),
                 Err(error) => Err(ConcurrentPhyRegisterFailure::CalibrationClock {
                     registration,
@@ -181,7 +179,7 @@ where
         }
         Err(failure) => Err(ConcurrentPhyRegisterFailure::Failed {
             failure,
-            clocks: release_phy_clocks(lease),
+            clocks: release_phy_clocks(radio),
         }),
     }
 }
@@ -208,17 +206,17 @@ where
 /// radio then requires reset.
 pub async fn close_concurrent_rf<P, D>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
 ) -> Result<(), ConcurrentRfError>
 where
     D: PhyShortDelay,
 {
-    let mut domain = lease
+    let mut domain = radio
         .attachment_mut()
         .idle_domain()
         .map_err(ConcurrentRfError::Rejected)?;
-    let (mut registers, phy) = lease.phy_hal_with_attachment();
+    let (mut registers, phy) = radio.phy_hal_with_attachment();
     if !domain.clients.describes(&registers) {
         *phy.slot_mut() = Slot::Registered(domain);
         return Err(ConcurrentRfError::Rejected(
@@ -247,7 +245,7 @@ where
     match closed {
         Ok(()) => {
             *phy.slot_mut() = Slot::RfClosed(domain);
-            lease
+            radio
                 .disable_phy_modem_clocks(PhyClockModule::Phy)
                 .map_err(ConcurrentRfError::Clock)
         }
@@ -282,33 +280,33 @@ where
 /// edge every failure is fail-stop and requires reset.
 pub async fn wake_concurrent_rf<D>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &impl PlatformClockProvider,
 ) -> Result<(), ConcurrentRfError>
 where
     D: PhyShortDelay,
 {
-    let domain = lease
+    let domain = radio
         .attachment_mut()
         .closed_domain()
         .map_err(ConcurrentRfError::Rejected)?;
     let describes = {
-        let (registers, _) = lease.phy_hal_with_attachment();
+        let (registers, _) = radio.phy_hal_with_attachment();
         domain.clients.describes(&registers)
     };
     if !describes {
-        *lease.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
         return Err(ConcurrentRfError::Rejected(
             ConcurrentPhyError::EpochMismatch,
         ));
     }
-    if let Err(error) = enable_phy_clocks(lease, clocks) {
-        *lease.attachment_mut().slot_mut() = Slot::RfClosed(domain);
+    if let Err(error) = enable_phy_clocks(radio, clocks) {
+        *radio.attachment_mut().slot_mut() = Slot::RfClosed(domain);
         return Err(ConcurrentRfError::Rejected(ConcurrentPhyError::Clock(
             error,
         )));
     }
-    let (mut registers, phy) = lease.phy_hal_with_attachment();
+    let (mut registers, phy) = radio.phy_hal_with_attachment();
     if let Err(error) =
         radio_lifecycle::execute_rf_wake_with_hal::<D>(timer, &mut registers, domain.phy_state())
             .await
@@ -317,13 +315,14 @@ where
         return Err(ConcurrentRfError::Failed(error));
     }
     *phy.slot_mut() = Slot::Registered(domain);
-    lease
+    radio
         .disable_phy_modem_clocks(PhyClockModule::Calibration)
         .map_err(ConcurrentRfError::Clock)
 }
 
 /// Run the pending tracking request with the protocols running, as the
-/// vendor's tracking does under its PHY lock: the lease is that lock, and the
+/// vendor's tracking does under its PHY lock: the exclusive borrow of the
+/// radio domain is that lock, and the
 /// tracking graph brackets its RF-sensitive regions with the grant-protect
 /// request.
 ///
@@ -337,7 +336,7 @@ where
 /// partially updated; the radio then requires reset.
 pub async fn maintain_concurrent_phy<P, D, O>(
     timer: &impl oer_time::Timer,
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     observer: O,
 ) -> Result<PhyParamTrackingOutcome, ConcurrentPhyTrackingError>
@@ -345,16 +344,16 @@ where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    admit_maintenance(lease).map_err(ConcurrentPhyTrackingError::Rejected)?;
+    admit_maintenance(radio).map_err(ConcurrentPhyTrackingError::Rejected)?;
 
-    let (mut registered, pending) = match core::mem::take(lease.attachment_mut().slot_mut()) {
+    let (mut registered, pending) = match core::mem::take(radio.attachment_mut().slot_mut()) {
         Slot::Pending {
             registered,
             pending,
         } => (registered, pending),
         other => {
             // Admission accepted only a pending slot.
-            *lease.attachment_mut().slot_mut() = other;
+            *radio.attachment_mut().slot_mut() = other;
             return Err(ConcurrentPhyTrackingError::Rejected(
                 ConcurrentPhyError::NoTrackingPending,
             ));
@@ -362,7 +361,7 @@ where
     };
     let mut tracking = pending.begin_tracking(registered.tracking_policy());
 
-    let (mut registers, phy, mut grant) = lease.phy_hal_with_attachment_and_grant();
+    let (mut registers, phy, mut grant) = radio.phy_hal_with_attachment_and_grant();
     if !tracking.describes(&registers) {
         let error = TargetPhyParamTrackingError::EpochMismatch;
         *phy.slot_mut() = Slot::Poisoned;
@@ -416,7 +415,8 @@ pub enum ConcurrentTrackingTick {
 /// One tick of ESP-IDF's periodic `phy_track_pll`: evaluate the clients'
 /// tracking period and, when tracking is due, run it at once with the
 /// protocols running, as the vendor timer callback does under its PHY lock;
-/// the lease is that lock, and the tracking graph brackets its RF-sensitive
+/// the exclusive borrow of the radio domain is that lock, and the tracking
+/// graph brackets its RF-sensitive
 /// regions with the grant-protect request.
 ///
 /// # Errors
@@ -429,7 +429,7 @@ pub enum ConcurrentTrackingTick {
 /// Once tracking starts, drive this future to a terminal result;
 /// cancellation then leaves hardware partially updated and requires reset.
 pub async fn track_concurrent_phy<P, D, O>(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     platform: &mut P,
     timer: &impl oer_time::Timer,
     observer: O,
@@ -438,10 +438,10 @@ where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    let due = if lease.attachment().tracking_pending() {
+    let due = if radio.attachment().tracking_pending() {
         true
     } else {
-        match evaluate_periodic_tracking(lease, timer) {
+        match evaluate_periodic_tracking(radio, timer) {
             Ok(due) => due,
             Err(
                 error @ (ConcurrentPhyError::NotRegistered
@@ -454,7 +454,7 @@ where
     if !due {
         return Ok(ConcurrentTrackingTick::NotDue);
     }
-    maintain_concurrent_phy::<P, D, O>(timer, lease, platform, observer)
+    maintain_concurrent_phy::<P, D, O>(timer, radio, platform, observer)
         .await
         .map(ConcurrentTrackingTick::Tracked)
 }
@@ -492,8 +492,8 @@ fn wifi_channel_state<'domain>(
 /// Select a Wi-Fi channel on the shared domain before the MAC runs, as the
 /// registered Wi-Fi route's channel selection does.
 ///
-/// `phy` and `channel` come from one lease: the HAL Wi-Fi client lends the
-/// channel HAL together with the arbiter attachment.
+/// `phy` and `channel` come from one radio domain: the HAL Wi-Fi client lends
+/// the channel HAL together with the domain's attachment.
 ///
 /// # Errors
 ///

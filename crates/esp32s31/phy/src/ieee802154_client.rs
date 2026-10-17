@@ -1,7 +1,7 @@
 //! IEEE 802.15.4 as a client of the shared PHY domain.
 //!
 //! The HAL chain holds the IEEE 802.15.4 partition; the registered PHY domain
-//! lives under the arbiter as [`ConcurrentPhy`]. Between the module clocks and
+//! lives in the radio domain as [`ConcurrentPhy`]. Between the module clocks and
 //! the MAC reset, ESP-IDF's `esp_ieee802154_enable` runs `esp_phy_enable` and
 //! `esp_btbb_enable`, and `ieee802154_mac_init` then overrides the shared
 //! transmit-on delay. [`join_ieee802154`] performs those steps on the
@@ -19,17 +19,17 @@
 //!
 //! This module holds the crate's single scoped `unsafe` override: the BTBB
 //! gain parameter is projected here from the settled registration that
-//! describes the lease, never supplied by a caller.
+//! describes the radio, never supplied by a caller.
 
 use core::fmt;
 
 use oer_esp32s31_hal::{
+    domain::{BtbbError, RadioClient, RadioDomain},
     ieee802154::{
         Ieee802154Clocked, Ieee802154FoundationConfigured, Ieee802154FoundationTransitionFailure,
         Ieee802154Operational,
         mac::{Ieee802154InterruptSetupOwner, Ieee802154TaskOwner},
     },
-    shared_radio::{BtbbError, RadioClient, SharedRadioLease},
 };
 
 use crate::concurrent::{
@@ -78,18 +78,17 @@ pub enum Ieee802154PhyClientError {
 /// # Errors
 ///
 /// Every check runs before the client set or BTBB changes: IEEE 802.15.4 already
-/// holds BTBB, or the client set rejects the client. The lease comes back
+/// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
-pub fn join_ieee802154<'l, 'r>(
-    ready: PhyReady<'l, 'r>,
+pub fn join_ieee802154<'l>(
+    ready: PhyReady<'l>,
     clocked: &Ieee802154Clocked,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, 'r, Ieee802154PhyMembership>, JoinRefused<'l, 'r, Ieee802154PhyClientError>>
-{
-    let lease = ready.into_lease();
+) -> Result<Joined<'l, Ieee802154PhyMembership>, JoinRefused<'l, Ieee802154PhyClientError>> {
+    let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the
-    // lease.
-    let gain_parameter = match lease.attachment().settled() {
+    // radio.
+    let gain_parameter = match radio.attachment().settled() {
         Ok(domain) => {
             domain
                 .registered
@@ -100,51 +99,51 @@ pub fn join_ieee802154<'l, 'r>(
         Err(error) => {
             return Err(JoinRefused {
                 error: Ieee802154PhyClientError::Phy(error),
-                lease,
+                radio,
             });
         }
     };
-    if lease.holds_btbb(RadioClient::Ieee802154) {
+    if radio.holds_btbb(RadioClient::Ieee802154) {
         return Err(JoinRefused {
             error: Ieee802154PhyClientError::Btbb(BtbbError::AlreadyAcquired),
-            lease,
+            radio,
         });
     }
-    let acquired = match acquire_client(lease, RadioClient::Ieee802154, clock) {
+    let acquired = match acquire_client(radio, RadioClient::Ieee802154, clock) {
         Ok(acquired) => acquired,
         Err(error) => {
             return Err(JoinRefused {
                 error: Ieee802154PhyClientError::Phy(error),
-                lease,
+                radio,
             });
         }
     };
 
     #[allow(
         unsafe_code,
-        reason = "the gain byte is projected from the registration that describes the lease"
+        reason = "the gain byte is projected from the registration that describes the radio"
     )]
     let btbb = {
         // SAFETY: the settled domain was registered by a completed target
-        // run whose epoch is the lease's current registration, and
+        // run whose epoch is the radio's current registration, and
         // `gain_parameter` is the `phy_param` byte at 0x120 projected from
         // that same registered state. `clocked` proves the IEEE 802.15.4
         // module clocks.
-        unsafe { clocked.acquire_btbb(lease, gain_parameter) }
+        unsafe { clocked.acquire_btbb(radio, gain_parameter) }
     };
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.
-        let _ = release_client(lease, RadioClient::Ieee802154);
+        let _ = release_client(radio, RadioClient::Ieee802154);
         return Err(JoinRefused {
             error: Ieee802154PhyClientError::Btbb(error),
-            lease,
+            radio,
         });
     }
     Ok(Joined {
         membership: Ieee802154PhyMembership { _private: () },
         acquired,
-        lease,
+        radio,
     })
 }
 
@@ -186,17 +185,17 @@ impl fmt::Debug for Ieee802154PhyLeaveFailure {
 /// The domain rejects the release (tracking pending, poisoned) or the BTBB
 /// reference is missing; nothing changed and the membership is returned.
 pub fn leave_ieee802154(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     clocked: &Ieee802154Clocked,
     membership: Ieee802154PhyMembership,
 ) -> Result<bool, Ieee802154PhyLeaveFailure> {
-    if !lease.holds_btbb(RadioClient::Ieee802154) {
+    if !radio.holds_btbb(RadioClient::Ieee802154) {
         return Err(Ieee802154PhyLeaveFailure {
             membership,
             error: Ieee802154PhyClientError::Btbb(BtbbError::NotAcquired),
         });
     }
-    let last = match release_client(lease, RadioClient::Ieee802154) {
+    let last = match release_client(radio, RadioClient::Ieee802154) {
         Ok(last) => last,
         Err(error) => {
             return Err(Ieee802154PhyLeaveFailure {
@@ -207,7 +206,7 @@ pub fn leave_ieee802154(
     };
     let Ieee802154PhyMembership { _private: () } = membership;
     // The reference was checked above, so the release cannot be rejected.
-    let _ = clocked.release_btbb(lease);
+    let _ = clocked.release_btbb(radio);
     Ok(last)
 }
 

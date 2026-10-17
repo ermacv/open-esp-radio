@@ -1,16 +1,16 @@
-//! The coexistence ports of one radio arbiter lease.
+//! The coexistence ports of one radio domain.
 //!
-//! The arbiter owns the timer bank, the event priority table and the shared
-//! modem clock fields. [`CoexArbiterPorts`] lends them to [`crate::CoexCore`]
+//! The radio domain owns the timer bank, the event priority table and the shared
+//! modem clock fields. [`CoexDomainPorts`] lends them to [`crate::CoexCore`]
 //! for one transaction: the timer port programs the policy timers and reads
-//! the arbiter's current event priorities, the clock port samples the bank's
+//! the domain's current event priorities, the clock port samples the bank's
 //! low-power clock selection.
 
 use core::cell::RefCell;
 
 use oer_esp32s31_hal::{
     coex::{CoexPolicyTimer, timer_clock},
-    shared_radio::SharedRadioLease,
+    domain::RadioDomain,
     types::{
         CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
         CoexTimerPtiValue,
@@ -32,37 +32,34 @@ const fn bank_timer(index: CoexTimerIndex) -> CoexPolicyTimer {
     }
 }
 
-/// The timer and clock ports of one arbiter lease, shared by the two port
+/// The timer and clock ports of one radio domain, shared by the two port
 /// handles of a single transaction.
-pub struct CoexArbiterPorts<'lease, 'radio, T> {
-    lease: RefCell<&'lease mut SharedRadioLease<'radio, T>>,
+pub struct CoexDomainPorts<'radio, T> {
+    radio: RefCell<&'radio mut RadioDomain<T>>,
     real_chip: bool,
 }
 
-/// The timer port of [`CoexArbiterPorts`].
-pub struct CoexArbiterTimer<'ports, 'lease, 'radio, T> {
-    ports: &'ports CoexArbiterPorts<'lease, 'radio, T>,
+/// The timer port of [`CoexDomainPorts`].
+pub struct CoexDomainTimer<'ports, 'radio, T> {
+    ports: &'ports CoexDomainPorts<'radio, T>,
 }
 
-/// The clock port of [`CoexArbiterPorts`].
-pub struct CoexArbiterClock<'ports, 'lease, 'radio, T> {
-    ports: &'ports CoexArbiterPorts<'lease, 'radio, T>,
+/// The clock port of [`CoexDomainPorts`].
+pub struct CoexDomainClock<'ports, 'radio, T> {
+    ports: &'ports CoexDomainPorts<'radio, T>,
 }
 
-impl<'lease, 'radio, T> CoexArbiterPorts<'lease, 'radio, T> {
-    /// Lend the lease's coexistence resources for one transaction.
-    pub fn new(lease: &'lease mut SharedRadioLease<'radio, T>) -> Self {
-        Self::with_real_chip(lease, true)
+impl<'radio, T> CoexDomainPorts<'radio, T> {
+    /// Lend the domain's coexistence resources for one transaction.
+    pub fn new(radio: &'radio mut RadioDomain<T>) -> Self {
+        Self::with_real_chip(radio, true)
     }
 
     /// As [`Self::new`], with the vendor's FPGA clock constant selectable for
     /// compiled comparison.
-    pub(crate) fn with_real_chip(
-        lease: &'lease mut SharedRadioLease<'radio, T>,
-        real_chip: bool,
-    ) -> Self {
+    pub(crate) fn with_real_chip(radio: &'radio mut RadioDomain<T>, real_chip: bool) -> Self {
         Self {
-            lease: RefCell::new(lease),
+            radio: RefCell::new(radio),
             real_chip,
         }
     }
@@ -71,12 +68,12 @@ impl<'lease, 'radio, T> CoexArbiterPorts<'lease, 'radio, T> {
     pub fn ports(
         &self,
     ) -> (
-        CoexArbiterTimer<'_, 'lease, 'radio, T>,
-        CoexArbiterClock<'_, 'lease, 'radio, T>,
+        CoexDomainTimer<'_, 'radio, T>,
+        CoexDomainClock<'_, 'radio, T>,
     ) {
         (
-            CoexArbiterTimer { ports: self },
-            CoexArbiterClock { ports: self },
+            CoexDomainTimer { ports: self },
+            CoexDomainClock { ports: self },
         )
     }
 
@@ -124,15 +121,15 @@ impl<'lease, 'radio, T> CoexArbiterPorts<'lease, 'radio, T> {
     }
 
     fn with_bank(&self, operation: impl FnOnce(&mut oer_esp32s31_hal::coex::CoexTimerBank<'_>)) {
-        operation(&mut self.lease.borrow_mut().coex_timer_bank());
+        operation(&mut self.radio.borrow_mut().coex_timer_bank());
     }
 }
 
-impl<T> CoexClockHardware for CoexArbiterClock<'_, '_, '_, T> {
+impl<T> CoexClockHardware for CoexDomainClock<'_, '_, T> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
         let observation = self
             .ports
-            .lease
+            .radio
             .borrow_mut()
             .coex_timer_bank()
             .sample_low_power_clock();
@@ -140,9 +137,9 @@ impl<T> CoexClockHardware for CoexArbiterClock<'_, '_, '_, T> {
     }
 }
 
-impl<T> CoexTimerHardware for CoexArbiterTimer<'_, '_, '_, T> {
+impl<T> CoexTimerHardware for CoexDomainTimer<'_, '_, T> {
     fn pti(&mut self, event: CoexEventId) -> CoexPti {
-        self.ports.lease.borrow().coex_pti(event)
+        self.ports.radio.borrow().coex_pti(event)
     }
 
     fn configure_request(

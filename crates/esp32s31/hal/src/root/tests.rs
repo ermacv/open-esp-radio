@@ -1,8 +1,8 @@
 use super::{RadioHardware, RadioPhyReleaseError};
 use crate::{
+    domain::{RadioDomain, RadioDomainReleaseError},
     owner::PhyInitializationAccess,
     phy::restore::PhyRouteState,
-    shared_radio::{SharedRadio, SharedRadioReleaseError},
 };
 
 #[derive(Clone, Copy)]
@@ -42,49 +42,42 @@ impl Restore {
     }
 }
 
-/// Begin one registration through a fresh lease of `shared`.
-fn register(shared: &SharedRadio<()>) -> crate::owner::PhyRegistrationEpoch {
-    let mut lease = shared
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-    lease.phy_hal().begin_registration_epoch()
+/// Begin one registration in `shared`.
+fn register(shared: &mut RadioDomain<()>) -> crate::owner::PhyRegistrationEpoch {
+    shared.phy_hal().begin_registration_epoch()
 }
 
 #[test]
 fn every_pending_restore_blocks_the_reunion() {
     for restore in Restore::ALL {
-        let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
+        let (mut shared, partitions) = RadioHardware::for_host_test().split(());
         restore.occupy(shared.phy_state_mut_for_test());
-        let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
+        let Err(failure) = RadioHardware::reunite(shared, partitions) else {
             panic!("the split reunited over a pending restore");
         };
         assert_eq!(
             failure.error(),
-            super::ConcurrentReunionError::Shared(SharedRadioReleaseError::Restore(
-                restore.error()
-            ))
+            super::ReunionError::Shared(RadioDomainReleaseError::Restore(restore.error()))
         );
     }
 }
 
 #[test]
-fn a_concurrent_split_reunites_and_retires_the_registration() {
-    let (shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
-    let first = register(&shared);
-    let second = register(&shared);
+fn a_split_reunites_and_retires_the_registration() {
+    let (mut shared, partitions) = RadioHardware::for_host_test().split(());
+    let first = register(&mut shared);
+    let second = register(&mut shared);
     assert_ne!(first, second);
-    let (hardware, ()) = RadioHardware::from_concurrent(shared, partitions)
+    let (hardware, ()) = RadioHardware::reunite(shared, partitions)
         .unwrap_or_else(|_| panic!("an idle split reunites"));
 
     // Returning to the neutral root retires the registration.
-    let (shared, _partitions) = hardware.into_concurrent(());
+    let (mut shared, _partitions) = hardware.split(());
     {
-        let lease = shared
-            .try_acquire()
-            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
-        assert_eq!(lease.registration_epoch(), None);
+        let radio = &mut shared;
+        assert_eq!(radio.registration_epoch(), None);
     }
-    let third = register(&shared);
+    let third = register(&mut shared);
     assert!(third != first && third != second);
 }
 
@@ -95,14 +88,14 @@ fn a_concurrent_split_reunites_and_retires_the_registration() {
 fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
     use crate::power::{PlatformClock, test_clocks::CountingPlatformClocks};
     let platform = CountingPlatformClocks::new();
-    let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
+    let (mut shared, partitions) = RadioHardware::for_host_test().split(());
     shared.hold_platform_clock_for_test(PlatformClock::Pll160m, &platform);
-    let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
+    let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("common power still holds the 160 MHz source");
     };
     assert_eq!(
         failure.error(),
-        super::ConcurrentReunionError::Shared(SharedRadioReleaseError::PlatformClocksHeld)
+        super::ReunionError::Shared(RadioDomainReleaseError::PlatformClocksHeld)
     );
     let (mut shared, _partitions) = failure.into_parts();
     shared.abandon_platform_clocks();
@@ -114,15 +107,15 @@ fn reunion_waits_for_platform_clocks_a_failed_power_sequence_kept() {
 
 #[test]
 fn reunion_waits_for_common_power() {
-    use crate::shared_radio::RadioClient;
-    let (mut shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
+    use crate::domain::RadioClient;
+    let (mut shared, partitions) = RadioHardware::for_host_test().split(());
     shared.hold_common_power_for_test(RadioClient::Bluetooth);
-    let Err(failure) = RadioHardware::from_concurrent(shared, partitions) else {
+    let Err(failure) = RadioHardware::reunite(shared, partitions) else {
         panic!("a client still holds common power");
     };
     assert_eq!(
         failure.error(),
-        super::ConcurrentReunionError::Shared(SharedRadioReleaseError::CommonPowerHeld)
+        super::ReunionError::Shared(RadioDomainReleaseError::CommonPowerHeld)
     );
     let (_shared, _partitions) = failure.into_parts();
 }

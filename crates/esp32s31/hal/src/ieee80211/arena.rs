@@ -12,7 +12,7 @@ use core::{
 };
 use oer_esp32s31_pac::WifiRadioRegisters;
 
-use crate::{owner::RadioRuntimeOwner, shared_radio::SharedRadioLease};
+use crate::{domain::RadioDomain, owner::RadioRuntimeOwner};
 
 const EMPTY: u8 = 0;
 const PUBLISHED: u8 = 1;
@@ -132,27 +132,27 @@ impl RadioOwnerArena {
     }
 
     /// Borrow the published owner only through the narrow channel capability,
-    /// with the shared PHY borrowed from the arbiter lease. The dynamic borrow
+    /// with the shared PHY borrowed from the radio domain. The dynamic borrow
     /// is the serialization guard and remains held across the complete
     /// asynchronous channel transaction.
     pub fn try_channel_hal<'arena, P, T>(
         &'arena self,
         platform: &'arena mut P,
-        lease: &'arena mut SharedRadioLease<'_, T>,
+        radio: &'arena mut RadioDomain<T>,
     ) -> Result<crate::ieee80211::channel::RadioChannelHal<'arena, P>, RadioOwnerArenaError> {
         let mac = self.try_published_mac()?;
-        let (phy, restore) = lease.phy_parts_mut();
+        let (phy, restore) = radio.phy_parts_mut();
         Ok(crate::ieee80211::channel::RadioChannelHal::from_published(
             platform, mac, phy, restore,
         ))
     }
 
-    /// [`Self::try_channel_hal`] together with the arbiter's attachment, for
+    /// [`Self::try_channel_hal`] together with the domain's attachment, for
     /// a PHY channel operation that updates the shared domain's state.
     pub fn try_channel_hal_with_attachment<'arena, P, T>(
         &'arena self,
         platform: &'arena mut P,
-        lease: &'arena mut SharedRadioLease<'_, T>,
+        radio: &'arena mut RadioDomain<T>,
     ) -> Result<
         (
             crate::ieee80211::channel::RadioChannelHal<'arena, P>,
@@ -161,7 +161,7 @@ impl RadioOwnerArena {
         RadioOwnerArenaError,
     > {
         let mac = self.try_published_mac()?;
-        let (phy, restore, attachment) = lease.phy_parts_with_attachment();
+        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
         Ok((
             crate::ieee80211::channel::RadioChannelHal::from_published(platform, mac, phy, restore),
             attachment,
@@ -507,20 +507,20 @@ pub struct RadioAccess<'arena> {
 
 impl<'arena> RadioAccess<'arena> {
     /// Start one serialized channel transaction with the shared PHY borrowed
-    /// from the arbiter lease.
+    /// from the radio domain.
     pub fn try_channel_hal<'access, P, T>(
         &'access self,
         platform: &'access mut P,
-        lease: &'access mut SharedRadioLease<'_, T>,
+        radio: &'access mut RadioDomain<T>,
     ) -> Result<crate::ieee80211::channel::RadioChannelHal<'access, P>, RadioOwnerArenaError> {
-        self.arena.try_channel_hal(platform, lease)
+        self.arena.try_channel_hal(platform, radio)
     }
 
-    /// [`Self::try_channel_hal`] together with the arbiter's attachment.
+    /// [`Self::try_channel_hal`] together with the domain's attachment.
     pub fn try_channel_hal_with_attachment<'access, P, T>(
         &'access self,
         platform: &'access mut P,
-        lease: &'access mut SharedRadioLease<'_, T>,
+        radio: &'access mut RadioDomain<T>,
     ) -> Result<
         (
             crate::ieee80211::channel::RadioChannelHal<'access, P>,
@@ -528,7 +528,7 @@ impl<'arena> RadioAccess<'arena> {
         ),
         RadioOwnerArenaError,
     > {
-        self.arena.try_channel_hal_with_attachment(platform, lease)
+        self.arena.try_channel_hal_with_attachment(platform, radio)
     }
 
     /// Start one serialized Wi-Fi MAC transaction without exposing the

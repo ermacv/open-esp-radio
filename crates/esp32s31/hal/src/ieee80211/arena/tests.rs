@@ -1,15 +1,15 @@
 use crate::{
+    domain::RadioDomain,
     ieee80211::client::{WifiClocked, WifiCold},
     owner::{MacInterruptSetup, RadioRuntimeOwner},
     root::RadioHardware,
-    shared_radio::SharedRadio,
 };
 
 use super::*;
 
-/// A running Wi-Fi client over a validation split, beside its arbiter.
-fn running() -> (SharedRadio<()>, RadioRuntimeOwner, MacInterruptSetup) {
-    let (shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
+/// A running Wi-Fi client over a host-test split, beside its radio domain.
+fn running() -> (RadioDomain<()>, RadioRuntimeOwner, MacInterruptSetup) {
+    let (shared, partitions) = RadioHardware::for_host_test().split(());
     let (owner, interrupts, _clocks) =
         WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi)).into_running();
     (shared, owner, interrupts)
@@ -81,18 +81,16 @@ fn reclaimed_owner_republishes_only_through_its_exact_arena_binding() {
 
 #[test]
 fn published_channel_capability_holds_the_arena_serialization_guard() {
-    let (shared, owner, _interrupt_setup) = running();
+    let (mut shared, owner, _interrupt_setup) = running();
     let arena = RadioOwnerArena::new();
     let published = arena
         .publish(owner)
         .unwrap_or_else(|_| panic!("an empty arena must accept the runtime owner"));
     let access = published.access();
     let mut platform = ();
-    let mut lease = shared
-        .try_acquire()
-        .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
+    let radio = &mut shared;
     let channel = access
-        .try_channel_hal(&mut platform, &mut lease)
+        .try_channel_hal(&mut platform, radio)
         .unwrap_or_else(|_| panic!("published registers must yield a channel capability"));
 
     let published = match published.try_reclaim() {

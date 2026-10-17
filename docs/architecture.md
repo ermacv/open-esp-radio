@@ -65,7 +65,7 @@ One actor on the P2 executor will own the shared RF front-end: PHY
 registration, calibration and tracking, channel retune, modem clocks,
 coexistence timers and sleep. Clients reach it through per-client cells with
 lock-free wakers; PHY membership is a typestate (`Untracked`, `Tracked`,
-`Suspended`). It replaces `shared_radio.rs` in the HAL. It is built in steps
+`Suspended`). It owns the HAL's `RadioDomain` by value. It is built in steps
 with the Wi-Fi slice (R0 at W0); coexistence claims arrive with the second
 radio.
 

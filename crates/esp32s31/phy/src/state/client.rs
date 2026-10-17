@@ -38,7 +38,7 @@ pub const DEFAULT_PLL_TRACK_PERIOD_MICROS: u64 = 1_000_000;
 
 /// One typed user of the shared PHY software client set: the portable
 /// radio client.
-pub use oer_esp32s31_hal::shared_radio::RadioClient;
+pub use oer_esp32s31_hal::domain::RadioClient;
 
 /// The bit of `client` in the reviewed software client set.
 pub(crate) const fn client_bit(client: RadioClient) -> u8 {

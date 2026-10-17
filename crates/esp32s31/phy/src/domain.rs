@@ -1,7 +1,7 @@
 //! One registered PHY epoch shared by every protocol client.
 //!
 //! A [`PhyDomain`] is the target-issued [`RegisteredPhyState`] and the client
-//! set that shares it. The concurrent domain keeps it under the radio arbiter;
+//! set that shares it. The concurrent domain keeps it in the radio domain;
 //! Wi-Fi, Bluetooth and IEEE 802.15.4 acquire and release their client bits
 //! in it.
 
@@ -13,7 +13,7 @@ use crate::{
 /// One registered PHY epoch: the target-issued calibration state and the
 /// client set that shares it.
 ///
-/// The radio arbiter holds the domain beside the shared PHY registers, and
+/// The radio domain holds the PHY domain beside the shared PHY registers, and
 /// the registration path mints it. The domain is neither `Clone` nor
 /// constructible outside the crate, so its calibration state and client set
 /// cannot be replaced or paired with another epoch.

@@ -1,8 +1,8 @@
 use oer_esp32s31_pac::{BluetoothLowPowerClockObservation, ModemSysconBluetoothObservation};
 
 use crate::{
-    root::{ConcurrentPartitions, Ieee802154RadioPartition, RadioHardware, WifiPartition},
-    shared_radio::{LowPowerClockError, SharedRadio},
+    domain::{LowPowerClockError, RadioDomain},
+    root::{Ieee802154RadioPartition, ProtocolPartitions, RadioHardware, WifiPartition},
 };
 
 use super::{
@@ -15,15 +15,15 @@ use super::{
 type Others = (
     WifiPartition,
     Ieee802154RadioPartition,
-    crate::shared_radio::CoexAbsent<crate::shared_radio::WifiClient>,
-    crate::shared_radio::CoexAbsent<crate::shared_radio::BluetoothClient>,
-    crate::shared_radio::CoexAbsent<crate::shared_radio::Ieee802154Client>,
+    crate::domain::CoexAbsent<crate::domain::WifiClient>,
+    crate::domain::CoexAbsent<crate::domain::BluetoothClient>,
+    crate::domain::CoexAbsent<crate::domain::Ieee802154Client>,
 );
 
 /// A concurrent split whose Bluetooth partition is assumed clocked.
-fn clocked() -> (SharedRadio, Others, ClockedOwner) {
-    let (shared, partitions) = RadioHardware::for_host_test().into_concurrent(());
-    let ConcurrentPartitions {
+fn clocked() -> (RadioDomain, Others, ClockedOwner) {
+    let (shared, partitions) = RadioHardware::for_host_test().split(());
+    let ProtocolPartitions {
         wifi,
         wifi_coex,
         bluetooth,
@@ -139,7 +139,7 @@ fn untouched_task_owner_returns_the_partition_to_the_neutral_root() {
     let clocked = task
         .into_clocked(interrupts)
         .expect("an untouched task owner can be reunited");
-    let partitions = ConcurrentPartitions {
+    let partitions = ProtocolPartitions {
         wifi,
         wifi_coex,
         bluetooth: clocked.into_partition_for_host_test(),
@@ -150,7 +150,7 @@ fn untouched_task_owner_returns_the_partition_to_the_neutral_root() {
 
     // Reuniting the split proves that the finite HAL borrows neither moved
     // nor duplicated any partition.
-    let Ok(_root) = RadioHardware::from_concurrent(shared, partitions) else {
+    let Ok(_root) = RadioHardware::reunite(shared, partitions) else {
         panic!("the untouched partitions reunite");
     };
 }
@@ -278,13 +278,13 @@ fn clock_readback_names_the_first_failed_checkpoint() {
 
 #[test]
 fn an_unselected_low_power_clock_cannot_be_deselected() {
-    let (shared, _partitions, clocked) = clocked();
+    let (mut shared, _partitions, clocked) = clocked();
     let (task, _interrupts) = clocked.separate_interrupt_owner();
-    let mut lease = shared.try_acquire().expect("the arbiter is free");
+    let radio = &mut shared;
     // Rejected before any register access, so the validation root is safe.
     assert_eq!(
-        lease.deselect_bluetooth_low_power_clock(&task.registers),
+        radio.deselect_bluetooth_low_power_clock(&task.registers),
         Err(LowPowerClockError::NotSelected)
     );
-    assert!(!lease.bluetooth_low_power_clock_selected());
+    assert!(!radio.bluetooth_low_power_clock_selected());
 }

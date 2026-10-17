@@ -1,15 +1,15 @@
-//! Shared coexistence mechanism owned by the radio arbiter.
+//! Shared coexistence mechanism owned by the radio domain.
 //!
-//! The arbiter keeps the coexistence priority table ([`CoexPtiTable`]) and
-//! lends the timer bank ([`CoexTimerBank`]) through its lease. Both are
+//! The radio domain keeps the coexistence priority table ([`CoexPtiTable`])
+//! and lends the timer bank ([`CoexTimerBank`]). Both are
 //! mechanism: which event requests which timer, and when, is the coexistence
 //! driver's policy, and every protocol programs its own MAC PTI registers from
 //! the values read here. A timer write or a PTI value does not report RF
 //! admission or grant revocation; the hardware arbitrates by priority and
 //! gives the CPU no grant acknowledgement.
 //!
-//! Timer 5 is not lent: the arbiter programs it for the PHY grant-protect
-//! request (`SharedRadioLease::acquire_phy_grant_protect`).
+//! Timer 5 is not lent: the domain programs it for the PHY grant-protect
+//! request (`RadioDomain::acquire_phy_grant_protect`).
 
 use oer_esp32s31_pac::{
     CoexTimerBankRegisters, CoexTimerClientValue, CoexTimerPtiValue, CoexTimerRegister,
@@ -17,7 +17,7 @@ use oer_esp32s31_pac::{
 };
 
 /// The event priority table and IEEE 802.15.4 levels every Espressif chip
-/// shares; the arbiter keeps one table as shared state.
+/// shares; the domain keeps one table as shared state.
 pub use oer_espressif_coex::{
     COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable, Ieee802154CoexLevel,
 };
@@ -124,7 +124,7 @@ impl<'owner> PhyGrantProtect<'owner> {
 
 /// One coexistence timer the coexistence policy may program.
 ///
-/// Timer 5 is not among them: the arbiter reserves it for the PHY
+/// Timer 5 is not among them: the domain reserves it for the PHY
 /// grant-protect request (vendor event 48), so no policy request can
 /// withdraw or overwrite that protection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -313,7 +313,7 @@ pub enum ExternalCoexError {
     /// External coexistence already runs.
     AlreadyActive,
     /// The coexistence module clock could not change.
-    Clock(crate::shared_radio::ModemClockError),
+    Clock(crate::domain::ModemClockError),
 }
 
 #[cfg(test)]

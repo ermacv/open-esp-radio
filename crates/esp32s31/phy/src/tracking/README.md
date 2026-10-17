@@ -5,7 +5,7 @@ terminology and the ownership relationship with protocol runtimes and coex.
 
 This module owns the source-derived tracking algorithms and read-only demand.
 It does not grant RF access, stop protocol runtimes, or implement coexistence.
-The registered domain and the shared PHY must remain under the radio arbiter
+The registered domain and the shared PHY must remain in the radio domain
 lease throughout execution. A network queue credit, scheduler pause or CPU
 mutex alone is not permission to mutate the shared PHY.
 
@@ -40,7 +40,7 @@ execution; it must not be used merely to ask whether work is due. Its pending
 owner remains pending until the selected target children complete.
 
 The concurrent domain runs the vendor periodic tracking when its owner calls
-`track_concurrent_phy` every tracking period under the arbiter lease (no radio
+`track_concurrent_phy` every tracking period on the radio domain (no radio
 system in this tree does this yet), and due work starts at once, as the
 vendor's does: no protocol pauses, and the tracking graph brackets its RF-sensitive regions with the
 grant-protect request. There is no protocol-selected maintenance of individual
@@ -122,7 +122,7 @@ protection separately, as does RFPLL. The pinned `libcoexist.a` (`c758e7b5`)
 provides strong hooks that request/release an event through the coex timer
 engine. OER follows those brackets: the calibration and RFPLL transitions emit
 `SetGrantProtect` at the same positions, and the target port executes them
-through `PhyGrantProtectPort`. The radio arbiter lends one
+through `PhyGrantProtectPort`. The radio domain lends one
 `PhyGrantProtect` request beside the shared PHY, so
 the request is programmed in every configuration, including Wi-Fi alone. The
 hooks do not themselves wait for a grant acknowledgement or prove MAC/DMA

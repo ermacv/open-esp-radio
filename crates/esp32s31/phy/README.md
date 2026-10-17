@@ -66,17 +66,17 @@ reset or retained-sleep wakeup replay.
 | [PHY state](src/state.rs) | Configuration, calibration results, temperature references and cache values | Values do not grant register access |
 | [Client state](src/state/client.rs) and [tracking schedule](src/tracking/schedule.rs) | Active clients, source intervals and read-only demand | Wi-Fi and BT/154 are scheduling classes; BT and 154 remain distinct clients |
 | [Registered domain](src/domain.rs) | One `PhyDomain` per registration: calibration state and the shared client set | A domain cannot be cloned, rebuilt or paired with another epoch; operations check the registration epoch before hardware access |
-| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain beside the HAL radio arbiter; Wi-Fi, Bluetooth and IEEE 802.15.4 join it as clients | Every operation holds the arbiter lease |
+| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi, Bluetooth and IEEE 802.15.4 join it as clients | Every operation borrows the radio domain mutably |
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs) and [HAL PHY](../hal/src/phy.rs) | Typed MMIO, analog buses, hardware completion and bounded waits | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../espressif/analog/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
-| The owner of the shared radio (none in this tree yet; the radio system) | The arbiter, the platform resources and the vendor periodic tracking timer | Tracking runs under the lease and the grant-protect brackets; it pauses no protocol |
+| The owner of the shared radio (none in this tree yet; the radio system) | The radio domain, the platform resources and the vendor periodic tracking timer | Tracking runs on the borrowed domain and the grant-protect brackets; it pauses no protocol |
 | [HAL stopped-MAC check](../hal/src/owner/maintenance.rs) | The stopped Wi-Fi MAC check at the final-client boundary | A CPU mutex does not stop MAC or DMA |
 | [Hardware coex control](../../espressif/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 
 ```mermaid
 flowchart TD
-    W[Wi-Fi client] --> L[Radio arbiter lease]
+    W[Wi-Fi client] --> L[Radio domain, owned by the radio system]
     Z[IEEE 802.15.4 client] --> L
     T[Tracking timer of the shared radio's owner] --> L
     P[PHY demand and calibration state] --> T
@@ -88,9 +88,9 @@ flowchart TD
 ```
 
 PHY supplies the algorithms, demand and the concurrent domain; the radio
-system owns the arbiter and runs the vendor periodic tracking (none exists in
+system owns the radio domain and runs the vendor periodic tracking (none exists in
 this tree yet); coex supplies the hardware arbitration mechanism. Tracking follows the vendor
-admission: the arbiter lease is the PHY lock, and the tracking graph brackets
+admission: the exclusive borrow of the radio domain is the PHY lock, and the tracking graph brackets
 its RF-sensitive regions with the grant-protect request instead of pausing
 the protocols. A coex timer reply, client bit or PTI is never an ownership
 proof for the shared PHY.
@@ -133,14 +133,14 @@ started failure poisons the domain.
 ### Concurrent clients
 
 For concurrently running protocols the registered domain lives beside the
-shared registers in the HAL radio arbiter, as `SharedRadio<ConcurrentPhy>`.
-Every operation takes the arbiter's lease, so the domain and the shared PHY are
+shared registers in the HAL radio domain, as `RadioDomain<ConcurrentPhy>`.
+Every operation borrows the domain mutably, so the PHY state and the shared PHY are
 serialized by one mechanism:
 
-- `register_concurrent_phy` registers the domain once through the lease's
+- `register_concurrent_phy` registers the domain once through the domain's
   shared-PHY borrow. As ESP-IDF's calibrating first `esp_phy_enable`, it
   enables the `PHY` and `PHY_CALIBRATION` modem clock modules through the
-  arbiter and releases `PHY_CALIBRATION` after calibration;
+  domain and releases `PHY_CALIBRATION` after calibration;
 - `close_concurrent_rf` runs `phy_close_rf` after the last client left and
   releases `PHY`, as the last `esp_phy_disable` does. `wake_concurrent_rf`
   takes `PHY` and `PHY_CALIBRATION` again, restores the retained
@@ -154,7 +154,7 @@ serialized by one mechanism:
   Bluetooth Controller's task owner, each with its BTBB reference;
 - `select_concurrent_wifi_channel` and `switch_concurrent_wifi_channel` tune
   the shared domain for Wi-Fi through the HAL Wi-Fi client's channel HAL,
-  which it lends together with the arbiter attachment; the switch stops and
+  which it lends together with the domain's attachment; the switch stops and
   restarts the Wi-Fi MAC around the retune;
 - `evaluate_periodic_tracking` and an acquisition that needs initial tracking
   leave the domain pending, and no client operation proceeds until it settles;
@@ -162,20 +162,20 @@ serialized by one mechanism:
   pending, and `maintain_concurrent_phy` then runs the tracking transaction;
   a started failure poisons the domain. The one admission follows ESP-IDF's
   `phy_common.c`: the periodic timer runs `phy_param_track_tot` under the PHY
-  lock alone, without pausing any protocol. The arbiter lease is that lock,
+  lock alone, without pausing any protocol. The exclusive domain borrow is that lock,
   and the tracking graph brackets its RF-sensitive regions with the
   grant-protect request. A protocol operation that loses RF to it ends with
   its ordinary outcome.
 - `track_concurrent_phy` is one tick of the vendor `phy_track_pll`: it
   evaluates the clients' tracking period and runs due tracking at once. The
   vendor periodic timer that calls it belongs to the radio system that owns
-  the arbiter, as it belongs to ESP-IDF's `esp_phy` component; nothing in
+  the radio domain, as it belongs to ESP-IDF's `esp_phy` component; nothing in
   this tree runs it yet.
 
 ### First and last PHY client
 
 The owner of the shared radio chooses the PHY transition for a joining
-client as the vendor `esp_phy_enable` does, under the arbiter lease:
+client as the vendor `esp_phy_enable` does, on the radio domain:
 
 - RF closed: `wake_concurrent_rf` (the retained registration is restored
   without calibration);
@@ -185,7 +185,7 @@ client as the vendor `esp_phy_enable` does, under the arbiter lease:
   a calibrating registration; a registration refused as
   `ConcurrentPhyError::AlreadyRegistered` counts as already open.
 
-A client then proves the domain ready (`phy_ready`) under the lease it joins
+A client then proves the domain ready (`phy_ready`) on the radio domain it joins
 with. Wi-Fi prepares the domain before it enters power, which a cold RF
 restart requires. The last client's half of `esp_phy_disable` closes
 RF (`close_concurrent_rf`) only when the domain is open and its client set is
@@ -195,7 +195,7 @@ started failure requires reset.
 IEEE 802.15.4 composes these steps in [its client module](src/ieee802154_client.rs).
 `join_ieee802154` runs on the HAL `Ieee802154Clocked` owner and consumes a
 `PhyReady` proof (`phy_ready`: the domain registered, RF open and settled,
-its registration describing the lease, which the proof borrows until the
+its registration describing the domain, which the proof borrows until the
 join gives it back); every client's entry into the client set consumes one,
 so no client enters a domain that is not ready. It acquires the client, takes the
 shared BTBB reference with the gain byte projected from that registration and
@@ -252,14 +252,14 @@ The source interval is not a measured maximum thermally safe deferral.
 
 The vendor periodic tracking is the only runtime maintenance path: the
 shared radio's owner runs one `track_concurrent_phy` tick every tracking period
-under the arbiter lease, and due work starts at once (no owner in this tree
+on the radio domain, and due work starts at once (no owner in this tree
 runs it yet). There is no
 protocol-selected maintenance of individual operations. Joint
 Wi-Fi/Bluetooth/154 maintenance and active-traffic publication of individual
 compensation classes are not qualified execution modes.
 
 The production RX-gain and TXDC/PWDET paths execute as direct blocking
-transactions under the already-acquired arbiter lease. Required 1–20 us
+transactions on the already-borrowed radio domain. Required 1–20 us
 hardware settles use the ESP32-S31 ROM `ets_delay_us` primitive used by the
 recovered vendor graph; bounded PBus, I2C, DC/IQ and SAR readiness reads poll
 directly. Interrupts remain enabled and the physical owner remains held until
@@ -284,7 +284,7 @@ The execution limits have different scopes:
 | [RFPLL search](src/tracking/rfpll/search.rs) | Both search directions terminate after finite samples, including unrecognized status values | Its finite state graph still invokes synchronous bus and settle operations |
 
 The BLE radio owner arms the independent SoC deadline service around
-physical lifecycle transactions and retain its lease until checked restoration.
+physical lifecycle transactions and keeps the radio domain until checked restoration.
 The board/application supplies explicit engineering budgets; PHY owns no timer
 or reset peripheral. Hardware reset does not by itself establish a qualified
 RF-cessation bound. A pending-future timeout, observed calibration maximum and

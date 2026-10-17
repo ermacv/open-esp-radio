@@ -22,7 +22,7 @@ pub struct CoexCore {
 }
 
 impl CoexCore {
-    /// A disabled core. Event priorities are read from the radio arbiter's
+    /// A disabled core. Event priorities are read from the radio domain's
     /// table through [`CoexTimerHardware::pti`] when a request is programmed.
     pub const fn new() -> Self {
         Self {

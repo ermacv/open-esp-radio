@@ -1,8 +1,8 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 use crate::{
+    domain::RadioDomain,
     ieee80211::{channel, mac as wifi_mac, station_wake::StationWakeState},
-    shared_radio::SharedRadioLease,
     types::{
         MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, MacPowerWakeCause,
         PhyAdcRate,
@@ -50,7 +50,7 @@ pub mod route {
     /// Closed set of routes; downstream crates cannot add a lender.
     pub trait Route: sealed::Route {}
 
-    /// Borrowed through a lease of the shared radio arbiter.
+    /// Borrowed from the shared radio domain.
     pub enum Shared {}
 
     impl sealed::Route for Shared {}
@@ -330,8 +330,8 @@ pub(crate) fn phy_parts_mut(
 ///
 /// A clocked Wi-Fi client becomes this owner after cold MAC setup
 /// ([`WifiClocked::into_running`](crate::ieee80211::client::WifiClocked::into_running)). It holds the Wi-Fi MAC registers only:
-/// the Wi-Fi hot path needs no arbiter lease, and every operation that
-/// touches shared radio registers borrows them from the lease. It can move
+/// the Wi-Fi hot path needs no radio domain, and every operation that
+/// touches shared radio registers borrows them from the radio domain. It can move
 /// between lifecycle owners and the runtime arena, but exposes no PAC owner,
 /// dereference operation, or generic register callback.
 pub struct RadioRuntimeOwner {
@@ -346,7 +346,7 @@ impl RadioRuntimeOwner {
     #[cfg(test)]
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
-        let (_shared, partitions) = crate::root::RadioHardware::for_host_test().into_concurrent(());
+        let (_shared, partitions) = crate::root::RadioHardware::for_host_test().split(());
         let clocked = crate::ieee80211::client::WifiClocked::for_host_test(
             crate::ieee80211::client::WifiCold::from_partition(partitions.wifi),
         );
@@ -374,24 +374,24 @@ impl RadioRuntimeOwner {
     }
 
     /// Borrow the channel HAL for one channel transaction, with the shared
-    /// PHY borrowed from the arbiter lease.
+    /// PHY borrowed from the radio domain.
     pub fn channel_hal<'hal, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        lease: &'hal mut SharedRadioLease<'_, T>,
+        radio: &'hal mut RadioDomain<T>,
     ) -> channel::RadioChannelHal<'hal, P> {
-        let (phy, restore) = lease.phy_parts_mut();
+        let (phy, restore) = radio.phy_parts_mut();
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
     }
 
-    /// Borrow the channel HAL together with the arbiter's attachment, for a
+    /// Borrow the channel HAL together with the domain's attachment, for a
     /// PHY channel operation that updates the shared domain's state.
     pub fn channel_hal_with_attachment<'hal, P, T>(
         &'hal mut self,
         platform: &'hal mut P,
-        lease: &'hal mut SharedRadioLease<'_, T>,
+        radio: &'hal mut RadioDomain<T>,
     ) -> (channel::RadioChannelHal<'hal, P>, &'hal mut T) {
-        let (phy, restore, attachment) = lease.phy_parts_with_attachment();
+        let (phy, restore, attachment) = radio.phy_parts_with_attachment();
         (
             channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore),
             attachment,
@@ -475,7 +475,7 @@ impl RadioRuntimeOwner {
     }
 
     /// Borrow the station TBTT and modem-wakeup capability. Both wake banks
-    /// are Wi-Fi MAC registers, so this needs no arbiter lease.
+    /// are Wi-Fi MAC registers, so this needs no radio domain.
     pub fn station_wake_hal(&mut self) -> crate::ieee80211::station_wake::StationWakeHal<'_> {
         let (registers, state) = self.station_wake_parts_mut();
         crate::ieee80211::station_wake::StationWakeHal::from_owned(registers, state)

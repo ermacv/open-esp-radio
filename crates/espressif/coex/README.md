@@ -5,7 +5,7 @@ recovered from esp-coex-lib `c758e7b5`: the 49-event priority table
 (`CoexPtiTable`, equal in the pinned ESP32-S31 and ESP32-C5 archives) with
 the IEEE 802.15.4 levels it resolves, the timer programming sequence, clock
 conversion, event-to-timer mapping and software schedule state. It owns no
-register: each chip's radio arbiter keeps its own copy of the table as
+register: each chip's radio domain keeps its own copy of the table as
 shared state, and a chip crate such as
 [`oer-esp32s31-coex`](../../esp32s31/radio/coex/README.md) binds the
 `CoexTimerHardware` and `CoexClockHardware` ports to its HAL.
@@ -13,8 +13,8 @@ shared state, and a chip crate such as
 programmed, and a priority change goes through the arbiter's lease. The
 ESP32-S31 arbiter lends only timers 0 through 4: timer 5 carries its PHY
 grant-protect request, so event 48 has no policy timer. No runtime combines
-the core and the schedule now: the former ESP32-S31 radio runtime did, under
-the arbiter lease, and its policy is recorded below
+the core and the schedule now: the former ESP32-S31 radio runtime did, with exclusive
+access to the shared radio, and its policy is recorded below
 ([Participants, status and order](#participants-status-and-order)). This
 crate does not implement
 RF grant notification. See the ESP32-S31
@@ -58,7 +58,7 @@ signalled each notified radio; no runner exists now. A radio publishes its statu
 `set_status_bits` and `clear_status_bits`; in the former runtime Wi-Fi
 reacted to its phases, while Bluetooth LE did not wait for its own.
 
-On the ESP32-S31, `oer_esp32s31_coex::CoexArbiterPorts` lends one arbiter
+On the ESP32-S31, `oer_esp32s31_coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
 clock ports.
 
@@ -104,7 +104,7 @@ a timer index or mailbox reply cannot be converted into that capability.
 
 Three similarly timed operations remain separate contracts. Wi-Fi
 peer-facing power save exchanges PM state with an AP and governs peer buffering.
-PHY tracking runs under the radio arbiter lease. Physical RF/baseband/clock
+PHY tracking runs on the exclusively borrowed radio domain. Physical RF/baseband/clock
 close follows the last client's release and the shared PHY lifecycle. A coex
 timer request grants none of those authorities, and an immediate RF close/wake
 cycle is not connected modem sleep.
@@ -116,7 +116,7 @@ events 41 through 44, which a radio publishes per operation scene.
 
 ## Participants, status and order
 
-The former ESP32-S31 radio runtime ran this policy under the arbiter lease, as the pinned libcoexist does:
+The former ESP32-S31 radio runtime ran this policy with exclusive access to the shared radio, as the pinned libcoexist does:
 
 - **Participants (`coex_enable`/`coex_disable`).** The first participant
   selects the policy timers' clock (`coex_pre_init`) and enables requests

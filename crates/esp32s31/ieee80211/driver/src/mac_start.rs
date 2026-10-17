@@ -2,7 +2,7 @@
 
 use crate::cold_start::{WifiColdStart, WifiColdStartReport};
 
-use oer_esp32s31_hal::{ieee80211::client::WifiClocked, shared_radio::SharedRadioLease};
+use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
 use oer_esp32s31_phy::{PhyTxTargetPowerProfile, wifi_client::WifiPhyMembership};
 
 use oer_esp32s31_ieee80211_mac::init::{
@@ -110,10 +110,10 @@ impl<W> WifiMacStartFailure<W> {
 
 /// Perform the common MAC transition exactly once after the Wi-Fi client
 /// joined the shared PHY domain. The shared registers of the cold MAC
-/// transaction are borrowed from the arbiter lease.
+/// transaction are borrowed from the radio domain.
 pub fn start_esp32s31_wifi_mac<W, T>(
     mut cold: WifiColdStart<W>,
-    lease: &mut SharedRadioLease<'_, T>,
+    radio: &mut RadioDomain<T>,
     config: WifiMacStartConfig,
 ) -> Result<WifiMacReady<W>, WifiMacStartFailure<W>>
 where
@@ -127,7 +127,7 @@ where
             ..
         } = &mut cold;
         platform.install_phy_tx_power_profile(report.tx_power);
-        let mut mac = clocked.cold_mac_hal(lease);
+        let mut mac = clocked.cold_mac_hal(radio);
         initialize_wifi_mac(
             platform,
             &mut mac,

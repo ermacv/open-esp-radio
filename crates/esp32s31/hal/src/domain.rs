@@ -1,38 +1,25 @@
-//! Arbiter of the shared radio partitions for concurrently running routes.
+//! The shared radio domain of concurrently running protocols.
 //!
-//! [`SharedRadio`] owns the shared radio registers together with the shared
+//! [`RadioDomain`] owns the shared radio registers together with the shared
 //! PHY software state (registration epoch and calibration restore slots).
-//! Protocol routes that run at the same time hold only their own register
-//! partitions and borrow the shared owner through a [`SharedRadioLease`].
+//! Protocol drivers hold only their own register partitions; the one owner of
+//! the domain, the radio system, works on it by `&mut` borrow, so no lock and
+//! no lease exists.
 //!
-//! Acquisition never blocks: [`SharedRadio::try_acquire`] either grants the
-//! unique lease or reports [`SharedRadioBusy`]. A lease may be held across
-//! `await` points, so a long calibration or tracking transaction keeps the
-//! shared registers for its whole duration. Because acquisition cannot wait,
-//! an interrupt handler that tries to acquire cannot deadlock against a task
-//! holding the lease; it only observes `Busy`.
-//!
-//! The arbiter also owns common radio power. Each protocol enters and leaves
-//! it through the lease, proving its identity with its own register set; the
-//! first client runs the modem/PHY power sequence once and the last restores
-//! the cold-power baseline. Refcounted modem clock dependencies are the shared
-//! modem clock planner's, and are not part of this membership.
+//! The domain also owns common radio power. Each protocol enters and leaves
+//! it proving its identity with its own register set; the first client runs
+//! the modem/PHY power sequence once and the last restores the cold-power
+//! baseline. Refcounted modem clock dependencies are the shared modem clock
+//! planner's, and are not part of this membership.
 //!
 //! Modem clocks are reference-counted per dependency by the shared modem clock
-//! planner inside the arbiter: each client enables and disables its module's
-//! clocks through the lease, and a client leaving never disables a clock
-//! another client still holds. The platform clock provider supplies the
-//! upstream 160 MHz source and the analog-I2C master clock.
+//! planner inside the domain: each client's module clocks are enabled and
+//! disabled through it, and a client leaving never disables a clock another
+//! client still holds. The platform clock provider supplies the upstream
+//! 160 MHz source and the analog-I2C master clock.
 //!
-//! A lease is not a coexistence grant: it serializes register access, not
-//! air time. Forgetting a lease with `mem::forget` leaks it: the arbiter
-//! stays busy and no later route can reach the shared registers, which is a
-//! fail-stop rather than unsound state.
-
-use core::{
-    cell::UnsafeCell,
-    sync::atomic::{AtomicBool, Ordering},
-};
+//! The domain is not a coexistence grant: it serializes register access, not
+//! air time.
 
 use oer_esp32s31_pac::{
     BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, BluetoothTaskRegisters, Ieee802154TaskRegisters,
@@ -76,7 +63,7 @@ const fn client_bit(client: RadioClient) -> u8 {
     }
 }
 
-/// Protocol register owner that proves which client calls the arbiter.
+/// Protocol register owner that proves which client calls the domain.
 ///
 /// Only the protocol register sets implement it, so a caller cannot enter or
 /// leave common power on behalf of a protocol whose registers it lacks.
@@ -164,7 +151,7 @@ static CONCURRENT_CLOCK_IDENTITY: ModemClockPlannerIdentity = ModemClockPlannerI
 /// Modem clock planner and the module lease each client holds.
 #[allow(
     clippy::large_enum_variant,
-    reason = "the arbiter keeps the allocation-free planner or its poisoned owner inline"
+    reason = "the domain keeps the allocation-free planner or its poisoned owner inline"
 )]
 enum ModemClocks {
     Ready {
@@ -234,7 +221,7 @@ pub enum PhyClockModule {
     Calibration,
 }
 
-/// One lease slot per protocol client, per PHY-domain module and for the
+/// One modem clock lease slot per protocol client, per PHY-domain module and for the
 /// coexistence module of external coexistence.
 const CLOCK_SLOTS: usize = 6;
 
@@ -272,39 +259,28 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
     }
 }
 
-/// Unique arbiter of the shared radio partitions.
+/// The shared radio domain: the shared radio registers, the shared PHY
+/// software state and common radio power, owned by value.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::shared_radio::SharedRadio;
+/// use oer_esp32s31_hal::domain::RadioDomain;
 /// fn requires_clone<T: Clone>() {}
-/// requires_clone::<SharedRadio>();
+/// requires_clone::<RadioDomain>();
 /// ```
 ///
-/// `T` is state an upper layer keeps under the same arbitration, such as the
-/// PHY layer's registered domain. The HAL never interprets it; a lease lends
-/// it together with the shared registers.
-#[must_use = "dropping the shared radio arbiter permanently loses the shared registers"]
-pub struct SharedRadio<T = ()> {
-    held: AtomicBool,
-    state: UnsafeCell<SharedRadioState<T>>,
+/// `T` is state an upper layer keeps with the domain, such as the PHY
+/// layer's registered domain. The HAL never interprets it.
+#[must_use = "dropping the radio domain permanently loses the shared registers"]
+pub struct RadioDomain<T = ()> {
+    state: SharedRadioState<T>,
 }
 
-// SAFETY: `state` is dereferenced only through a `SharedRadioLease`, and at
-// most one lease exists at a time: `try_acquire` grants one only after
-// atomically changing `held` from false to true, and the lease clears it on
-// drop after its last access. The shared registers are safe to move between
-// execution contexts, and the attachment is `Send`, so granting exclusive
-// access from any context is sound.
-#[allow(unsafe_code)]
-unsafe impl<T: Send> Sync for SharedRadio<T> where SharedRadioRegisters: Send {}
-
-impl<T> SharedRadio<T> {
-    /// Place the shared owner, its PHY state and `attachment` under
-    /// arbitration. This performs no MMIO.
+impl<T> RadioDomain<T> {
+    /// Place the shared owner, its PHY state and `attachment` in one domain.
+    /// This performs no MMIO.
     pub(crate) fn new(registers: SharedRadioRegisters, phy: PhyRouteState, attachment: T) -> Self {
         Self {
-            held: AtomicBool::new(false),
-            state: UnsafeCell::new(SharedRadioState {
+            state: SharedRadioState {
                 registers,
                 phy,
                 power: CommonRadioPower::default(),
@@ -317,117 +293,85 @@ impl<T> SharedRadio<T> {
                 external_coex: None,
                 coex_participants: CoexParticipants::default(),
                 attachment,
-            }),
+            },
         }
     }
 
-    /// Take the unique lease, or report that another holder has it.
+    /// Give the parts back, once nothing holds them.
     ///
     /// # Errors
     ///
-    /// [`SharedRadioBusy`] while another lease is alive or was forgotten.
-    pub fn try_acquire(&self) -> Result<SharedRadioLease<'_, T>, SharedRadioBusy> {
-        self.held
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .map(|_| SharedRadioLease { radio: self })
-            .map_err(|_| SharedRadioBusy)
-    }
-
-    /// Take the lease of an arbiter this caller borrows uniquely, without an
-    /// atomic access to it.
-    ///
-    /// The unique borrow proves that no lease is alive, so the flag is set
-    /// without an atomic exchange; dropping the lease releases it normally.
-    #[cfg(test)]
-    #[doc(hidden)]
-    pub fn lease_for_host_test(&mut self) -> SharedRadioLease<'_, T> {
-        *self.held.get_mut() = true;
-        SharedRadioLease { radio: self }
-    }
-
-    /// Whether a lease is currently held.
-    pub fn is_held(&self) -> bool {
-        self.held.load(Ordering::Relaxed)
-    }
-
-    /// Leave arbitration. Consuming the arbiter proves no lease is alive.
-    ///
-    /// # Errors
-    ///
-    /// Returns the unchanged arbiter while a client still holds common power
+    /// Returns the unchanged domain while a client still holds common power
     /// or a PHY calibration still owns a restore obligation.
     #[allow(
         clippy::type_complexity,
         clippy::result_large_err,
-        reason = "the parts, or the unchanged arbiter, are returned exactly as held"
+        reason = "the parts, or the unchanged domain, are returned exactly as held"
     )]
     pub(crate) fn into_parts(
         self,
-    ) -> Result<(SharedRadioRegisters, PhyRouteState, T), (Self, SharedRadioReleaseError)> {
-        let state = self.state.into_inner();
+    ) -> Result<(SharedRadioRegisters, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
+        let state = self.state;
         if state.power.any_client() {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::CommonPowerHeld,
+                RadioDomainReleaseError::CommonPowerHeld,
             ));
         }
         if state.btbb_clients != 0 {
-            return Err((Self::from_state(state), SharedRadioReleaseError::BtbbHeld));
+            return Err((Self::from_state(state), RadioDomainReleaseError::BtbbHeld));
         }
         if state.clocks.any_held() {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::ModemClocksHeld,
+                RadioDomainReleaseError::ModemClocksHeld,
             ));
         }
         if state.phy_grant_protected {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::PhyGrantProtectHeld,
+                RadioDomainReleaseError::PhyGrantProtectHeld,
             ));
         }
         if state.bluetooth_low_power_clock.is_some() {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::BluetoothLowPowerClockSelected,
+                RadioDomainReleaseError::BluetoothLowPowerClockSelected,
             ));
         }
         if state.external_coex.is_some() {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::ExternalCoexActive,
+                RadioDomainReleaseError::ExternalCoexActive,
             ));
         }
         if let Err(error) = crate::root::check_phy_restore_complete(&state.phy) {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::Restore(error),
+                RadioDomainReleaseError::Restore(error),
             ));
         }
         if !state.platform_clock_holds().is_empty() {
             return Err((
                 Self::from_state(state),
-                SharedRadioReleaseError::PlatformClocksHeld,
+                RadioDomainReleaseError::PlatformClocksHeld,
             ));
         }
         Ok((state.registers, state.phy, state.attachment))
     }
 
     fn from_state(state: SharedRadioState<T>) -> Self {
-        Self {
-            held: AtomicBool::new(false),
-            state: UnsafeCell::new(state),
-        }
+        Self { state }
     }
 
     #[cfg(test)]
     pub(crate) fn phy_state_mut_for_test(&mut self) -> &mut PhyRouteState {
-        &mut self.state.get_mut().phy
+        &mut self.state.phy
     }
 
     #[cfg(test)]
     pub(crate) fn hold_btbb_for_test(&mut self, client: RadioClient) {
-        self.state.get_mut().btbb_clients |= client_bit(client);
+        self.state.btbb_clients |= client_bit(client);
     }
 
     /// Record a programmed PHY grant-protect request without register
@@ -435,17 +379,17 @@ impl<T> SharedRadio<T> {
     #[cfg(test)]
     #[doc(hidden)]
     pub fn hold_phy_grant_protect_for_host_test(&mut self) {
-        self.state.get_mut().phy_grant_protected = true;
+        self.state.phy_grant_protected = true;
     }
 
     /// Keep every platform clock reference the radio holds on until a chip
     /// reset, and forget them: the explicit end of a terminal validation
-    /// image or test that drops its shared radio. Each guard ends with
+    /// image or test that drops its radio domain. Each guard ends with
     /// `abandon`, so none is dropped.
     #[cfg(test)]
     #[doc(hidden)]
     pub fn abandon_platform_clocks(&mut self) {
-        let state = self.state.get_mut();
+        let state = &mut self.state;
         state.power.abandon_platform_clocks();
         core::mem::take(&mut state.modem_platform_clocks).abandon();
         if let Some(guard) = state.bluetooth_low_power_clock.take() {
@@ -462,20 +406,19 @@ impl<T> SharedRadio<T> {
         platform: &impl PlatformClockProvider,
     ) {
         self.state
-            .get_mut()
             .power
             .hold_platform_clock_for_test(clock, platform);
     }
 
     #[cfg(test)]
     pub(crate) fn hold_common_power_for_test(&mut self, client: RadioClient) {
-        self.state.get_mut().power.hold_for_test(client);
+        self.state.power.hold_for_test(client);
     }
 }
 
-/// Why the shared radio cannot leave arbitration.
+/// Why the radio domain cannot give its parts back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SharedRadioReleaseError {
+pub enum RadioDomainReleaseError {
     /// A client still holds common radio power.
     CommonPowerHeld,
     /// A client still holds the shared BTBB baseband.
@@ -497,33 +440,13 @@ pub enum SharedRadioReleaseError {
     Restore(crate::root::RadioPhyReleaseError),
 }
 
-/// Another holder owns the shared radio lease.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SharedRadioBusy;
-
-/// Unique, scoped access to the shared radio partitions.
-#[must_use = "a lease blocks every other route until it is dropped"]
-pub struct SharedRadioLease<'radio, T = ()> {
-    radio: &'radio SharedRadio<T>,
-}
-
-impl<T> SharedRadioLease<'_, T> {
+impl<T> RadioDomain<T> {
     fn state(&self) -> &SharedRadioState<T> {
-        // SAFETY: this lease is the unique holder (see `SharedRadio`'s `Sync`
-        // proof), so no mutable reference to the state exists elsewhere.
-        #[allow(unsafe_code)]
-        unsafe {
-            &*self.radio.state.get()
-        }
+        &self.state
     }
 
     fn state_mut(&mut self) -> &mut SharedRadioState<T> {
-        // SAFETY: this lease is the unique holder and `&mut self` prevents a
-        // second borrow through it, so the reference is exclusive.
-        #[allow(unsafe_code)]
-        unsafe {
-            &mut *self.radio.state.get()
-        }
+        &mut self.state
     }
 
     /// The registration that currently describes the shared PHY.
@@ -1124,7 +1047,7 @@ impl<T> SharedRadioLease<'_, T> {
     }
 
     /// Read register `index` of the radio-PHY partition image under this
-    /// lease, without effect, for hardware cross-checks of the calibrated
+    /// domain, without effect, for hardware cross-checks of the calibrated
     /// state; `None` past its end. A register whose clock domain is off
     /// may not answer, so a caller reads only indices known to be readable
     /// in the current radio state.
@@ -1142,7 +1065,7 @@ impl<T> SharedRadioLease<'_, T> {
     }
 
     /// Read analog register `index` of the analog register image under
-    /// this lease, for hardware cross-checks of the calibrated analog state;
+    /// this domain, for hardware cross-checks of the calibrated analog state;
     /// `None` past its end. The read is one analog-I2C read command, which
     /// selects the block's host and read mask as every production read
     /// does; the busy host is polled at most `maximum_polls` times.
@@ -1184,20 +1107,14 @@ impl<T> SharedRadioLease<'_, T> {
     }
 }
 
-/// Register transaction of [`SharedRadioLease::select_bluetooth_low_power_clock`].
+/// Register transaction of [`RadioDomain::select_bluetooth_low_power_clock`].
 pub(crate) fn select_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
     phy.select_bluetooth_low_power_timer_main_crystal(BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER);
 }
 
-/// Register transaction of [`SharedRadioLease::deselect_bluetooth_low_power_clock`].
+/// Register transaction of [`RadioDomain::deselect_bluetooth_low_power_clock`].
 pub(crate) fn deselect_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
     phy.deselect_bluetooth_low_power_timer_sources();
-}
-
-impl<T> Drop for SharedRadioLease<'_, T> {
-    fn drop(&mut self) {
-        self.radio.held.store(false, Ordering::Release);
-    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! Bluetooth as a client of the shared PHY domain.
 //!
 //! The HAL chain holds the Bluetooth controller partition; the registered PHY
-//! domain lives under the arbiter as [`ConcurrentPhy`]. The Controller enable
+//! domain lives in the radio domain as [`ConcurrentPhy`]. The Controller enable
 //! runs `esp_phy_enable(PHY_MODEM_BT)` and `esp_btbb_enable` after the
 //! controller HAL is initialized and before the BLE base stack is enabled.
 //! [`join_bluetooth`] performs those steps on the task owner, which proves the
@@ -15,7 +15,7 @@ use core::fmt;
 
 use oer_esp32s31_hal::{
     bluetooth::TaskOwner,
-    shared_radio::{BtbbError, RadioClient, SharedRadioLease},
+    domain::{BtbbError, RadioClient, RadioDomain},
 };
 
 use crate::concurrent::{
@@ -60,17 +60,17 @@ pub enum BluetoothPhyClientError {
 /// # Errors
 ///
 /// Every check runs before the client set or BTBB changes: Bluetooth already
-/// holds BTBB, or the client set rejects the client. The lease comes back
+/// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
-pub fn join_bluetooth<'l, 'r>(
-    ready: PhyReady<'l, 'r>,
+pub fn join_bluetooth<'l>(
+    ready: PhyReady<'l>,
     task: &TaskOwner,
     clock: &impl oer_time::Clock,
-) -> Result<Joined<'l, 'r, BluetoothPhyMembership>, JoinRefused<'l, 'r, BluetoothPhyClientError>> {
-    let lease = ready.into_lease();
+) -> Result<Joined<'l, BluetoothPhyMembership>, JoinRefused<'l, BluetoothPhyClientError>> {
+    let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the
-    // lease.
-    let gain_parameter = match lease.attachment().settled() {
+    // radio.
+    let gain_parameter = match radio.attachment().settled() {
         Ok(domain) => {
             domain
                 .registered
@@ -81,51 +81,51 @@ pub fn join_bluetooth<'l, 'r>(
         Err(error) => {
             return Err(JoinRefused {
                 error: BluetoothPhyClientError::Phy(error),
-                lease,
+                radio,
             });
         }
     };
-    if lease.holds_btbb(RadioClient::Bluetooth) {
+    if radio.holds_btbb(RadioClient::Bluetooth) {
         return Err(JoinRefused {
             error: BluetoothPhyClientError::Btbb(BtbbError::AlreadyAcquired),
-            lease,
+            radio,
         });
     }
-    let acquired = match acquire_client(lease, RadioClient::Bluetooth, clock) {
+    let acquired = match acquire_client(radio, RadioClient::Bluetooth, clock) {
         Ok(acquired) => acquired,
         Err(error) => {
             return Err(JoinRefused {
                 error: BluetoothPhyClientError::Phy(error),
-                lease,
+                radio,
             });
         }
     };
 
     #[allow(
         unsafe_code,
-        reason = "the gain byte is projected from the registration that describes the lease"
+        reason = "the gain byte is projected from the registration that describes the radio"
     )]
     let btbb = {
         // SAFETY: the settled domain was registered by a completed target
-        // run whose epoch is the lease's current registration, and
+        // run whose epoch is the radio's current registration, and
         // `gain_parameter` is the `phy_param` byte at 0x120 projected from
         // that same registered state. `task` proves the Bluetooth module
         // clocks.
-        unsafe { task.acquire_btbb(lease, gain_parameter) }
+        unsafe { task.acquire_btbb(radio, gain_parameter) }
     };
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.
-        let _ = release_client(lease, RadioClient::Bluetooth);
+        let _ = release_client(radio, RadioClient::Bluetooth);
         return Err(JoinRefused {
             error: BluetoothPhyClientError::Btbb(error),
-            lease,
+            radio,
         });
     }
     Ok(Joined {
         membership: BluetoothPhyMembership { _private: () },
         acquired,
-        lease,
+        radio,
     })
 }
 
@@ -167,17 +167,17 @@ impl fmt::Debug for BluetoothPhyLeaveFailure {
 /// The domain rejects the release (tracking pending, poisoned) or the BTBB
 /// reference is missing; nothing changed and the membership is returned.
 pub fn leave_bluetooth(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     task: &TaskOwner,
     membership: BluetoothPhyMembership,
 ) -> Result<bool, BluetoothPhyLeaveFailure> {
-    if !lease.holds_btbb(RadioClient::Bluetooth) {
+    if !radio.holds_btbb(RadioClient::Bluetooth) {
         return Err(BluetoothPhyLeaveFailure {
             membership,
             error: BluetoothPhyClientError::Btbb(BtbbError::NotAcquired),
         });
     }
-    let last = match release_client(lease, RadioClient::Bluetooth) {
+    let last = match release_client(radio, RadioClient::Bluetooth) {
         Ok(last) => last,
         Err(error) => {
             return Err(BluetoothPhyLeaveFailure {
@@ -188,7 +188,7 @@ pub fn leave_bluetooth(
     };
     let BluetoothPhyMembership { _private: () } = membership;
     // The reference was checked above, so the release cannot be rejected.
-    let _ = task.release_btbb(lease);
+    let _ = task.release_btbb(radio);
     Ok(last)
 }
 

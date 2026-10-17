@@ -15,7 +15,7 @@ pub enum MacCoexEvent {
 impl MacCoexEvent {
     /// The shared coexistence event this MAC query reads.
     ///
-    /// Its priority comes from the radio arbiter's table, never from a Wi-Fi
+    /// Its priority comes from the radio domain's table, never from a Wi-Fi
     /// constant. The cold values are still required in a Wi-Fi-only build.
     /// Complete `libpp.a[hal_mac.o]::hal_init` passes event three to
     /// `hal_set_rx_ack_pti`, which directly programs the MAC's immediate
