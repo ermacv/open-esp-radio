@@ -1,0 +1,447 @@
+extern crate std;
+
+use core::{cell::RefCell, future::Future};
+use std::{rc::Rc, vec, vec::Vec};
+
+use embassy_futures::{
+    block_on,
+    select::{Either, select},
+    yield_now,
+};
+use oer_esp32s31_hal::{
+    ieee80211::client::{WifiClocked, WifiCold},
+    root::RadioHardware,
+};
+use oer_esp32s31_ieee80211_mac::init::{
+    MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
+};
+use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
+use oer_esp32s31_radio_client::{
+    ClientCells, Leaving, RcSlow, claim_for_host_test,
+    wifi::{
+        TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiReturned, WifiTrack,
+        WifiTracked,
+    },
+};
+use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_time::{Clock as _, Duration, Instant};
+use oer_time_virtual::VirtualClock;
+
+use super::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Event {
+    Prepare(Result<PhyPreparation, Fault>),
+    CoexEnter,
+    CoexLeave,
+    Enter,
+    Track,
+    Exit,
+    CloseRf,
+    Tick,
+}
+
+#[derive(Default)]
+struct Script {
+    registered: bool,
+    rf_open: bool,
+    fail_prepare: bool,
+    refuse_enter: bool,
+    poison_track: bool,
+    not_last: bool,
+    deadline: Option<Instant>,
+    log: Vec<Event>,
+}
+
+#[derive(Clone)]
+struct Model(Rc<RefCell<Script>>);
+
+impl Model {
+    fn log(&self) -> Vec<Event> {
+        self.0.borrow().log.clone()
+    }
+    fn push(&self, event: Event) {
+        self.0.borrow_mut().log.push(event);
+    }
+}
+
+impl PhyDomain for Model {
+    async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
+        let mut script = self.0.borrow_mut();
+        let result = if script.fail_prepare {
+            Err(Fault)
+        } else if !script.registered {
+            script.registered = true;
+            script.rf_open = true;
+            Ok(PhyPreparation::Registered {
+                calibration_path: PhyCalibrationPath::FullUncached,
+                micros: 10,
+            })
+        } else if !script.rf_open {
+            script.rf_open = true;
+            Ok(PhyPreparation::Woke { micros: 3 })
+        } else {
+            Ok(PhyPreparation::AlreadyOpen)
+        };
+        script.log.push(Event::Prepare(result));
+        result
+    }
+
+    async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), Fault> {
+        let LastClientLeft(()) = last;
+        self.0.borrow_mut().rf_open = false;
+        self.push(Event::CloseRf);
+        Ok(())
+    }
+
+    fn tracking_deadline(&self) -> Option<Instant> {
+        self.0.borrow().deadline
+    }
+
+    async fn track_tick(&mut self) -> Result<(), Fault> {
+        let mut script = self.0.borrow_mut();
+        script.deadline = script
+            .deadline
+            .and_then(|deadline| deadline.checked_add(Duration::from_secs(1)));
+        script.log.push(Event::Tick);
+        Ok(())
+    }
+}
+
+impl ClientBackend<Wifi, RcSlow> for Model {
+    fn enter_coex(&mut self) {
+        self.push(Event::CoexEnter);
+    }
+
+    fn leave_coex(&mut self) {
+        self.push(Event::CoexLeave);
+    }
+
+    async fn enter(
+        &mut self,
+        join: WifiJoin,
+        phy: PhyPreparation,
+        _lp: &LpClock<RcSlow>,
+    ) -> Result<WifiJoined, Failed<WifiReturned>> {
+        self.push(Event::Enter);
+        if self.0.borrow().refuse_enter {
+            return Err(Failed {
+                returned: WifiReturned::Cold(join.wifi),
+                cause: Failure::Refused,
+            });
+        }
+        Ok(WifiJoined {
+            wifi: WifiClocked::for_host_test(join.wifi),
+            phy,
+        })
+    }
+
+    async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
+        self.push(Event::Track);
+        if self.0.borrow().poison_track {
+            return Err(Failed {
+                returned: track.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
+        Ok(WifiTracked {
+            wifi: track.wifi,
+            report: TrackReport {
+                tracking_micros: Some(7),
+                temperature: None,
+                tx_power: PhyState::default().tx_target_power_profile(),
+                mac: MacColdStartOutcome {
+                    handshake_samples: 1,
+                    handshake_observations: 2,
+                },
+            },
+        })
+    }
+
+    async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
+        self.push(Event::Exit);
+        let WifiLeave { wifi } = leave;
+        (
+            WifiLeft {
+                wifi: WifiReturned::Clocked(wifi),
+            },
+            Exit {
+                last: !self.0.borrow().not_last,
+                health: DomainHealth::Healthy,
+            },
+        )
+    }
+}
+
+fn cold() -> WifiCold {
+    let (_domain, partitions) = RadioHardware::for_host_test().split(());
+    WifiCold::from_partition(partitions.wifi)
+}
+
+fn track_request(wifi: WifiClocked) -> WifiTrack {
+    WifiTrack {
+        wifi,
+        channel: WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+        maximum_tx_power_quarter_dbm: 80,
+        mac: MacColdStartConfig {
+            handshake_sample_limit: 100,
+            station_address: [2, 0, 0, 0, 0, 1],
+            access_point_address: [2, 0, 0, 0, 0, 2],
+        },
+        slow_clock: MacSlowClockCalibration::Unavailable,
+        delay_random: 0,
+    }
+}
+
+/// Run `client` against an actor over `model` until `client` finishes.
+fn run<F: Future<Output = ()>>(
+    model: &Model,
+    clock: &'static VirtualClock,
+    client: impl FnOnce(ClientCells) -> F,
+) {
+    let (end, cells) = claim_for_host_test();
+    let lp = LpClock::<RcSlow>::for_host_test();
+    let actor = RadioSystem::new(end, model.clone(), clock, lp);
+    match block_on(select(actor.run(), client(cells))) {
+        Either::First(never) => match never {},
+        Either::Second(()) => {}
+    }
+}
+
+fn clock() -> &'static VirtualClock {
+    std::boxed::Box::leak(std::boxed::Box::new(VirtualClock::default()))
+}
+
+fn model(script: Script) -> Model {
+    Model(Rc::new(RefCell::new(script)))
+}
+
+const REGISTERED: Event = Event::Prepare(Ok(PhyPreparation::Registered {
+    calibration_path: PhyCalibrationPath::FullUncached,
+    micros: 10,
+}));
+
+#[test]
+fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
+    let model = model(Script::default());
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(joined) = joined else {
+            panic!("a cold join registers")
+        };
+        assert_eq!(joined.epoch.get(), 0);
+        assert!(matches!(
+            joined.payload.phy,
+            PhyPreparation::Registered { .. }
+        ));
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let Ok(tracked) = tracked else {
+            panic!("tracking runs")
+        };
+        assert_eq!(tracked.payload.report.tracking_micros, Some(7));
+        let (_cell, left) = cell
+            .leave(
+                Leaving::Tracked(tracked.member),
+                WifiLeave {
+                    wifi: tracked.payload.wifi,
+                },
+            )
+            .await;
+        assert_eq!(left.domain, DomainHealth::Healthy);
+    });
+    assert_eq!(
+        model.log(),
+        vec![
+            REGISTERED,
+            Event::CoexEnter,
+            Event::Enter,
+            Event::Track,
+            Event::Exit,
+            Event::CoexLeave,
+            Event::CloseRf,
+        ]
+    );
+}
+
+#[test]
+fn a_join_after_rf_closed_wakes_rf_with_a_new_epoch() {
+    let model = model(Script::default());
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(first) = joined else {
+            panic!("a cold join registers")
+        };
+        let (cell, _left) = cell
+            .leave(
+                Leaving::Untracked(first.member),
+                WifiLeave {
+                    wifi: first.payload.wifi,
+                },
+            )
+            .await;
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let Ok(second) = joined else {
+            panic!("a join wakes closed RF")
+        };
+        assert_eq!(second.payload.phy, PhyPreparation::Woke { micros: 3 });
+        assert_eq!((first.epoch.get(), second.epoch.get()), (0, 1));
+    });
+    assert_eq!(
+        model.log()[..7],
+        [
+            REGISTERED,
+            Event::CoexEnter,
+            Event::Enter,
+            Event::Exit,
+            Event::CoexLeave,
+            Event::CloseRf,
+            Event::Prepare(Ok(PhyPreparation::Woke { micros: 3 })),
+        ]
+    );
+}
+
+#[test]
+fn a_refused_first_member_leaves_rf_closed_and_gets_its_partition_back() {
+    let model = model(Script {
+        refuse_enter: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (_cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Err(failed) = joined else {
+            panic!("the backend refused")
+        };
+        assert_eq!(failed.cause, Failure::Refused);
+        assert!(matches!(failed.returned, WifiReturned::Cold(_)));
+    });
+    assert_eq!(
+        model.log(),
+        vec![
+            REGISTERED,
+            Event::CoexEnter,
+            Event::Enter,
+            Event::CoexLeave,
+            Event::CloseRf,
+        ]
+    );
+}
+
+#[test]
+fn a_failed_preparation_poisons_the_domain_for_every_later_request() {
+    let model = model(Script {
+        fail_prepare: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Err(failed) = joined else {
+            panic!("the preparation failed")
+        };
+        assert_eq!(failed.cause, Failure::Poisoned);
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let Err(failed) = joined else {
+            panic!("the domain stays poisoned")
+        };
+        assert_eq!(failed.cause, Failure::Poisoned);
+        assert!(matches!(failed.returned, WifiReturned::Cold(_)));
+    });
+    assert_eq!(model.log(), vec![Event::Prepare(Err(Fault))]);
+}
+
+#[test]
+fn a_poisoned_track_hands_back_the_member_and_the_client() {
+    let model = model(Script {
+        poison_track: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(joined) = joined else {
+            panic!("a cold join registers")
+        };
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let Err(Failed {
+            returned: (member, wifi),
+            cause,
+        }) = tracked
+        else {
+            panic!("tracking failed")
+        };
+        assert_eq!(cause, Failure::Poisoned);
+        let (_cell, left) = cell
+            .leave(Leaving::Untracked(member), WifiLeave { wifi })
+            .await;
+        assert_eq!(left.domain, DomainHealth::Poisoned);
+    });
+    // A poisoned domain closes no RF.
+    assert!(!model.log().contains(&Event::CloseRf));
+}
+
+#[test]
+fn a_member_that_is_not_the_last_keeps_rf_open() {
+    let model = model(Script {
+        not_last: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(joined) = joined else {
+            panic!("a cold join registers")
+        };
+        let (_cell, _left) = cell
+            .leave(
+                Leaving::Untracked(joined.member),
+                WifiLeave {
+                    wifi: joined.payload.wifi,
+                },
+            )
+            .await;
+    });
+    assert!(!model.log().contains(&Event::CloseRf));
+}
+
+#[test]
+fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
+    let clock = clock();
+    let model = model(Script {
+        deadline: Some(Instant::from_micros(1_000_000)),
+        ..Script::default()
+    });
+    run(&model, clock, |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(joined) = joined else {
+            panic!("a cold join registers")
+        };
+        let (_cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let Ok(tracked) = tracked else {
+            panic!("tracking runs")
+        };
+        let _ = tracked;
+        for _ in 0..4 {
+            yield_now().await;
+        }
+        clock.advance_to(Instant::from_micros(1_000_000));
+        for _ in 0..4 {
+            yield_now().await;
+        }
+        clock.advance_to(Instant::from_micros(2_000_000));
+        for _ in 0..4 {
+            yield_now().await;
+        }
+        assert_eq!(clock.now(), Instant::from_micros(2_000_000));
+    });
+    assert_eq!(
+        model
+            .log()
+            .iter()
+            .filter(|event| **event == Event::Tick)
+            .count(),
+        2
+    );
+}
