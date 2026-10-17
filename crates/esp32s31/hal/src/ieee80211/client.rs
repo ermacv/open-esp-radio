@@ -235,7 +235,7 @@ impl WifiClocked {
     /// claiming any clock state.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn for_validation(cold: WifiCold) -> Self {
+    pub fn for_host_test(cold: WifiCold) -> Self {
         Self {
             registers: cold.registers,
             initialized: false,

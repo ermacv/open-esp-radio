@@ -678,7 +678,7 @@ impl Ieee802154Clocked {
     /// Enter the clocked phase without the modem clock planner, for host
     /// tests of the later stages. It proves no clock.
     #[doc(hidden)]
-    pub fn for_validation(partition: Ieee802154RadioPartition) -> Self {
+    pub fn for_host_test(partition: Ieee802154RadioPartition) -> Self {
         let Ieee802154Cold { mac } = Ieee802154Cold::from_partition(partition);
         Self {
             inner: Ieee802154Lifecycle::clocked(mac),

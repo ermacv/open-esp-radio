@@ -280,7 +280,7 @@ impl RadioPartitions {
         unsafe_code,
         reason = "a host-test root is fictitious; each test needs its own fresh singleton"
     )]
-    pub fn for_validation() -> Self {
+    pub fn for_host_test() -> Self {
         // SAFETY: only host tests build this root. It is fictitious: no real
         // MMIO exists behind it, so the singleton need not be unique.
         Self::from_peripherals(unsafe { svd::Peripherals::steal() })

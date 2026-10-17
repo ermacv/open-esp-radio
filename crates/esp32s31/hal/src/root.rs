@@ -108,9 +108,9 @@ impl RadioHardware {
     /// Construct a fictitious complete root for one host test.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn for_validation() -> Self {
+    pub fn for_host_test() -> Self {
         Self {
-            partitions: RadioPartitions::for_validation(),
+            partitions: RadioPartitions::for_host_test(),
             phy_registration: PhyRegistration::new(),
         }
     }

@@ -47,7 +47,7 @@ impl RxDmaWalkerEnabled<'_> {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self::confirmed()
     }
 }
@@ -65,7 +65,7 @@ impl RxDmaReloadSettled<'_> {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self::confirmed()
     }
 }
@@ -78,7 +78,7 @@ impl RxDmaWalkerStopped<'_> {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self::confirmed()
     }
 }
@@ -111,7 +111,7 @@ impl RxDmaNextDescriptor {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn validation(address_low: u32, unknown_upper_nonzero: bool) -> Self {
+    pub const fn for_host_test(address_low: u32, unknown_upper_nonzero: bool) -> Self {
         Self::from_fields(address_low, unknown_upper_nonzero)
     }
 
@@ -179,7 +179,7 @@ impl RxDmaCursorObservation<'_> {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn validation(last_descriptor_low: u32, next_descriptor_low: u32) -> Self {
+    pub const fn for_host_test(last_descriptor_low: u32, next_descriptor_low: u32) -> Self {
         Self::confirmed(last_descriptor_low, next_descriptor_low)
     }
 
@@ -220,7 +220,7 @@ impl<'storage> RxDmaBinding<'storage> {
         reason = "raw target publication is already an unsafe validation boundary"
     )]
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn raw_validation(descriptor_base: u32) -> RxDmaBinding<'static> {
+    pub(crate) fn raw_for_host_test(descriptor_base: u32) -> RxDmaBinding<'static> {
         // SAFETY: target callers cross an unsafe public API and retain the
         // addressed ring; native callers use a model with no DMA actor.
         let range = unsafe {

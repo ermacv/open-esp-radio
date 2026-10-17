@@ -345,10 +345,9 @@ impl RadioRuntimeOwner {
     /// image without exposing the underlying PAC owner.
     #[cfg(test)]
     #[doc(hidden)]
-    pub fn claim_for_validation() -> Self {
-        let (_shared, partitions) =
-            crate::root::RadioHardware::for_validation().into_concurrent(());
-        let clocked = crate::ieee80211::client::WifiClocked::for_validation(
+    pub fn claim_for_host_test() -> Self {
+        let (_shared, partitions) = crate::root::RadioHardware::for_host_test().into_concurrent(());
+        let clocked = crate::ieee80211::client::WifiClocked::for_host_test(
             crate::ieee80211::client::WifiCold::from_partition(partitions.wifi),
         );
         clocked.into_running().0

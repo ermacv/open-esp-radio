@@ -15,7 +15,7 @@ use crate::{
 };
 
 fn registered() -> (SharedRadio<ConcurrentPhy>, WifiClocked) {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let mut lease = radio
             .try_acquire()
@@ -28,7 +28,7 @@ fn registered() -> (SharedRadio<ConcurrentPhy>, WifiClocked) {
     }
     (
         radio,
-        WifiClocked::for_validation(WifiCold::from_partition(partitions.wifi)),
+        WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi)),
     )
 }
 
@@ -61,8 +61,8 @@ fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
 
 #[test]
 fn an_unregistered_domain_admits_no_wifi_client() {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
-    let clocked = WifiClocked::for_validation(WifiCold::from_partition(partitions.wifi));
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
+    let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));

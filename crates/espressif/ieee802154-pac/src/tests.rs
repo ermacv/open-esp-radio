@@ -22,10 +22,10 @@ fn semantic_event_union_never_loses_ed_done_or_rx_abort_presence() {
 
 #[test]
 fn state_codes_are_bounded_and_expose_only_reviewed_predicates() {
-    let zero_rx = Ieee802154RxStateCode::for_validation(0).expect("three-bit state");
-    let zero_tx = Ieee802154TxStateCode::for_validation(0).expect("four-bit state");
-    let sfd = Ieee802154RxStateCode::for_validation(1).expect("three-bit state");
-    let after_sfd = Ieee802154RxStateCode::for_validation(2).expect("three-bit state");
+    let zero_rx = Ieee802154RxStateCode::for_host_test(0).expect("three-bit state");
+    let zero_tx = Ieee802154TxStateCode::for_host_test(0).expect("four-bit state");
+    let sfd = Ieee802154RxStateCode::for_host_test(1).expect("three-bit state");
+    let after_sfd = Ieee802154RxStateCode::for_host_test(2).expect("three-bit state");
 
     assert!(Ieee802154StateSnapshot::new(zero_rx, zero_tx).all_codes_zero());
     assert!(sfd.is_receive_sfd());
@@ -34,19 +34,19 @@ fn state_codes_are_bounded_and_expose_only_reviewed_predicates() {
     assert_eq!(after_sfd.value(), 2);
     assert_eq!(zero_tx.value(), 0);
     assert_eq!(
-        Ieee802154RxStateCode::for_validation(Ieee802154RxStateCode::MAX + 1),
+        Ieee802154RxStateCode::for_host_test(Ieee802154RxStateCode::MAX + 1),
         None
     );
     assert_eq!(
-        Ieee802154TxStateCode::for_validation(Ieee802154TxStateCode::MAX + 1),
+        Ieee802154TxStateCode::for_host_test(Ieee802154TxStateCode::MAX + 1),
         None
     );
 }
 
 #[test]
 fn nonzero_state_code_fails_only_the_numeric_zero_predicate() {
-    let rx = Ieee802154RxStateCode::for_validation(0).expect("three-bit state");
-    let tx = Ieee802154TxStateCode::for_validation(1).expect("four-bit state");
+    let rx = Ieee802154RxStateCode::for_host_test(0).expect("three-bit state");
+    let tx = Ieee802154TxStateCode::for_host_test(1).expect("four-bit state");
     let snapshot = Ieee802154StateSnapshot::new(rx, tx);
 
     assert!(!snapshot.all_codes_zero());

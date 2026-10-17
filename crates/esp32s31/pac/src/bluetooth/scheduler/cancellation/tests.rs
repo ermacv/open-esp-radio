@@ -13,7 +13,7 @@ use crate::{
 };
 
 fn scheduler(busy: bool) -> BluetoothSchedulerBusyObservation {
-    BluetoothSchedulerBusyObservation::from_busy_for_validation(busy)
+    BluetoothSchedulerBusyObservation::from_busy_for_host_test(busy)
 }
 
 fn index(value: u8) -> BluetoothSchedulerHardwareListIndex {

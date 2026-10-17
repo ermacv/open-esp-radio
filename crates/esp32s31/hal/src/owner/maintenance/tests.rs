@@ -68,12 +68,12 @@ fn release_rechecks_hardware_instead_of_reusing_admission_observation() {
 
 fn setup() -> super::MacInterruptSetup {
     super::MacInterruptSetup {
-        inner: oer_esp32s31_pac::RadioPartitions::for_validation().wifi_interrupts,
+        inner: oer_esp32s31_pac::RadioPartitions::for_host_test().wifi_interrupts,
     }
 }
 
 fn registers() -> super::RadioRuntimeOwner {
-    super::RadioRuntimeOwner::claim_for_validation()
+    super::RadioRuntimeOwner::claim_for_host_test()
 }
 
 #[test]

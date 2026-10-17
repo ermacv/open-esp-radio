@@ -356,7 +356,7 @@ impl ClockedOwner {
 impl ClockedOwner {
     /// Assume the clock stage for a host test, without any MMIO.
     #[doc(hidden)]
-    pub fn for_validation(partition: BluetoothPartition) -> Self {
+    pub fn for_host_test(partition: BluetoothPartition) -> Self {
         Self {
             partition: ColdOwner::from_partition(partition).partition,
         }
@@ -364,7 +364,7 @@ impl ClockedOwner {
 
     /// Leave the assumed clock stage without any MMIO.
     #[doc(hidden)]
-    pub fn into_partition_for_validation(self) -> BluetoothPartition {
+    pub fn into_partition_for_host_test(self) -> BluetoothPartition {
         ColdOwner {
             partition: self.partition,
         }

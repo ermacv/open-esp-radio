@@ -55,7 +55,7 @@ impl BluetoothSchedulerLockModifyTaskObservation {
     /// Construct semantic task fields for host-side controller validation.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn from_fields_for_validation(start: bool, result: u8) -> Self {
+    pub const fn from_fields_for_host_test(start: bool, result: u8) -> Self {
         assert!(
             result <= 0x0f,
             "scheduler result must fit its reviewed field"
@@ -118,7 +118,7 @@ impl BluetoothSchedulerLockModifyObservation {
     /// register geometry in a controller test.
     #[cfg(test)]
     #[doc(hidden)]
-    pub const fn from_fields_for_validation(busy: bool, start: bool, result: u8) -> Self {
+    pub const fn from_fields_for_host_test(busy: bool, start: bool, result: u8) -> Self {
         assert!(
             result <= 0x0f,
             "scheduler result must fit its reviewed field"
@@ -164,7 +164,7 @@ impl BluetoothSchedulerLockModifyPublished {
     /// validation. Production builds can obtain this value only from live PAC
     /// publication.
     #[doc(hidden)]
-    pub const fn for_validation() -> Self {
+    pub const fn for_host_test() -> Self {
         Self { _private: () }
     }
 }

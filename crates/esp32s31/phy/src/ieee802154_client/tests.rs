@@ -18,7 +18,7 @@ use crate::{
 /// An arbiter whose domain is registered in the arbiter's current epoch, or,
 /// when `stale`, in an epoch a later registration retired.
 fn arbiter(stale: bool) -> (SharedRadio<ConcurrentPhy>, ConcurrentPartitions) {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
     {
         let mut lease = radio
             .try_acquire()
@@ -44,8 +44,8 @@ fn ieee802154_is_client(lease: &SharedRadioLease<'_, ConcurrentPhy>) -> bool {
 
 #[test]
 fn joining_an_unregistered_domain_changes_nothing() {
-    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
-    let clocked = Ieee802154Clocked::for_validation(partitions.ieee802154);
+    let (radio, partitions) = RadioHardware::for_host_test().into_concurrent(ConcurrentPhy::new());
+    let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
@@ -62,7 +62,7 @@ fn joining_an_unregistered_domain_changes_nothing() {
 #[test]
 fn a_stale_registration_is_rejected_before_the_client_set_changes() {
     let (radio, partitions) = arbiter(true);
-    let clocked = Ieee802154Clocked::for_validation(partitions.ieee802154);
+    let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
@@ -81,7 +81,7 @@ fn a_stale_registration_is_rejected_before_the_client_set_changes() {
 #[test]
 fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
     let (radio, partitions) = arbiter(false);
-    let clocked = Ieee802154Clocked::for_validation(partitions.ieee802154);
+    let clocked = Ieee802154Clocked::for_host_test(partitions.ieee802154);
     let mut lease = radio
         .try_acquire()
         .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
