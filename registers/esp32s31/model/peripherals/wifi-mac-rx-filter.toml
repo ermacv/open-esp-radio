@@ -1,0 +1,344 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_FILTER"
+description = "Four WDEVRX_ABORT receive-queue policy words. Complete dbg_read_rx_misc names every used bit through 19; queue three is also the complete promiscuous-sniffer control word."
+baseAddress = 0x201040D8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x4
+dimIndex = "0,1,2,3"
+name = "POLICY%s"
+description = "WDEVRX_ABORT[0-3], updated through separate fresh-read RMW edges."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "DUMP_UNICAST_CHECK_DA"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DUMP_UNICAST_CHECK_BSSID"
+description = "The policy-six UBSSID branch sets this bit before live vendor Authentication."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DUMP_BROADCAST_CHECK_BSSID"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ABORT_GROUP"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "PASS_BEACON"
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_5_OPAQUE"
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DUMP_MANAGEMENT_NOT_CHECK_BSSID"
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RECEIVE_BROADCAST_CHECK_BSSID"
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RECEIVE_UNICAST_CHECK_BSSID"
+description = "The policy-six UBSSID branch sets this bit before live vendor Authentication."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RECEIVE_UNICAST_CHECK_DA"
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RECEIVE_MANAGEMENT_NOT_CHECK_BSSID"
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TO_DS"
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FROM_DS"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CHECK_BSSID"
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CHECK_DA"
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CHECK_BROADCAST_BSSID"
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "NOT_GROUP"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "AUTO_ACK_DISABLE"
+description = "Complete hal_sniffer_enable sets this bit first on queue three; the debug decoder names it AUTOACK_DISABLE."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SECURITY_ERROR_DISABLE"
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SECURITY_TKIP_ERROR_FORCE_ON"
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+bitOffset = 20
+bitWidth = 12
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x4
+dimIndex = "0,1,2"
+name = "BASEBAND_ERROR_STATUS%s"
+description = "First three words sampled by the bounded four-entry hal_ifc_get_bb_err_bitmap loop. Bit 16 contributes the corresponding output bitmap bit."
+addressOffset = 0x10
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "ERROR"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "MISC_PACKET_POLICY"
+description = "The open promiscuous RX frontier sets bits 15:8 together after the complete sniffer-enable leaf. The complete vendor misc-packet leaf independently proves this register and related packet-class fields. Complete hal_ifc_get_bb_err_bitmap reads bit 16 as the fourth baseband-error status bit."
+addressOffset = 0x1C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "OPEN_MISC_PACKET_CLASSES"
+description = "Eight independent class-enable bits used by the working open scan/STA receive path; every eight-bit mask is representable."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BASEBAND_ERROR"
+description = "Fourth status bit sampled by the bounded hal_ifc_get_bb_err_bitmap loop."
+bitOffset = 16
+bitWidth = 1
+access = "read-only"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER"
+sources = [
+    "BLOB_LIBPP_HAL_INIT_RX_POLICY",
+    "BLOB_LIBPP_RX_POLICY",
+    "BLOB_LIBNET80211_WIFI_RX_POLICY",
+    "BLOB_LIBPP_HAL_SNIFFER_ENABLE",
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_RX_POLICY",
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.DUMP_UNICAST_CHECK_BSSID"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_RX_POLICY",
+    "BLOB_LIBNET80211_WIFI_RX_POLICY",
+    "HIL_VENDOR_STA_AUTH_POLICY_2026_07_28",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.PASS_BEACON"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_RX_POLICY"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.RECEIVE_UNICAST_CHECK_BSSID"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_RX_POLICY",
+    "BLOB_LIBNET80211_WIFI_RX_POLICY",
+    "HIL_VENDOR_STA_AUTH_POLICY_2026_07_28",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.AUTO_ACK_DISABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_SNIFFER_ENABLE",
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.BASEBAND_ERROR_STATUS%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.MISC_PACKET_POLICY"
+naming = "descriptive"
+sources = [
+    "OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER",
+    "BLOB_LIBPP_HAL_SNIFFER_MISC",
+    "BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.MISC_PACKET_POLICY.OPEN_MISC_PACKET_CLASSES"
+naming = "descriptive"
+sources = ["OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER"]
+provenance = "observed"
+accuracy = "bounded"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.MISC_PACKET_POLICY.BASEBAND_ERROR"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.DUMP_UNICAST_CHECK_DA"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.DUMP_BROADCAST_CHECK_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.ABORT_GROUP"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.BIT_5_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.DUMP_MANAGEMENT_NOT_CHECK_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.RECEIVE_BROADCAST_CHECK_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.RECEIVE_UNICAST_CHECK_DA"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.RECEIVE_MANAGEMENT_NOT_CHECK_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.TO_DS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.FROM_DS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.CHECK_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.CHECK_DA"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.CHECK_BROADCAST_BSSID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.NOT_GROUP"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.SECURITY_ERROR_DISABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.SECURITY_TKIP_ERROR_FORCE_ON"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.POLICY%s.BITS_20_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RX_FILTER.BASEBAND_ERROR_STATUS%s.ERROR"
+naming = "descriptive"

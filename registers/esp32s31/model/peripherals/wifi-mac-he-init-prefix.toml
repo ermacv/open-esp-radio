@@ -1,0 +1,647 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_HE_INIT_PREFIX"
+description = "Complete hal_he_init prefix through hal_init_tb_tx, stopping immediately before hal_init_tx_pwr. Twenty-two separate RMW edges and one final synchronization/status read."
+baseAddress = 0x20104048
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_FIELD_CONTROL"
+description = "Canonical RX_HE_BSS_COLOR_CONF word. Complete dbg_read_color_collision names the fields; the HE init parent replaces TIMEOUT_SECONDS bits 8:3 with 0x3c. HE Operation programming sets COLOR_BITMAP_CLEAR to clear the accumulated BSS-color collision bitmap."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "COLOR_BITMAP_CLEAR"
+description = "COLOR_BITMAP_CLR in complete dbg_read_color_collision. HE Operation programming sets this bit to clear the accumulated BSS-color collision bitmap."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITMAP_CONTROL_HIGH"
+description = "High bit of the two-bit BITMAP diagnostic printed by complete dbg_read_color_collision. No independent write-side meaning is currently claimed."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TIMEOUT_SECONDS"
+bitOffset = 3
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "COLLISION_THRESHOLD"
+bitOffset = 9
+bitWidth = 4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_MODE_CONTROL"
+description = "Complete hal_init_bf clears bit two, then sets bit three through a separate fresh-read RMW. Complete esp_test_bf_set_feedback proves these same physical fields are the high-selector class and parity controls for its feedback modes; this is one canonical register identity rather than an address alias."
+addressOffset = 0x54
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "HIGH_SELECTOR_CLASS"
+description = "For test feedback selector values eight through fourteen, set exactly when selector is greater than nine. Complete hal_init_bf clears it."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HIGH_SELECTOR_PARITY"
+description = "For test feedback selector values eight through fourteen, receives selector bit zero; selectors fifteen and sixteen clear it. Complete hal_init_bf sets it."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_REPORT_RATE"
+description = "Three independently published beamforming-report profiles selected for BPSK, QPSK and 16-QAM. Complete libpp[hal_mac_ctl.o]::hal_he_set_bf_report_rate(1,0x10,0,0) writes signal mode one, normalized rate zero, DCM false and ER-SU false into the 16-QAM, QPSK and BPSK profiles in that order."
+addressOffset = 0x41C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BPSK_RATE"
+bitOffset = 0
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BPSK_SIGNAL_MODE"
+bitOffset = 5
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BPSK_DCM"
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BPSK_ERSU"
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "QPSK_RATE"
+bitOffset = 9
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "QPSK_SIGNAL_MODE"
+bitOffset = 14
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "QPSK_DCM"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "QPSK_ERSU"
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "QAM16_RATE"
+bitOffset = 18
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "QAM16_SIGNAL_MODE"
+bitOffset = 23
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "QAM16_DCM"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "QAM16_ERSU"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_VECTOR_CONTROL"
+description = "Complete hal_init_bf replaces bits 23:12 with 0x801."
+addressOffset = 0x434
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_23_OPAQUE"
+bitOffset = 12
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_ENABLE"
+description = "Complete hal_init_bf sets bit 31."
+addressOffset = 0x438
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "PARENT_ENABLE"
+description = "Parent sets bit 12 before trigger-based TX init. Complete print_isr_regs independently names this same physical word WDEV_INT1_ENABLE. This is one canonical register with two observed roles, not two peripheral owners."
+addressOffset = 0xBE4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_12_OPAQUE"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INTERRUPT_1_RAW"
+description = "WDEV_INT1_RAW snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking the primary MAC interrupt bank."
+addressOffset = 0xBE8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "EVENTS"
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INTERRUPT_1_STATUS"
+description = "WDEV_INT1_STATUS diagnostic snapshot read by complete print_isr_regs."
+addressOffset = 0xBEC
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "EVENTS"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "INTERRUPT_1_CLEAR"
+description = "Complete libpp[hal_mac_ctl.o]::hal_mac_interrupt_clr_bsscolor sets bit 12 through a fresh-read RMW to acknowledge the secondary BSS-color event."
+addressOffset = 0xBF0
+size = 32
+access = "read-write"
+modifiedWriteValues = "oneToClear"
+
+[[peripherals.registers.register.fields]]
+name = "BSS_COLOR"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_TIMING_CONTROL"
+description = "Seven ordered RMWs in complete hal_init_bf. Complete dbg_read_rx_misc supplies the beamforming field names through its WDEVBEAMFORMCONF decoder. Complete dbg_disable_report_cbf independently proves the write polarity of HE_BEAM_ENABLE bit 20. Complete esp_test_get_csi_dump_cfg supplies the more specific RXBFRPTO_MS name for bits 7:1."
+addressOffset = 0xC30
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BF_MEMORY_WRITE_ENABLE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_BFRP_TIMEOUT_MS"
+description = "Vendor test getter names bits 7:1 RXBFRPTO_MS."
+bitOffset = 1
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "HE_BEAM_NDP_TIME"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "HE_BEAM_HW_SEQUENCE_SELECT"
+bitOffset = 16
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "HE_BEAM_HW_SEQUENCE_ENABLE"
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HE_BEAM_ENABLE"
+description = "Complete dbg_read_rx_misc names bit 20 HE_BEAM_ENA. Complete dbg_disable_report_cbf clears it for a nonzero disable argument and sets it for zero, connecting the general hardware label to compressed-beamforming-report output."
+bitOffset = 20
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "NON_TB_BEAM_RU_SELECT"
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BEAM_RU_SELECT"
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_23_OPAQUE"
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BF_HIGH_IMAGE"
+description = "Complete hal_init_bf replaces bits 31:20 with 0x690."
+addressOffset = 0xD9C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+bitOffset = 20
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TB_TX_CONTROL"
+description = "Complete hal_init_tb_tx clears bit 15, then bit 14 through a separate fresh-read RMW."
+addressOffset = 0xDBC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_14"
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_15"
+bitOffset = 15
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+    "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS",
+    "BLOB_LIBNET80211_IEEE80211_PARSE_HEOPR",
+    "PROMOTED_HE20_PEER",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_MODE_CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+    "BLOB_LIBPP_TEST_BF_SET_FEEDBACK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_MODE_CONTROL.HIGH_SELECTOR_CLASS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TEST_BF_SET_FEEDBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_MODE_CONTROL.HIGH_SELECTOR_PARITY"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TEST_BF_SET_FEEDBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+    "BLOB_LIBPP_HAL_BF_CONFIG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+    "BLOB_LIBPP_ISR_REGISTER_DUMP",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_RAW"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_DISABLE_MAC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_CLEAR"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+    "BLOB_LIBPP_HAL_BF_CONFIG",
+    "BLOB_LIBPP_HAL_BF_DEBUG_CONTROL",
+    "BLOB_LIBPP_TEST_HAL_CSI",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.RX_BFRP_TIMEOUT_MS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_ENABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_BF_CONFIG",
+    "BLOB_LIBPP_HAL_BF_DEBUG_CONTROL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.COLOR_BITMAP_CLEAR"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.BITMAP_CONTROL_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.TIMEOUT_SECONDS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL.COLLISION_THRESHOLD"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_RATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_SIGNAL_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_DCM"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.BPSK_ERSU"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_RATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_SIGNAL_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_DCM"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QPSK_ERSU"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_RATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_SIGNAL_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_DCM"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_REPORT_RATE.QAM16_ERSU"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_VECTOR_CONTROL.BITS_12_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_ENABLE.BIT_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.PARENT_ENABLE.BIT_12_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_RAW.EVENTS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_STATUS.EVENTS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.INTERRUPT_1_CLEAR.BSS_COLOR"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BF_MEMORY_WRITE_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_NDP_TIME"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_HW_SEQUENCE_SELECT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.HE_BEAM_HW_SEQUENCE_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.NON_TB_BEAM_RU_SELECT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BEAM_RU_SELECT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_TIMING_CONTROL.BIT_25_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.BF_HIGH_IMAGE.BITS_20_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.CLEAR_14"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_INIT_PREFIX.TB_TX_CONTROL.CLEAR_15"
+naming = "descriptive"

@@ -1,0 +1,75 @@
+schema = 2
+
+[[peripherals]]
+name = "LP_AON_CLKRST"
+description = "Low-power always-on clock/reset registers reached by the reviewed PHY power-detector lifecycle."
+baseAddress = 0x20701000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ROOT_CLK_CONF"
+description = "Low-power root clock configuration. Only the RTC slow-clock source selector is published."
+addressOffset = 0x00
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SLOW_CLK_SEL"
+description = "RTC slow-clock source: zero is the RC slow oscillator and one the 32 kHz crystal; other values are invalid."
+bitOffset = 23
+bitWidth = 3
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RTC_SAR2_PWDET_CCT"
+description = "SAR2 power-detector circuit mode. Only encodings two and four are published by reviewed complete ROM bodies."
+addressOffset = 0x68
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "RTC_SAR2_PWDET_CCT"
+description = "Three-bit power-detector circuit-mode field."
+bitOffset = 0
+bitWidth = 3
+
+[[review]]
+entity = "LP_AON_CLKRST"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_AON_CLKRST.RTC_SAR2_PWDET_CCT"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_AON_CLKRST.RTC_SAR2_PWDET_CCT.RTC_SAR2_PWDET_CCT"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_AON_CLKRST.ROOT_CLK_CONF"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_AON_CLKRST.ROOT_CLK_CONF.SLOW_CLK_SEL"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

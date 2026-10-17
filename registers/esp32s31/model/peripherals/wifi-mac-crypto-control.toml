@@ -1,0 +1,466 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_CRYPTO_CONTROL"
+description = """
+Per-interface hardware-crypto controls, shared policy mask and key
+        validity bitmap recovered from complete libpp hal_crypto leaves."""
+baseAddress = 0x20104800
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x4
+dimIndex = "0,1,2"
+name = "INTERFACE_CONTROL%s"
+description = "STA, AP and NAN interface controls selected by hal_crypto_enable. Ordinary CCMP writes 0x00030103 and additionally enables SPP A-MSDU when the association negotiated it. SPP is shared by every key on this interface."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_8_OPAQUE"
+description = "Low algorithm and enable fields composed by hal_crypto_enable."
+bitOffset = 0
+bitWidth = 9
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1FF
+
+[[peripherals.registers.register.fields]]
+name = "SPP_AMSDU"
+description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_29_OPAQUE"
+description = "Upper algorithm and management-frame policy fields composed by hal_crypto_enable."
+bitOffset = 10
+bitWidth = 20
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Complete ordinary enable clears both high bits; one algorithm branch sets bit 31."
+bitOffset = 30
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POLICY_CONTROL"
+description = "Shared policy word. The ordinary non-algorithm-four enable path preserves bits 31:22 and 5:0 while clearing bits 21:6."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_5_OPAQUE"
+bitOffset = 0
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_21_OPAQUE"
+description = "Cleared by the reachable STA CCMP enable transaction."
+bitOffset = 6
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_31_OPAQUE"
+bitOffset = 22
+bitWidth = 10
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_000C_OPAQUE"
+description = "Fourth full-word cold-init store, cleared by complete hal_crypto_init. Its algorithm-specific meaning is not yet recovered."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "KEY_VALID_BITMAP"
+description = "One validity bit per one of the 25 evidenced hardware key entries."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_0_VALID"
+description = "Validity of key-table entry zero."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_1_VALID"
+description = "Validity of key-table entry one."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_2_VALID"
+description = "Validity of key-table entry two."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_3_VALID"
+description = "Validity of key-table entry three."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_4_VALID"
+description = "Validity of key-table entry four."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_5_VALID"
+description = "Validity of key-table entry five."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_6_VALID"
+description = "Validity of key-table entry six."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_7_VALID"
+description = "Validity of key-table entry seven."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_8_VALID"
+description = "Validity of key-table entry eight."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_9_VALID"
+description = "Validity of key-table entry nine."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_10_VALID"
+description = "Validity of key-table entry ten."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_11_VALID"
+description = "Validity of key-table entry eleven."
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_12_VALID"
+description = "Validity of key-table entry twelve."
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_13_VALID"
+description = "Validity of key-table entry thirteen."
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_14_VALID"
+description = "Validity of key-table entry fourteen."
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_15_VALID"
+description = "Validity of key-table entry fifteen."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_16_VALID"
+description = "Validity of key-table entry sixteen."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_17_VALID"
+description = "Validity of key-table entry seventeen."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_18_VALID"
+description = "Validity of key-table entry eighteen."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_19_VALID"
+description = "Validity of key-table entry nineteen."
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_20_VALID"
+description = "Validity of key-table entry twenty."
+bitOffset = 20
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_21_VALID"
+description = "Validity of key-table entry twenty-one."
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_22_VALID"
+description = "Validity of key-table entry twenty-two."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_23_VALID"
+description = "Validity of key-table entry twenty-three."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENTRY_24_VALID"
+description = "Validity of key-table entry twenty-four."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RESERVED_HIGH"
+description = "Reserved bits 31:25. Complete validity writes publish zero here."
+bitOffset = 25
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL"
+sources = [
+    "BLOB_LIBPP_HAL_CRYPTO",
+    "BLOB_LIBPP_HAL_CRYPTO_INIT",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_0_8_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_30_31_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_6_21_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_0_5_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.POLICY_CONTROL.BITS_22_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.WORD_000C_OPAQUE.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_0_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_1_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_2_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_3_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_4_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_5_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_6_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_7_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_8_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_9_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_10_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_11_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_12_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_13_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_14_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_15_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_16_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_17_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_18_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_19_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_20_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_21_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_22_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_23_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.ENTRY_24_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.KEY_VALID_BITMAP.RESERVED_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.SPP_AMSDU"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_SPP_AMSDU"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CRYPTO_CONTROL.INTERFACE_CONTROL%s.BITS_10_29_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"

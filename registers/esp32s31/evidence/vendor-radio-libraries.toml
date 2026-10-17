@@ -1,0 +1,557 @@
+# Reviewed register evidence: vendor radio libraries.
+schema = 1
+
+[[sources]]
+id = "BLOB_LIBCOEX_IEEE802154_HANDOFF"
+description = "libcoexist.a sha256 9b8f55b1a1670ac8da1323595c817eca7340f073e783c162d3a2dfde7bbd19c8; complete coexist_api.o esp_coex_ieee802154_coex_break_notify tail-calls coexist_hw.o hal_ieee802154_coex_break_notify, whose complete body returns without effects. Complete esp_coex_ieee802154_extcoex_rx_stage and esp_coex_ieee802154_extcoex_tx_stage bodies also return without effects. The TXRX/ACK PTI wrappers separately map a client priority and call hal_set_IEEE802154_TXRX_pti / hal_set_IEEE802154_ACK_pti; force_rx_enable calls the force-RX and coex-delay setters. These named leaves establish no CPU-observed RF grant or release acknowledgement. No general absence of hardware coexistence is inferred."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_reg.o phy_start_tx_tone_step_new body, size 0xf4. It clears the tone stop field of 0x2010040c before calling g_phyFuns + 0x30 with zero; only when both path selectors are zero does it set that field to three and tail-call g_phyFuns + 0x30 with one."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_rx_cal.o phy_xtal_duty_cal body, size 0x3a6. It retunes through phy_set_rf_freq_offset_new and searches 24 duty candidates."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_debug.o phy_reg_check body, size 0x400. Its fixed loop bounds and block-name strings prove the half-open hardware dump ranges recorded in the project evidence catalogs; they do not name individual registers. Three blocks are dumped only while bit 10 or bit 16 of 0x20109c14 or bit 23 of 0x20109c04 is set, which leaves the ranges unchanged."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_DEBUG_I2C"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_debug.o phy_i2c_check body, size 0x1f6. Its ten calls prove each logical bank name, block ID, selected host and half-open register-index range."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_DEBUG_PBUS"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_debug.o phy_pbus_print body, size 0xf4. Its finite calls and strings associate selector/path pairs with RFRX, RFTX, BB and DCO groups."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o ble_tx_config_check body, size 0x1c0. Its loads, masks and pinned field-name strings prove the BLE TX timing fields, including RF_ON_BT_DELAY and PA_ON_BT_DELAY in the canonical FECTRL word at 0x20100870. The same complete body reads 0x2010201c, prints bits 31:27 under the pinned string tx_rampup_delay and subtracts them, with bb_tx_on_delay and tx_ramp_delay, from lc_tx_on_delay to print constant_DC_time."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bbmac_idle_for_swrst body, size 0x3c. The leaf returns success only when 0x2010207c bits 20:23 and 15:16, 0x20101550 bits 0:3 and 0x20103088 bits 0:3 are zero and 0x20102c38 bits 0:2 equal one. These are exact read predicates; the source does not assign meanings to individual status bits."
+
+[[sources]]
+id = "BLOB_LIBBTBB_CHANNEL_POWER_CONTROL"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_get_channel_pwr_set and bt_get_channel_pwr_unset bodies, sizes 0x50 and 0x1e. Their fresh-read RMW operations set or clear exactly 0x20102004 bits 8:9 while preserving all other bits. The aggregate field name records only the named function boundary; individual bit semantics remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBTBB_GAUSSIAN_COEFFICIENTS"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o set_gauss_coeff_1m and set_gauss_coeff_2m bodies, sizes 0xf6 and 0x82. Their ordered fresh-read RMW operations prove the exact masks and finite field images recorded for 0x201020e0..0x201020f4. The function identities distinguish 1M and 2M coefficient sets; positional field names deliberately avoid inventing individual coefficient semantics."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_TX_SET"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_bb_v2_tx_set body, size 0x34. One fresh-read RMW replaces exactly the low byte of 0x201020f0 with 0xf5 while preserving bits 31:8. This fact shares a physical word with the independently observed 2M Gaussian-coefficient fields."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_AGC_RESTART_SET"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_agc_restart_set body, size 0x2e6. At 0x20102100 it performs separate fresh-read RMW operations that set exactly bits 6, 7, 8, 9, 10, 19, 20 and 21. Other words touched by the complete body are intentionally outside this bounded standalone-BLE slice and remain unreviewed here."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_CTE_ACCESSORS"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_cte.o public getter/setter set. Matching independent masks provide instruction-exact CTE and shared BTAGC field geometry. ble_bb_cte_set_ant_map additionally proves an indexed 16-bit MMIO window from 0x20102130 while its input-dependent count leaves the hardware capacity open. The observations populate canonical BT_V3_2 and BTAGC physical owners; they do not create per-function singleton peripherals."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_BB_V2_ACCESSORS"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete named bt_bb_v2.o accessors and finite configuration leaves for LE TX delay, LE correlation thresholds, RX correlator/filter/DPO, TX CCA/FIFO, baseband watchdog, diagnostics and coexistence. Their direct loads, stores and RMW masks prove the recorded BT_V3_2 and BTAGC register/field geometry. Neutral ARGUMENT_N names preserve unknown C parameter semantics instead of promoting them to hardware meaning; CONFIG_VALUE fields record exact finite constants without claiming why the hardware uses them."
+
+[[sources]]
+id = "BLOB_LIBBLE_BASE_STACK_TASK_ENABLE"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member base_4.o symbol brk_sym_base_uevmRkB8BjrlJh1c3VnZ, plus libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895 complete named bt_bb_v2.o symbol bt_bb_corr_thresh_aa_lc_en. oer-symbol-lineage carries the source name r_base_stack_on_task_enable from commit 31c3094. The task-enable body first publishes its software memory-tracking and option state, then calls bt_bb_corr_thresh_aa_lc_en directly with Boolean image one, optionally enters the separately guarded BQB branch, and only afterwards calls the complete BLE PHY register initializer r_sym_ble_nENHlP4KBuQYlFVffaR5. The complete 0x16-byte bt_bb_corr_thresh_aa_lc_en body freshly reads BT_V3_2_BASEBAND.LE_CORRELATION_THRESHOLD_0 and replaces only AA_LC_ENABLE with the Boolean argument image. This source proves that the enabled field publication precedes the BLE PHY MMIO body; it does not import the vendor software environment or make optional BQB state part of the standalone open profile."
+
+[[sources]]
+id = "BLOB_LIBBLE_DTM_PHY_ETM_RELEASE"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member dtm_4.o bodies sym_dtm_2zeOUjc7g55zkDNQuZkg and sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1 call r_sym_ble_YpJTETFGhduIAMkkBKjc (member ble_68.o) for channels zero and one on every event whose CTE length at context +0x1d is zero. For channels up to eleven that body clears the channel's bit in the software ownership map of r_sym_resMgmt_zyxoWB9DZg2URcqF30NE and writes the complete image 1 << channel to 0x20108808. Channel zero carries the event 8 to task 20 route that r_sym_ble_nENHlP4KBuQYlFVffaR5 installs (BLOB_LIBBLE_PHY_INIT_REGISTERS); channel one carries only the CTE branch's route. Test End sym_dtm_NsbldBIeGraE2wg0AVy7 calls r_sym_ble_r39KCENxd4X4fI1qTGp9 (r_ble_phy_init), which marks the PHY for the reinitialization that installs the route again. The open implementation runs that route on channel two, so a DTM event clears channel two and Test End routes and enables it again."
+
+[[sources]]
+id = "BLOB_LIBBLE_PHY_INIT_REGISTERS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_70.o symbol r_sym_ble_nENHlP4KBuQYlFVffaR5 body, size 0x2a2, with its complete callees r_sym_ble_dQthQ5ciPZuxiqTBiBNa, r_sym_ble_D7WjPzItc9OF8YS067Wq, member ble_38.o r_sym_ble_K9RI7JxM1NMxwdTUJ82J, member ble_68.o r_sym_ble_9gO1NCZ8fOI7LwbgnMi6 and r_sym_ble_fy9eOwbFJlqEr1QO6bwO, and member ble_25.o r_sym_ble_Fh7KRrkOJ0DaZapRKpqP. oer-symbol-lineage carries the source names r_ble_phy_init_registers, r_ble_phy_ramup_time_set, r_ble_phy_monitor_bb_sync, r_ble_ll_resolv_get_list, r_ble_hw_resolv_list_set and r_sdkconfig_get_opts from commit 31c3094; the names supply only role hints, and every reviewed address, mask, value and ordering comes from these bodies. At 0x201014b4 the body applies a fresh-read AND with 0x00020000, preserving only bit 17; no later write enables another source. It proves complete ordered images zero then one at the isolated positional word 0x20101ff0, complete ordered images 0x20 then 0x40 at the isolated positional word 0x2010891c, emitted by r_sym_ble_fy9eOwbFJlqEr1QO6bwO for its arguments 0x31 and 0x32 (the 0x40 image after the 0x20101470 branch), and finite BLE-accelerator initialization images at 0x20109800, 0x201098cc and 0x201098d0. 0x201018a0 takes the raw address of environment member +0x2c and 0x2010124c the raw address of environment member +0x4d. 0x20101940 takes the controller-configuration word at +0x40, the 0x48-byte copy of rodata sym_controller_jqcSm1kAtUzAMoyGlaKq (member controller_1.o), where it is 0x7d0. At 0x20101470 the selected branch performs a fresh-read RMW setting bit 18 when byte +0x55 of the r_sym_ble_Fh7KRrkOJ0DaZapRKpqP options is nonzero; it does not prove an allowlist, directed-advertising or independent enable meaning. 0x20101b74 takes the complete image 0x1ba and 0x20101b78 complete image one, without proven latch semantics. The tail writes 0x20101244 = 0, 0x201011f0 = 0x55 and 0x20101248 = 0xfff, then routes modem ETM channel 0 from event 8 to task 20 (0x2010880c = 8, 0x20108810 = 0x14) and enables that channel through r_sym_ble_fy9eOwbFJlqEr1QO6bwO(0), which writes 1 << channel to 0x20108804 for channels up to 11. These observations retain neutral initialization names; the role hints do not prove inner hardware meaning. Narrow owners are used for isolated addresses when neither adjacency nor a role hint proves a wider physical block."
+
+[[sources]]
+id = "BLOB_LIBBLE_CONNECTION_ABORT_CONTROL"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_3.o r_sym_ble_mLYtT1I4BQmunJL36NqV, member connSim_1.o sym_connSim_Dzx5u6gHUrhrEF6GLX1p and member conn_4.o sym_conn_9o4sfTJUuO7muCutlmpa bodies. oer-symbol-lineage carries the names r_ble_lll_conn_update_link_state, r_conn_abortLcp_setAbortedOpcode and r_conn_hal_setDefaultAbortedOpcode from public same-chip commit 31c30949541a5d3abd4043a1cb66d55aa55577dd. The default writer publishes 0x00ff0002 at 0x201018ac, the custom writer publishes 0x00ff0003, and link-state refresh performs separate fresh-read replacements of only bit 1: it clears the bit when the second private connection flag (connection byte +0x121 bit 1) is set, independently of the first flag, and sets it otherwise. This proves the register role, custom-opcode selector and dynamic bit operation without assigning an unobserved inner meaning to LINK_STATE_CONTROL."
+
+[[sources]]
+id = "BLOB_LIBBLE_CONTROLLER_ADDRESS_SLOTS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete 0x70-byte ble_phy.c member ble_70.o symbol r_sym_ble_4jTcHipi5k7xftmgAPTH, which oer-symbol-lineage carries from r_ble_phy_set_dev_address; that name supplies only the function-role hint. Selector values zero, one and two choose exactly three stride-eight register pairs at 0x2010180c..0x20101820; any other selector takes the assertion path. For the selected pair, the ESP32-S31 body packs input bytes 0..3 into the complete little-endian low word, then packs bytes 4..5 into bits 0..15 of the complete high-word write while clearing bits 16..31. The named r_esp_ble_ll_set_public_addr wrapper reaches selector zero through complete member ble_25.o helper r_sym_ble_60U2aYYZeD1Ql9djxRaO; named esp_ble_clear_rand_addr reaches selector one after clearing six bytes. Those caller names are role evidence for slots zero and one, not permission to invent semantics for slot two or adjacent hardware."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_RX_SETUP"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete named bt_bb_rx_set body and its complete bt_agc_v2_set leaf. Their fresh-read RMW operations prove the recorded BTAGC field geometry and finite images. The complete parent also sets 0x20102000 bit 0 and 0x2010204c bit 2 through separate fresh-read RMW operations; this proves only their positional set-by-RX-setup behavior, not an independent hardware enable semantic. The parent body also performs a fresh-read RMW that clears 0x20104C24 bit 31 while preserving bits 30:0; that physical word is independently used by Wi-Fi MAC initialization and therefore has a shared-radio owner. Neutral CONFIG names deliberately avoid assigning undocumented receive/AGC semantics beyond the function boundary."
+
+[[sources]]
+id = "BLOB_LIBBTBB_SHARED_RX_INIT"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete named zb_rx_v0_0_set body, size 0xf0. It is called unconditionally by complete bt_bb_v2_init_cmplx and again by complete bt_bb_v2_rx_set. Its ordered fresh-read RMW operations prove the exact disjoint masks and finite images recorded at 0x20102C10..0x20102C34. The historical function prefix is retained only as call-identity evidence: the physical words remain in the protocol-neutral shared-radio owner and no Zigbee-only or BLE-only hardware semantics are inferred."
+
+[[sources]]
+id = "BLOB_LIBBTBB_IEEE802154_TXON_DELAY_SET"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o ieee802154_txon_delay_set body, size 0x46, which ESP-IDF 7b9cc1ac ieee802154_mac_init calls. It performs four ordered fresh-read RMW operations on the IEEE 802.15.4 MAC block and no other access: 0x20103104 bits 9:0 become 45, 0x20103110 bits 10:0 become 50, 0x20103114 bits 9:0 become 117 and 0x2010310c bits 5:0 become 5, each preserving every other bit. It does not call bt_bb_set_zb_tx_on_delay and does not access the shared baseband."
+
+[[sources]]
+id = "BLOB_LIBBTBB_SHARED_TX_TIMING_INIT"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete named bt_bb_set_zb_tx_on_delay body, size 0x32. Complete bt_bb_v2_init_cmplx calls it unconditionally with argument 60. The leaf performs one fresh-read RMW at 0x20102010, replacing bits 16:26 with ((argument - 10) << 3) while preserving every other bit. The historical function name is evidence for the call boundary, not a claim of exclusive Zigbee ownership; the physical word is retained by the shared-radio partition."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_BB_V2_RX_SET_SLICE"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_bb_v2_rx_set body, size 0x94, which ends by tail-calling bt_agc_sat_gain with argument 0x0a1b272e, and complete directly selected configuration leaves bt_set_rx_comp (0x94), bt_agc_gain_set (0x46), bt_agc_recorrect_set (0xc8), bt_agc_restart_set (0x2e6), bt_agc_detect_set (0x108), bt_agc_rssi_thresh (0x5e) and bt_agc_target_set (0x96). Complete bt_bb_set_rx_sense (0x80) independently proves the whole-word dynamic writes that overlap finite subfields in shared BTAGC words. Direct accesses prove the exact masks and finite or dynamic images recorded for the sparse 0x20102844..0x20102900 words. Whole-word dynamic writes remain register-level evidence and are not projected as overlapping SVD fields. Positional names retain unknown hardware semantics."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_BB_V2_INIT"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_bb_v2_init_cmplx body for argument one and its complete bt_agc_gain_set leaf. The body sets the reviewed WORD_7CD0_OPAQUE fields in one fresh-read RMW. The linked phy_param byte at offset 0x120 is retained to seven bits for RX_GAIN_FORCE_OPAQUE, then independently wrapping-subtracted by five and retained to seven bits for AGC_GAIN_IMAGE. These are two ordered fresh-read RMW operations; the source does not assign a physical unit to the linked byte. The complete body also proves the ordered finite transmit-timing updates at 0x20100870, 0x20102014 and 0x201020b8: PA_ON_BT_DELAY becomes 0x96, the LE delay update clears bits 16:18 while replacing bits 19:26 with 29, and two separate CCA fresh-read RMW operations first clear bits 20:22 while replacing bits 23:30 with 0x17 and then replace bits 9:19 with 0x157. After the complete shared receive initializer, the same body performs a distinct fresh-read RMW at 0x20102c00 that preserves bits 11:0 and replaces bits 31:12 with 0x0019f."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BT_AGC_BASIC_RUNTIME"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_bb_v2.o bt_agc_gain_max and bt_agc_sat_gain bodies, sizes 0x34 and 0x52. The first performs one fresh-read RMW that replaces exactly 0x20102850 bits 20:14 with a dynamic image. The second writes the complete finite image 0x00000404 to 0x20102864, replaces 0x2010284c bits 18:0 with 0x1770 in one fresh-read RMW, writes argument 0 as complete images to 0x20102858 and 0x2010285c, sets 0x2010284c bits 19, 24, 26, 28, 30 and 31 in a second fresh-read RMW, clears 0x20102820 bit 3 and sets 0x20102888 bit 30, each in one fresh-read RMW. Dynamic complete images are intentionally reviewed at register level without an overlapping SVD field."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_ENCRYPT_BLOCK"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_68.o symbol r_sym_ble_7dhVHgpwooZIKXq5TBqb body, size 0xe2. Its position in the ble_hw.c object symbol sequence matches the named ESP32-C61 r_ble_hw_encrypt_block counterpart. The function assembles four little-endian words from argument bytes 0..15, publishes argument+16 and argument+32 pointers, writes length 16 and finite control images, starts the engine, and polls the completion word. Cross-chip evidence names the operation only; all register facts come from ESP32-S31 bytes."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_68.o symbol r_sym_ble_6lDKo33OEA8POtZnFQHv body, size 0xd2, which oer-symbol-lineage pairs by call graph with r_ble_hw_resolv_list_search. The ESP32-S31 body publishes the two input images, mode bit 28, finite control image 0x400 and start image 1, then polls status bit 2; after 0x10000 reads it reports the timeout through an assertion with the current status and keeps polling. It then reads the result-present word, compressed SRAM result pointer and result metadata. The name supplies only the function identity."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_RESOLV_LIST_SET"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_68.o symbol r_sym_ble_9gO1NCZ8fOI7LwbgnMi6 body, size 0x12. oer-symbol-lineage pairs it by identical normalized body with r_ble_hw_resolv_list_set of commit 31c3094. The ESP32-S31 body writes (argument >> 2) masked to twenty bits as a complete image at 0x20101880. The name supplies only the function identity; the address, compression and write shape come from ESP32-S31 bytes."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_STATUS_CLEAR"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_59.o symbol r_sym_ble_ddurhv5Lz7XyowJFKiWv, size 0x5a. Its finite eight-iteration loop writes 0xFFFFFFFF to 0x20101b50 + index*4, reads the paired complete word at 0x20101b30 + index*4 twice, and asserts with that status only when it is nonzero. The evidence proves eight status/clear pairs and their directions; individual source meanings remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_RUNTIME_CONFIG"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_62.o symbols r_sym_ble_69lxyAzOOeBfNkewk2l0, r_sym_ble_uW7fgxQeZKMshYSHpqwh and r_sym_ble_QfTpg5GfTMzPcrTREkE2. They publish complete ESP32-S31 images at 0x20101b88, 0x20101b90 and 0x20101b94 from controller configuration bytes. Exact masks are low five bits, two low-five-bit values separated by fixed bits 5 and 13, and one low byte respectively. Function roles remain intentionally unnamed because the matching source identity is not recovered."
+
+[[sources]]
+id = "BLOB_LIBBLE_HW_CTE_RING_CONTROL"
+description = "_oracles/libble_app.a sha256 62dbe7216619d1f1e3dcd51233d91b211add15c7c746851af0be6a632cdae195 complete ble_hw_cte.c member 11.o, plus public same-chip espressif/esp32s31-bt-lib commit 31c30949541a5d3abd4043a1cb66d55aa55577dd libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63 named ble_hw_cte.c.o and ble_lll_df.c.o. Current and named same-chip CTE hardware leaves are instruction-identical. They prove that reset clears thirteen complete words at 0x2010199c..0x201019cc, bit 15 of the first word is independently set, bits 12..14 are replaced with the low three argument bits and read back, and six pairs at 0x201019a0 + index*8 retain a low-twenty-bit compressed sample-descriptor pointer followed by a state word whose bit 31 is cleared, set and queried as software ownership. Named r_ble_lll_df_env_init allocates a 0x20-byte controller-global environment and initializes offsets 8 and 12 to one. Named r_ble_lll_linkstate_cte_config_init is called for ordinary connection, advertising and synchronization link states: it selects six buffers, links the state to environment offset 8, and, while the separate LL direction-finding ring is absent, publishes environment offset 12 as buffer-zero's descriptor and clears buffer-zero ownership. All addresses, field geometry and transforms are proved by ESP32-S31 instructions; the public named revision supplies same-chip identities and the controller-global disabled-CTE lifecycle."
+
+[[sources]]
+id = "BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_57.o symbols r_sym_ble_BBHrCLEntlUwRxUQSeoj and r_sym_ble_lSOP0PF29bmKTVrxV8AS. Both publish the complete image 1 at 0x20101424 after manipulating software-owned ISO state; the first does so only when the current object exists and flag bit 0 at object offset 6 is set, while the second does so after its queue/publication path. The evidence proves a shared ISO-path command strobe but does not establish the command's undocumented hardware effect."
+
+[[sources]]
+id = "BLOB_LIBBTDM_CONTROLLER_IRQ"
+description = "_oracles/libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099; complete btdm_hal.c members 7.o and 8.o, plus pinned libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member nrtIsr_1.o. Primary setup clears exact bank images 0x00008000/0x00001300, ORs those images into IRQ_ENABLE_0/1, writes one to 0x2010100c, then allocates source 0x7c with caller flags zero. Its source-124 handler reads 0x2010105c then 0x20101068 and copies both images to 0x20101058/64. Its complete 190-byte diagnostic prefix then treats bank-zero source 15 and bank-one sources 8, 9 and 12 as assertion paths; source 9 first reads complete detail words 0x201011c8/1cc and source 12 first reads complete state word 0x20101070. The handler then synchronously dispatches callback phases zero and one and has a special path selected by bank-zero bits 21/27/28 and bank-one bit 3. Current source 21, combined sources 27/28 and bank-one source 3 all reach one static recycle event. Public same-chip named bodies map that path to r_btdm_hal_radio_isr, r_btdm_recycle_in_isr and r_btdm_recycle_in_task: every dequeued ordinary or marked event drains scheduler work, while the marker adds only buffer recycling. The handler never reads 0x2010125c, so no raw source is proven to produce a finished-list bit. Complete current helpers r_sym_bt_DOVkQWJHjeuid8jcS9Bq (16 bytes) and r_sym_bt_6lAYUFKOuBLyOZ6Kvsv5 (24 bytes) respectively W1C images 0x18200000/0x00000008 to IRQ_CLEAR_0/1 and OR those same images into IRQ_ENABLE_0/1; the scheduler-run prologue calls them in that order. Primary teardown frees the route, writes one to 0x20101010 then 0x20101014, and clears the baseline enable groups. The NRT initializer r_sym_nrtIsr_C19LvRC9gRxcfnay5CL6 allocates distinct source 0x85 with caller flags one and asserts on failure; its handler r_sym_nrtIsr_kgxM2CJfVperrlVjmB4B reads raw snapshots 0x20101340/48, copies them to the same clear banks, and synchronously dispatches entry zero of the linker-assembled _nrtIsr_linear_broker_flash table with the two-word snapshot. No member of the pinned libble_app, libbtdm_common or libbredr_app archives defines a __sublinear__F_nrtIsr_linear_broker_flash subscriber, so that dispatch has no callback in the pinned controller. Independent RMW users prove the remaining recorded source positions. Event names beyond the two CPU source identities remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBTDM_MODEM_LP_TIMER_IRQ"
+description = "Public espressif/esp32s31-bt-lib commit 7f20740dd66ee774ffce5db0b55507892551aa31, libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099, complete member 9.o symbols r_sym_bt_waDX0omCE7oLuPVSoPOK, r_sym_bt_FYr6kIOvDbNGoOHfaRvK and r_sym_bt_atiitVoBKMplOJVvjTHP. The initializer passes r_sym_bt_FYr6kIOvDbNGoOHfaRvK to wr_btdm_osal_intr_alloc with source 0x7f and caller flags zero. The complete 0x40-byte IRQ handler first reads 0x2010d038 and returns without calling the common timer handler when that word is zero. Otherwise it reads 0x2010d06c; zero joins the common timer-handler call without reading 0x2010d058. A nonzero 0x2010d06c freshly reads 0x2010d058 and tests exactly bit 2; a clear bit joins the timer-handler call, while a set bit causes a second fresh read of 0x2010d058, ORs exactly bit 1 into that second image, writes the result back, and then joins the same call. The complete 0x6c-byte call target r_sym_bt_atiitVoBKMplOJVvjTHP samples the low byte at 0x2010d024; when nonzero it publishes zero there, samples the low byte at 0x2010d02c, conditionally publishes zero there and advances a software environment word by 0x01000000, then invokes the timer-queue dispatcher. When the first low byte is zero it still samples and conditionally clears 0x2010d02c and advances the same software word, but skips queue dispatch. Both return paths end with a fresh read of 0x2010d024. The public same-chip unobfuscated older revision role-maps the pair as r_btdm_hal_rtc_irq_handler and r_btdm_hal_rtc_timer_handler. The evidence proves the exact positional register/branch order and the boundary between hardware acknowledgement and software timer state; it does not assign undocumented hardware meanings to the positional state bytes or make the vendor callback loop suitable for the source-owned no-RTOS runtime."
+
+[[sources]]
+id = "BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME"
+description = "Public espressif/esp32s31-bt-lib commit 7f20740dd66ee774ffce5db0b55507892551aa31, libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099, complete member 9.o symbols r_sym_bt_xPWv1Z87N9d40AR9yCcT, r_sym_bt_86dRVPWrmTMQpChjYeWi and r_sym_bt_VoUEVeWY4EiqyfQlgWT0. The 0x56-byte clock sample reads 0x2010d048 then the low byte at 0x2010d02c; on a nonzero byte it advances the software epoch by 0x01000000, freshly rereads 0x2010d048, clears 0x2010d02c, publishes one to 0x2010d024 and 0x00040000 to 0x2010d010, then returns the bitwise OR of the selected counter and epoch images. The 0x70-byte compare program first publishes 0x00040000 to 0x2010d014, samples the same counter/rollover pair and uses a fresh counter plus a locally advanced epoch when rollover is nonzero. A signed deadline delta at most two publishes one to 0x2010d024; a later delta below 0x01000000 publishes the deadline low 24 bits to 0x2010d06c; every other later delta publishes the selected counter plus 0x00800000 there. Every branch finishes by publishing 0x00040000 to 0x2010d010. The 0x96-byte queue dispatcher repeatedly removes due intrusive-list heads and calls function pointers, programs the first future deadline through the compare function, or publishes 0x00040000 to 0x2010d014 when empty. The evidence proves the finite hardware clock/compare transactions and separately identifies the vendor callback loop; it does not justify executing that loop in the source-owned hard handler."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_REGISTERS"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_sched.c member 18.o scheduler list and command transactions. They reconstruct list pointers as 0x2f000000 | (compressed_20_bit_value << 2), read the 20-bit compressed pointers at 0x201010c8/cc, publish pointer/list-index/START to 0x201010ec, and separately publish payload plus START bit 31 to 0x20101254 or 0x20101258. Wait paths take scheduler BUSY from a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC), inspect recorded command status bits and clear START. Complete 12-byte leaf r_sym_bt_iFvwGI2tL5M1WM3fIkHq reads 0x2010107c once and returns exactly bits 23:20 with every other result bit zero. The worker pop path r_sym_bt_WHYoiw8ufY0AEM2KSRK1 (0x7a) is the exclusive reviewed controller accessor for this transfer: it copies the low 16 bits of 0x2010125c into a zero-high image at 0x20101260 and, when the combined hardware/software image is nonzero, synchronously dispatches it through entry five of the linker-assembled _btdm_sched_linear_broker_flash table, whose BLE subscriber is libble_app brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV (the r_sched_txn_onSchedHwListDone role; the unobfuscated BR/EDR subscriber of the same entry is btdm_common_sched_bredr_on_sched_hw_list_done). The raw ISR does not read 0x2010125c, and no reviewed body proves an IRQ-source-to-finished-mask relation or the clear/re-arm effect of the report write. Command opcodes and other status meanings remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8). Every scheduler BUSY sample in the command paths samples the MAC diagnostic pair instead of SCHEDULER_STATE: complete member 18.o symbols r_sym_bt_EabYtUaAIR05LXw3qZSA (0x10e), r_sym_bt_4KfpZh0Hu5NprlqcNu0D (0xf4), r_sym_bt_9H3AnHbaHJ3auzSvPDme (0x11a), r_sym_bt_B8fDByebTHuwRe8FZuRt (0x88), r_sym_bt_DkrQYQcoyzIHdYi0CzWE (0x140), r_sym_bt_FCfM3hAXphsk1qERleGZ (0x88), r_sym_bt_KmzLfKJ5UUi7zkqz1Nwn (0xc4), r_sym_bt_VrTmsQfPlkmys4UL0NZp (0x1d8), r_sym_bt_qkNMymdnaJnYUfzpKgEp (0x2e0), r_sym_bt_vibwBXogwGafrHSYUbon (0x1be) and r_sym_bt_74l62ZLsZuXg67pPHSd7 (0xce), member 19.o r_sym_bt_zwu3w1OKSOTGoGdV7TSf (0x76), member 8.o r_sym_bt_t4aeyhcVrKTNMSlq45XR (0x5e) and the source-124 reference gate in member 7.o r_sym_bt_R9GZfnUbtn7k6mHtoZbv (0xba). Each sample writes the complete image 0x38 to 0x201011e8, reads 0x201011ec until two consecutive complete reads are equal, and tests bit 7 of the accepted image; a set bit takes the path the 7f20740 bodies took for a set SCHEDULER_STATE.BUSY (bit 31 of 0x2010107c), and no body inserts a fence between the selector write and the reads. The reference gate publishes the zero SCHEDULER_REFERENCE image only for a clear bit 7 and no longer reads 0x2010107c. The deferred-work predicate r_sym_bt_37HcX0qW6j1XVtKakUIG (member 8.o, 0x50) still reads bits 31 and 29 of 0x2010107c, and the current-link-index leaf r_sym_bt_iFvwGI2tL5M1WM3fIkHq still returns its bits 23:20. FCfM keeps its 7f20740 predicate order: a set bit 7 skips both command reads, then SCHEDULER_COMMAND_0.STATUS_26 gates SCHEDULER_COMMAND_1.STATUS_18, with an assertion after 10,000 attempts. The bodies prove the selector image, the stable double read and the BUSY bit position; they do not name the diagnostic signal."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_EXECUTION_MODIFY"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member 18.o symbol r_sym_bt_rPoPGH6BBYjZaunDU5FV (0x16a, the r_btdm_sched_execution_modify role of commit 31c3094). Inside the hardware critical section it repeats one attempt: it calls r_sym_bt_B8fDByebTHuwRe8FZuRt (return once a diagnostic BUSY sample is clear or, while busy, once SCHEDULER_COMMAND_0.STATUS_26 and SCHEDULER_COMMAND_1.STATUS_18 are both set), writes the complete selector image 0xc01 to 0x201011e8 and publishes the list mask, the mode bit 16 when requested and START bit 31 to 0x20101258. It then reads 0x201011ec until two consecutive complete reads are equal; while bits 2:0 hold 2, or hold 3 with bits 13:12 equal to 1, it marks the attempt for repetition and samples again. It next waits while a diagnostic BUSY sample (image 0x38) is set and SCHEDULER_COMMAND_1 bit 17 is clear, asserting after 9999 iterations, writes the complete image 7 to 0x201011e8 and waits until a stable complete value differs from 9. A marked attempt clears START and starts over; otherwise it leaves the critical section and asserts that bit 19 is clear. The body proves the selector images, lane positions, compared values and ordering; it does not name the selected signals."
+
+[[sources]]
+id = "BLOB_LIBBLE_DIAGNOSTIC_STATUS_DUMP"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) unobfuscated member base_3.o symbol api_base_ll_dumpDebugStatus (0x10e) and member ble_74.o symbol r_esp_ble_diag_select (0x20). The dump writes 0x55 to 0x201011f0 and 0xfff to 0x20101248, then for i = 0..142 writes to 0x201011e8 the OR of 4i, (4i+1) << 8, (4i+2) << 16 and (4i+3) << 24, reads 0x201011ec until two consecutive complete reads are equal and logs the accepted word. For i below 64 each byte lane carries one signal number, which indicates four eight-bit selector lanes; later iterations overlap adjacent lanes. The body names the pair as the MAC diagnostic selector and value and proves the stable double read; it does not name individual signals. r_esp_ble_diag_select writes the same enable images and routes its three arguments to 0x201011e0, 0x201011d8 and 0x201011dc, the diagnostic GPIO outputs."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_SOFTWARE_LIST_REMOVAL"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member 18.o symbol r_sym_bt_FCfM3hAXphsk1qERleGZ (0x88), and libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member sched_3.o symbol r_sym_sched_4yOHdQa50AXnZAom3x3f (0x12a), which oer-symbol-lineage carries from the named r_sched_txn_removeSwList of commit 31c3094. The caller mutates its software-list links before conditionally tail-calling the helper; neither body accepts a primary-event argument, acknowledges an interrupt or proves that command readiness raises source 124. Each helper attempt first takes a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC); a set value skips both command reads. An idle sample reads SCHEDULER_COMMAND_0.STATUS_26; a clear value skips the second command. Only a set STATUS_26 causes a read of SCHEDULER_COMMAND_1.STATUS_18, and only a set STATUS_18 returns. After 10,000 non-ready attempts the vendor body asserts with fresh complete command-word images and resumes waiting. The open implementation retains the proven short-circuit predicate and read order as one finite event-driven observation. Its opaque pairing with an already captured, acknowledged and durably published post-unlink primary carrier has no public constructor until a session owner proves temporal order; this is a conservative ownership split, not vendor evidence of source-124 causality or a guaranteed Pending retry wake; it does not reproduce the diagnostic loop or assign undocumented meanings to the two positional status fields."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_LIFECYCLE"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_sched.c member 18.o symbols r_sym_bt_74l62ZLsZuXg67pPHSd7 (0xce), r_sym_bt_B8fDByebTHuwRe8FZuRt (0x88), r_sym_bt_HGbPEa9oUCsYybIAWjE0 (0xe) and r_sym_bt_XPuqTHliEO5V9xpR7aJR (0x94). The first is reached from both r_btdm_task_disable and r_btdm_task_shutdown. It first takes a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC) and returns without a lifecycle write when BUSY is clear. On the busy path it masks dynamic IRQ bank-zero sources 21/27/28 and bank-one source 3, synchronously dispatches entry two of the linker-assembled _btdm_sched_linear_broker_ram table with argument zero, whose only subscriber is libble_app brk_sym_scan_fd4yzdFac8vdFTlQ4BPA clearing bit 14 of 0x201014b4 (BTMAC scheduler-run source 14), and invokes B8f before publishing the finite complete image 1 to 0x20101004. B8f returns once a fresh BUSY sample is clear; while BUSY remains set it requires SCHEDULER_COMMAND_0.STATUS_26 followed by SCHEDULER_COMMAND_1.STATUS_18 before returning. Only after that preamble does 74l publish the request and wait for BUSY to clear. This proves the whole-word image and complete ordering, but not a hardware STOP command semantic or a source-owned async wake for either wait. The open finite lifecycle transaction preserves that preamble and ordering, uses caller-owned absolute-deadline rechecks instead of vendor polling, and keeps stopped-item head retirement and software/memory ownership as separate proofs. This is source coverage, not hardware qualification or whole-function semantic equivalence. The 14-byte config builder publishes complete integer images 40 and 46. The init body zeroes its software list heads and finished mask, clears bits 0..19 of exactly sixteen stride-0x10 words at 0x2010b000..0x2010b0f0 while preserving their upper twelve bits, copies the two config values and initializes one recycle event; unlike 7f20740 it attaches no broker source, because the linear broker tables are assembled at link time. oer-symbol-lineage carries the helper names r_btdm_sched_dft_cfg_build and r_btdm_sched_init from commit 31c3094. The open implementation retains the policy in a typed software value and replaces the event, task and broker containers with one pristine static runtime epoch; it does not make the numeric broker entries an open ABI. The observations establish lifecycle transactions and array geometry; the hardware meaning of the lifecycle request and entry payload remains unknown."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_HEAD_PUBLICATION"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_sched.c member 18.o symbols r_sym_bt_EabYtUaAIR05LXw3qZSA (0x10e), r_sym_bt_4KfpZh0Hu5NprlqcNu0D (0xf4), r_sym_bt_DPWY0umixzmXEaFuUyCI (0x1c) and r_sym_bt_PVKilXLQPu1BjRkm4C6O (0x30). The first reads bits 0..19 from 0x2010b000 + list_index * 0x10 and reconstructs zero or 0x2f000000 | (image << 2). The second replaces those same low twenty bits with an SRAM item address shifted right by two while preserving bits 20..31; its result-four and result-five paths independently clear START in SCHEDULER_COMMAND_0 and SCHEDULER_COMMAND_1. Its successful publication path calls the 28-byte leaf. That leaf first calls the run prologue and writes complete image 1 to SCHEDULER_CONTROL when the prologue returns zero. The complete prologue always returns zero after calling the exact dynamic IRQ clear and enable helpers and synchronously dispatching entry one of the linker-assembled _btdm_sched_linear_broker_ram table with argument zero. Thus the branch is not a runtime predicate, and the hardware command is the final action of the larger scheduler-run operation. oer-symbol-lineage carries the roles r_btdm_sched_insertion_begin, r_btdm_sched_insertion_end, r_btdm_sched_run and the hardware-list-header leaves from commit 31c3094; these current bodies establish the physical field, table geometry and ordering."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_RUN_EVENT"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member 18.o r_sym_bt_PVKilXLQPu1BjRkm4C6O synchronously dispatches entry one of the linker-assembled _btdm_sched_linear_broker_ram table with argument zero after dynamic interrupt preparation and before RUN. In libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) the only subscriber of that entry, recorded by the entry-index byte of its .subinfo descriptor, is complete member scan_2.o brk_sym_scan_b8ogEC3hTjGmqL5oRuyw: it writes only bit 14 to 0x201014b8 and then sets bit 14 at 0x201014b4 through a fresh-read RMW. The subscriber of entry two, brk_sym_scan_fd4yzdFac8vdFTlQ4BPA, clears bit 14 at 0x201014b4. The complete base-stack ISR hook brk_sym_base_QIE6fqExGJrsGUIGYNSf (r_base_stack_on_hal_enter_isr in commit 31c3094) writes its sampled pending-source image to 0x201014b8, while the BLE PHY register initializer writes all ones there, establishing the write-one-to-clear interrupt-bank role. The open implementation replaces the generic broker dispatch with this exact synchronous clear-then-enable transaction; it does not turn the entry into an asynchronous worker event."
+
+[[sources]]
+id = "BLOB_LIBBTDM_HAL_CONTROLLER_INIT"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_hal.c member 7.o symbol r_sym_bt_aGdrujd2MUAzWYH75baR, its complete config setter r_sym_bt_BOhffsuJp3HZRA44ZYRn, its byte-scaling helper and caller r_btdm_task_init in member 20.o. The caller constructs positional bytes 16, 11 and 33, complete image 2000 and SRAM base 0x2f000000. The setter accepts first byte 8 or 16 and complete image 500, 1000 or 2000, maps the latter to selector 2, 1 or 0 in the same config object, and copies the remaining inputs. The helper uses that selector: byte values are shifted right one, retained, or shifted left one respectively. Therefore the reviewed caller produces sleep-control shift 3 and HAL bytes 22 and 66; no vendor structure layout is required by the production API. The HAL body performs exactly 49 ordered writes/RMWs across 0x20101074/84/90/dc/e0, 0x201011c0/c4, 0x20101250/7c and 0x2010134c/50. Its sixteen-iteration loop covers two adjacent words with eight four-bit lanes each: for every lane it first clears nibble mask 0xc through a fresh-read RMW, then through another fresh read ORs 1 | ((global_index & 3) << 1). Thus bit zero is set, bit one is preserved-or-set, bit two is replaced and bit three is cleared; the transaction is not a complete lane assignment on arbitrary input. Unlike the fa22a8a2 body it no longer follows the 0x201010dc update with a second 0x20101090 RMW that set bit 24 for the eight-scale and cleared bits 25..31; the pinned sleep-timer paths leave those bits to their own transactions. Every address, mask, constant and ordering claim comes from these complete bodies. HAL_INIT and positional names intentionally do not assign undocumented controller semantics."
+
+[[sources]]
+id = "BLOB_LIBBTDM_RUNTIME_CONTROL"
+description = "_oracles/libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099; complete direct MMIO users in the low-level member 9.o and btdm_sleep.c member 20.o. They prove the sparse 0x20108800/08/2c..48 and 0x2010d000..78 register set, all recorded access directions, finite complete images, dynamic low-24-bit publications and independent bit RMWs. The source establishes BTDM runtime/sleep ownership but not the undocumented meaning of positional words; no field name below is inferred from address adjacency."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_RUNTIME_TIMER_ROLE"
+description = "Current public espressif/esp32s31-bt-lib libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099 complete member 9.o symbol r_sym_bt_ymLPVGRY14FVW494j9ZD is a ten-byte leaf that writes complete image 1 to 0x2010d000 and returns. Public same-chip commit 31c30949541a5d3abd4043a1cb66d55aa55577dd complete unobfuscated btdm_hal_rtc.c.o symbol r_btdm_hal_rtc_start is instruction-identical. Its sole caller r_btdm_hal_enable invokes it after controller hardware initialization and controller-output preparation and before primary CPU-route allocation. The same historical object names the complete timer-initialization role r_btdm_hal_rtc_init; current complete member 9.o symbol r_sym_bt_waDX0omCE7oLuPVSoPOK is the exact geometry and order authority for the changed seven-write plus fresh-read/RMW initialization body. The historical name is role evidence only where the bodies differ."
+
+[[sources]]
+id = "BLOB_LIBBLE_CONTROLLER_OPERATIONAL_GAPS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member ble_51.o symbols r_sym_ble_izRwciSMhvv39tBPsJHF (size 0x240) and r_sym_ble_7jv3TlgP4OsXtyxLLgrv (size 0x122). The first performs two complete zero writes each to 0x2010108c and 0x201010b8. The second publishes complete dynamic images to 0x20108804. Function roles remain unnamed; the evidence proves only physical ownership, direction, values and complete-word geometry."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbols r_sym_bt_DkrQYQcoyzIHdYi0CzWE (0x140), r_sym_bt_qkNMymdnaJnYUfzpKgEp (0x2e0) and r_sym_bt_VrTmsQfPlkmys4UL0NZp (0x1d8). Their direct controller-window accesses prove bit-zero set/clear RMWs at 0x20101204, complete reads plus publications of 0x80000000 | dynamic_low_20 at 0x20101218, complete reads at 0x20101324 and complete dynamic publications plus independent low-nibble clears at 0x2010136c. Positional names deliberately retain the unknown operation semantics."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_INSERTION_BRANCH"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbols r_sym_bt_EabYtUaAIR05LXw3qZSA (0x10e), r_sym_bt_4KfpZh0Hu5NprlqcNu0D (0xf4), r_sym_bt_YRnBzKlWCjsIbotqvNyS (0x232) and r_sym_bt_VrTmsQfPlkmys4UL0NZp (0x1d8). The complete insert wrapper calls Eab, then YRn, and reaches the lock/modify request only when Eab returned positional outcome four and the environment gate is enabled. The request pointer is loaded from YRn's first output, with a separate manager-current fallback; it is not unconditionally the originally submitted item. Complete Eab returns outcome three on its scheduler-idle edge, taken from a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC), four after the command-zero execution-lock edge and five on the current-head path. Complete 4Kfp independently clears command-zero START for outcome four, handles head publication plus command-one clear for outcome five, and owns the remaining conditional head/RUN path. Positional names deliberately retain semantics not established by the current archive alone."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_EMPTY_LIST_MERGE"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) complete member 18.o symbol r_sym_bt_YRnBzKlWCjsIbotqvNyS (0x232), which oer-symbol-lineage carries from the named r_btdm_sched_merge_list_remove_overlap of public same-chip commit 31c30949541a5d3abd4043a1cb66d55aa55577dd. With a non-null submitted item, empty manager head/tail/current slots and the DTM item's cleared positional flag at +0x4f.3, the remove-unshareable helper r_sym_bt_E8c5Eimm0z6kYe9v4wHr receives a null candidate and returns without mutation. The merge clears item control byte +0x4e, installs the in-flight status at +0x38, clears the software-next word at +0x50, clears only the low-twenty-bit compressed hardware-next link at item +0x00 while preserving its upper allocation image, installs the submitted item as all three source manager references and first selected-item output, and returns positional result seven. The open controller-memory transition owns only the item writes; the source-owned Rust scheduler epoch replaces the vendor manager container rather than reproducing its ABI. This source proves the first insertion into an independently established empty epoch only and grants no non-empty merge, visibility, MMIO publication or completion authority."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_INSERTION_EXECUTION_COMMANDS"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbols r_sym_bt_9H3AnHbaHJ3auzSvPDme (0x11a), called by complete insertion-begin r_sym_bt_EabYtUaAIR05LXw3qZSA (0x10e). The first waits for the command drain of r_sym_bt_B8fDByebTHuwRe8FZuRt, enters the hardware critical section and publishes SCHEDULER_COMMAND_0 as START, zero-based hardware-list index in bits 23:20 and the four-byte-compressed selected-item address in bits 19:0. While a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC) stays set it observes STATUS_24; once that field is set it retains exactly bits 29:27 as the positional execution-lock result, and an idle sample returns failure. Result zero keeps the command-zero lock for begin outcome four. The body asserts for positional results one, three and four; every nonzero result then returns failure, so results two, five, six and seven enter current-head reconciliation as an ordinary failed lock. After 10,000 busy attempts without STATUS_24 it asserts with both complete command words and resumes waiting. Insertion-begin then passes a one-hot sixteen-list mask and selector zero to r_sym_bt_rPoPGH6BBYjZaunDU5FV before current-head reconciliation. In libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099 of espressif/esp32s31-bt-lib 7f20740dd66ee774ffce5db0b55507892551aa31 member 19.o, that second function published the mask plus START to SCHEDULER_COMMAND_1, waited only while SCHEDULER_STATE.BUSY was set and STATUS_17 clear, and required STATUS_19 clear; the pinned body replaces this with a different diagnostic-selector protocol, which this source does not yet review. oer-symbol-lineage carries the named roles r_btdm_sched_execution_lock and r_btdm_sched_execution_modify from commit 31c3094."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_INSERTION_END_BRANCH"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbol r_sym_bt_4KfpZh0Hu5NprlqcNu0D (0xf4). Positional begin outcome four first clears SCHEDULER_COMMAND_0.START. Outcome five first publishes the submitted item as hardware-list head and then clears SCHEDULER_COMMAND_1.START. Both then enter the common continuation. The body next takes a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC) and returns without later publication while busy. Once idle it calls the current instruction-corresponding r_btdm_sleep_is_enabled role. A disabled result publishes the manager software-list head and returns without RUN. An enabled result reads submitted-item status +0x38: a value other than the established in-flight sentinel returns without later MMIO, while the sentinel path publishes the submitted item as head, executes the mapped scheduler-run function and returns. The older named same-chip insertion-end supplies role names only; the BUSY observation order and the manager-head and item-status branches come solely from this complete current body."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_SCHEDULER_ROLES"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c, contains unobfuscated btdm_sched.c.o, btdm_hal_link.c.o and btdm_broker.c.o. oer-symbol-lineage carries its names to the pinned libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8). Named r_btdm_sched_insert_with_lock_modify (0x154) has the control flow and call sequence of current r_sym_bt_VrTmsQfPlkmys4UL0NZp (0x1d8). The current body waits while a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC) and 0x20101218 bit 31 are both set, replaces the low nibble of 0x2010136c, publishes START plus the compressed pointer, repeats the same wait and reports positional diagnostic result zero when the scheduler is idle or bits 30:27 of the request word read before that BUSY sample otherwise. Named 12-byte r_btdm_sched_get_current_link_index is instruction-identical to current 12-byte r_sym_bt_iFvwGI2tL5M1WM3fIkHq; both return exactly 0x2010107c bits 23:20. The same historical object supplies the roles r_btdm_sched_skip_specified_sch (current r_sym_bt_DkrQYQcoyzIHdYi0CzWE), r_btdm_sched_delete_specified_items (r_sym_bt_qkNMymdnaJnYUfzpKgEp), r_btdm_sched_insertion_begin, r_btdm_sched_insertion_end, r_btdm_sched_get_hw_list_header, r_btdm_sched_set_hw_list_header and r_btdm_sched_run for the current call graph. The named header leaves use the same sixteen-entry stride-0x10 table, preserve its upper twelve bits and encode zero or a four-byte-aligned 0x2f-prefixed SRAM address in bits 0..19. The named insertion-end has the same result-four/result-five command START clears, head publication and run call structure as current r_sym_bt_4KfpZh0Hu5NprlqcNu0D. The named run body calls r_btdm_hal_link_basic_irq_clear, r_btdm_hal_link_basic_irq_enable and r_btdm_broker_publish with selector two and argument zero before writing complete image 1 to SCHEDULER_CONTROL; the named IRQ helpers are instruction-identical to current r_sym_bt_DOVkQWJHjeuid8jcS9Bq and r_sym_bt_6lAYUFKOuBLyOZ6Kvsv5, and the current run prologue dispatches the linker-assembled linear broker entry one instead of the attached broker selector. This earlier same-chip revision is role-only evidence; all current addresses, masks, ordering and result extraction come independently from the current ESP32-S31 archive pinned by the BLOB sources."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_CANCELLATION"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 8.o symbol r_sym_bt_t4aeyhcVrKTNMSlq45XR (0x5e) and member 18.o symbols r_sym_bt_qkNMymdnaJnYUfzpKgEp (0x2e0) and r_sym_bt_DkrQYQcoyzIHdYi0CzWE (0x140). The first publishes 0x201010ec as bit 31 START, the zero-based hardware-list index in bits 23:20 and the four-byte-compressed item pointer in bits 19:0, waits while both a diagnostic BUSY sample and START are set, returns bits 29:28 or four when BUSY cleared first, and writes zero to the complete word. The two callers set item word bit 25 on every item they pass to it. qkNM enters its skip sequence only after a set BUSY sample; DkrQ has no BUSY precondition. When the scheduler environment enables lock/modify, both wait while 0x20101218 bit 31 is set, clear and then publish the list index in 0x2010136c bits 7:4 through fresh-read updates, write complete image 0x80 to 0x20101058, set 0x20101204 bit 0, wait while BUSY is set and 0x20101324 bit 0 is clear, wait while BUSY is set and 0x20101208 bit 0 is set, and finally clear 0x20101204 bit 0. Every BUSY test in these bodies is a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC). qkNM brackets its per-item skip requests with this sequence and ends the loop on skip result two or four; DkrQ performs its skip requests first and the sequence afterwards. Result zero reaches the vendor assertion in both callers. The hardware effect of the skip request and of 0x20101204 bit 0 is not established."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c. Named btdm_hal_link.c.o r_btdm_hal_link_skip_specified_tl (0x4a), btdm_sched.c.o r_btdm_sched_delete_specified_items (0x2b0) and r_btdm_sched_skip_specified_sch (0x138) are the roles oer-symbol-lineage carries to current r_sym_bt_t4aeyhcVrKTNMSlq45XR, r_sym_bt_qkNMymdnaJnYUfzpKgEp and r_sym_bt_DkrQYQcoyzIHdYi0CzWE. The current bodies keep the named control flow and replace each scheduler-state BUSY read with a diagnostic BUSY sample. This earlier revision supplies role names only; current register behavior comes from the pinned current archive."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_LIST_DELETION"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbol r_sym_bt_KmzLfKJ5UUi7zkqz1Nwn (0xc4). After calling a sleep-path function it forwards a non-null item chain to r_sym_bt_qkNMymdnaJnYUfzpKgEp. Without a chain it clears the software list's current, head and tail words and, for a non-negative hardware-list index, takes a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC): a clear sample clears the head pointer field of that list directly; a set sample calls r_sym_bt_rPoPGH6BBYjZaunDU5FV with the one-hot list mask and mode argument one, clears the head pointer field and clears SCHEDULER_COMMAND_1.START. In libbtdm_common.a sha256 fa22a8a2aca48b807addda2bbad78868d6774c82bcdeb8090f9140f6cbccd099 of espressif/esp32s31-bt-lib 7f20740dd66ee774ffce5db0b55507892551aa31 member 19.o, the called function published the mask plus START with mode bit 16 to SCHEDULER_COMMAND_1; its pinned diagnostic-selector protocol is not yet reviewed here. The effect of the mode bit is not established."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_DELETION_ROLE"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c. Named btdm_sched.c.o r_btdm_sched_delete_from_list (0x80) has the same chain forwarding and whole-list deletion branches as current r_sym_bt_KmzLfKJ5UUi7zkqz1Nwn, which adds the leading sleep-path call and takes BUSY from the diagnostic pair; named r_btdm_sched_execution_modify is the role of current r_sym_bt_rPoPGH6BBYjZaunDU5FV. This earlier revision supplies role names only; current register behavior comes from the pinned current archive."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_SCHEDULER_LIST_INDEX"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c and initial libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63 retain unobfuscated scheduler list roles. Named r_sched_txn_insertIntoList loads the signed zero-based hardware-list index from scheduler-manager byte +0x18 and passes it as the third argument to r_btdm_sched_insert_with_lock_modify. That body uses the same value for insertion begin/end, the sixteen-entry hardware-list table and the 0x2010136c low nibble. Its current counterpart r_sym_bt_VrTmsQfPlkmys4UL0NZp in libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) independently establishes the register geometry and ordering. Current DTM allocation and event bodies match the named path: their separately allocated 0x48-byte zeroed scheduler context embeds the manager at +0x2c, so the manager's list-index byte at context +0x44 is zero and DTM is assigned hardware list zero."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_TIME_ROLES"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c and initial libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63 retain unobfuscated controller-time roles. Exact body and size comparison maps named r_btdm_sleep_timer_ticks_get (0xb2) to pinned r_sym_bt_KrvfcwDw4eZoaTPVdFj5 (0xd8, whose always-awake path keeps the named body and whose added low-power branch estimates time from the RTC), named r_sched_timer_convertTimeToUs (0x4e) to current r_sym_sched_TYdJzWTeOAsagss1aIFj (0x4e), named r_sched_timer_convertTimeToTicks (0x42) to current r_sym_sched_sNmTBa8gkKuVLZu7GU1A (0x42), and named r_btdm_hal_util_ticks_to_us (0x34) to current r_sym_bt_RJ9vWjyuZJabuhkGCaRp (0x34). The same complete-body comparison maps named r_sched_timer_init (0x3c), r_sched_timer_on_task_enable (0x4), r_sched_timer_on_task_run (0x4c) and r_sched_timer_updateRefTime (0x6c) to pinned libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) member sched_2.o symbols r_sym_sched_4bmSl1BmzE5nJghzSx18, r_sym_sched_fDm6cgOYa2vbgM6NW6KG, r_sym_sched_nNWZOVojOrSuyuiwQ3OR and r_sym_sched_2ZpHIzRzIyx8b2ictYDG respectively. Init zeroes both reference images; task-enable is a no-op; task-run tail-calls the reference update. The update samples raw time, converts the wrapping delta from the prior raw reference while retaining the helper remainder, then stores sampled raw time minus that remainder and advances the scheduler reference by the converted quotient. The complete config setter r_sym_bt_BOhffsuJp3HZRA44ZYRn stores the period-dependent software selector 2/1/0 for period images 500/1000/2000 in the byte read by the conversion helper. This selector is distinct from the hardware sleep-timer divider. For standalone selector zero, the first update from zero references retains sample modulo two as a raw-tick remainder: raw_anchor=sample-(sample modulo two), scheduler_anchor=sample/2. The pinned libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 and libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 independently prove the always-awake register order and arithmetic; the same member also exports the unobfuscated r_sched_timer_getCurrentTimeU32 (0x26), which returns zero before scheduler initialization and otherwise converts the r_sym_bt_KrvfcwDw4eZoaTPVdFj5 sample through r_sym_sched_TYdJzWTeOAsagss1aIFj. This earlier same-chip revision supplies role names only; it does not establish a public physical time unit, effective counter width or low-power RTC-path contract."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BT_TIME_MICROSECOND_DOMAIN"
+description = "The pinned ESP32-S31 bodies (libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723, espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) and the named same-chip roles jointly establish the always-awake software time unit without importing a vendor ABI. The first DTM event body sym_dtm_2zeOUjc7g55zkDNQuZkg in member dtm_4.o obtains r_sched_timer_getCurrentTimeU32, which converts the r_btdm_sleep_timer_ticks_get sample through r_sched_timer_convertTimeToUs (r_sym_sched_TYdJzWTeOAsagss1aIFj), adds the microsecond LLL lead, the independently recovered literal 500 and the scheduler margin, compares the result with the RF-ready time that r_sym_bt_Ceh2khbCcopEBybBO6Z5 feeds through the same conversion, and passes both descriptor boundaries, built with literal 1000 or the microsecond packet airtime, through r_sched_timer_convertTimeToTicks (r_sym_sched_sNmTBa8gkKuVLZu7GU1A). The named r_btdm_hal_util_ticks_to_us body implements the selected scale, and the inverse helper implements the reverse projection with an explicit remainder. The complete config setter r_sym_bt_BOhffsuJp3HZRA44ZYRn (member 7.o, 0x10e) writes software selector zero for standalone period image 2000; the conversion helper reads that selector and takes its right-shift-by-one branch with the discarded raw tick as remainder. One standalone raw tick therefore equals half a microsecond. The sleep-timer hardware divider image three is a separate configuration value and is not the software conversion selector. This establishes the unit and conversion used by the open always-awake DTM scheduler; it does not establish effective counter width, sleep-enabled wake causality, or the independent source-127 low-power RTC frequency."
+
+[[sources]]
+id = "PUBLIC_ESP32S31_BLE_COMPLETION_ROLES"
+description = "Public espressif/esp32s31-bt-lib Git commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63 and initial libbtdm_common.a sha256 bd9007072c6ab94df5f29d8b96dc65a69cb4406568c75a64022c8121e242b96c, retain unobfuscated scheduler and DTM roles. oer-symbol-lineage carries r_sched_txn_onSchedHwListDone (0x1ca) to current libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV (0x1ca) and r_ble_lll_dtm_recycle_sch_item (0x144) to current sym_dtm_ifYtgHeQ0rvhqeqBbpl1 (0x172), and in libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8) r_btdm_sched_pick_finished_items to r_sym_bt_M9nG353V0svWrv1l1zGw (0x144), r_btdm_recycle_in_task to r_sym_bt_uNi9OHmE7XdXfGqTelU5 (0x6a), r_btdm_sched_pop_executed_sch to r_sym_bt_WHYoiw8ufY0AEM2KSRK1 (0x7a) and r_btdm_recycle_process_dequeued_sch to r_sym_bt_QsLKLOCC2pct4rL8uFBN (0x6c). The pinned pick-finished body waits for the command drain of r_sym_bt_B8fDByebTHuwRe8FZuRt before asserting that the hardware-list head no longer names each picked item. Current complete bodies independently establish the finished-list, software completed-queue and item callback behavior; the earlier archive supplies role names only and no current MMIO or ABI claims."
+
+[[sources]]
+id = "BLOB_LIBBLE_DTM_PACKET_HEADER_BINDING"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member memMgmt_3.o r_sym_memMgmt_2LOgKQI4pa8z243VUnLR and member dtm_4.o sym_dtm_25YOj8pPkiCiy504xJbR establish the DTM TX allocation graph. The former stores the compressed packet base at header +0x04, compressed packet+0x10 at header +0x08, and the DTM-supplied full-capacity profile at header +0x10; the latter writes the standard no-CTE LE Test PDU header at packet +0x10, length at +0x11 and declared payload at +0x12. Public same-chip commit 31c30949541a5d3abd4043a1cb66d55aa55577dd, initial libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63, retains the named r_ble_lll_mmgmt_alloc_tx_buffer_and_hdr and r_ble_lll_dtm_tx_create_ctx roles those bodies correspond to. Complete member memMgmt_3.o r_sym_memMgmt_vqXcstfse8788iyCxlJf and r_sym_memMgmt_wH5HONweyQB0WZipVFDn allocate the RX packet and place its compressed base in the bound RX header. This proves exact CPU producer bindings in the controller-visible graph, not a field-specific packet-engine reader or physical meaning for the opaque high header lanes."
+
+[[sources]]
+id = "BLOB_LIBBLE_DTM_LINK_STATE_RESET_PROFILE"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member dtm_4.o symbol sym_dtm_7gOGApwmDG1TxZOfQhrh is 0x120 bytes, and oer-symbol-lineage pairs it with r_ble_lll_dtm_reset_link_state of public same-chip commit 31c30949541a5d3abd4043a1cb66d55aa55577dd (initial libble_app.a sha256 ec10a20eaf869f7cd2300100fe54826980525911f8417206af5a0745a9f85f63), whose complete named body independently ORs bit 27 followed by bit 26. The pinned body likewise ORs bit 27 and then bit 26 into link-state word +0x14 on every path, the aggregate (old & 0xf3ffffff) | 0x0c000000. This proves the aggregate DTM reset profile at +0x14[27:26]. It does not establish separate names or field-specific hardware consumers for the two selected bits."
+
+[[sources]]
+id = "BLOB_LIBBLE_DTM_RX_RSSI"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); member esp_1.o symbol esp_ble_get_dtm_rx_rssi (0x8) tail-calls member dtm_2.o sym_dtm_ydFzYkQJZ1ArZKhfWxJ5 (0x8), which tail-calls complete member dtm_4.o sym_dtm_JMPstxdIRcEVY1YJeXkA (0x1c). The target follows the DTM environment and returns byte +0xb9 with signed lb, or 127 without an environment; environment resets also store 127. Complete member dtm_4.o sym_dtm_ikQ7xyHA5qBHWlaqAjZu copies returned RX packet result byte +0x0f into the same environment byte only after accepting a zero low-24 result image. This proves the copied high byte is a signed DTM RSSI value. It does not establish a physical unit, calibration, or meanings for the rejected low 24 bits."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SCHEDULER_WAIT_TAIL"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 18.o symbols r_sym_bt_DkrQYQcoyzIHdYi0CzWE (0x140) and r_sym_bt_qkNMymdnaJnYUfzpKgEp (0x2e0). Both complete functions share the same controller wait tail. After setting 0x20101204 bit zero, software first observes 0x20101324 bit zero against a diagnostic BUSY sample (BLOB_LIBBTDM_SCHEDULER_STATUS_DIAGNOSTIC), then observes 0x20101208 bit zero against a fresh sample of the same BUSY bit, and finally clears 0x20101204 bit zero. The second predicate continues while 0x20101208 bit zero is one. The evidence assigns no meaning to that bit or to the unconsumed bits."
+
+[[sources]]
+id = "BLOB_LIBBTDM_RUNTIME_OPERATIONAL_GAPS"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete member 19.o symbols r_sym_bt_aOsjkDNQyOII2OseK6av (0x372), r_sym_bt_1Gbu522bM6JExNgRaco7 and r_sym_bt_32zs9B7Gv9vHIVpsl2A7 (0x1cc). aOsjk publishes the finite complete image 0x10 to 0x20108804, reads 0x2010d064, clears the complete word at 0x2010d01c and reads it twice, and later publishes a dynamic complete image to 0x2010d064. 1Gbu publishes the finite complete images 0x80, 0x40 and 0x800 to 0x20108804. The fa22a8a2 revision issued the 0x80 and 0x40 images from aOsjk; the pinned 32zs no longer touches these words. No undocumented operation meaning is assigned."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SLEEP_TIMER_REGISTERS"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_sleep.c paths. The timer-programming paths r_sym_bt_Om3oeseqyzxJTVgbw4Wp (member 18.o), r_sym_bt_HkSB5rY0aoJLnHldAOO9 and r_sym_bt_zwu3w1OKSOTGoGdV7TSf (member 19.o) write the first computed word to 0x20101094 and, in the latter two, words to 0x20101098 and 0x2010109c, then set bit 31 in 0x20101090. The time-read paths r_sym_bt_KrvfcwDw4eZoaTPVdFj5, r_sym_bt_32zs9B7Gv9vHIVpsl2A7, r_sym_bt_aOsjkDNQyOII2OseK6av (member 19.o) and r_sym_bt_1oCMtmOT1H9hQJgJtlO1 (member 15.o) set bit 26, wait for hardware to clear it, and then consume the latched controller time from 0x201010ac. The controller HAL initialization (BLOB_LIBBTDM_HAL_CONTROLLER_INIT) publishes control bits 0..2 and, unlike fa22a8a2, no longer rewrites bits 24..31. The evidence establishes a sleep-timer transaction but does not assign inner counter/window semantics to the three data words."
+
+[[sources]]
+id = "BLOB_LIBBTDM_SLEEP_TIMER_SNAPSHOT"
+description = "libbtdm_common.a sha256 389561cead8a68444b46118fb606d5742813c88f8a37c43d22be271aaa4bdb41 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete btdm_sleep.c member 19.o symbol r_sym_bt_32zs9B7Gv9vHIVpsl2A7 and member 15.o symbol r_sym_bt_1oCMtmOT1H9hQJgJtlO1. Each sets 0x20101090 bit 26, waits for hardware to clear it, then reads the ordered snapshot words at 0x201010ac, 0x201010b0 and 0x201010b4; 32zs stores them into software-state offsets 0x2c, 0x30 and 0x34. The order and whole-word widths are proven; inner counter or window meanings remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBLE_CONTROLLER_TRANSACTION_WORDS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); direct instruction evidence from member ble_59.o symbols r_sym_ble_8UF9MdmrIB3xzJL37y69 and r_sym_ble_ayzkbWXdt7oT4JBQ2fZa and member ble_60.o symbol r_sym_ble_y2VPPii0Dg0SROjRpV07 proves the low-twenty-bit compressed SRAM-pointer reads at 0x20101080. Member memMgmt_2.o symbol r_sym_memMgmt_rys45AxT1geyo5W0TUT5 proves the transaction at 0x201010c4, and member sched_3.o symbol r_sym_sched_hG0vjzWD9iloJ7W5NaCG the same positional transaction shape at 0x201010d8. The sequences publish bit 31 with a dynamic low-twenty-bit value while bits 20..29 are zero, poll bit 30, and republish while bit 31 is clear. Source identities are software-context hints and do not establish RX, TX or link-layer hardware meaning."
+
+[[sources]]
+id = "BLOB_LIBBLE_DEVICE_TABLE"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); ble_hw.c member ble_68.o. Every device-table mutation ends with the pair r_sym_ble_DUBYQR5eTKgK1GRT7kWv, inlined in r_sym_ble_Zl3qiGNWbkk3Jppj4Wzu (clear), r_sym_ble_tOCGaLxKLDEp3XSu87ee, r_sym_ble_HO8wcaVJ18N9VyWDUEAi, r_sym_ble_s3mGfL8pOw7v42rf3Uq9, r_sym_ble_MYLyveve8Kxs7BxPBxOK and r_sym_ble_CX4quJm6H0AYnGOQmQIm: a read-modify-write of bits 7:0 of 0x20101870 with the table's entry-count byte (header +8), then a complete write of 0x20101874 with (entries[0] pointer >> 2) & 0xfffff and zero in bits 20..31. The table's 8-byte entries are shared by the filter accept list (byte 0 bit 1) and the resolving list (byte 0 bit 0); byte 1 bit 7 marks a valid entry and bit 6 a random address, bytes 2..7 hold the address."
+
+[[sources]]
+id = "BLOB_LIBBLE_SYNC_PUBLICATION"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); ble_lll_sync.c member ble_8.o symbol r_sym_ble_vNVoB3u8sNalnntugADe (r_ble_lll_sync_set_scan_link_state) writes one runtime-derived complete image to 0x20101878 and one runtime-derived low-24-bit image with a zero high byte to 0x2010187c. The source identity records sync-path ownership only; the hardware-field meanings remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBLE_SCAN_BACKOFF"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete ble_lll_scan.c member ble_6.o symbol r_sym_ble_aQLjUHo25zeoHGKf9dby (r_ble_lll_scan_start) writes complete image 1 to 0x20101978 and 0x20101974, then writes 0x20101970 from the SDK options r_sym_ble_Fh7KRrkOJ0DaZapRKpqP returns: image 1 when byte +0x50 (dis_scan_backoff) is nonzero, otherwise halfword +0x5c (scan_backoff_upperlimitmax) masked to nine bits. ESP-IDF components/bt/include/common/btdm_le.h esp_bt_ctrl_le_config_t places those two fields at +0x50 and +0x5c, and ble_user_cfg.h defaults them to disabled-backoff zero and 256, so the supported standard-backoff profile writes 0x100. The option names and the Core Specification scan-backoff procedure (Vol 6, Part B, 4.4.3.2), whose upper limit and backoff count start at one, identify 0x20101970 as the maximum upper limit and the two words initialized to one as the backoff state."
+
+[[sources]]
+id = "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); member ble_46.o symbol sym_ble_J4xWLLnJTN2yd1WPJrtH, a vendor-specific test command reached from api_internalTest_hci_procVsCmds, reads 0x20101978 and 0x20101974, masks each to nine bits and returns them as two little-endian halfwords. The hardware therefore maintains both words; which one is the backoff count is not established."
+
+[[sources]]
+id = "BLOB_LIBBLE_MMGMT_HW_LISTS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete ble_phy.c member ble_70.o selectors r_sym_ble_jhaN9KOsH0u0RgIu2DI9 and r_sym_ble_95olV4pLl0ue84SnuzXf, identical in body to the r_ble_phy_global_curr_rxptr_set and r_ble_phy_global_next_rxptr_set selectors of the earlier _oracles/libble_app.a sha256 62dbe7216619d1f1e3dcd51233d91b211add15c7c746851af0be6a632cdae195, and member memMgmt_4.o symbol r_sym_memMgmt_zJpaiu5wcM3sURVaC4Za (r_ble_lll_mmgmt_reset_rxlink). Selector values 1, 2 and 3 choose three register pairs at 0x20101280..0x20101294. Each selector first freshly reads the selected word and writes that image with bits 0..19 cleared, then freshly reads it again and writes the complete second image OR the SRAM pointer shifted right by two. The reset body calls the current setter with its chain and the next setter with zero, then clears CONTROL_20 in the current-pointer word and performs a second fresh read/write preserving that complete observation, for selector two and then selector one; selector 3 is not published after reset. In the earlier archive, complete ble_lll_mmgmt.c member 61.o allocator/free paths read each value twice until stable, reconstruct the pointer with 0x2f000000 | (value[19:0] << 2), and independently consume or clear bit 20; its memory-manager callers route scanner kind 2 to selector 1 and admitted non-scanner kinds to selector 2, and DTM kind 5 enables the precheck bypass and instead copies its private TX head and RX tail into link-state words reached from the scheduler item. Selector 3 purpose and hardware current/next rotation remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBLE_ISO_COEX_REGISTERS"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete coexIso member coexIso.c.o_1.o initialization and deinitialization symbols r_sym_coexIso_rZmnVfOeuJbHu47VyZ7H and r_sym_coexIso_b24kWhZaxtKURlSMNhS1. Their finite operations and pinned diagnostic strings prove the ISO coexistence ownership of the recorded enable, timing and control registers. Unknown individual interrupt-source and timing semantics retain positional names."
+
+[[sources]]
+id = "BLOB_LIBBLE_SCAN_HW_SNAPSHOT"
+description = "libble_app.a sha256 e61c5f8b0e558df8c520bcedd78dd8b930c2b61350b08c03430b774275385723 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); complete ble_lll_scan.c member ble_6.o symbol r_sym_ble_hEHMaxTKBX87ciUBUpma. It reads 0x201012a0 twice until stable, passes the stable complete image to one converter and stores the result into scan environment offset 0x78. The scan ownership and atomic-snapshot access are exact; the hardware encoding and converter semantics remain unknown."
+
+[[sources]]
+id = "BLOB_LIBBTBB_COEX_PTI_V2"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete 0x20-byte bt_bb_v2.o coex_pti_v2 body. Two fresh-read RMW operations preserve the opposite halfword while publishing the fixed low image 0x0010 and high image 0x0640 at 0x20100010. The instruction evidence does not assign individual bit semantics."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_I2C"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_i2c.o callbacks and phy_i2c_master_cmd_mem_init"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_GET_XTAL_FREQ"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_init.o phy_get_xtal_freq body, size 0x40"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_rx_gain.o phy_rxiq_cal_init body, size 0x198"
+
+[[sources]]
+id = "BLOB_LIBPHY_REGISTER_CHIPV7_PHY"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_init.o register_chipv7_phy body, size 0x1e6, and relocation graph"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_RFPLL_CHANNEL"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_rfpll.o phy_chip_set_chan body, size 0x122, and its finite ROM leaf call graph"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_tx_gain.o phy_set_tx_cfr_mem body, size 0x76"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_tx_gain.o phy_set_tx_gain_mem_new body and complete ROM phy_write_gain_mem leaf"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_reg.o phy_open_i2c_xpd_new body"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_REG_UPDATE_NEW"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_init.o phy_reg_update_new body, size 0x68, which no longer tail-calls phy_set_ftm_en, and complete rev0 ROM phy_wifi_agc_sat_gain at 0x2f827db0 size 0x0c"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_rx_gain.o phy_set_rx_gain_table body, size 0x28a, including the final two register limit writes"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_SET_RX_COMP_NEW"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_reg.o phy_set_rx_comp_new body, size 0x28"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_DC_MEM_CLR"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_reg.o phy_dc_mem_clr body, size 0x1c"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK"
+description = "_oracles/libphy.a phy_init.o phy_close_fe_bb_clk, complete 0x20-byte body"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_BB_INIT"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; phy_init.o phy_bb_init, complete 0x18e-byte body and relocation graph"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_BASEBAND_CONFIG"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_reg.o phy_bb_txpwr_track size 0xf4 and phy_txgain_comp_pacfg_new size 0x5c"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_CFR_CONTROL"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_reg.o phy_iccfr_en size 0x2c, phy_force_iccfr size 0x7a and phy_config_hccfr size 0x38"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_FE_REG_UPDATE"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_reg.o libphy[phy_reg.o]::phy_fe_reg_update size 0x32"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_TXDC_PWDET"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_tx_cal.o phy_txdc_cal_pwdet_init size 0x232"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_CHECK_RX_SAT"
+description = "_oracles/libphy.a sha256 51497819736295c9b33d6775495dade4c6fb39db887edfe095608c670d9ae223; complete phy_rx_cal.o phy_check_rx_sat body, size 0x76, and relocation graph"
+
+[[sources]]
+id = "BLOB_LIBCOEX_PTI_TABLE"
+description = "_oracles/libcoexist.a sha256 9b8f55b1a1670ac8da1323595c817eca7340f073e783c162d3a2dfde7bbd19c8; complete coexist_api.o coex_pti_get tail-calls complete coexist_core.o libcoexist[coexist_core.o]::coex_core_pti_get size 0x1e, which bounds-checks only the output pointer and copies coex_pti_tab[event]. The complete 48-byte coex_pti_tab object in coexist_core.o .dram1.2 gives cold defaults event 1 = 5, event 3 = 7, event 10 = 3 and event 15 = 1. These are the only events queried by complete hal_init and hal_set_ofdma_sequence_pti. Runtime coexistence may mutate the table, so the PAC fields do not hardcode these policy values."
+
+[[sources]]
+id = "BLOB_LIBCOEX_PHY_GRANT_PROTECT"
+description = "espressif/esp-coex-lib commit c758e7b56e0fa22177a0539796e1df59978dc322, esp32s31/libcoexist.a, sha256 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147; complete coexist_api.o libcoexist[coexist_api.o]::phy_acquire_grant_protect tail-calls libcoexist[coexist_core.o]::coex_core_request(2, 48, 0, 0) and libcoexist[coexist_api.o]::phy_release_grant_protect tail-calls libcoexist[coexist_core.o]::coex_core_release(2, 48). Complete coexist_core.o libcoexist[coexist_core.o]::coex_core_timer_idx_get accepts events 1 through 48; its 48-byte switch table maps event 48 to timer index 5 and every other event to 0 through 4 or 0xff. The complete coexist_hw.o timer leaves are byte-identical to the earlier archive, so index 5 addresses the sixth 0x10-byte entry at 0x2010f450. The coex_pti_tab object in .dram1.2 is 49 bytes, with event 48 = 15. The strong hooks replace the empty weak libcoexist[coexist_api.o]::phy_acquire_grant_protect/libcoexist[coexist_api.o]::phy_release_grant_protect of the paired esp-phy-lib archive."
+
+[[sources]]
+id = "BLOB_LIBCOEX_HW_TIMER"
+description = "espressif/esp-coex-lib commit c758e7b56e0fa22177a0539796e1df59978dc322, esp32s31/libcoexist.a, sha256 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147; complete coexist_hw.o libcoexist[coexist_hw.o]::coex_hw_timer_set/enable/disable/force/unforce leaves prove the 0x2010f400 + index*0x10 bank, word offsets and ordered RMW masks. Complete coexist_core.o libcoexist[coexist_core.o]::coex_core_timer_idx_get guards event numbers 1 through 48 and its complete 48-byte switch table contains only timer indices 0 through 5 or 0xff; event 48 selects timer 5, the PHY grant-protect request. Complete libcoexist[coexist_core.o]::coex_core_request maps request kinds 0 through 4 to the timer client field through its five-byte table 02 01 00 03 04 and asserts on any larger kind."
+
+[[sources]]
+id = "BLOB_LIBCOEX_TIMER_CLOCK"
+description = "espressif/esp-coex-lib commit c758e7b56e0fa22177a0539796e1df59978dc322, esp32s31/libcoexist.a, sha256 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147; complete coexist_hw.o coex_hw_timer_freq_set accepts selector 8 only with divisor 1, selector 4 with a divisor of at least 50, selector 2 with at least 40 and selector 1 with at least 3, replaces the low nibble of 0x2010f008 with the one-hot selector and then, through a second fresh-read RMW, bits 15:4 with the divisor minus one. Complete coexist_core.o coex_core_pre_init calls it with selector 4 and divisor 50 when g_coa_funcs_p slot 0x30 reports a real chip and with selector 8 and divisor 1 otherwise. Complete coex_hw_timer_tick_get converts timer values from the same word and fails when its low nibble selects no source."
+
+[[sources]]
+id = "BLOB_LIBCOEX_EXTERNAL"
+description = "espressif/esp-coex-lib commit c758e7b56e0fa22177a0539796e1df59978dc322, esp32s31/libcoexist.a, sha256 13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147; complete hal_external_coexist.o hal_set_extern_pti, hal_clr_extern_pti, hal_set_extern_pti_mode, hal_set_extern_coex_mode, hal_set_extern_coex_sync, hal_set_extern_coex_delay, hal_set_extern_coex_validity, hal_enable_extern_coex and hal_disable_extern_coex, and complete external_coex.o ic_set_extern_coex, ic_set_extern_coex_params and ic_stop_extern_coex, prove the words at 0x2010f49c, 0x2010f4a0, 0x2010f4a4, 0x2010f4d0 and 0x2010f4d8, their fields and the ordered fresh-read RMW sequences of starting, configuring and stopping external coexistence. ic_set_extern_coex maps the MID and HIGH external priority levels to 8 and 0xc, and publishes the external coexistence schedule status bits 1 and 2."
+
+[[ranges]]
+name = "FECOEX"
+start = 0x20100000
+end-exclusive = 0x20100058
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+[[ranges]]
+name = "FEDATA"
+start = 0x20100400
+end-exclusive = 0x2010048c
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "FECTRL"
+start = 0x20100800
+end-exclusive = 0x201008e4
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "FEDATA_WIFI"
+start = 0x20100c00
+end-exclusive = 0x20100c58
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BTMAC"
+start = 0x20101400
+end-exclusive = 0x20101fb8
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BT_V3_2"
+start = 0x20102000
+end-exclusive = 0x20102200
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BTAGC"
+start = 0x20102800
+end-exclusive = 0x2010290c
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "ZBBB"
+start = 0x20102c00
+end-exclusive = 0x20102c4c
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "IEEE802154_REG"
+start = 0x20103000
+end-exclusive = 0x201031a4
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "AGC"
+start = 0x20107000
+end-exclusive = 0x2010720c
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BBTX"
+start = 0x20107400
+end-exclusive = 0x20107480
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "NRX"
+start = 0x20107800
+end-exclusive = 0x20107a44
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BB"
+start = 0x20107c00
+end-exclusive = 0x20107d50
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[ranges]]
+name = "BRX"
+start = 0x20108000
+end-exclusive = 0x2010809c
+sources = ["BLOB_LIBPHY_PHY_DEBUG_REG_CHECK"]
+
+[[sources]]
+id = "BLOB_LIBPHY_CALIBRATION_20260907"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; Complete phy_txgain_comp_pacfg_new, phy_start_tx_tone_step_new, phy_force_dig_gain, phy_reg_update_new and their caller sequencing in phy_bb_init/phy_rf_init. Gain compensation bytes are 00 fb 03 00. Tone start clears stop before disabling compensation; only disabling both paths sets stop and restores compensation. Post-init AGC preserves FTM. Forced digital gain updates enable bit 16 before bytes 0 and 1 in 0x20100408. phy_rf_init applies libphy[phy_reg.o]::phy_fe_reg_update before phy_xtal_duty_cal_init."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_CLOSE_RF_20260907"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_init.o phy_close_rf body, size 0x8c. After its retained-state guards it enters the PHY critical section, disables hardware frequency control, calls phy_xpd_rf_new without forcing TX/RX off, enables BBPLL calibration, writes 0x77 to PHY-I2C block 0x6a registers zero and one, publishes the retained closed flag, and exits the critical section."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_WAKEUP_INIT_20260907"
+description = "espressif/esp-phy-lib commit b88e4b76e090ae59c51cb00b916d38def895b396, esp32s31/libphy.a, sha256 d4218e359b9716c616cbf116172f44d9195d4f2e020fad73279067e92d08e580; complete phy_init.o phy_wakeup_init body, size 0x188. The retained-wake parent enters baseband mode two, forces TX/RX off, disables hardware frequency control, restores PHY-I2C/front-end/BBPLL/bias/temperature/PBUS/frequency/register/AGC/channel/TX-capacitance state in the recorded call order, waits for frequency readiness, resets CKGEN, restores hardware frequency control, BBPLL and TX/RX force state, and returns to baseband mode zero. Its phy_freq_i2c_data_write argument is zero, so command memory is preserved while the number-address table is republished. The conditional Wi-Fi-enable tail is guarded by vendor client state; source-owned retained wake starts from an explicitly empty client set."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_I2C_INIT2_20260907"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/libphy.a, sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; complete phy_i2c.o phy_i2c_init2 body, size 0x2b8. The leaf constructs six 22-byte source arrays from fixed values and retained phy_param inputs, applies three saturated derived values, selects the combined I2C master-zero block mask, performs one six-bank phy_i2c_paral_write_num transaction inside the vendor PHY-I2C critical boundary, and restores the master mask afterward. Binary origin does not exclude these required constants or derived inputs from source-owned retained wake."
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907"
+description = "espressif/esp-phy-lib commit b88e4b76e090ae59c51cb00b916d38def895b396, esp32s31/libphy.a, sha256 d4218e359b9716c616cbf116172f44d9195d4f2e020fad73279067e92d08e580; complete phy_init.o phy_xpd_rf_new body, size 0x62. The leaf disables AGC, clears only bit one of MODEM_SYSCON_RADIO.WIFI_BB_CFG (andi -3) in one fresh-read RMW, delays one microsecond, writes 0x07 to PHY-I2C block 0x67 register two, clears PMU_RADIO.RF_PWC bits 31:16, clears only bit 28 of PMU_RADIO.IMM_HP_CK_POWER_0 (and 0xefffffff) in one fresh-read RMW, and tail-calls phy_close_fe_bb_clk. The pinned esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0 (libphy.a sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2) carries the identical body."
+
+[[sources]]
+id = "HIL_S31_SOFTWARE_CCM_OPCODE_ABORT"
+description = "ESP32-S31 rev0 software-CCM controlled comparison, 2026-09-19. Sealed HIL run 1789809143418-000c485b, application sha256 6cb8829320c2804bee55afc48a51a036ead6e598d8c693ea1fa5b92303b201ed, and run 1789809316911-000c4b1d, application sha256 86e8653faf0f7ab60fa52cfc342a5cefee74e5756717f00bf4dbd86baada49c9. Both select valid IVp values for the public fixture LTK so the authenticated Central START_ENC_RSP ciphertext begins with 0x02. The baseline leaves the reviewed initialization image and yields three connection timeouts. The comparison adds only the reviewed LINK_STATE_CONTROL clear after initialization and completes six forced-prefix connections, refreshes and exact ACL echoes. This establishes the software-CCM opcode-inspection requirement on this chip, not Bluetooth qualification or the meaning of other register bits. Complete firmware/source/input hashes and observations are retained in the sealed HIL bundles."
+
+[[sources]]
+id = "BLOB_LIBBREDR_HAL_LINK_ACCESSORS"
+description = "libbredr_app.a sha256 813f8a34e98694be4e19e9ac5d0ce5e805f531c73154c35f98e22143834ad851 (espressif/esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8); unobfuscated BR/EDR accessors in orca_bt_hal_link.c.o and orca_bt_driver_common.c.o over the shared Bluetooth MAC block. r_obh_link_btlc_timer_cc_set(index, value) writes indexes 0..3 to 0x2010108c, 0x201010b8, 0x201010bc and 0x201010c0. r_obh_link_btlc_fre_get returns the crystal frequency in kHz shifted right by bits 2:0 of 0x20101090, which r_obh_link_btlc_fre_set programs; r_obd_update_btlc_timer writes 0x20101094..0x2010109c and r_obd_capture_btlc_timer reads 0x201010ac..0x201010b4. r_obh_link_current_txlinkptr_get and r_obh_link_current_rxlinkptr_get read 0x201010c8 and 0x201010cc. r_obh_link_wdt_config packs its enable into bit 31 of 0x201010dc beside two further arguments and four packed arguments into 0x201010e0. r_obh_link_gpio_diag_set replaces bits 7:4 of 0x20101248 with its first argument and writes its remaining arguments to 0x201011f0, 0x201011e0, 0x201011d8 and 0x201011dc. r_obh_link_global_rxlink_curr_ptr_set, r_obh_link_global_rxlink_next_ptr_set and r_obh_link_global_rxvalid_set select 0x20101280/0x20101284, 0x20101288/0x2010128c or 0x20101290/0x20101294 by list index 1..3; the current pointer and the valid flag share the first word, bits 19:0 and bit 20."
+
+[[sources]]
+id = "BLOB_LIBBTBB_BLE_BB_AGC_TARGET_VALUE"
+description = "libbtbb.a sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895; complete bt_cte.o ble_bb_set_agc_target_value, size 0x20, which replaces exactly 0x20102840 bits 21:13 with its argument in one fresh-read RMW, and ble_bb_get_agc_target_value, which reads the same word."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_FORCE_RX_GAIN"
+description = "librftest.a sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o force_rx_gain(enable, gain, path), size 0x10c. A nonzero path writes the caller's gain into 0x20102840 bits 31:24 and then its flag bit into bit 23 in separate fresh-read RMWs, the same layout as ROM phy_rx_gain_force. Path zero applies the same order to 0x2010702c: it replaces bits 31:24 with the gain while keeping bits 23:0, clears bit 23, waits 5 us and then replaces bit 23 with the low bit of the enable argument."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_RX_MAX_GAIN"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o rx_max_gain(path), size 0x1c. Path zero returns bits 14:8 of 0x2010702c; a nonzero path returns bits 20:14 of 0x20102850. It has no other effect."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_RX_INIT_GAIN"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete wifi.o rx_init_gain(gain), size 0x36. Two fresh-read RMWs write the same seven-bit argument into 0x2010713c bits 24:18 and then 0x20107094 bits 8:2, preserving every other bit; it has no other effect."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_RF_RX_SATURATION_PROBES"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o get_rfrx_sat, size 0x2c, reads 0x2010708c one hundred times and returns how many reads had bits 18:12 equal to 49. Complete phy_test.o phy_rx_sat_test, size 0x136, forces receive gain, then records bits 18:12 of 0x2010708c in one hundred samples and prints them. Neither body names the field or assigns a unit to its value."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_ADCTRIG"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete mac_common.o adctrig, size 0x48c, the receive sample-dump trigger. It replaces bits 24:21 of 0x20109008 with half its fourth argument (zero below two), stores 0xffffffff to 0x20109c04, sets bit 2 of 0x20100800, replaces bits 16:0 of 0x20109004 with its first argument plus one and clears bit 17 there. It programs 0x20109018 as four six-bit selectors in bits 5:0, 11:6, 17:12 and 23:18, defaulting to 24, 25, 26 and 27, with alternative values for selector arguments 11 and 12, and sets bit 24. It clears bits 21:20 of 0x20109004. One path of its selector jump table, whose case values the static analysis does not resolve, clears bit 0 of 0x201020b4 and replaces bits 20:17 of 0x20109008 with the selector argument. It sets bit 31 of 0x20109004, pulses bit 19 there only for selector zero (selector twelve starts Bluetooth reception instead), polls bit 18 of 0x20109004 against a 1,000,000-count bound of 0x2010d800, then reads 0x20109008, clears bit 31 of 0x20109004 and prints the low sixteen bits of that read together with the constants 0x2f060000 and 0x20000. Optional gain arguments are written to 0x2010702c bits 31:24 with bit 23 set, alternating between two gains while polling in mode three."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_SET_DUMP_MODE"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o set_dump_mode(mode), size 0x2a. It clears bits 22:19 of 0x201008cc, then replaces bits 2:0 of 0x201070b8 with one for mode zero and zero otherwise, in two fresh-read RMWs."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_PRINT_DUMP_DATA"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o print_dump_data, size 0x114, reads 160 dump words from 0x2f060000 and interprets bits 9:0 and 19:10 of each as signed ten-bit components whose squares it sums; complete wifi.o sampledeal, size 0x12, performs the same ten-bit sign extension."
+
+[[sources]]
+id = "BLOB_LIBRFTEST_PHY_TEST_FILTER_BAND_SET"
+description = "espressif/esp-phy-lib commit 20f1db053a0e6cb9f1c09d255c43bf42483041d0, esp32s31/librftest.a, sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; complete phy_test.o phy_test_filter_band_set(select), size 0x58. A nonzero select writes phy_param byte 0xef, and zero writes byte 0xf0, to both PHY-I2C block 0x67 host 1 registers 0x1c and 0x1d."

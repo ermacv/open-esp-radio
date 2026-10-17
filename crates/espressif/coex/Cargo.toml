@@ -1,0 +1,24 @@
+[package]
+name = "oer-espressif-coex"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Coexistence priority table, timer policy and time-slice schedule of the Espressif chips, recovered from esp-coex-lib"
+readme = "README.md"
+
+[features]
+# Vendor-comparison constructors of the compiled probe image.
+validation-probes = []
+
+[dependencies]
+oer-radio-coex = { path = "../../radio/coex" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "family"
+family = "espressif"

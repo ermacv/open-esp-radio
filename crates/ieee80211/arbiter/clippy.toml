@@ -1,0 +1,18 @@
+disallowed-methods = [
+    { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
+]
+
+suppress-restriction-lint-in-const = false
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+disallowed-macros = [
+    { path = "core::assert", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+    { path = "core::assert_eq", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+    { path = "core::assert_ne", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+    { path = "core::debug_assert", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+    { path = "core::debug_assert_eq", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+    { path = "core::debug_assert_ne", reason = "retain invariants in closed types; dynamic refusals return their owners" },
+]

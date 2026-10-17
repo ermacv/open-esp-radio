@@ -1,0 +1,57 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_LOCAL_TIME"
+description = """
+Free-running Wi-Fi MAC local-time counter, read-only and without read side
+        effects. Complete libpp[lmac.o]::lmacAdjustTimestamp subtracts the receive timestamp
+        a received frame carries from this word as the frame's age and, while
+        the station slept, rewrites that timestamp as this word minus a
+        TU-scaled sleep interval; libpp[pm_twt.o]::pm_twt_set_target_wdev_time,
+        libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice read
+        it as the MAC's current time. The PHY SDM deadline samples the same
+        word. Its unit and rate against the system timer are not
+        established."""
+baseAddress = 0x2010D800
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "COUNTER"
+description = "The MAC local-time counter. Complete phy_wait_i2c_sdm_stable samples it before and after each independently completed PHY-I2C read."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Full-width wrapping counter value in microseconds, at the system timer's rate; receive timestamps are readings of it."
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_LOCAL_TIME"
+sources = ["BLOB_LIBPP_MAC_LOCAL_TIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_LOCAL_TIME.COUNTER"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_WAIT_I2C_SDM_STABLE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_LOCAL_TIME.COUNTER.VALUE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_WAIT_I2C_SDM_STABLE",
+    "BLOB_LIBPP_MAC_LOCAL_TIME",
+    "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"

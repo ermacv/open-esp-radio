@@ -1,0 +1,609 @@
+schema = 2
+
+[[peripherals]]
+name = "BLE_HW_ACCELERATOR"
+description = """
+Sparse ESP32-S31 BLE hardware-accelerator view. Complete ble_hw.c operations
+independently prove encryption and resolving-list engines in this physical
+block; complete BLE PHY initialization proves three additional initialization
+words. Cross-chip objects provide function identities only. Addresses, field
+geometry, values, ordering and predicates all come from ESP32-S31 bytes.
+"""
+baseAddress = 0x20109800
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "INIT_CONFIG"
+description = "BLE PHY initialization writes the complete finite image 0x000002F0. Inner semantics remain unknown."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_START"
+description = "r_ble_hw_encrypt_block writes the complete value 1 after publishing all encryption parameters."
+addressOffset = 0x4
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "COMMAND"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_CONFIG"
+description = "r_ble_hw_encrypt_block writes the finite complete image 1 before publishing buffer pointers."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_BLOCK_LENGTH"
+description = "r_ble_hw_encrypt_block writes the finite complete image 16."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "BYTES"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_KEY_WORD_0"
+description = "Little-endian word assembled from encryption-key argument bytes 0 through 3."
+addressOffset = 0x10
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_KEY_WORD_1"
+description = "Little-endian word assembled from encryption-key argument bytes 4 through 7."
+addressOffset = 0x14
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_KEY_WORD_2"
+description = "Little-endian word assembled from encryption-key argument bytes 8 through 11."
+addressOffset = 0x18
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_KEY_WORD_3"
+description = "Little-endian word assembled from encryption-key argument bytes 12 through 15."
+addressOffset = 0x1C
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_INPUT_BUFFER_ADDRESS"
+description = "Complete pointer image equal to the r_ble_hw_encrypt_block argument base plus 16."
+addressOffset = 0x20
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "ADDRESS"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_OUTPUT_BUFFER_ADDRESS"
+description = "Complete pointer image equal to the r_ble_hw_encrypt_block argument base plus 32."
+addressOffset = 0x24
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "ADDRESS"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_SEARCH_START"
+description = "r_ble_hw_resolv_list_search writes the complete finite image 1 after publishing its inputs."
+addressOffset = 0x80
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "COMMAND"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_LIST_ARGUMENT"
+description = "Complete first argument published by r_ble_hw_resolv_list_search."
+addressOffset = 0x88
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_SEARCH_ARGUMENT"
+description = "Second search argument in bits 0..27 and a Boolean third-argument mode in bit 28."
+addressOffset = 0x8C
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "ARGUMENT_LOW_28"
+bitOffset = 0
+bitWidth = 28
+[[peripherals.registers.register.fields]]
+name = "MODE"
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_RESULT_METADATA"
+description = "Search result word; r_ble_hw_resolv_list_search returns bits 8..15 through its fourth argument. Other bits remain unknown."
+addressOffset = 0xA0
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "RESULT_BYTE"
+bitOffset = 8
+bitWidth = 8
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_RESULT_POINTER_OFFSET"
+description = "Search result combined with SRAM prefix 0x2F000000 to form the returned pointer. The exact encoded width remains unknown."
+addressOffset = 0xA4
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_RESULT_PRESENT"
+description = "Complete word tested for zero before the result pointer and metadata are consumed."
+addressOffset = 0xA8
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENGINE_CONTROL"
+description = "Shared control word: encryption sets bits 0..1 through RMW; resolving-list search writes the finite complete image 0x400."
+addressOffset = 0xB8
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "ENCRYPT_CONFIG_BITS"
+bitOffset = 0
+bitWidth = 2
+[[peripherals.registers.register.fields]]
+name = "RESOLV_CONFIG_BIT"
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESOLV_STATUS"
+description = "r_ble_hw_resolv_list_search polls bit 2 with a finite software timeout."
+addressOffset = 0xBC
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "COMPLETE"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ENCRYPT_COMPLETION_STATUS"
+description = "r_ble_hw_encrypt_block polls the complete word until nonzero, with a finite software timeout. Inner encoding remains unknown."
+addressOffset = 0xC4
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "INIT_SRAM_REGION_0"
+description = "BLE PHY initialization writes the complete finite image 0x2F080000. Inner semantics remain unknown."
+addressOffset = 0xCC
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "INIT_SRAM_REGION_1"
+description = "BLE PHY initialization writes the complete finite image 0x2F000000. Inner semantics remain unknown."
+addressOffset = 0xD0
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS", "BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+# Every register and field below is reviewed from complete ESP32-S31 bodies.
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_CONFIG"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_CONFIG.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_START"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_START.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_CONFIG"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_CONFIG.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_BLOCK_LENGTH"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_BLOCK_LENGTH.BYTES"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_0.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_1.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_2"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_2.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_3"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_KEY_WORD_3.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_INPUT_BUFFER_ADDRESS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_INPUT_BUFFER_ADDRESS.ADDRESS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_OUTPUT_BUFFER_ADDRESS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_OUTPUT_BUFFER_ADDRESS.ADDRESS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_SEARCH_START"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_SEARCH_START.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_LIST_ARGUMENT"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_LIST_ARGUMENT.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_SEARCH_ARGUMENT"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_SEARCH_ARGUMENT.ARGUMENT_LOW_28"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_SEARCH_ARGUMENT.MODE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_METADATA"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_METADATA.RESULT_BYTE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_POINTER_OFFSET"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_POINTER_OFFSET.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_PRESENT"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_RESULT_PRESENT.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENGINE_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK", "BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENGINE_CONTROL.ENCRYPT_CONFIG_BITS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENGINE_CONTROL.RESOLV_CONFIG_BIT"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.RESOLV_STATUS.COMPLETE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SEARCH"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_COMPLETION_STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.ENCRYPT_COMPLETION_STATUS.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_ENCRYPT_BLOCK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_SRAM_REGION_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_SRAM_REGION_0.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_SRAM_REGION_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_ACCELERATOR.INIT_SRAM_REGION_1.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

@@ -1,0 +1,6332 @@
+# Code fingerprints of the vendor functions production `SOURCE:` blocks
+# and the register model cite, and those the verification decisions
+# exclude code of, as reviewed. Maintained by
+# `cargo verification provenance`; checked by `cargo verification
+# check provenance`.
+schema = 1
+
+[[function]]
+artifact = "libble_app"
+member = "base_3.o"
+symbol = "api_base_ll_dumpDebugStatus"
+code = "4283829f189d5f9d8b8052d130d29a42a4a85a6919e66470dfb31af6adb2f2f6"
+
+[[function]]
+artifact = "libble_app"
+member = "base_4.o"
+symbol = "brk_sym_base_QIE6fqExGJrsGUIGYNSf"
+code = "c8a351b5441bee246dad5dc25a994abf7d8f4f8310aa3fd60f798011dbdaf4f2"
+
+[[function]]
+artifact = "libble_app"
+member = "base_4.o"
+symbol = "brk_sym_base_uevmRkB8BjrlJh1c3VnZ"
+code = "f313b154865f0d18a11cefcab3f065e4a70eb8708409d815b695742c315cac84"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_1.o"
+symbol = "r_sym_ble_Ok6PLzc6qsIOuEzma5oM"
+code = "0d8e02d2954ac689fefb58490c84cb6c0a2f9a811fc33a66980f1cc561a4f30b"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_2.o"
+symbol = "r_sym_ble_2eLkvpKuoaxT83Mj406p"
+code = "6979807a845881b89aeb1dddc729dd5988687fa8158297b720aa15e020f15702"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_2.o"
+symbol = "r_sym_ble_7lsXnox2LxrGG0FmY7qR"
+code = "de67520442045fd5fac9da18d10ae447fb289208d2e6b22126eeb4d56a434f33"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_2.o"
+symbol = "r_sym_ble_GlcyfUkkhUzGUt8un0d8"
+code = "fd14b7f0315340e7f06e9a90ad5cc183559d195e429bd4ad4cd797659b6b1cc3"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_2.o"
+symbol = "r_sym_ble_VTHfF9d12DSYglVnHRqM"
+code = "4d8c636bdecbe157b4b044e4e13b37f2b37b22fa153def11ebf6245a86edbb45"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_2.o"
+symbol = "r_sym_ble_eNifqLwR78cnxeKb1y6t"
+code = "54ab0a06b50907e0ff03ef15605107f79c916e3d0cc3b1f241151249b97fad23"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_25.o"
+symbol = "r_sym_ble_60U2aYYZeD1Ql9djxRaO"
+code = "eabc4cb7a5314c03a4370f2b4aeef6560f7f99bd571b6a1d640c8655144018e6"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_25.o"
+symbol = "r_sym_ble_Fh7KRrkOJ0DaZapRKpqP"
+code = "ac7c65f6b080d02b4e64ed3c828a035835e49695c4da52955d4379a592e9272f"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_28.o"
+symbol = "r_sym_ble_62UX9ux9YcuUoIf4gPAp"
+code = "d09f97d68f5e1342685f62254054f124ea61c94bf03cb50d7f962aee8e94c934"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_28.o"
+symbol = "r_sym_ble_IXD9YD54AdqppMHisVZw"
+code = "41550c576f50914974a871e4d09b3066f2a89746187a726e52c36752cfcee003"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_28.o"
+symbol = "r_sym_ble_JqbtnypGd2wyQym9wmK4"
+code = "380fdffb0f3ceef7acf87f8ec6acea0637774a7b00cdcdf9c988a67b7e66981d"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_3.o"
+symbol = "r_sym_ble_bgOSnaHsEjrTC0mkupqH"
+code = "878070054023627dfcf00caf7b591b744dbab4a8b2f6ff8dd2d868bb9ddcb856"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_3.o"
+symbol = "r_sym_ble_mLYtT1I4BQmunJL36NqV"
+code = "64345ccdbb40a79f303e526bd2ba37c91b8b5f4977d4870dc288a590ce8ffa52"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_3.o"
+symbol = "r_sym_ble_rsCCyH2B22gdYkN4LOOJ"
+code = "3ff5446677f6e32a3afaa096765ddcf2f0058cc5ea4644d2bcafe67d70f94a7c"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_3.o"
+symbol = "r_sym_ble_tPr7egUaNHmqfcieCA5O"
+code = "c00750a1d3026c76199a35a3836cc5f7071811a4a24d1ff1bfdefba47a3cf291"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_38.o"
+symbol = "r_sym_ble_K9RI7JxM1NMxwdTUJ82J"
+code = "503794cce50efed06f3b3316a15f0c4e8e31894e1ecb49b6f1aa130caa5d8b3b"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_46.o"
+symbol = "sym_ble_J4xWLLnJTN2yd1WPJrtH"
+code = "e312ae6f8526900563e05e69e613004c5bccadfef5b18a76684906eb09c489bd"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_51.o"
+symbol = "r_sym_ble_7jv3TlgP4OsXtyxLLgrv"
+code = "8be59777d4e04f807c25b09ebc76b8899bd8003d2cb2dc008c7a027d3ef0e60a"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_51.o"
+symbol = "r_sym_ble_izRwciSMhvv39tBPsJHF"
+code = "009802264029d72ce5a53582184e718bfa1680ae5706313914894c21fff2fda5"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_57.o"
+symbol = "r_sym_ble_BBHrCLEntlUwRxUQSeoj"
+code = "4afe0001067e32945c9930398d71911ecb563634b22a60f74cbc527a409141e6"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_57.o"
+symbol = "r_sym_ble_lSOP0PF29bmKTVrxV8AS"
+code = "e162e389c0097aab2d2c0cfbf149eb09174138946b492fb39fa72b107fced7d8"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_59.o"
+symbol = "r_sym_ble_8UF9MdmrIB3xzJL37y69"
+code = "e3705e3f25ed699a01d9b7a4bc0a2344a0808c5abc2c8372f2ff0727e30986d2"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_59.o"
+symbol = "r_sym_ble_ayzkbWXdt7oT4JBQ2fZa"
+code = "37e4eea3e90fed67854a2395540c032eb5c16ef0705fc73035cdad4d74c19d30"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_59.o"
+symbol = "r_sym_ble_ddurhv5Lz7XyowJFKiWv"
+code = "62b61bb36c82611087bd594b2c7489ee1887172c88492a6a004e6cfd1ad02cfe"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_6.o"
+symbol = "r_sym_ble_KkAldzIlkQuEkNQp1g6q"
+code = "785ac0a0946abbd36b3bdbe5a9dc4e43fab31f3b56ae72636b824db5aa05a2dd"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_6.o"
+symbol = "r_sym_ble_M0sTWGzdUqAUyXoK849F"
+code = "03e9bd56a73d22b101d75d2eb14cb231ef4b949abec9ee79260c5d188937166e"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_6.o"
+symbol = "r_sym_ble_aQLjUHo25zeoHGKf9dby"
+code = "f0c8b0893a7fbae878defa8958cb83c98cbdd1a68887010f74d5bb7846356ad8"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_6.o"
+symbol = "r_sym_ble_aTsLUeVnygnblNndYYVB"
+code = "8bd46f9de52777ffb32310b7a5591ab0c674a69c6243892ee02aff03d454d892"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_6.o"
+symbol = "r_sym_ble_hEHMaxTKBX87ciUBUpma"
+code = "63d08d657176517a3f1684adc1314ba6f8cd607b0c3e3194c1e36f6be7e12ddb"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_60.o"
+symbol = "r_sym_ble_y2VPPii0Dg0SROjRpV07"
+code = "1b40f8ead24c57e808741b49fde29181a0f6416061dca051f60e542aa8950bc2"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_62.o"
+symbol = "r_sym_ble_69lxyAzOOeBfNkewk2l0"
+code = "b90b488ada01aef8169cc439869bd251a48363c4d335da4dd44cc59b12399d48"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_62.o"
+symbol = "r_sym_ble_QfTpg5GfTMzPcrTREkE2"
+code = "ae8db7ad34313f44e46dc0b4df2e81e07f19e9277519ded8ec979ef7aa7b8d1b"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_62.o"
+symbol = "r_sym_ble_uW7fgxQeZKMshYSHpqwh"
+code = "63c190d75bcbdfbe15fb15ee2c765c2b86272ba3cd48dd0b46d16dcf42b30b55"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_6lDKo33OEA8POtZnFQHv"
+code = "fc7a9183a603020a3feaacdcace88c4dbc22c0ad8ec22f76356ccc8e54d13e2b"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_7dhVHgpwooZIKXq5TBqb"
+code = "f3d722114d5ff013c5891c7313f7cf198b8769ec3e311160de8f4d59072639d8"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_9gO1NCZ8fOI7LwbgnMi6"
+code = "bda34a6a9c61bb1e7ba6843e095a5d4d2195672b8530993c40d5a703a332dcda"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_CX4quJm6H0AYnGOQmQIm"
+code = "78498324cab5c2e6c4d5f5ad6df6cba26e0a1c1a6b8c4673f0613bdade00e0eb"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_DUBYQR5eTKgK1GRT7kWv"
+code = "73f6909e3a884756a81a9e285cd24a4c43960c2acbb3ce7975384317fea2e1d3"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_HO8wcaVJ18N9VyWDUEAi"
+code = "05eb69cfbf089f96f6078b6e550ef373fc7831377c2be250108ce9423147378a"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_MYLyveve8Kxs7BxPBxOK"
+code = "9ae5d7967cc726a537e00090371f808b213175582e86eb4e6f33ae5b4921d45d"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_YpJTETFGhduIAMkkBKjc"
+code = "b3f0e75a96333af5adf83353eb712451add7e4d12e67ada7ca4ff94ae65cf438"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_Zl3qiGNWbkk3Jppj4Wzu"
+code = "9e6ffcdda4a3fb11644fdb37dce52da8bc646e2497d19049da9543cd5c6a1449"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_fy9eOwbFJlqEr1QO6bwO"
+code = "305ea57c53d82ad997e63e629187da1d4e67f6ff15ee2b357ed8090ce682ba65"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_s3mGfL8pOw7v42rf3Uq9"
+code = "6d49323c90d2e488bfad6f549f20b69649247b8ddea5323240488618f6481dd0"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_68.o"
+symbol = "r_sym_ble_tOCGaLxKLDEp3XSu87ee"
+code = "43e604f8c5017cc7444b7052587ea370ce0c08993a16f3992e75232898644fe2"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_4jTcHipi5k7xftmgAPTH"
+code = "5846dcc8b9ef27e3147be9a69482247aaaff5c8d710e11762dad76f725e91665"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_5YIHPyqYswSaQs7KMvEA"
+code = "a9606573da63c41779a43eadb9a4b83fa348d108250bc346ea631fb591a25e4d"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_95olV4pLl0ue84SnuzXf"
+code = "f262657b00b2c111f22489a4d026c381f1b4f683d5a7faa847b83833e0b83786"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_D7WjPzItc9OF8YS067Wq"
+code = "10c7c3f0548e398f69cd3d2d1627763e796edfe496609c69d4ec009d40a2d13c"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_dQthQ5ciPZuxiqTBiBNa"
+code = "1358578566d5b736e7c84e60a0c6869d39896bd49410a7061b6d00a4259f9a5a"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_jhaN9KOsH0u0RgIu2DI9"
+code = "075caf1f36fdd635257260970f11512772523d590c828772da03ffdca75705a3"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_nENHlP4KBuQYlFVffaR5"
+code = "624124ad43eefcd26d05a88a90e0e1f8272c2acb2953632c7bf92dccd6ad0088"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_r39KCENxd4X4fI1qTGp9"
+code = "be1f6d722c3711cf919d4f62f688cfcecff056a846733fce359efa20a398d546"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_70.o"
+symbol = "r_sym_ble_ragNLqDkbVnj7GUutTgs"
+code = "5878d727c044f16ebcd8a32e77a2471f685bdc08c493981cf05566af6e5622b7"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_74.o"
+symbol = "r_ble_controller_init"
+code = "9a0cd43c64c499eaa8cb80c7763a2c05179ac6921985c46d8a6121282fb64606"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_74.o"
+symbol = "r_esp_ble_diag_select"
+code = "722ed60c83ad50f2302bc8ad2fc1d133e44cc676067936843b1d4e99c0fa5fe8"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_74.o"
+symbol = "r_esp_ble_ll_set_public_addr"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libble_app"
+member = "ble_8.o"
+symbol = "r_sym_ble_vNVoB3u8sNalnntugADe"
+code = "a7ae8c382e9a8edcb0dc8e1dfd0af27f62b5b300993ecc03dee470ebae310f93"
+
+[[function]]
+artifact = "libble_app"
+member = "coexAdv.c.o_1.o"
+symbol = "r_sym_coexAdv_A5DXuOYpsXb125NuYN3d"
+code = "8e7913df9a252e7a32071aac3e3bd31c400ef82d8c8bb4eecff2fd5327d64f4d"
+
+[[function]]
+artifact = "libble_app"
+member = "coexAdv.c.o_1.o"
+symbol = "r_sym_coexAdv_OyYkQW0rKTbKcPp0FJNt"
+code = "353d823f3ca101330948ca0cce6197859b7930c70b871557aa598bc4ac0e125f"
+
+[[function]]
+artifact = "libble_app"
+member = "coexAdv.c.o_1.o"
+symbol = "r_sym_coexAdv_VG7vTjgdtb9y55QZyPP0"
+code = "7ad50b500c3ccdb77b241279e942415b55682bce9b2a3a24a097bc94b3fefb44"
+
+[[function]]
+artifact = "libble_app"
+member = "coexAdv.c.o_1.o"
+symbol = "r_sym_coexAdv_pNmEzY32xPoYRR8VuoXP"
+code = "e7d7a5f6d5b631ed0df012cd61f928a7b954213e8d19c48b553b447608c0ff01"
+
+[[function]]
+artifact = "libble_app"
+member = "coexAdv.c.o_1.o"
+symbol = "r_sym_coexAdv_sLW7oGzvK2Nq64ivPWK2"
+code = "07b99aed26a8ade96a1f06b148bb7261a22d2f5fe461d7dd872eef92e64db9f0"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_8zwo11wSByltviHFU8eN"
+code = "8587c7694d3e90c77a839efb9d417a3a59f5ed4575c532f144371b4d15f5a1f6"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_BqYvJSQvD3IUJJyL5jD8"
+code = "504fb6e56a072f985ed3401feca7131153743e08b1afd41c9290e6996b7e7fb8"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_FwW1rUBEXrFbsmQm3dvU"
+code = "68f71f6a64e5aa61bebeba18919b028975bc57734946ce8f212801902f983e61"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_H75YiVgeEk0LdscxQrpJ"
+code = "925096192be33c0011999c76d9846a5e1b04d1652dac8064d685f17d135c7324"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_sQLo226BUyucqr2y4gOW"
+code = "ba0ae9acdd3e14ccec48a9d8aa11ec64cecd77a2922308148255463f1f9a1a44"
+
+[[function]]
+artifact = "libble_app"
+member = "coexConn.c.o_1.o"
+symbol = "r_sym_coexConn_zaMnJdgVnBd25ru35IkB"
+code = "3e6b4ef10f98e1edaca3c2fc884b512f2775e4e74a12282089ce928e276c7777"
+
+[[function]]
+artifact = "libble_app"
+member = "coexHook.c.o_1.o"
+symbol = "r_sym_coexHook_QgUvVmt2sVpZ9D6zbl3P"
+code = "c8186efd4f906f9bc0ce288b297cbfd74f832624279b983f584aa3fd95c9e8f7"
+
+[[function]]
+artifact = "libble_app"
+member = "coexHook.c.o_1.o"
+symbol = "r_sym_coexHook_RqzHsepjtcxRQpoBqpK6"
+code = "a8b891ba63d7bc40a2ea22bb2a6ac15f07577754e7c6022e2eb8b01db7295e08"
+
+[[function]]
+artifact = "libble_app"
+member = "coexIso.c.o_1.o"
+symbol = "r_sym_coexIso_b24kWhZaxtKURlSMNhS1"
+code = "c8aabdb9ce67d1cd28d79b150c1dfcb53c6e376f275cc624fa134b907c8485e8"
+
+[[function]]
+artifact = "libble_app"
+member = "coexIso.c.o_1.o"
+symbol = "r_sym_coexIso_rZmnVfOeuJbHu47VyZ7H"
+code = "ef508920f7e5f27a32be1e4989807d2c28534b268db69b9547f994b83302c8ce"
+
+[[function]]
+artifact = "libble_app"
+member = "coexScan.c.o_1.o"
+symbol = "r_sym_coexScan_FGUQNnreeyQiPkw2qTYu"
+code = "4572678c027196f974dc86bee78a98528e2214d70c5f5e7a2ca11abd4b0c1e58"
+
+[[function]]
+artifact = "libble_app"
+member = "coexScan.c.o_1.o"
+symbol = "r_sym_coexScan_s7w1EV32meG8f6y0sPBq"
+code = "9bcdeba684225814ffdc6b39cfb4c3ba4b2e55f3383e7abe1090dda7f56a115a"
+
+[[function]]
+artifact = "libble_app"
+member = "coexScan.c.o_1.o"
+symbol = "r_sym_coexScan_wNFqQvVjWMhmRY8ZGk4o"
+code = "6e7b0738dc3e5f6878169df520ce0db23d77b9ebc5dd53aee696fb6a263a8064"
+
+[[function]]
+artifact = "libble_app"
+member = "coexStack.c.o_1.o"
+symbol = "brk_sym_coexStack_hzrw4DdhxAw5xAlGFEwI"
+code = "7180144dda8abd2c22ffb15efeadddf8394b4ed1ab17b23eade931131056ae1a"
+
+[[function]]
+artifact = "libble_app"
+member = "connSim_1.o"
+symbol = "sym_connSim_Dzx5u6gHUrhrEF6GLX1p"
+code = "26cc4efb861b72258843035ee714b4633921f28bac2c8f8c19737df2242a5372"
+
+[[function]]
+artifact = "libble_app"
+member = "conn_4.o"
+symbol = "sym_conn_9o4sfTJUuO7muCutlmpa"
+code = "5c9e4051c3448c70c233fe66f4bea3ae9fdd8ee78b74196258e0885eb2d812c6"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_2.o"
+symbol = "sym_dtm_ydFzYkQJZ1ArZKhfWxJ5"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_25YOj8pPkiCiy504xJbR"
+code = "bc47bc9bf7c678ba1592dde25709aeb8ae73b216f83655abc22fc157b376a48d"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_2zeOUjc7g55zkDNQuZkg"
+code = "00a673c477e4b2968c14730dd18968d240413d4c0df521332b5be7b4afcc5ba8"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_7gOGApwmDG1TxZOfQhrh"
+code = "2aeb263b593ed1648abbc95f97c762a76e2be9b96f1bcb3c509812bcd92cacfe"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_C15YAGhOCEEdWMnhjaY3"
+code = "1063887884965de58b8f4af8f5a7b11189c1144a66d41a7a496a670064da516f"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_JMPstxdIRcEVY1YJeXkA"
+code = "36ded198571cc816d54a2be662390177226b0c2f64e887f4c4ffd0c8ba869452"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_NsbldBIeGraE2wg0AVy7"
+code = "fdb66ae08765cf2e2ee14c768672967b4f25301ee23d4a4167a9517d036a4f08"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_ifYtgHeQ0rvhqeqBbpl1"
+code = "a41ede87c8d8ef8e8d2e7014e04bdfd68f254ae8d0efb18a07fcba71e5e747a0"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_ikQ7xyHA5qBHWlaqAjZu"
+code = "fa1f708d56eaa01180e8bdfff261cde32fb32fdbabd4597479c5fe8712b9c79b"
+
+[[function]]
+artifact = "libble_app"
+member = "dtm_4.o"
+symbol = "sym_dtm_qzyGhbH1fEoUEmtalnva"
+code = "37895c21a9c2115d27c4ab70df2d0d97834ddd562ae5aaf26fa07e97c95ef12e"
+
+[[function]]
+artifact = "libble_app"
+member = "esp_1.o"
+symbol = "esp_ble_clear_rand_addr"
+code = "91712f3bd3d00bf1f65c66be71090fbf6fcf815b51bcf415a538a300615030da"
+
+[[function]]
+artifact = "libble_app"
+member = "esp_1.o"
+symbol = "esp_ble_get_dtm_rx_rssi"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libble_app"
+member = "internalTest_1.o"
+symbol = "api_internalTest_hci_procVsCmds"
+code = "a614a0ca5a9b13ff48761ff7553e1a48c6264922b8c6032f5c7de7406d5f86b0"
+
+[[function]]
+artifact = "libble_app"
+member = "memMgmt_2.o"
+symbol = "r_sym_memMgmt_rys45AxT1geyo5W0TUT5"
+code = "5a548722b53309554045cfef2c109ac7b44db4543893b865cb205ff608ab9135"
+
+[[function]]
+artifact = "libble_app"
+member = "memMgmt_3.o"
+symbol = "r_sym_memMgmt_2LOgKQI4pa8z243VUnLR"
+code = "5d9c53995dade935b93f3f5764f10653101e1a693b6497d419e615e3fd6a6147"
+
+[[function]]
+artifact = "libble_app"
+member = "memMgmt_3.o"
+symbol = "r_sym_memMgmt_vqXcstfse8788iyCxlJf"
+code = "e22ec36e3fbf7c9fe5d4191ce3de067a20fe5466a530cedca21dfde27ac5f734"
+
+[[function]]
+artifact = "libble_app"
+member = "memMgmt_3.o"
+symbol = "r_sym_memMgmt_wH5HONweyQB0WZipVFDn"
+code = "8f266a4ec24702d6e5870e2a5a84f9858e58ce9ba98fba48f36be30ebca3687d"
+
+[[function]]
+artifact = "libble_app"
+member = "memMgmt_4.o"
+symbol = "r_sym_memMgmt_zJpaiu5wcM3sURVaC4Za"
+code = "bea8e57e349fa785f5a46d4e2b7489ce5d1a0bf896ca462afe135a0a3d805865"
+
+[[function]]
+artifact = "libble_app"
+member = "nrtIsr_1.o"
+symbol = "r_sym_nrtIsr_C19LvRC9gRxcfnay5CL6"
+code = "476f5d059fb23ecacbba2ea3b5652aed5e7ae2a52dd8067cc32b4080815e8ebd"
+
+[[function]]
+artifact = "libble_app"
+member = "nrtIsr_1.o"
+symbol = "r_sym_nrtIsr_kgxM2CJfVperrlVjmB4B"
+code = "bdf180c8caf45873776100fb407a40cc6f06e83d0660afa368c1b0fe6d4b60b6"
+
+[[function]]
+artifact = "libble_app"
+member = "resMgmt_1.o"
+symbol = "r_sym_resMgmt_zyxoWB9DZg2URcqF30NE"
+code = "edde10c75be9954a28d20a640117b503aa59eaa3bb3a5800feb74f309c0cbaf3"
+
+[[function]]
+artifact = "libble_app"
+member = "scan_2.o"
+symbol = "brk_sym_scan_b8ogEC3hTjGmqL5oRuyw"
+code = "93519dbf6bfd5a4163a5d1ebddf99e70ffca3d8177e332f6311ec882fa8e9f4c"
+
+[[function]]
+artifact = "libble_app"
+member = "scan_2.o"
+symbol = "brk_sym_scan_fd4yzdFac8vdFTlQ4BPA"
+code = "b7258e4d1e203d596baeddd10e16ca460942fb7bb308685b908e09a57e52c71a"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sched_timer_getCurrentTimeU32"
+code = "efe46737bcf9ae456bfd3b6f619216de1859222756b2348b08c4ca74e0f546fb"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_2ZpHIzRzIyx8b2ictYDG"
+code = "5ad7982a166915ef05148373335a5a62f9cec4e03fdd9ff940e37d5e315da86c"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_4bmSl1BmzE5nJghzSx18"
+code = "54cb0e8c71f09b5770468d81f54397ee5b3c1e949d0aaec3395af2ec801ff872"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_TYdJzWTeOAsagss1aIFj"
+code = "b3271c1809f49c60704399882d6879c198b32be94a3c1e44481d4844ce597e9f"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_fDm6cgOYa2vbgM6NW6KG"
+code = "82000d0ef706de3f2cf011239d156fc30a0c41e0fc07e1d7e755f2e8f143def9"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_nNWZOVojOrSuyuiwQ3OR"
+code = "5e842afab5c8c7f8d28c5125f52e2e9fd75f52ad0b57d536a0470bd3f27e542b"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_2.o"
+symbol = "r_sym_sched_sNmTBa8gkKuVLZu7GU1A"
+code = "e4b1222246fe964fe73c989b45c61e2195472585852796d2d62df434f5efb8fc"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_3.o"
+symbol = "brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV"
+code = "fc226c782b49e83cec6c42121c7f4beb3667cb4b5118174172d9bf6f9f45dd38"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_3.o"
+symbol = "r_sym_sched_4yOHdQa50AXnZAom3x3f"
+code = "ec88294141d3e53cb4bb237c6c650dd755585f5b8c9365808e17494ebca13866"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_3.o"
+symbol = "r_sym_sched_GEBmwfVsspx61ARDIjlz"
+code = "e2e8744060194e94545af22853f4094fda7621c7a2389ba84eff8e5f0ed5a60f"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_3.o"
+symbol = "r_sym_sched_hG0vjzWD9iloJ7W5NaCG"
+code = "840978ea43383411b65037b3827cd103b8a423907d308f98a880c0a92be60388"
+
+[[function]]
+artifact = "libble_app"
+member = "sched_3.o"
+symbol = "r_sym_sched_modWXEVwpjpaAKhsFBrP"
+code = "a8b71e3bff0f8f490d7ce589d7e4e6ab2192d65628ed8a468db7232dd0c26548"
+
+[[function]]
+artifact = "libbredr_app"
+member = "bt_coex_schm_adapter.c.o"
+symbol = "r_bt_coex_schm_calculate_afh_by_wifi_channel"
+code = "528b98ca294f797c8ffd3d6ffa2142288825a7acd7c962287beecc24144d572c"
+
+[[function]]
+artifact = "libbredr_app"
+member = "btdm_common_sched.c.o"
+symbol = "btdm_common_sched_bredr_on_sched_hw_list_done"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_driver_common.c.o"
+symbol = "r_obd_capture_btlc_timer"
+code = "a34a58ebfca141a863426aba3c991653765b817a88cbdeba6b50d323df41502c"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_driver_common.c.o"
+symbol = "r_obd_update_btlc_timer"
+code = "f8892ebebc1b421a1cba539f0fec51fbcdd936bb5749c36d79805d2ae9aaa0f4"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_btlc_fre_get"
+code = "8bc0edb54eaa9173413ddf4b199db0b2f6f0bc21ff67595dc6aa2344f7cfa4ce"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_btlc_fre_set"
+code = "c51097b9a2c9907995030bedff150e8a427a2f7e7b24ccfdbf36254f851d90e6"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_btlc_timer_cc_set"
+code = "5e4dacd967fd8ee23688945cbdb24085a7dff6c1917d3c5bcb928c9b275c758f"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_current_rxlinkptr_get"
+code = "ec1ce34c20d249f8fb8987807768203c4dcb7222d0c6abac83ec2133c7a7280d"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_current_txlinkptr_get"
+code = "a29e6e28d73c7679c3b49895054aa6a7d1bce5ec7b8d642b73a74a2029a663d4"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_global_rxlink_curr_ptr_set"
+code = "3d191cc78a4c0b350cca0c4b794338d0818e8d82fe8451c2994fbcdc6205b23b"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_global_rxlink_next_ptr_set"
+code = "eaa143a049327a7aabb5c06e578071ee8bad6f76bc4c52eb75e292516d80cbe1"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_global_rxvalid_set"
+code = "d8b4343ac0b539cd3c14b95fb06dddb32205bc7a7607c825a6cae9d702f2857f"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_gpio_diag_set"
+code = "2c1a7a259268429dce898a6358c73a13374b87fb52d7719bb86237ac8746c260"
+
+[[function]]
+artifact = "libbredr_app"
+member = "orca_bt_hal_link.c.o"
+symbol = "r_obh_link_wdt_config"
+code = "d8ee46ecfaef9f9d66756afddae0bff77c4ed499e6cc5ec041db73c621ad0118"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bbmac_idle_for_swrst"
+code = "e16849008632411b3cc5fe6531ae6c37c62cf4cb2b75909cead29695fd241d0a"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "ble_tx_config_check"
+code = "72b0e5baa39f2c694b7d4c4a195fb2841b6aa96e762c9a8d657454f7c6bd041c"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_detect_set"
+code = "bff98d443f13deddb466ddc7b547da1a0a3384cb2d76037cfd1d7ea3e1b06b95"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_gain_max"
+code = "37a36959b0a2b6c849dee7218ad8eac04c06979afc2f2a3ca5e296c17a30336f"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_gain_offset"
+code = "965df8dbed1d7ab33ccbee6ad06662e79840ce486b89596f120299c8d39c82f0"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_gain_set"
+code = "1d28b0d5722ef4b83da850a4bcdc7379dd81e56d6cf5da1fe7b6defd21ac3bcb"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_recorrect_set"
+code = "ffb6065e778e91005040b0b12f34226c8f4b5e508694ac13769dea02d503b562"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_restart_set"
+code = "c18192204b650194859e03eac050df4561ea696c3db7a1e8dacc4b4fe5f3d2f1"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_rssi_thresh"
+code = "8b5e90d18ace1b32e6c1e9d81fdb049e15a4a079530044581afac3f0d92e8900"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_sat_gain"
+code = "cb48d4ba238cbfdda47a19efcb5f363bf73ba567dd70be5693ff297a72c9b1ad"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_target_set"
+code = "35392d07dd3bc8d8fa5543a479e0be122a8ef2bc5f49197466ed6bef419c392c"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_agc_v2_set"
+code = "3ea719b051a1c77f80a8b5b1f8f5a26af697f10fe4b747d200e5f6d47754f8ae"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_cca_config"
+code = "1937386055f4582f5482e0c5fc53e9faf063a0ee4f7086879e9d21af4a2e646a"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_coex_config"
+code = "28ca861372d6012b31fea2ae669d8ad2632376a1a2d0bc04369830737731dd86"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_corr_thresh_aa_lc_en"
+code = "30a114f096af888e14f294d3bc6782868d99af682d8151ff8e29c5a244669a35"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_get_cur_rx_info"
+code = "30d3b61ce9a9d32bd8dcd21b02eadcb3f713331d40b77a8115c6e8c638d25f04"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_get_le_tx_on_delay"
+code = "34f786b1b9e044cd03ff22c1aebc505a132087f059bacaca72e72e411f9e37cc"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_rx_correlator_set"
+code = "d1a1ac62be8b71a3cf3b99df3416079f7c450ab8138ea609a86eb2de8a365025"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_rx_dpo_set"
+code = "a3878fe62a55fb7c4a26f82e901e7ab87be9819c53d0095e1b1ef7f431b2cd6f"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_rx_filter_sel"
+code = "0f4e20dcbd435fc1bbd8b01d673d0ffdf4db872d7d7627c188f0281ea8bb8ebd"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_rx_set"
+code = "5dafe2820b1f7705b92aa0826b14309c5915c6ccf84936eabba9137185c5116d"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_set_corr_thresh_le"
+code = "aac0050a4ab55597dab053dd5e0e8854a0bcbf7f1935d78a179b1c13576f7511"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_set_le_tx_on_delay"
+code = "c271bc27863750ebcc33ad5b6562f2d91d3c72eb6c0a7dd5fb4007ee175dcc7a"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_set_rx_sense"
+code = "be2d36e59aa25fe833cc27cdb6aa49d42edf050b142e70a9456eb9893d75875a"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_set_zb_tx_on_delay"
+code = "b6d31fe6f99c03fe188ba45f3b45225c0224d40ed15a5c48188bcea3c2c190f6"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_fifo_count"
+code = "2e27bd88833e9b5f3f32273df59254a00f273b7190d6ee058414e75185ac5983"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_fifo_empty"
+code = "aa5bc013aef379a9e0202c9c11261e7bec0677be927f1e8bb38512d2fac5e1bb"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_fifo_full"
+code = "9bc6279059ece30131c8424a15c3e3f6dcae37731e4ee357e5aab431762e6cb3"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_fifo_read"
+code = "06c29c0cadad55a6467b0ee4f5dde6744b9af9646d7682238f5ef8b37600c16a"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_fifo_reset"
+code = "d5562a734bbbcc6a8b2cebf8ac659278bd8e3fdb2be84b13c83118b15b577963"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_period"
+code = "d46ee86ed6abd96262047ffb67b3bc7130914de40e5decd73b178cca3c48b3b6"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_tx_cca_set"
+code = "80b89700c0f2be4e2570dd16902d12066b012d42878b7d268a17bfbe1afafa41"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_v2_init_cmplx"
+code = "a3b1cb149283c8acd8115163476630bc6900f35ea02136303e882b3e3f7dccf2"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_v2_rx_set"
+code = "3d41369c05eb799add3690a40d3095dc7f2ab07716b22b9f8216c2438bd96d7e"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_v2_tx_set"
+code = "773f5d2d9d4479c30950de36f2cf7dde3b3f549f07bb61c3854687e91d117e57"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_bb_wdt_init"
+code = "a2c22f0d3bf76d22116dbbfbce1d8447e584482b7fddc2c8fc8a60850afc7fae"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_get_channel_pwr_set"
+code = "efe75ca74c2e05f60fcef3d9f07caaeb0b68c1e477e443776e8a8b9e4c25a507"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_get_channel_pwr_unset"
+code = "53092639158062a2f3daea9da0ba0ed59786cf78989f29fb89dded099b05577c"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "bt_set_rx_comp"
+code = "ee03112e6e3685026b5aa286d9ee1f9ef2fadfebffe4f7c26698a07151f4dffc"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "coex_pti_v2"
+code = "aec7a07fec278cbcb11fae064adcf60bc9448ac9da900eb8730d00355c09463b"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "ieee802154_txon_delay_set"
+code = "092245011210b49afced17640f803d8f4c75cb10bbd1610eed6eadf43593a105"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "set_gauss_coeff_1m"
+code = "7d1bacc2c7b5de7402b67dd8556357c3a43a22be4fef96ff9f3f274e51f589f1"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "set_gauss_coeff_2m"
+code = "e4477d0002220d74f899038b65fb79f817729fefbcd9ee80f24e5abd650d98e1"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_bb_v2.o"
+symbol = "zb_rx_v0_0_set"
+code = "23af0292bd0547032a097c086c9186bf89af5bd5395e8625f5fba6e92462a9d9"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_cte.o"
+symbol = "ble_bb_cte_set_ant_map"
+code = "eb374c208ba703fa48c62b768c50bb8c0ab46220e84419f596efdcc3fb24d92d"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_cte.o"
+symbol = "ble_bb_cte_set_cte_en"
+code = "7bdcd0d2883ba4dcfea60974fc0c45a175d9b39a4d527cd24d6b4e092050bd3e"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_cte.o"
+symbol = "ble_bb_get_agc_target_value"
+code = "52185e31bb900eec4c98ee5e1e07bb139694a1f2bfefc4908b3b05fa7b3b1952"
+
+[[function]]
+artifact = "libbtbb"
+member = "bt_cte.o"
+symbol = "ble_bb_set_agc_target_value"
+code = "2d07bedec16a5135972013654de88fa1a04ca23d60131adcfbd38b11ff503e2c"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "10.o"
+symbol = "r_sym_bt_RJ9vWjyuZJabuhkGCaRp"
+code = "4fd2f0e2e7e6d76d0c44613e3409a62069892e918094f61cfa2a8288c16fd74b"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "14.o"
+symbol = "wr_btdm_osal_intr_alloc"
+code = "4a2de232d6d55a191d01452e5ba75f22f2ff1474dd47b7ee91536c0f78a685bd"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "15.o"
+symbol = "r_sym_bt_1oCMtmOT1H9hQJgJtlO1"
+code = "7daaf20c4b36e1726ca36a2c56c15c5f1c395611e0a1f0e086ad345442b01cfe"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "16.o"
+symbol = "r_sym_bt_QsLKLOCC2pct4rL8uFBN"
+code = "e9892c3ee791a959297790f1d14379fb3ba59c89bad043dc22491b6058790a3e"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "16.o"
+symbol = "r_sym_bt_uNi9OHmE7XdXfGqTelU5"
+code = "26cb7e831d653831d64f56f0fb580ca46a305b64d40d1596e110124b74014c8a"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_4KfpZh0Hu5NprlqcNu0D"
+code = "13eee48f1255542b58d7bc7d8ac6e791ebc28eed13e3c9d67c996af179fb279c"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_74l62ZLsZuXg67pPHSd7"
+code = "b56df604ce9d340eeaf06606571d93f4ec2a78a6835394730960c3b43c3b7a1a"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_9H3AnHbaHJ3auzSvPDme"
+code = "f0a2858bb080ef7e0ff6c80cdbf6b34b8062745fa40ebe3a3ac74b4cd8017cbc"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_B8fDByebTHuwRe8FZuRt"
+code = "ee423e4417737dd0571d0124c71ac9511ebad832a0705697e7dd6f7c41123d4e"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_DPWY0umixzmXEaFuUyCI"
+code = "a63819e6361af8243eabd6ed96c4ecf33193221bc48277f03dd012fb95f475d7"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_DkrQYQcoyzIHdYi0CzWE"
+code = "811d0b41222fa01b0a1613282dfeebdc32d1362827b7b470e9ab2b1d8c0c190e"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_E8c5Eimm0z6kYe9v4wHr"
+code = "e02cedc933cc8350031456ca7e3a1020361ad5a44dfcb2d791b95ec94fb3340f"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_EabYtUaAIR05LXw3qZSA"
+code = "90de4c8ed742368d258a55bac404eff203672fcce6b29693bf74d91f9a6f13c8"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_FCfM3hAXphsk1qERleGZ"
+code = "88818fb3ce25ef0ce457a39b744640e5e9e9bd15f30a7b6e837daaf6ef071ca8"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_HGbPEa9oUCsYybIAWjE0"
+code = "9ef8eb5b6bef451908ca742fec6d7a7a8e4d9d9a26b255943ac67a2e79443cf3"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_KmzLfKJ5UUi7zkqz1Nwn"
+code = "de92756c41bae70f88e3bc5675d2e97c08cc74a2d7a1536b1f0e63103d462f76"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_M9nG353V0svWrv1l1zGw"
+code = "b3bd1fc0af8f8a86f481af29c5aab9b1fa28b5a1df66da771533798312fe7ad7"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_Om3oeseqyzxJTVgbw4Wp"
+code = "65b524e473fee616571bc75dc6087a779236e26cd72a033f5aef91d887d82d1b"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_PVKilXLQPu1BjRkm4C6O"
+code = "6e7ef6f36848f852df8132fba6593d40f8fca418db8f7f8128b1f3dc47e9d495"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_VrTmsQfPlkmys4UL0NZp"
+code = "85e20fdaa8e2ef93672258fe5d4708effb291d1431b88cfdb93046a57319178d"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_WHYoiw8ufY0AEM2KSRK1"
+code = "21d0e0a283cc4dba2f2944518322b897210fa1acffa377e2465f512338cf795f"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_XPuqTHliEO5V9xpR7aJR"
+code = "d4853b1db04687791b1669f39c05ead1a60471e73239c164f76794bb1f541a76"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_YRnBzKlWCjsIbotqvNyS"
+code = "4a94fd8da584ab253c422d10a5c5fd49a6fa936fcfc6d95a332f26de6aa2dcd4"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_iFvwGI2tL5M1WM3fIkHq"
+code = "e0708cb0ce1ace04ac0b40170b1e85ab9ae13e231ce78fff7135a52556cf63fd"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_qkNMymdnaJnYUfzpKgEp"
+code = "0c45d64fe4a3b082b31260ca378893d4eaf8b622ef7f286f3f7621bf17361c90"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_rPoPGH6BBYjZaunDU5FV"
+code = "e721fb297e4fc62f2c10c4a09203a9575a419b6b4cb357117ec40531ae0f318c"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "18.o"
+symbol = "r_sym_bt_vibwBXogwGafrHSYUbon"
+code = "1812017e8c26ae7a74e8bc9f77233fd0ad463be32ac02b6ff792fcd4fa2cc4cf"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_1Gbu522bM6JExNgRaco7"
+code = "804922aff264ab5fc65b20e1b0c88f6c0ec2784c11c8a620402e49a907fdd526"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_32zs9B7Gv9vHIVpsl2A7"
+code = "795205aac8a497696a30ff869f363c3f8c5952b413b2bf28926fb99a0f291dca"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_Ceh2khbCcopEBybBO6Z5"
+code = "dbeeb00fab7a4fdca15e1d6d0592474c9938e0c61f0fc0e4f535f78a8dfbcd36"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_HkSB5rY0aoJLnHldAOO9"
+code = "ceb574e715ad902bd93d1aff7f35d5bde47d1f65e035f779392eb582b20c81c4"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_JHP69cMcA5vCzdaxdFgT"
+code = "8534ddf6e38a8046bc5699e57a2edf82a8ea04ac86161533abf4624b28aea981"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_KrvfcwDw4eZoaTPVdFj5"
+code = "05fdae5c781bc04cadb4f43e22f84582a2e881406739b9606314e75d11f13289"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_aOsjkDNQyOII2OseK6av"
+code = "7876f8e7d75c113c498a3530e2da455fbe8e3e2bd697867d84a25258e441fa20"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_cgaCegmpqnbaoszyOy3c"
+code = "88d3e869af3984328406ba351dcb756456b08ed54035a03f199c9ef661b729f9"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "19.o"
+symbol = "r_sym_bt_zwu3w1OKSOTGoGdV7TSf"
+code = "51e95d01cf39ece5b1f021eccde5ec4d46e83f79804e8c9898b62f2ad32a0fde"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "20.o"
+symbol = "r_btdm_task_disable"
+code = "14cf2c3e0ee7d5ce37dfdc55594cf8cb1c80ec362abc2a2922c41ed7f789a403"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "20.o"
+symbol = "r_btdm_task_init"
+code = "e6e15b1036f406939144307c82bff5b8c18b063fee296a10393a55302397f486"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "20.o"
+symbol = "r_btdm_task_shutdown"
+code = "8b05250c7328f8ad09430f67ef86a4abe132afc396d56b60de7603220d8e463d"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "4.o"
+symbol = "wr_btdm_coex_schm_status_bit_set"
+code = "ece4bf640ecd5992be03a2254b4fad07a317b954eba834d3777fac3b3588cf00"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "7.o"
+symbol = "r_sym_bt_BOhffsuJp3HZRA44ZYRn"
+code = "6ba5deee615577d802a5c6247f1c42ddb46ab8d60f61747a854fcf596ca14fbf"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "7.o"
+symbol = "r_sym_bt_R9GZfnUbtn7k6mHtoZbv"
+code = "9cab3dfc50f4101dec41fc70d794d66f8ec080e59b3ff919cb1a56edb86e85b2"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "7.o"
+symbol = "r_sym_bt_aGdrujd2MUAzWYH75baR"
+code = "ff0f463360b21a56ccd3fd51a332feea452d091da568e36b32e691afed13f632"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "8.o"
+symbol = "r_sym_bt_37HcX0qW6j1XVtKakUIG"
+code = "1015b80bd8fd115c54019ca84bc2847de3a4e089713039a3f416f8b8d925d5ef"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "8.o"
+symbol = "r_sym_bt_6lAYUFKOuBLyOZ6Kvsv5"
+code = "22ccb6c209afb464368407b384a63ea1e67730d722fc1c6b2647b82f04dd2327"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "8.o"
+symbol = "r_sym_bt_DOVkQWJHjeuid8jcS9Bq"
+code = "3ea3c802a7c1ff45443defd7b9e7f76adca64fb4f74bfb30065ca5622e57d7ef"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "8.o"
+symbol = "r_sym_bt_t4aeyhcVrKTNMSlq45XR"
+code = "fe9b77b276859fd5555da61bd7a17428b63721b26dc5eb32f270a72ab4984ddc"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_86dRVPWrmTMQpChjYeWi"
+code = "abd6262e30d2b6201965d298744befddda7e07a22440d203ef05196d2a11794f"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_FYr6kIOvDbNGoOHfaRvK"
+code = "f7012475dfdca86a090a151bdc229bc6ae06238ab2c11fcbcec129374ee8f3b6"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_VoUEVeWY4EiqyfQlgWT0"
+code = "d52a282a5966e1ceaf0e780c3557d569b195e76eaad121a555e401a61b07fbd9"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_atiitVoBKMplOJVvjTHP"
+code = "d17518999b1dcd09594e3c69c9295f5ba8b8ff247b5226998eb1d7300411a31c"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_waDX0omCE7oLuPVSoPOK"
+code = "090a3909e35b4fa090e749f7cfbfcef663167d56ef1574812d95dd5c2c3edcd6"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_xPWv1Z87N9d40AR9yCcT"
+code = "79a180fb2c2226fd90db9ea4d005cc28e6f70c8a4d53e998b134b074c4d20d13"
+
+[[function]]
+artifact = "libbtdm_common"
+member = "9.o"
+symbol = "r_sym_bt_ymLPVGRY14FVW494j9ZD"
+code = "bd7f5e58dfb047d1f7255159e180e17eb72853654cce9e7a6e9eee46d2871670"
+
+[[function]]
+artifact = "libbttestmode"
+member = "zb_macinit_txrx.o"
+symbol = "ieee802154_mac_init"
+code = "511960e154e5d10790fb29ef2749103d642c43ab867354c9e7d96a42a0c5a935"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "coex_pti_get"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "esp_coex_ieee802154_coex_break_notify"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "esp_coex_ieee802154_extcoex_rx_stage"
+code = "be7b9b2e5febaef3ef3f45b57489b02bd25fc0673a3c8be300be8a779b725bfc"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "esp_coex_ieee802154_extcoex_tx_stage"
+code = "be7b9b2e5febaef3ef3f45b57489b02bd25fc0673a3c8be300be8a779b725bfc"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "phy_acquire_grant_protect"
+code = "d2fa177352e1fc5f666020f8d5a4085ff8a8e3f7475ceb418095fbecb755cce3"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_api.o"
+symbol = "phy_release_grant_protect"
+code = "87ee7840edb576da77368336cdab9c6220876c7444e66260fc9b41473a55785f"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_core.o"
+symbol = "coex_core_pre_init"
+code = "f63a1f518b4a4457f25deed3d292f5d315e477413a70417589af451643fc0683"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_core.o"
+symbol = "coex_core_pti_get"
+code = "662cb352efebfc1f99349b0876bc309185b766ff271be349ace2cd70ebb2d782"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_core.o"
+symbol = "coex_core_release"
+code = "303a25e922b46de3a2bceb659dde9541dc720b9e8083a846af81d412dc525de7"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_core.o"
+symbol = "coex_core_request"
+code = "0e0ff7807808d58646f75cd206a2e4f627e3dea9630e036b59d8deb526bda26a"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_core.o"
+symbol = "coex_core_timer_idx_get"
+code = "ecfc5b7c6d8e5c07280cfa7146072e2cc09c7bfb6dced21e3e5d56a9de813897"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_disable"
+code = "edd42e22e5b5344a7d7bd6cba789f76ca689dd8c9146775327709e66444eb5ff"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_enable"
+code = "c5cb406d43192859c05b1324f7f8a21ef5fbf7b1722d711e7c12c616d9812520"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_force"
+code = "fd42999eef5ed54c2b49aea2c5674a0e9b56724dd71e492380a8c3f758233c2f"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_freq_set"
+code = "4f5457dbd226bf10f3491b6cf581e2ca4cba3ff2a9a102fc0c4c69ffe50fd75a"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_set"
+code = "014967708138e0b0b2630763e9b9dce786be667baac5b6a759bac487cb8af2fb"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_tick_get"
+code = "322ed82beb7312d2d8c6ddfe595d02880dd5720b11c974dbf2cddcc309ee3f93"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "coex_hw_timer_unforce"
+code = "6cf6e30c218039cc30dcfcf28671c3935baa495e7d78ab9b053e5bd2ace8f8c6"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "hal_get_IEEE802154_pti_offset"
+code = "e3db8a61a3e98a4380ea133911ea658f3508fd4fcab2d2f39eab8773ae0dc545"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "hal_ieee802154_coex_break_notify"
+code = "be7b9b2e5febaef3ef3f45b57489b02bd25fc0673a3c8be300be8a779b725bfc"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "hal_set_IEEE802154_ACK_pti"
+code = "2b9a2ca7d1c60ae65c10399d25c81f067d6f49cbece4cd748d20ef812fcd6b7f"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "hal_set_IEEE802154_TXRX_pti"
+code = "6339da312b4b89894abea013e3999e432b3fa0ee9a5b322b651bacfe50e6e949"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_hw.o"
+symbol = "hal_set_IEEE802154_pti_offset"
+code = "a9ddfa2fb0e2bd337d12a1495662cf0e871c26d4a5073f85a84563fb8f4ac655"
+
+[[function]]
+artifact = "libcoexist"
+member = "coexist_scheme.o"
+symbol = "coex_wifi_channel_set"
+code = "cabc0a1e044a5ce3d49ef11bf03b2b125d317ed9aa01b1c2b47d2195bc6a6716"
+
+[[function]]
+artifact = "libcoexist"
+member = "external_coex.o"
+symbol = "ic_set_extern_coex"
+code = "df9bb3de4b01f743654bf3bbe7bf8a08d232924d6f84a8602f991301ed7649a4"
+
+[[function]]
+artifact = "libcoexist"
+member = "external_coex.o"
+symbol = "ic_set_extern_coex_params"
+code = "48af0ccf1a76168c6d699be4d8301d67b491ad03bd9681e85ab38a2db6b1ee5b"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libcoexist"
+member = "external_coex.o"
+symbol = "ic_stop_extern_coex"
+code = "fb46d36d715394989c05ff5402484e010e7362f79d0d11565370e0abdd736e7f"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_clr_extern_pti"
+code = "9123a3271eab6aae770932060c7508da247ba42e7e90e15568cc566f79513966"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_disable_extern_coex"
+code = "cb0c1f7e1f107b8cc90263a694c6376647c024bde2d3688182d655ccdaeb1406"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_enable_extern_coex"
+code = "3f44274c6de56a44dee3439a1290833f2104fadd8fb78402583d7726a9e72df1"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_coex_delay"
+code = "24932319028ea81b855120e239b79885e3cc033db45ca84574e5aa6011c27cd8"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_coex_mode"
+code = "b1c66187fc29bef0abee37a7b7120eaf6c5eb1ee826504a7355839895cabf10b"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_coex_sync"
+code = "07be3d53354e04aa1ff7341ae95d65a3b17502fe6d88c9a26a5e0d3bc18a9015"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_coex_validity"
+code = "d3099dcf98f6493ee96a2c997beb66ed72ff6fc76b67a8ea3ca71ad85afd7c90"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_pti"
+code = "82f0b468c42944f5fb4a8b467681a126c9174810bbbea5267af622ac60b3a31c"
+
+[[function]]
+artifact = "libcoexist"
+member = "hal_external_coexist.o"
+symbol = "hal_set_extern_pti_mode"
+code = "6d1d3e74811f513c451f0439eac7b84f8c0cfd27e19d677087feaa6a289ded6d"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211.o"
+symbol = "ieee80211_is_robust_mgmt_frm"
+code = "5af8d19bf265dc215a47aba26e7f06300bf803a75bb07077fe28432b9bda3ee9"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211.o"
+symbol = "ieee80211_recv_sa_query_resp"
+code = "87434affc8653669f9e6430c74bfd45ed5dffe84edd9eaee9503c35ae5b9a11d"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "esp_wifi_config_11b_rate"
+code = "1528c64005a82939b2e65e6984a2708ba5aa9d2d6542acc894fe84b06bbfa4c9"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "esp_wifi_config_80211_tx"
+code = "d9124e337505e621ea7f22587d2a7d7f093b6534d7fb7c0f453f0986987c5291"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "esp_wifi_internal_get_partial_ru_max_tx_pwr"
+code = "6f07a9c3b824dd1da944e642003516b8413362caa317bf78563f5d9364320354"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "esp_wifi_internal_set_partial_ru_max_tx_pwr"
+code = "b0c66878d4340ffe71c93c455923f35a91b0ac52ba3e2798a0f4e6e98ba675df"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "esp_wifi_set_inactive_time"
+code = "7c050f1cea86a37301fc1ec15c17ab0e2d39602e251181b0b4309b5ebaa6a53a"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_api.o"
+symbol = "wifi_assert"
+code = "5eeec31b06ef92db53dd9e2251302f4da1b63f41091973fcca3dc62bf564aa51"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_crypto.o"
+symbol = "ieee80211_crypto_encap"
+code = "7de583bfcf3f96f7ae53972aef94d6338368b2c956f748db18829ed2e834a0ab"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_crypto_ccmp.o"
+symbol = "ccmp_encap"
+code = "697fc19b5fc7c6c1fbbedb461e8f45473e6985b4f0d751c32f655759ce911214"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_crypto_ccmp.o"
+symbol = "ieee80211_ccmp_decrypt"
+code = "b1ff3f0521cf9d1eaed31429f790427e526d311684d1de83e0626b6c924f1c50"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_debug.o"
+symbol = "wifi_log"
+code = "f4ca28815625952b8111a11d1513c352da0d9da74eb3c954961ded354753cd2b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "esp_wifi_enable_rx_stbc"
+code = "a891728f4806e098f51d53d5b9b19b5489eda2b69ec59c10f994b976187e3fcf"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_add_hecap"
+code = "8212769f9b409da05583382e0c99713fc780163749329884521ba933176edd1d"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_add_power_cap"
+code = "10d387819f6918699fdd72ed311ebb8672f95841f3d9e3ad0c36e99c219f8116"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_add_ulmu_pwrcap"
+code = "e98cd4be3637b3834023d1fdd45ce407c15de34a7bfd58d905a5c88c908d67eb"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_encap_esfbuf_htc"
+code = "3f05fbc008398e223f6589c77fd214fa9baa13e3773119da1a5983c83baa0e14"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_parse_hecap"
+code = "503d7515e1722fe83e113e910cb04164ef6900d0c1aa9fdf984da9d7d0d2498a"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "ieee80211_parse_heopr"
+code = "65546c346d5f5b2bb29e7189ce50ffa4fd6a226bac2650c8912c233903caaf31"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "sta_recv_ctl"
+code = "5dea52e0e3aa74d95f5d21f1d02ff36586e8c317571bfa6da6e938bb8b836439"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_he.o"
+symbol = "wifi_htc_omc_txcb"
+code = "af7f9d9a308d38672d490428cb6bbe50dcd62ffa17c57efce7f375a8d975063d"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_hostap.o"
+symbol = "hostap_recv_ctl"
+code = "08abfd6d5d9605c04d12f9b5479b1d441b711a6ae6be594f882a1051aa329aee"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_hostap.o"
+symbol = "ieee80211_hostap_send_beacon_process"
+code = "85ef31bcd28a014b26c2bc09119a1ca3c91f37c26cef11d2959b2a17ca266f90"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_hostap.o"
+symbol = "ieee80211_hostapd_beacon_txcb"
+code = "08e58e288dfa641472c71e23e1f04e41fba7e52f58cfb55396d9c70dc7362043"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ampdu_dispatch_upto"
+code = "b2c67a70a8a80c32281be7d93f3db690921a9777b7bd25fd25c642a31329cdbd"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ht_recv_action_ba_addba_request"
+code = "3622a62735e402a695db1eb94c547291bff34970c7f5182a859bad4043f944e3"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ht_recv_action_ba_addba_response"
+code = "3e083d1d4a5929285620b983f22552a7f2ce837cacfc6793220c26429c9bc50d"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ht_recv_action_ba_delba"
+code = "dd98991236f101d0584239e2f460a658dfb0c35b26bbcea9c96d6d99cae1d1eb"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ieee80211_ampdu_reorder"
+code = "c641c025704b4c86b99f1f113372a607dedf788a46ef9c5a61be976a39e60bf2"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ieee80211_ampdu_request"
+code = "003dbc8c07e988a40a1fa8b8ae9799183d2e3eef135394c954ab771216ec0bc8"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ieee80211_process_bar_info"
+code = "8369399970397cd8f1467d63de3a4eaf86a6ab18df8b23727fc44065dfe2b9e5"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ieee80211_recv_bar"
+code = "fcef7440be640cbdb44c1acb7dabd151ce519b9a1d9dc86641362e489ec97a48"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ht.o"
+symbol = "ieee80211_update_channel"
+code = "87f4afb8a771959fbb19c00ad85367aa106a209995a9f4e144838e2d2ef03b19"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_input.o"
+symbol = "ieee80211_parse_rsn"
+code = "17e65359f373432d452f37db4ca9bb61c91192516aef214d3576d89925df6124"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "map_wifi_config_sae_pwe_to_supp"
+code = "6e60ed09400ea79080aa64536e4ad61cdfb4bb52d303c9313e8a915f99353176"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "wifi_get_partial_ru_max_txpwr_process"
+code = "b53255f6e4cc933ecbfdc7ea73405f01fff107c4703f7ae7ee460adad1e2b1aa"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "wifi_get_tsf_time_process"
+code = "97672a8a953a6491f31d23c90d5bb1a07712cc5eb64593b05cd8f0df63f8b7ee"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "wifi_rf_phy_disable"
+code = "16655d72938ad650830de500c692a1bd91fcdfbb9886ac61f1a7e8392bf7a531"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "wifi_rf_phy_enable"
+code = "ffd870ee65903f7425234fda66b407b0e086add2949ffd157038fc80f9e33e8c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_ioctl.o"
+symbol = "wifi_set_partial_ru_max_txpwr_process"
+code = "39260153501e905439ca9bf6d6c7f81cd0f16eabdde67ffab99a60939d18ed68"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_nvs.o"
+symbol = "wifi_nvs_get_sta_listen_interval"
+code = "1a95557e3e1be42b56860d59651e46b8f761479fabc7b5e2eaee85f94ba6c875"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "esp_wifi_80211_tx"
+code = "ad1068c8ee57ba621df8763bacc122ab9db12e690481c3dc78f25eb2800b413a"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_alloc_proberesp"
+code = "d6e8fcb55e23537b82acdab95baaf3bb6de91f1cb49cc0999477b122c822fc4e"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_alloc_tx_buf"
+code = "ee053cdf63bdd7fba8ad8596fc9033ea5b3d4d81b5b2ac36ecac3fc02699970c"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_assoc_req_construct"
+code = "a69000ec23d939e52ae62fab6d59b8d2146ee2a6daa478b2634a11c55d699dda"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_encap_amsdu"
+code = "63e3b39062cc2dc0ba6d1a499364f6bb7ea530dc5301a944c63fc40636780dde"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_encap_esfbuf"
+code = "d94b327c795da2b81e7ca542efc8ca6f20f1b776f16820dbe944224e428ef7f5"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_recycle_cache_eb"
+code = "e4c6e50229a6ce3261f3b8ce298c92b0c2130abea7bc8c7eea831c269143341d"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_set_tx_desc"
+code = "26422c19752c875379fbd92fe32f5837da2e6681c1b44fe1fba4f3a6a2913f75"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_output.o"
+symbol = "ieee80211_set_tx_pti"
+code = "0234f8d68873c148099922a91fe79504a83a4439dfdda558b9ad02a8ecd72696"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_scan.o"
+symbol = "scan_next_channel"
+code = "10431ecd72ceeb729727dc27ab8e41d0309c076042778f54f4a3f574e13cd6a2"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_scan.o"
+symbol = "scan_op_end"
+code = "2db0e8c44e34f06bf14dbdb4b3dc5458f539530d7cf7c03f79ae4437ba4f83ce"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "ieee80211_is_action_category_robust"
+code = "b87d58e20de879861835baa6700cb0a44310437f0a0b599db8398e35c21f7b34"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "ieee80211_parse_wmeparams"
+code = "642ea34d278804972aa903d93131ab9865217d4a522f1f9a7ecc8b626fdda13a"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "ieee80211_sta_new_state"
+code = "74771fd9160f20e42aea848cc40f493c1385a5a19ef5571a43a4fc41b995308b"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "ieee80211_wme_standard_ac_to_esp_ac"
+code = "88052b326595cfd63e4105c06b396ab44868723410ada84f221b5676233dc829"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_assoc_comeback"
+code = "a3fe8c1d24afcfdf974535366fd078c60797d752399224b66c9a29edac5cfacd"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_auth_sae"
+code = "379f571bf6dd69aff1d8d91f2bc94b0d7bcc1fa7e9f3acff9a0e3a699b13932e"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_recv_assoc"
+code = "cbeaa9e2b7a5e99f826110c871523d05594e7a2123235a572ca132caccf0e75a"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_recv_mgmt"
+code = "070e0565d8e09ec2d9ccc0015ca45f9b5de3cdc0edbd15fe7633bf8d466cc0d8"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_sa_query_process_timeout"
+code = "7c2139cfd2a25043338c3a31f253dab9d50c3de4a04fd0f971b40b08c313b7be"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_sa_query_timeout"
+code = "7dcc18dbf0ae78798db2b92c96b04d8913113858aa920b7af3cdca413f434761"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_try_sa_query"
+code = "985da19ebd9251e5284ce91d0c6b4f4ecf76c62bb1bf7f921ab580d45b1b11f3"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_sta.o"
+symbol = "sta_try_sa_query_process"
+code = "54aa547f67604149b60b319d298604194d0f7f89cf5d5b58a7b7972169a15f89"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_supplicant.o"
+symbol = "ieee80211_get_spp"
+code = "003d39a2e4b854dbd472454dbe010092f903cf36748a3911d055542d5f85fd18"
+
+[[function]]
+artifact = "libnet80211"
+member = "ieee80211_supplicant.o"
+symbol = "wifi_set_rx_policy"
+code = "b270f09898a38eb62eda6f291600b82a75fe5479fdfb6930cf905e35e8fcbe8c"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "cnx_auth_done"
+code = "b17cfa401ed09fb627bed007cd1821785b892591df16d54af22857ac38a42fc5"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "cnx_beacon_timeout_process"
+code = "388086afdea225cee37949322eed0fafa1acc69839fd61bb85361175f9e72159"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "cnx_connect_to_bss"
+code = "0945a8892e9b1dc2cf90e17e8db962e50cf985e4f8b9a5ec5669c391da918a5f"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "ic_set_sta"
+code = "d15f3e1c630ae2f30b90f7393bebcdb2485512803fc4ace145a1a09a8162c115"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "mgd_probe_send_timeout_process"
+code = "92f7a98e1ee9052ba803e9626429fd09d6a02f42a402a623a07b7b8b2dee9a4a"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "send_ap_probe"
+code = "0f34c89d04d60f42378d749e92218c0a4c6ef437e1902cd28b24b4134e295cb9"
+
+[[function]]
+artifact = "libnet80211"
+member = "wl_cnx.o"
+symbol = "sta_reset_beacon_timeout"
+code = "c10aa5e94d6858ddb0cfd83d248d60793e14c944e39be3306bce4b763a053458"
+
+[[function]]
+artifact = "libphy"
+member = "phy_api.o"
+symbol = "phy_change_channel"
+code = "44be690963c760ba331522fdb1b38011da855989949d27f9be02869dd70e10b6"
+
+[[function]]
+artifact = "libphy"
+member = "phy_basic.o"
+symbol = "phy_chan14_mic_cfg_new"
+code = "8bd7ab16ceebb70314c3dad00f97e0b16508b7aa2ad67dfcf6e76c34ef53f0d2"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_debug.o"
+symbol = "phy_i2c_check"
+code = "a94b6f8881a1510e87eff3af2924605390efcabc158986f0ce98ac76fa74a178"
+
+[[function]]
+artifact = "libphy"
+member = "phy_debug.o"
+symbol = "phy_pbus_print"
+code = "804676357d7a163da365dbc6765a54cdc7304e30727ca7ad29f281a97c75de3d"
+
+[[function]]
+artifact = "libphy"
+member = "phy_debug.o"
+symbol = "phy_reg_check"
+code = "c1f074d32a32ff9d88ff9d4b164b9d8db64636db0985d550949db92152120b35"
+
+[[function]]
+artifact = "libphy"
+member = "phy_feature.o"
+symbol = "phy_set_most_tpw"
+code = "d229452f192c25785a311b47a327533d44de92a1fb8da5ccadb1faa0947458fc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_hw_freq.o"
+symbol = "phy_freq_i2c_data_write"
+code = "e1f43517e21e57a29d69b0a7bc9bdfeef6eebfac1edbfae57e84a6e0c7299ce1"
+
+[[function]]
+artifact = "libphy"
+member = "phy_i2c.o"
+symbol = "phy_get_i2c_hostid_new"
+code = "a8f886556cb6cbce00cca44c1318363bceb023def1f13bb9bf64f09268e74878"
+
+[[function]]
+artifact = "libphy"
+member = "phy_i2c.o"
+symbol = "phy_get_i2c_read_mask_new"
+code = "5449365c53276bb2a3a219851d9ac6206848612f9254bbe91f076fafa028d284"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_i2c.o"
+symbol = "phy_i2c_init2"
+code = "b4c59d38adf9bc745bf226bec1de7ffb52a9d33a1e92a7a9d281e629ffb198ba"
+
+[[function]]
+artifact = "libphy"
+member = "phy_i2c.o"
+symbol = "phy_i2c_master_cmd_mem_init"
+code = "feed5fb32785f3bed9164acf042e0f9ddcc05d2258dbaf705159e0a5e4dd87c0"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_bb_init"
+code = "44641626c7b71d97065c918c987f4d43fe86f6383c4d39cab1daca488f15ba80"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_close_fe_bb_clk"
+code = "a0669eea2d497b142884804ce8788520a9d15ef85f698d10a59dedfc652ff884"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_close_rf"
+code = "b3cc0ee522993b472db7e20083550103658eeb71a15e4d87ae555f9d129855c4"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_get_romfunc_addr"
+code = "d3067f9adcb694ecc742c3dfbdca8a247e2ee81ac84ddd1db5cea703c2989c99"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_get_xtal_freq"
+code = "f433fde2d3dd3b61dd34f58f3c1ccb139d5020f64ad728b43c7e2e7371b5ca7f"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_rc_cal_init"
+code = "05d15c358d67e37c5fa9d40fcbd48d244d4e930df2df9f227338740e061899f2"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_reg_update_new"
+code = "e1ac02c29a8a146f403845254a5b45cb7ab02a228b52b52ee3e2b3dd854f0432"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_rf_init"
+code = "5585f5375484055e0146750b7869c20efb932a7c40a2e53f4b2912a5275b3b72"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_wakeup_init"
+code = "91b94b367161baabb568652771aa37e61f517435b8d2f9c9144981b6e3da821f"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "phy_xpd_rf_new"
+code = "a9029b79401a89f65098e22ef11add12aeeed7ad9ed205b67a81c81654b39b71"
+
+[[function]]
+artifact = "libphy"
+member = "phy_init.o"
+symbol = "register_chipv7_phy"
+code = "5e753fc0022d6d37e0a3e509cee0f01c658530a7676b70407b2631a0a0a97409"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_bb_txpwr_track"
+code = "d26e361612559b1e1943a7910bd9c104d0629adcd94976b4d69da88eef4a56e6"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_config_hccfr"
+code = "cc0641c6ca95cc8e51ce6be9cdfd9b99c1c060cf45d0c76fdda3c17c4345b1e9"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_dc_mem_clr"
+code = "ac0c74dc236622b7cc367e298aad8b12f2f946e9c18c61438b7330b2bb6c57a5"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_fe_reg_update"
+code = "27f6ee7d57487ef5ae0c5d6a3d93e70f4c9d161e745a08031342ccd224943796"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_force_dig_gain"
+code = "45e1692a54e8e29d81d390272cda1b4682f7ddf89f200388dc6931eff9039788"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_force_iccfr"
+code = "7cc6bb871b94fd53474fcd9e5445620bc5a198a943e1c6a6fe91c00c1df10ad6"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_iccfr_en"
+code = "6c6ddf5aaf94a852bcac616239fee61c634a5669e42acddca85b5c7859333ade"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_open_i2c_xpd_new"
+code = "c9b8948ebe02bbfdd325eded30572f6a385f2eb8afcc7ab795634027a8f83e6c"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_set_ftm_en"
+code = "0031151e698cccf52c8eb0045d67023c9ca4f01dca4739b553d705c60fe37366"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_set_rx_comp_new"
+code = "d145f91d193d8bc88186fe69c2a42d670ad8336c8d24c25a20426649b547fdd0"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_start_tx_tone_step_new"
+code = "bdcf81751df96963f65eac4f2c2226242ccb18c84d75e350bf5f19d68b5ab6ef"
+
+[[function]]
+artifact = "libphy"
+member = "phy_reg.o"
+symbol = "phy_txgain_comp_pacfg_new"
+code = "c7c55da7a8d15710e3f56a70fccc19467062da9e29ce15c1613f8f23c7a10ff8"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rfpll.o"
+symbol = "phy_chip_set_chan"
+code = "03066d6e320d5d2bb571f7c4c235cfbf9b1f57e7043b4d75324e9d6cad53b943"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rfpll.o"
+symbol = "phy_rfpll_cap_correct_track"
+code = "005e1944b5f7dde36a5853727f8321a20a6d06e4b91b95e65217682eb9c6192d"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rfpll.o"
+symbol = "phy_rfpll_cap_init_cal_new"
+code = "2e6b5d3fcd2a47d7b432ff0bc06c18919843cbef838d8a922000bc0dba01afae"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rfpll.o"
+symbol = "phy_set_channel_rfpll_freq_new"
+code = "642e3dd6c8d3dbe00bb1e5269c0dd237ba67d8c851d56df538e3df12be35182f"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rfpll.o"
+symbol = "phy_set_rf_freq_offset_new"
+code = "f01e57354d4409535b6d25c1ff47289d175ef935706882fa5abac96285862dac"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_bt_rx_mx_dgain"
+code = "072ce0e537fba0efab86a1cc0689e00351e62046ba88dff20fd04c5a7b68c2e4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_check_rx_sat"
+code = "c08a8492e58fb4dee8d2598c281648fa6fd155ce4d9ef8892d3a796c82e43a8d"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_pbus_rx_dco_cal_1step_new"
+code = "58dfdd59d88a3bae6f9787814dca0e66130fd7bc485ac18c6023b14d17f5647a"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_rfrx_gain_index_new"
+code = "9736b8f8397480baa3c2e6fae51bfa967e5712557e8cec889194648e716ac094"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_xtal_duty_cal"
+code = "9f8b456588e28bfd5f6560269f52c6f25d14e188e5203c6e3b53abb9b68de9c0"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_cal.o"
+symbol = "phy_xtal_duty_cal_init"
+code = "cc1150a67486e4dda929100d48fce6122174a4ae758d09c4f35e1487cf79d75d"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_gain.o"
+symbol = "phy_get_rxbb_dc_new"
+code = "f0d7efa9dfe5541a48416f415bc86f619fc003fa0ba3df49232a40fdd9ccb24f"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_gain.o"
+symbol = "phy_rxiq_cal_init"
+code = "ca32107c01e0627d647b3439152603a0ab198021631ccf5eea582c7f8209cc5e"
+
+[[function]]
+artifact = "libphy"
+member = "phy_rx_gain.o"
+symbol = "phy_set_rx_gain_table"
+code = "3071cc75af53b35afc8c083870e67ecb4baa134ffcdeae27358990b18e19fcb6"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_track.o"
+symbol = "phy_cal_param_track"
+code = "e55dd2c349891eaee7f8390778e24e3eec4c70200df48b241537d42cc21014bf"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_track.o"
+symbol = "phy_param_track_tot"
+code = "cd0cb6a1403d504235284fcf59a9341ebba7e58f2d5fc6094295f5117c59ba17"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_track.o"
+symbol = "phy_rfpll_cap_track_new"
+code = "6cdb6b4be0aa03819e6deec1f622866c0ac088fce908d59c6a373077ae1ad57e"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_track.o"
+symbol = "phy_txpwr_cal_track_new"
+code = "dfff2f565c78af6778d8ac7d378d5fdf2702fbab32cca14c66354f79925440d0"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_tsens.o"
+symbol = "phy_get_tsens_value"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tsens.o"
+symbol = "phy_tsens_read_init"
+code = "0e1315963235546afa7de2ff4fe08f4d09f66b487f702b41708820a06b4eb916"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_cal.o"
+symbol = "phy_tx_cap_init"
+code = "76e2eb798b223a26713a887208c844d3e738ae45a951f5bb316b7dcdaa15bdd7"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_cal.o"
+symbol = "phy_tx_pwctrl_init"
+code = "60874028704c8cadaaf293923adda597d3087d93a1a9aafa75469564169a90ad"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_cal.o"
+symbol = "phy_txdc_cal_pwdet_init"
+code = "6c776ed44719786390bcde3b2e22e0a554fac6b134c51fa6f9d40cdba8f99f44"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_cal.o"
+symbol = "phy_txdc_cal_pwdet_new"
+code = "6fe3b59b65e2884cdc3234f9a408c93e2a653d3260ee44299b14496694dd2abd"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_gain.o"
+symbol = "phy_bt_set_tx_gain_new"
+code = "9b7a80561fce0b804423eba1458a1681a15cb43d9840bf511eaaa8ce3a604051"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_gain.o"
+symbol = "phy_set_tx_cfr_mem"
+code = "05fc7a571a5c5ae7e41b3fdb422a448d8168ec07685463daf5440f91ccaf4ae2"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_gain.o"
+symbol = "phy_set_tx_gain_mem_new"
+code = "d75a11ef71ac696d1ba38aa8a0080dfea597401c0354c8e739369a74af159628"
+
+[[function]]
+artifact = "libphy"
+member = "phy_tx_gain.o"
+symbol = "phy_wifi_set_tx_gain_new"
+code = "ea83f68c83b91b02b5015982b3db2ead1aaad0b8eb5c3070dc6923b659b0a9d8"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "esf_buf.o"
+symbol = "esf_buf_recycle_default_handler"
+code = "d4a27f1ea1912ead09a14f012294501720c73b490e17e695a46f31a2bf2a6206"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_add_extra_softap_rx_ba"
+code = "65f2bce7e5b63817deb202b591ab9c6f8d72c806543b5262505b3d43ae55ef26"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_add_rx_ba"
+code = "8e63443bcbc87266984742724038ad76bdcca32a51d24c69917d0132b65793f1"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_clr_extra_softap_rx_ba"
+code = "e2dd940b388bc18cb1a7c70403238839b34258c685558775acd2664e0169f21c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_clr_rx_ba"
+code = "90ba6777c1ba722397a9a545644f3fdca4276bfcb675abdab41155b52bfbefbd"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_del_extra_softap_rx_ba"
+code = "b18bb6dc1721130b4cc0ce20ee90dda717126b6da7b12e15af7c632f7453fb2f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_agreement_del_rx_ba"
+code = "1459f2ba8b8f790fc84d854548a46d057f288914797a9b6c34ab949a8340be98"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_ba_session_restore"
+code = "eef343e63d826845e38db5b30663f8480ce3e0658d14fb1e31172fde8025d5c3"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_ba_session_restore_by_hw_index"
+code = "cc55e275a17f62788121f94c4d36a222fc765c3733a885f48621fefb3043972e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_ba_session_store"
+code = "3e4626df5a9c8aa0fcd62830edcd157f8158ff9c134067ee88777f8e05848113"
+
+[[function]]
+artifact = "libpp"
+member = "hal_ampdu.o"
+symbol = "hal_debug_read_extra_softap_rx_ba"
+code = "f939f22594a3ad39a47e138c64ec53f880783cb7401ed55a9407c9eadd1f2ce0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_clear_rx_beacon_pti"
+code = "f871effaea35c694faa446cf624bfc0ee48a7b86669c8b0aeace3a2108692a53"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_clr_itwt_pti"
+code = "e2cad71e043a352c69d934da87618f0292aeb85ada133a47832808b9d3c46a5b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_coex_pti_init"
+code = "41579a7cd2f8294552626947e59fdc1122d125f838ebed75fe9b4987034a33ba"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_beamf_mt_pti"
+code = "254be725401e1cb1e3621ee1fd28c665fa619088f99f6866d0857fa7a8c93835"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_beamf_pti"
+code = "22fc641d1673994f6de126051d3323d5ec6bbf8b5a84483faecd5f74f8d31b42"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_itwt_pti"
+code = "8ad0a0521cafac65f0f744f7d674cb86d227e78faff1dbe8da6109926459c65b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_ofdma_sequence_pti"
+code = "f3bc413dbee5059fa667ec12aa73adefc45acab67d8e9c514aea198955f885e4"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_rx_ack_pti"
+code = "1ef6fc374e19c090ca3b696ec9fa98d0945d170c3a1cc107206b8a824c23f33b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_rx_active_pti"
+code = "99ec490ecf28a477e6f210aa25e9c66807e55811988b0e4f14a23a11af342f6b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_rx_beacon_pti"
+code = "b6e2afea5a97cdabaa114b89c9807724399f32355204069c1a734cca2e7e14b6"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_rx_beacon_time"
+code = "ea72e66cf81dd6adc8f22fec73d4051c43053fbc2d6fcbe77164e760f56762fe"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_tb_pti"
+code = "7a5cf5437be2f555b1223781bd7c71c12817eced8cae903342c1d92288be4989"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_tx_pti"
+code = "dc8757e914030db23564c7c6a5a2d714024d93364ca3cf02830c4ec4c3fd55e4"
+
+[[function]]
+artifact = "libpp"
+member = "hal_coex.o"
+symbol = "hal_set_wifi_default_pti"
+code = "a0533adb2d8acb541ef54726bb95037f1176adb6840a9792ce92a9f14a0c5001"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_clr_key_entry"
+code = "1f01a8212ce4e5beb4bc9c60b9609656fc71aa07634d929334e9db35973e0d2f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_disable"
+code = "0e9994626a23299d923cbb6248ece3b8709a60cb442fc35e06cabe715d0bb515"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_enable"
+code = "c051c333c7f3e96b27c4e9dedf64f1172536502664795e2a00d5fbce319448b8"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_init"
+code = "d382183503d94403401c52d13a7f11de67edafc29827c8c3c8f6ddf56e259180"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_is_key_valid"
+code = "0c49788ff74d863aae2e4c27dacae0a1253be236c9462ca9e20692a8f258828c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_crypto.o"
+symbol = "hal_crypto_set_key_entry"
+code = "f7f2d9ff969d453710655427c0ffb63ebb1186aa43b623d692c98c77a8f98373"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_clr_hw_count"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_disable_report_cbf"
+code = "dc8fae6b2c0875b234844dd7deaec683ac9b928f578dfb42ed5e7059124186d8"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_musigb_mimo"
+code = "928f9fa52d70ad198c70bc49287cf9b5c64595afa7164ed96be8ca76d23122b3"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_musigb_non_mimo"
+code = "9bd55079c70c9a4e861cb078d08b92888b8373adcca40b43a6023e3a1bca7ace"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_rx_ppdu"
+code = "87f98cb21d414fecb290b8de7584587b9ac8662f5caea2bec08e8d742fd03c64"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_basic_dependent"
+code = "0804891005e6b75feffab07c6fa0be6e1f5d223a07c456df50cc9360fef4c97e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_bfrp_dependent"
+code = "951917136a3d5c9ec31a616c98105944c42d6eb76be96fd55ed8c3c2ecc17355"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_common_info"
+code = "609ccf8f7d47c4dcafbcd75ad4b58f4301886141207552515959a2c8597d3c76"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_mubar_dependent"
+code = "fdf47af4476f0bfa3ab30296b504a38a32154ee0c446ad4e87c913cb3d6b0e7d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_nfrp_user"
+code = "b8d4b2d90a42d1099e21ef182bbeb7a69e5a26e48c3fd8033a9bde78ea17de1f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_user_ru"
+code = "f7fa8eb982836c7ca43b44f911a63dfabf22d8fe4d6a8d2a465f4a93629ff874"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trig_user_ss"
+code = "06271baaa78bcf893d6138aff739fa457b4721a9840c31f312418603c7d0dd74"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_trs_control"
+code = "622142c23347dab77894273f966b0abcc55090c2015ba59b11d0a9d3e501b8e1"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_txq_txinfo"
+code = "3c6cb64aae426ded4f6359b50737a0d8bd320cf1971d203da1588575c5dfd06d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_dump_uph_control"
+code = "608331fd976cd304a078f2d961081bbccfc6832e3b617375e8941a9db4b0187d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_ack_rate"
+code = "8103f2f025752c1c4153cfdb293bac65f8fc9a6e56d4ec842e090f81af40adfa"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_ax_diag"
+code = "f9d85ba425da57ca25cfabb630f6753113be002b78838db031d9de93b83c8b26"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_axtb_diag"
+code = "050e857f5aaddeb23ae6fca9e3292be2dcf8f944521255033dfbd1a0a7192166"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_bfr_rate"
+code = "c67c9d1776fda4354fa119be7b76e4320c77148ae1a22259ef967dccea2a5f84"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_bsr_info"
+code = "7fb9674d4b62226c2f704869aaf15353e304c01e31ddb9f67602446d73896112"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_color_collision"
+code = "0e9f56b1602690b342dd1e24472a196842067d4edb49a17de4e7ee113c2e79fd"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_cts_rate"
+code = "04221f529f15111ccb83ebbbc29552803cc4038dd7480236e5e8d2cdf7cc0267"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_internal_txba"
+code = "b04157ab9c6b1db7179f617de32d391f42a528d0d5581d4ee692f64aebe24d6b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_key_entry"
+code = "cfa57889e9441390db91955380cf14d6313dfd941d9342efe868b774ab2eff4c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_muedca_timer"
+code = "ee7580dc0ff562824b6271b8ea8de9fc562d4781ea1c72d491d402c884ecc8c1"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_rx_ba"
+code = "b6eb6d2defbb06d1b74607172f7e66eb87be7779f06b10a9405ccf0b55f609ae"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_rx_count"
+code = "441abad73926b53c253917e74f48b5b1770b6464f507412ec748e8d9dd3e49ab"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_rx_misc"
+code = "6ddc46ff0e8377263717ce024126cb046a79fff4017052189af64d91afc92907"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_tx_mplen"
+code = "9a55325aa0612a3c9e02f7923d56bd65546182b3f99492fcc59bb82bda6bf37b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_tx_power"
+code = "efef777f018e61305b227cfa1b4d8eceeea279ad3da419e8666b90fbc1aaf69c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_tx_ppdu"
+code = "7c7f5a50ce2ce93426faf4981fa10b0c02df1a4a3882b887b3ea4eae24183378"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_tx_sig"
+code = "2d3abfd69b85340e76291182840b67dfb76e12a3c4b447bd2014cd9b1282202c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_txq_conf1"
+code = "4891f64c500762b05319fc5e3442eb514c32df116cf571e2b9677956f30d88cd"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_txq_conf2"
+code = "9aa5951e38434844b2afda88ce4ece84c9b999bc210de614b40cee70eb08b5b2"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_read_wdevdelay"
+code = "fa3e5ef51b0be3f002429388dd712cc1d839bb6762988ddaff7b7e132bb36d12"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "dbg_tb_ignore_cca_enable"
+code = "43475eb65d892020a495cf2fa9af38cfff453c6e41c4917431cf13f01fb81dd2"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "esp_test_clr_hw_statistics"
+code = "8ae19ac0d662dc49d93d606f72119458d0bab90a2db0596f62f934cdded07f1a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "esp_test_get_bfr_avgsnr"
+code = "e1f102be40fda2d866b192ea571f339594d2ee25c389ff7820a381c232256b72"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "esp_test_get_hw_tb_statistics"
+code = "cc57c19d15be486c401325bbf9fbcf002ff47ca02cce4e30277bd03a2711391c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "get_txtb_min_subframe"
+code = "456d6ca7cc2812f25f1d4f9386749a3d6dc179fcfaf6c59e98a740aebe0c430b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "get_txtb_psdu_len"
+code = "dbc0839d35ee07e15b93b6d8b9e3080657ae8fd8d07c0e47c6b3652186e2333b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "get_txtb_sym_num"
+code = "3c55c149b00c8ed9640df2d302f364ff7ae779753c3fe12db8001b1ba38a61eb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "get_txtb_time_pe"
+code = "76925336b440d21a2b2f5d081a070a14f3460800a19f98d465d7d3fd2209cb05"
+
+[[function]]
+artifact = "libpp"
+member = "hal_debug.o"
+symbol = "print_isr_regs"
+code = "4bd3653b974f03e0c8da913df9e5558099f9afcacf0d3d7e27481ead4932127a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_he_common.o"
+symbol = "dbg_hal_check_clr_mplen_bitmap"
+code = "391dc5a83ebdf5dac60ce98e3896a70313933e00b816c1544e0155830e56641b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_he_common.o"
+symbol = "dbg_hal_check_set_mplen_bitmap"
+code = "d1bb8459dc1e0e70d85ccc663cf1e139b6790a10ff38713c689d44297277f487"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_he_common.o"
+symbol = "hal_he_get_mplen_addr_end"
+code = "37fa4ae962fe8fbdfc5e564091e268d0a22357e440c22d916e7e81879925434c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_he_common.o"
+symbol = "hal_he_get_mplen_addr_start"
+code = "efe423634f02bc5183121df0e802c06b29382891c62ba3572e6ca7fef4c5a636"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_beacon_ie_crc_get"
+code = "efdc69b77f1394bee542cfa104465c80e7c417b199907caf16392a2fddaa46eb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_disable_mac"
+code = "f1f6cebb31c4f808218e6fa45f81b872441c26c0753f74682c44a2e6b486a168"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_disable_sta_beacon_filter"
+code = "5fb205a15d26a45a41d47c83b9c592943d393b112cce098e926c621fb877fcac"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_enable_mac"
+code = "1ba908525c44f35b13ab07e8963f333c7c8a81b0452dbb494640eb654bd40699"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_enable_sta_beacon_filter"
+code = "43512733a273487d1fd7864176f2bb0d65994196eba7982c04f262489e7015ef"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_enable_sta_btwt_tsf"
+code = "54702fc0f1a3b55beccf6dbcf2ab2523bfeeede3c779090cb70cfce1b0e5e078"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_get_tsf_time"
+code = "bf45f3c338d96bccde01761e020cfa3fefd7bd405ea9c14dc5ba1050014c5dcd"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_init"
+code = "1822b5c5733914a98ee57e5da7457f7800515c7f3e03f6a9927a089f1d42c753"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_deinit"
+code = "99c2b75d92f9a32661f7d31dc8aaf8c2894ca46b648ad5622d74ab84a59b86b0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_init"
+code = "226e774b4cd444e6407fefba97da06085146700ee50d9fd7d3a51fd9f031035f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_interrupt_clr_event"
+code = "37a74099edf3a0f1aed7d813da76b9224169c2d977d77c4630ed53233f1bf71d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_interrupt_clr_watchdog"
+code = "b3ab5c910dc75da4f27457d08b641b0e90c5109c75c13736cc09c47f8f29dac0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_interrupt_get_event"
+code = "fab0bc0f78a01425fd88835ea5b6444d099eb4ae145a54ec7968726720db2f8a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_rx_disable"
+code = "ccdd20f7511c9f71931825d0f0e1b9f91790fd4b09c6ded3dc66283f53d8b290"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_rx_enable"
+code = "2d3fc7d06477ee3d1284db8c864fdac1f6e9ce8080d94ae7738c16eb28aa35a3"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_rx_set_policy"
+code = "26ca3ce4ad3489584eea155525f0672eb03ad2a37ad3274bcdae02aeee650e50"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_set_addr"
+code = "2eaedac8b6086d8bc7f977f958084d1dc3bf230cefcf08ad5b12111ddf14887d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_set_bssid"
+code = "09ec2106a43588178583374081dc1063ffab37f57254c2c872a2b8d1aac3ca0a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_set_rxbuf_reload_use_hw_beacon_enable"
+code = "a2d0c74d23b2980583a34b0483a259f80c3832e8076b4ec563573216238086e9"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_set_rxq_policy"
+code = "26f1a9c7dbfbd6764b57a9f6705f75ff7831cf562967afe29e593792368d7a56"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_mac_tsf_reset"
+code = "3e950e452a431480dd2474e79bad672c24eb6770c07c372d6312d2b5961d3569"
+decisions = ["coverage.toml", "state.rs"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_now"
+code = "287f8fce4ba9828a3ac5d239355e8c2c82b2d51def4229ff01e8406fad5d90e6"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "hal_random"
+code = "5b1db9d083d398ba853b5d97576516b86019ce466d8c9029b9672406ac80b607"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "mac_last_rxbuf_init"
+code = "a6cb15677de53753f6b8852cd9a30d9936bba9b723ca13f6b1a8bf7cc16b8724"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "mac_rxbuf_init"
+code = "4949270a4fcee71364033df458c5e63e23f18fe36f9d264ef7d56b623db24c53"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "mac_tx_set_pti"
+code = "0eba676f4dc12d904762e858746c4783c51b51653008148ddf322f3c72c0ed25"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac.o"
+symbol = "mac_txrx_init"
+code = "69d31001abe775d0e74d62a2f713cb0f2455a54cc18b217bec8daf879f60fd06"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_coex_enable_default_pti"
+code = "5be474f92d6b7f184a4fae25ce22b0013f1e6c9ec1bc6db8ec48d231c92ab3e4"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_bsr_ctrl"
+code = "023493e6dbd5bdc940218972192435e3a40b596e4296cbe146b747f1a601bf04"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_bsr_init"
+code = "f04a25014059e45e50423fa7566cb8f6f3cb79e5be18701a471cb079f66f1d36"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_bssid_deinit"
+code = "5a62b3130a326f30762f743dbd4e830f4853790acdb7e5fe9c939663c42d42aa"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_bssid_init"
+code = "c33c8dd45bc5f295f4a3dfee7d8489e91562b9cebb3e82fffeaa343065a8cbfb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_clr_multi_bssid"
+code = "c93c568a57d46f6681fd7a820e24271439dbc4eff6dca632b661276db812e075"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_clr_tid_bitmap"
+code = "1ef54c4c422debf3fd29b3d2d9381672f3f140f11c6a219bd39c06516de52c4f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_disable_obss_narrow_bw_ru"
+code = "25ffd2adc1390048004d87be17a87040963818b8356e3e279dca612c9c9a4bba"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_disable_rts_threshold"
+code = "6c995f6299705771a18fb51d98b73316802841bfb9537b0a38d22aa8de6d5ff0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_enable_dump_complete_hesigb"
+code = "5ad38b81722b676f17c6eeadfc628e8bc6d0ab12e7646b97ac137d06234f3196"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_bss_color"
+code = "56453509e5aad2e07c1ffd4d66e7291e29e997d026c5fbbeed8569080191142e"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_htc"
+code = "423f87a7bb1aefbb3b9fa9306c82c13c9c01b229bc3df3d13d2c258b30aec3fe"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_hw_txq_bsr"
+code = "c63ceda31dde84f150cae18e59948dae6dea9dad3b59918ba18231f05a1464bf"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_rx_trigger_cnt"
+code = "a5a28d5a9110068cfad106404432b045fbb7ebd61d1f5238a8fe5457e1033330"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_tb_qosnull_cnt"
+code = "8aae6b2ad90311cf83f9a6d2dd302921e315e426486a3276ea36e733ee168335"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_get_tb_times_cnt"
+code = "21e68378bdbca49b12ae484c3f30045331e6996c9d8a7903fe4c432eb1fc7bff"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_init"
+code = "4edf149ea1f6ecdf1e66afbd7db39fed96142b54ca3373c277b3515f04c6683b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_ack_rate"
+code = "ad0de7803b070beef8b13ecf606bb7d8b26f5b680816330e11377a2fd3d0539f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_bbrxhung_time"
+code = "daefdb728a143f8b23e5a8762754bc33f6c6fecd1f527779e3b6b0fd2bda2ed5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_bcast_ru"
+code = "516b7428a0d03a151417185fdd002eb6155d8eab4148b40a01d50a0cae1e962c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_bf_report_rate"
+code = "eb5ae343fd395b697ecc2a7508b27a49e92309f3ce1d3c88551bbbb6b60ca48b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_bss_color"
+code = "091b2c19cc7406e89a96d1fc9b62f5901122a314b6f617423b0af9deb4067b13"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_co_hosted_bss"
+code = "8ade9c22bc170f26d25a535873446a74c9559ffdde6492f1f9dd82831f2745b5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_default_pe"
+code = "9cfe73211d90c6980cf65ccf73fe96f911d993ac1165c0827773a8e07b2b800b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_ersu"
+code = "2d5b8caf33f87dbefdd5950c16674b4de342d782c37dc9e1dc572970fb527e66"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_ersu_ack_rate"
+code = "62e5321c17fa8add47172812c0cebaf0c7841e7cb3a3130330940e6ff305af3a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_htc"
+code = "e851b73244dd4c59aa8d9252e5e0cfe9b824e082c42a914190b0fff82852a0b7"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_hw_qos_null_ra_to_trans"
+code = "f73b91c51c74d561d29064527baedca79490b6d28d9df422bd9dea420441e7aa"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_mac_delay"
+code = "4e0462b5c272d0c7cd35b66f29db9af59e61b7131cfd0b6bd62f77277ac615e2"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_mmss_and_aid"
+code = "d7b9d4ca893491adcc780432978db11730b387bde61ec523dfc14400f67d2e8a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_multi_bssid"
+code = "a963804491aa2496314c99ae0672661ef71ac946ae0f61d1ade8549396676d39"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_power_save"
+code = "d6f467070bded9711fd3851ec8d399a9ea1e3a21a5f5725aec58e5209e336aef"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_tid_bitmap"
+code = "d0fc4b820a45a23b90e76bc6affc68cef399ee3ca4edc3f15fa16df0f6ab94ee"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_tx_protection"
+code = "796a540c305bd76a09562829da1d88026e7d752a0397966b87b50275e787e071"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_ul_mu"
+code = "a710f432564d22a0f6cc41426be272f254ad747b3efc899da61bbafbf26cbdad"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_he_set_uora_parameter"
+code = "c105edb67d129ec74514bd810a92d0d2d0d6565c03f314b6da0764575b3f68f0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_ifc_get_bb_err_bitmap"
+code = "999c0f9c5d12f6a4443f864c763a02ad7d10ca3799ea3162d1e4c432608799e3"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_init_bf"
+code = "45ad4f169f25895c263ed5866ee08f21eec9882fb8ac42a97d19db3e59ad38ba"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_init_imrsp_power"
+code = "4824375f491cb7c57a4423dfd4213d0210168c73f48a81da7da28b509aba11e7"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_init_tb_power"
+code = "7e1c86aea22123686b30d94c77df3bf38fc898e3760bb2f0f3f295c4e899ed9b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_init_tb_ru_power"
+code = "92444dad3321370b8095024da820916ce7fe72f1065216d132aa5775753177f5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_init_tb_tx"
+code = "c18f06f8ba4ac8a9b93918c325f693b72f84fead6891a07359f295536f784c66"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_mac_get_tb_max_pwr"
+code = "c508b9b857d45e703a15ec8a4094b1f488d4267f73b6ab5b6200a0c22d0b1976"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_mac_interrupt_clr_bsscolor"
+code = "7e40f5e8b1d6cbe6691d54829e3593999333b396bc8250d952d3c2fa7e7a884b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_mac_set_csi_cbw"
+code = "be7b9b2e5febaef3ef3f45b57489b02bd25fc0673a3c8be300be8a779b725bfc"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_mac_set_tb_max_pwr"
+code = "62a1999ecc071ca6818af043ea5ae1a262be846a8ff8eb3e79c1408ecc494a53"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_set_pri20_chan_offset"
+code = "8fc5ccf66c64d7a474fa6fe1d907b75a67954f4477ba9589e4a711bf106798c1"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "hal_vht_enable_bwsignaling_rts"
+code = "a12bb45ed4761f55e3194d1b01cd2520ab9fadd26291c086084ed1c66a96895a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_ctl.o"
+symbol = "is_use_muedca"
+code = "b08b49d1440563190ef57d0ec448809ec7e4a05bd4fcbf97b4b019def89b8a50"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_rx.o"
+symbol = "hal_mac_rx_get_end_info"
+code = "8020e76f51d53b7e2e9ce8fb19ddc1bd6f7db41cf080cda7182dd31d6ac2808f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_rx.o"
+symbol = "hal_mac_rx_get_end_state"
+code = "ee931ffe34e3f481d08ad02a99a397605a7c2c980286b777a5bd6883b930e0e9"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_rx.o"
+symbol = "hal_mac_rx_get_last_dscr"
+code = "93fae01aadd70b9a11143df89559b4bf96677bee49ffb7ea5d7f68b14562c800"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_attenna_init"
+code = "754a83a1f95d9fc6f801a85446a876212983e353403a927d5623f2f3706c4ed2"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_get_tx_min_pwr"
+code = "9e22e2bfd5db63ede8da239e3cb63280dbb0bdaae0df1b17d04eb88034567b0e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_get_tx_pwr"
+code = "eba1ad40c7a5a18c23c2909749e713eb61c058a1d9b705d305c45b1208f17113"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_init_tx_pwr"
+code = "3b99abd3aa03963e46c51a4a121c93290a24fb3d464dfb95787d9fbdaf4f8408"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_clr_txq_state"
+code = "203bb51c44078c58da4705117029b2e23691e6845e18c45bbfba20e025a72ff8"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_fill_hwtxop"
+code = "364d47c529aadb337bf6e7b32363ed3df06d0f70968489dc4a6b76c6e90c83cd"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_get_txq_complete"
+code = "314e6c96d3bfa23c7df35404ee6a4c823addc5548979d5cd44018824a6d634c0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_get_txq_in_trig_flow_state"
+code = "363a9ae4535e8bbdaa307fcd9ebc628bc41164345056ce81ab403dec03f8ba7a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_get_txq_state"
+code = "129c6004d1d740ef4c5ec304ad4c4b9ce603be538ec1e760c316af317daf3f09"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_rate_autoack_init"
+code = "be7b9b2e5febaef3ef3f45b57489b02bd25fc0673a3c8be300be8a779b725bfc"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_tx_clr_mplen"
+code = "d4a329d252e21375afe4217e49aabd7563cd86f81e7a327fba8d063527ba58e7"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_tx_config_edca"
+code = "9be08aebaf75c0da2aa905d78f122b8ef64f9d7d80383d559fc85173871b515c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_tx_config_timeout"
+code = "d66049450e342ffc76d2ae81ab3ef6e53d5ac4daaee35f476d6d66758904e42c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_tx_get_blockack"
+code = "cf0584e66f2c008d72bc44dfaa97e612ce46bf9d913862dda110f023b8a0bfb1"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_tx_set_ppdu"
+code = "c07c84be62ec4d3d5fcb7541d9592328bcb66a85e2fa4feb06a026fb899bc571"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_txq_disable"
+code = "0ece11415a9b491d9cd95cc033789eb99b995fb3abff0c5785804bfef55d9d86"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_mac_txq_enable"
+code = "a5ba411d829f1fbd3778b7c8676527c6aa6b335205eb1becd77dcbb40107b308"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_set_tx_min_pwr"
+code = "b6b6dd92a372f811b18f846eae44d22df56a1e40a705fb50ba97b097870abf60"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "hal_set_tx_pwr"
+code = "ea5195fb4a02e4458af7844b72322d000f5f9431badc73c940ed1a90b23ed353"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_get_rts_rate"
+code = "1ba8ebef3a9a9f5e77d8229fc3b0e6d5ddae3e981c861f32fb5b9bc1785abd52"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_hesig"
+code = "00056eb3d55c5bf8ce0ead6489b3df61b56af638cfdde7a777a7cecaddbf10cd"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_htsig"
+code = "46651ccfbbb6965853ee6e2c9d0d0991a8bd2925f12e8bab323e5e62dbb72e87"
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_len"
+code = "6dd27b41efc1a15862bc27aa810ac8cc8c494fe7380501b3449992374446eafb"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_mplen"
+code = "8d4d8dc863e5a2621949ef976b17522bd0b0eb0756143d8a562d7b21212797bf"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_plcp0"
+code = "93d7fd24c6413f25ec1f340cfcc6cee9938f2bb36a1f65fe73f0f9fb72960dd4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_plcp1"
+code = "5be8b9e59001a9f1383e2349312f4302031391f2aae5835582feb0a8195b315c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_tb"
+code = "1b1d9962e1909bc1faa2f25edf3002532adccede6b3aee6d7211e8304582058a"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_mac_tx.o"
+symbol = "mac_tx_set_txop_q"
+code = "4840548d6fbe1378cf2c5ab9e5cfdf82bf421938141679f9bf18d1e8397ac3f6"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_select_wifimac_regdma_link"
+code = "d73abad28ea76119d2e1b2069a6a554897d65da5ceaf9fb4e8152007008e9051"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_lpclk_sync_disable"
+code = "5eede6f338190c15a2ca31e4e1ac272f2b934725bc064379e45fdfce79d36fb9"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_lpclk_sync_enable"
+code = "342cb428227815aeb6fb77f75f9504366cbbf1797f5dccb3d4c99d86b1e77714"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_beacon_miss_limit"
+code = "33a82291c470e9e422dba874b24875bf11031181664b833c12bc428210e268b5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_beacon_miss_timeout"
+code = "0be9a93f1875698c602d90512a5e5efadacccb8d79357be5ccbbd280fc8ac9de"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_state_sleep_limit"
+code = "ad6feb6d2a78bf0df8ff9aca719b795b7c03849f48effaaed42af28fe90ca884"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_state_wakeup_protect_early_time"
+code = "a4ffe350e9b07fcc8ff9c627d32a2c9afddd89b060a12859ed09956cbb801f2e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_state_wakeup_protect_enable"
+code = "6c3cdbf8546b6f91c561324684e9dbe55fcdd5833a253dcc4fb8db4e19a531a9"
+
+[[function]]
+artifact = "libpp"
+member = "hal_pwr.o"
+symbol = "pwr_hal_set_mac_modem_tbtt_auto_period_interval"
+code = "21e2472ef3127285b7a60e575999f19a3cbccd523a859c42c734c7962a665155"
+
+[[function]]
+artifact = "libpp"
+member = "hal_sniffer.o"
+symbol = "hal_sniffer_disable"
+code = "4ed6dd367f9c1a64f0a58c18409c0faf62fa27f48cf187d2820c92ff3319427e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_sniffer.o"
+symbol = "hal_sniffer_enable"
+code = "537e05f7f3907805c84c877e73d6cf674bdbb086d8f6f7cce4ac2ee8dbb23299"
+
+[[function]]
+artifact = "libpp"
+member = "hal_sniffer.o"
+symbol = "hal_sniffer_rx_clr_statistics"
+code = "9b8c2189333458fb9a2bc937f217fbe92c6de6fbfb6db240e32d537fbc2e9f9e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_sniffer.o"
+symbol = "hal_sniffer_set_promis_misc_pkt"
+code = "297c98e4245186d1effaccbf7a4a3c43e95c4ce587c2a089fd918e822eb32547"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_nan_tsf"
+code = "b8b4fcf9624090d7430980ec3de4dc55d12159dd053fe493bf141ff1bb9561fb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_softap_tsf"
+code = "33b2f628bf0a49c0298286e98c40151a49a6cabff65c453291bcf9d4b3716d09"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_sta_tbtt"
+code = "4a799de964508de5b8f4030a6c7e43ef20c32ee281a00e47148c53b39b081513"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_sta_tsf"
+code = "cc1525003565d03cf4ddbec9a6686b166be4215d989e6b6212e8f18192d6216a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_tsf_timer"
+code = "826f35eb5ce53fc59c58b3ed2635efaf1d6ff7ad31005aab6b1cd5973c976710"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_disable_tsf_timer_wakeup"
+code = "ec943746f6ef08fa0c77c52fc6dd13c5590f4e6a9ede43a1e1a91fab65b64c43"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_enable_nan_tsf"
+code = "f7b0fd3523204762f57fea149680e0da0c9560eaac616e3a42a01c05862b89b8"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_enable_sta_tbtt"
+code = "7d9d045c1fb3299676e459b2a1c98c56cf4deaa717aeded1971b5512def14b31"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_enable_sta_tsf"
+code = "04e2d8f5506e79e4e4ca7379b3403930708557ca31dccad1177e703e0cc30676"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_enable_tsf_timer"
+code = "c43f4192d29353f7b045b6c755e90159be7d7c668de14aa7a45cac130affeaa5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_enable_tsf_timer_wakeup"
+code = "1e8ebf8d9832a33d106cd38e99e1341a0bbefb111a8fab35f3b25d606bf45ceb"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_get_sta_tsf"
+code = "12421a4225482800848ca6493919537c64f88056be407741a1aeabe6259a659f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_is_sta_tsf_active"
+code = "84ed8990c2c554246e0169b5ef7c63dfecbb6d27cfe3792489b7a2dfcc9ceb6f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_pwr_interrupt_clr_event"
+code = "f2e170155d6b044aeac8aa7e2a9a815680e879336530cd523bf63b3eca314a9e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_pwr_interrupt_get_event"
+code = "0ab81309ab35f3e3a7dbb275f61a4a7f96726fa0edc21fedb58038091b272659"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_light_sleep_wake_ahead_time"
+code = "1755b1f676af6bd9c03c4d97cc4830df35b037d4965dc31eb96fb04b7eedd5a7"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_tbtt"
+code = "788e7388c9dba91a34b0e64e51ac9cba37b5733cfc6d2d6f3834ef7b41d1083c"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_tbtt_ahead_time"
+code = "58869f9ea7a84f99bfc29f81a431d4325b2a33b671e6d318209cf2ee71272351"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_tbtt_interval"
+code = "6e626358c73b8f88da1d0e186e7f63c2cd7a95df1897c36157870c702b33b671"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_tsf"
+code = "c18c1e5625c224e4cf7801a092b37b81a1c3fcfe1a2e714e522b28911f9346f0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_set_sta_tsf_wakeup"
+code = "52efd49885073aee38ec6e2aadddb3ec604f82e0c09ca1709b71a85477b148d3"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_timer_update_by_rtc"
+code = "a625f7dea4168864deddbdd721a406f6b459d6b39d8a90140995a2eb9e40b546"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_tsf_clear_soc_wakeup_request"
+code = "e267498a36d20d84741698556f7d52dfffc5ce5653f2f74ade49905b8915055e"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_tsf_timer_get_target"
+code = "e4cba512633999072939f5d39013d459a55da5a85b5ba23020c910d5c9d12d0d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_tsf_timer_set_target"
+code = "d0d11d113514faa371d6a5613c7f21a51bada5ae3e85e6fae597b54c8f8493db"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_wdev_timer_set_target"
+code = "48a5cabc19f83cba93355e97fbad90aa80dfd47414116870ce61edf2856cd245"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "hal_wdev_timer_target_enable"
+code = "14cbe8d40167a062d9667ab81c3dd633c47310b975cac363da09375ac859cf1d"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_get_counter_value"
+code = "ea4eadc33c739e440767f7cdea423320129e6851b4e64924ad5975a19fff242f"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_get_tbtt_interval"
+code = "411dff89f4341daa7414c436e37df4ffa6ea0b7483b136d1d3a7132d077537e0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_disable"
+code = "6221abe2466d9aab21036c9742a88e8acab1ffbe48c3724904ac81f4149965ff"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_early_time"
+code = "60d86d411295c26a92612f35e7f085e145f7cfcd40f8c9761d437064ce6f1e3a"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_enable"
+code = "7fde5cdc09de675dd9e71fcb73f58be12cf318508353cee1835df0dcf5ad5158"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_intr_disable"
+code = "ca18a5dedca2e943b2e19a19774ef0ccbd04cae47be873473f1921a2f7a5fc67"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_intr_enable"
+code = "761ea9b8b1ce9ce15b707b64a8c55fb5e77ec1be045b5e9f769fcba2cd9ec4a5"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_rf_ctrl_wait_cycles"
+code = "956fecd8c2a2920249f37001e0dbc8276725e34a43ac7369009aa81483c1fed0"
+
+[[function]]
+artifact = "libpp"
+member = "hal_tsf.o"
+symbol = "tsf_hal_set_tbtt_start_time"
+code = "06f674d75744262a2132bb356ae9487f59efdefb466a842524c4ed2e61fe453b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_utilities.o"
+symbol = "ru2str"
+code = "2c3dc3fd1626b411db4e1bf277cb2c58811ef84b93044221596771f3c90f744b"
+
+[[function]]
+artifact = "libpp"
+member = "hal_utilities.o"
+symbol = "rutype2str"
+code = "38860379bf27e75e1401f5eab4707448e0de1d6e41990847c0a1fd0874c39528"
+
+[[function]]
+artifact = "libpp"
+member = "hal_utilities.o"
+symbol = "txformat2str"
+code = "a61d243a0119feb478b1e536ce263969a290af98b1ae152fb0ac30e292bb5dc2"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "if_hecfg.o"
+symbol = "wifi_he_get_hetb_tid_bitmap"
+code = "b9bef00760425c975e20ec9a89e8c785d68688b243899f06064caac05f7921bc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_add_rx_ba"
+code = "3368805868867d509a83ad5e1f12f8f650c557acc8babb16a134dcaf6385ba17"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_get_he_rts_threshold_bytes"
+code = "b30a13c62fb33e594f84f1e83718b7a95d96f462c4b15bd8f2792c7a40d0751a"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_get_next_tbtt"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_mac_deinit"
+code = "f4fba27500f6b1e7a9a28ae0a0edf4e46e7bb75ff8ac56b183c718559d10719a"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_mac_init"
+code = "92c9428cb78b655c7cf0ab15d6f004699630f351ac394a67c2cbb9cdcf090489"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_80211_tx_rate_config"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_bssid"
+code = "3392de95fa3d24a1e4209cef121335c55bf491bd05e03e976a32067ced76dddb"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_he_rts_threshold_bytes_tab"
+code = "274db8e6faf8b53f6e67be75ffd48d65b670e605b14b77d2493d54a4345d01b7"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_key"
+code = "acb94bd31b3ada9188d94847544ff18e3b63b01ce8c07f67989294997eed7a31"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_mac"
+code = "e0ebb2ce22443b93423a2aa10cfc227b75cd454381a5346e6a6867b4b764f14a"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_rx_policy"
+code = "ce623c967f8ae822767c01092ed6dc22107296308945044bfdafb66bbff3304c"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_rx_policy_ubssid_check"
+code = "d5956bac9741d02444b4826dd0c29a4ae0cc30f864ef2c603a77e21c05944135"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_trc"
+code = "c9882c3a1a1056778e1d1739ebf36700f4688dc79fcaa7ab019dc9fc28c6801d"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_set_vif"
+code = "6892eb7f2e0c17e9734dc7fa8ce20211172868b6466cf5a24445c59aa5c4c918"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_update_listen_interval"
+code = "7caec59be316cd22dade694630367e34cfc664c6b72bc7974603cae37da3ea29"
+
+[[function]]
+artifact = "libpp"
+member = "if_hwctrl.o"
+symbol = "ic_update_sta_tsf"
+code = "67358168a25e4ebfbfe50209914508741ba02792eb115ee79873075696a2cb6e"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "GetAccess"
+code = "7977f505f00db6803d3e06ecaffc35542ed612400dac6940447595e1aafd5d92"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacAdjustTimestamp"
+code = "16da0bfb0e2577cd82545b420226d25cb9e06d035f86dd42a90eb450447734fd"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacEndFrameExchangeSequence"
+code = "8972f91be0d3ae2a9e5a73326cb933392b938a344579bd748c3c2f55d532b17d"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacEndRetryAMPDUFail"
+code = "55118cc28a74bc4e957b66cfe9ee8bdfdf23c86a006bdf46799abbf6859d6b07"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacInit"
+code = "569e4ca681506aea16e70bc014349e294d626caaf219cb675fa599ceff00f412"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacInitAc"
+code = "919d6f19e01b41c24cbee40f884fb3a65001b94e06b44a04fbc07e7f9064883b"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacIsLongFrame"
+code = "538b802b5418b0d03a21bea7fadcac3f6046f679081780a09cfe08a36db7efb5"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacMSDUAged"
+code = "07e43ca95c237dc9fbbb106380fed4cd19d995f8e5d633877d489923ed4c8217"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessAckTimeout"
+code = "6beee0b6c99ff68889bfe217af500eba07c8524e0e015b27fd67c8046e7e6beb"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessCollision"
+code = "e1fe0dcd530f24366700ebf02bc3f79f874539ef2ca61b8e3061e87e311b3bf0"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessCollisions"
+code = "4c12aa85ddef64720690f92b7680aae85979775ecffdc6906e1325988f422931"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessCtsTimeout"
+code = "ddfaf6f6e85bb683e621b8676fe5ba3a436c73aed9b234a544982981e82473df"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessLongFrameSuccess"
+code = "33695b711f364492ac4b32903b32e014ac597cd5b3492234fd6b1c1e4f05086c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessLongRetryFail"
+code = "a1e23b93da6f9da537ed8096c76da4eb17829d4a4feb934783e13e07bfb089e8"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessShortFrameSuccess"
+code = "508ce402780910891f907f2808f52cf42b596d9e56a06dc1f71c8dc353d51e3b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessShortRetryFail"
+code = "51356c1ddc4030243bc73aee34118cd86bd3b98143a4c444ed8429997ac27153"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTBSuccess"
+code = "067edd6629c96889a70fc16137ea3d20ccf0216492c685e2b6d25f7d91cf93c1"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxComplete"
+code = "0559fef06bab407ceb14400a469bb1445ea504db4a718bd66fdf53ee2cff433b"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxError"
+code = "039855052b3efd306806e72603bbbe77976e3b68d0fb346b1f02afc07c1a8e79"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxRtsError"
+code = "ffe2cc462d6a55e6d94e6f22608a1946e2eb185786db04847ad2488fb5e8284f"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxSuccess"
+code = "ec7260bc2880e4e3e05749a0056467c02b65b6ecd9c9561f70d8ec1332899e37"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxopQComplete"
+code = "cbde0f1ade14f73b184be9f9bd87b265454bba5f3e5a478a8cbd33e3b561bbf4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacProcessTxseckiderr"
+code = "92c011f797b379df062d10b35258e72cb9ffd0dfce105798d34c851ae6bc3446"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacRetryTxFrame"
+code = "85f82ee391c1d8a5f9542a1153135f2173ed57dbabe6608d9df521283f2b538d"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacSetAcParam"
+code = "c44542f84c9124d0cafdc2cbf9d4bade1d256f534fb610fe97a9eec1bbe1bb72"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacSetTxFrame"
+code = "bea018c12ba72d68e92203d94d5293a061ab5f8683a29895d090616967c55962"
+
+[[function]]
+artifact = "libpp"
+member = "lmac.o"
+symbol = "lmacTxFrame"
+code = "ac249e3f4df06c66f39fb57d5c6ebd3cfe66895ac29268d811057b5d1d432d40"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "hal_pm_unblock_txq"
+code = "93f098c8babefb300a9df9275540812a2bc6b2248557886314c285f2426f164a"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_attach"
+code = "3cc080f8c9c48dfdb8d4ed4281471c4a0dcb2897c1bfd0d06ecae9f36b2e112e"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_clear_wakeup_signal"
+code = "3c725048ce97a28fe0c013e073c59c87ad527eea92e608bcdb697c48fdcfd569"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_coex_go_to_sleep"
+code = "96e8e34946d363ffb7290eaeea97a480cb3e4a7959d5fe9c17e8ed39e3842631"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_coex_schm_process"
+code = "45a597d4b8ad933909d03e6d52425ec28f3fc4933fc7c985110e25c32ef219ec"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_get_tx_blocks_retention_mask"
+code = "1d73e2b676e1bfe2e3a8ac9a8755742d368d658634e35265951bb822b22cfee2"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_on_coex_schm_status_config"
+code = "7b4ec4e45df5261ab2067cb336bc5f3d2a1641836b3ffc8c6897b162de2c9a60"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_on_coex_start"
+code = "9cd22e467d052cfa15a326431b7b3f171db31d67eae8a51301fd40c0ef48897f"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_on_probe_resp_rx"
+code = "6841958b66214cb8506c79233025440bd8d6f6df59d750c2d247a9a595cb105e"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_on_sample_beacon"
+code = "64af92279b59b3ff36fc1699282d85a3ffdaf8eb2b78aaf984ae662c816090e9"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_on_tbtt"
+code = "7aef2e82858b1bb222cfccd44fa716be5c285a620caf739799a072191d0726f0"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_parse_beacon"
+code = "ad4783404c9aed195e4a3f4809f84c0111d5c6fe8241d3761da457bd313f97ad"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_scale_listen_interval"
+code = "1d243f647e7fb94a055eef8a5ecc7d1eed22f30c0bffbaf3aac51be166a18993"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_start"
+code = "f1338e52532bb0273ed33c588148ca8557ddb530d312e788dc62e16ca4699a38"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_tbtt_process"
+code = "221da650e370dc945930247c4089ad0bcc8571ce7facf429784bab2e50c709a2"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_update_next_tbtt"
+code = "1eba78c72219e5cbb4280adeef87cf114439ea4765cbac413d411a31d5505790"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_update_params"
+code = "3ff42c30e01c012926618ae60dac8e4a403389a42bf7664953a8a6f5563ec31c"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_wake_done"
+code = "019e5768b61597d5e7fb55f27fa786df4ad282cbc44a9eda0fa7cd13b93df2ab"
+
+[[function]]
+artifact = "libpp"
+member = "pm.o"
+symbol = "pm_wake_up"
+code = "5adb9aa1f970158dfcf5fd8651ada417adbf8b89972d5e90034d25a736e8e796"
+
+[[function]]
+artifact = "libpp"
+member = "pm_coex.o"
+symbol = "pm_coex_recalculate_wifi_time_slice"
+code = "ca9ea86bd484a70e3510dfb32d0b26b3033f6ce108293f10d67ea2585e615851"
+
+[[function]]
+artifact = "libpp"
+member = "pm_coex.o"
+symbol = "pm_coex_reconnect_policy"
+code = "d8104bf7a06cb718a640483a606199e53bb81c4dd6a9bd6a200fcca2049f5c98"
+
+[[function]]
+artifact = "libpp"
+member = "pm_coex.o"
+symbol = "pm_coex_set_reconnect_policy"
+code = "8280c97c5ffd74de116b576140d2cb3da645da23fc8283aa3e46e937cecd7eda"
+
+[[function]]
+artifact = "libpp"
+member = "pm_coex.o"
+symbol = "pm_coex_update_rx_beacon_pti"
+code = "691a63dcd367cda33f4f8541075dda8bd69a481effcfa611d3b86a5f7fd705eb"
+
+[[function]]
+artifact = "libpp"
+member = "pm_coex.o"
+symbol = "pm_get_null_max_tx_time"
+code = "d9bd7507f8e30b8f20237d2202519e790fe4b7b479621a68f70451b7c4bc1e99"
+
+[[function]]
+artifact = "libpp"
+member = "pm_twt.o"
+symbol = "pm_on_isr_twt_wake"
+code = "fec0d70fce79f25808a9cce596a9aa752844fc4cc71a7c623da7bde4a557cd6f"
+
+[[function]]
+artifact = "libpp"
+member = "pm_twt.o"
+symbol = "pm_twt_set_target_tsf"
+code = "25be7a296146fdd57258729a7220926f9e0b1957934cbc6ec5f6fc0e70aa25e4"
+
+[[function]]
+artifact = "libpp"
+member = "pm_twt.o"
+symbol = "pm_twt_set_target_wdev_time"
+code = "4f3fc60e54e4bcd4453b337712ae101024f36b694c337464695726a2e764a81b"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppAssembleAMPDU"
+code = "a5cbe452f0370db3da6cb303b83833c4c6058f94c52112bcb8f9ddc149a084ce"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppCalTxAMPDULength"
+code = "c0b0edd52a69ea0982b4e16dd443dbfa92039646d4e7c7b4b53d69d50e55e1ce"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppCheckTxAMPDUlength"
+code = "b8a2bc2641b9235ee8f25ce2c5e634fa3563f4c9180b6adaa54c969f6e0b506a"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppEnqueueTxDone"
+code = "3c183a89a8620135e426021f48833e0ae4ab684baf7f60bf18487032a97844a7"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppFillAMPDUBar"
+code = "5b7ebc731e172d074255eee1e7730900d97eab214c0a276f1fd0274dddfdd3a3"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppPrepareBarFrame"
+code = "01386488d8e7dcbe6489c62cd812768a4a2b5e947d342861b4fa1fa78bf018d0"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppProcessLifeTime"
+code = "f2e4b60c066af35ba219908ad7d7371f9b0094dbce0faf9cac9a5a1c163c39db"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppProcessTxQ"
+code = "7c64459d3c9c4f13bac49564ebcea30032121c9e1716b9f86e486200536ca5f9"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppReSendBar"
+code = "32d2982476c0357233a74f15d0404ded6bc5c2da1bdb1112ad93b84ff101d41b"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppResortTxAMPDU"
+code = "c9ebafbfb0b2376729d34aa9a4eb9280e29c443c64147dac20df59221c005c16"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppTask"
+code = "6815ae47a7636ff04fce0e4a5e52a75c37cabcd85ffdc5aedf252e485c5834c5"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppTxFragmentProc"
+code = "0b87b1db81ba0ff56780eaecc7911a33d4d552b98fa23eec0785a2c501cdeb3a"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppTxProtoProc"
+code = "6e7b2964f8efedf755d8234ed284b94c47b44b0d9ed2b7c9ed72333427f239b2"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "ppTxqUpdateBitmap"
+code = "e9ecc5e52f91a32b03f4200666df470eabe6793025e3f9fed5d5fae618212c43"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "pp_coex_tx_request"
+code = "d15f672747892b744c792e14b2decc1e719cb9a5085d2d642b5f714f09ea1972"
+
+[[function]]
+artifact = "libpp"
+member = "pp.o"
+symbol = "pp_post"
+code = "5161d84875ff496618e031bafffc47e69cca6b3c1a8f5f215887989114366092"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp_debug.o"
+symbol = "dbg_lmac_diag_statis_dump"
+code = "8d5a49d9e64fd1203f567ef4e0c37ab9e9a097eba10b238c92f5539a1abdc3e2"
+
+[[function]]
+artifact = "libpp"
+member = "pp_debug.o"
+symbol = "dbg_lmac_hw_statis_dump"
+code = "9e68bb3e520a4543928c96e70280b19c3f662a933842407e1c96bf93bc31208a"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "get_estimated_batime"
+code = "13f5ebbaa8f3846603e8387bcf63bde66f7971016a2f55a4b008b4ab0277d948"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCalDeliNum"
+code = "0347fec2a89812cf0014fac53afc07ef3b9955a855175dea1e13f30d80354cc9"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCalSubFrameLength"
+code = "9a07302db1857bcf4fc5a3e30f0cc722b4661d423343b439c72bf897f72d2dc6"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCalTxHEAMPDULength"
+code = "0c39047015508ee806f493a1e8a086286e4487c46bb25059e2d167f02dd3b51b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCalTxHESMPDULength"
+code = "08d47c62c4fec35258b573c6cf5c4cd3c8825c68b4b53af5fcc8f52666fc5774"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCertSetRate"
+code = "096912af0079943885d316da1228c6c30552e28e8f7ce83661d7e3fefa8302a0"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCheckTxHEAMPDUlength"
+code = "fca5d9ae1f38423a38d8fe472c6592b8fbfa2ed0b50705aa996457f57439a47e"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppCheckTxRTS"
+code = "41ce42d50e586970ac0257703f2afd3c2a54a59520d41357f06f23d02ea629fe"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppEmptyDelimiterLength"
+code = "687b6998b90a614951a37cfd2dd890a119c6743139085e5ba1156e5f71b86bd1"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppHEAMPDU2Normal"
+code = "04fc2185ec2ea484416d3b50bbb23086aa1d50e9f8d9c7da814e9f14a1d0dd1d"
+
+[[function]]
+artifact = "libpp"
+member = "pp_he.o"
+symbol = "ppSelectTxFormat"
+code = "8a80b2fec22586d3e39180ec8e8f3356656bf38227c79f206e0fb5486694886c"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal.o"
+symbol = "esp_test_bf_set_feedback"
+code = "c8c9b09e816b2a677e06d6f8303e78ebab834d7866007f5338652c58370ae83d"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal.o"
+symbol = "esp_test_get_csi_dump_cfg"
+code = "a578d5f8d858c66e7da4eb60c063bbee3c7408b96fb90417c1888127778e2f0b"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal.o"
+symbol = "esp_test_set_csi_dump_cfg"
+code = "1bfaf200565216da5c17a590448899235dbd4413c69fdc42fb5e94f08467bed4"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu.o"
+symbol = "get_user_num"
+code = "c6f1099d541787989b48c890b5c10bf5aab07c4fbda9a449bee5ef3cf6915026"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu.o"
+symbol = "mumimo_spatial_cfg_get_nsts"
+code = "2c7d33678b57d5eda14f2dccb0655c50faa697e43be7d1e51f7e48b2c8797bca"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu.o"
+symbol = "mumimo_spatial_cfg_get_nsts_tot"
+code = "658d496eb0009fae63a5465f0dd251d5157dd61a367bd8da485de59716c73a3e"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu.o"
+symbol = "test_nonmimo_update_user_info"
+code = "d6fd6a8c777a8b89291dfbb434aceaa52f27f5f2fcc5fa439aacfacd95facd9e"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu_sigb.o"
+symbol = "dbg_dump_rx_sigb"
+code = "c93bcb8686043d6ee41e7c692c3370ddb25e6777a306de3bc4bd8fb8bf0bcbb2"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu_sigb.o"
+symbol = "test_get_nonmumimo_common"
+code = "c3c39dbf747d4f795dd7765c4556b5c21a192d14e39a522105cfc670d149fe27"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu_sigb.o"
+symbol = "test_rx_parse_mumimo_complete_sigb"
+code = "74653a8403cca953f245c51393796cc75d81b5cca92ed6fd4f3bcd5eaf27cd30"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_rx_mu_sigb.o"
+symbol = "test_rx_parse_nonmumimo_complete_sigb"
+code = "607574bbe3ecdd17527c5385d9bfb5292c9643dc31dcaafd5232cf7d5e5ff3f3"
+
+[[function]]
+artifact = "libpp"
+member = "test_hal_tx_statis.o"
+symbol = "esp_test_tx_enab_statistics"
+code = "ca28328dd377372dd255a82f015e015d136099d96b95f3edafe6e8c49166ac99"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "he_get_min_subframe_len"
+code = "3380ee36bf75004b06d2598b38af170209d55bb0d377a2eb69f2d947aabbc3d7"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "he_get_min_subframe_len_dcm"
+code = "5710ea73266dba675d92b963ff061f765c1c162a72aa3acef078be10ecb1dbef"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "he_get_min_subframe_len_static"
+code = "8be0e43fd3685bad58f42cbf74019557c360dac189bea64143d9cca642531864"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rc11GRate2SchedIdx"
+code = "bc891d5f2cf1761a6c4e8085e7bf4d3c5f5ed2a7548d398d34129034ec3e7118"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcGetDCMMaxRate"
+code = "f23243943e3559e29720adadb04cc191eaa526dd6b0f6a09d3803c6948eeeedc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcGetRate"
+code = "50116399291c142b29228cae4e4c01de872b2c36066fef3afcb00142b0fc9c59"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcGetSMPDURate"
+code = "263ae9942a725ad2b9b8654d2019117c5ab97075f9a20a8b1c968abd849ef6ad"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcGetSched"
+code = "b6a05dcff114d7780af16b9a609d9ccce05817b44fa93c49660b4158364a4347"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcReachRetryLimit"
+code = "254743107a43aee1c82293cb8b66f2f3454c4dbacdb6da4ded1efe800b7d6642"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcTxUpdatePer"
+code = "065587d2fd881fee572e14774bb9c8409c3876712829e1bd709cdf38ae649587"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcUpdateAMPDUParam"
+code = "57e25564b1210de28e2e144333e456291010a61be2798e594513a5021b1bdb20"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcUpdateAckSnr"
+code = "2bd7ef72c5b76aafb172387aa0282fe824236becc6dc5d8cf822d469fe2b2e07"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcUpdatePhyMode"
+code = "4cda7da0b75807e44ed33ca09c6aa2e37988df05ff0a89d21a7bd943411ad5f0"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcUpdateTxDone"
+code = "416433b9770e896abc03ed6c787a78820710f90d6d81e94222ca61172dca03f9"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rcUpdateTxDoneAmpdu2"
+code = "be0491a6fc7384bda54952e3033e4c6c6209d9e3102f6b04fc269a1847d3f1d6"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rx11AXRate2AMPDULimit"
+code = "b7800a76d0c456fde9703b2ce4ca50cc36e33719a591c333ce451656bf59bede"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rx11AXRate2AMPDULimit_update"
+code = "1e321c47ece18f68151d511d91590e8227900897aec51c1bc48a18d985819514"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "rx11NRate2AMPDULimit"
+code = "b1cae6c8b0caf134b046cb5914760a5fb13d8938ce46c44092de1ac5c5de005e"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "trc_init"
+code = "7e47b90f0b36b0c1fa8b02b1fd438007ebe6f5843504bacb8382563a62172241"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "trc_isTxAmpduOperational"
+code = "9ee1c1f056bf7daa35ce19c5637dd190eac83e26d8de4edef3c5753ef3f97402"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "trc_set_bf_report_rate"
+code = "d553a697bc3647209b03a133425af8893b0680f34c0c57dbb64b7160687899ea"
+
+[[function]]
+artifact = "libpp"
+member = "trc.o"
+symbol = "trc_tid_isTxAmpduOperational"
+code = "4e549d60c4e236b88fe9d2b88190e584829a7332b5587d7f2e7a3457556bf010"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "is_ndpa_to_dut"
+code = "d8165045d9e692086ccff5047b9e6c1f79bd428391520ff253741c47825e5419"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_AppendRxBlocks"
+code = "f462be0dee1176c3ba2284c2519361aa468a02553466bbed3e457f81a77cd033"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_GetNoiseFloor"
+code = "775259e70c961484ef61b12a6c2d3eb67100fb3393bd102170dfc34cf165874b"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_Get_Next_TBTT"
+code = "38ad53d087bb0d15cfeda83076408dd54fb824d25e956a6cba58b90b33f989ba"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_Insert_KeyEntry"
+code = "34a3781cb7e3dcf19434712ba7cc39bcec2ea253b550e5863cfb951bbb32b917"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_ProcessFiq"
+code = "12bf9ef1759337c2106092fd97e495a3eac350b6fcbaa1448eb46ae56eb645e7"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_ProcessRxSucData"
+code = "97aea622fac41fc200a1d1b011448e49bde08963b2dc6406837227bb94f487a2"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wDev_remove_KeyEntry"
+code = "9c4285ebd44f9f5738b1a5057562152e69fb0ad86f98c62f179c4f3ef5f81487"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wdevProcessRxSucDataAll"
+code = "d8efee1e8731a5e5f4a5dfdfe8fd02a3494c3a898038712d12b2d2030fbe9606"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wdev_funcs_init"
+code = "977a523d5e4a2f3993c60b2214919d0156dd88eac34a787bc586e7b6d4a2aa4d"
+
+[[function]]
+artifact = "libpp"
+member = "wdev.o"
+symbol = "wdev_process_tbtt"
+code = "101cd146279b40460a640dec5dbd08a3e81d22becf3437a1fdc0355cef22255e"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "force_rx_gain"
+code = "867a79ebd1ab19e4da56fc4d93d9ed9701cfdf5b45bb406f3c398cc5e686086c"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "get_rfrx_sat"
+code = "db096fd9ba28b9f70fa17e078f15e8a9c123b1b4b9a49fc263636bc5df7df73f"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "phy_rx_sat_test"
+code = "19c47179aac155ba017cbe03b8b252a47b32bd26955d9794aa82487b576c638d"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "phy_test_filter_band_set"
+code = "674d5dd0bc60913036c37f8f79468bc4a4e7eab9a6908dbda5db6d88bbc1c103"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "print_dump_data"
+code = "33252d46a51b80721ab92ee040af334bf38190cb0058504319a71aa9622fcf1f"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "rx_max_gain"
+code = "5a13f8be99a86b16ceb02f9ec1e21c5d800f9f56a5b289c21a68699ff15344f1"
+
+[[function]]
+artifact = "librftest"
+member = "phy_test.o"
+symbol = "set_dump_mode"
+code = "4162772ca6cad3a8ff0ddce5b448e486a058d94539b1b67ec33d528b2776f513"
+
+[[function]]
+artifact = "librftest"
+member = "wifi.o"
+symbol = "rx_init_gain"
+code = "1eb55ac03c531b947679973b6974d640540d2f1cf6e707cb769f227bde552a81"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__assert_func"
+code = "6e29e42a979d589b39e48b573d76b17d57068754f5055b3dcca9beb828335cae"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__clzsi2"
+code = "171a0a963ecea0e22231795b0b880a265e5a717796144ce01621af5ffcae727e"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__divdi3"
+code = "f2c69054ac7d381e8f79c55a6b19949bf66e89f53ed651ef2d63bc8acab0c9b1"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__riscv_restore_10"
+code = "728883001c689fa7f8dfcc52b7ead0d88d68528452b138735be69a7747ccee46"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__riscv_restore_12"
+code = "44599b4cfcad1d9104be537a9d1f920c31f296fc8d80cd67f7ad8a37949a6059"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__riscv_save_10"
+code = "1b333c99a3f67699727f422708aa5cc6da3b12ed365df9585aca760ce7531475"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__riscv_save_12"
+code = "3d3ac1745b23794c58e76941b509a787dcf5c1f3cd3c32e8dec499bde4ea5d27"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__udivdi3"
+code = "9dce670594e3e6df66125fea1f821504f3ddf3caa2f8cf9057bedb2f07cd9f2d"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "__umoddi3"
+code = "8f4b8226e5828ce57fbdd9954cf77c5dafdb6d82f32b78d71802603ec1bbd794"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "_cvt"
+code = "b4899d8b0c378c219ed9664a5582b1c4482f20617a8cba827ab37fad91e33d3c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "esp_test_tx_enab_statistics"
+code = "08a24b92c2f794f3b9ce4e5ec0aeca9c8995451d53b7cf65e5f70a0c3c7affe2"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ets_printf"
+code = "a9b521676d8a09f26d4fc748519b0684cd1f912d88f2ac226d0688086097c004"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ets_vprintf"
+code = "6f8b2f12affe818e859f442722725e9d4cc0cdeb7726db7e4597642c3aea7ddc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_get_sta_tsf"
+code = "27f9dc2c7f413aab5bbb342a42ea6c9acb7786e0b603c627f35af923f2ae0b9a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_he_get_bss_color"
+code = "8540eddbea73ff36373d4649941bf45d6c91a7bd99b585562d1eadf5b56310f8"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_he_get_mplen_addr_end"
+code = "44eab789b69c0905aefa28cc83904341e34430d2acf4ffffc5be62603c04a5db"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_he_get_mplen_addr_start"
+code = "73c0ac68034bd0b0235901960c1046f6f7b8d6c9df618bfbe087d0453938096c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_he_set_htc"
+code = "69a5f6cd284657dd992f11ac82e3e4c469fc441c97f06eb7b3fc25c9d7c0afea"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_clr_txq_state"
+code = "c3c8267e701f705103388e9655d3512e665d26331912b52a2bcc09c5763a218a"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_rx_disable"
+code = "ccdd20f7511c9f71931825d0f0e1b9f91790fd4b09c6ded3dc66283f53d8b290"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_rx_enable"
+code = "2d3fc7d06477ee3d1284db8c864fdac1f6e9ce8080d94ae7738c16eb28aa35a3"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_rx_get_last_dscr"
+code = "93fae01aadd70b9a11143df89559b4bf96677bee49ffb7ea5d7f68b14562c800"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_rx_set_dscr_reload"
+code = "fbb77484318c393d3d938dcec20e8b2310b2d76e4607b115e583ae969351f761"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_tx_clr_mplen"
+code = "a19fc4140a1aee59e11749915f1742accd63d99da5e4e2a3c8bcf275099e8c68"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_tx_set_ppdu"
+code = "f04a682c0e8c16a9434706b5901f6bf6c7bff3144c18bca6bc1f115ced59c20e"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_mac_txq_enable"
+code = "404068ef3fb0b887c1456b42ce62588f3e85a1c0f41de32567d9511dfb07d56c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_wdev_timer_set_target"
+code = "49909a8655cb02461d8dfdd7465ae713e3b5a53cfb10b59f3d0ed6d6918cea7a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "hal_wdev_timer_target_enable"
+code = "d645301f184f019d3d1125ef934f0f72b1b729c3fa93a5156820b0034edc1d36"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "is_use_muedca"
+code = "a5e2fbee1e9bd8a351df7d73afe0db39a9205027f61572cf244325b72ccda548"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacIsLongFrame"
+code = "ee92b131eef7fc32f3a72e9e3736a9aab365d22d4d0e92d5e4365df9d56576a4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessAckTimeout"
+code = "aa179f06ac773f7edc783176e0f0f90ab20cf3ebd3eaae0f26326d88c0eaa5c1"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessCollision"
+code = "552e02541e1878baf445bdf83202d26eae6b463e5786a39884a069cc36a8c981"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessCtsTimeout"
+code = "f2a05612ba9f7cf0c4b741d7c54d25bb75f2cb86cc25eb38337d3d98514a9ac8"
+decisions = ["state.rs"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessLongFrameSuccess"
+code = "4319b15ed6f0da5fe2037e7f12be412a588630f49270ace57fc4577731f059fc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessShortFrameSuccess"
+code = "eb06e0ee3d5fb73d6c2530bb90eea527f1fb33a4810afe2db5861a0e9ce1d1d6"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessTxComplete"
+code = "83e1d892883146ed6e33f60be2d8fad9bfd63f1389495384ee50e5fb1ab61a5a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacProcessTxSuccess"
+code = "76d43228921b5450a69f385c01a4932d7e8b2294b6023d891f1e77cc75a3beb3"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "lmacSetTxFrame"
+code = "f4d3f823209ad13cf69b947ece140b69d2994edae089691792a5a8debd0687a9"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_hesig"
+code = "68f6179143ab1d2f26ead53bacd0ea27837b5de4b37a4cd2d8967eafc543af42"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_len"
+code = "bbb8d2da599cc7cab31a274ad2b82c7fe339d3f406266d29215feaaf44f23b57"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_mplen"
+code = "59f2d59e70ad3989971986a273f761a0da823416cece0f548aa5ef15a2099e17"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_plcp0"
+code = "c31b6dc40927375f7d14cc6427fc1f6e9982e1c17ecd0bf4ab57cce7f6571606"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_plcp1"
+code = "1de725a4f3ff680f28d981b79f78376c4b91ca2720d809abaec52781ce0cfbbf"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_pti"
+code = "34cc1cc9373fd89dd9ef970deb5fc2295f43fce34ed878b42012fde807f8fd34"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_tb"
+code = "f224f8b4b07b2d42b07ab36047f6e987e168f49608563a2ca30bc8815f486b39"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "mac_tx_set_txop_q"
+code = "b378c9ed3987451861b19f10bd500a3fc26246ac62125e84fd5649e14aca8cdc"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "memset"
+code = "568f1d35e758ab82126426a68435e6740e2f192dcf667e24fcbe281a33fd9388"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_adc_rate_set"
+code = "01ce36bfdab120f8ecb69ea1b1d0ec482f5ee3c23c9ad49697a85fea9efefa1e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_agc_reg_init"
+code = "d07280c9bf46eca404ef675b5fb5517d1cafe924cb3338b8280d37d2dc6c3f6e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_btrx_cfg"
+code = "b0cd35d90a9d66be5132f505c23afd7d12c7a11cf6b9d80cef5a4637a59e0dc2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_bttx_cfg"
+code = "025cbaa205afd7a4bb75a6c1e3eb30148d51cc4997f06451eb7345607e4ac1b4"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_dft_cfg"
+code = "c83a847f50dbda9379b7ac3c857d9ffabd18244771471ab440479a8da85a81a9"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_init"
+code = "782b3b2ba5413a218f7395a702117560c94d7e4442e14d64ae336faef32fc756"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_wifirx_cfg"
+code = "89d3f5b60fc443e3237b50965da4a8986264d16eec38cc76401d290093d1ad98"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_ant_wifitx_cfg"
+code = "4a3533e021f34b4c9687dec3c70c9a6bab309dd81f9432df2b356254bd109a17"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_agc_reg_update"
+code = "7b56b8e5020a502b140eb77c90f8508643808499063a6d47b6cd0082046ce62f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_bss_cbw40"
+code = "0a5f674da1372252e822f329d3a6a1ad35f22176ff6e078632bb90c195a37ea2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_bss_cbw40_dig"
+code = "53c6a151555bfbaf4ba16d28d4ca952038fde22ac69e703eda527759b2305a50"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_cbw_chan_cfg"
+code = "c16cf8f08e802a997a29efb0473751eba32dfd52112c79b736a667d7efe68635"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_cfo_cfg"
+code = "3a26eeb1c6ba442b9580d633739349f00ebaa3342a626fca5a459996deef7ae7"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_reg_init"
+code = "3f2cff1cda1762159b0c666b52c43095a28da8bb1ab28567ca244a5a150e64e5"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_wdg_cfg"
+code = "0f6df8358f3d254ef0bf599212c6c97dff42a2b4ac00c7573437ba0e2427c724"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_wdt_get_status"
+code = "daec4f8d48df597a9a140ec525454ef6a5d0512b1d48c505775d2eaf8df73431"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_wdt_int_enable"
+code = "a5ba5d1ebc3f95cca057a034417df425f6f4f91a1f84f3a1eccc78ebb4c80d6d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_wdt_rst_enable"
+code = "36350ee87c43311bd064113541cf9ab9158b130f5f5fe1047ddfdb9e36222fee"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bb_wdt_timeout_clear"
+code = "e31649490fa8d32a8757fbd20f6f5193e935a435b23a69a3cd181ebdda0b49f3"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bbpll_cal"
+code = "911936dbebd85e34099f5cc2766f067978fa0922a76831f1c82faa9caa1119b1"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bbtx_outfilter"
+code = "57c77ea41091bec1755dd80baa35d3cfe9e3927fcd5d94b447c1a4566e17bd1c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bt_filter_reg"
+code = "f901f33ff1d3429b34b2d0fdb28e2da2dd46cd787f0fa31591f86579e5c8ac51"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bt_gain_offset"
+code = "80bc7ff8941d6f0a43777fdb2c72de04a49e13ed7f3bcd98e971a2aab904cc96"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_bt_get_tx_gain"
+code = "f30e047d113bb37541744fe1f3e5ce7bf8056d8bca2f1248e643379e70ee415b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_btbb_wifi_bb_cfg2"
+code = "ec49b87d2625222fd7cae1043e9b176ae4aa96f21cb9a43d721f3dde7937773f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_chan_dump_cfg"
+code = "10b16ec3be656a05e61f4c9dc93d2439561619cbf9005ac5e335990a7e6e0848"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_chan_filt_set"
+code = "7f39ee32383eeb474410f9baa6a8ac9efe656305602a563187d721ce1737958f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_chip_i2c_readReg_org"
+code = "ae7e812c155be8535e849b6e4282bef028d55f63501e82d8d2e1ca0664d5534b"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_chip_i2c_writeReg"
+code = "a4924b5380085916f4389e1d18925009ddb8c4e2b83f408a63574c604a5540e8"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_code_to_temp"
+code = "6423b4c753b74165722b87240082f4803d7db70a363bb2af4bc3ef7b14d5f152"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_csidump_force_lltf_cfg"
+code = "f4a9ddf157ec5336f643336464127ba0eb73eb9dfbd3bd0806ed7008a53b727f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_dac_rate_set"
+code = "b9325c9c87bde0bb478119f771b55a41a2814a6652ac401e8d351ecd551cfde0"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_dac_scale_set"
+code = "4034bde3874cb3f5a92b09d1aef9ff1b193ca0cdc56cc36729db2572b0b6373b"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_dc_iq_est"
+code = "7045815caac254e09520cf78b6ebc3ffd5f79ab3aee04be7f9e72ee8587dabac"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_dig_reg_backup"
+code = "15debef08242b1b50c9cfd81b96a1734eadc1c7949ab37e4f2d75e29ba2ad4d8"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_dis_hw_set_freq"
+code = "ae34e5633adc307977afb68d4c3dd40bff173c0714c2d4bc425b17bdcde20f2b"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_disable_agc"
+code = "e43ddc42b61febba8522dd111846eaa26cab92ec658d5353a39829cbe4d20945"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_disable_cca"
+code = "be7e3aee666a0866ead34c01cb56d7aeca7c41431d6e1b68fe520f82f190572e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_disable_low_rate"
+code = "cbad38026c7a3b33871c073a825913c2b42e0b4023baa36bbc41bc99521b14da"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_en_hw_set_freq"
+code = "1f8be3f30557dffb4621ad0aa446531da5db94fed54f9281906cba00d3e67f39"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_en_pwdet"
+code = "1131a74d9a8afeb40ed102d0364baff4ab5db6ce908ed6bfc7709c6a0ff4729d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_enable_agc"
+code = "455825421bb9ec34b850536d317e84d4296b8856cad2f1ca96094ff2af24b802"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_enable_cca"
+code = "2dc2b01e5a393ea661d77acb8deca9abc2088958aad16917735eb907acca67d3"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_enable_low_rate"
+code = "9efee9c5ee3d5756c2fc69dc58a24fdda1040e5caaeee37f13a339ae944ae979"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_fe_reg_init"
+code = "77932b5a83da49eb46ca3fad1319f9c00beb8a9603f1e8ff42cc10828f5ea711"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_fe_txrx_reset"
+code = "9fef42eaf830e8e91e638cad0eb3f9c86df37e1b6113ff76533361371f8c59bc"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_fft_scale_force"
+code = "28be9c3055f6001376113c809e85a09c304ce790c2da5d13355fc7cc8c37d893"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_force_pwr_index"
+code = "7a81950fb34dea12e8a73c0d0e2f76bbd5094002e3a1ff7f44b43e24b00abd7e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_force_rx_gain"
+code = "3c902bf9f77836db2fa07923ca7934bc5cb518c813107a0283bd638b373f2352"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_force_txrx_off"
+code = "bda3be2ca78af86ffb0707c7bf25fb7f3bc21247b2f16c7b63d7a30d3dea0b14"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_band_reg_set"
+code = "d444063a6f3b0c40803715de4e28caf275876550d9fa089087626448afb13221"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_chan_en_sw"
+code = "0f8c65ff221af98e62b8cc986c868039a32216ef71e4f2fb91c12e6850cd8d99"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_correct"
+code = "a5db9d942f99713d1b3040dcb115a23adc647a76d18f9bdaef33c92d5945ba77"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_i2c_mem_write"
+code = "5819cd4cfd6977de09c5be9050476ad1af9ec9e3ad233206b9ecb8dd7fbd9e37"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_i2c_num_addr"
+code = "701e7a9db0890b78d71181562c326b76cd3e62fccaf2bcf9f552ceb3bd89c9c6"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_module_resetn"
+code = "da398d993ba8117a32ab0b2493e0111243b965f889b555148f285bde043f4b2c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_num_get_data"
+code = "c5e7690ce0481acaebb13cba2b781c7bf2887548b88fa13433b00b053df57242"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_freq_reg_init"
+code = "42d3068c62696293a0cc5148a41c09de3cf49f6a2a342a05fe086f26eb0ac037"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_gen_rx_gain_table"
+code = "b36ce40b64d61f8cccd2a1670ad6e0db2f261eb18a90a90bcb996e85005fdfbf"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_cca"
+code = "5df478002c3156ac1d3819553420d505fdf47ab5fa5d4f56f468d7de3df24c02"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_cca_cnt"
+code = "b3394bc537db3e348d3955b5909251c0bf770dc246d6f7da8edca7acb721351a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_chan_target_power"
+code = "2ff211d0499950891dc72987971c93ffbc0771be48dbf85e9d297b093d628854"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_fm_sar_dout"
+code = "d744b995473c1620b0079326649590301a379db68f703f79df1eff6789df3e5f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_freq_mem_param"
+code = "ff7100582ce51628363d13571590491a95473ba34a3e39032d12dc1f25109431"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_max_pwr"
+code = "ce7d97f47df17fb5d2bff1647f6b442999efc16538244db2cbddccfb26cfea60"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_noise_floor"
+code = "460ef68a6c8aaab8d4cc2f20c65662f6ea0401241c4f7b5a761649e1d679ae0b"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_rssi"
+code = "5ec696b09b72c652e03c00f4bb04b9b5cdd3619309a1c1d9522031d0f8697f8e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_rx_sig_pwr"
+code = "b41c5690b394be0165ea3f76f4f405a24f02134b6546b8144d9a232ff6a30c82"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_target_pwr"
+code = "1f2bcba16838c08a085c9c988651f31640dd7dca154939a0aa8cb1714bcfb6f7"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_tone_sar_dout_"
+code = "55e8806dc99415702698d5f9f4ac57d856d44d53d188ad5374bb5b5d872708dc"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_get_tx_gain_value"
+code = "cb60c2c4cc44e6b93d590e352a08d81c2dda25a3a997b06d62164c41bf089089"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_hemu_ru26_good_res"
+code = "01be27a3b38eb93dfc707ca5ccfafee5ef7b98892ce28e747352bf10f2424704"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_clk_sel"
+code = "2ea49ed75e7e91e4c23fb98fa97d9328514c1cba0d177976bf43e7fe761270ec"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_master_mem_txcap"
+code = "8f9a53be5318007326ad982c1984fcb82f1f637c51dc733c81c2b95b1609f4ea"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_master_reset"
+code = "a2c8646e2fcc5be59d0c5423bb0c470bb85b345122e81c79f67c8efaa108a006"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_paral_write_num"
+code = "9cc6b957117675eec70a9a27fc3a96332b54a6599929826752fe3b561a340593"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_txrate_init"
+code = "3e318e299ba1e89fde558097a4dfa7f60bc82bd3861fefdb067f1d49a83bb28d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2c_writeReg_Mask"
+code = "acbebf5aa7aece26272023b2cdd23db29accde1ddc199e8e39385b56f45517ba"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_i2cmst_reg_init"
+code = "4e9336b52ceda74d2bda280d46b2baeff0050b994766d0e50faf7513d8901201"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_index_to_txbbgain"
+code = "431b9527086569081061a0a3adf80fab290d0a24705de54016022cb5e6074c89"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_iq_corr_enable"
+code = "11eb09186b5fd1bc3f257a6b97e55714845b84dbaeb9665595afc40661c47fea"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_iq_est_disable"
+code = "5e50192de5afc34cad06ac7ef476261f4caa83935513f7c84f8ebc366ada9ef4"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_iq_est_enable"
+code = "c715fc318c29b8097c9967ddc4711f62161f7197743aae2f0ad02d2d19275722"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_linear_to_db"
+code = "9c8c03cb19e978d625a59c6e4cb644ca728d2dd6942d0c7b5da7dd7d87cf623c"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_lltf_mask_en"
+code = "b6fb3c065fc215d92783306c423179e44b361b1d9e4382fcdfa3b93d7ece2938"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_mac_enable_bb"
+code = "5149fef5c58934288c46edc44681ce5e613eb24540ff7731a1b6ff6dad18e82a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_mac_tx_chan_offset"
+code = "5c6d4567541bb2e1b9228813625792608f31bd1bdd29eb4fd821ef75db7d5cd2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_mhz2ieee"
+code = "454713ca71496cdcd494cfbce5c4081240a1700fcc76503fbeae0f2724f9101a"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_noise_floor_auto_set"
+code = "72e55a17b76ce85af58d2b1c4e99149b5799f8ec57ccde0ca34ee0d2c9d0333d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_nrx_freq_set"
+code = "fdd2ed49ae826be02c8158a79be6fbd6eb65802bf8c1cbfcc96b87dc6bfaf3aa"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_open_fe_bb_clk"
+code = "bd650b0330d3075e590f32ab8aac0a0b6d33f9820240cbe5d0f019a24caf1f00"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_force_mode"
+code = "05156c095f49828d2c056108df48d3c74b887c63f139a76aa0f39620f87f6009"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_force_test"
+code = "5c961b41747cc65971035ba8785e7c3c373356027ef8d3a96f7d9f4faddc701a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_rd"
+code = "082007999cc8656024f20a5945ab1468c5077aba6bd39e543fa5c5a4192d283c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_rd_addr"
+code = "7569561443a8942cbb5d35a999a17ef37fc4bffccd40f0bdf59f491ef34763b5"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_rd_shift"
+code = "fc41e1460dc5292515ab80ac14a50223ba91d6940fa165f23afe295a51393a11"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pbus_rx_dco_cal"
+code = "1f633571f9abd71deaa9d5ed3379a10dbb18c3579b76368ad1e2fc117560f7c1"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pwdet_reg_init"
+code = "85d5a61086a2613f35d3f5b56f401cead86fccbe97d5c06096cb4ed87f1aefa6"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pwdet_sar2_init"
+code = "fec66e532ee853875e47cf61f5e192807191934ab853fc504907f7a11f8effd4"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_pwdet_tone_start"
+code = "d9c78e789357ffee959d45bd6de0cee9b685ce57809c02d4af41f80e2eac4f85"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rate_to_index"
+code = "2925804f3c00614979ef31a1b1dab10e83587d89abb44242f26274a037347716"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rc_cal"
+code = "1257f3491f1b006ebedf8d6e109e4e602d1435260c4ac7c7788127e4ca60a762"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_read_hw_noisefloor"
+code = "4b15c1bc8c83d3cb9d28c9ef11b713a1c90434b03e8a208d4fe190cbbfc7524e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_read_rf_freq_mem"
+code = "289e64c0386aaa12fd2eac93dedf2ff1e98222dc6314701958a28c34a1f9aba2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_reg_init"
+code = "da11d9f4b08f8f2d4fe8308dd520889b69de964cd0395ee5de50e2f844c85a60"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_restart_cal"
+code = "37acdd4b110713d7755f8ee7fc29abe8424836e6d6753cf5cd5fbda0ea49c3ef"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rfcal_txiq"
+code = "17b7b5fe00795857fb0f44d61951cae7cbea96cbd374a1645573fc097e242926"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rfpll_cap_init_cal"
+code = "c33da51f68269528fa1a16fddda7f3668d4c4bf29ec5261c4bd3104624ac1baf"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rfpll_set_freq"
+code = "04b64141ad7c4665e0ff39bb6eb893f1b012e3a6907adedee3864359f6604beb"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rfrx_sat_rst"
+code = "d2979f9d5ee551c91b31720bd80d0e6a8b7fb5d23411e860e8cab23508bc746e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rx11blr_cfg"
+code = "30c88d63ecabe25d999dd5292b7068ab4d51f4e86ebd33e76b25b8a94659164c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rx_11b_opt"
+code = "8d80c2d69512d7bd8d7b8227c2ce39e07eb81f59f02bd9d216ac38d759ac2dd2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rx_filter_mode"
+code = "f1039d34f4656ffd75099c5da69614dfe8b02362a8dd5196dc59fe367a30a990"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rx_gain_force"
+code = "8f4f02174b4c3653fb009d4e8360eb3adbbbf3fd470acc445fa32adef41bb7ba"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rx_sense_set"
+code = "420370fed985d13a1b417e8ef8bac84c827bb5d8514c5676c7a670e66478dac9"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rxdc_est_min"
+code = "0ea60e05dd893106a73a0bb50200c729b634d9a4d51e82861d5600f175249100"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rxiq_get_mis"
+code = "4420cb567f6cb03e497179337ec57106bde49bb146859043196ae48a53cdb7ad"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_rxiq_set_reg"
+code = "6c0b4eed74880d66bc72e63cc1bd82dce9ea57ffce693800873719ed424a7f5a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_save_pbus_reg"
+code = "b8a7ec3f45d356baf42dfccd05b8753155144f91e01aa3447fb6cebc20ee8b0c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_cca"
+code = "9c46eff4d596fb8d680b6b53b72e005ea5e17a15cd7fea59b44193d6b8bc5543"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_cca_cnt"
+code = "39753e67615232b78e478c2e610c44ed1e91cb7eda56b9b77d6548f12b7ba348"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_chan_freq_sw_start"
+code = "e1a073104fb3cf480e4828e5fdde5d8aab20576039ade848beeec9ee21621de7"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_chan_reg"
+code = "30a6fa68a6123f5f5ff184b78c4403cda696d56a0dd4737fd54cc0b6d6527236"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_channel_rfpll_freq"
+code = "88b6dbafa8f52e49aeef87b7e97ee875a15a3f0f16348280b9c57ccd182009ce"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_most_tpw"
+code = "a07b822853ef6dc6b955cefd9c23963b8022ced057c0fc7d4649b4365b673da6"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_pbus_mem"
+code = "55a48033d7599fd360a16a84bd1e3d6e229330550f602d87f3c11f925f11d8f2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_rf_freq_offset"
+code = "4632a55d4d7f49904f57b2b737740b03eec2dac95ea8d5c58bf658c321d58bc2"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_rfpll_freq"
+code = "3cef7c88dbfdcc25d541afc1814b4809947391d3a0aa324a133160119612fadd"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_rx_gain_cal_dc"
+code = "cdbc15c8f3f149af9303f4edd59ed13537592683a744c02d61f39569dc0d9e6e"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_rx_gain_cal_iq"
+code = "7ed1bfd841cb0ed814f0fe2cb6ccb6e39b7bbbeb2fc80194324a74c0952f3c8a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_rxclk_en"
+code = "fee40edec9311be66ad0c20661f635690dd47c824431e2c67cc1c6058b01ba50"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_tsens_power_"
+code = "509272eff4231b43172228fd3328c7089284cb2041f97bc6fa0cfcc50286f31c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_set_txclk_en"
+code = "6db1ebd3a5a92b06de995ffb801ebff89eb3fea79482e836b1f6b7335e74888f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_sifs_reg_init"
+code = "99954f67dab07cc6ecf6ef95f9dba2acc14fd3bf0b9c3d2809a357458e05b398"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_spur_coef_cfg"
+code = "82cbdc4f678bdcb38618153cb707884954f48a692ca55b181ec98c5cf2ce6355"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_spur_reg_write_one_tone"
+code = "fd6fc242b2ec8414cc04329ec884bdeae1f82ed2313c61bbbc779cd4fa8b32aa"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_start_tx_tone_step"
+code = "b93e53f4228e7c69ca9ea3bb5eaad74f254f7f1efec01cc7875288465d63c354"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_stop_tx_tone"
+code = "35757090a2815840db39b68c86438a239f4fdb53abe5a0bcf997194b5bf7860a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tsens_code_read"
+code = "ec6eff4305546acb5763ed7f3a10f1bb8580668e0e6724fe94aa83e6f70fd2f6"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tsens_dac_cal"
+code = "e23505499ee667dc4648b0d61c2376557b79e3c006cfd3333f60aba9d71248f2"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tsens_dac_to_index"
+code = "460aa952475ec58806e1fab93f625d580d6dcdd4f06581700f77c35acccbbe06"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tsens_temp_read_local"
+code = "8137183db5ff130656580390df09b48f337973cd8f5046be77db0b1645d7d662"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tx_paon_set"
+code = "fc24f2f66f118599864807bca5f0deb97fdcf601cd108a138f1b06807af073de"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tx_pwctrl_bg_init"
+code = "e178702e61b537df4e547c1fd95fff7aef80d1ca6ac613195e71acff7ebaf0c6"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_tx_state_set"
+code = "ffbbe2e6695f4e7b236433f4ba52373cabf14ef9b9860ccf7ba15f05da78b8bc"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_txcal_debuge_mode_"
+code = "dae783325b9463aa36f7ef719a1436e675e41fa018127cbb6345197c60a7a402"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_txdc_cal"
+code = "a310c05d9d7c059bad26831407390bb1380a7ca8647e21f37e2ab88e15cf2e58"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_txiq_get_mis_pwr"
+code = "ad953e0f9d74ae76098fcf654a0cff56f71f6aa1e7b7d5267c3f13c119993dd7"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_txiq_set_reg"
+code = "cf7bf87a28562f723cfe70460e1d0b430f33b7a204d1f6fd41b9ce4b0082288c"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_vht_support"
+code = "345bb82525cbb8b4b3cf60f999ccc216c99ea178b905bed92f79de4e0826784a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wait_i2c_sdm_stable"
+code = "d77d3daa2bdf1101ad365cf5d2fad4a0aee28483b9cf2bfdc6db1ea5a861a381"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wait_rfpll_cal_end"
+code = "b2df95e46486cfddb0df45c97f23473695fd0ae8a78256b578cb6debe41739d3"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_agc_sat_gain"
+code = "79379a39970d8231c30fcc6025f8273cf969177fd680817d134b458782fac535"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_enable_set"
+code = "20be53330e9f08579b0be647eabe13852a24f524b90d87c0014605d982b08614"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_fbw_sel"
+code = "354f250ff930aea3385788de202cf829d3349d62a0bf12edf37f5ff472d590a8"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_get_target_power"
+code = "5f2b2f5c526751027299144888749190fcf7f64ca48e3f93349aa4ac3ae8a778"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_get_tx_gain"
+code = "87e8a5a81d5d026bad0b9e1f2a782677e4e753ba3cdc29a904417901a061e412"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_wifi_rifs_mode_en"
+code = "4eb9df53af01d6bb81e5dcba19513bff414a7562619763fbb0160ea2e4f7de86"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_write_gain_mem"
+code = "e50216b95e9f1bcfab6b48acdc5d84eddf7a90e26f29606a78d73aaa058db8b8"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_write_pbus_mem"
+code = "bb025145c3c28d1bf2b9d7d773fabd8d62bee31f95b86d436d3bba2e36556503"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_write_pll_cap"
+code = "67e605d5382158a598805ed102368b94b9199f9d6af32c390ee2d8df43768f4f"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "phy_write_rfpll_sdm"
+code = "0d02a883de59bdf700b58f05a9c7e52f8c3d52e7ce4db0c7fb72aa2ee90e3132"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "pm_clear_wakeup_signal"
+code = "f1acb79b7a0ce22a05069e9ae7e9dd192b8e35f95c764cedffcfc769ad2f4d1d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "pm_on_isr_twt_wake"
+code = "2cd1163707f162174df9581af932f647e3f66033fc92b162980b94ccf2fac6c8"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "pm_twt_set_target_tsf"
+code = "ea31a60204d92f4fe1b99bfad5390f1cc5d85686bc672f11468ab2bd31192d2a"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppAssembleAMPDU"
+code = "bda8049993c1dee62667afdb14cd1bc7b81f4ebd4901c0f20ef8f1639b03e51b"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppCalTxAMPDULength"
+code = "b34d9df43d2e64dcb81ce36524db3a821e993b6278091072660e538d86387186"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppCalTxHEAMPDULength"
+code = "d6fdb9e2f0f18958a90107fbaeccfb9f8bc4907e5cb55b1edaabde376b88cc6d"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppCertSetRate"
+code = "a51b5e77b55e04630e6b2ef3f3a31f68049f2a90d699895089ec23f35c22a5e2"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppCheckTxHEAMPDUlength"
+code = "a9120409c3aab86fd609db4b27518673996aa167e3793cf81544917fb78a5cdb"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppEnqueueTxDone"
+code = "9e01510098176ffd9fd77d1b81accce4bd2e93cae78ee8f81819b748ff641cc4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppProcessLifeTime"
+code = "6a7319903f4b1d3efe58413aca9408cc0b6f2de2167c8c1836c479844c0a7667"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "ppResortTxAMPDU"
+code = "c71cdedd654ae3be5472c7af1446e18178abbd4a3c7f544b2f24691937bf2557"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "pp_post"
+code = "b2c0dba7015129c4e9bb1cc9cb41a33ffc2184d8ce072d3c27750d992cd8c251"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "pwr_hal_set_beacon_filter_frame_crc_state"
+code = "6bfd2abf13e6f3f8b071407af54e8a6d0f5fdd6c82c8cda9dc8b02f6873e121d"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "rcGetDCMMaxRate"
+code = "a5a6885cc2870f6ef9f2b86dbd21c4675d50b09b3a998cce2de2002e0a145279"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "rcGetRate"
+code = "0f0855c9fee5ca804227a5925162e69e2225554f514f123e57cef7f044193153"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "rcReachRetryLimit"
+code = "10feb35d6b156527c94250d5109ecd6858eee8543a4415af14698a747c1e17f4"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "tsf_hal_set_rx_beacon_abort_tsf_time_deviation_sync_enable"
+code = "73e8c05e1bf65206400bf27a3b84d36e09f49625aacbff666b389871316df9fe"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "tsf_hal_set_tbtt_rf_ctrl_wait_cycles"
+code = "956fecd8c2a2920249f37001e0dbc8276725e34a43ac7369009aa81483c1fed0"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "tsf_hal_set_tsf_time_deviation"
+code = "22d3ee2cd379bb306d8795c914e921a16b110be260d26029661fb3d75b37c7f1"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "tsf_hal_set_tsf_time_deviation_sync_enable"
+code = "e5cb96e0163b11fd608f9c65ba8c83b78b309ed4f5aff3cd903a9447c0476cb0"
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "wDev_AppendRxBlocks"
+code = "e5fc4517bbfb5f84e4d6371aa39cbf6cd97b405583d025682867a2fdd55c3ec6"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "wifi_he_get_hetb_tid_bitmap"
+code = "1179d218ab3a1124d427a87ac185d2c8b11e0c1282d278136c513f2b68486cb9"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "wifi_rf_phy_disable"
+code = "a8eda1c56fffa45d1033fd89b63b9e64c7d19c314ad36be31eea6d64c30e8ce9"
+decisions = ["coverage.toml"]
+
+[[function]]
+artifact = "rom"
+member = ""
+symbol = "wifi_rf_phy_enable"
+code = "3a8c41585ef3aae493fd227f5ee278d9c8d4113bb676027bfb0403ca44bc8b4d"
+decisions = ["coverage.toml"]

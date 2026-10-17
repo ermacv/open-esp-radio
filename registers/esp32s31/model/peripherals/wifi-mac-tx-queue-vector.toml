@@ -1,0 +1,1483 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_TX_QUEUE_VECTOR"
+description = "Four 0x7c-byte physical vector banks represent logical EDCA queues 3,2,1,0. The write-side Trigger-based path additionally publishes the tail of its linked MPDU-length list in the word between HE-SIG-A2 and POWER."
+baseAddress = 0x20105364
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "PLCP1%s"
+description = "Per-queue second PLCP/vector word. Complete dbg_read_key_entry independently names bits 22:17 as KEY_ENTRY_INDEX and bits 24:23 as BSSID_SELECT. Complete libpp[hal_mac_tx.o]::mac_tx_set_plcp1 sets bit 29 for the guarded HT branch when descriptor word1 bit 15 selects 40-MHz channel width; the same selector is copied into HT-SIG1 CBW. A synchronous vendor raw HE20 MCS0 DCM capture used descriptor rate 0x1a and published 0x0401a000, proving that explicit DCM retains the ordinary 0x1a+MCS HE descriptor-code domain."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "LEGACY_SIGNAL"
+description = "Twelve-bit legacy PLCP SIGNAL/length value. Non-legacy formatters leave this field zero."
+bitOffset = 0
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers.register.fields]]
+name = "RATE"
+description = "Five-bit MAC rate selector published by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp1."
+bitOffset = 12
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "KEY_ENTRY_INDEX"
+bitOffset = 17
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "BSSID_SELECT"
+bitOffset = 23
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "VECTOR_FORMAT"
+description = "Three-bit vector family: zero for legacy, one for HT and two for HE in the reviewed paths."
+bitOffset = 25
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "HIGH_CONTROL_28"
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CBW40"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_plcp1 sets this bit for the guarded non-HE HT40 branch."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HIGH_CONTROL_31_30"
+bitOffset = 30
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_RTS_CONTROL%s"
+description = "Complete hal_he_set_tx_protection optionally replaces this word with a sixteen-bit HE byte threshold and bit 16 set, clearing the disabled flag and all upper state. With no threshold publication request it leaves this word untouched. HE Operation peer programming independently sets bit 17 in all four physical queue vectors when the encoded RTS threshold is disabled."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "RTS_THRESHOLD_BYTES"
+description = "Low sixteen bits of hal_he_set_tx_protection argument a4. Complete libpp[pp_he.o]::ppCalTxHEAMPDULength stores the libpp[if_hwctrl.o]::ic_get_he_rts_threshold_bytes result at descriptor offset 0x34; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 loads the same word into a4. This is a PHY-specific length threshold in bytes, not a frame Duration/NAV value."
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "RTS_THRESHOLD_VALID"
+description = "Set by the complete whole-word byte-threshold publication when argument a3 is nonzero."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HE_RTS_DISABLED"
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "PTI%s"
+description = "Complete libpp[hal_mac.o]::mac_tx_set_pti publishes the original packet PTI independently into four lanes, then loads descriptor byte offset 0x22 once and passes it as argument six to hal_set_tx_pti, which publishes it as COUNT bits 31:20. This count is independent of the A-MPDU descriptor count written by libpp[hal_mac_tx.o]::mac_tx_set_mplen to HT_DESCRIPTOR_COUNTS. For vendor Authentication and Association, libnet80211[ieee80211_output.o]::ieee80211_set_tx_pti event six maps through coex_pti_tab to packet PTI one; the independent scheduler field also resolves to one through the unsigned-minimum clamp against event-one PTI five. Vendor and open HIL both used 0x00111110, including the hardware-qualified 32-MPDU open profile."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TXOP"
+description = "Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_3_OPAQUE"
+bitOffset = 1
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "PTI_0"
+bitOffset = 4
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "PTI_1"
+bitOffset = 8
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "PTI_2"
+bitOffset = 12
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "PTI_3"
+bitOffset = 16
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "COUNT"
+description = "Descriptor metadata byte 0x22 passed to hal_set_tx_pti; not the A-MPDU MPDU/descriptor count."
+bitOffset = 20
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_CONTROL%s"
+description = "Per-queue four-byte HT-Control/HE-Control image at 0x201054e4-logical_queue*0x7c. Complete hal_he_get_htc reads the whole word. Complete libpp[hal_mac_ctl.o]::hal_he_set_htc writes the supplied word before independently selecting whether this software image overrides the hardware-generated HE-Control value."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Complete four-byte HE-Control image. Its A-Control subfields depend on the control ID; keep the finite protocol interpretation in the handwritten IEEE 802.11 layer rather than exposing overlapping mode-dependent SVD fields."
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HT_SIGNAL%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_htsig (size 0x23c) writes the packed HT-SIG1/HT-SIG2 queue image here for non-HE rates 16..35. Complete dbg_read_tx_sig independently prints the low MCS nibble and sixteen-bit length. The formatter copies descriptor word1 bit 15 to HT-SIG1 bit 7, whose standard meaning is CBW: zero selects 20 MHz and one selects 40 MHz. The exact vendor single-MPDU HT20 MCS0 callback image carried HT_SIGNAL=0x07006e00 for length 0x6e, confirming MCS zero, CBW20 and aggregate bit zero. Open HIL qualified the same single formatter at HT20 MCS0 LGI and HT40 MCS7 SGI. The independent two-MPDU HT20 MCS7/SGI capture carried 0x8f0c2e07 for aggregate length 0x0c2e, confirming aggregate bit one. The open direct-DMA A-MPDU path then received complete BlockAck for four separate HT40 MCS7/SGI two-MPDU submissions."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MCS"
+description = "Seven-bit standard HT-SIG1 MCS selector. The reviewed open 1T1R path uses MCS0 through MCS7."
+bitOffset = 0
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "CBW40"
+description = "Standard HT-SIG1 channel-width bit: zero selects 20 MHz and one selects 40 MHz."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "LENGTH"
+description = "Sixteen-bit HT length printed by complete dbg_read_tx_sig."
+bitOffset = 8
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "SMOOTHING"
+description = "Standard HT-SIG2 smoothing bit; the reviewed formatter publishes one."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "NOT_SOUNDING"
+description = "Standard HT-SIG2 not-sounding bit; the reviewed formatter publishes one."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "REQUIRED_ONE"
+description = "Required one bit retained by every reviewed HT queue vector."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "AGGREGATION"
+description = "Standard HT-SIG2 aggregation bit: clear for a direct MPDU and set for A-MPDU."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STBC"
+bitOffset = 28
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "FEC_CODING"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SHORT_GI"
+description = "Standard HT-SIG2 short guard-interval bit."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "VHT_SIGNAL_1%s"
+description = "Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names VHT MCS, channel width, group ID, NSTS, SU partial AID, SGI, SGI symbol disambiguation and coding. This maps an internal hardware vector; it does not assert that the ESP32-S31 public Wi-Fi mode supports VHT transmission."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CHANNEL_WIDTH"
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_3_OPAQUE"
+bitOffset = 2
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "GROUP_ID"
+bitOffset = 4
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "NSTS"
+bitOffset = 10
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "SU_PARTIAL_AID"
+bitOffset = 13
+bitWidth = 9
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_23_OPAQUE"
+bitOffset = 22
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "SHORT_GI"
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SHORT_GI_SYMBOL_DISAMBIGUATION"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CODING"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_27_OPAQUE"
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MCS"
+bitOffset = 28
+bitWidth = 4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "VHT_MODE%s"
+description = "Complete dbg_read_tx_sig decodes this word only when PLCP_FORMAT is three and names bits 18:2 SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LEN. Remaining bits are not assigned a meaning by the complete body."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LENGTH"
+bitOffset = 2
+bitWidth = 17
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_31_OPAQUE"
+bitOffset = 19
+bitWidth = 13
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_SU_SIGNAL_A1%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_hesig writes this HE SU vector word at 0x201054f4-q*0x7c. Live vendor MCS9 uplink images 0xfc205b4f and 0xfc605b4f independently qualify MCS nine, BSS color 27, HE20 and GI/LTF selectors one and three. A separate explicit MCS0 DCM vendor frame published 0xfc204087. Replaying the selector-one MCS9 image through the owned open DMA path received a complete 32-MPDU BlockAck on the first attempt and remained stable for more than 13,800 aggregates. Bits 31:26 are a TX-vector-required all-ones image and are not presented as on-air HE-SIG-A1 payload bits."
+addressOffset = 0x1C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FORMAT"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BEAM_CHANGE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "UPLINK"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MCS"
+bitOffset = 3
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "DCM"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_hesig copies descriptor-state word at offset 0x30 bit 15 into HE-SIG-A1 bit 7. Complete libpp[trc.o]::rcGetDCMMaxRate bounds the ordinary BCC DCM rate family to MCS0, MCS1 and MCS3 according to the peer DCM receive constellation. The vendor raw-TX configuration path independently set descriptor byte +0x31 bit 7 while retaining descriptor rate 0x1a, and the live formatter published HE-SIG-A1 0xfc204087. The owned open S-MPDU path reproduced that word and received an ordinary ACK with completion status zero. Rate-bounded open A-MPDUs with 30, 29 and 26 MPDUs then received BlockAck at MCS0 for the three qualified GI/LTF selectors. Explicit DCM and rate-control fallback therefore use distinct descriptor-code domains; BPSK DCM TX is hardware-qualified for both S-MPDU and multi-subframe A-MPDU, while QPSK and 16-QAM still require a capable peer."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BSS_COLOR"
+bitOffset = 8
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "VECTOR_REQUIRED_14"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_hesig ORs 0x40 into the second output byte before publication; both synchronous MCS9 vendor captures retained this otherwise non-payload vector bit."
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SPATIAL_REUSE"
+bitOffset = 15
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BANDWIDTH"
+bitOffset = 19
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "GI_LTF"
+bitOffset = 21
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "NSTS_AND_MIDAMBLE_PERIODICITY"
+description = "Complete dbg_dump_rx_ppdu shifts HE-SIG-A1 right by 23, masks three bits and prints the value as nsts_and_midamble_periodicity. The complete vendor private header uses the same name. A live 1T1R HE-SU RX vector 0x00e0591b with STBC set in HE-SIG-A2 produced encoding one: two space-time streams created from one spatial stream. This field is therefore not an unconditional NSS-minus-one value; with Doppler enabled it also carries midamble-periodicity information."
+bitOffset = 23
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "VECTOR_REQUIRED_HIGH"
+description = "Complete formatter ORs 0xfc000000 before publication; both synchronous vendor captures retained all six bits."
+bitOffset = 26
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_SU_SIGNAL_A2_LENGTH%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_hesig writes this second HE SU vector word at 0x201054f8-q*0x7c. It combines a bounded low control image with the complete HE APEP byte length shifted by eleven and a frame-class bit copied to bit 28. A-MPDU length 0x76 produced 0x1003b105; the live vendor throughput path independently reported length 0x061a in 0x1030d105. Complete libpp[pp_he.o]::ppCalSubFrameLength adds four to APEP when DMA metadata byte seven bit zero selects hardware HE-Control insertion, while leaving the low fourteen-bit MPDU length and DMA CCMP position unchanged. The vendor and open 24-byte raw S-MPDU paths both use APEP length 32, producing 0x00010105 with bit 28 clear."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CONTROL_REQUIRED_0"
+description = "Bounded HE SU formatter-required low control bit."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FEC_CODING"
+description = "Zero selects BCC and one selects LDPC in the bounded HE SU formatter."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CONTROL_REQUIRED_2"
+description = "Bounded HE SU formatter-required low control bit."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_3_7_OPAQUE"
+bitOffset = 3
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "CONTROL_REQUIRED_8"
+description = "Bounded HE SU formatter-required low control bit."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_9_OPAQUE"
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DESCRIPTOR_CLASS_MATCH"
+description = "Set exactly when descriptor byte 0x2f bits 6:3 equal seven."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "APEP_LENGTH"
+description = "Sixteen-bit assembled HE APEP byte count produced by libpp[pp_he.o]::ppCalTxHEAMPDULength or libpp[pp_he.o]::ppCalTxHESMPDULength and copied by libpp[hal_mac_tx.o]::mac_tx_set_hesig. For A-MPDU, DMA metadata byte seven bit zero contributes the four-byte hardware HE-Control insertion without changing the low fourteen-bit MPDU length. The qualified S-MPDU value is 32 bytes: four-byte delimiter plus 24-byte MPDU, four-byte hardware FCS slot and alignment."
+bitOffset = 11
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "AMPDU_LENGTH_VALID"
+description = "Copy of frame-state bit 12; set in live HE A-MPDU images and clear in the acknowledged HE S-MPDU image."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_MPDU_LENGTH_TAIL%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_mplen writes the final allocated seven-bit HE MPDU-length link index at 0x201054fc-q*0x7c when it reaches the DMA descriptor whose word zero bit 30 marks the tail. Bits 31:7 are preserved. Complete libpp[hal_mac_tx.o]::mac_tx_set_tb calls that leaf for every frame before making the queue Trigger-eligible."
+addressOffset = 0x24
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "LINK_INDEX"
+bitOffset = 0
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "POWER%s"
+description = "Packed data/RTS PHY gain-table indices, not dBm."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "DATA_PRIMARY"
+description = "Primary calibrated data-power gain-table index."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA_ALTERNATE"
+description = "Alternate calibrated data-power gain-table index."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "RTS_PRIMARY"
+description = "Primary calibrated RTS-power gain-table index."
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "RTS_ALTERNATE"
+description = "Alternate calibrated RTS-power gain-table index."
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HT_DESCRIPTOR_COUNTS%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_htsig constructs the base address 0x20105504-q*0x7c, then copies descriptor byte 0x2a into bits 6:0 and 20:14 and descriptor byte 0x2e into bits 13:7 through three fresh-read RMW edges. The vendor oracle read 0x00004081 for idle ordinary queues, consistent with one descriptor in all three fields. Open direct-DMA HIL first qualified two in all three lanes, then qualified the full negotiated 32-frame window with a 48,448-byte A-MPDU and complete BlockAck."
+addressOffset = 0x2C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "DESCRIPTOR_COUNT_A"
+description = "Seven-bit descriptor byte 0x2a copied by complete libpp[hal_mac_tx.o]::mac_tx_set_htsig."
+bitOffset = 0
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "DESCRIPTOR_COUNT_B"
+description = "Seven-bit descriptor byte 0x2e copied by complete libpp[hal_mac_tx.o]::mac_tx_set_htsig."
+bitOffset = 7
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "DESCRIPTOR_COUNT_A_COPY"
+description = "Second copy of descriptor byte 0x2a written by complete libpp[hal_mac_tx.o]::mac_tx_set_htsig."
+bitOffset = 14
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+bitOffset = 21
+bitWidth = 11
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "DATA_LENGTH%s"
+description = "Complete libpp[hal_mac_tx.o]::mac_tx_set_len (size 0x128) writes the packed non-HE HT data length, MCS index and entry class here. Complete dbg_read_tx_sig names the fields as the HT40 length, MCS, EOF count and TXOP count. The exact vendor single-MPDU HT20 MCS0 callback image carried 0x0000006e for length 0x6e, proving entry class zero. The independent two-MPDU MCS7 capture carried 0x70400c2e for aggregate length 0x0c2e, proving entry class one for A-MPDU. The open direct-DMA A-MPDU HIL qualified the same entry class through complete BlockAck results. Legacy formatting does not consume this queue word."
+addressOffset = 0x34
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "HT40_LENGTH"
+bitOffset = 0
+bitWidth = 19
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_21_OPAQUE"
+bitOffset = 19
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "HT40_EOF_COUNT"
+bitOffset = 22
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "HT40_TXOP_COUNT"
+bitOffset = 24
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "HT40_MCS"
+bitOffset = 28
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "LENGTH_CONTROL%s"
+description = "Canonical queue-vector length/rate/antenna image. Complete dbg_read_tx_sig names the low antenna-selection flags, RTS rate, HT20 EOF count and HT20 TXOP count. The upper four words of complete hal_attenna_init's eight-word traversal are these same queue-vector registers; its bit operations therefore use the canonical antenna fields below rather than a second BANK_CONTROL identity. Complete libpp[hal_mac_tx.o]::mac_tx_set_len always publishes the mac_tx_get_rts_rate result in bits 13:6, including PPDUs without explicit RTS/CTS. The exact vendor single-MPDU HT20 MCS0 callback image carried 0x000002c4, proving entry class zero; the independent two-MPDU MCS7 capture carried 0x00400244, proving entry class one. Counterintuitively, the acknowledged HE20 DCM S-MPDU also requires entry class one and carries 0x004002c4. The open direct-DMA HIL qualified both the HT aggregate and HE S-MPDU images. Complete mac_tx_get_rts_rate maps legacy OFDM 48/24/54/36 Mbit/s to basic rate 24M, 12/18M to 12M, and 6/9M to 6M."
+addressOffset = 0x38
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TXRX_QUEUE_ANTENNA_LAST"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TXRX_QUEUE_ANTENNA_VALUE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TXRX_QUEUE_ANTENNA_ENABLE"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TX_QUEUE_ANTENNA_LAST"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TX_QUEUE_ANTENNA_VALUE"
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TX_QUEUE_ANTENNA_ENABLE"
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RTS_RATE"
+bitOffset = 6
+bitWidth = 8
+
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_14_21_OPAQUE"
+bitOffset = 14
+bitWidth = 8
+
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "HT20_EOF_COUNT"
+bitOffset = 22
+bitWidth = 2
+
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "HT20_TXOP_COUNT"
+bitOffset = 24
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+bitOffset = 28
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "HE_CONTROL_CONFIG%s"
+description = "Per-queue control word at 0x20105518-logical_queue*0x7c. Complete libpp[hal_mac_ctl.o]::hal_he_set_htc performs a fresh-read RMW of bit 28 after publishing HE_CONTROL: nonzero enable sets the bit and zero clears it. The vendor descriptor path supplies descriptor state bit 16, which is set only for an explicit software HE-Control image such as OMC; leaving it clear permits the hardware-generated BSR path selected by the QoS frame Order bit and Trigger-eligible TID state. Vendor DMA/air HIL proves that hardware inserts the four-byte HE-Control field between QoS Control and CCMP. The DMA buffer contains no placeholder; complete libpp[pp_he.o]::ppCalSubFrameLength accounts for the insertion through metadata byte seven bit zero. Open-driver HIL independently qualifies the same contract through WPA2, decrypted ARP and ICMP traffic."
+addressOffset = 0x40
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "SOFTWARE_HE_CONTROL_ENABLE"
+description = "Use the software HE_CONTROL word instead of the hardware-generated HE-Control value."
+bitOffset = 28
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_HAL_HE_TX",
+    "BLOB_LIBPP_MAC_TX_SET_TB",
+    "ROM_REV0_MAC_TX_SET_TB",
+    "PROMOTED_LMAC_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS9_AMPDU_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_DBG_READ_KEY_ENTRY",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS",
+    "BLOB_LIBNET80211_IEEE80211_PARSE_HEOPR",
+    "PROMOTED_HE20_PEER",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBCOEX_PTI_TABLE",
+    "HIL_OPEN_AUTH_PTI_2026_07_29",
+    "HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.COUNT"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "BLOB_LIBNET80211_HE_CONTROL_TX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_DBG_READ_TX_SIG",
+    "IEEE80211_HT_SIG",
+    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
+    "HIL_VENDOR_HT_AMPDU_PPDU",
+    "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29",
+    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_DBG_READ_TX_SIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_DBG_READ_TX_SIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS9_AMPDU_2026_07_29",
+    "ESP_WIFI_SYS_S31_HE_SU_SIG",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.DCM"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "BLOB_LIBPP_HE_DCM",
+    "BLOB_LIBNET80211_RAW_TX_RATE_CONFIG",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_AMPDU_2026_07_29",
+    "IEEE80211_HE_PHY_CAP_DCM",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.VECTOR_REQUIRED_14"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.NSTS_AND_MIDAMBLE_PERIODICITY"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_DBG_DUMP_RX_PPDU",
+    "ESP_WIFI_SYS_S31_HE_SU_SIG",
+    "HIL_OPEN_HE20_STBC_NSTS_2026_07_30",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.VECTOR_REQUIRED_HIGH"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "BLOB_LIBPP_PP_HE_AMPDU_LENGTH",
+    "BLOB_LIBPP_PP_HE_SMPDU_LENGTH",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30",
+    "HIL_OPEN_HE_CONTROL_METADATA_2026_07_30",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.FEC_CODING"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_TX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.DESCRIPTOR_CLASS_MATCH"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.APEP_LENGTH"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_PP_HE_AMPDU_LENGTH",
+    "BLOB_LIBPP_PP_HE_SMPDU_LENGTH",
+    "BLOB_LIBPP_HAL_HE_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30",
+    "HIL_OPEN_HE_CONTROL_METADATA_2026_07_30",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.AMPDU_LENGTH_VALID"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "HIL_VENDOR_HE20_MCS9_SU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_MPDU_LENGTH_TAIL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_MAC_TX_SET_TB",
+    "ROM_REV0_MAC_TX_SET_TB",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "HIL_VENDOR_CONNECTED_VECTOR_2026_07_29",
+    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
+    "HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_DBG_READ_TX_SIG",
+    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
+    "HIL_VENDOR_HT_AMPDU_PPDU",
+    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_DBG_READ_TX_SIG",
+    "BLOB_LIBPP_HAL_ANTENNA_INIT",
+    "PROMOTED_LMAC_TX",
+    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
+    "HIL_VENDOR_HT_AMPDU_PPDU",
+    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL_CONFIG%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TX",
+    "BLOB_LIBNET80211_HE_CONTROL_TX",
+    "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30",
+    "HIL_OPEN_HE_CONTROL_METADATA_2026_07_30",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.LEGACY_SIGNAL"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.RATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.KEY_ENTRY_INDEX"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.BSSID_SELECT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.VECTOR_FORMAT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.HIGH_CONTROL_28"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.CBW40"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PLCP1%s.HIGH_CONTROL_31_30"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.RTS_THRESHOLD_BYTES"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.RTS_THRESHOLD_VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_RTS_CONTROL%s.HE_RTS_DISABLED"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.TXOP"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.BITS_1_3_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_0"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_1"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_2"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.PTI%s.PTI_3"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL%s.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.MCS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.CBW40"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.LENGTH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.SMOOTHING"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.NOT_SOUNDING"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.REQUIRED_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.AGGREGATION"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.STBC"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.FEC_CODING"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_SIGNAL%s.SHORT_GI"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.CHANNEL_WIDTH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_2_3_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.GROUP_ID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.NSTS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SU_PARTIAL_AID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BITS_22_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SHORT_GI"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.SHORT_GI_SYMBOL_DISAMBIGUATION"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.CODING"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.BIT_27_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_SIGNAL_1%s.MCS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_0_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.SU_CBW20_PRE_EOFPAD_UNIT4BYTES_LENGTH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.VHT_MODE%s.BITS_19_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.FORMAT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BEAM_CHANGE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.UPLINK"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.MCS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BSS_COLOR"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.SPATIAL_REUSE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.BANDWIDTH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A1%s.GI_LTF"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_0"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_2"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BITS_3_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.CONTROL_REQUIRED_8"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_SU_SIGNAL_A2_LENGTH%s.BIT_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_MPDU_LENGTH_TAIL%s.LINK_INDEX"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.DATA_PRIMARY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.DATA_ALTERNATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.RTS_PRIMARY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.POWER%s.RTS_ALTERNATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_B"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.DESCRIPTOR_COUNT_A_COPY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HT_DESCRIPTOR_COUNTS%s.BITS_21_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_LENGTH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.BITS_19_21_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_EOF_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_TXOP_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.DATA_LENGTH%s.HT40_MCS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_LAST"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TXRX_QUEUE_ANTENNA_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_LAST"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.TX_QUEUE_ANTENNA_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.RTS_RATE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_14_21_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.HT20_EOF_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.HT20_TXOP_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.LENGTH_CONTROL%s.BITS_28_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_VECTOR.HE_CONTROL_CONFIG%s.SOFTWARE_HE_CONTROL_ENABLE"
+naming = "descriptive"

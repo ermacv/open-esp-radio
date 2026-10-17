@@ -1,0 +1,25 @@
+[package]
+name = "oer-espressif-staged-layout"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Staged-boot layout contract of the Espressif chips: address map type, stage-two header and checksum, zeroed sections and the linker binding"
+
+[features]
+# Bind a chip's layout to the shared linker scripts from a Cargo build
+# script (requires std).
+build = []
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+features = ["build"]
+
+[package.metadata.open-radio]
+layer = "platform"
+platform = "family"
+family = "espressif"

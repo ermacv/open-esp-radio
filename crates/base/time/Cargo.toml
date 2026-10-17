@@ -1,0 +1,32 @@
+[package]
+name = "oer-time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Chip-neutral monotonic time, clock and timer contract for open ESP radio drivers"
+
+[features]
+# `Duration` serializes transparently as its `u64` microseconds, so that a
+# port's typed bounds travel from the firmware to the host.
+serde = ["dep:serde"]
+# `postcard_schema::Schema` for `Duration`, as `u64`, for a host
+# protocol's message lock.
+schema = ["serde", "dep:postcard-schema"]
+
+[dependencies]
+postcard-schema = { version = "0.2.5", default-features = false, optional = true }
+serde = { version = "1.0", default-features = false, optional = true }
+
+[dev-dependencies]
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+toml = "1.1"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"
+test-feature-sets = ["serde", "schema"]

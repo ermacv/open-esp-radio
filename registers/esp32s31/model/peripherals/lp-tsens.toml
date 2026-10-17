@@ -1,0 +1,217 @@
+schema = 2
+
+[[peripherals]]
+name = "LP_TSENS"
+description = "Low-power temperature sensor reached by reviewed complete ROM and libphy bodies."
+baseAddress = 0x20818000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CTRL"
+description = "Temperature-sensor sample and power control."
+addressOffset = 0
+size = 32
+access = "read-write"
+resetValue = 0x00019400
+
+[[peripherals.registers.register.fields]]
+name = "OUT"
+description = "Unsigned temperature-sensor code sampled once by the complete ROM read leaves."
+bitOffset = 0
+bitWidth = 8
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "READY"
+description = "Temperature-sensor ready observation; not consumed by this slice."
+bitOffset = 8
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SAMPLE_EN"
+description = "Temperature sample enable; modeled for exact geometry but not written by this slice."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "WAKEUP_MASK"
+description = "Temperature wakeup mask; modeled for exact geometry but not written by this slice."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "INT_EN"
+description = "Temperature interrupt enable; modeled for exact geometry but not written by this slice."
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "IN_INV"
+description = "Input inversion control; modeled for exact geometry but not written by this slice."
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_DIV"
+description = "Temperature-sensor clock divider; modeled for exact geometry but not written by this slice."
+bitOffset = 14
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "POWER_UP"
+description = "Temperature-sensor power control set by complete ROM phy_set_tsens_power_."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "POWER_UP_FORCE"
+description = "Forced power control; modeled for exact geometry but not written by this slice."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF"
+description = "Temperature-sensor register-bank and PHY read-path control."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "CLK_EN"
+description = "Temperature-sensor register-bank clock enable."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_9_OPAQUE"
+description = "Blob-evidenced conversion-path enable; the individual hardware meaning remains unknown."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_23_OPAQUE"
+description = "Blob-evidenced readout-path enable; the individual hardware meaning remains unknown."
+bitOffset = 23
+bitWidth = 1
+
+[[review]]
+entity = "LP_TSENS"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_TSENS.CTRL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.OUT"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.READY"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.SAMPLE_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.WAKEUP_MASK"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.INT_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.IN_INV"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.CLK_DIV"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.POWER_UP"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_TSENS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CTRL.POWER_UP_FORCE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF.CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD", "BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF.BIT_9_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_TSENS.CLK_CONF.BIT_23_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPHY_PHY_TSENS_READ_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

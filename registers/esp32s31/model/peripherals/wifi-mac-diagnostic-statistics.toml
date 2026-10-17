@@ -1,0 +1,286 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_DIAGNOSTIC_STATISTICS"
+description = "Complete libpp.a[pp_debug.o]::dbg_lmac_diag_statis_dump ties the blob's diag0 through diag12 and diagsel labels to these sparse MMIO words. The non-contiguous geometry and absence of diag11 are properties of the complete body. Higher-level meanings and internal bit widths remain unknown."
+baseAddress = 0x201043B4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG4"
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG5"
+addressOffset = 0x4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG6"
+addressOffset = 0x8
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG7"
+addressOffset = 0xC
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG8"
+addressOffset = 0x12C
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG9"
+addressOffset = 0x130
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG10"
+addressOffset = 0x134
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG12"
+addressOffset = 0x138
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG0"
+addressOffset = 0xA9C
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG1"
+addressOffset = 0xAA0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG2"
+addressOffset = 0xAA4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG3"
+addressOffset = 0xAAC
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DIAG_SELECT"
+addressOffset = 0xAB0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS"
+sources = ["BLOB_LIBPP_PP_DEBUG_DIAGNOSTIC_STATISTICS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG4"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG4.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG5"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG5.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG6"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG6.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG7"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG7.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG8"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG8.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG9"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG9.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG10"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG10.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG12"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG12.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG0"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG0.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG1"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG1.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG2"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG2.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG3"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG3.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG_SELECT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_DIAGNOSTIC_STATISTICS.DIAG_SELECT.VALUE"
+naming = "descriptive"

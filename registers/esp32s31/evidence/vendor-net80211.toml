@@ -1,0 +1,72 @@
+# Reviewed register evidence: vendor net80211.
+schema = 1
+
+# SOURCE(esp32s31): libnet80211[ieee80211_ioctl.o]::wifi_get_tsf_time_process,
+# libnet80211[ieee80211_hostap.o]::ieee80211_hostap_send_beacon_process,
+# libnet80211[ieee80211_hostap.o]::ieee80211_hostapd_beacon_txcb,
+# libnet80211[ieee80211_output.o]::ieee80211_alloc_proberesp.
+[[sources]]
+id = "BLOB_LIBNET80211_AP_TSF_TIMESTAMP_TIM_20261015"
+description = """
+espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21,
+esp32s31/libnet80211.a, sha256 23de6b00cbc71f4cd4a43c0c6cca4aa670154f52eb43d798668e1f1507f2425d.
+libnet80211[ieee80211_ioctl.o]::wifi_get_tsf_time_process (0x7a) passes
+argument one for the AP interface into the TSF snapshot leaf described by
+BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015. The normal SoftAP path in
+libnet80211[ieee80211_hostap.o]::ieee80211_hostap_send_beacon_process
+(0x4da), +0x33a..+0x386, likewise samples AP TSF with argument one. It
+computes I = (u16(g_wifi_nvs + 1016) / 100) * 0x19000 and
+D = u8(g_wifi_nvs + 1339), then stores the low byte of
+D - 1 - ((TSF / I) % D) as DTIM count using signed 64-bit division/modulo.
+The interval field 100 gives 102400; other intervals, D == 0 and TSF beyond
+the signed range are not validated by this observation. It copies TIM
+bitmap-control from g_ic + 438 and three bitmap bytes from g_ic + 439
+(+0x38a..+0x3a0), clearing the multicast bit when DTIM count is nonzero
+(+0x4aa). At +0x3ee..+0x408 it writes MAC local time into the beacon
+timestamp low word and zero into the high word. In contrast,
+libnet80211[ieee80211_output.o]::ieee80211_alloc_proberesp (0x3b4),
++0x16e..+0x178, zeros all eight timestamp bytes before transmission.
+libnet80211[ieee80211_hostap.o]::ieee80211_hostapd_beacon_txcb (0xf0)
+schedules the next beacon from the AP-time cursor (+0x38..+0x70) and uses
+the stored DTIM/group indication to release group traffic after the TX
+callback (guard +0x72..+0x82, tail call +0x92..+0x96), rather than deriving
+DTIM count from TX successes.
+These functions have decoded instruction coverage but incomplete call/state
+semantics: the observations do not cover every TIM producer or unsuccessful
+TX callback. The timestamp bytes are pre-transmit SRAM contents; later
+hardware replacement, its timer and its timing require on-air HIL with
+distinct SRAM/AP-TSF/local-time values, delayed beacon and probe response,
+AP-only/STA+AP, restart/retune and low-word carry.
+"""
+
+[[sources]]
+id = "BLOB_LIBNET80211_IEEE80211_PARSE_HECAP"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_he.o ieee80211_parse_hecap body, size 0x2d8, including nominal-packet-padding extraction."
+
+[[sources]]
+id = "BLOB_LIBNET80211_RX_BLOCK_ACK"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_ht.o ampdu_rx_start.constprop.0 size 0x186 and complete ht_recv_action_ba_addba_request containing the ordinary receive-BA activation branch with the ic_add_rx_ba relocation. ht_recv_action_ba_addba_request extracts a four-bit TID and rejects values with bit three set, admitting TIDs 0 through 7. ampdu_rx_start selects min(peer-requested window, g_wifi_menuconfig+0x30) for a nonzero request, or the configured window otherwise. The later ordinary activation passes constant 64 as the sixth ic_add_rx_ba argument; if_hwctrl.o only swaps interface/index before tail-calling complete hal_agreement_add_rx_ba."
+
+[[sources]]
+id = "BLOB_LIBNET80211_PARTIAL_RU_MAX_POWER"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_api.o esp_wifi_internal_get_partial_ru_max_tx_pwr size 0x68 and esp_wifi_internal_set_partial_ru_max_tx_pwr size 0x62, plus complete ieee80211_ioctl.o wifi_get_partial_ru_max_txpwr_process size 0x38 and wifi_set_partial_ru_max_txpwr_process size 0x1c. The API stores the caller's first byte unchanged in the IOCTL object and the process leaf passes it unchanged to _oracles/libpp.a complete hal_mac_get_tb_max_pwr size 0x126 or hal_mac_set_tb_max_pwr size 0x160. Their relocation-complete jump tables admit raw Trigger RU selectors 0 through 8, 37 through 40, 53, 54 and 61, select one six-bit field at 0x2010443c..0x20104448, and log \u201cthe ru_alloc_num is not correct\u201d for every other value."
+
+[[sources]]
+id = "BLOB_LIBNET80211_HE_TID_BITMAP"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_ht.o ht_recv_action_ba_addba_response size 0x24a and ht_recv_action_ba_delba size 0xda call hal_he_set_tid_bitmap and hal_he_clr_tid_bitmap for HE nodes. _oracles/libpp.a complete hal_mac_ctl.o leaves size 0x2a and 0x2e update 0x20104db8 bits 20:13 with the selected TID bit through two reads followed by one write."
+
+[[sources]]
+id = "BLOB_LIBNET80211_IEEE80211_PARSE_HEOPR"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_he.o ieee80211_parse_heopr body and pinned format string \"(opr)len:%d, Default PE Duration:%d, TXOP RTS Threshold:%d(%d us), ER-SU-Disable:%d\". The input points at a complete extension IE: bytes 0..2 are element ID, length and HE Operation extension ID; byte 3 bits 2:0 are passed to hal_he_set_default_pe and byte 5 bit 0 is the raw ER-SU-Disable value passed to libpp[hal_mac_ctl.o]::hal_he_set_ersu. The complete BSS-color branch treats HE Operation byte six bit seven as disabled, bits 5:0 as color and bit six as partial. A controlled AP advertised raw value 0x99, so disabled is true and the effective color passed to TX is zero rather than 25."
+
+[[sources]]
+id = "BLOB_LIBNET80211_WIFI_RX_POLICY"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_supplicant.o wifi_set_rx_policy parent and jump table. Case five ends with ic_set_rx_policy_ubssid_check(0,false); case six ends with ic_set_rx_policy_ubssid_check(0,true). Register masks, addresses and ordered RMW edges come from the complete libpp HAL leaves."
+
+[[sources]]
+id = "BLOB_LIBNET80211_HE_CONTROL_TX"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_he.o libnet80211[ieee80211_he.o]::ieee80211_encap_esfbuf_htc size 0x86 and complete ieee80211_output.o libnet80211[ieee80211_output.o]::ieee80211_set_tx_desc/libnet80211[ieee80211_output.o]::ieee80211_encap_esfbuf call graph. The HE QoS/TID path sets Frame Control Order bit 15 without reserving or moving four DMA bytes. An explicit pending OMC additionally writes the descriptor HE-Control word at offset 0x3c and sets descriptor-state bit 16; otherwise the software override stays clear for hardware-generated control such as BSR. _oracles/libpp.a complete hal_mac_tx.o libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu forwards those descriptor fields to libpp[hal_mac_ctl.o]::hal_he_set_htc after libpp[hal_mac_tx.o]::mac_tx_set_hesig. Complete pp_he.o libpp[pp_he.o]::ppCalSubFrameLength independently proves the four-byte metadata accounting used by hardware insertion."
+
+[[sources]]
+id = "BLOB_LIBNET80211_RAW_TX_RATE_CONFIG"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_api.o esp_wifi_config_80211_tx and ieee80211_output.o esp_wifi_80211_tx. The public configuration copies a 12-byte phymode/rate/ERSU/DCM record through ic_set_80211_tx_rate_config. Only the raw 802.11 submission path reads that record: for phymode six it selects the HE descriptor branch, copies the configured rate to descriptor+0x0c and copies DCM to descriptor+0x31 bit 7. This API is therefore not an oracle for ordinary STA data rate-control packets unless a raw frame is explicitly submitted."

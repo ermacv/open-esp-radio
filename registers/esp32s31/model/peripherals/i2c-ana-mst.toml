@@ -1,0 +1,466 @@
+schema = 2
+
+[[peripherals]]
+name = "I2C_ANA_MST"
+description = "Shared ESP32-S31 analog-register I2C master owned by the affine radio-PHY lifecycle."
+baseAddress = 0x2010F800
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C0_CTRL"
+description = "Analog-register I2C host-0 command and completion word."
+addressOffset = 0x00
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_ADDR"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_REG_ADDR"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_WRITE"
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BUSY"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "START_OR_RESET"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C1_CTRL"
+description = "Analog-register I2C host-1 command and completion word."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_ADDR"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_REG_ADDR"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_WRITE"
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BUSY"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "START_OR_RESET"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF0"
+description = "Shared analog-I2C master control used by PHY register mode and BBPLL calibration."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+resetValue = 0x0000E408
+
+[[peripherals.registers.register.fields]]
+name = "BBPLL_CAL_MODE"
+description = "Reviewed two-bit BBPLL calibration mode; complete ROM uses encodings one and two."
+bitOffset = 2
+bitWidth = 2
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+value = 1
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+value = 2
+
+[[peripherals.registers.register.fields]]
+name = "PHY_REGISTER_ENABLE"
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "PHY_REGISTER_MODE"
+bitOffset = 9
+bitWidth = 2
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REGISTER_MODE"
+value = 2
+
+[[peripherals.registers.register.fields]]
+name = "ANA_STATUS0"
+bitOffset = 24
+bitWidth = 8
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF1"
+description = "Shared analog-I2C routing and read-mask word."
+addressOffset = 0x1C
+size = 32
+access = "read-write"
+resetValue = 0x0000002D
+
+[[peripherals.registers.register.fields]]
+name = "READ_MASK_COMPLEMENT_LOW"
+description = "Low 24 bits of the complete complemented PHY-I2C read-mask publication."
+bitOffset = 0
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_MASK_COMPLEMENT_HIGH"
+description = "High byte of the complete complemented PHY-I2C read-mask publication."
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF2"
+description = "Shared analog-I2C host-selection word."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+resetValue = 0x00000004
+
+[[peripherals.registers.register.fields]]
+name = "PHY_HOST_MAP"
+description = "Complete host-selection field replaced by phy_get_i2c_hostid_new while unrelated bits are preserved."
+bitOffset = 4
+bitWidth = 14
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REVIEWED_RADIO_MAP"
+value = 0x3FA0
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C0_CTRL1"
+description = "Host-0 timing and clock-selection control."
+addressOffset = 0x24
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C1_CTRL1"
+description = "Host-1 timing and clock-selection control."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HW_I2C_CTRL"
+description = "Hardware-host timing and clock-selection control."
+addressOffset = 0x2C
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "ARBITER_DISABLE"
+bitOffset = 11
+bitWidth = 1
+
+[[review]]
+entity = "I2C_ANA_MST"
+sources = ["S31_ESP_PACS_SVD", "ROM_REV0_PHY_I2C", "BLOB_LIBPHY_PHY_I2C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.PHY_HOST_MAP"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_I2C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.BUSY"
+naming = "vendor"
+sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.BUSY"
+naming = "vendor"
+sources = ["ROM_REV0_PHY_I2C", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_ADDR"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_REG_ADDR"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.DATA"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.READ_WRITE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.START_OR_RESET"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_ADDR"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_REG_ADDR"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.DATA"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.READ_WRITE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.START_OR_RESET"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.BBPLL_CAL_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_ENABLE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_MODE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.ANA_STATUS0"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1.SDA_SIDE_GUARD"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1.SDA_SIDE_GUARD"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.SDA_SIDE_GUARD"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.ARBITER_DISABLE"
+naming = "descriptive"

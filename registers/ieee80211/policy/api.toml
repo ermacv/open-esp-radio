@@ -1,0 +1,57 @@
+# Reviewed transactions over the shared Wi-Fi MAC register blocks. Each
+# transaction cites the evidence of every chip that places the layout.
+schema = 5
+
+[options]
+allow-clippy-empty-docs = true
+
+[[enum-domains]]
+name = "MacInterface"
+description = "Reviewed Wi-Fi MAC interface selector shared by address, BSSID, crypto, TX and ordinary receive-BlockAck transactions."
+
+[[enum-domains.values]]
+name = "Station"
+value = 0
+description = "Infrastructure-station hardware context; traced from STA callers into interface and key-control fields."
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR", "BLOB_LIBPP_HAL_MAC_SET_BSSID", "BLOB_LIBPP_HAL_CRYPTO", "BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+
+[[enum-domains.values]]
+name = "AccessPoint"
+value = 1
+description = "SoftAP hardware context; traced from AP callers into interface and key-control fields."
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR", "BLOB_LIBPP_HAL_MAC_SET_BSSID", "BLOB_LIBPP_HAL_CRYPTO", "BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+
+[[enum-domains.values]]
+name = "Context2"
+value = 2
+description = "Reviewed third hardware selector accepted by the complete EDCA and RX BlockAck leaves; its protocol-role semantics are not assigned."
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+
+[[enum-domains.values]]
+name = "Context3"
+value = 3
+description = "Reviewed fourth hardware selector accepted by the complete EDCA and RX BlockAck leaves; its protocol-role semantics are not assigned."
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
+
+[[zero-based-field-writes]]
+name = "mac_interface_address_low"
+peripheral = "WIFI_MAC_INTERFACE_ADDRESS"
+register = "ADDRESS_LOW%s"
+fields = ["BYTES_0_3"]
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR"]
+
+[[zero-based-field-writes]]
+name = "mac_interface_address_high"
+peripheral = "WIFI_MAC_INTERFACE_ADDRESS"
+register = "ADDRESS_HIGH%s"
+fields = ["BYTES_4_5"]
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR"]
+
+[[field-replace-modifies]]
+name = "enable_mac_interface_receive_policy"
+peripheral = "WIFI_MAC_INTERFACE_ADDRESS"
+register = "ADDRESS_HIGH%s"
+fields = [{ field = "RX_POLICY_ENABLE", source-bit-offset = 0 }]
+value = 1
+exposure = "facade"
+sources = ["BLOB_LIBPP_HAL_MAC_SET_ADDR"]

@@ -1,0 +1,31 @@
+[package]
+name = "oer-ieee80211-sta"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor- and chip-independent Wi-Fi station MLME and policy"
+
+[features]
+default = []
+# Resource accounting visible to host compositions that test retirement.
+test-support = []
+
+[dependencies]
+heapless = "0.9.3"
+oer-ieee80211-arbiter = { path = "../arbiter" }
+oer-ieee80211-lower-mac = { path = "../lower-mac" }
+oer-ieee80211-mac = { path = "../mac" }
+oer-ieee80211-rsn = { path = "../rsn" }
+oer-ieee80211-upper-mac = { path = "../upper-mac" }
+oer-time = { path = "../../base/time" }
+oer-radio-port = { path = "../../radio/port" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"
+test-feature-sets = ["test-support"]

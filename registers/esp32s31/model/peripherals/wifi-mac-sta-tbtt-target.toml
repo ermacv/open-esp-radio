@@ -1,0 +1,39 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_STA_TBTT_TARGET"
+description = "Station TBTT target word recovered from complete hal_set_sta_tbtt. The low 26-bit packing from the supplied 64-bit TSF value is exact; the hardware counter unit remains unnamed."
+baseAddress = 0x2010D82C
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TARGET"
+description = "Complete hal_set_sta_tbtt replaces bits 25:0 with bits 35:10 of the supplied station TSF value and preserves the high six bits."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TSF_BITS_35_10"
+bitOffset = 0
+bitWidth = 26
+
+[[review]]
+entity = "WIFI_MAC_STA_TBTT_TARGET"
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_STA_TBTT_TARGET.TARGET"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_STA_TBTT_TARGET.TARGET.TSF_BITS_35_10"
+naming = "descriptive"

@@ -1,0 +1,199 @@
+schema = 2
+
+[[peripherals]]
+name = "COEX_HW_TIMER"
+description = "Six-entry coexistence timer bank. Complete libcoexist leaves address entry index as 0x2010f400 + index*0x10. The 48-event libcoexist[coexist_core.o]::coex_core_timer_idx_get table of the pinned archive returns timer indices zero through five or 0xff; index five is used only by the PHY grant-protect event 48."
+baseAddress = 0x2010F400
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x10
+dimIndex = "0,1,2,3,4,5"
+name = "CONFIGURATION%s"
+description = "Primary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set replaces both high nibbles and the low 24-bit tick image through separate fresh-read RMW operations. coex_hw_timer_force clears the low 24 bits; coex_hw_timer_unforce replaces them with 1000."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "PRIMARY_TICK_IMAGE"
+description = "Low 24 bits returned by coex_hw_timer_tick_get for the first timer value. The exact counter epoch and units remain part of the reviewed timer conversion rather than the register geometry."
+bitOffset = 0
+bitWidth = 24
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x00ffffff
+
+[[peripherals.registers.register.fields]]
+name = "PARAMETER_2"
+description = "Low nibble of the third libcoexist[coexist_hw.o]::coex_hw_timer_set argument."
+bitOffset = 24
+bitWidth = 4
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x0f
+
+[[peripherals.registers.register.fields]]
+name = "PARAMETER_1"
+description = "Low two bits of the second libcoexist[coexist_hw.o]::coex_hw_timer_set argument. Bits 31:30 are preserved by the complete vendor RMW."
+bitOffset = 28
+bitWidth = 2
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x03
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "Bits preserved by libcoexist[coexist_hw.o]::coex_hw_timer_set while PARAMETER_1 is replaced."
+bitOffset = 30
+bitWidth = 2
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x10
+dimIndex = "0,1,2,3,4,5"
+name = "SECONDARY_TARGET%s"
+description = "Secondary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set preserves the high byte and replaces the low 24 bits with the converted fourth timer-value argument."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "SECONDARY_TICK_IMAGE"
+bitOffset = 0
+bitWidth = 24
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x00ffffff
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+bitOffset = 24
+bitWidth = 8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x10
+dimIndex = "0,1,2,3,4,5"
+name = "ENABLE_CONTROL%s"
+description = "libcoexist[coexist_hw.o]::coex_hw_timer_enable sets bit zero here after clearing bit zero in the paired disable-control word. libcoexist[coexist_hw.o]::coex_hw_timer_disable performs the inverse transaction."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "ENABLE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_31_OPAQUE"
+bitOffset = 1
+bitWidth = 31
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x10
+dimIndex = "0,1,2,3,4,5"
+name = "DISABLE_CONTROL%s"
+description = "libcoexist[coexist_hw.o]::coex_hw_timer_disable sets bit zero here after clearing bit zero in the paired enable-control word. libcoexist[coexist_hw.o]::coex_hw_timer_enable performs the inverse transaction."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "DISABLE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_31_OPAQUE"
+bitOffset = 1
+bitWidth = 31
+
+[[review]]
+entity = "COEX_HW_TIMER"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s"
+naming = "descriptive"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "COEX_HW_TIMER.SECONDARY_TARGET%s"
+naming = "descriptive"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "COEX_HW_TIMER.ENABLE_CONTROL%s"
+naming = "descriptive"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "COEX_HW_TIMER.DISABLE_CONTROL%s"
+naming = "descriptive"
+sources = ["BLOB_LIBCOEX_HW_TIMER", "BLOB_LIBCOEX_PHY_GRANT_PROTECT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.PRIMARY_TICK_IMAGE"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.PARAMETER_2"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.PARAMETER_1"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.CONFIGURATION%s.BITS_30_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.SECONDARY_TARGET%s.BITS_24_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "COEX_HW_TIMER.ENABLE_CONTROL%s.ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.ENABLE_CONTROL%s.BITS_1_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "COEX_HW_TIMER.DISABLE_CONTROL%s.DISABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "COEX_HW_TIMER.DISABLE_CONTROL%s.BITS_1_31_OPAQUE"
+naming = "opaque"

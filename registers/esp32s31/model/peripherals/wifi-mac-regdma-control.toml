@@ -1,0 +1,125 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_REGDMA_CONTROL"
+description = "Shared WDEVPWR control word. The channel-change leaf proves the REGDMA selector, while complete modem-power leaves prove the wake-protect lead time and TBTT auto-period fields. Hardware interactions between these fields remain unqualified."
+baseAddress = 0x2010D83C
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Shared REGDMA and modem wakeup configuration word. Every promoted field has a complete independent setter; their combined hardware lifecycle is not inferred."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_WAKEUP_PROTECT_EARLY_TIME"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_early_time replaces the low sixteen bits."
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_16_OPAQUE"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ACTIVE_LINK"
+description = "Four-bit Wi-Fi MAC REGDMA link selector; the active no-power-save channel restart writes four. Leaving zero after retuning caused intermittent authentication ACK timeouts."
+bitOffset = 17
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "WIFI_NO_POWER_SAVE"
+description = "REGDMA link selected by the qualified Wi-Fi no-power-save restart."
+value = 4
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_TBTT_AUTO_PERIOD_INTERVAL"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_tbtt_auto_period_interval replaces bits 30:21 from the low ten argument bits."
+bitOffset = 21
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_TBTT_AUTO_PERIOD_ENABLE"
+description = "The dedicated enable and disable leaves set or clear bit 31."
+bitOffset = 31
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL"
+sources = [
+    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
+    "BLOB_LIBPP_HAL_PWR",
+    "HIL_OPEN_REGDMA_LINK4_2026_07_29",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
+    "BLOB_LIBPP_HAL_PWR",
+    "HIL_OPEN_REGDMA_LINK4_2026_07_29",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_WAKEUP_PROTECT_EARLY_TIME"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.ACTIVE_LINK"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_MAC_CHANNEL_SWITCH",
+    "HIL_OPEN_REGDMA_LINK4_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_TBTT_AUTO_PERIOD_INTERVAL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.MODEM_TBTT_AUTO_PERIOD_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_REGDMA_CONTROL.CONTROL.BIT_16_OPAQUE"
+naming = "opaque"

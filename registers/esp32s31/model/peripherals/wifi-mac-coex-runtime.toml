@@ -1,0 +1,150 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_COEX_RUNTIME"
+description = "Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names."
+baseAddress = 0x2010D89C
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CLEAR_REQUEST"
+description = "Complete hal_clear_rx_beacon_pti sets bit zero through a fresh-read RMW. Complete hal_clr_itwt_pti sets the input-selected bit through the same word; the accepted index domain and remaining bit identities are not inferred."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xffffffff
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_BEACON_TIME_HIGH"
+description = "Complete hal_set_rx_beacon_time replaces the low byte from bits 15:8 of its second argument after updating WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "ITWT_CONTROL"
+description = "Complete hal_set_itwt_pti clears the low byte and then writes seqz(argument zero) into bit zero. The remaining low-byte semantics are unknown."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_PTI"
+description = "Shared receive PTI word updated from the second argument by complete hal_set_rx_beacon_pti and hal_set_itwt_pti. Both leaves preserve bits 31:4 and replace only bits 3:0."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "PTI"
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_BEACON_PTI"
+description = "Complete hal_set_rx_beacon_pti replaces bits 15:12 from the low nibble of its first argument."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "PTI"
+bitOffset = 12
+bitWidth = 4
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_TIME_HIGH"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.CLEAR_REQUEST.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_TIME_HIGH.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI.PTI"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI.PTI"
+naming = "descriptive"

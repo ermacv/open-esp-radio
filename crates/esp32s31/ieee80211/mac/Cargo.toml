@@ -1,0 +1,55 @@
+[package]
+name = "oer-esp32s31-ieee80211-mac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocation-free source-owned ESP32-S31 Wi-Fi MAC primitives"
+
+[features]
+# Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
+test-support = ["oer-esp32s31-hal/test-support", "oer-esp32s31-ieee80211-dma/test-support"]
+default = []
+large-rx-pool-48 = []
+rx-ba-window-8 = []
+validation-raw-dma = ["oer-esp32s31-ieee80211-dma/validation-raw-dma"]
+validation-probes = ["oer-esp32s31-hal/validation-probes"]
+
+[dependencies]
+atomic-waker = "1.1.2"
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
+oer-time = { path = "../../../base/time" }
+oer-memory = { path = "../../../base/memory" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-ieee80211-dma = { path = "../dma" }
+oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
+oer-ieee80211-lower-mac = { path = "../../../ieee80211/lower-mac" }
+oer-ieee80211-mac = { path = "../../../ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../../ieee80211/softmac" }
+oer-ieee80211-upper-mac = { path = "../../../ieee80211/upper-mac" }
+pin-project = "1.1.13"
+subtle = { version = "2.6.1", default-features = false }
+zeroize = { version = "1.9.0", default-features = false }
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-esp32s31-ieee80211-dma = { path = "../dma", features = ["test-support"] }
+
+[[test]]
+name = "mac"
+required-features = ["test-support"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "chip"
+chip = "esp32s31"
+test-feature-sets = ["test-support"]

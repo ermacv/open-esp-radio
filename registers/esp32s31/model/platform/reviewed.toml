@@ -1,0 +1,15 @@
+# Reviewed assertions of the ESP32-S31 platform publication: none beyond the
+# review annotations of its fragment.
+schema = 2
+id = "esp32s31-platform-rev0-facts"
+
+[classification]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+
+[applies-to]
+ecosystems = ["esp-idf"]
+chips = ["esp32s31"]
+chip-revisions = ["rev0"]
+artifact-lineages = ["esp32s31-platform"]

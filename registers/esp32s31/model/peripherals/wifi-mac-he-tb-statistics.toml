@@ -1,0 +1,86 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_HE_TB_STATISTICS"
+description = "Hardware counters read by the complete hal_he_get_rx_trigger_cnt, hal_he_get_tb_times_cnt and hal_he_get_tb_qosnull_cnt leaves. These counters distinguish Trigger reception from actual trigger-based transmission and appended QoS Null responses. An ordinary controlled HE SU AP produced no Trigger frames, so all three remained zero during sustained HE DCM A-MPDU traffic."
+baseAddress = 0x201043A0
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_TRIGGER"
+description = "Complete hal_he_get_rx_trigger_cnt returns the low sixteen bits."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "COUNT"
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+bitOffset = 16
+bitWidth = 16
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TB_TRANSMISSION"
+description = "Complete hal_he_get_tb_times_cnt returns the low sixteen bits; complete hal_he_get_tb_qosnull_cnt returns the high sixteen bits."
+addressOffset = 0x4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "COUNT"
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "QOS_NULL_COUNT"
+bitOffset = 16
+bitWidth = 16
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS"
+sources = [
+    "BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS",
+    "HIL_OPEN_HE_TB_COUNTER_BASELINE_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.RX_TRIGGER.BITS_16_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION.COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_TB_STATISTICS.TB_TRANSMISSION.QOS_NULL_COUNT"
+naming = "descriptive"

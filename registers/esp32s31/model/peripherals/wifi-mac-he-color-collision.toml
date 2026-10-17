@@ -1,0 +1,60 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_HE_COLOR_COLLISION"
+description = "Complete dbg_read_color_collision reads the 64-bit observed BSS-color bitmap. Its adjacent control word is the canonical WIFI_MAC_HE_INIT_PREFIX.RX_FIELD_CONTROL register. Open HE HIL observed color bit 25, threshold one and timeout 60 seconds."
+baseAddress = 0x20104040
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BSS_COLOR_BITMAP_LOW"
+description = "RX_HE_BSS_COLOR_MAPLO."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BSS_COLOR_BITMAP_HIGH"
+description = "RX_HE_BSS_COLOR_MAPHI."
+addressOffset = 0x4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_HE_COLOR_COLLISION"
+sources = [
+    "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS",
+    "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_LOW.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_HE_COLOR_COLLISION.BSS_COLOR_BITMAP_HIGH.VALUE"
+naming = "descriptive"

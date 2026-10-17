@@ -1,0 +1,172 @@
+# Reviewed register evidence: hil open.
+schema = 1
+
+[[sources]]
+id = "HIL_OPEN_HE_BSSID_LIFECYCLE_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, open PHY/MAC, standard psram-code-psram-data profile and controlled HE20 AP, 2026-07-30. After association, WPA2/CCMP, TID0 AddBA and sustained 32-MPDU HE MCS9 transmission, typed PAC diagnostics read HE_BSSID_ENABLE=1, BSSID_SELECT=0, INTRA_PPDU_PS_ENABLE=1 and INTRA_PS_CHECK_BSS_COLOR_ENABLE=1. The AP advertised disabled BSS color 0x99, so BSS_COLOR_ENABLE correctly remained zero."
+
+[[sources]]
+id = "HIL_OPEN_AUTH_PTI_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, open PHY/MAC and standard psram-code-psram-data profile, 2026-07-29. Five reset-to-connect runs read scheduler priority one and PTI image 0x00111110 for Authentication/Association."
+
+[[sources]]
+id = "HIL_OPEN_HE_QUEUE_SCHEDULING_BASELINE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, open PHY/MAC, standard psram-code-psram-data profile and controlled HE20 AP, 2026-07-29. After HE association, WPA2 and TID0 AddBA, all ordinary-SU TB_ENA fields and Trigger/TB counters remained zero; MU-EDCA timers were disabled with REACHED=1."
+
+[[sources]]
+id = "HIL_OPEN_HE_RATE_CONTROL_ACK_SNR_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, open PHY/MAC, standard psram-code-psram-data profile and FRITZ!Box 7530 FN HE20 channel 1, 2026-07-30. The owned Dot11Ax/1 schedule selected rate byte 0x19; the typed arena decoder published HE MCS9, two LTFs/1600 ns and peer-qualified LDPC at 108.3 Mbit/s. The first three-member A-MPDU received BlockAck bitmap 0x7 and its successful PRIMARY completion decoded ACK-SNR sample 70. DHCP completed in 7 ms; a following 100-packet ICMP run had zero loss and 4.244 ms average RTT."
+
+[[sources]]
+id = "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, open PHY/MAC, standard psram-code-psram-data profile and nearby FRITZ HE20 peer, 2026-07-30. The generated PAC plus complete ROM/wDev transform read -92 dBm, scan RSSI was -20 dBm and the blob-compatible signed-byte metric was 72. The Rust-owned association selected Dot11Ax schedule 1, rate code 0x19, maximum schedule 13, 16 entries and BF report mode/rate 1/16. WPA2/CCMP, TID0/TID7/TID5 AddBA, a three-subframe TX A-MPDU and DHCP completed; 100/100 ICMP packets completed with 3.692 ms mean RTT and zero driver RX drops or duplicates."
+
+[[sources]]
+id = "HIL_OPEN_RX_BLOCK_ACK_DIRECT_BANK_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, fully open PHY/MAC, standard psram-code-psram-data profile and FRITZ!Box 7530 FN HE20 channel 1, 2026-07-30. The AP requested TID0 RX BlockAck at starting sequence five and negotiated window sixteen. Immediately after the open driver programmed ordinary bank zero, typed PAC readback at 0x20104274 reported control 0xc0000001, peer dc:15:c8:54:bc:1e, interface zero, window sixteen, current and loaded sequences five, and zero bitmaps. After two independent 500-packet ICMP receive runs, the hardware-maintained current-sequence word advanced first to 491 and then to 992 while the loaded starting sequence remained five. This qualifies the direct-bank geometry, field packing, publication update bit and live-state/load split; it does not qualify the separate extra-SoftAP staging path."
+
+[[sources]]
+id = "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. After HE association, WPA2, successful TID0 AddBA window 32 and one complete 30-profile HE matrix round, the typed snapshot observed MPDU 6216, end 6197, data-success 286, FCS 42, power-drop 42, HT-SIG error 8, HE-SIG-A CRC 1, ACK interrupt 25 and RTS interrupt 6. FIFO overflow, buffer full, TKIP, abort and all four hang/panic counters were zero. The color bitmap had bit 25 set, threshold one and timeout 60 seconds. Four subsequent 30-profile matrix rounds remained clean."
+
+[[sources]]
+id = "HIL_OPEN_HE_RX_CONFIGURATION_BASELINE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. After HE association, WPA2, TID0 AddBA and one clean 30-profile matrix round, the allocation-free dbg_read_rx_misc snapshot observed MPDU length offset 380, NFRP threshold 8, hardware TXOP, BSR update, TB stop, TRS, UL MU and UL MU data both enabled, HE response ACK enabled, RX frequency-hop time 50, PHY signal delay 20, intra-BSS-color and intra-PPDU power save enabled, and HE beamforming with BFRP time 16, NDP time 113, hardware sequence selector 5. RX power-save itself and all three custom RX types were disabled. Trigger/TB counters and all hang/panic counters remained zero."
+
+[[sources]]
+id = "HIL_OPEN_HE_TB_COUNTER_BASELINE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust open-radio-phy-prelude-hil on ESP32-S31 rev0 against the controlled Linux AX211 HE20 AP, 2026-07-29. After HE association, WPA2/CCMP setup and more than nineteen complete three-profile DCM A-MPDU rounds, two independent ten-second snapshots both reported RX_TRIGGER_COUNT=0, TB_TRANSMISSION_COUNT=0 and TB_QOS_NULL_COUNT=0. WDEVAXTBDIAG0..3 also remained all zero. This proves the typed read path and a no-Trigger baseline; it does not qualify OFDMA because this ordinary AP configuration did not schedule uplink Trigger frames."
+
+[[sources]]
+id = "HIL_OPEN_HE_BSR_TID_LIFECYCLE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust open-radio-phy-prelude-hil on ESP32-S31 rev0 against the controlled Linux AX211 HE20 AP, 2026-07-29. The fully open STA completed HE association, WPA2/CCMP and a TID0 AddBA response with window 32. Applying the complete vendor TID-bitmap edge at the transition to Operational produced two independent snapshots with WDEVTXQBSR_CTRL TID_BITMAP=0x01. Hardware/software BSR values and validity bits remained zero because the AP sent no Trigger frames. Twenty-four complete three-profile DCM A-MPDU rounds reported zero failures, qualifying the TID0 lifecycle write without an HE SU regression; this does not qualify OFDMA scheduling."
+
+[[sources]]
+id = "HIL_OPEN_HE_TB_QUEUE_PUBLICATION_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, fully open PHY/MAC against FRITZ!Box 7530 FN HE20 on channel 6, 2026-07-30. The STA completed WPA2/CCMP and TID0 AddBA window 32, then prepared 32 owned 1472-byte MSDUs using the complete ROM rom[]::mac_tx_set_tb order. PAC readback before the HE queue doorbell observed logical queue two, TID0, TB_ENA=1, MU-EDCA selector two and enabled timer, contiguous MPLEN links 0 through 31 with first PSDU length 1512 and terminal link 31, plus WDEVTXQBSR_CTRL validity bit two set. The programmed WDEVTXQBSR_SW value was 47104 but its immediate post-validity read was zero; removing a non-oracle fence and reproducing the exact ROM SW(BSR), LW(CONTROL), SW(CONTROL) sequence did not change that result. The following ordinary HE20 MCS9 PPDU received a complete 32-bit BlockAck and sustained roughly 70-77 Mbit/s. RX_TRIGGER_COUNT and TB transmission counters remained zero because this AP emitted no Trigger. This qualifies the queue/link/validity publication and no-SU-regression boundary, but not the BSR read-latch semantics or over-air TB/OFDMA transmission."
+
+[[sources]]
+id = "HIL_OPEN_REGDMA_LINK4_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs switch_channel_with_mac_restart on ESP32-S31 rev0, psram-code-psram-data profile, 2026-07-29. An exact working vendor pre-auth snapshot read 0x2010d83c=0x080801ff (ACTIVE_LINK=4), while the failing open path read 0x080001ff (ACTIVE_LINK=0). Restoring the complete libpp[if_hwctrl.o]::ic_mac_init link-four tail produced first-attempt Authentication, Association, WPA2 and DHCP at the ordinary 80-quarter-dBm limit; 200/200 ICMP echoes completed with 0 percent loss and 4.539 ms average RTT. The accumulated open TX counters were 211 immediate successes, three recovered ACK retries, zero other failures and zero hardware timeouts."
+
+[[sources]]
+id = "HIL_OPEN_HE_CONTROL_METADATA_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs open-radio-phy-prelude-hil on ESP32-S31 rev0 with the complete open PHY/MAC, standard psram-code-psram-data profile and Android shiva HE20/WPA2 AP on channel 6, captured in /tmp/open-radio-he-control-metadata-ch6-20260730.log and /tmp/open-radio-he-control-metadata-ch6-air-20260730.pcapng. The Rust A-MPDU builder kept CCMP immediately after the 26-byte QoS header, left the low fourteen-bit DMA MPDU length unchanged and set metadata byte seven bit zero. The driver completed WPA2, its first protected ARP on attempt one, immediate static-address network bring-up, and the first HE20 MCS9 aggregate with 32 of 32 MPDUs acknowledged on attempt one. Air frame 843, repeated as frame 78088 after a clean reset, contained Frame Control 0x88c1, QoS 0x0000, hardware BSR HE-Control bytes 4f 00 03 03, then intact CCMP bytes 09 00 00 20 00 00 00 00; tshark decrypted it as the expected ARP request. Eight subsequent ICMP replies likewise carried hardware BSR, decrypted successfully and had no retries or packet loss. This independently hardware-qualifies the vendor-equivalent metadata contract and rules out a software DMA placeholder."
+
+[[sources]]
+id = "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. After open scan, HE association, WPA2 and DHCP, the typed owner submitted one 24-byte non-QoS HE20 BCC DCM MCS0 S-MPDU using the exact bounded vendor DMA layout. Hardware completion returned status zero, proving ordinary ACK reception. The synchronous queue snapshot carried rate 0x1a, PLCP0 format one at 0x01636230 with only the live descriptor-address bits differing from vendor, PLCP1 0x0401a000, HE-SIG-A1 0xfc204087, HE-SIG-A2 0x00010105, power 0x14141314 and LENGTH_CONTROL 0x004002c4. The immediately following two-MPDU DCM A-MPDU retained status five and no BlockAck for all three supported GI/LTF profiles, localizing the remaining DCM failure to aggregate construction or BA handling rather than PHY, power, HE-SIG or DCM coding."
+
+[[sources]]
+id = "HIL_OPEN_HE20_MCS0_DCM_AMPDU_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with complete open PHY and MAC, and a nearby OnePlus IN2023 Android-13 HE20 WPA2 SoftAP on channel 11, 2026-07-29. Android reported Ieee80211axEnabled=true; the association HE PHY capability advertised BPSK DCM receive, and the open path completed WPA2, protected RX and DHCP before the probe. A separate typed MCS0 DCM S-MPDU first received an ordinary ACK. The matrix then used valid minimum Ethernet bodies so the exact zero-TXOP ROM APEP table, blob DCM-halving branch and owned delimiter/MPDU/MIC/FCS accumulator admitted real multi-subframe aggregates: 30 MPDUs at 2xLTF/0.8 us, 29 at 2xLTF/1.6 us and 26 at 4xLTF/3.2 us. The first 30-MPDU aggregate completed with status zero, acknowledged all 30 sequence numbers and required one attempt. Twenty-seven complete bounded rounds, each containing 64 aggregates at every supported GI/LTF profile, reported zero failed profiles and zero terminal retry failures. This qualifies BPSK DCM S-MPDU and multi-subframe A-MPDU TX, APEP bounding, BlockAck and aggregate retry; the peer did not advertise QPSK or 16-QAM DCM receive, so MCS1 and MCS3 remain unqualified."
+
+[[sources]]
+id = "HIL_OPEN_HE20_MCS9_AMPDU_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust open-radio-phy-prelude-hil on ESP32-S31 rev0 and the same nearby FRITZ!Box HE20 WPA2 BSS, 2026-07-29. The fully open PHY/MAC path associated as HE20, installed the recovered HE peer state, then published selector-one GI/LTF, descriptor rate 0x23/MCS9 and 32 owned CCMP MPDUs through the typed HE queue program. The first aggregate completed with status zero and a full BlockAck bitmap 0x00000000ffffffff on its first attempt. A sustained raw-MAC run exceeded 13,800 aggregates with tx_ampdu_partial zero, RX dropped zero and five-second Ethernet-payload windows of 83.6 to 87.5 Mbit/s. This qualifies the complete bounded HE SU q0 image and its ordered PAC publication, not OFDMA, DCM, LDPC, STBC or beamforming."
+
+[[sources]]
+id = "HIL_OPEN_HE20_STBC_NSTS_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, fully open PHY/MAC against the nearby FRITZ!Box HE20 WPA2 BSS, 2026-07-30. During a controlled 10-Mbit/s UDP downlink the RX owner captured HE-SIG-A1 0x00e0591b and HE-SIG-A2 0x4a0c for HE-SU MCS3, and later 0x00a0594b/0x520c for MCS9. Both vectors set STBC and encode bits 25:23 as one. Because the S31 is 1T1R, this is two space-time streams generated from one spatial stream and independently disproves the previous unconditional spatial_streams_minus_one label."
+
+[[sources]]
+id = "HIL_OPEN_HE20_MCS9_EMPTY_DELIMITERS_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust open-radio-phy-prelude-hil on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. A deterministic 32-MPDU protected-QoS aggregate used 54-byte PSDUs, HE20 MCS9, 2xLTF/0.8-us GI and an explicit 16-us density. Complete blob arithmetic produced minimum subframe length 230, 43 empty four-byte delimiters after every non-final MPDU and APEP length 7250. Keeping the old fixed queue PROTECTION value 0x31 produced completion status four and zero acknowledged MPDUs after four attempts. Changing only all three PROTECTION lanes to 230 produced status zero, a first-attempt BlockAck bitmap 0x00000000ffffffff and then more than 13,000 acknowledged MPDUs without final retry failure. This A/B HIL qualifies metadata-byte-four delimiter generation, final-tail APEP accounting and the descriptor-offset-0x28 to PROTECTION-lane mapping together."
+
+[[sources]]
+id = "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with ISR and DMA audited in internal SRAM, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. The Rust STA initiated a TID-0 immediate BlockAck agreement with window four, retained separate pinned storage for single and aggregate submission, and transmitted four observed two-MPDU A-MPDUs at HT40 MCS7 SGI. Every completion reported both submitted sequence bits through a BlockAck bitmap ending in 0x000f, with zero aggregate hardware timeouts. The same run continued using the single-MPDU path whenever only one network frame was queued. This qualifies the open direct-DMA descriptor head, PLCP format two, aggregate HT-SIG/length class, descriptor-count two and BlockAck-before-completion-clear ordering; it does not yet qualify partial-BlockAck retry or a throughput ceiling."
+
+[[sources]]
+id = "HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with ISR and DMA audited in internal SRAM, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. The peer HT A-MPDU parameter byte was 0x17, maximum-length exponent three. Applying the complete rcUpdateAMPDUParam mapping allowed the open owner to submit 32 full-size MPDUs totaling 48,448 aggregate bytes; the first completion returned starting sequence 2717 and bitmap 0x00000000ffffffff. PTI remained 0x00111110, proving its count one is independent of the 32 values in HT_DESCRIPTOR_COUNTS. Replacing individual missing-MPDU retries with the libpp[pp.o]::ppResortTxAMPDU-compatible retained retry aggregate reduced partial original submissions from 352/1044 to 50/2748 and raised HT40 MCS7 LGI UDP enqueue throughput from 38-41 to 49.6-55.2 Mbit/s. HT40 MCS7 SGI then produced 53.1-59.3 Mbit/s and Linux independently reported RX bitrate 150.0 Mbit/s MCS7 40MHz short GI. No aggregate hardware timeout occurred."
+
+[[sources]]
+id = "HIL_OPEN_HT_AMPDU_RAW_CADENCE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. A raw protected-QoS profile retained real CCMP, Sequence Control, DMA, 30-MPDU A-MPDU and BlockAck handling but removed Embassy UDP/IP production. It delivered 63.6-76.8 Mbit/s of 1472-byte Ethernet payload at MCS7 40MHz short GI. Across 3811 original aggregates, cadence averaged 5194 us per original and 3201 us from each hardware-submit edge to completion; 5087 aggregate attempts give 1.335 attempts per original. This matches the separately retained vendor direct-TX range 59.3-75.5 Mbit/s and localizes the remaining 100-Mbit/s gap to serialized preparation/completion plus missing-BlockAck retries rather than the former 21-MPDU byte ceiling."
+
+[[sources]]
+id = "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with ISR and DMA audited in internal SRAM, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11. HT20 MCS0 LGI completed first-attempt Authentication, Association, WPA2 and DHCP; 200/200 ICMP replies completed at 2.483-ms average RTT, while the open TX counters recorded 210 immediate successes, two recovered ACK retries, zero other failures and zero hardware timeouts over 212 attempts. HT40 MCS7 SGI then negotiated 150 Mbit/s in both directions; 500/500 ICMP replies completed at 2.203-ms average RTT, while open TX recorded 510 immediate successes and two recovered ACK retries over 512 attempts. These are single-MPDU results. They hardware-qualify PLCP format one and both extreme MCS/CBW/GI encodings; they do not qualify the separate A-MPDU constructor."
+
+[[sources]]
+id = "HIL_OPEN_RX_LIVE_APPEND_2026_07_27"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs run_connected_network on ESP32-S31 rev0, psram-code-psram-data profile, 2026-07-27; rotating 32-entry ring survived more than 7000 receives and completed open scan, WPA2, DHCP and 5/5 ICMP echo with zero loss"
+
+[[sources]]
+id = "HIL_OPEN_MAC_IRQ_STATUS_CLASSIFICATION_2026_08_03"
+kind = "unattested-hil-observation"
+description = "Open-radio connected RX classification on ESP32-S31 rev0, 2026-08-03; a sustained 30-second HE20 RX run recorded 220732 RX-bearing first STATUS snapshots with auxiliary bits 5 and 24, no spurious first snapshot and no bounded acknowledgement-loop saturation"
+
+[[sources]]
+id = "HIL_OPEN_AUTH_PLCP_FORMAT_2026_07_28"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on connected ESP32-S31 rev0, open PHY and MAC, 2026-07-28. Controlled A/B kept the 30-byte authentication MPDU, descriptor, PLCP1 0x22, power, rate, channel and RX policy fixed. Format one yielded completion status five with no response; format zero yielded status zero and one addressed authentication response, but later format-zero repetitions failed. Earlier repeated format-one runs had completed authentication through DHCP. Therefore this experiment proves that TX completion status is not by itself a protocol-success oracle; it does not supersede the instruction-exact libpp[hal_mac_tx.o]::mac_tx_set_plcp0 mapping."
+
+[[sources]]
+id = "HIL_OPEN_TX_POWER_CONNECTIVITY_2026_07_28"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, psram-code-psram-data, open PHY and MAC, 2026-07-28. With the HIL API limit 80 quarter-dBm and resulting ordinary queue power code 20, three consecutive reset-to-network runs completed Authentication and Association on their first MAC attempts, WPA2 and DHCP. A host test then received 200 of 200 ICMP replies with 4.613 ms average RTT; the device observed four raw ACK timeouts among 215 attempts and recovered all four by retrying the same encoded MPDU. With limit 20 quarter-dBm and resulting code 5, repeated runs included complete twelve-attempt Authentication failures. This is connectivity evidence for the current open profile, not proof that the open and vendor power/gain-table encodings are equivalent; the complete vendor driver also succeeds with queue code 5, so that mismatch remains localized for investigation."
+
+[[sources]]
+id = "HIL_OPEN_LEGACY_RTS_RATE_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, psram-code-psram-data, open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. Before the vendor basic-rate mapping, fixed 54-Mbit/s data with LENGTH_CONTROL incorrectly carrying rate 54 lost 25 to 39 percent of ICMP samples. Fixed 6M and 24M each completed 200/200, while 48M completed 199/200. After restoring complete mac_tx_get_rts_rate semantics so 54M publishes basic rate 24M and derives RTS power separately, 54M completed 197/200 followed by 495/500, with 1.975-ms and 2.353-ms average RTT. Linux reported the station RX bitrate as 54.0 Mbit/s, five AP-side TX retries and one AP-side TX failure over 709 packets. This qualifies the rate-dependent LENGTH_CONTROL field and strongly localizes the former loss to the wrong basic-rate image."
+
+[[sources]]
+id = "hil-open-ieee802154-ed-done-selected-write-2026-08-25"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0 hardware run at repository commit d26e70ee37355d485b989b19c1734170e890b071 on 2026-08-25. The diagnostic-ieee802154-ed-event application had SHA-256 f0d7b2f4db196e63753bf3e04992d8afdbac27e64dd8b86890eecfa4a83a5607 and runtime CRC32 fc2624b2; the schema-1 result had SHA-256 b437528fd9d6f4837c8ee92f12d7bab4f48ca1e0fcb28f110b51c9994f66ddce and passed 3/3 reset-isolated boots. In the bounded event window, EVENT_STATUS 0x0140 became 0x0100 after writing the exact selected image 0x0040, then became zero after the separate TIMER0 write. This qualifies only the literal ED_DONE selected write in that serialized transaction, not whole-register W1C, other event bits, concurrent same-bit arrival, IRQ behavior, STOP, or production PHY/RF readiness."
+
+[[sources]]
+id = "hil-open-ieee802154-generated-ed-done-write-2026-08-25"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0 hardware rerun on 2026-08-25. The diagnostic-ieee802154-ed-event application had SHA-256 590a6ce232d617148ff557d7eca23e2d7b747714730bb9d612a0e4c4360563bb and runtime CRC32 9be0ea77; the schema-1 result had SHA-256 af87cbf4bb22a75f70215b75fa8a660ccbdedea51c09fd04152f4914942ec561 and passed 3/3 reset-isolated boots. Its ED_DONE write crossed the reviewed schema-4 selected-register-write generated from the binary analysis and the production PAC lease, while the independent validation-only TIMER0 write remained separate. EVENT_STATUS 0x0140 became 0x0100 after the exact generated image 0x0040, then zero after TIMER0. This qualifies the generated integration path only within the same serialized boundary; it does not add a whole-register, concurrency, IRQ, STOP, RF-readiness, or repeated-operation claim."
+
+[[sources]]
+id = "HIL_OPEN_HT40_SOFTWARE_CTS_2026_09_21"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0, 2026-09-21, diagnostic-tx-protection-air with a source-snapshotted experimental HT SOFTWARE_CTS request in the production PAC and ordinary production DMA/retry owner. Snapshot 70397fa8e1ed793d941144ffead1f798c651cb8d5cd85af32df94f4dd46d624a; runtime ELF sha256 048c5ec016d7ce191b9b0f1af221b1ad1be6d0fa0ae094adb8988bcf82f108af. HIL run 1789981709062-0027be8b passed the UDP workload; its independent primary-channel pcap sha256 1faed0c26d5672fd8ceffe6c4b656b8dac1e31ca2ec3805208311170effea0c5 records CTS addressed to the DUT before its HT40 MCS7 SGI unicast data and ACK/BlockAck. The single-MPDU exchange records CTS Duration 104 and data Duration 44 at a 24-Mbit/s control rate. Repeat run 1789982329025-0027f28d passed; separate secondary-channel-9 HT20 capture sha256 f68d688c8f8ba2f91f1c333960e251962ad1da34bbafc66e21d8b457b2cff9da records the same CTS destination on the other 20-MHz half of primary-channel-13 HT40-below. External capture ownership, channel, firmware identity and restoration are in its provenance.json; it is a diagnostic sidecar, not a qualification seal. This establishes the bounded hardware-generated CTS request. It does not qualify other PHY/rate/receiver combinations, every NAV value, CTS-timeout recovery or warm protected-to-unprotected queue turnover. Production protection admission remains closed."
+
+[[sources]]
+id = "HIL_OPEN_HT40_SOFTWARE_RTS_2026_09_21"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0, 2026-09-21, diagnostic-tx-protection-air with experimental HT SOFTWARE_RTS in the source-snapshotted production PAC and the ordinary DMA/retry owner. Snapshot 65c68d60e570e88adefd7c29332436d1688fe266fff27cbfc4fe9d2b5c71c271; runtime ELF sha256 85165d09f79670fa2d3141b90d1a720ce827e49c301b8a0cc82b3c24eb4e3d23. Run 1789981986182-0027d860 primary-channel capture sha256 eab9c6bda6be51a37011239934e8915dd0363f0e8468bcdd54d17bff5fcd3198 records DUT-to-AP RTS, CTS addressed to DUT, HT40 MCS7 SGI data and ACK; single-MPDU RTS/CTS Duration is 152/108, with 24-Mbit/s control frames. Its delivery completed but 88 aggregates did not meet the workload's 100-aggregate threshold. Twelve-second repeat 1789982495219-0027f53c passed with 128 full32 aggregates. Independent secondary-channel-9 HT20 capture sha256 56cc2de6388a8d2e97c2171f97ad89948cdae4632a079e3c28d17349b848340b records DUT-to-AP RTS and CTS responses on the other 20-MHz half of primary-channel-13 HT40-below. Its provenance.json records ownership, geometry, selected firmware and successful restoration; the sidecar is not a qualification seal. Full32 RTS/CTS Duration is 5680/5636; this diagnostic does not establish the complete automatic NAV algorithm. Other PHY/rate/receiver combinations, missing-CTS recovery and warm queue turnover remain outside the observation. Production protection admission remains closed."
+
+[[sources]]
+id = "HIL_OPEN_HT40_PROTECTION_TURNOVER_2026_09_21"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0, 2026-09-21, diagnostic-tx-protection-air run 1789985071050-0028227b passed with the production descriptor-bound protection parameter and idle-queue CTS/RTS replacement. Snapshot 72f34f0549acdb3be5c5a0148a8e5f2719573c9806717eab6c37e5969e1b7a6c; runtime ELF sha256 fb0529938fc6ea26768b5a462c6a754f47fda99e928d7e48c5623ba4134aaf4a. An explicitly snapshotted experiment cycles the ordinary HT aggregate configuration through CtsToSelf, RtsCts and None; the PAC has no experimental forcing. Independent primary-channel capture sha256 8ee12918fee911f973d4bc059ed82ac3c7e2840cd560a7980dd09d5e079b583f contains 58 DUT-origin RTS frames and 66 CTS frames addressed to the DUT. Its opening sequence includes CTS frame 5 before DATA 6, RTS/CTS 41/42 before DATA 43, and DATA 64 without an observed preceding protection frame. Passive capture losses prevent treating absence as proof for every exchange. The best-effort HT40 MCS7 SGI workload completed 175 aggregates across 185 publications, with 4089 acknowledged subframes, two individual fallback retries and no hardware timeout or collision. This is bounded on-air evidence for per-publication queue turnover, not qualification of every PHY, queue, receiver, NAV value or missing-CTS recovery. Normal protocol admission remains closed."
+
+[[sources]]
+id = "HIL_OPEN_HT40_MISSING_CTS_RECOVERY_2026_09_21"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0, 2026-09-21, diagnostic-tx-protection-air run 1790007947790-002b0d7d; source snapshot 7fdc60164eb33afe7344db71724e41a897be1597bd1e653d0949466f9d81cedd, runtime ELF sha256 aedbc0ec6a7584dffccd71d14ecabe4079eb234b14c284c4145d47e367023cba. The source-snapshotted experiment paces individual UDP datagrams at 200 kbit/s and cycles RtsCts, CtsToSelf and None by MPDU sequence modulo three. Only workload UDP is affected. The first RTS publication addresses absent receiver 02:4f:45:52:ff:fe; the existing ordinary retry owner re-publishes to the fixture AP. Protection selection and receiver mutation occur before DMA reservation. Frozen OTXR reports 204 terminal successes, 68 CTS-timeout re-publications and 68 recovered transactions, one ACK retry, no missing report, terminal CTS failure, collision or hardware timeout. Independent primary-channel capture sha256 4b908a3b579556820d7387bc3fc3b064ee12dab2f24a6fe77adcd0aa0c88932a contains 66 RTS to the absent receiver, 64 RTS to the AP and 158 DUT data frames, all HT40 MCS7 SGI; no data to the absent receiver was captured. Frames 22 through 26 show absent-receiver RTS, AP RTS, CTS, DATA sequence 2091 with Retry clear, and ACK; RTS/CTS/DATA Duration is 316/272/44. The laptop capture sha256 d98e0a81388e144db9867c9cdc67da9e1c81d7477058d66f755dd08acfa9f34f records all 68 absent/AP RTS pairs and 136 CTS addressed to the DUT, but no DUT data. Capture loss prevents exhaustive per-packet inference. The overall scenario failed its complete-burst criterion with 204 host datagrams (sequence 0 through 203); this is bounded recovery evidence, not a passed qualification workload. Fixture cleanup succeeded. This does not establish retry exhaustion, other PHY/rate/queue/receiver combinations, aggregate CTS recovery, every NAV value or production protection admission."
+
+[[sources]]
+id = "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03"
+kind = "unattested-hil-observation"
+description = "Diagnostic RX-clock run on ESP32-S31 rev0, open PHY/MAC, diagnostic-rx-clock image and a controlled AP over HE20, 2026-10-03, run 1791029233233-001511d2. 335 readings of WIFI_MAC_LOCAL_TIME.COUNTER, each between two system-timer readings 1-3 us apart, over 34 s fitted one microsecond per tick at 1.000000003 times the system-timer rate with a residual of -0.5 to +0.6 ticks and no step; receive timestamps of the RX-control prefix were readings of the same counter, 131-442 us before their executor handoff."

@@ -1,0 +1,144 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_POWER_SAVE"
+description = "WDEV_RX_POWER_SAVE_CONF decoded by complete dbg_read_rx_misc. Complete hal_he_set_power_save sets the interface-zero intra-PPDU and BSS-color-check bits as the tail of hal_he_bssid_init; open associated-STA HIL read both bits set."
+baseAddress = 0x201040A0
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "RX_PS_THRESHOLD"
+bitOffset = 0
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "RX_PS_ENABLE"
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STOP_RF"
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "PS_READY"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FE_FREQUENCY_HOP_TIME"
+bitOffset = 13
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_22_OPAQUE"
+bitOffset = 21
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "RX_PHY_SIGNAL_DELAY"
+bitOffset = 23
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "INTRA_PS_CHECK_BSS_COLOR_ENABLE"
+description = "Complete hal_he_set_power_save sets bit 28 for interface zero as the final fresh-read RMW of hal_he_bssid_init; dbg_read_rx_misc names it INTRA_PS_CHECK_BSS_COLOR."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "INTRA_PPDU_PS_ENABLE"
+description = "Complete hal_he_set_power_save sets bit 29 for interface zero immediately before bit 28; dbg_read_rx_misc names it INTRA_PPDU_PS."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_VHT_TXOP_PS_CHECK_ADDRESS"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_VHT_TXOP_PS_ENABLE"
+bitOffset = 31
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE"
+sources = [
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+    "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE",
+    "HIL_OPEN_HE_BSSID_LIFECYCLE_2026_07_30",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.INTRA_PS_CHECK_BSS_COLOR_ENABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE",
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.INTRA_PPDU_PS_ENABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE",
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PS_THRESHOLD"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PS_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.STOP_RF"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.PS_READY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.FE_FREQUENCY_HOP_TIME"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.BITS_21_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_PHY_SIGNAL_DELAY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_VHT_TXOP_PS_CHECK_ADDRESS"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_POWER_SAVE.CONTROL.RX_VHT_TXOP_PS_ENABLE"
+naming = "descriptive"

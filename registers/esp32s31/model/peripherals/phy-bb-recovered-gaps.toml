@@ -1,0 +1,116 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_BB_RECOVERED_GAPS"
+description = "Sparse BB words absent from the public platform PAC."
+baseAddress = 0x20107C00
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0014_OPAQUE"
+description = "Complete phy_spur_coef_cfg clears bit 13 through two read-modify-write paths; all hardware field names remain unknown."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_13_OPAQUE"
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0058_OPAQUE"
+description = "Complete phy_set_cca_cnt read-modify-writes this word; individual fields remain unnamed."
+addressOffset = 0x58
+size = 32
+access = "read-write"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_005C_OPAQUE"
+description = "Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."
+addressOffset = 0x5C
+size = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0060_OPAQUE"
+description = "Complete phy_get_cca_cnt reads this word; hardware access semantics remain unknown."
+addressOffset = 0x60
+size = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_00E8_OPAQUE"
+description = "Complete phy_bb_cfo_cfg reads and replaces this word; individual hardware fields remain unnamed."
+addressOffset = 0xE8
+size = 32
+access = "read-write"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_00EC_OPAQUE"
+description = "Complete phy_bb_cfo_cfg replaces this word and independently read-modify-writes bit 12; the hardware field meaning remains unknown."
+addressOffset = 0xEC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_12_OPAQUE"
+bitOffset = 12
+bitWidth = 1
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS"
+sources = [
+    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
+    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_0058_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_005C_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_0060_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_00E8_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_0014_OPAQUE.BIT_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BB_RECOVERED_GAPS.WORD_00EC_OPAQUE.BIT_12_OPAQUE"
+naming = "opaque"

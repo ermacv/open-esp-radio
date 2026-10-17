@@ -1,0 +1,22 @@
+# Reviewed facts about functions of the ROM that `esp32s31-eco0.x` links the
+# images against and that the stack analysis cannot bound from their machine
+# code alone: each one's frame (bytes below its entry `sp`) and the functions
+# it calls or jumps to.
+#
+# The analysis checks each address against the symbol of the pinned ROM ELF
+# (`esp32s31_rev0_rom.elf`) and requires a summary to agree with the machine
+# code wherever the analysis bounds the function itself. Provenance keeps each
+# cited function's code fingerprint, so a changed ROM fails until reviewed.
+
+# SOURCE(esp32s31): rev0 ROM `memset` (newlib's RISC-V assembly) never writes
+# `sp` and calls nothing. Its two computed transfers stay inside it: `jr
+# 0xa(a3)` enters its unrolled byte-store sequence at 15 - (length & 15) stores
+# from its end (the length is below 16 on every path to it: `li t1, 15` with
+# `bgeu t1, a2`, or `andi a2, a2, 15`), and the `jalr` that keeps `ra` in `t0`
+# enters the same sequence for the 1-15 bytes before a 16-byte boundary
+# (`andi a5, a4, 15`, nonzero) and returns through `ra`.
+[[function]]
+name = "memset"
+address = 0x2f8220c6
+frame = 0
+calls = []

@@ -1,0 +1,368 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_TX_QUEUE_CONTROL"
+description = "Four ascending physical banks represent logical EDCA queues 3,2,1,0."
+baseAddress = 0x20104D34
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x10
+dimIndex = "0,1,2,3"
+name = "PROTECTION%s"
+description = "Canonical WDEVTXQ_CONF2. Complete dbg_read_txq_conf2 names the three ten-bit lanes TXQ_MIN_MPDU_LEN for CBW20, CBW40 and CBW80, followed by SW_CTS at bit 30 and SW_RTS at bit 31. For HT, complete libpp[hal_mac_tx.o]::mac_tx_set_htsig copies peer state offset 0x82 into all three lanes; complete rcUpdateAMPDUParam derives that value from the HT A-MPDU minimum MPDU start-spacing code. For HE, complete libpp[pp_he.o]::ppCalDeliNum stores the rate/GI/DCM/density-specific minimum subframe byte count at descriptor offset 0x28 and complete libpp[hal_mac_tx.o]::mac_tx_set_hesig copies that halfword into all three lanes. The HE init suffix clears only SW_CTS in this same word, preserving SW_RTS and all three spacing lanes. A coherent hardware-owned vendor HT queue contained 0x0280a028, exactly three copies of negotiated value 40. Open HE20 MCS9 HIL with 16-us density proved value 230: fixed snapshot 0x31 lost all 32 MPDUs, while three copies of 230 received a full first-attempt BlockAck with 43 empty delimiters per non-final subframe. The descriptor-count RMWs target the separate queue-vector word at 0x20105504-q*0x7c."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MINIMUM_MPDU_LENGTH_CBW20"
+description = "First copy of the HT peer-derived or HE rate/density-derived minimum MPDU/subframe value."
+bitOffset = 0
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "MINIMUM_MPDU_LENGTH_CBW40"
+description = "Second copy of the HT peer-derived or HE rate/density-derived minimum MPDU/subframe value."
+bitOffset = 10
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "MINIMUM_MPDU_LENGTH_CBW80"
+description = "Third copy of the HT peer-derived or HE rate/density-derived minimum MPDU/subframe value."
+bitOffset = 20
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "SOFTWARE_RTS"
+description = "Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SOFTWARE_CTS"
+description = "Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x10
+dimIndex = "0,1,2,3"
+name = "CONFIG%s"
+description = "Timeout, contention window, interface, AIFSN and scheduler-priority fields configured as distinct recovered RMW edges. Scheduler priority is not the original packet PTI retained in the vector bank."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TIMEOUT"
+bitOffset = 0
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers.register.fields]]
+name = "CONTENTION_WINDOW"
+bitOffset = 12
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "INTERFACE"
+bitOffset = 22
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "AIFSN"
+bitOffset = 24
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "SCHEDULER_PRIORITY"
+description = "Complete libpp[hal_mac.o]::mac_tx_set_pti writes the unsigned minimum of packet PTI and coexistence event-one PTI here. This scheduler value is independent of the four original packet-PTI lanes in the vector bank; for Authentication and Association both values resolve to one. Open HIL read scheduler one in five reset-to-connect repetitions."
+bitOffset = 28
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x10
+dimIndex = "0,1,2,3"
+name = "CONTROL%s"
+description = "Descriptor address and PLCP0 format image in low 30 bits; VALID bit 30 and ENABLE bit 31 publish hardware ownership."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "DESCRIPTOR_ADDRESS_LOW"
+description = "Low twenty bits of the owned TX descriptor address; the DMA window supplies the high address bits."
+bitOffset = 0
+bitWidth = 20
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_21_OPAQUE"
+description = "Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 initializes these two bits to binary 10 for the ordinary direct legacy path."
+bitOffset = 20
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_22_OPAQUE"
+description = "Complete pp.o ppTxFragmentProc reaches its common legacy setup at offsets 0x8e..0xa8 from the CCMP selector-three branch at 0x22a and sets descriptor bit seven. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_txop_q offsets 0x86..0xaa then sets this queue-control bit exactly when descriptor flag bits 7:6 equal binary 10 and clears it otherwise. Thus the bounded ordinary individual/group CCMP path sets this bit after libpp[hal_mac_tx.o]::mac_tx_set_plcp0. A 2026-07-29 open HIL A/B clearing the bit increased raw ACK timeouts from the prior roughly 28 percent to 1395/2325 attempts (60 percent), so the exact set mapping is retained while the electrical meaning remains unknown."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_23_OPAQUE"
+description = "Recovered PLCP0 control image; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 initializes this bit to zero for the ordinary direct legacy path."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "PLCP_FORMAT"
+description = "Three-bit format selector derived by complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 from vendor descriptor flags. For the bounded plain legacy roots, libpp[pp.o]::ppTxProtoProc maps the address-one I/G bit to descriptor flag 0x2: group traffic retains format zero, while an ordinary individual-address descriptor with zero flags selects format one. Exact vendor callback images select format one for both non-A-MPDU HT20 MCS0 and HE20 MCS0 DCM S-MPDU frames; the owned open paths receive ACK at the same format. Independently captured HT and HE A-MPDU images select aggregate format two or five respectively. Format three has an instruction-exact descriptor branch but its higher-level meaning remains open. A legacy-only single-variable A/B temporarily correlated format one with status five and format zero with one authentication response, but format-zero repetitions failed; that experiment is retained as evidence that completion status alone is not a protocol-success oracle, not as an override of the complete blob mapping."
+bitOffset = 24
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "BITS_27_29_OPAQUE"
+description = "Remaining low control bits before ownership publication."
+bitOffset = 27
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "VALID"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ENABLE"
+bitOffset = 31
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBPP_TRC_AMPDU_PARAM",
+    "BLOB_LIBPP_HE_DELIMITER_SPACING",
+    "BLOB_LIBPP_HAL_HE_MU_EDCA_DEBUG",
+    "BLOB_LIBPP_HAL_HE_INIT_SUFFIX",
+    "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS",
+    "HIL_VENDOR_ACTIVE_HT_VECTOR_2026_07_29",
+    "HIL_OPEN_HE20_MCS9_EMPTY_DELIMITERS_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.SOFTWARE_RTS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TX_PROTECTION_ARGUMENTS", "HIL_OPEN_HT40_SOFTWARE_RTS_2026_09_21"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.SOFTWARE_CTS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TX_PROTECTION_ARGUMENTS", "HIL_OPEN_HT40_SOFTWARE_CTS_2026_09_21"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBCOEX_PTI_TABLE",
+    "HIL_OPEN_AUTH_PTI_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.SCHEDULER_PRIORITY"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "BLOB_LIBCOEX_PTI_TABLE",
+    "HIL_OPEN_AUTH_PTI_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+    "HIL_OPEN_RX_LIVE_APPEND_2026_07_27",
+    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.DESCRIPTOR_ADDRESS_LOW"
+naming = "descriptive"
+sources = ["PROMOTED_LMAC_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_20_21_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_22_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BIT_23_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.PLCP_FORMAT"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+    "HIL_OPEN_RX_LIVE_APPEND_2026_07_27",
+    "HIL_OPEN_AUTH_PLCP_FORMAT_2026_07_28",
+    "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29",
+    "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29",
+    "HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29",
+    "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29",
+    "HIL_OPEN_HE20_MCS0_DCM_SMPDU_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.BITS_27_29_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW20"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW40"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.PROTECTION%s.MINIMUM_MPDU_LENGTH_CBW80"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.TIMEOUT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.CONTENTION_WINDOW"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.INTERFACE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONFIG%s.AIFSN"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.VALID"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TX_QUEUE_CONTROL.CONTROL%s.ENABLE"
+naming = "descriptive"

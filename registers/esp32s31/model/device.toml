@@ -1,0 +1,147 @@
+schema = 3
+chip = "esp32s31"
+address-space = "cpu"
+fragments = [
+    "peripherals/wifi-mac-internal-tx-block-ack.toml",
+    "peripherals/wifi-mac-he-color-collision.toml",
+    "peripherals/wifi-mac-rx-power-save.toml",
+    "peripherals/wifi-mac-rx-bssid-list.toml",
+    "peripherals/wifi-mac-rx-custom-type.toml",
+    "peripherals/wifi-mac-rx-statistics.toml",
+    "peripherals/wifi-mac-tx-statistics.toml",
+    "peripherals/wifi-mac-diagnostic-statistics.toml",
+    "peripherals/wifi-mac-rx-hang-statistics.toml",
+    "peripherals/phy-memory.toml",
+    "peripherals/phy-frequency-channel-oracle.toml",
+    "peripherals/phy-pbus.toml",
+    "peripherals/i2c-ana-mst.toml",
+    "peripherals/phy-i2c-command-ram.toml",
+    "peripherals/phy-agc-oracle.toml",
+    "peripherals/wifi-phy-rate-oracle.toml",
+    "peripherals/phy-baseband-config-oracle.toml",
+    "peripherals/phy-iq-estimator-oracle.toml",
+    "peripherals/phy-rx-dco-oracle.toml",
+    "peripherals/wifi-mac-local-time.toml",
+    "peripherals/phy-clock-oracle.toml",
+    "peripherals/pmu-radio.toml",
+    "peripherals/hp-sys-clkrst-radio.toml",
+    "peripherals/modem-syscon-radio.toml",
+    "peripherals/modem-lpcon-shared-clock.toml",
+    "peripherals/modem-lpcon-phy-tick.toml",
+    "peripherals/lp-aon-clkrst.toml",
+    "peripherals/lp-periclkrst.toml",
+    "peripherals/lp-tsens.toml",
+    "peripherals/wifi-mac-sta-beacon-filter.toml",
+    "peripherals/wifi-mac-beacon-ie-crc.toml",
+    "peripherals/wifi-mac-rx-end-state.toml",
+    "peripherals/wifi-mac-rx-runtime-results.toml",
+    "peripherals/wifi-mac-bssid-policy.toml",
+    "peripherals/wifi-mac-rx-filter.toml",
+    "peripherals/wifi-mac-control.toml",
+    "peripherals/wifi-mac-regdma-control.toml",
+    "peripherals/wifi-mac-crypto-control.toml",
+    "peripherals/wifi-mac-key-table.toml",
+    "peripherals/wifi-mac-tx-common.toml",
+    "peripherals/wifi-mac-tx-queue-control.toml",
+    "peripherals/wifi-mac-tx-queue-vector.toml",
+    "peripherals/wifi-mac-beamforming-report.toml",
+    "peripherals/wifi-mac-tx-completion.toml",
+    "peripherals/wifi-mac-he-init-prefix.toml",
+    "peripherals/wifi-mac-he-tb-statistics.toml",
+    "peripherals/wifi-mac-he-tb-diagnostics.toml",
+    "peripherals/wifi-mac-he-buffer-status.toml",
+    "peripherals/wifi-mac-he-mu-edca-timer.toml",
+    "peripherals/wifi-mac-he-trigger-rx-diagnostics.toml",
+    "peripherals/wifi-mac-beamforming-feedback-test.toml",
+    "peripherals/wifi-mac-he-obss-narrow-band-ru.toml",
+    "peripherals/wifi-mac-tx-power-init.toml",
+    "peripherals/wifi-mac-he-init-suffix.toml",
+    "peripherals/wifi-mac-coex-init.toml",
+    "peripherals/wifi-mac-antenna-init.toml",
+    "peripherals/wifi-mac-tsf-status.toml",
+    "peripherals/wifi-mac-sta-tbtt-target.toml",
+    "peripherals/wifi-mac-tsf-load.toml",
+    "peripherals/wifi-mac-rtc-timer-update.toml",
+    "peripherals/wifi-mac-aux-tsf-control.toml",
+    "peripherals/wifi-mac-txrx-prefix.toml",
+    "peripherals/wifi-mac-txrx-callbacks.toml",
+    "peripherals/wifi-mac-txrx-suffix.toml",
+    "peripherals/shared-radio-init-control.toml",
+    "peripherals/wifi-mac-rx-csi-control.toml",
+    "peripherals/wifi-mac-last-rx-buffer.toml",
+    "peripherals/wifi-mac-core-enable.toml",
+    "peripherals/wifi-mac-interrupt.toml",
+    "peripherals/wifi-mac-tsf-timer.toml",
+    "peripherals/coex-hw-timer.toml",
+    "peripherals/coex-external.toml",
+    "peripherals/wifi-mac-coex-runtime.toml",
+    "peripherals/wifi-mac-power-interrupt.toml",
+    "peripherals/wifi-mac-cold-handshake.toml",
+    "peripherals/wifi-mac-rx-dma.toml",
+    "peripherals/phy-fecoex-recovered.toml",
+    "peripherals/phy-fedata-recovered.toml",
+    "peripherals/phy-adc-dump-recovered.toml",
+    "peripherals/phy-fectrl-recovered.toml",
+    "peripherals/phy-fedata-wifi-recovered.toml",
+    "peripherals/phy-btagc-recovered.toml",
+    "peripherals/btmac-ble-phy-init.toml",
+    "peripherals/bluetooth-controller-core.toml",
+    "peripherals/bluetooth-interrupt-bank.toml",
+    "peripherals/bluetooth-scheduler-interrupt-runtime.toml",
+    "peripherals/bluetooth-reset-idle-status-0.toml",
+    "peripherals/shared-baseband-reset-idle-status.toml",
+    "peripherals/shared-baseband-tx-timing.toml",
+    "peripherals/btdm-scheduler-table.toml",
+    "peripherals/btdm-runtime-control.toml",
+    "peripherals/ble-phy-init-aux.toml",
+    "peripherals/ble-controller-address-slots.toml",
+    "peripherals/ble-sync-publication.toml",
+    "peripherals/ble-scan-backoff.toml",
+    "peripherals/ble-hw-accelerator.toml",
+    "peripherals/ble-hw-resolving-list.toml",
+    "peripherals/ble-hw-runtime-control.toml",
+    "peripherals/ble-hw-cte-ring-control.toml",
+    "peripherals/ble-iso-scheduler-notify.toml",
+    "peripherals/bt-v3-2-baseband.toml",
+    "peripherals/bt-v3-2-cte.toml",
+    "peripherals/zbbb-radio-control.toml",
+    "peripherals/phy-agc-recovered-gaps.toml",
+    "peripherals/phy-nrx-recovered-gaps.toml",
+    "peripherals/phy-bb-recovered-gaps.toml",
+    "peripherals/phy-brx-recovered-gaps.toml",
+    "peripherals/ieee802154-mac.toml",
+    "peripherals/ieee802154-interrupt-route.toml",
+    "peripherals/modem-etm.toml",
+]
+
+[[shared-fragments]]
+library = "../../ieee80211/model/library.toml"
+fragment = "peripherals/wifi-mac-interface-address.toml"
+review = "peripherals/wifi-mac-interface-address.review.toml"
+placement = { WIFI_MAC_INTERFACE_ADDRESS = 0x2010405C }
+
+[device]
+name = "ESP32S31_RADIO"
+version = "3.52"
+description = """
+Recovered ESP32-S31 modem/radio core plus the minimum platform dependencies
+    no longer delegated to an external platform PAC. Unclaimed MODEM_LPCON,
+    PMU and HP_SYS_CLKRST words remain platform-owned.
+    I2C_ANA_MST, PMU_RADIO, HP_SYS_CLKRST_RADIO, MODEM_SYSCON_RADIO, MODEM_LPCON_SHARED_CLOCK, MODEM_LPCON_PHY_TICK, LP_AON_CLKRST,
+    LP_PERICLKRST and LP_TSENS are canonical reviewed radio-PHY dependencies.
+    These are independently decoded
+    MMIO windows, not one monolithic radio peripheral. Covered functions include PHY-PBus,
+    PHY-I2C, IQ estimation, RX-DCO, cold deadlines, temperature sensing,
+    Wi-Fi MAC RX-DMA and receive BlockAck. Unknown fields are omitted; OPAQUE
+    and UNKNOWN names describe instruction-level evidence without assigning an
+    unproven hardware meaning."""
+vendor = "Espressif"
+vendor-id = "ESP"
+series = "ESP32-S31"
+license-text = "MIT OR Apache-2.0"
+address-unit-bits = 8
+width = 32
+svd-schema = "1.3"
+svd-schema-location = "CMSIS-SVD.xsd"
+
+[device.register-defaults]

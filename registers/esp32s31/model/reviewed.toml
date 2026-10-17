@@ -1,0 +1,56 @@
+# Project-wide sparse reviewed facts for Wi-Fi, Bluetooth/BLE, IEEE 802.15.4,
+# coexistence, and shared radio logic. Generated MMIO geometry and access
+# observations stay under generated/; this file grows only when a reviewer
+# accepts new investigation-specific meaning.
+schema = 2
+id = "esp32s31-radio-rev0-project-facts"
+
+[classification]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+
+[applies-to]
+ecosystems = ["esp-idf"]
+chips = ["esp32s31"]
+chip-revisions = ["rev0"]
+artifact-lineages = ["esp32s31-radio"]
+
+[[assertions]]
+id = "ieee802154.event-status.identity"
+subject = "register:esp32s31/cpu/0x20103064/32"
+kind = "register-identity"
+value = "IEEE802154_MAC.EVENT_STATUS"
+
+[[assertions.evidence]]
+source = "esp-idf-7b9cc1ac-ieee802154-common-ll"
+locator = "ieee802154_ll_get_events"
+
+[[assertions]]
+id = "ieee802154.event-status.access"
+subject = "register:esp32s31/cpu/0x20103064/32"
+kind = "register-access"
+value = "read-write"
+
+[[assertions.evidence]]
+source = "esp-idf-7b9cc1ac-ieee802154-common-ll"
+locator = "ieee802154_ll_get_events and ieee802154_ll_clear_events"
+
+[[assertions]]
+id = "ieee802154.event-status.write-semantics"
+subject = "register:esp32s31/cpu/0x20103064/32"
+kind = "hardware-write-semantics"
+value = "w1c"
+note = "The pinned public LL reads the fourteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. Reset-isolated timer and ED records independently observed selective one-bit clearing while retaining another latched bit. Concurrent same-bit arrival remains a hardware limitation of W1C acknowledgement, not a distinct software access model."
+
+[[assertions.evidence]]
+source = "esp-idf-7b9cc1ac-ieee802154-common-ll"
+locator = "ieee802154_ll_clear_events"
+
+[[assertions.evidence]]
+source = "hil-open-ieee802154-ed-done-selected-write-2026-08-25"
+locator = "EVENT_STATUS 0x0140 -- write 0x0040 --> 0x0100"
+
+[[assertions.evidence]]
+source = "hil-open-ieee802154-generated-ed-done-write-2026-08-25"
+locator = "generated selected-register-write: EVENT_STATUS 0x0140 -- write 0x0040 --> 0x0100"

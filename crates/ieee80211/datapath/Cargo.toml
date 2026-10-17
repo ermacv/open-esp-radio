@@ -1,0 +1,27 @@
+[package]
+name = "oer-ieee80211-datapath"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Radio-native packet ownership and materialization contracts"
+
+[dependencies]
+oer-memory = { path = "../../base/memory" }
+oer-network-interface = { path = "../../base/network" }
+
+[features]
+default = []
+# `memory::MemoryTxQueues`: a host model of a network's TX source.
+model = []
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-ieee80211-softmac = { path = "../softmac" }
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"

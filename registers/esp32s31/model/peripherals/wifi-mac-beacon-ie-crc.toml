@@ -1,0 +1,34 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_BEACON_IE_CRC"
+description = "Full beacon-IE CRC/result word returned through the caller output pointer by complete hal_beacon_ie_crc_get."
+baseAddress = 0x20104300
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RESULT"
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_BEACON_IE_CRC"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_BEACON_IE_CRC.RESULT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_BEACON_IE_CRC.RESULT.VALUE"
+naming = "descriptive"

@@ -1,0 +1,9 @@
+/target/
+**/target/
+**/*.swp
+**/*.swo
+__pycache__/
+# Private vendor inputs are never committed.
+/_oracles/
+# Claude Code sessions' git worktrees: full checkouts of other branches.
+/.claude/worktrees/

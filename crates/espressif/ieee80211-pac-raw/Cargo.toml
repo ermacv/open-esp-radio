@@ -1,0 +1,23 @@
+[package]
+name = "oer-ieee80211-pac-raw"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internal svd2rust register blocks of the Wi-Fi MAC layouts shared between chips"
+publish = false
+
+[dependencies]
+vcell = "0.1.3"
+
+[lints.rust]
+# Generated svd2rust 0.37.1 code. This package contains generated code only.
+unsafe_op_in_unsafe_fn = "allow"
+
+[lints.clippy]
+disallowed_methods = "deny"
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "portable"

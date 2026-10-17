@@ -1,0 +1,50 @@
+schema = 2
+
+[[peripherals]]
+name = "BLE_HW_RESOLVING_LIST"
+description = """
+Narrow owner for the standalone BLE resolving-list base publication. The
+complete ESP32-S31 ble_hw.c leaf proves one compressed SRAM pointer word but
+does not prove that adjacent BTMAC addresses belong to the same logical block.
+"""
+baseAddress = 0x20101880
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "BASE_POINTER"
+description = "Complete image equal to the caller-provided SRAM address shifted right by two and truncated to twenty bits."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "COMPRESSED_SRAM_POINTER"
+description = "Bits 0..19 contain address >> 2; bits 20..31 are written as zero."
+bitOffset = 0
+bitWidth = 20
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xF_FFFF
+
+[[review]]
+entity = "BLE_HW_RESOLVING_LIST"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RESOLVING_LIST.BASE_POINTER"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RESOLVING_LIST.BASE_POINTER.COMPRESSED_SRAM_POINTER"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RESOLV_LIST_SET"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

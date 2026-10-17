@@ -1,0 +1,37 @@
+[package]
+name = "oer-esp32s31-ieee80211-dma"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Audited ESP32-S31 Wi-Fi MAC DMA ownership and descriptor ring"
+
+[features]
+# Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
+test-support = ["oer-esp32s31-hal/test-support"]
+default = []
+validation-raw-dma = []
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
+oer-memory = { path = "../../../base/memory" }
+oer-esp32s31-hal = { path = "../../hal" }
+pin-project = "1.1.13"
+vcell = "0.1.3"
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "chip"
+chip = "esp32s31"

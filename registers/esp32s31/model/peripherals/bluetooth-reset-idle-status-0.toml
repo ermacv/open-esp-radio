@@ -1,0 +1,47 @@
+schema = 2
+
+[[peripherals]]
+name = "BLUETOOTH_RESET_IDLE_STATUS_0"
+description = """
+One independently bounded Bluetooth baseband reset-idle status word. The
+complete bbmac_idle_for_swrst leaf proves the exact predicate but neither
+address adjacency nor the function name proves a wider physical block."""
+baseAddress = 0x20101550
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STATUS"
+description = "bbmac_idle_for_swrst requires the observed low four-bit field to be zero before reporting idle."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_3_OPAQUE"
+description = "The reset-idle predicate fails when this exact field is nonzero."
+bitOffset = 0
+bitWidth = 4
+
+[[review]]
+entity = "BLUETOOTH_RESET_IDLE_STATUS_0"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_RESET_IDLE_STATUS_0.STATUS.BITS_0_3_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

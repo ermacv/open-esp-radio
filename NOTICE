@@ -1,0 +1,201 @@
+open-esp-radio
+Copyright (c) 2026 Vladislav Ermachenkov
+
+The repository is licensed under MIT OR Apache-2.0 (LICENSE-MIT,
+LICENSE-APACHE), except the crates holding the ESP-IDF port below, which are
+Apache-2.0 only. It contains material derived from the third-party works
+listed here. Each derived file names its source and pinned revision beside
+the code; docs/source-policy.md says how a new one is recorded.
+
+The vendor libraries below are read for facts and never committed.
+
+
+1. ESP-IDF
+----------
+
+Source:    https://github.com/espressif/esp-idf at
+           7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe (and 4d59230d for parts
+           of the modem clock)
+Copyright: Espressif Systems (Shanghai) Co Ltd
+License:   Apache-2.0 (LICENSE-APACHE)
+
+Ported and modified by Vladislav Ermachenkov; each file carries the
+modification notice:
+
+- crates/espressif/ieee802154-engine (Apache-2.0): the IEEE 802.15.4
+  driver, components/ieee802154/driver/esp_ieee802154_{dev,util,timer,pib,
+  debug}.c
+- crates/ieee802154/mac/src/mac/{header,pending,security,csl,time_sync,
+  link_metrics}.rs (crate Apache-2.0): esp_ieee802154_{frame,ack}.c and
+  components/openthread/src/port/esp_openthread_radio.c
+- crates/espressif/modem-clock (Apache-2.0):
+  components/esp_hw_support/modem/modem_clock.c
+- crates/ieee80211/ap/src/sae.rs (crate Apache-2.0):
+  components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c
+
+Facts only (register sequences, values, call order) in the ESP32-S31 HAL and
+PAC, cited by SOURCE lines and evidence identifiers.
+
+
+2. ESP32-S31 SVD (esp-pacs)
+---------------------------
+
+Source:    https://github.com/esp-rs/esp-pacs, esp32s31/svd/esp32s31.base.svd
+Copyright: Espressif Systems (Shanghai) PTE LTD
+License:   Apache-2.0
+
+- registers/esp32s31/upstream/platform-radio-deps.svd: a subset with review
+  annotations, modified by Vladislav Ermachenkov; its licenseText carries the
+  original notice.
+
+
+3. Espressif vendor libraries
+-----------------------------
+
+Sources:   https://github.com/espressif/esp-phy-lib at 20f1db05,
+           https://github.com/espressif/esp32-wifi-lib at af55a0ca,
+           https://github.com/espressif/esp-coex-lib at c758e7b5
+Copyright: Espressif Systems (Shanghai) Co Ltd
+License:   Apache-2.0 (each repository's LICENSE)
+
+Recovered tables and coefficients (coexistence schemes and PTI, PHY gain and
+power, Wi-Fi) in production source; the SOURCE line beside each names the
+library, object and symbol.
+
+
+4. esp32s31-bt-lib
+------------------
+
+Source:    https://github.com/espressif/esp32s31-bt-lib at 10c50778
+License:   none; facts only
+
+The library has no license. The repository records only facts from it:
+values, layouts, addresses, order of operations and names (the HAL and PAC,
+knowledge/esp32s31/bluetooth, knowledge/esp32s31/notes and the name maps
+under knowledge/esp32s31/vendor/facts/names). It records neither code nor
+verbatim data blocks.
+
+
+5. OpenThread
+-------------
+
+Source:    https://github.com/openthread/openthread at
+           43cc05a9bcf780bd758bad53d897e2d88cf8cb75
+License:   BSD-3-Clause (text below)
+
+Ported and modified:
+
+- crates/ieee802154/mac/src/mac/{csma,retransmission,enhanced_ack}.rs:
+  src/core/mac/sub_mac.cpp, sub_mac.hpp, mac_frame.cpp and
+  src/core/config/mac.h
+- crates/ieee802154/mac/src/mac/{csl,link_metrics}.rs: mac_frame.cpp and
+  link_metrics.cpp
+
+
+
+6. hostap (wpa_supplicant and hostapd)
+--------------------------------------
+
+Source:    https://w1.fi/hostap, as vendored in ESP-IDF 7b9cc1ac
+           components/wpa_supplicant/src, and hostapd 2.12
+License:   BSD-3-Clause (text below)
+
+Partly ported and modified:
+
+- crates/ieee80211/rsn/src/sae.rs: src/common/sae.c and
+  dragonfly.c
+- crates/ieee80211/ap/src/sae.rs: src/ap/ieee802_11.c
+  (handle_auth_sae, sae_sm_step), src/ap/ap_config.h, src/common/sae.c
+- crates/ieee80211/ap/src/pmksa.rs: src/ap/pmksa_cache_auth.c and
+  src/ap/wpa_auth.c
+- crates/ieee80211/sta/src/pmksa.rs: src/rsn_supp/pmksa_cache.c and
+  src/rsn_supp/wpa.c
+- crates/ieee80211/sta/src/machine/deferred_eapol.rs: behaviour of
+  src/rsn_supp/wpa.c
+
+
+7. esp-hal
+----------
+
+Source:    https://github.com/esp-rs/esp-hal, ld/riscv/hal-defaults.x
+Copyright: the esp-rs contributors
+License:   MIT OR Apache-2.0
+
+firmware/platform/espressif/linker/runtime/link.x repeats its
+PROVIDE(interruptN = DefaultHandler) symbol interface.
+
+
+Not derived
+-----------
+
+Test vectors from IEEE Std 802.11 Annex J, RFC 3394 and the Bluetooth Core
+sample data are facts and keep their citations. Linux mac80211 (GPL-2.0) is
+cited for behaviour only: crates/ieee80211/rsn/src/ccmp_mpdu.rs and
+crates/ieee80211/mac/src/data.rs implement the IEEE 802.11 rules
+independently.
+
+
+License texts
+=============
+
+OpenThread (BSD-3-Clause)
+-------------------------
+
+Copyright (c) 2016, The OpenThread Authors.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the
+   names of its contributors may be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+hostap (BSD-3-Clause)
+---------------------
+
+Copyright (c) 2002-2024, Jouni Malinen <j@w1.fi> and contributors
+All Rights Reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+3. Neither the name(s) of the above-listed copyright holder(s) nor the
+   names of its contributors may be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

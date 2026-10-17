@@ -1,0 +1,267 @@
+schema = 2
+
+[[peripherals]]
+name = "BLE_HW_RUNTIME_CONTROL"
+description = """
+Sparse BLE hardware status/clear and runtime-configuration view. Complete
+ESP32-S31 functions prove the array geometry, access directions and exact
+configuration images. Positional names retain unknown source and field
+semantics instead of promoting diagnostic strings to hardware truth.
+"""
+baseAddress = 0x20101B00
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+dim = 8
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5,6,7"
+name = "STATUS%s"
+description = "Complete status word read once for each of eight sources before optional diagnostic reporting."
+addressOffset = 0x30
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "PENDING_BITS"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+dim = 8
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5,6,7"
+name = "CLEAR%s"
+description = "Paired clear word receiving the complete image 0xFFFFFFFF for each of eight sources."
+addressOffset = 0x50
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "PENDING_BITS"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "PHY_INIT_CONFIGURATION"
+description = "Complete BLE PHY initialization publishes one runtime-derived low byte together with finite bit 8 as a whole-word image. The byte encoding remains unknown."
+addressOffset = 0x74
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE_LOW_8"
+bitOffset = 0
+bitWidth = 8
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+[[peripherals.registers.register.fields]]
+name = "CONFIG_8"
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "PHY_INIT_CONFIGURATION_FOLLOWUP"
+description = "Complete BLE PHY initialization writes the finite complete image one immediately after PHY_INIT_CONFIGURATION. The hardware meaning of this ordered follow-up write remains unknown."
+addressOffset = 0x78
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0088_OPAQUE"
+description = "Complete image formed from the low five bits of one controller configuration byte."
+addressOffset = 0x88
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE_LOW_5"
+bitOffset = 0
+bitWidth = 5
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0090_OPAQUE"
+description = "Complete image formed from two low-five-bit controller values in bits 0..4 and 8..12 plus finite one bits at positions 5 and 13."
+addressOffset = 0x90
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE_0"
+bitOffset = 0
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "CONFIG_5"
+bitOffset = 5
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "VALUE_1"
+bitOffset = 8
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "CONFIG_13"
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_0094_OPAQUE"
+description = "Complete image formed from one controller configuration byte."
+addressOffset = 0x94
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE_LOW_8"
+bitOffset = 0
+bitWidth = 8
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL"
+sources = [
+    "BLOB_LIBBLE_HW_STATUS_CLEAR",
+    "BLOB_LIBBLE_HW_RUNTIME_CONFIG",
+    "BLOB_LIBBLE_PHY_INIT_REGISTERS",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION.VALUE_LOW_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION.CONFIG_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION_FOLLOWUP"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.PHY_INIT_CONFIGURATION_FOLLOWUP.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_PHY_INIT_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.STATUS%s"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.STATUS%s.PENDING_BITS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.CLEAR%s"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.CLEAR%s.PENDING_BITS"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_STATUS_CLEAR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0088_OPAQUE.VALUE_LOW_5"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.VALUE_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.CONFIG_5"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.VALUE_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0090_OPAQUE.CONFIG_13"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_HW_RUNTIME_CONTROL.WORD_0094_OPAQUE.VALUE_LOW_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_HW_RUNTIME_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

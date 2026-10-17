@@ -1,0 +1,572 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RTC_TIMER_UPDATE"
+description = "Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value."
+baseAddress = 0x2010D830
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Enabled hal_timer_update_by_rtc sets bit 27. hal_set_sta_tsf_wakeup sets or clears bit 21 together with the STA TSF wakeup bit at 0x2010d858."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "STA_TSF_WAKEUP_ENABLE"
+description = "hal_set_sta_tsf_wakeup sets or clears this bit in the same branch as STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE."
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "LP_CLOCK_SYNC_ENABLE"
+description = "Low-power clock synchronization enable. The dedicated pwr_hal_set_lpclk_sync_enable and pwr_hal_set_lpclk_sync_disable leaves set and clear only this bit; hal_timer_update_by_rtc sets it when its enable argument is nonzero and clears it otherwise."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SOC_WAKEUP_CLEAR"
+description = "Complete libpp[hal_tsf.o]::hal_tsf_clear_soc_wakeup_request sets bit 30. Complete modem-power leaves independently expose status bits and clear pulses in this shared word; hardware transition behavior is not inferred."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_FILTER_FORCE_SYNC_LIMIT"
+description = "The dedicated setter replaces bits 9:0."
+bitOffset = 0
+bitWidth = 10
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_FILTER_FORCE_SYNC_ENABLE"
+description = "Dedicated enable/disable leaves set or clear bit 10."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_FILTER_FORCE_DUMP_LIMIT"
+description = "The dedicated setter replaces bits 17:11."
+bitOffset = 11
+bitWidth = 7
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_FILTER_FORCE_DUMP_ENABLE"
+description = "Dedicated enable/disable leaves set or clear bit 21."
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_BEACON_SLEEP_COUNTER"
+description = "Dedicated clear leaf sets bit 28."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_BEACON_MISS_COUNTER"
+description = "Dedicated clear leaf sets bit 29."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_REQUEST"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_BEACON_INFO"
+description = "Dedicated clear leaf sets bit 31."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "MODEM_SLEEP_LIMIT_CONTROL"
+description = "Complete no-call setters prove two bounded modem counters and their independent limit-exceeded wake gates. Units and hardware transition behavior remain unknown."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_MISS_LIMIT"
+description = "Low four argument bits published by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_limit."
+bitOffset = 0
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BEACON_MISS_LIMIT_WAKEUP_ENABLE"
+description = "Dedicated enable/disable leaves set or clear bit four."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_STATE_SLEEP_LIMIT"
+description = "Low ten argument bits published in bits 14:5 by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_sleep_limit."
+bitOffset = 5
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE"
+description = "Dedicated enable/disable leaves set or clear bit fifteen."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STA_LIGHT_SLEEP_WAKE_AHEAD"
+description = "Complete hal_set_sta_light_sleep_wake_ahead_time replaces the high sixteen bits. Complete hal_set_sta_tbtt independently publishes its fifth argument to the same field."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TIME"
+bitOffset = 16
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TBTT_RF_CONTROL_WAIT_CYCLES"
+description = "Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_rf_ctrl_wait_cycles replaces the low twenty-four bits; units and hardware transition behavior remain unknown."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "WAIT_CYCLES"
+bitOffset = 0
+bitWidth = 24
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_BEACON_TIME_LOW"
+description = "Complete hal_set_rx_beacon_time and libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_timeout independently replace the same low sixteen bits. The mode-dependent hardware interpretation is not inferred."
+addressOffset = 0x24
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STA_TSF_CONTROL"
+description = "Shared STA TSF scheduler, TBTT and modem-state wakeup control word used by hal_enable_sta_tsf, hal_disable_sta_tsf, hal_enable_sta_tbtt, hal_disable_sta_tbtt, hal_set_sta_tbtt_ahead_time, hal_set_sta_tsf_wakeup, and the wakeup-protect enable/disable leaves."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "STA_TBTT_AHEAD_TIME"
+description = "hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed."
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "STA_TSF_MODE"
+description = "hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them."
+bitOffset = 19
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "StaTsfMode"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+value = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_STATE_WAKEUP_PROTECT_ENABLE"
+description = "libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enable sets this bit and the corresponding disable leaf clears it."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STA_TBTT_ENABLE"
+description = "hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STA_TSF_ENABLE_LOW"
+description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STA_TSF_WAKEUP_ENABLE"
+description = "hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STA_TSF_ENABLE_HIGH"
+description = "hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STA_TBTT_INTERVAL"
+description = "Complete hal_set_sta_tbtt_interval replaces bits 25:0 with its 32-bit argument shifted right by ten and preserves bits 31:26. Complete hal_set_sta_tbtt performs the same update from its third argument, and tsf_hal_get_tbtt_interval reads the interval back as this field shifted left by ten."
+addressOffset = 0x2C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "INTERVAL_TSF_BITS_35_10"
+description = "The TBTT interval in station TSF units of 1024 µs."
+bitOffset = 0
+bitWidth = 26
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SLOW_CLOCK_CALIBRATION"
+description = "Enabled hal_timer_update_by_rtc replaces bits 17:0 with the low eighteen bits returned by g_wifi_osi_funcs._slowclk_cal_get."
+addressOffset = 0x48
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation."
+bitOffset = 0
+bitWidth = 18
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FFFF
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_INIT_TAIL",
+    "BLOB_LIBPP_HAL_TSF",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.LP_CLOCK_SYNC_ENABLE"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_INIT_TAIL",
+    "BLOB_LIBPP_HAL_PWR_LPCLK_SYNC",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_TSF_RUNTIME",
+    "BLOB_LIBPP_HAL_PWR",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_LIMIT"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_SYNC_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_LIMIT"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.BEACON_FILTER_FORCE_DUMP_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_SLEEP_COUNTER"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_MISS_COUNTER"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_BEACON_INFO"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.BEACON_MISS_LIMIT_WAKEUP_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.MODEM_SLEEP_LIMIT_CONTROL.MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_LIGHT_SLEEP_WAKE_AHEAD"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.TBTT_RF_CONTROL_WAIT_CYCLES"
+naming = "descriptive"
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_COEX_RUNTIME",
+    "BLOB_LIBPP_HAL_PWR",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_TSF",
+    "BLOB_LIBPP_HAL_PWR",
+    "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TSF_MODE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.MODEM_STATE_WAKEUP_PROTECT_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TSF_ENABLE_LOW"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TSF_ENABLE_HIGH"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TBTT_INTERVAL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_TSF_RUNTIME",
+    "BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TBTT_INTERVAL.INTERVAL_TSF_BITS_35_10"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SLOW_CLOCK_CALIBRATION"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SLOW_CLOCK_CALIBRATION.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TBTT_AHEAD_TIME"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_TSF_CONTROL.STA_TBTT_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.SOC_WAKEUP_CLEAR.CLEAR_REQUEST"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.STA_LIGHT_SLEEP_WAKE_AHEAD.TIME"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.TBTT_RF_CONTROL_WAIT_CYCLES.WAIT_CYCLES"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RTC_TIMER_UPDATE.RX_BEACON_TIME_LOW.VALUE"
+naming = "descriptive"

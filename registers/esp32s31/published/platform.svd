@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device schemaVersion="1.3" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd">
+  <vendor>Espressif</vendor>
+  <vendorID>ESP</vendorID>
+  <name>ESP32S31_PLATFORM</name>
+  <series>ESP32-S31</series>
+  <version>1</version>
+  <description>ESP32-S31 platform registers the host reads through the chip's JTAG, never
+    firmware: no PAC is generated from this model. ESP-HAL owns these blocks
+    at runtime.</description>
+  <licenseText>MIT OR Apache-2.0</licenseText>
+  <addressUnitBits>8</addressUnitBits>
+  <width>32</width>
+  <peripherals>
+    <peripheral>
+      <name>LP_AON_CLKRST</name>
+      <description>Low-power always-on clock/reset registers: the reset cause of HP core 0, which the stand reads after a power cycle.</description>
+      <baseAddress>0x20701000</baseAddress>
+      <registers>
+        <register>
+          <name>HPCORE0_RESET_CAUSE</name>
+          <description>Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned.</description>
+          <addressOffset>0x30</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>HPCORE0_RESET_FLAG</name>
+              <description>Set when HP core 0 left reset.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HPCORE0_RESET_CAUSE</name>
+              <description>The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+  </peripherals>
+</device>

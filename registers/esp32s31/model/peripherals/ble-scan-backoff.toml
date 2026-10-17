@@ -1,0 +1,100 @@
+schema = 2
+
+[[peripherals]]
+name = "BLE_SCAN_BACKOFF"
+description = """
+Scan-backoff state of the Link Layer scanner (Core Specification Vol 6, Part
+B, 4.4.3.2). Scanner start publishes the maximum upper limit and initializes
+the two hardware-maintained backoff words to one; a vendor test command reads
+those two words back as nine-bit values. Which word is the backoff count and
+which the upper limit is not established.
+"""
+baseAddress = 0x20101970
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "UPPER_LIMIT_MAX"
+description = "Maximum scan-backoff upper limit. Scanner start writes the Controller configuration's nine-bit upper limit, 32 in the S31 build, or 1 when backoff is disabled."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 9
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "BACKOFF_STATE_0"
+description = "One of the two hardware-maintained backoff words (upper limit or backoff count); scanner start writes one."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 9
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "BACKOFF_STATE_1"
+description = "The other hardware-maintained backoff word; scanner start writes one."
+addressOffset = 0x8
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 9
+
+[[review]]
+entity = "BLE_SCAN_BACKOFF"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_SCAN_BACKOFF.UPPER_LIMIT_MAX"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_SCAN_BACKOFF.UPPER_LIMIT_MAX.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_0.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+[[review]]
+entity = "BLE_SCAN_BACKOFF.BACKOFF_STATE_1.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_SCAN_BACKOFF", "BLOB_LIBBLE_SCAN_BACKOFF_READBACK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

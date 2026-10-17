@@ -1,0 +1,206 @@
+# Reviewed register evidence: vendor rom.
+schema = 1
+
+[[sources]]
+id = "ROM_REV0_HAL_GET_STA_TSF"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete rom[]::hal_get_sta_tsf at 0x2f82c15c, size 0x36. The function snapshots the station TSF through CONTROL bit zero, conditionally reads the low and high words, then clears the snapshot request."
+
+[[sources]]
+id = "ROM_REV0_PHY_BLOBRAY_GAPS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_ant_btrx_cfg, phy_ant_bttx_cfg, phy_ant_wifirx_cfg, phy_ant_wifitx_cfg, phy_bt_gain_offset, phy_chan_filt_set, phy_dig_reg_backup, phy_fe_txrx_reset, phy_fft_scale_force, phy_freq_correct, phy_get_cca, phy_get_cca_cnt, phy_get_noise_floor, phy_get_rssi, phy_read_rf_freq_mem, phy_rx_filter_mode, phy_rx_gain_force, phy_rx_sense_set, phy_set_cca, phy_set_cca_cnt, phy_tx_state_set and phy_wifi_rifs_mode_en bodies. These bodies prove concrete word accesses and observed read/write behavior, but not undocumented hardware field names or reset values."
+
+[[sources]]
+id = "ROM_REV0_PHY_CFO_SPUR_CONTROLS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete phy_bb_cfo_cfg at 0x2f828322 size 0x164, phy_spur_reg_write_one_tone at 0x2f829a5e size 0x25e and phy_spur_coef_cfg at 0x2f829d0c size 0xee. The bodies prove the listed word accesses and partial-write masks; opaque names retain the boundary where undocumented field semantics remain unknown."
+
+[[sources]]
+id = "ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete rom[]::hal_he_get_bss_color at 0x2f834f58 size 0x2a, rom[]::hal_wdev_timer_set_target at 0x2f82b990 size 0x1c, rom[]::hal_wdev_timer_target_enable at 0x2f82b9ac size 0x2a, rom[]::pm_clear_wakeup_signal at 0x2f82c974 size 0x36, rom[]::tsf_hal_set_tbtt_rf_ctrl_wait_cycles at 0x2f82bc7e size 0x1a, rom[]::tsf_hal_set_tsf_time_deviation at 0x2f82bcfc size 0x18, rom[]::tsf_hal_set_tsf_time_deviation_sync_enable at 0x2f82bd14 size 0x14 and rom[]::tsf_hal_set_rx_beacon_abort_tsf_time_deviation_sync_enable at 0x2f82bd28 size 0x12. These bodies prove exact address selection and masks; hardware transition semantics remain unknown."
+
+[[sources]]
+id = "ROM_REV0_PHY_DAC_SCALE_SET"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_dac_scale_set at 0x2f82873a, size 0x3c."
+
+[[sources]]
+id = "ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_set_rx_gain_cal_dc at 0x2f829858, size 0x206."
+
+[[sources]]
+id = "ROM_REV0_PHY_START_TX_TONE_STEP"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_start_tx_tone_step at 0x2f828776, size 0x102."
+
+[[sources]]
+id = "ROM_REV0_PHY_START_STOP_TX_TONE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_start_tx_tone_step at 0x2f828776, size 0x102, and phy_stop_tx_tone at 0x2f828878, size 0x30."
+
+[[sources]]
+id = "ROM_REV0_PHY_TXIQ_GET_MIS_PWR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_txiq_get_mis_pwr at 0x2f82ae18, size 0xa8."
+
+[[sources]]
+id = "ROM_REV0_PHY_RFCAL_TXIQ"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete phy_rfcal_txiq at 0x2f82b1de, size 0x132. Its entry clears the high TX-IQ correction mode while setting the low mode in one fresh RMW; its completion edge sets the high mode in a separate fresh RMW."
+
+[[sources]]
+id = "ROM_REV0_PHY_RX_DCO_CAL"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_pbus_rx_dco_cal at 0x2f828f44, size 0x228, including the bounded capture/clear/restore graph."
+
+[[sources]]
+id = "ROM_REV0_PHY_RX_DCO"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete RX-DCO call graph rooted at phy_pbus_rx_dco_cal at 0x2f828f44, size 0x228, and its PBUS helper leaves."
+
+[[sources]]
+id = "ROM_REV0_PHY_OPEN_FE_BB_CLK"
+description = "_oracles/esp32s31_rev0_rom.elf phy_open_fe_bb_clk at 0x2f823ec0, complete 0x38-byte body"
+
+[[sources]]
+id = "ROM_REV0_PHY_FE_REG_INIT"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_fe_reg_init at 0x2f827740 size 0xf6"
+
+[[sources]]
+id = "ROM_REV0_PHY_ADC_RATE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_adc_rate_set at 0x2f82a6d2 size 0x4a"
+
+[[sources]]
+id = "ROM_REV0_PHY_TXDC_CAL"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_txdc_cal at 0x2f82abbe size 0x1dc"
+
+[[sources]]
+id = "ROM_REV0_PHY_PBUS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_pbus_force_mode at 0x2f824102 size 0x90 and phy_pbus_force_test at 0x2f824228 size 0x42, plus phy_pbus_rd address/shift jump tables"
+
+[[sources]]
+id = "ROM_REV0_PHY_SET_PBUS_MEM"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_set_pbus_mem at 0x2f82479e size 0x180"
+
+[[sources]]
+id = "ROM_REV0_PHY_WRITE_PBUS_MEM"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_write_pbus_mem at 0x2f824634 size 0x16a"
+
+[[sources]]
+id = "ROM_REV0_PHY_SAVE_PBUS_REG"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_save_pbus_reg at 0x2f824602 size 0x32"
+
+[[sources]]
+id = "ROM_REV0_PHY_WRITE_GAIN_MEM"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_write_gain_mem at 0x2f8274f0 size 0x2a"
+
+[[sources]]
+id = "ROM_REV0_PHY_AGC"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_disable_agc at 0x2f827460 size 0x10, phy_enable_agc at 0x2f827470 size 0x28, phy_rx_11b_opt at 0x2f827588 size 0xc4, phy_agc_reg_init at 0x2f8278d8 size 0xd8, phy_bb_agc_reg_update at 0x2f82860e size 0xa6 and phy_rfrx_sat_rst at 0x2f828944 size 0x42"
+
+[[sources]]
+id = "ROM_REV0_PHY_LOW_RATE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_enable_low_rate at 0x2f825210 size 0x20 and phy_disable_low_rate at 0x2f825230 size 0x20. Each performs three fresh-read RMW edges: bits 10 and 11 at 0x20108060 separately, then bit 11 at 0x2010807c."
+
+[[sources]]
+id = "ROM_REV0_PHY_ANT_INIT"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_ant_init at 0x2f827df4 size 0x44"
+
+[[sources]]
+id = "ROM_REV0_PHY_ANT_DFT_CFG"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_ant_dft_cfg at 0x2f82508a size 0x22"
+
+[[sources]]
+id = "ROM_REV0_PHY_BTBB_WIFI_BB_CFG2"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_btbb_wifi_bb_cfg2 at 0x2f8279b0 size 0x16"
+
+[[sources]]
+id = "ROM_REV0_PHY_CHAN_DUMP_CFG"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_chan_dump_cfg at 0x2f8251c0 size 0x50"
+
+[[sources]]
+id = "ROM_REV0_PHY_DAC_RATE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_dac_rate_set at 0x2f82a71c size 0x26"
+
+[[sources]]
+id = "ROM_REV0_PHY_FORCE_PWR_INDEX"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_force_pwr_index at 0x2f82817c size 0x3a"
+
+[[sources]]
+id = "ROM_REV0_PHY_FORCE_RX_GAIN"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_force_rx_gain at 0x2f8281f4 size 0x2c"
+
+[[sources]]
+id = "ROM_REV0_PHY_RX_FILTER_MODE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_rx_filter_mode at 0x2f82751a size 0x20, one fresh-read RMW that replaces bits 21:18 of 0x20100430 with the low four bits of its argument and preserves every other bit"
+
+[[sources]]
+id = "ROM_REV0_PHY_RX11BLR_CFG"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_rx11blr_cfg at 0x2f8253b8 size 0x38"
+
+[[sources]]
+id = "ROM_REV0_PHY_CCA_CONTROL"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_disable_cca at 0x2f827498 size 0x32 and phy_enable_cca at 0x2f8274ca size 0x26"
+
+[[sources]]
+id = "ROM_REV0_PHY_SIFS_REG_INIT"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_sifs_reg_init at 0x2f828532 size 0x44"
+
+[[sources]]
+id = "ROM_REV0_PHY_CLOCK_FORCE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_force_txrx_off at 0x2f827bb0 size 0x66, phy_set_txclk_en at 0x2f827cd2 size 0x24 and phy_set_rxclk_en at 0x2f827cf6 size 0x20"
+
+[[sources]]
+id = "ROM_REV0_PHY_I2C"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_i2c_clk_sel at 0x2f829f1c size 0x68, phy_i2cmst_reg_init at 0x2f8276c4 size 0x22, phy_bbpll_cal at 0x2f827dbc size 0x1c, phy_i2c_master_reset at 0x2f8260d0 size 0x74, phy_chip_i2c_readReg_org at 0x2f829ffa and phy_chip_i2c_writeReg at 0x2f82a30e"
+
+[[sources]]
+id = "ROM_REV0_PHY_FREQUENCY_CHANNEL"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_freq_module_resetn at 0x2f824abe size 0x1c, phy_freq_chan_en_sw at 0x2f824ada size 0x38, phy_freq_i2c_mem_write at 0x2f824bb6 size 0x3e, phy_freq_reg_init at 0x2f824c46 size 0x60, phy_freq_num_get_data at 0x2f824ca6 size 0x24, phy_freq_i2c_num_addr at 0x2f824cca size 0x6a, phy_en_hw_set_freq at 0x2f824f9e size 0x14, phy_dis_hw_set_freq at 0x2f824fb2 size 0x14, phy_bb_bss_cbw40 and child at 0x2f826052, phy_mac_tx_chan_offset at 0x2f827550 size 0x38, phy_mac_enable_bb at 0x2f827836 size 0x2a, phy_bb_reg_init at 0x2f8279c6 size 0x140, phy_wifi_fbw_sel at 0x2f827e38 size 0x58, phy_bt_filter_reg at 0x2f827e90 size 0x34, phy_nrx_freq_set at 0x2f8280ec size 0x32, phy_wifi_enable_set at 0x2f828220 size 0x18, phy_bb_cbw_chan_cfg at 0x2f828238 size 0x74 and phy_i2c_master_mem_txcap at 0x2f82a832 size 0x24"
+
+[[sources]]
+id = "ROM_REV0_PHY_REGISTER_INITIALIZATION"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_reg_init at 0x2f823ef8 size 0x52, phy_tx_paon_set at 0x2f82764c size 0x78, phy_bb_wdg_cfg at 0x2f827860 size 0x2c, phy_bb_reg_init at 0x2f8279c6 size 0x140, phy_noise_floor_auto_set at 0x2f827d3c size 0x36, phy_iq_corr_enable at 0x2f827d8c size 0x24 and phy_i2c_txrate_init at 0x2f8286d0 size 0x38"
+
+[[sources]]
+id = "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"
+description = "Caller-authenticated ESP32-S31 ROM register-access evidence from complete phy_bb_cbw_chan_cfg, phy_vht_support, phy_csidump_force_lltf_cfg, phy_hemu_ru26_good_res, phy_freq_band_reg_set, phy_bbtx_outfilter, phy_bb_wdt_rst_enable, phy_bb_wdt_int_enable, phy_bb_wdt_timeout_clear, phy_bb_wdt_get_status and phy_lltf_mask_en bodies; machine comparison is outside this repository"
+
+[[sources]]
+id = "ROM_REV0_PHY_READ_NOISE_FLOOR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_read_hw_noisefloor at 0x2f827d72, size 0x1a. It reads 0x2010708c, masks the low twelve bits, subtracts 0x1000, sign-extends and arithmetic-shifts right by two."
+
+[[sources]]
+id = "ROM_REV0_PHY_POWER_DETECTOR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_pwdet_reg_init at 0x2f82634a size 0x5c, phy_pwdet_sar2_init at 0x2f8263a6 size 0x34, phy_en_pwdet at 0x2f8263da size 0x26, phy_tx_pwctrl_bg_init at 0x2f8267f6 size 0x1e, phy_get_fm_sar_dout at 0x2f8264b2 size 0x2a, phy_get_tone_sar_dout_ at 0x2f8266da size 0x40 and phy_txcal_debuge_mode_ at 0x2f8244fe size 0x56"
+
+[[sources]]
+id = "ROM_REV0_PHY_IQ_COEFFICIENTS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_txiq_set_reg at 0x2f827c16 size 0x68 and phy_rxiq_set_reg at 0x2f827c7e size 0x54"
+
+[[sources]]
+id = "ROM_REV0_PHY_IQ_ESTIMATOR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_iq_est_enable at 0x2f8289d4 size 0xb4, phy_iq_est_disable at 0x2f828a88 size 0x2c, phy_dc_iq_est at 0x2f828ab4 size 0x84, phy_rxiq_get_mis at 0x2f828b84 size 0x13e, phy_set_rx_gain_cal_iq at 0x2f82964c size 0x20c and phy_get_rx_sig_pwr at 0x2f829ea2 size 0x76"
+
+[[sources]]
+id = "ROM_REV0_PHY_WAIT_I2C_SDM_STABLE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_wait_i2c_sdm_stable at 0x2f823e76 size 0x4a"
+
+[[sources]]
+id = "ROM_REV0_WDEV_APPEND_RX_BLOCKS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542; complete rom[]::wDev_AppendRxBlocks at 0x2f838a7e size 0x132, including descriptor rearm/sentinels and live old_tail.next publication. Its reload suffix performs a bounded in-function wait for RX_CONTROL bit 0 to clear and, without returning or introducing a scheduler boundary, reads and compares the complete 32-bit RX_NEXT_DESCRIPTOR word with zero, reads RX_LAST_DESCRIPTOR only when that complete word is zero, and repairs RX_DESCRIPTOR_BASE only when the accepted LAST is not the newly appended tail. This uninterrupted whole-word NEXT -> conditional LAST ordering is an observed vendor fact; it is distinct from the low-address LAST -> NEXT completion-frontier observation used by the Rust ring owner."
+
+[[sources]]
+id = "ROM_REV0_HAL_MAC_RX_GATE"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete rom[]::hal_mac_rx_enable at 0x2f8386c0 size 0x14 and rom[]::hal_mac_rx_disable at 0x2f8386d4 size 0x12; set and clear RX_CONTROL bit 31"
+
+[[sources]]
+id = "ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete rom[]::hal_mac_rx_get_last_dscr at 0x2f8386a2 size 0x1e; joins RX_LAST_DESCRIPTOR low 20 bits with RX_DESCRIPTOR_HIGH_WINDOW high 12 bits"
+
+[[sources]]
+id = "ROM_REV0_PHY_GET_MAX_PWR"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_get_max_pwr at 0x2f8249fe size 0x54, phy_get_target_pwr at 0x2f824976 size 0x88, phy_rate_to_index at 0x2f82491e size 0x58, phy_wifi_get_target_power at 0x2f8270fa size 0x22 and phy_get_chan_target_power at 0x2f826da4 size 0x98. Each max-power query first sets bit 14 and replaces bits 13:8 with 0x15 at 0x20107428 through separate RMWs, derives two quarter-unit target powers from live PHY calibration/channel state, clamps each to 84, arithmetic-shifts both right by two and writes two signed bytes."
+
+[[sources]]
+id = "ROM_REV0_MAC_TX_SET_TB"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete rom[]::mac_tx_set_hesig at 0x2f8350a8 size 0x1e2, rom[]::mac_tx_set_tb at 0x2f834f82 size 0x126, rom[]::mac_tx_set_mplen at 0x2f836b1a size 0x156, rom[]::hal_he_get_mplen_addr_start at 0x2f836a8e size 0x46, rom[]::hal_he_get_mplen_addr_end at 0x2f836ad4 size 0x46 and rom[]::wifi_he_get_hetb_tid_bitmap at 0x2f839386 size 0x28. The ROM independently reproduces the same fixed-address Trigger queue, MU-EDCA, software-BSR, ready-bitmap, MPDU-link and tail writes as the blob. The newer blob adds only allocation diagnostics and a terminal-frame assertion/log around this bounded hardware transaction."
+
+[[sources]]
+id = "ROM_REV0_HE_MAX_APEP"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete 120-byte he_max_apep_length object at 0x2f84fd40. Its three GI rows by ten MCS columns are [3700,7400,11100,14800,22500,30000,33600,37600,45000,50000], [3500,7000,10500,14000,21000,28200,31500,35200,42300,47000], and [3200,6400,9600,12800,19000,25200,28700,32000,37800,42000]. Complete BLOB_LIBPP_HE_AMPDU_LIMIT maps both 0.8-us GI selectors to row zero and consumes these values as u16 APEP byte ceilings."
+
+[[sources]]
+id = "ROM_REV0_RADIO_ACCESSOR_FIELDS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete single-purpose accessor bodies whose argument or result is exactly one bit range. phy_get_noise_floor returns 0x20107050 bits 9:0 sign-extended by OR 0xfffffc00; phy_get_rssi adds 0x2010706c bits 15:8 to that noise floor shifted right by two. phy_get_cca returns 0x2010701c bits 7:0 sign-extended; phy_set_cca sets 0x20107018 bit 30 and replaces 0x2010701c bits 7:0 with its threshold argument, or with 0xbf (-65) when either argument is zero. phy_rx_sense_set(sense) replaces bits 31:23 of 0x20107010 and 0x20107014 and bits 7:0 of 0x20107044 with sense, and sets 0x20107108 bit 9 when sense is zero or clears it otherwise. phy_wifi_rifs_mode_en replaces 0x201070f4 bit 0 with its argument. phy_fft_scale_force(force, scale) replaces 0x20107800 bits 27:20 with scale and bit 19 with force. phy_wifi_agc_sat_gain stores its argument to both 0x20107064 and 0x20107114. phy_bt_gain_offset replaces bits 31:24 and 23:16 of both 0x20102848 and 0x20102868 with its argument. phy_bb_bss_cbw40_dig replaces 0x20109c18 bits 3:2 with its one-bit argument in bit 2 and zero in bit 3. rom[]::pwr_hal_set_beacon_filter_frame_crc_state replaces 0x201042b8 bits 31:30 with its argument."

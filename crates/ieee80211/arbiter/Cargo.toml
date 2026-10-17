@@ -1,0 +1,23 @@
+[package]
+name = "oer-ieee80211-arbiter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor- and chip-independent arbiter of the channel a Wi-Fi station and access point share"
+readme = "README.md"
+
+[dependencies]
+oer-ieee80211-lower-mac = { path = "../lower-mac" }
+oer-ieee80211-mac = { path = "../mac" }
+oer-time = { path = "../../base/time" }
+
+oer-radio-port = { path = "../../radio/port" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"

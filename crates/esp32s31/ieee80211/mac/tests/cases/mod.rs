@@ -1,0 +1,10 @@
+mod aggregation;
+mod crypto;
+mod dma_geometry;
+mod irq;
+mod rx_frames;
+mod rx_metadata;
+mod rx_ring;
+mod startup;
+mod tx_ownership;
+mod tx_rates;

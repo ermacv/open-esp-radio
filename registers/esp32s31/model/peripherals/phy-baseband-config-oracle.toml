@@ -1,0 +1,2776 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_BASEBAND_CONFIG_ORACLE"
+description = """
+PHY/baseband configuration registers recovered from complete rev0 ROM
+        bodies and complete pinned libphy leaves. Operation-derived fields keep
+        UNKNOWN where neither public documentation nor an independent symbol
+        establishes the electrical meaning."""
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FRONT_END_AND_TONE_STOP_CONTROL"
+description = "Shared word whose bit 2 is set by complete phy_fe_reg_init. Complete phy_start_tx_tone_step clears bits 1:0 and complete phy_stop_tx_tone sets them."
+addressOffset = 0x40C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Two-bit field cleared before the ROM power-control tone and set by its complete cleanup; the individual bit meanings are unknown."
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_GAIN_COMPENSATION"
+description = "Complete phy_txgain_comp_pacfg_new(1) publishes four ordered byte updates."
+addressOffset = 0x410
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_23_OPAQUE"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_GAIN_COMPENSATION_AUX"
+description = "Pinned libphy.a[phy_reg.o] phy_start_tx_tone_step_new writes the full zero image while disabling TX-gain compensation."
+addressOffset = 0x414
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_DC_MEASUREMENT_CONTROL_STATUS"
+description = "Complete phy_txdc_cal triggers measurement with bits 1 and 0, polls ready bit 22, samples I and Q comparator bits 29 and 28 through independent reads, then clears bits 1 and 0."
+addressOffset = 0x418
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MEASUREMENT_START"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MEASUREMENT_ENABLE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MEASUREMENT_READY"
+bitOffset = 22
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "Q_COMPARATOR_HIGH"
+bitOffset = 28
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "I_COMPARATOR_HIGH"
+bitOffset = 29
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TONE_PATH_0_CONTROL"
+description = "First calibration-tone path word. Complete source bodies prove the packed selector, negated step or attenuation, enable/arm bit and TX-IQ mismatch images; the high nibble is preserved and remains electrically unknown."
+addressOffset = 0x41C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "SELECTOR_HIGH"
+description = "Upper eight bits of the evidenced ten-bit selector; bits 1:0 are in TONE_SELECTOR_CONTROL."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_9_OPAQUE"
+description = "Complete tone writers clear these bits; their hardware meaning is unknown."
+bitOffset = 8
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "NEGATED_STEP_OR_ATTENUATION"
+description = "Two's-complement negated eight-bit tone step or attenuation."
+bitOffset = 10
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "TONE_ENABLE_OR_ARM"
+description = "Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_21_OPAQUE"
+description = "Three-bit image set to binary 101 for the first mismatch-power polarity and otherwise cleared by general tone setup."
+bitOffset = 19
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_23_OPAQUE"
+description = "Complete general and first-polarity tone writers clear these bits."
+bitOffset = 22
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "TXIQ_POLARITY_IMAGE"
+description = "Four-bit mismatch polarity image: first configuration writes bit 26, while the second phase writes nibble 1 or 8."
+bitOffset = 24
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "High nibble preserved by all recovered tone updates and retained by the TX-IQ save/restore transaction."
+bitOffset = 28
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TONE_PATH_1_CONTROL"
+description = "Second calibration-tone path word. All currently evidenced calls publish a disabled zero low image while preserving the high nibble."
+addressOffset = 0x420
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "SELECTOR_HIGH"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "SecondToneSelectorHigh"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLEARED"
+value = 0
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_9_OPAQUE"
+bitOffset = 8
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "SecondToneLowReserved"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLEARED"
+value = 0
+
+[[peripherals.registers.register.fields]]
+name = "NEGATED_STEP_OR_ATTENUATION"
+bitOffset = 10
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "SecondToneNegatedStep"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLEARED"
+value = 0
+
+[[peripherals.registers.register.fields]]
+name = "TONE_ENABLE_OR_ARM"
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_27_OPAQUE"
+bitOffset = 19
+bitWidth = 9
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "SecondToneLowImageRemainder"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLEARED"
+value = 0
+
+[[peripherals.registers.register.fields]]
+name = "BITS_28_31_OPAQUE"
+description = "High nibble preserved by all recovered second-path tone updates."
+bitOffset = 28
+bitWidth = 4
+
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_GAIN_DC_CONTROL"
+description = """
+Complete rev0 ROM phy_set_rx_gain_cal_dc at 0x2f829858, size
+            0x206, sets bits 6:5 before the bounded RX-gain DC calibration
+            graph and clears the same pair during the common cleanup tail.
+            Their narrower electrical meaning is not independently proved."""
+addressOffset = 0x424
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_5_6_OPAQUE"
+bitOffset = 5
+bitWidth = 2
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+description = "Common phy_set_rx_gain_cal_dc cleanup value."
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+description = "phy_set_rx_gain_cal_dc calibration-prefix value."
+value = 3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TONE_SELECTOR_CONTROL"
+description = "Low two selector bits for each calibration-tone path, updated through separate fresh-read edges."
+addressOffset = 0x428
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "PATH_0_SELECTOR_LOW"
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "PATH_1_SELECTOR_LOW"
+bitOffset = 2
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "IQ_CORRECTION_CONTROL"
+description = "Shared RX-IQ coefficient and correction-mode word."
+addressOffset = 0x438
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "RX_IQ_GAIN_COEFFICIENT"
+bitOffset = 16
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "RX_IQ_PHASE_COEFFICIENT"
+bitOffset = 22
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "RX_IQ_CORRECTION_MODE_LOW"
+description = "Low bit of the correction-mode field updated through a distinct fresh-read edge by the RXIQ parent."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_IQ_CORRECTION_MODE_HIGH"
+description = "High bit of the correction-mode field updated through a distinct fresh-read edge by the RXIQ parent."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_31_OPAQUE"
+description = "Complete phy_fe_reg_init sets bit 31 after the repeated ADC-control writes."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FRONT_END_CLEAR_CONTROL"
+description = "Complete phy_fe_reg_init clears bits 8 and 11 in two separately ordered RMW edges."
+addressOffset = 0x444
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_8_OPAQUE"
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_11_OPAQUE"
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "ADC_RATE_AND_FRONT_END_CONTROL"
+description = "Complete phy_adc_rate_set and phy_dac_rate_set publish rate bit zero into bits 1 and 0 through separate RMW edges. Front-end initialization and update set the same bits in their independently evidenced order."
+addressOffset = 0x448
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_CONTROL"
+description = "Shared PWDET trigger, calibration and background-control word."
+addressOffset = 0x808
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "SAR_TRIGGER"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_11_OPAQUE"
+bitOffset = 4
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_16_OPAQUE"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_22_OPAQUE"
+bitOffset = 20
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_SAR_CONTROL_STATUS"
+description = "PWDET SAR configuration and three-bit ready status."
+addressOffset = 0x80C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_9_OPAQUE"
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_13_OPAQUE"
+bitOffset = 12
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "SAR_READY"
+description = "Hardware completion state sampled by the complete power-detector paths; neither source writes these bits."
+bitOffset = 14
+bitWidth = 3
+access = "read-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0810_OPAQUE"
+description = "Complete phy_pwdet_reg_init writes 0x0f0f0fff."
+addressOffset = 0x810
+size = 32
+access = "write-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_TABLE_1"
+description = "Complete initialization writes 0x00ff0f64; TX-DC calibration temporarily replaces the low byte."
+addressOffset = 0x814
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_23_OPAQUE"
+bitOffset = 8
+bitWidth = 16
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_REFERENCE"
+description = "PWDET reference word; initialization writes 0xaaaa and later paths publish 0, 0x5555 or 0xaaaa."
+addressOffset = 0x818
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "REFERENCE_CODE"
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_SAR_RESULT"
+description = "First of four consecutive SAR result words. phy_get_tone_sar_dout_ consumes its upper thirteen-bit sample; phy_get_fm_sar_dout consumes both thirteen-bit halves from all four words."
+addressOffset = 0x81C
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_LOW"
+bitOffset = 1
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE"
+bitOffset = 17
+bitWidth = 13
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_SAR_RESULT_1"
+description = "Second of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+addressOffset = 0x820
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_LOW"
+bitOffset = 1
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_HIGH"
+bitOffset = 17
+bitWidth = 13
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_SAR_RESULT_2"
+description = "Third of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+addressOffset = 0x824
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_LOW"
+bitOffset = 1
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_HIGH"
+bitOffset = 17
+bitWidth = 13
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "POWER_DETECTOR_SAR_RESULT_3"
+description = "Fourth of four consecutive dual thirteen-bit SAR result words consumed by complete phy_get_fm_sar_dout."
+addressOffset = 0x828
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_LOW"
+bitOffset = 1
+bitWidth = 13
+
+[[peripherals.registers.register.fields]]
+name = "SAR_SAMPLE_HIGH"
+bitOffset = 17
+bitWidth = 13
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_PA_CONTROL_0"
+description = "Shared front-end low byte and PA-on high byte."
+addressOffset = 0x86C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_PA_CONTROL_1"
+description = "Complete phy_tx_paon_set publishes 0x0a0e in the high half and 0xc8 in byte one. Complete ble_tx_config_check independently names the low two bytes as Bluetooth RF/PA turn-on delays."
+addressOffset = 0x870
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "RF_ON_BT_DELAY_CODE"
+description = "Eight-bit RF-on delay code printed by the vendor checker after integer division by 80. The electrical time unit of the raw code is not otherwise assumed."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "PA_ON_BT_DELAY"
+description = "Bluetooth PA-on delay."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+bitOffset = 16
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DAC_SCALE_CONTROL"
+description = "Complete ROM tone start clears both byte-wide DAC-scale fields before measurement; complete phy_stop_tx_tone(1) restores both fields to 0xff through separate fresh-read writes."
+addressOffset = 0xC04
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_23_OPAQUE"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0C08_OPAQUE"
+description = "Both complete source bodies set bit 25 and then bit 26 through separate fresh-read RMW edges."
+addressOffset = 0xC08
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_26_OPAQUE"
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "IQ_CORRECTION_AUX"
+description = "Shared TX-IQ coefficient and correction-mode word."
+addressOffset = 0xC0C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TX_IQ_GAIN_COEFFICIENT"
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "TX_IQ_PHASE_COEFFICIENT"
+bitOffset = 6
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers.register.fields]]
+name = "TX_IQ_CORRECTION_MODE_LOW"
+description = "Low bit of the auxiliary correction-mode field updated through a distinct fresh-read edge by the RXIQ parent."
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TX_IQ_CORRECTION_MODE_HIGH"
+description = "High bit of the auxiliary correction-mode field updated through a distinct fresh-read edge by the RXIQ parent."
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_15_OPAQUE"
+description = "Complete phy_fe_reg_init sets bit 15 after the shared correction-mode initialization."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0C20_OPAQUE"
+description = "Final complete phy_fe_reg_init RMW replaces the low byte with 0x57."
+addressOffset = 0xC20
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "I2C_TX_RATE_CONTROL"
+description = "Complete phy_i2c_txrate_init replaces both evidenced rate fields before dispatching TX-gain compensation."
+addressOffset = 0x448C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_18_25_OPAQUE"
+bitOffset = 18
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "NOISE_FLOOR_CONTROL"
+description = "Complete phy_noise_floor_auto_set sets both control bits."
+addressOffset = 0x7018
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_23_OPAQUE"
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_28_OPAQUE"
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7400_OPAQUE"
+description = "Complete phy_bb_reg_init sets bits 14:13."
+addressOffset = 0x7400
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_14_OPAQUE"
+bitOffset = 13
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7428_OPAQUE"
+description = "Complete phy_bb_reg_init sets bit 14 and replaces bits 13:8 with 0x15."
+addressOffset = 0x7428
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_13_OPAQUE"
+bitOffset = 8
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "BIT_14_OPAQUE"
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_743C_OPAQUE"
+description = "Complete phy_bb_reg_init clears bits 8:6 through two fresh-read updates."
+addressOffset = 0x743C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_6_7_OPAQUE"
+bitOffset = 6
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_8_OPAQUE"
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_OUTPUT_FILTER_CONTROL"
+description = "Complete phy_bbtx_outfilter replaces bits five, six and four through three independent fresh-read RMWs."
+addressOffset = 0x7440
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FILTER_INPUT_2"
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FILTER_INPUT_0"
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FILTER_INPUT_1"
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_POWER_TRACK_CONTROL_0"
+description = "Complete phy_bb_txpwr_track publishes enable plus two initialization fields."
+addressOffset = 0x7454
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TRACK_ENABLE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_4_OPAQUE"
+bitOffset = 1
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_5_9_OPAQUE"
+bitOffset = 5
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_POWER_TRACK_CONTROL_1"
+description = "Complete phy_bb_txpwr_track clears bits 1:0 and publishes three eight-bit tracking values."
+addressOffset = 0x7458
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_14_OPAQUE"
+bitOffset = 7
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_22_OPAQUE"
+bitOffset = 15
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_30_OPAQUE"
+bitOffset = 23
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_POWER_TRACK_CONTROL_2"
+description = "Complete phy_bb_txpwr_track publishes four byte-wide tracking values."
+addressOffset = 0x745C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_23_OPAQUE"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_31_OPAQUE"
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TX_POWER_TRACK_CONTROL_3"
+description = "Complete phy_bb_txpwr_track publishes two byte-wide tracking values."
+addressOffset = 0x7460
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "HCCFR_CONTROL"
+description = "Complete phy_config_hccfr replaces bit 22 with the low bit of its first argument."
+addressOffset = 0x7468
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "ENABLE"
+description = "Complete phy_config_hccfr writes zero to disable HCCFR and one to enable it."
+bitOffset = 22
+bitWidth = 1
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "HccfrEnable"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+description = "Disable HCCFR processing."
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+description = "Enable HCCFR processing."
+value = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "HCCFR_VALUE"
+description = "Complete phy_config_hccfr replaces the low twelve bits with its second argument."
+addressOffset = 0x746C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Complete phy_config_hccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
+bitOffset = 0
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "ICCFR_FORCE_CONTROL"
+description = "Complete phy_force_iccfr publishes five fields through five separately ordered fresh-read RMWs."
+addressOffset = 0x7478
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_ENABLE"
+description = "Complete phy_force_iccfr writes zero to disable the forced ICCFR value and one to enable it."
+bitOffset = 0
+bitWidth = 1
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "IccfrForceEnable"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+description = "Use the ordinary ICCFR value path."
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+description = "Use the forced ICCFR value."
+value = 1
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_VALUE"
+description = "Complete phy_force_iccfr retains the caller value to this twelve-bit field; every representable field image is accepted by the recovered leaf."
+bitOffset = 1
+bitWidth = 12
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFF
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_MODE_LOW"
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_MODE_HIGH"
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_TRIGGER"
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "ICCFR_ENABLE_CONTROL"
+description = "Complete phy_iccfr_en writes three to bits 26:25 for a zero argument and clears them for a nonzero argument."
+addressOffset = 0x747C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "GATE"
+description = "Complete phy_iccfr_en writes zero for a nonzero enable input and three for a zero input; the other two encodings are not evidenced."
+bitOffset = 25
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "IccfrGate"
+usage = "read-write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+description = "Enable ICCFR through the recovered zero gate image."
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+description = "Disable ICCFR through the recovered all-ones gate image."
+value = 3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7808_OPAQUE"
+description = "Complete phy_bb_reg_init replaces bits 13:7 with 0x60."
+addressOffset = 0x7808
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_13_OPAQUE"
+bitOffset = 7
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7890_OPAQUE"
+description = "Complete phy_bb_reg_init and phy_hemu_ru26_good_res both clear bit 25 then set bit 24 through separate fresh-read RMWs."
+addressOffset = 0x7890
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "HE_RU26_GOOD_RESPONSE_ENABLE"
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HE_RU26_GOOD_RESPONSE_DISABLE"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_78DC_OPAQUE"
+description = "Complete phy_bb_reg_init replaces bits 13:7 with two."
+addressOffset = 0x78DC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_7_13_OPAQUE"
+bitOffset = 7
+bitWidth = 7
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_78E4_OPAQUE"
+description = "Complete phy_bb_reg_init clears bit 22."
+addressOffset = 0x78E4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_22_OPAQUE"
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_790C_OPAQUE"
+description = "Complete phy_bb_reg_init clears bit 11; complete phy_lltf_mask_en independently replaces bits thirteen and twelve; complete phy_chan_dump_cfg replaces bits 7:4 and bit 11 through separate fresh-read RMWs."
+addressOffset = 0x790C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_7_OPAQUE"
+description = "Complete phy_chan_dump_cfg replaces bits 7:4 with the low nibble of its first argument."
+bitOffset = 4
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_11_OPAQUE"
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "LLTF_MASK_INPUT_1"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "LLTF_MASK_INPUT_0"
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7980_OPAQUE"
+description = "Complete phy_bb_reg_init clears bit 25."
+addressOffset = 0x7980
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7A28_OPAQUE"
+description = "Complete phy_bb_reg_init clears bit 22."
+addressOffset = 0x7A28
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_22_OPAQUE"
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BASEBAND_TX_PA_CONTROL"
+description = "Complete phy_bb_reg_init sets bit 9; complete phy_tx_paon_set replaces bits 20:11; complete phy_chan_dump_cfg replaces bit 30 with the low bit of its second argument."
+addressOffset = 0x7C00
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_9_OPAQUE"
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_11_20_OPAQUE"
+bitOffset = 11
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Complete phy_chan_dump_cfg replaces bit 30 with the low bit of its second argument."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BASEBAND_WATCHDOG_STATUS"
+description = "Complete phy_bb_wdt_get_status returns one unrestricted full-word read."
+addressOffset = 0x7C08
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "STATUS"
+description = "Complete unrestricted watchdog status value returned by phy_bb_wdt_get_status."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BASEBAND_TX_PA_TIMING"
+description = "Complete phy_bb_reg_init clears bits 19:12; complete phy_tx_paon_set replaces bits 9:0 with 0x1e."
+addressOffset = 0x7C30
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_9_OPAQUE"
+bitOffset = 0
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_19_OPAQUE"
+bitOffset = 12
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BASEBAND_WATCHDOG_CONTROL"
+description = "Complete phy_bb_wdg_cfg publishes low configuration 0x00aa and sets bit 30."
+addressOffset = 0x7C3C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+bitOffset = 0
+bitWidth = 16
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BASEBAND_WATCHDOG_ENABLE"
+description = "Complete phy_bb_wdg_cfg sets bit 31. The standalone watchdog leaves replace bits 31 and 30 and set timeout-clear bit 29."
+addressOffset = 0x7C40
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "WATCHDOG_TIMEOUT_CLEAR"
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "WATCHDOG_INTERRUPT_ENABLE"
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "WATCHDOG_ENABLE"
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "NOISE_FLOOR_ENABLE_0"
+description = "Complete phy_noise_floor_auto_set sets bit zero."
+addressOffset = 0x7C44
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "NOISE_FLOOR_ENABLE_1"
+description = "Complete phy_noise_floor_auto_set sets bit zero."
+addressOffset = 0x7C50
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7C6C_OPAQUE"
+description = "Complete phy_tx_paon_set writes 0x0661a45f."
+addressOffset = 0x7C6C
+size = 32
+access = "write-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7CA8_OPAQUE"
+description = "Complete phy_bb_reg_init sets bit 20."
+addressOffset = 0x7CA8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_20_OPAQUE"
+bitOffset = 20
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7CD0_OPAQUE"
+description = "Complete phy_bb_reg_init sets both nibbles to 0xf; complete phy_btbb_wifi_bb_cfg2 preserves low bit two, sets the other low bits and sets the high nibble."
+addressOffset = 0x7CD0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "Complete phy_btbb_wifi_bb_cfg2 preserves this bit while setting the other low-nibble bits."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_19_OPAQUE"
+bitOffset = 16
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_POWER_DETECTOR",
+    "ROM_REV0_PHY_IQ_COEFFICIENTS",
+    "BLOB_LIBPHY_PHY_BASEBAND_CONFIG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL.BITS_0_1_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_START_STOP_TX_TONE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION_AUX"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_TXDC_CAL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+    "ROM_REV0_PHY_TXIQ_GET_MIS_PWR",
+    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_19_21_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.TXIQ_POLARITY_IMAGE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_TXIQ_GET_MIS_PWR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_28_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+    "ROM_REV0_PHY_TXIQ_GET_MIS_PWR",
+    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_28_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.RX_GAIN_DC_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_SET_RX_GAIN_CAL_DC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_SELECTOR_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_START_TX_TONE_STEP",
+    "ROM_REV0_PHY_TXIQ_GET_MIS_PWR",
+    "BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_IQ_COEFFICIENTS",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.RX_IQ_CORRECTION_MODE_LOW"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.RX_IQ_CORRECTION_MODE_HIGH"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.BIT_31_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_ADC_RATE",
+    "ROM_REV0_PHY_DAC_RATE",
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "BLOB_LIBPHY_PHY_FE_REG_UPDATE",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_POWER_DETECTOR",
+    "BLOB_LIBPHY_PHY_TXDC_PWDET",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_POWER_DETECTOR",
+    "BLOB_LIBPHY_PHY_TXDC_PWDET",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.SAR_READY"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_POWER_DETECTOR",
+    "BLOB_LIBPHY_PHY_TXDC_PWDET",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0810_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_POWER_DETECTOR",
+    "BLOB_LIBPHY_PHY_TXDC_PWDET",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_REFERENCE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_1"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_2"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_3"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1.RF_ON_BT_DELAY_CODE"
+naming = "descriptive"
+sources = ["BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1.PA_ON_BT_DELAY"
+naming = "descriptive"
+sources = ["BLOB_LIBBTBB_BLE_TX_CONFIG_CHECK"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_START_STOP_TX_TONE",
+    "ROM_REV0_PHY_DAC_SCALE_SET",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "BLOB_LIBPHY_PHY_FE_REG_UPDATE",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_IQ_COEFFICIENTS",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.TX_IQ_CORRECTION_MODE_LOW"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.TX_IQ_CORRECTION_MODE_HIGH"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "BLOB_LIBPHY_PHY_RXIQ_CAL_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.BIT_15_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C20_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FE_REG_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_BASEBAND_CONFIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_CONTROL.ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.HCCFR_VALUE.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL.FORCE_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL.FORCE_VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_ENABLE_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_ENABLE_CONTROL.GATE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_CFR_CONTROL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7808_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78DC_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78E4_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG",
+    "ROM_REV0_PHY_CHAN_DUMP_CFG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BITS_4_7_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7980_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7A28_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_CHAN_DUMP_CFG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_30_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CHAN_DUMP_CFG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_STATUS"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_STATUS.STATUS"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_CBW_FEATURE_WATCHDOG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_0"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_1"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7C6C_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CA8_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_REGISTER_INITIALIZATION"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_REGISTER_INITIALIZATION",
+    "ROM_REV0_PHY_BTBB_WIFI_BB_CFG2",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_AND_TONE_STOP_CONTROL.BIT_2_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_8_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_16_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION.BITS_24_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_GAIN_COMPENSATION_AUX.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_START"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.MEASUREMENT_READY"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.Q_COMPARATOR_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_DC_MEASUREMENT_CONTROL_STATUS.I_COMPARATOR_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.SELECTOR_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_8_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.NEGATED_STEP_OR_ATTENUATION"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.TONE_ENABLE_OR_ARM"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_0_CONTROL.BITS_22_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.SELECTOR_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_8_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.NEGATED_STEP_OR_ATTENUATION"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.TONE_ENABLE_OR_ARM"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_PATH_1_CONTROL.BITS_19_27_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.RX_GAIN_DC_CONTROL.BITS_5_6_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_SELECTOR_CONTROL.PATH_0_SELECTOR_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TONE_SELECTOR_CONTROL.PATH_1_SELECTOR_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.RX_IQ_GAIN_COEFFICIENT"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_CONTROL.RX_IQ_PHASE_COEFFICIENT"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL.BIT_8_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.FRONT_END_CLEAR_CONTROL.BIT_11_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ADC_RATE_AND_FRONT_END_CONTROL.BIT_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.SAR_TRIGGER"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_2_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_3_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BITS_4_11_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BIT_16_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_CONTROL.BITS_20_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BIT_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_CONTROL_STATUS.BITS_12_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_TABLE_1.BITS_8_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_REFERENCE.REFERENCE_CODE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT.SAR_SAMPLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_1.SAR_SAMPLE_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_2.SAR_SAMPLE_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.POWER_DETECTOR_SAR_RESULT_3.SAR_SAMPLE_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_0.BITS_8_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_PA_CONTROL_1.BITS_16_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_8_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.DAC_SCALE_CONTROL.BITS_16_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BIT_25_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C08_OPAQUE.BIT_26_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.TX_IQ_GAIN_COEFFICIENT"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.IQ_CORRECTION_AUX.TX_IQ_PHASE_COEFFICIENT"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_0C20_OPAQUE.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL.BITS_0_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.I2C_TX_RATE_CONTROL.BITS_18_25_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BIT_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_CONTROL.BIT_28_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7400_OPAQUE.BITS_13_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE.BITS_8_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7428_OPAQUE.BIT_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE.BITS_6_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_743C_OPAQUE.BIT_8_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_2"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_0"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_OUTPUT_FILTER_CONTROL.FILTER_INPUT_1"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0.TRACK_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0.BITS_1_4_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_0.BITS_5_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BIT_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_7_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_15_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_1.BITS_23_30_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_8_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_16_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_2.BITS_24_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3.BITS_0_7_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.TX_POWER_TRACK_CONTROL_3.BITS_8_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL.FORCE_MODE_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL.FORCE_MODE_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.ICCFR_FORCE_CONTROL.FORCE_TRIGGER"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7808_OPAQUE.BITS_7_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE.HE_RU26_GOOD_RESPONSE_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7890_OPAQUE.HE_RU26_GOOD_RESPONSE_DISABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78DC_OPAQUE.BITS_7_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_78E4_OPAQUE.BIT_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.BIT_11_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.LLTF_MASK_INPUT_1"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_790C_OPAQUE.LLTF_MASK_INPUT_0"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7980_OPAQUE.BIT_25_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7A28_OPAQUE.BIT_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BIT_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_CONTROL.BITS_11_20_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING.BITS_0_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_TX_PA_TIMING.BITS_12_19_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BITS_0_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_CONTROL.BIT_30_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_TIMEOUT_CLEAR"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_INTERRUPT_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.BASEBAND_WATCHDOG_ENABLE.WATCHDOG_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_0.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.NOISE_FLOOR_ENABLE_1.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CA8_OPAQUE.BIT_20_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_2_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BIT_3_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_BASEBAND_CONFIG_ORACLE.WORD_7CD0_OPAQUE.BITS_16_19_OPAQUE"
+naming = "opaque"

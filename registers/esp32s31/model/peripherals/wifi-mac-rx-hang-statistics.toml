@@ -1,0 +1,99 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_HANG_STATISTICS"
+description = "Complete dbg_read_rx_count decodes two eight-bit hang counters and two full-width combined hang/panic counters. All four remained zero during the connected open HE matrix baseline."
+baseAddress = 0x20104C64
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "HANG"
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "TX_COUNT"
+bitOffset = 16
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "RX_COUNT"
+bitOffset = 24
+bitWidth = 8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_TX_HANG"
+description = "Complete dbg_read_rx_count names the combined counter RX_TX_HANG; complete pp_debug.o::dbg_lmac_hw_statis_dump independently reads the same full word under the shorter txhung label."
+addressOffset = 0x1B4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "COUNT"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_TX_PANIC"
+description = "Complete dbg_read_rx_count names the combined counter RX_TX_PANIC; complete pp_debug.o::dbg_lmac_hw_statis_dump independently reads the same full word under the shorter panic label."
+addressOffset = 0x1B8
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "COUNT"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS"
+sources = [
+    "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS",
+    "HIL_OPEN_RX_STATISTICS_BASELINE_2026_07_29",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.BITS_0_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.TX_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.HANG.RX_COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_HANG"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_HANG.COUNT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_PANIC"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_HANG_STATISTICS.RX_TX_PANIC.COUNT"
+naming = "descriptive"

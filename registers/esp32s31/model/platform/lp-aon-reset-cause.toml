@@ -1,0 +1,58 @@
+schema = 2
+
+[[peripherals]]
+name = "LP_AON_CLKRST"
+description = "Low-power always-on clock/reset registers: the reset cause of HP core 0, which the stand reads after a power cycle."
+baseAddress = 0x20701000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HPCORE0_RESET_CAUSE"
+description = "Why HP core 0 last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned."
+addressOffset = 0x30
+size = 32
+access = "read-only"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE0_RESET_FLAG"
+description = "Set when HP core 0 left reset."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HPCORE0_RESET_CAUSE"
+description = "The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets."
+bitOffset = 1
+bitWidth = 6
+
+[[review]]
+entity = "LP_AON_CLKRST"
+sources = ["ESP_IDF_4D59230D_S31_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_S31_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE.HPCORE0_RESET_FLAG"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_S31_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_S31_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

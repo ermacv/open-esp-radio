@@ -1,0 +1,59 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_RX_DCO_ORACLE"
+description = """
+RX-DCO calibration control word recovered from complete pinned S31
+        blob and rev0 ROM calibration bodies."""
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Complete phy_xtal_duty_cal and RX-DCO calibration bodies save, clear and restore bits 23:22 around measurement."
+addressOffset = 0x434
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_23_OPAQUE"
+description = "Two-bit field preserved around the complete bounded RX-DCO measurement graph."
+bitOffset = 22
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[review]]
+entity = "PHY_RX_DCO_ORACLE"
+sources = [
+    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
+    "ROM_REV0_PHY_RX_DCO_CAL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_RX_DCO_ORACLE.CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
+    "ROM_REV0_PHY_RX_DCO_CAL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_RX_DCO_ORACLE.CONTROL.BITS_22_23_OPAQUE"
+naming = "opaque"
+sources = [
+    "BLOB_LIBPHY_PHY_XTAL_DUTY_CAL",
+    "ROM_REV0_PHY_RX_DCO_CAL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"

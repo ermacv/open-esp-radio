@@ -1,0 +1,65 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_TSF_STATUS"
+description = "Station TSF activity status recovered from the complete no-call hal_is_sta_tsf_active leaf. The instruction body proves the address and bit geometry but not the hardware transition rules."
+baseAddress = 0x2010D80C
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STATUS"
+description = "Complete hal_is_sta_tsf_active returns bit zero."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "STATION_ACTIVE"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WAKEUP_SIGNAL_CLEAR"
+description = "Complete libpp[pm.o]::pm_clear_wakeup_signal sets bit zero before invoking two externally supplied synchronization callbacks; hardware clear behavior remains unknown."
+addressOffset = 0x4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR"
+bitOffset = 0
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS"
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS.STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_TSF_RUNTIME"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS.WAKEUP_SIGNAL_CLEAR"
+naming = "descriptive"
+sources = ["ROM_REV0_WIFI_RUNTIME_MMIO_GAPS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS.STATUS.STATION_ACTIVE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_TSF_STATUS.WAKEUP_SIGNAL_CLEAR.CLEAR"
+naming = "descriptive"

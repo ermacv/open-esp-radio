@@ -1,0 +1,142 @@
+# Reviewed register evidence: platform.
+schema = 1
+
+[[sources]]
+id = "S31_MODEM_SYSCON_STRUCT"
+description = "esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, c/include/esp32s31/modem/modem_syscon_struct.h, sha256 1d37b7f4748e9b665ed1bf4f25dc85cd20d25fa5ab2726db82766dd0b506f69e"
+
+[[sources]]
+id = "S31_MODEM_LPCON_STRUCT"
+description = "esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, c/include/esp32s31/modem/modem_lpcon_struct.h, sha256 af916837fb4c4ed8092fba78a844cc656299acfd63764a420c4c4fdac3472453"
+
+[[sources]]
+id = "ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP"
+description = "Official esp-rs/esp-hal commit 63e97be553f435f29171f7ae5f37a41ad737a75a, https://raw.githubusercontent.com/esp-rs/esp-hal/63e97be553f435f29171f7ae5f37a41ad737a75a/esp-hal/src/rtc_cntl/rtc/esp32s31.rs, sha256 2958839efd1f008574ca93c45e947646d2cc2057ba62c23f24e786b0dea426d3. modem_clock_domain_power_state_icg_map_init defines ICG_NOGATING_ACTIVE_MODEM as bits one and two and ORs that value into all four MODEM_LPCON shared state-map nibbles."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/esp_hw_support/modem/modem_clock.c sha256 f6cd061416a1356a7ca3cadb84ad9d8c137971cd9c167a74507ecd57d80f7edd, components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c sha256 c89ae6110cb4ca4e1208db3ef7263c729c84c84b2b5edaed3e9a3ce7c3c1e4df, components/hal/esp32s31/modem_clock_hal.c sha256 53c1f8c25b86cbb8eff5d06633615dde605763310fa97bcd3261e9bd84cce56e, and components/hal/esp32s31/include/hal/modem_syscon_ll.h sha256 565e2246dfd4af00c073b8668ee0b81b2eef9992b24030d814055159fec30b0c. Together they prove the refcounted Wi-Fi, Bluetooth and IEEE 802.15.4 dependency sets, low-bit-first transition order, MODEM_SYSCON clock-map updates, individual clock gates and reset pulses."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/hal/esp32s31/include/hal/modem_lpcon_ll.h sha256 5e6ce588f2e029aa3b895b57b0cfdad25efeacfc3cea835cdc320bcd06d5608f and components/hal/esp32s31/modem_clock_hal.c sha256 53c1f8c25b86cbb8eff5d06633615dde605763310fa97bcd3261e9bd84cce56e. Each Bluetooth RTC-timer low-power clock accessor writes one LP_TIMER_CONF field (the four source selectors and the divider) or the CLK_CONF timer gate; modem_clock_hal_deselect_all_ble_rtc_timer_lpclk_source clears the slow-oscillator, fast-oscillator, 32-kHz crystal and XTAL selectors in that order."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK"
+description = "Pinned vendor-firmware ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/esp_system/port/soc/esp32s31/clk.c sha256 1d2d27c434fd8e112435332f46e8f041445804e7623f312c8ab41e4e5715f1a8, components/esp_hw_support/modem/modem_clock.c sha256 e698cc6596430724b2fec5b8e631706f6ae112f12e0ae22119ff9e79b21c69d3, components/hal/esp32s31/modem_clock_hal.c sha256 6348b8fb6eee516bbcaf73e3706d08ec2b87091ecca97245f2409d22da5bd75e, components/hal/esp32s31/include/hal/modem_lpcon_ll.h sha256 5e6ce588f2e029aa3b895b57b0cfdad25efeacfc3cea835cdc320bcd06d5608f and components/soc/esp32s31/include/modem/modem_lpcon_reg.h sha256 8b70d89d270234d39bc6e0ae439a7e63a86cecceff10c9d4ebeccefb81e62752. When Wi-Fi is enabled, esp_perip_clk_init first selects the Wi-Fi power-domain low-power clock: XTAL32K when the RTC slow clock runs from the 32 kHz crystal, otherwise RC_SLOW, with divider zero. modem_clock_hal_deselect_all_wifi_lpclk_source clears WIFI_LP_CLK_CONF bits 0, 1, 3 and 2 in that order, each as its own field write; the select sets the one source bit (XTAL32K also writes CLK_MODEM_32K_SEL zero), the divider is written to bits 15:4, and the refcounted modem_clock_hal_enable_wifipwr_clock sets CLK_CONF bit 0 on its first enable. No caller deselects the Wi-Fi source."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_RTC_SLOW_CLOCK_SOURCE"
+description = "Pinned vendor-firmware ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h sha256 606a1206ace38f81a00a498255841ae7547b4811f779913650935e84ae7996ac, components/soc/esp32s31/register/soc/lp_clkrst_reg.h sha256 0f545692ddb5bc4fd5fee64752871425cd0012090ee203701978bb654874f211 and lp_clkrst_struct.h sha256 c20b1f7074c95a46e9c12058f012b42ab334e8f5accfdc1b1fb80387a15b31d6. clk_ll_rtc_slow_get_src reads LP_AONCLKRST_ROOT_CLK_CONF (offset 0) SLOW_CLK_SEL bits 25:23: zero is RC_SLOW, one XTAL32K, any other value invalid."
+
+[[sources]]
+id = "ESP_RADIO_7F914782_S31_WIFI_CLOCKS"
+description = "Pinned public esp-radio commit 7f914782f5c689a74f37df83b89a0827d3800323, esp-radio/src/radio_clocks/clocks_ll/esp32s31.rs sha256 eece62426050ac22647bb31d75cf83c7acd41f551cacc31bcb2377e8dc4df4eb. The S31 Wi-Fi path preserves one MODEM_SYSCON RMW for the complete CLK_CONF1 low eleven-bit clock set, pulses the Wi-Fi MAC reset independently, and pulses the Wi-Fi baseband and MAC reset pair together."
+
+[[sources]]
+id = "S31_ESP_PACS_SVD"
+description = "Reviewed ermacv/esp-pacs source snapshot 5b8b56036abd5f4646505b15988cc9da51cec826, retained independently of the build dependency revision. esp32s31/svd/patches/_modem_syscon.yml sha256 1f19377269adfab69596d7762499a28984b975fdb9f95f791de2ceff6f82f2e0 proves the selected MODEM_SYSCON register reset values, including CLK_CONF 0x00200002; the same reviewed PAC provides the exact LP_AON_CLKRST, LP_PERICLKRST and LP_TSENS register/field geometry."
+
+[[sources]]
+id = "ROM_REV0_PHY_TSENS"
+description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87; complete phy_set_tsens_power_ at 0x2f825dc8 size 0x1c, phy_tsens_code_read at 0x2f825ee0 size 0x0c and phy_tsens_temp_read_local at 0x2f825f1e size 0x5e"
+
+[[sources]]
+id = "BLOB_LIBPHY_PHY_TSENS_READ_INIT"
+description = "Pinned ESP32-S31 libphy.a member phy_tsens.o, complete phy_tsens_read_init body size 0x36; exact five preserving MMIO updates are independently projected by the source-owned HAL test"
+
+[[sources]]
+id = "S31_REG_BASE"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/soc/esp32s31/register/soc/reg_base.h, sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d. It names IEEE802154_REG_BASE as 0x20103000 and the surrounding HP-system, LP-system and LP-peripheral blocks. The same bytes were previously reviewed from esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80."
+
+[[sources]]
+id = "ESP_IDF_S31_INTERRUPT_SOURCES"
+description = "Official ESP-IDF commit aeab6dcfbeb44aba4b1f8ed102e3086172833153, components/soc/esp32s31/include/soc/interrupts.h, sha256 1a4f155b87090376b1a40ac62e19de344c7f10dc53d9b4451b66d545e9e4717d. The hardware source table assigns MODEM_BT_MAC to 124 and MODEM_BT_MAC_INT1 to 133. The identical file is also present at the public-source review commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe."
+
+[[sources]]
+id = "ESP_IDF_BTDM_OSAL_INTERRUPT_POLICY"
+description = "Official ESP-IDF commit aeab6dcfbeb44aba4b1f8ed102e3086172833153, components/bt/porting_btdm/controller/btdm_common/src/btdm_osal_freertos.c, sha256 436d009f67fbe7c83fa367a6b80dbf87316727605e751febc03c5118a669b5c8. The complete public wrapper always requests interrupt level three, additionally requests IRAM only when the controller caller passes flags zero, and allocates on CONFIG_BT_CTRL_PINNED_TO_CORE through blocking IPC on multicore builds. FreeRTOS and IPC are replaceable platform mechanisms; source, priority, residency and same-core policy are the recovered contract."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/soc/esp32s31/register/soc/ieee802154_struct.h, sha256 da13c2bc78cd6ef35a4e54ddddf11ce48fda967746193f1a0ad03578a5881752. The public volatile esp_ieee802154_t declaration fixes register and field geometry through offset 0x1a0, but its TODO ZB-93 says the file still awaits generation from IEEE802154.csv; it therefore supports a selective partial model, not a claim that every word or access policy is complete."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/soc/esp32s31/register/soc/ieee802154_reg.h, sha256 fd3f944ac97634605083031f96c0f942af26a81a9e9a3123281c59e5719f9d9c. The public register macros independently restate the selected offsets and masks, but carry the same TODO ZB-93, omit several struct-only words and disagree with struct/common_ll naming for ED_CONFIG bits 13 and 12:11; they are corroboration for selected geometry only."
+
+[[sources]]
+id = "esp-idf-7b9cc1ac-ieee802154-common-ll"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/esp_hal_ieee802154/include/hal/ieee802154_common_ll.h, sha256 ba4ce294b402df311f25c4d0ce9cb33449e3eb41993aff94a25df5a66142d471. Public inline accessors prove the selected software read/write directions, command/event values and field use; they do not establish reset values or semantics for untouched fields."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_IEEE802154_RECENT_RSSI"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/ieee802154/driver/esp_ieee802154_dev.c sha256 9aaccfa2832cb89bfdfd98086a984269e621400a272b02926c4e088d16222830. ieee802154_get_recent_rssi, the body of the public esp_ieee802154_get_recent_rssi, returns (int8_t)(bt_bb_get_cur_rx_info() & 0xff) with no lock and no radio-state condition. With the complete bt_bb_get_cur_rx_info load of BT_V3_2_BASEBAND.CURRENT_RX_INFO (BLOB_LIBBTBB_BT_BB_V2_ACCESSORS), this proves the low byte as the signed RSSI the IEEE 802.15.4 driver reports. It does not prove the upper bits, read side effects or which protocol's reception the byte reflects while Bluetooth shares the baseband."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_TIMERS"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/ieee802154/driver/esp_ieee802154_dev.c sha256 9aaccfa2832cb89bfdfd98086a984269e621400a272b02926c4e088d16222830, components/ieee802154/driver/esp_ieee802154_timer.c sha256 66a2b68bb718d8fa878cbf28488af810ecb902288fde26dc7a0e5b32dcbd1326, and components/ieee802154/private_include/esp_ieee802154_timer.h sha256 e5ab8062c0c4b9195bd597a79a6aabb692fdb686a9599a034db36a46d8f89bd6. After TX_DONE of an ACK-requesting frame, the driver enables TIMER0 overflow and starts a 200000-microsecond watchdog from two truncated esp_timer_get_time samples; the timer helper clamps wrapping-expired deadlines to zero with the header's exact sign-bit test, writes the remaining threshold, and starts TIMER0. ACK completion stops TIMER0 and removes its event. Generic event teardown stops TIMER0 and TIMER1. This is behavioral evidence over already reviewed register leaves, not a new register geometry claim."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_SOC_ETM"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/soc/esp32s31/register/soc/soc_etm_reg.h sha256 5b2b2433cd45a21841ec9dc009e39f82f78a6ba934173b2d4216dc60f7c6a6d2 and components/soc/esp32s31/register/soc/soc_etm_struct.h sha256 df4a549b594de89af0afbb9f4ac1ec5d4d8fde34fca9207b9bff34d1e80e69d8. The ESP32-S31 SoC ETM places a channel-enable status word (R/WTC/WTS) at +0x0, write-trigger set and clear words (WT; writing 1 enables or clears a channel, writing 0 has no effect) at +0x4 and +0x8, and per-channel event/task words from +0xc at an eight-byte stride. The modem ETM of ieee802154_reg.h has the identical layout, so this source corroborates the write-trigger semantics of the modem ETM set and clear words by layout identity only; the semantics is a hypothesis not yet verified on the modem ETM hardware."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe: components/ieee802154/driver/esp_ieee802154_util.c sha256 e1a012d5f359e2445128977e82a304ba94c100c2994729e062e26586596df38a and components/ieee802154/driver/esp_ieee802154_dev.c sha256 9aaccfa2832cb89bfdfd98086a984269e621400a272b02926c4e088d16222830. ieee802154_etm_channel_clear reads the modem ETM channel-enable word and, only when the channel bit is set, writes the clear word back with that bit added; ieee802154_etm_set_event_task clears the channel, writes the complete event and task words at the channel stride and writes the set word back with the channel bit added. The driver clears channels zero and one at every operation stop, programs channel zero from TIMER0 overflow to TX_START or ED_TRIG_TX for timed transmit and channel one from TIMER1 overflow to RX_START for timed receive. Register offsets, the eight-byte channel stride and the event/task identifiers come from ESP_IDF_7B9CC1AC_S31_IEEE802154_REG."
+
+[[sources]]
+id = "ESP_IDF_7B9CC1AC_S31_IEEE802154_LL"
+description = "Official ESP-IDF commit 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe, https://raw.githubusercontent.com/espressif/esp-idf/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/esp_hal_ieee802154/esp32s31/include/hal/ieee802154_ll.h, sha256 a66a3562ff6ef62ffa6dda90bc08e97f0d4509bcf3817cdc57795fd97daeaa30. The ESP32-S31 extension independently reads the two high-half diagnostic counters declared by the public struct."
+
+[[sources]]
+id = "ESP_RADIO_7F914782_S31_IEEE802154_INIT"
+description = "Pinned public esp-radio commit 7f914782f5c689a74f37df83b89a0827d3800323, https://github.com/ermacv/esp-hal/blob/7f914782f5c689a74f37df83b89a0827d3800323/esp-radio/src/ieee802154/raw.rs, sha256 36785d992099512dce4cd23f95b8de0355d0cc4849157712ce57ec846f8d709a. The public ESP32-S31 enable path calls bt_bb_v2_init_cmplx(1) before ieee802154_mac_init; that initializer then calls bt_bb_set_zb_tx_on_delay(50) immediately before set_rx_on_delay(50). This source proves the protocol-specific values and order, while the closed setter evidence separately proves the shared-register encoding."
+
+[[sources]]
+id = "ESP_RADIO_7F914782_S31_IEEE802154_HAL"
+description = "Pinned public esp-radio commit 7f914782f5c689a74f37df83b89a0827d3800323, https://github.com/ermacv/esp-hal/blob/7f914782f5c689a74f37df83b89a0827d3800323/esp-radio/src/ieee802154/hal.rs, sha256 1a7c806723c050f4de3e150fb0255ca97eed0080f3eb43ba4252672e500b8b1b. The complete public set_rx_on_delay accessor performs one preserving field update of IEEE802154.RXON_DELAY.RXON_DELAY from its u16 argument."
+
+[[sources]]
+id = "ESP_PACS_AAA5C2EA_S31_IEEE802154_RXON_DELAY"
+description = "Official esp-rs/esp-pacs commit aaa5c2ea8a82f0aa202422d69682e3179d7b2365, https://github.com/esp-rs/esp-pacs/blob/aaa5c2ea8a82f0aa202422d69682e3179d7b2365/esp32s31/src/ieee802154.rs sha256 e102b36158d5d1000108d04bf51d86be3fbeec3f8abd25c56f41f2f559db9825 and https://github.com/esp-rs/esp-pacs/blob/aaa5c2ea8a82f0aa202422d69682e3179d7b2365/esp32s31/src/ieee802154/rxon_delay.rs sha256 b36584fd316421b0e640f44264329727a72994f51bc817b9bb8c7651a59dfbd9. The generated public PAC independently places RXON_DELAY at offset 0x110 and exposes its preserving read-write field as bits 0:10. No reset-value claim is imported."
+
+[[sources]]
+id = "ESP_PACS_AAA5C2EA_S31_INTERRUPT_MATRIX"
+description = "Official esp-rs/esp-pacs commit aaa5c2ea8a82f0aa202422d69682e3179d7b2365. esp32s31/src/lib.rs publishes INTERRUPT_CORE0 at 0x20585000 and INTERRUPT_CORE1 at 0x20585800; the generated core register blocks place source-indexed route words at four-byte stride, and source 132 therefore resolves to offset 0x210 on each core. esp32s31/src/interrupt_core0.rs sha256 d949dd47ae1c59b3029bc8d6e2e29cc66e0f0d30165bee771e311cd6dc1f3243, interrupt_core0/core_0_intr_map.rs sha256 9bcb132b7ce49d93b98126d253dec00f03adabf03e0530b7dfaf416aeda48d89, interrupt_core1.rs sha256 9ccdbaef1abe65fff733cef87a6e7838e5f9f263aff89c9d9fe5d1e885d17ed0, and interrupt_core1/core_1_intr_map.rs sha256 2dd5ecc1033f088baaf7dee22b7f715e40eaa911b2b90b0d937c43a0c2af51ba. Both route words reset to zero and expose MAP at bits 0:5 and PASS_LEVEL at bits 8:9."
+
+[[sources]]
+id = "ESP_IDF_25FE69F_S31_PHY_RETENTION"
+description = "Official ESP-IDF commit 25fe69f946311abdaf9ad56591f25fedbc20ac98. components/esp_phy/esp32s31/phy_init_data.c sha256 03176e75102562df905e7ec342860ddd120443c2bff043f06d66faef4285b217 defines the FECOEX, FEDATA, FECTRL, FEDATA_WIFI, AGC, NRX, BB and BRX retention bases and register counts. components/esp_phy/esp32s31/include/btbb_retention_reg.h sha256 8acdbdff2393e3d4dc15f1a6aedd240afeb95010e50446c9d596a878fc8af7f3 defines the BTAGC/BB_PART_1 base and count."
+
+[[sources]]
+id = "S31_PMU_HEADERS"
+description = "ESP-IDF master commit 102122904ade11fd1ae373848f34ffd7dfb18aeb, components/soc/esp32s31/register/soc/pmu_reg.h; local esp-wifi-sys commit 2585f278d381acc67c529fa730b91739b5461359, pmu_reg.h sha256 b1a04a306b9d7ee908e2f7b083d42b7a634f8687b6ee034cfe6f54f385e0d816 and pmu_struct.h sha256 5fc84c7569f9f24e193b0205728a647768c7c289b39d5ce679c50db7d8352e28"
+
+[[sources]]
+id = "ESP_IDF_ESP32S31_MODEM_REG_BASE"
+description = "Official ESP-IDF master commit 873d612fdeebf5dadc068670d320dbf4bcd742bc, components/soc/esp32s31/include/modem/reg_base.h, sha256 86a9909938d4db06b3d11c4c386a2c3dbdcd9657b6d194a216202b796ada13b9. It defines MODEM_BASE 0x20100000, MODEM_PWR_BASE 0x2010d000 and the FE, WIFI_MAC, WIFI_BB, WIFI_BB_BRX, MODEM_TIMER, MODEM_ETM, MODEM_DATADUMP, MODEM_WIDGETS, MODEM_SYSCON, MODEM_LPCON, I2C_ANA_MST and I2C_ANA_MST_MEM sub-block bases."
+
+[[sources]]
+id = "IEEE80211_HT_SIG"
+description = "IEEE Std 802.11 HT-SIG field layout: HT-SIG1 bit 7 is CBW, with zero selecting 20 MHz and one selecting 40 MHz. This standard semantic is joined only to the instruction-exact descriptor-word1-bit-15 mapping proved by BLOB_LIBPP_HAL_MAC_TX."
+
+[[sources]]
+id = "IEEE80211_HE_PHY_CAP_DCM"
+description = "IEEE 802.11 HE PHY Capabilities byte three field semantics as exposed by Linux include/linux/ieee80211-he.h: bits 1:0 encode DCM maximum TX constellation and bits 4:3 encode DCM maximum RX constellation, with encodings NotSupported, BPSK, QPSK and 16-QAM."
+
+[[sources]]
+id = "ESP_WIFI_SYS_S31_HE_SU_SIG"
+description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_private/esp_wifi_he_types_private.h complete esp_wifi_su_siga1_t and packed esp_wifi_su_siga2_t layouts. These standard field names are joined only to bit positions independently exercised by the complete S31 blob formatter."
+
+[[sources]]
+id = "ROM_REV0_PHY_TSENS_DAC"
+description = "ESP32-S31 rev0 ROM ELF sha256 d01bde81d9b3806e37ef1d9ac3b58af4f5b3d91eeef4f44d20e79d6a9f227542: complete phy_tsens_temp_read_local at 0x2f825f1e size 0x5e reads PHY-I2C bank 0x69 register 6 then masks bits 3:0; complete phy_tsens_dac_cal at 0x2f825e5e size 0x6e writes the same low nibble through the masked-write ABI. esp-phy-lib b88e4b76e090ae59c51cb00b916d38def895b396, S31 libphy.a sha256 d4218e359b9716c616cbf116172f44d9195d4f2e020fad73279067e92d08e580: phy_get_romfunc_addr installs phy_get_tsens_value in callback slot 32; its complete weak body tail-calls phy_tsens_temp_read_local."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_INTERRUPT_ZB_MAC_MAP"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/interrupt_core0_reg.h sha256 60785a48a2b2be35670a789bf2e0a82a45f4bd85f110fc18c197de14211f311e (lines 2786-2805), interrupt_core0_struct.h sha256 fff9ca086bd0f10f6f931cdf104c27fe80a8edb58f5898de55b966eaf8318f75 (interrupt_core0_modem_zb_mac_intr_map_reg_t) and interrupt_core1_reg.h sha256 e7966b5cda22b0df047182c6f7758c385b95edb991cdc40d0794127fdfdaf335. The MODEM_ZB_MAC_INTR map word at +0x210 of each core holds modem_zb_mac_intr_map in bits 5:0 and modem_zb_mac_intr_pass_level in bits 9:8; bits 7:6 (reserved_6) and 31:10 (reserved_10) are declared reserved, without a name or meaning."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_LP_CLKRST"
+description = "Official ESP-IDF commit 4d59230ddff16327812782151ef0afef202dc6d7: components/soc/esp32s31/register/soc/lp_clkrst_reg.h sha256 0f545692ddb5bc4fd5fee64752871425cd0012090ee203701978bb654874f211 defines LP_AONCLKRST_HPCORE0_RESET_CAUSE_REG at DR_REG_LP_AONCLKRST_BASE + 0x30, read-only HPCORE0_RESET_FLAG at bit 0 and HPCORE0_RESET_CAUSE at bits 6:1 (6'h1 POR reset); components/soc/esp32s31/register/soc/reg_base.h sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d sets DR_REG_LP_AONCLKRST_BASE to 0x20701000."

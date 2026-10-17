@@ -1,0 +1,20 @@
+[package]
+name = "oer-bluetooth-controller"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure Bluetooth LE Controller pieces: event geometry, authenticated PDU receive and the diagnostic MIC-fault command"
+
+[dependencies]
+bt-hci = "=0.10.1"
+oer-bluetooth-ll = { path = "../ll" }
+oer-bluetooth-radio = { path = "../radio" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "portable"

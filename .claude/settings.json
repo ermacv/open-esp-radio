@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(**/target/*/deps/**)",
+      "Read(**/target/*/build/**)",
+      "Read(**/target/*/incremental/**)",
+      "Read(**/target/*/.fingerprint/**)",
+      "Read(**/target/*/*/deps/**)",
+      "Read(**/target/*/*/build/**)",
+      "Read(**/target/*/*/incremental/**)",
+      "Read(**/target/*/*/.fingerprint/**)",
+      "Read(**/target/doc/**)",
+      "Read(**/target/*/doc/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre_tool_use.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

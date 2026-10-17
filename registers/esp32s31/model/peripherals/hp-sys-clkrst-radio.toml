@@ -1,0 +1,145 @@
+schema = 2
+
+[[peripherals]]
+name = "HP_SYS_CLKRST_RADIO"
+description = "Route-owned high-power system clock/reset words shared by the reviewed Wi-Fi, Bluetooth and IEEE 802.15.4 lifecycles. Unrelated HP_SYS_CLKRST words remain platform-owned."
+baseAddress = 0x20587000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "MODEM_CTRL0"
+description = "Modem control/register-bus clock gate."
+addressOffset = 0x40
+size = 32
+access = "read-write"
+resetValue = 0x00000001
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_CLK_EN"
+description = "Modem control/register-bus clock enable."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "MODEM_CONF"
+description = "Modem APB, reset and source-clock configuration."
+addressOffset = 0x1E0
+size = 32
+access = "read-write"
+resetValue = 0x00000025
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_APB_CLK_EN"
+description = "Modem APB clock enable."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_RST_EN"
+description = "Modem subsystem reset assertion."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_CLK_EN"
+description = "Modem source-clock enable."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_CLK_SOURCE_SEL"
+description = "Modem source-clock selector."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_PLL_CLK_EN"
+description = "Modem PLL clock enable."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_XTAL_CLK_EN"
+description = "Modem crystal clock enable."
+bitOffset = 5
+bitWidth = 1
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CTRL0"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CTRL0.MODEM_CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_APB_CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_RST_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_CLK_SOURCE_SEL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_PLL_CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "HP_SYS_CLKRST_RADIO.MODEM_CONF.MODEM_XTAL_CLK_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

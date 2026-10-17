@@ -1,0 +1,35 @@
+schema = 1
+model = "../model/device.toml"
+reviewed = ["../model/reviewed.toml"]
+memory = "../model/memory.toml"
+ownership = "../policy/ownership.toml"
+api = "../policy/api.toml"
+lints = "../policy/lints.toml"
+evidence = [
+    "../evidence/policy.toml",
+    "../evidence/platform.toml",
+    "../evidence/vendor-rom.toml",
+    "../evidence/vendor-radio-libraries.toml",
+    "../evidence/vendor-libpp.toml",
+    "../evidence/vendor-net80211.toml",
+    "../evidence/hil-open.toml",
+    "../evidence/hil-vendor.toml",
+    "../evidence/promoted-driver-provenance.toml",
+]
+
+[applicability]
+ecosystems = ["esp-idf"]
+chip = "esp32s31"
+chip-revisions = ["rev0"]
+artifact-lineages = ["esp32s31-radio"]
+
+[outputs]
+svd = "../published/radio.svd"
+bindings = "../published/radio.bindings.toml"
+
+[outputs.pac]
+raw = "../../../crates/esp32s31/pac-raw/src/lib.rs"
+api = "../../../crates/esp32s31/pac/src/generated.rs"
+crate-name = "oer_esp32s31_pac_raw"
+target = "none"
+edition = "2024"

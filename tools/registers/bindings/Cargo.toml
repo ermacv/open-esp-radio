@@ -1,0 +1,23 @@
+[package]
+name = "oer-register-bindings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The binding index format of a register publication: addresses, PAC paths and fields"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "tool"
+platform = "host"
+host-layer = "foundation"
+host-app = "formats"
+host-boundary = "format"

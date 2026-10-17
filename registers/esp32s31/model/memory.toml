@@ -1,0 +1,455 @@
+schema = 1
+default-address-space = "cpu"
+
+[[address-spaces]]
+id = "cpu"
+address-width = 32
+endianness = "little"
+
+[[regions]]
+name = "modem-radio-core-low"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20100000
+end-exclusive = 0x20109C00
+permissions = "rw"
+
+[[regions]]
+name = "modem-syscon-radio"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20109C00
+end-exclusive = 0x20109C1C
+permissions = "rw"
+
+[[regions]]
+name = "modem-syscon-platform-remainder"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20109C1C
+end-exclusive = 0x2010A000
+permissions = "rw"
+
+[[regions]]
+name = "modem-radio-core-mid"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010A000
+end-exclusive = 0x2010F000
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F000
+end-exclusive = 0x2010F004
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-lp-timer-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F004
+end-exclusive = 0x2010F008
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-coex-lp-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F008
+end-exclusive = 0x2010F00C
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-wifi-lp-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F00C
+end-exclusive = 0x2010F010
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-between-wifi-lp-clock-and-modem-32k"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F010
+end-exclusive = 0x2010F014
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-modem-32k-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F014
+end-exclusive = 0x2010F018
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-between-modem-32k-clock-and-map"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F018
+end-exclusive = 0x2010F020
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-shared-clock-map"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F020
+end-exclusive = 0x2010F024
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-before-phy-tick"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F024
+end-exclusive = 0x2010F028
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-phy-tick"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F028
+end-exclusive = 0x2010F02C
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-after-phy-tick"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F02C
+end-exclusive = 0x2010F400
+permissions = "rw"
+
+[[regions]]
+name = "coex-hw-timer"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F400
+end-exclusive = 0x2010F460
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-high"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F460
+end-exclusive = 0x2010F49C
+permissions = "rw"
+
+[[regions]]
+name = "coex-external"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F49C
+end-exclusive = 0x2010F4DC
+permissions = "rw"
+
+[[regions]]
+name = "modem-lpcon-platform-after-coex-external"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F4DC
+end-exclusive = 0x2010F800
+permissions = "rw"
+
+[[regions]]
+name = "i2c-ana-mst"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010F800
+end-exclusive = 0x2010FC00
+permissions = "rw"
+
+[[regions]]
+name = "modem-radio-core-high"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2010FC00
+end-exclusive = 0x20200000
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-before-ieee802154-core0-route"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20500000
+end-exclusive = 0x20585210
+permissions = "rw"
+
+[[regions]]
+name = "ieee802154-core0-route"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585210
+end-exclusive = 0x20585214
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-ieee802154-routes"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585214
+end-exclusive = 0x20585A10
+permissions = "rw"
+
+[[regions]]
+name = "ieee802154-core1-route"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585A10
+end-exclusive = 0x20585A14
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-ieee802154-core1-route-and-radio-modem-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20585A14
+end-exclusive = 0x20587040
+permissions = "rw"
+
+[[regions]]
+name = "hp-sys-clkrst-radio-modem-control"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587040
+end-exclusive = 0x20587044
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-between-radio-modem-control-and-modem-configuration"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20587044
+end-exclusive = 0x205871E0
+permissions = "rw"
+
+[[regions]]
+name = "hp-sys-clkrst-radio-modem-configuration"
+address-space = "cpu"
+kind = "mmio"
+start = 0x205871E0
+end-exclusive = 0x205871E4
+permissions = "rw"
+
+[[regions]]
+name = "hp-system-after-radio-modem-configuration"
+address-space = "cpu"
+kind = "mmio"
+start = 0x205871E4
+end-exclusive = 0x20600000
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-before-aon-root-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20700000
+end-exclusive = 0x20701000
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-root-clock"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701000
+end-exclusive = 0x20701004
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-between-root-clock-and-hpcore0-reset-cause"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701004
+end-exclusive = 0x20701030
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-hpcore0-reset-cause"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701030
+end-exclusive = 0x20701034
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-between-hpcore0-reset-cause-and-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701034
+end-exclusive = 0x20701068
+permissions = "rw"
+
+[[regions]]
+name = "lp-aon-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20701068
+end-exclusive = 0x2070106C
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-between-phy-aux-and-pmu-radio"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2070106C
+end-exclusive = 0x20704014
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-active-icg-modem"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704014
+end-exclusive = 0x20704018
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-active-icg-and-active-clock-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704018
+end-exclusive = 0x2070401C
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-active-clock-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2070401C
+end-exclusive = 0x20704020
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-active-clock-power-and-immediate-clock-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704020
+end-exclusive = 0x207040F0
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-immediate-clock-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207040F0
+end-exclusive = 0x207040F4
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-immediate-clock-power-and-sleep-sysclk"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207040F4
+end-exclusive = 0x207040F8
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-immediate-sleep-sysclk"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207040F8
+end-exclusive = 0x207040FC
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-sleep-sysclk-and-modem-icg"
+address-space = "cpu"
+kind = "mmio"
+start = 0x207040FC
+end-exclusive = 0x20704104
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-immediate-modem-icg"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704104
+end-exclusive = 0x20704108
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-modem-icg-and-rf-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704108
+end-exclusive = 0x20704184
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-rf-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704184
+end-exclusive = 0x20704188
+permissions = "rw"
+
+[[regions]]
+name = "pmu-between-radio-rf-power-and-analog-peripheral-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704188
+end-exclusive = 0x20704208
+permissions = "rw"
+
+[[regions]]
+name = "pmu-radio-analog-peripheral-power"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20704208
+end-exclusive = 0x2070420C
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-between-pmu-radio-and-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2070420C
+end-exclusive = 0x20710030
+permissions = "rw"
+
+[[regions]]
+name = "lp-periclkrst-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20710030
+end-exclusive = 0x20710034
+permissions = "rw"
+
+[[regions]]
+name = "lp-system-after-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20710034
+end-exclusive = 0x20800000
+permissions = "rw"
+
+[[regions]]
+name = "lp-peripheral-before-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20800000
+end-exclusive = 0x20818000
+permissions = "rw"
+
+[[regions]]
+name = "lp-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x20818000
+end-exclusive = 0x2081801C
+permissions = "rw"
+
+[[regions]]
+name = "lp-peripheral-after-tsens-phy-aux"
+address-space = "cpu"
+kind = "mmio"
+start = 0x2081801C
+end-exclusive = 0x20900000
+permissions = "rw"

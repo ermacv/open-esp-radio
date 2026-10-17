@@ -1,0 +1,19 @@
+[package]
+name = "oer-ieee802154-pac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Closed typed IEEE 802.15.4 MAC values and transactions shared between chips"
+
+[features]
+# Hidden constructors of the validation probes.
+validation-probes = []
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "portable"

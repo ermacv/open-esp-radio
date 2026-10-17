@@ -1,0 +1,72 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_FECOEX_RECOVERED"
+description = "Sparse FECOEX words absent from the public platform PAC."
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BT_COEX_PTI_CONFIG"
+description = "Complete coex_pti_v2 performs two ordered fresh-read RMW operations: it first replaces bits 31:16 with 0x0640, then replaces bits 15:0 with 0x0010. Individual bit meanings remain unknown."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Fixed 0x0010 image published by the second coex_pti_v2 RMW."
+bitOffset = 0
+bitWidth = 16
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "LOW_IMAGE"
+usage = "write"
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REVIEWED_IMAGE"
+description = "The only low-halfword image proved by coex_pti_v2."
+value = 0x0010
+
+[[peripherals.registers.register.fields]]
+name = "BITS_16_31_OPAQUE"
+description = "Fixed 0x0640 image published by the first coex_pti_v2 RMW."
+bitOffset = 16
+bitWidth = 16
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+[[peripherals.registers.register.fields.enumeratedValues]]
+name = "HIGH_IMAGE"
+usage = "write"
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REVIEWED_IMAGE"
+description = "The only high-halfword image proved by coex_pti_v2."
+value = 0x0640
+
+[[review]]
+entity = "PHY_FECOEX_RECOVERED"
+sources = [
+    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
+    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+    "BLOB_LIBBTBB_COEX_PTI_V2",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FECOEX_RECOVERED.BT_COEX_PTI_CONFIG"
+naming = "descriptive"
+sources = ["BLOB_LIBBTBB_COEX_PTI_V2"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FECOEX_RECOVERED.BT_COEX_PTI_CONFIG.BITS_0_15_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FECOEX_RECOVERED.BT_COEX_PTI_CONFIG.BITS_16_31_OPAQUE"
+naming = "opaque"

@@ -1,0 +1,44 @@
+schema = 2
+
+[[peripherals]]
+name = "MODEM_LPCON_PHY_TICK"
+description = "Role-neutral MODEM_LPCON tick target used by the reviewed common-PHY prelude. Other MODEM_LPCON registers remain platform-owned."
+baseAddress = 0x2010F000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "TICK_CONF"
+description = "Fixed-crystal modem-power tick target published by complete phy_get_xtal_freq."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+resetValue = 0x00000027
+
+[[peripherals.registers.register.fields]]
+name = "MODEM_PWR_TICK_TARGET"
+description = "Six-bit target replaced with crystal_frequency_mhz minus one by complete phy_get_xtal_freq."
+bitOffset = 0
+bitWidth = 6
+
+[[review]]
+entity = "MODEM_LPCON_PHY_TICK"
+sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_PHY_TICK.TICK_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "MODEM_LPCON_PHY_TICK.TICK_CONF.MODEM_PWR_TICK_TARGET"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

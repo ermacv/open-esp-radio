@@ -1,0 +1,309 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_CLOCK_ORACLE"
+description = """
+OPAQUE PHY clock-gate
+        registers recovered from complete no-call ROM/blob leaves."""
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0400_OPAQUE"
+description = "ROM writes 0x1e7 to open and the blob writes zero to close."
+addressOffset = 0x400
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "STATE"
+description = "Complete observed front-end clock-gate images; constituent gate meanings remain unknown."
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLOSED"
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "OPEN"
+value = 487
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TABLE_MEMORY_INDEX_SOURCE"
+description = "Shared word contains the table-memory base index and the complete phy_force_pwr_index controls."
+addressOffset = 0x408
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FORCED_DIGITAL_GAIN_0"
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 255
+
+[[peripherals.registers.register.fields]]
+name = "FORCED_DIGITAL_GAIN_1"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 255
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_DIGITAL_GAIN_ENABLE"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FORCED_POWER_INDEX"
+description = "Complete phy_force_pwr_index replaces bits 22:17 with the low six bits of its second argument."
+bitOffset = 17
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_POWER_ENABLE"
+description = "Complete phy_force_pwr_index replaces bit 23 with the low bit of its first argument."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BASE_INDEX"
+description = "Eight-bit table-memory base index; the complete front-end initializer writes 0xa0."
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0800_OPAQUE"
+description = "ROM sets bits 1:0 and the blob clears them."
+addressOffset = 0x800
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Two-bit open/close mask; individual meanings are unknown."
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLOSED"
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "OPEN"
+value = 3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_2_OPAQUE"
+description = "The phy_bb_init parent sets bit 2 before calibration; the individual hardware meaning remains unknown."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_7C80_OPAQUE"
+description = "ROM writes all ones to open and the blob writes zero to close."
+addressOffset = 0x7C80
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "STATE"
+description = "Complete observed baseband clock-gate images; constituent gate meanings remain unknown."
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "CLOSED"
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "OPEN"
+value = 4294967295
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0400_OPAQUE.STATE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "ROM_REV0_PHY_FORCE_PWR_INDEX",
+    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
+    "BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_POWER_INDEX"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCE_POWER_ENABLE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FORCE_PWR_INDEX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.BASE_INDEX"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FE_REG_INIT",
+    "BLOB_LIBPHY_PHY_SET_TX_CFR_MEM",
+    "BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BITS_0_1_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_0800_OPAQUE.BIT_2_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPHY_PHY_BB_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE"
+naming = "opaque"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.WORD_7C80_OPAQUE.STATE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_OPEN_FE_BB_CLK",
+    "BLOB_LIBPHY_PHY_CLOSE_FE_BB_CLK",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_DIGITAL_GAIN_0"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCED_DIGITAL_GAIN_1"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_CLOCK_ORACLE.TABLE_MEMORY_INDEX_SOURCE.FORCE_DIGITAL_GAIN_ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_CALIBRATION_20260907"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

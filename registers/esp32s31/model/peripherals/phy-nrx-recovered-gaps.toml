@@ -1,0 +1,137 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_NRX_RECOVERED_GAPS"
+description = "Sparse NRX words absent from the public platform PAC."
+baseAddress = 0x20107800
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0000_OPAQUE"
+description = "Complete phy_fft_scale_force read-modify-writes this word."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FFT_SCALE_FORCE"
+description = "Force the FFT scale to FFT_SCALE; complete phy_fft_scale_force publishes its first argument here."
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FFT_SCALE"
+description = "FFT scale complete phy_fft_scale_force publishes from its second argument."
+bitOffset = 20
+bitWidth = 8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_000C_OPAQUE"
+description = "Complete phy_dig_reg_backup saves and restores this word; all field semantics remain unknown."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0030_OPAQUE"
+description = "Complete phy_spur_reg_write_one_tone reads and replaces this word on three control-flow paths; individual hardware fields remain unnamed."
+addressOffset = 0x30
+size = 32
+access = "read-write"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0098_OPAQUE"
+description = "Complete phy_freq_correct read-modify-writes this word; individual fields remain unnamed."
+addressOffset = 0x98
+size = 32
+access = "read-write"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_00B8_OPAQUE"
+description = "Complete phy_bb_cfo_cfg replaces bits 31:29 with the observed constant pattern while preserving bits 28:0; the hardware field meaning remains unknown."
+addressOffset = 0xB8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+bitOffset = 29
+bitWidth = 3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0104_OPAQUE"
+description = "Complete phy_chan_filt_set read-modify-writes this word and complete phy_dig_reg_backup saves/restores it."
+addressOffset = 0x104
+size = 32
+access = "read-write"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS"
+sources = [
+    "ESP_IDF_25FE69F_S31_PHY_RETENTION",
+    "BLOB_LIBPHY_PHY_DEBUG_REG_CHECK",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_000C_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0030_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0098_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_CFO_SPUR_CONTROLS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0104_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_BLOBRAY_GAPS"]
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_00B8_OPAQUE.BITS_29_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE_FORCE"
+naming = "descriptive"
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_NRX_RECOVERED_GAPS.WORD_0000_OPAQUE.FFT_SCALE"
+naming = "descriptive"
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"

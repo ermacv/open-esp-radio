@@ -1,0 +1,115 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_CUSTOM_TYPE"
+description = "WDEVTXRX_TAB three custom frame-type match and ACK-index profiles decoded by complete dbg_read_rx_misc."
+baseAddress = 0x20104CA4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_2_ACK_INDEX"
+bitOffset = 0
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_2_VALUE"
+bitOffset = 3
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_2_ENABLE"
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_1_ACK_INDEX"
+bitOffset = 10
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_1_VALUE"
+bitOffset = 13
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_1_ENABLE"
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_0_ACK_INDEX"
+bitOffset = 20
+bitWidth = 3
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_0_VALUE"
+bitOffset = 23
+bitWidth = 6
+
+[[peripherals.registers.register.fields]]
+name = "TYPE_0_ENABLE"
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+bitOffset = 30
+bitWidth = 2
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE"
+sources = ["BLOB_LIBPP_HAL_RX_MISC_DEBUG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_ACK_INDEX"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_2_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_ACK_INDEX"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_1_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_ACK_INDEX"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.TYPE_0_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_CUSTOM_TYPE.CONTROL.BITS_30_31_OPAQUE"
+naming = "opaque"

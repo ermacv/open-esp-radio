@@ -1,0 +1,122 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK"
+description = "Complete dbg_read_internal_txba reads one internal WDEVTXBA result: a 64-bit bitmap, two transmitter-address words and a combined fragment/starting-sequence/TID word."
+baseAddress = 0x2010429C
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BITMAP_HIGH"
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITMAP"
+description = "High 32 bits of the internal transmit BlockAck acknowledgement bitmap."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "BITMAP_LOW"
+addressOffset = 0x4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITMAP"
+description = "Low 32 bits of the internal transmit BlockAck acknowledgement bitmap."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TRANSMITTER_ADDRESS_WORD_0"
+description = "First WDEVTXBA TA word printed by the complete blob decoder. Byte ordering is retained as a raw word until a matching live frame qualifies it."
+addressOffset = 0x8
+size = 32
+access = "read-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "TRANSMITTER_ADDRESS_WORD_1"
+description = "Second WDEVTXBA TA word printed by the complete blob decoder. Byte ordering is retained as a raw word until a matching live frame qualifies it."
+addressOffset = 0xC
+size = 32
+access = "read-only"
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL_SEQUENCE"
+addressOffset = 0x10
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "FRAGMENT_NUMBER"
+bitOffset = 0
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "STARTING_SEQUENCE"
+bitOffset = 4
+bitWidth = 12
+
+[[peripherals.registers.register.fields]]
+name = "TID"
+bitOffset = 16
+bitWidth = 4
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK"
+sources = ["BLOB_LIBPP_DBG_READ_INTERNAL_TXBA"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_HIGH.BITMAP"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.BITMAP_LOW.BITMAP"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_0"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.TRANSMITTER_ADDRESS_WORD_1"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.FRAGMENT_NUMBER"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.STARTING_SEQUENCE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERNAL_TX_BLOCK_ACK.CONTROL_SEQUENCE.TID"
+naming = "descriptive"

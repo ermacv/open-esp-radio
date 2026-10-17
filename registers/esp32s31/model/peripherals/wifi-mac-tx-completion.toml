@@ -1,0 +1,188 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_TX_COMPLETION"
+description = "Non-aliased words from four 0x7c-byte completion banks representing logical EDCA queues 3,2,1,0. AUX_A/AUX_B are canonically described by the richer TX BlockAck high-address and TX queue-information registers in WIFI_MAC_RX_DMA."
+baseAddress = 0x201053B0
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "PRIMARY%s"
+description = "Primary completion/status word. Complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete copies bits 23:16 to result byte two independently of the primary/alternate status selector; complete libpp[lmac.o]::lmacProcessTxSuccess stores that byte as encoded ACK SNR."
+addressOffset = 0x18
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "DETAIL"
+description = "Low completion detail byte passed by complete libpp[lmac.o]::lmacProcessTxComplete to the status-one/status-four secondary dispatchers when PRIMARY is selected."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "STATUS"
+description = "Four-bit top-level completion status selected by complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete and dispatched by complete libpp[lmac.o]::lmacProcessTxComplete."
+bitOffset = 12
+bitWidth = 4
+
+[[peripherals.registers.register.fields]]
+name = "ACK_SNR_ENCODED"
+description = "Complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete copies PRIMARY bits 23:16 to result byte two. Complete libpp[lmac.o]::lmacProcessTxSuccess passes that byte into the descriptor ACK-SNR slot. Complete libpp[trc.o]::rcUpdateTxDone adds the pinned wDevCtrl byte 0x60 and narrows to a signed byte before libpp[trc.o]::rcUpdateAckSnr. This field is meaningful only for a successful completion."
+bitOffset = 16
+bitWidth = 8
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "ALTERNATE%s"
+description = "Alternate completion/status word selected by the recovered auxiliary bit."
+addressOffset = 0x1C
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "DETAIL"
+description = "Low completion detail byte used by the status-one/status-four secondary dispatchers when the auxiliary selector chooses ALTERNATE."
+bitOffset = 0
+bitWidth = 8
+
+[[peripherals.registers.register.fields]]
+name = "STATUS"
+description = "Four-bit top-level completion status used when the auxiliary selector chooses ALTERNATE."
+bitOffset = 12
+bitWidth = 4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 4
+dimIncrement = 0x7C
+dimIndex = "0,1,2,3"
+name = "AUX_C%s"
+description = "Third auxiliary completion word contributing to the second decoded extension image."
+addressOffset = 0x28
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "SECONDARY_TRIGGER_BASED_PACKET_COUNT"
+description = "Complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete contributes AUX_C bits 13:7 to reconstructed extension word one; complete libpp[lmac.o]::lmacProcessTxComplete shifts that image right by two before storing the seven-bit secondary Trigger-based packet count."
+bitOffset = 7
+bitWidth = 7
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+    "HIL_OPEN_HE_RATE_CONTROL_ACK_SNR_2026_07_30",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s.ACK_SNR_ENCODED"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "HIL_OPEN_HE_RATE_CONTROL_ACK_SNR_2026_07_30",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s.DETAIL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.PRIMARY%s.STATUS"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s.DETAIL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.ALTERNATE%s.STATUS"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.AUX_C%s"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_TX_COMPLETION.AUX_C%s.SECONDARY_TRIGGER_BASED_PACKET_COUNT"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_MAC_TX",
+    "PROMOTED_LMAC_TX",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"

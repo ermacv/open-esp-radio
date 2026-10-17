@@ -1,0 +1,98 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_CSI_CONTROL"
+description = "Multifunction receive/CSI word. Complete mac_last_rxbuf_init sets bit 27; complete hal_init later replaces its low and second bytes through separate RMWs."
+baseAddress = 0x20104098
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Complete mac_last_rxbuf_init sets bit 27 after publishing all six table entries and both control groups. Complete hal_init later replaces byte zero with one, then byte one with one through a second fresh-read edge."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Complete hal_init replaces bits 7:0 with one."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "INITIALIZED"
+value = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_15_OPAQUE"
+description = "Complete hal_init replaces bits 15:8 with one through a separate RMW."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "INITIALIZED"
+value = 1
+
+[[peripherals.registers.register.fields]]
+name = "BIT_27_OPAQUE"
+description = "Final set edge of mac_last_rxbuf_init; its narrower interaction with CSI is unknown."
+bitOffset = 27
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL"
+sources = [
+    "BLOB_LIBPP_MAC_LAST_RXBUF_INIT",
+    "BLOB_LIBPP_HAL_INIT_TAIL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_MAC_LAST_RXBUF_INIT",
+    "BLOB_LIBPP_HAL_INIT_TAIL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_0_7_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BITS_8_15_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_CSI_CONTROL.CONTROL.BIT_27_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

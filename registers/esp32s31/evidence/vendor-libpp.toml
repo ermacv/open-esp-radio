@@ -1,0 +1,413 @@
+# Reviewed register evidence: vendor libpp.
+schema = 1
+
+# SOURCE(esp32s31): libpp[hal_mac.o]::hal_get_tsf_time,
+# libpp[hal_tsf.o]::tsf_hal_get_counter_value.
+[[sources]]
+id = "BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015"
+description = """
+espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21,
+esp32s31/libpp.a, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4.
+Complete libpp[hal_mac.o]::hal_get_tsf_time (0x3e) selects bit zero of
+0x2010d814 for argument zero and bit one for a nonzero argument. Its latter
+branch sets bit one at +0x26..+0x2a, reads high at 0x2010d824 then low at
+0x2010d820 (+0x34..+0x36), and clears bit one from a fresh CONTROL read
+(+0x38..+0x3c, shared store +0x22). Complete
+libpp[hal_tsf.o]::tsf_hal_get_counter_value (0x4c) accepts indices 0..3,
+selects 1 << index in the same word, reads the low/high words when their
+output pointers are present, then clears its selector through a fresh RMW.
+The SoftAP caller identity is recorded in BLOB_LIBNET80211_AP_TSF_TIMESTAMP_TIM_20261015;
+it establishes index one as AP TSF. The readback pair is shared, requiring
+serialization of the entire select/read/release transaction across domains.
+This proves snapshot geometry and the vendor sequence, not a hardware TX
+timestamp-insertion control or the timer used by such an insertion.
+"""
+
+# SOURCE(esp32s31): libpp[hal_mac.o]::hal_now,
+# libpp[wdev.o]::wDev_Get_Next_TBTT, libpp[if_hwctrl.o]::ic_get_next_tbtt,
+# libpp[pp.o]::ppTxProtoProc.
+[[sources]]
+id = "BLOB_LIBPP_AP_BEACON_TIMING_20261015"
+description = """
+espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21,
+esp32s31/libpp.a, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4.
+Complete libpp[hal_mac.o]::hal_now (0x0a) reads the MAC local-time word
+0x2010d800; this is the source of the pre-transmit beacon timestamp in
+BLOB_LIBNET80211_AP_TSF_TIMESTAMP_TIM_20261015. In
+libpp[wdev.o]::wDev_Get_Next_TBTT (0x50), +0x1a..+0x34 advances the saved
+32-bit beacon cursor by its interval and compares it against the low word
+of AP TSF obtained with argument one. It repeats until the unsigned delay
+is within the interval and returns delay / 1000 + 1 at +0x38..+0x46.
+libpp[if_hwctrl.o]::ic_get_next_tbtt (0x08) forwards to this leaf. This is
+software scheduling from AP time, not a count of successful beacon TX
+terminals, and it does not establish use of AP TBTT IRQ by that callback.
+Complete libpp[pp.o]::ppTxProtoProc (0x96) marks a unicast probe response
+with software TX-descriptor bit 27. That flag alone does not identify a
+hardware timestamp enable or timer selection. The cursor leaf's calls and
+state remain incompletely resolved by static analysis; these are bounded
+observations of the named instructions, not whole-function equivalence.
+"""
+
+[[sources]]
+id = "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS"
+description = "libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_txq_conf2 size 0x80 and its .LANCHOR61 format string. The string orders queue, image, CBW20, CBW40, CBW80, SW_RTS, SW_CTS. The RISC-V ILP32 call places the first four variadic arguments in a4..a7, CBW80 at sp+0, bit 31 at sp+4 and bit 30 at sp+8. Therefore SOFTWARE_RTS is bit 31 and SOFTWARE_CTS is bit 30. Complete hal_mac_ctl.o hal_he_set_tx_protection size 0x40 updates only bit 31 from a1; a2 is unused, and nonzero a3 additionally writes a4 truncated to 16 bits OR 0x10000 to the queue vector at 0x201054dc-q*0x7c. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_plcp0 size 0x2a0 passes descriptor flags bit 8 as a1 at offsets 0x10c..0x12c. Complete pp_he.o libpp[pp_he.o]::ppCheckTxRTS size 0x98 sets that flag for RTS length/duration thresholds. Complete hal_mac_ctl.o hal_he_init size 0x19e offsets 0xb6..0xec ANDs each protection word with 0xbfffffff in logical queue order zero through three, clearing CTS while retaining RTS and spacing. The private-input tx_protection test compares those four ordered RMWs against compiled production; other initialization effects and pre-edge children are outside that property. Complete hal_mac_ctl.o hal_he_disable_rts_threshold size 0x32 performs four fresh-read RMWs in logical queue order zero through three, setting bit 17 and retaining the low byte threshold and bit 16. Its exact unrelocated section SHA-256 is 1cd0e787d4aafd4a2ca5083ef88207f215bcf20e9194a3520b22a9702d58ee7e. The no-threshold-publication branch retains the prior byte threshold; threshold publication clears bit 17 and all higher state. These register transactions and the separate CTS reset do not establish a CTS-to-Self formatter, on-air NAV calculation, protected publication or completion contract. Complete pp_he.o libpp[pp_he.o]::ppCalTxHEAMPDULength offsets 0x110..0x11a calls libpp[if_hwctrl.o]::ic_get_he_rts_threshold_bytes and stores the returned halfword value into descriptor word 0x34. Complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 offsets 0x10c..0x128 loads that same word as argument a4. Thus the optional register payload is a PHY-specific byte threshold, not a Duration/NAV override. The duration-threshold predicate comes separately from descriptor word 0x30 bits 12:3. libpp[pp_he.o]::ppCheckTxRTS compares descriptor word 0x34 against the proposed frame length when that predicate is nonzero."
+
+[[sources]]
+id = "BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES"
+description = "libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; hal_mac_tx.o libpp[hal_mac_tx.o]::hal_mac_txq_enable size 0xbc, libpp[hal_mac_tx.o]::hal_mac_clr_txq_state size 0x42 and hal_mac_txq_disable size 0x18; lmac.o libpp[lmac.o]::lmacProcessTxComplete size 0x25c. The enable prefix reads the selected CONTROL and ORs ENABLE|VALID at offsets 0x0c..0x1e before libpp[lmac.o]::GetAccess at 0x22; the remaining access/HE bookkeeping and statistics are outside the publication comparison. Selector two of clr_txq_state reads COMPLETE_CLEAR and writes its old value OR the queue bit. txq_disable clears ENABLE|VALID while preserving the remaining CONTROL bits. The completion dispatcher calls libpp[hal_mac_tx.o]::hal_mac_get_txq_complete at 0xde, hal_mac_get_txq_in_trig_flow_state at 0xe6 and libpp[hal_mac_tx.o]::hal_mac_clr_txq_state with selector two at 0x14a, before status dispatch. The ordinary-tx-ownership suite compares the three register edges against compiled production for ordinary queues zero through three; full descriptor/result/lifecycle roots and physical DMA quiescence are not established by these leaf comparisons."
+
+[[sources]]
+id = "BLOB_LIBPP_ISR_REGISTER_DUMP"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o print_isr_regs body, size 0x5a, and pinned register-name strings. It reads WDEV ENABLE/RAW/STATUS at 0x20104c40/44/48, WDEV_INT1 ENABLE/RAW/STATUS at 0x20104c2c/30/34 and WDEVPWR ENABLE/RAW/STATUS at 0x2010d8b4/b8/bc."
+
+[[sources]]
+id = "BLOB_LIBPP_TEST_HAL_CSI"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete test_hal.o esp_test_get_csi_dump_cfg body, size 0x8a, and esp_test_set_csi_dump_cfg body, size 0x22e. The getter independently proves every promoted field. The setter contains a reproducible vendor quirk: cfg[8] gates the BEAMFORMED update, but retained cfg[1] supplies bit 11."
+
+[[sources]]
+id = "BLOB_LIBPP_PP_DEBUG_DIAGNOSTIC_STATISTICS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_debug.o dbg_lmac_diag_statis_dump body, size 0x17c, and its pinned diag0..diag12/diagsel format strings."
+
+[[sources]]
+id = "BLOB_LIBPP_PP_DEBUG_HW_STATISTICS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_debug.o dbg_lmac_hw_statis_dump body, size 0x252, and its pinned hardware-counter format strings."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_INTERRUPT_GET_EVENT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_interrupt_get_event body, size 0x0a."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_interrupt_clr_event body, size 0x0a; writes the supplied event bitmap to the clear register."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_WATCHDOG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_interrupt_clr_watchdog body, size 0x16."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_PWR_INTERRUPT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_pwr.o hal_pwr_interrupt_get_event body, size 0x0a, reads 0x2010d8bc; complete hal_pwr_interrupt_clr_event body, size 0x0a, stores its full event argument to 0x2010d8c0."
+
+[[sources]]
+id = "BLOB_LIBPP_WDEV_PROCESS_FIQ"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete wdev.o libpp[wdev.o]::wDev_ProcessFiq body, size 0x1ae, including MAC event-mask dispatch and event-clear call graph."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete color-collision branch reached from wdev.o libpp[wdev.o]::wDev_ProcessFiq and the independently named dbg_read_color_collision register decode."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TSF"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_tsf.o hal_set_sta_tsf size 0x1e, hal_enable_sta_tsf size 0x26, hal_disable_sta_tsf size 0x22 and hal_set_sta_tsf_wakeup size 0x32."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TSF_TIMER"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_tsf.o libpp[hal_tsf.o]::hal_tsf_timer_set_target size 0x22, hal_tsf_timer_get_target size 0x20, hal_enable_tsf_timer_wakeup size 0x18, hal_disable_tsf_timer_wakeup size 0x1a, libpp[hal_tsf.o]::hal_enable_tsf_timer size 0x3a and hal_disable_tsf_timer size 0x30."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_PWR_LPCLK_SYNC"
+description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete hal_pwr.o pwr_hal_set_lpclk_sync_enable size 0x14 ORs 0x08000000 into 0x2010d830 and pwr_hal_set_lpclk_sync_disable size 0x16 ANDs it with 0xf7ffffff, each touching only bit 27; complete hal_tsf.o hal_timer_update_by_rtc size 0x38 sets the same bit and replaces bits 17:0 of 0x2010d878 from its second argument when its first argument is nonzero, and clears the bit otherwise."
+
+[[sources]]
+id = "BLOB_LIBPP_PM_TWT_TSF_TARGET"
+description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete pm_twt.o libpp[pm_twt.o]::pm_on_isr_twt_wake size 0x74 loads the low and high words of an eight-byte wake TSF slot and passes them as the second and third arguments of libpp[hal_tsf.o]::hal_tsf_timer_set_target, whose size-0x22 body stores the second argument as the 32-bit target and the low three bits of the third into the control word; complete pm_twt.o libpp[pm_twt.o]::pm_twt_set_target_tsf size 0x17c parks a timer with the arguments all ones and seven. The ESP32-S31 rev0 ROM copies rom[]::pm_on_isr_twt_wake size 0x90 and rom[]::pm_twt_set_target_tsf size 0x254 pass the same (index, low, high) and (index, all ones, seven) arguments to the timer-target entry at offset 0x4e0 of their function table."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TSF_RUNTIME"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_tsf.o hal_enable_nan_tsf size 0x26, hal_disable_nan_tsf size 0x22, hal_disable_softap_tsf size 0x12, hal_set_sta_tbtt size 0x6e, hal_set_sta_tbtt_interval size 0x18, hal_set_sta_light_sleep_wake_ahead_time size 0x16, hal_is_sta_tsf_active size 0x0c and libpp[hal_tsf.o]::hal_tsf_clear_soc_wakeup_request size 0x14; complete hal_mac.o hal_enable_sta_btwt_tsf size 0x3e."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_COEX_RUNTIME"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_coex.o hal_set_rx_beacon_time size 0x2c, hal_set_rx_beacon_pti size 0x2a, hal_clear_rx_beacon_pti size 0x12, hal_set_itwt_pti size 0x26 and hal_clr_itwt_pti size 0x16."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_enable_sta_beacon_filter size 0x2c, hal_disable_sta_beacon_filter size 0x22 and hal_beacon_ie_crc_get size 0x0c. The disable leaf clears CONTROL bits 2:0 at 0x201042b4, then clears the station beacon-filter interrupt enable at 0x20104c40 bit 15 through an independent fresh-read RMW. Complete hal_mac_ctl.o libpp[hal_mac_ctl.o]::hal_mac_interrupt_clr_bsscolor size 0x12, hal_he_set_hw_qos_null_ra_to_trans size 0x44 and hal_ifc_get_bb_err_bitmap size 0x30; complete hal_mac_rx.o hal_mac_rx_get_end_state size 0x0c and hal_mac_rx_get_end_info size 0x3c; complete hal_sniffer.o hal_sniffer_rx_clr_statistics size 0x1e."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_PWR"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_pwr.o modem-power leaves from libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_timeout size 0x18 through libpp[hal_pwr.o]::pwr_hal_set_mac_modem_tbtt_auto_period_interval size 0x20. The promoted fields are limited to complete no-call RMW bodies at 0x2010d834, 0x2010d838, 0x2010d83c, 0x2010d854 and 0x2010d858."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_SET_MMSS_AND_AID"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_set_mmss_and_aid body, size 0x82."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_BSSID_LIFECYCLE"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_bssid_init size 0x4c, hal_he_bssid_deinit size 0x1e and hal_he_set_power_save size 0x36. Interface-zero init performs four ordered fresh-read RMW edges: set WDEV_HE_BSSID0_CONF bit 31, clear bits 30:29, set WDEV_RX_POWER_SAVE_CONF bit 29, then set bit 28. _oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f; complete wl_cnx.o cnx_connect_to_bss size 0x2b6 calls interface-zero init after associated-STA receive policy when the peer and cipher admit HE, before clearing the color bitmap and calling hal_he_set_bss_color."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_TX_PPDU"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_ppdu body, size 0x3b6, and its pinned format strings. The decoder names frame-state halfword offset 0x22 msdu_len; complete libpp[hal_mac_tx.o]::mac_tx_set_tb independently sums that exact halfword into WDEVTXQBSR_SW."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_ampdu.o hal_agreement_add_rx_ba size 0x12e, hal_agreement_clr_rx_ba size 0xbe, hal_agreement_del_rx_ba size 0x72, libpp[hal_ampdu.o]::hal_ba_session_store size 0x4e, libpp[hal_ampdu.o]::hal_ba_session_restore size 0x66 and hal_ba_session_restore_by_hw_index size 0x6c. These leaves prove eight reverse-addressed ordinary banks at 0x20104178..0x20104294 with stride 0x24, live-state/load-word pairs, and update bits zero through seven. Complete extra-SoftAP leaves independently prove the shared staging window at 0x20104ea4..0x20104eb8 plus commit/readback bits eight and nine."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_TX_BLOCK_ACK"
+description = "_oracles/libpp.a pinned ESP32-S31 archive; complete libpp[hal_mac_tx.o]::hal_mac_tx_get_blockack leaf recovered into PROMOTED_TX_AMPDU and moved to crates/hardware/esp32s31/driver/wifi/mac/src/tx_ampdu.rs. Queue register banks descend by 0x7c bytes. No independent HIL qualification yet."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TX_TRIGGER_FLOW"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o hal_mac_get_txq_in_trig_flow_state size 0x0c and complete lmac.o libpp[lmac.o]::lmacProcessTxComplete size 0x25c, libpp[lmac.o]::lmacProcessShortRetryFail size 0x318, libpp[lmac.o]::lmacProcessLongRetryFail size 0x266 and lmacProcessTBSuccess size 0x52. The HAL getter reads 0x20104cb4 and returns its complete high byte. The completion dispatcher right-shifts that byte by the completed queue index, masks bit zero and retains the resulting per-queue trigger-flow flag. On a zero-retry-count ACK/retry failure, both retry-failure paths use that flag to terminate through lmacProcessTBSuccess instead of scheduling an ordinary contention retry; the success completion path remains libpp[lmac.o]::lmacProcessTxSuccess."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_CRYPTO"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_crypto.o hal_crypto_clr_key_entry, hal_crypto_set_key_entry, hal_crypto_is_key_valid, hal_crypto_enable and hal_crypto_disable bodies. The active open STA pairwise/group images were first preserved in migration/esp32s31-hybrid-runtime/src/wpa2_s31.rs and now live in crates/hardware/esp32s31/driver/wifi/mac/src/crypto.rs."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_CRYPTO_INIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_crypto.o hal_crypto_init body. It proves five ordered full-word stores at 0x20104800, 0x20104804, 0x20104808, 0x2010480c and 0x20104810 with images 0x00030000, 0x00030000, zero, zero and zero."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_SET_ADDR"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_set_addr body. It proves the four-interface 0x8-byte stride and, per interface, one full low-address store, one full high-address store, then one fresh-read RMW setting bit 16."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_SET_BSSID"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_set_bssid body, size 0x5a. It proves the four-interface 0x8-byte stride and exact ordered transaction: clear high-word bit 31, full-store BSSID bytes 0..3, fresh-read replace high-word bits 15..0 with bytes 4..5, then fresh-read set bit 31."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_ENABLE_MAC"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_enable_mac body, size 0x18. It performs one fresh-read RMW clearing bits 7:4 at 0x20104c00, then stores its full event-mask argument at 0x20104c40. Complete hal_disable_mac independently sets the same four gate bits before clearing interrupt state."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_DISABLE_MAC"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_disable_mac body, size 0x2c. It sets bits 7:4 at 0x20104c00, reads and returns 0x20104c40, then stores zero in order to 0x20104c40, 0x20104c44 and 0x20104c30."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_INIT_PREFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_init body, offsets 0x00..0x3a. It proves the 0x20104de0 REQUEST-bit RMW, READY-bit polling loop, then the ordered interrupt-disable and all-events-clear stores."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_SNIFFER_ENABLE"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_sniffer.o hal_sniffer_enable body. At queue-three word 0x201040e4 it proves seven ordered fresh-read RMWs: set bit 17; clear bits 0, 1, 2, 3 and 8 separately; then clear bits 7 and 9 together."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_SNIFFER_MISC"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_sniffer.o hal_sniffer_set_promis_misc_pkt body, size 0x84. It independently proves the shared 0x201040f4 misc-packet policy register and its mode-dependent fields. The open frontier uses only the separately HIL-qualified bits 15:8 and does not claim the other vendor branches."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o mac_rxbuf_init body. Its first four RMWs touch 0x20104c68, 0x20104c6c, 0x20104c70 and 0x2010407c. The final store publishes the external wDevCtrl descriptor pointer at 0x20104084 and deliberately remains owned by the RX ring transaction rather than this prefix."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_LAST_RXBUF_INIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o mac_last_rxbuf_init body, size 0xd2. It performs eighteen ordered full-word stores for six three-word entries at 0x20104124..0x20104170, then two separate fresh-read RMWs setting 0x3f00 and 0x007e at 0x20104120, followed by one fresh-read RMW setting bit 27 at 0x20104098."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_TXRX_INIT_PREFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o mac_txrx_init body, direct prefix offsets 0x08..0xd0 before its first external call at 0xd2. It proves eighteen fresh-read RMW edges. The following hal_he_set_mac_delay, hal_he_set_ack_rate and hal_he_set_bbrxhung_time calls are deliberately outside this source entry."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_TXRX_CALLBACKS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_set_mac_delay (size 0x180), hal_he_set_ack_rate (size 0x156), and hal_he_set_bbrxhung_time (size 0x1e), reached from complete hal_mac.o mac_txrx_init with zero arguments for the latter two. g_wifi_osi_funcs layout is independently pinned by esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, esp-wifi-sys-esp32s31/src/include.rs sha256 de6ecd8853cc1925389f89e768a8a865ad58db6025f94a63584096eb8ad5f1dc and c/headers/esp32s31/esp_private/wifi_os_adapter.h sha256 08fb73f76da7e6800c42dbff2fb724dff5205e1c8262e969da0f391be21f1eae: offset 0x04 is _env_is_chip and offset 0x144 is _random. esp-hal branch esp32s31-async-platform commit 07de55443721de6fa32e7fb721f0fa7996e604d3, esp-radio/src/wifi/os_adapter/mod.rs sha256 cf8439e907161228875d852eb1e4cfa45628b62532bfbe4bc8adcebd8c6112ed and esp-radio/src/common_adapter.rs sha256 6e9ef6acc2236d29e7b2ef2ed957eaa878c8f5f767a77ecff19b6711e135ab34 prove the real-chip adapter returns true and sources _random from esp_hal::rng::Rng. The on-chip blob path uses that value modulo 11; the previously transcribed fixed values were the FPGA branch. Diagnostic log calls after hardware writes do not alter MMIO and are omitted."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_TXRX_INIT_SUFFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o mac_txrx_init body, direct suffix offsets 0xee..0x16e after the hal_he_set_mac_delay, hal_he_set_ack_rate and hal_he_set_bbrxhung_time calls. It proves nine fresh-read RMW edges, including replacement of 0x20104C24 bits 11:0 with 0x0F0 while preserving bits 31:12, and ends with RX_CONTROL walker-disable bit 31 clear."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_INIT_RX_POLICY"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_init offsets 0x56..0x90 and complete hal_mac_rx_set_policy body, size 0xd2. For each of four queues hal_init performs four direct fresh-read RMWs at 0x201040d8 + 4*q, then calls hal_mac_rx_set_policy(q,0,0,0). Queues 0..2 each add five leaf RMWs across filter, BSSID-high and interface-address-high; queue 3 is rejected by the leaf after its four direct RMWs. The complete cold transaction is therefore 31 distinct RMW edges."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_INIT_TAIL"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_init offsets 0xcc..0x12a, complete hal_mac_rx.o hal_mac_set_rxbuf_reload_use_hw_beacon_enable size 0x14, and complete hal_tsf.o hal_timer_update_by_rtc size 0x38. This bounded tail stores interrupt mask 0x19a879e0, repeats the bit-28 set at 0x20104c8c, performs two separate byte RMWs at 0x20104098, sets RX_CONTROL bit 27, then enables RTC timer update and publishes an 18-bit slow-clock calibration. g_wifi_osi_funcs offset 0x148 is independently pinned as _slowclk_cal_get by esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, esp-wifi-sys-esp32s31/src/include.rs sha256 de6ecd8853cc1925389f89e768a8a865ad58db6025f94a63584096eb8ad5f1dc and c/headers/esp32s31/esp_private/wifi_os_adapter.h sha256 08fb73f76da7e6800c42dbff2fb724dff5205e1c8262e969da0f391be21f1eae. esp-hal branch esp32s31-async-platform commit 07de55443721de6fa32e7fb721f0fa7996e604d3, esp-radio/src/wifi/internal.rs sha256 252cfe7cfdcdb104a91596fcbc173af6e07432b907480df746d0599463c6cdc7 and esp-radio/src/wifi/os_adapter/mod.rs sha256 cf8439e907161228875d852eb1e4cfa45628b62532bfbe4bc8adcebd8c6112ed prove that S31 installs this callback and currently returns zero with an explicit TODO rather than reading extra peripheral MMIO."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_INIT_COEX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_init offsets 0x12e..0x190; complete hal_coex.o hal_coex_pti_init size 0x12, hal_set_rx_active_pti size 0x14, hal_set_rx_ack_pti size 0x1a, hal_set_wifi_default_pti size 0x14, hal_set_ofdma_sequence_pti size 0x13a, hal_set_tb_pti size 0xb4, hal_set_beamf_pti size 0x34 and hal_set_beamf_mt_pti size 0x32; complete hal_mac_ctl.o hal_coex_enable_default_pti size 0x18. These bodies prove seventeen separate cold RMW edges. The OSI callback at offset 0x1a8 is _coex_pti_get in the independently pinned S31 esp-wifi-sys layout. The esp-hal no-coex stub at commit 07de55443721de6fa32e7fb721f0fa7996e604d3 returns zero without initializing its output pointer. hal_init preinitializes its ordinary RX outputs, but hal_set_ofdma_sequence_pti does not initialize twelve stack outputs before reading them; reproducing that disabled-feature path would therefore publish indeterminate data and is deliberately rejected in favor of an explicit platform PTI source."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_INIT_PREFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_init offsets 0x00..0x66, complete hal_init_bf size 0xd4, complete libpp[hal_mac_ctl.o]::hal_he_set_bf_report_rate size 0x7c reached with arguments (1,0x10,0,0), and complete hal_init_tb_tx size 0x1e. This bounded graph stops immediately before the hal_init_tx_pwr call at parent offset 0x6a. It proves twenty-two separate fresh-read RMW edges and a final volatile read at 0x20107128. In particular, parent clears bit 31 and then bits 31:30 at 0x20104c80 separately; hal_init_bf replaces the entire low byte at 0x20104c78 rather than preserving bit zero; and hal_init_tb_tx clears bits 15 and 14 at 0x20104e04 through separate RMWs."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_UL_MU_OMC"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e, complete hal_mac_ctl.o hal_he_set_ul_mu size 0x3a; _oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40, complete ieee80211_he.o wifi_htc_omc_txcb size 0x108 and its pinned format string. The callback extracts HT-Control bit 11 as ul_mu_disable and bit 17 as ul_mu_data_disable. The HAL leaf independently copies those arguments to 0x20104c80 bits 31 and 30 respectively through two fresh-read RMWs."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_TB_DIAGNOSTICS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_get_rx_trigger_cnt size 0x0e, hal_he_get_tb_times_cnt size 0x0e and hal_he_get_tb_qosnull_cnt size 0x0c; complete hal_debug.o get_txtb_sym_num size 0x10, get_txtb_psdu_len size 0x0e, get_txtb_min_subframe size 0x10, get_txtb_time_pe size 0x0c, dbg_read_axtb_diag size 0x102 and esp_test_get_hw_tb_statistics size 0x56. Field semantics and spellings for 0x201044f4..0x20104500 come from the complete debug function's own WDEVAXTBDIAG0..3 format strings and matching instruction-exact shifts/masks."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_BF_CONFIG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_init_bf size 0xd4, libpp[hal_mac_ctl.o]::hal_he_set_bf_report_rate size 0x7c and libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate size 0x4e; complete hal_debug.o dbg_read_rx_misc WDEVBEAMFORMCONF decode at offsets 0x3c0..0x418 and dbg_read_bfr_rate size 0x148 with its QAM16/QPSK/BPSK format strings; and complete trc.o libpp[trc.o]::trc_set_bf_report_rate size 0x52. The decoder proves 0x20104c78 bits 0 through 22. The report-rate decoder proves three 9-bit profiles at 0x20104464, high to low as QAM16, QPSK and BPSK; the setter and trc policy prove each profile packs normalized rate bits 4:0, signal mode bits 6:5, DCM bit 7 and ER-SU bit 8. The trc leaf then tail-calls libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate: its four fresh-read byte RMWs publish 0x80 for argument zero or 0xa0 for nonzero at 0x20104404."
+
+[[sources]]
+id = "BLOB_LIBPP_TEST_BF_SET_FEEDBACK"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete test_hal.o esp_test_bf_set_feedback size 0x182. The zero-enable branch clears 0x20104e00 bit 23. The enabled path sets bit 23, clears bits 22:20, replaces argument fields 13:7 and 6:0, and applies all bounded selector branches zero through sixteen across bits 22:14 plus 0x2010409c bits two and three. This is an instruction-exact test configuration leaf, not evidence that production sounding calls it or that selector numeric meanings are known."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_BF_DEBUG_CONTROL"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_disable_report_cbf size 0x42. A nonzero disable argument clears 0x20104c78 bit 20; zero sets it. The function then reads back and logs that same bit. Together with dbg_read_rx_misc label HE_BEAM_ENA, this proves the compressed-beamforming-report output polarity without creating a new address."
+
+[[sources]]
+id = "BLOB_LIBPP_BFR_AVERAGE_SNR"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o esp_test_get_bfr_avgsnr size 0x86 and its pinned \u201cAverage SNR\u201d format string. It reads 0x20105f94 low byte as stream-zero code, treats 0x7f as the special greater-than-or-equal case, and otherwise computes (code + 88.0) * 0.25 dB using the complete function-local float constants."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_TX_SIG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_sig size 0x350 and its pinned HT, VHT, HE, HT20-length and HT40-length format strings. The complete body selects interpretation from per-queue PLCP_FORMAT, then proves all documented shifts/masks at 0x201054e8..0x20105510-q*0x7c and the matching reverse-addressed queue-protection word."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_DUMP_RX_PPDU"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_dump_rx_ppdu size 0xa36, extracted object sha256 2d3eb6f1123aba62387d98864ecfe1ececc507e52f7f8b72a3efaf40cc5042e5. In the HE-SU and HE-extended-range-SU branch at offsets 0x1b0..0x280, instructions at 0x1e6..0x1ec shift the captured HE-SIG-A1 word right by 23 and mask three bits. The pinned format string at section offset 0x1b0 names that value nsts_and_midamble_periodicity."
+
+[[sources]]
+id = "BLOB_LIBPP_DEBUG_STATISTICS_CONTROL"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_clr_hw_count size 0x08 and reachable esp_test_clr_hw_statistics size 0x30. The wrapper tail-calls the leaf, which sets 0x20104c00 bit 16, pulses 0x20104308 bit 0 high then low, and clears 0x20104c00 bit 16 using fresh reads before every write."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_RX_DEBUG_COUNTERS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_color_collision size 0x64 and dbg_read_rx_count size 0x21a, including their pinned format strings. The former proves the BSS-color bitmap words at 0x20104040/44 and RX_HE_BSS_COLOR_CONF fields at 0x20104048. The latter proves 39 named RX statistics, their sparse addresses and widths, including signed high-halfword CFO multiplied by 40 and the hang/panic words at 0x20104c64 and 0x20104e18/1c."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_RX_MISC_DEBUG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_rx_misc size 0x42a and its pinned .rodata.dbg_read_rx_misc.str1.4 strings. The instruction-exact loads, shifts and masks decode WDEVRX_ABORT, WDEVDAHI/DALO, WDEVBSSIDHI/LO, WDEVTXRX_TAB, WDEV_HE_BSSID0_CONF, WDEVAXOPTIONS1/2, WDEVRXCTR_BSSIDLIST, WDEVRX_POWER_SAVE_CONF and WDEVBEAMFORMCONF at their exact 0x20104xxx addresses."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_RESPONSE_RATE_DEBUG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_ack_rate and dbg_read_cts_rate, each size 0x11e, including their pinned ACK_TAB0/1, ACK_SCCKTAB, CTS_TAB0/1 and CTS_SCCKTAB strings. Their instruction-exact byte extraction proves six consecutive response-rate words at 0x2010444c..0x20104460 and the named byte lanes."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_WDEV_DELAY_DEBUG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_wdevdelay size 0x5c and its pinned WDEVDELAY/WDEVDELAY1 format strings. It reads 0x20104c58 and 0x20104c54 and extracts bits 20:10 as WDEV_RXCCK_DELAY and WDEV_TXCCK_DELAY respectively."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_SET_MAC_DELAY"
+description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete hal_mac_ctl.o hal_he_set_mac_delay size 0x180 and its five pinned wifi_log format strings. After its RMWs it logs 0x20104c58 bits 20:10 as WDEV_RXCCK_DELAY, bits 9:0 as WDEV_RXOFDM_DELAY and bits 30:21 as WDEV_TXOFDM_DELAY (the tail call), and 0x20104c54 bits 30:21 as WDEV_RX_11G_OFDM_DELAY and bits 20:10 as WDEV_TXCCK_DELAY, each as a shifted, masked word read."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TX_POWER_INIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o hal_init_tx_pwr size 0x50 and hal_get_tx_pwr size 0x1a; complete hal_mac_ctl.o hal_init_tb_power size 0x1a0, hal_init_imrsp_power size 0x2f8, hal_mac_set_tb_max_pwr size 0x160 including both complete relocation jump tables, and hal_init_tb_ru_power size 0xba. The parent queries rates 0 through 42 in order into 43 adjacent two-byte entries. Its three children publish 56 separate fresh-read RMW edges at 0x20104408..0x20104448. Migration source is the predecessor repository's migration/esp32s31-hybrid-runtime/src/lmac.rs: it consumed this same exported 86-byte s_phy_get_max_pwr table for open legacy and HT TX but did not reproduce its builder."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_INIT_SUFFIX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_init offsets 0x7a..0x19e and complete reached libpp[hal_mac_ctl.o]::hal_he_set_ersu, libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate, hal_he_set_bcast_ru, hal_he_set_uora_parameter, hal_he_enable_dump_complete_hesigb, hal_vht_enable_bwsignaling_rts, hal_he_clr_multi_bssid and hal_he_set_co_hosted_bss leaves, plus complete hal_mac_tx.o hal_set_tx_min_pwr size 0x1a. It proves 163 writes/RMWs and two guard reads after the debug power traversal. In particular ER-SU ACK bytes are four separate RMWs, feature bits 1 and 0 at 0x20104c88 are separate, the 120-word scratch range is 0x201055f0..0x201057cc, and the parent/clear/co-hosted sequence deliberately repeats multi-BSSID fields."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_SET_DEFAULT_PE"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_set_default_pe body, size 0x14. It replaces only bits 2:0 at 0x20104c80 with its three-bit argument."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_BSR_INIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_bsr_init body, size 0x50, plus complete hal_he_bsr_ctrl and hal_he_get/set_bsr_acihigh_comp_method leaves. It proves eight ordered fresh-read RMW edges: set 0x20104c7c bits 15, 8, 7 and 6; set 0x20104c80 bit 27; clear 0x20104c7c bits 5 and 4; then replace bits 1:0 with one."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_BSR_DEBUG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_bsr_info size 0x268 and dbg_tb_ignore_cca_enable size 0x3c, including their pinned format strings. The first function decodes WDEVTXQBSR_CTRL, eight interleaved hardware/software BSR values, WDEVAXOPTIONS1 and WDEVAXOPTIONS2. The second proves that 0x20104c7c bit 12 set means TB cares about CCA and NAV, while clear means the debug ignore mode."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_BSR_STATUS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_get_hw_txq_bsr size 0x14. It reads 0x20104d74 plus eight times the queue/TID index and returns the low twenty bits."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_TX_SET_TB"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_hesig size 0x324, libpp[hal_mac_tx.o]::mac_tx_set_tb size 0x146, libpp[hal_mac_tx.o]::mac_tx_set_mplen size 0x2c4 and libpp[hal_mac_tx.o]::hal_mac_tx_clr_mplen size 0x1aa; complete if_hecfg.o libpp[if_hecfg.o]::wifi_he_get_hetb_tid_bitmap size 0x46 and its four-byte table [0x01,0x81,0xa1,0xa3]; complete hal_he_common.o libpp[hal_he_common.o]::hal_he_get_mplen_addr_start and libpp[hal_he_common.o]::hal_he_get_mplen_addr_end, each size 0x4a, and their tables. libpp[hal_mac_tx.o]::mac_tx_set_hesig calls libpp[hal_mac_tx.o]::mac_tx_set_tb unless descriptor-state word offset 0x30 bit 16 is set. The setter gates the QoS TID against the configured bitmap, allocates and writes a linked MPDU-length entry for every DMA frame, writes the terminal link index at 0x201054fc-q*0x7c, enables 0x20104dbc+4*q bit eight, constructs WDEVTXQ_CONF1 at 0x20104d68-0x10*q, replaces the low twenty software-BSR bits at 0x20104d78+8*q with its queued-byte accumulator, and finally ORs 1<<q into 0x20104db8. The default configuration value three returns bitmap 0xa1, selecting TIDs 0, 5 and 7. For that non-single-TID policy the allocator ranges are q0 32..63, q1 64..95, q2 0..31 and q3 96..119. The clear leaf walks and frees the software bitmap chain, while its only hardware-visible cleanup clears queue-control TB_ENA."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_MU_EDCA_DEBUG"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_muedca_timer size 0x70, dbg_read_txq_conf1 size 0x86 and dbg_read_txq_conf2 size 0x80, including their pinned format strings. They decode four WDEVMUEDCA_TIMER words at 0x20104dbc..0x20104dc8, eight reverse-addressed WDEVTXQ_CONF1 words at 0x20104cf8..0x20104d68 and four reverse-addressed WDEVTXQ_CONF2 words at 0x20104d34..0x20104d64. The strings identify TID, TB enable, MU-EDCA timer select, MPDU-length link address, minimum TX power, three channel-width minimum-MPDU lengths, software RTS/CTS, timer/reset/reached and AIFS fields."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_TRIGGER_RX_DIAGNOSTICS"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_ax_diag size 0x466 and its pinned WDEVAXDIAG0..9 format strings. The function reads 0x20104508..0x2010452c and decodes Trigger state, TB APEP length, EOF/pre-FEC padding, matched user RU/MCS/DCM/FEC/AID, common GI/LTF/bandwidth/spatial-reuse fields, TRS and packet counts. Its own warning says the words are not reliable after a following RX frame, so the PAC treats them as a best-effort diagnostic snapshot rather than durable state."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_RX_BA"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_rx_ba size 0x9a and its pinned WDEVTXQBA_BMHI/BMLO/SSC/TID/TAHI/TALO strings. Despite its symbol name, the function walks eight TX BlockAck result banks from 0x20105528 downward with stride 0x7c."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_DUMP_TXQ_TXINFO"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_dump_txq_txinfo size 0x70 and its pinned WDEVTXQ_TXINFO/BA/ACK/ACK_TID/LAST_TX_IS_TB/TB_PACK_SENT string. It reads the queue-information word at 0x20105524-q*0x7c and the upper result fields of 0x20105534-q*0x7c."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_INTERNAL_TXBA"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_internal_txba size 0x66 and its pinned WDEVTXBA bitmap, transmitter-address, fragment, SSN and TID strings. It reads five consecutive words at 0x2010429c..0x201042ac."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_KEY_ENTRY"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_key_entry size 0x1cc and its pinned key-entry strings. The queue selector reads 0x201054d8-q*0x7c bits 22:17 and 24:23, then indexes the ten-word key table at 0x20105800 with stride 0x28 and the validity bitmap at 0x20104814."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_TX_MPLEN"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_mplen size 0x120 and its pinned MPDU_LEN/NEXT strings. It reads 120 consecutive words at 0x201055f0..0x201057cc and extracts bits 13:0 and 20:14."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_OBSS_NARROW_BAND_RU"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_ctl.o hal_he_disable_obss_narrow_bw_ru size 0x3e. A nonzero argument writes 0xfffff to 0x20104e9c, sets 0x20104ea0 bits 8:4 through one fresh-read RMW and bit 0 through another; zero writes zero and clears those two groups in the same order. The aggregate disabled/enabled meaning is symbol-exact, while individual bitmap/class meanings remain approximate."
+
+[[sources]]
+id = "BLOB_LIBPP_DBG_READ_TX_POWER"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_tx_power size 0xcc. The unconditional hal_he_init child queries PHY rates 0 through 25 while skipping rate 4, for 25 discarded two-byte results, then only reads the MAC table and logs. Through ROM_REV0_PHY_GET_MAX_PWR those otherwise diagnostic queries still cause fifty ordered RMWs at 0x20107428."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_ANTENNA_INIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o hal_attenna_init body, size 0x5e. The symbol spelling is preserved from the archive. Its first reverse traversal clears bit 2 at eight words from 0x20105510 down to 0x201051ac with stride 0x7c. Its second reverse traversal clears bit 3, sets bit 5 and clears bit 4 through three separate fresh-read RMWs per word. It finishes with separate bit-2-clear and bit-5-set RMWs at 0x201042b0. Complete hal_mac_rate_autoack_init in the same object is independently verified as a two-byte ret-only no-op."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_CHANNEL_SWITCH"
+description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40, complete wl_chm.o chm_phy_change_channel.constprop.0; _oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e, complete if_hwctrl.o libpp[if_hwctrl.o]::ic_mac_deinit/libpp[if_hwctrl.o]::ic_mac_init, hal_mac.o libpp[hal_mac.o]::hal_mac_deinit/hal_mac_init, hal_pwr.o pwr_hal_select_wifimac_regdma_link and ret-only hal_mac_ctl.o hal_mac_set_csi_cbw. The exact vendor chain is pm_wake_up, libpp[if_hwctrl.o]::ic_mac_deinit, phy_change_channel, hal_mac_set_csi_cbw, libpp[if_hwctrl.o]::ic_mac_init, pm_wake_done. For WIFI_PS_NONE its bounded MMIO tail sets then clears 0x00ff1000 at 0x20104cac and selects REGDMA link four in bits 20:17 of 0x2010d83c."
+
+[[sources]]
+id = "BLOB_LIBPP_RX_POLICY"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac.o hal_mac_rx_set_policy and hal_mac_set_rxq_policy bodies plus if_hwctrl.o ic_set_rx_policy and ic_set_rx_policy_ubssid_check wrappers. The reachable queue-zero policy-five transaction was preserved in migration scan code and is HIL-qualified by the connected open STA path."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_TX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_plcp0, hal_mac_tx_config_timeout, libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu, hal_mac_tx_config_edca, libpp[hal_mac_tx.o]::hal_mac_txq_enable, hal_mac_txq_disable, libpp[hal_mac_tx.o]::hal_mac_get_txq_state, libpp[hal_mac_tx.o]::hal_mac_clr_txq_state and libpp[hal_mac_tx.o]::hal_mac_get_txq_complete bodies; complete lmac.o libpp[lmac.o]::lmacProcessTxSuccess; complete trc.o libpp[trc.o]::rcUpdateTxDone and libpp[trc.o]::rcUpdateAckSnr; complete pp.o libpp[pp.o]::ppTxProtoProc and libpp[hal_mac.o]::mac_tx_set_pti bodies."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_HE_TX"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_hesig size 0x324, libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu HE branch, libpp[hal_mac_tx.o]::mac_tx_set_plcp0/libpp[hal_mac_tx.o]::mac_tx_set_plcp1 and libpp[hal_mac_tx.o]::mac_tx_set_len, plus complete hal_mac_ctl.o libpp[hal_mac_ctl.o]::hal_he_get_bss_color, hal_he_set_tx_protection and libpp[hal_mac_ctl.o]::hal_he_set_htc. This graph proves the two reverse-stride HE SU vector stores, repeated descriptor-count and protection fields, length-control store and HE power-pair selection."
+
+[[sources]]
+id = "BLOB_LIBPP_HE_DCM"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete trc.o libpp[trc.o]::rcGetDCMMaxRate and libpp[trc.o]::he_get_min_subframe_len_dcm bodies plus their RU26, RU52, RU106 and RU242 rate tables. libpp[trc.o]::rcGetDCMMaxRate maps the peer receive-constellation bound to BCC DCM MCS0, MCS1 or MCS3. For RU242 the 100-kbit/s rate rows for GI 0.8, 1.6 and 3.2 us are respectively [43,86,0,172,258], [40,81,0,163,244] and [36,73,0,146,219]. libpp[trc.o]::he_get_min_subframe_len_dcm combines these tables with ROM global s_ht_ampdu_density_us, whose rev0 default at 0x2f07fc5a is eight microseconds: it computes scaled=(rate_100kbps*density_us)>>3 and minimum_bytes=scaled/10+(scaled%10!=0), then stores the u16 result in the GI-by-MCS density table."
+
+[[sources]]
+id = "BLOB_LIBPP_HE_DELIMITER_SPACING"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_he.o libpp[pp_he.o]::ppCalDeliNum size 0xac, libpp[pp_he.o]::ppCalSubFrameLength size 0x3e and libpp[pp_he.o]::ppEmptyDelimiterLength size 0x22; complete trc.o rcUpdateAMPDUParam size 0xde and ordinary/DCM HE minimum-subframe builders; complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_hesig size 0x324. rcUpdateAMPDUParam maps the eight negotiated density encodings through integer microseconds [0,1,1,1,2,4,8,16]. libpp[pp_he.o]::ppCalDeliNum selects the GI, HE MCS and DCM-specific minimum complete subframe byte count, stores it at descriptor offset 0x28, and writes ceil((minimum-current)/4) to private DMA metadata byte four when round4(PSDU)+delimiter is shorter. libpp[pp_he.o]::ppCalSubFrameLength adds those four-byte empty delimiters to non-final aggregate accounting; libpp[pp_he.o]::ppEmptyDelimiterLength removes final padding and empty delimiters. libpp[hal_mac_tx.o]::mac_tx_set_hesig copies the descriptor offset-0x28 halfword into all three ten-bit queue PROTECTION lanes. The length metadata and PROTECTION value are therefore two outputs of the same rate/density policy and must not be configured independently."
+
+[[sources]]
+id = "BLOB_LIBPP_HE_AMPDU_LIMIT"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_he.o libpp[pp_he.o]::ppCheckTxHEAMPDUlength size 0x258, pp_he.o libpp[pp_he.o]::get_estimated_batime size 0x1a, and trc.o libpp[trc.o]::rx11AXRate2AMPDULimit plus rx11AXRate2AMPDULimit_update size 0x136. The checker calls libpp[pp_he.o]::ppCalSubFrameLength for the candidate and rejects or stops accumulation when it exceeds the u16 limit selected by AC profile, GI/LTF and MCS. It halves that limit when descriptor-state word offset 0x30 bit 15 selects DCM. A zero EDCA TXOP copies ROM_REV0_HE_MAX_APEP into the selected profile. For a nonzero TXOP in 32-us units the producer generates three by ten values using duration_us=txop*32-36, estimated BlockAck times [68,44,44,32,32,32,32,32,32,32] us, preambles [31.2,32,40] us, symbol times [13.6,14.4,16] us, RU242 data bits per symbol [117,234,351,468,702,936,1053,1170,1404,1560], a minus-22 service/tail-bit term and final division by eight. The four AC profiles together occupy 120 u32 entries."
+
+[[sources]]
+id = "BLOB_LIBPP_PP_HE_AMPDU_LENGTH"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_he.o libpp[pp_he.o]::ppCalTxHEAMPDULength size 0x3e2 and libpp[pp_he.o]::ppCalSubFrameLength size 0x3e. libpp[pp_he.o]::ppCalSubFrameLength rounds the low fourteen-bit DMA MPDU length, adds delimiter and empty-delimiter terms, then adds four when metadata byte seven bit zero is set. The final assembled A-MPDU byte count is stored at pTxRx[logical_queue]+0x44; complete libpp[hal_mac_tx.o]::mac_tx_set_hesig later shifts that exact value by eleven into HE_SU_SIGNAL_A2_LENGTH."
+
+[[sources]]
+id = "BLOB_LIBPP_PP_HE_SMPDU_LENGTH"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete pp_he.o libpp[pp_he.o]::ppCalTxHESMPDULength size 0x58 and libpp[pp_he.o]::ppCalSubFrameLength size 0x3e. libpp[pp_he.o]::ppCalTxHESMPDULength rounds the low-twenty-bit DMA metadata payload length to four bytes, calls libpp[pp_he.o]::ppCalDeliNum and libpp[pp_he.o]::ppCalSubFrameLength, sets descriptor byte 0x32 bit two, sets frame byte 0x26 to one and descriptor byte 0x2a to one. libpp[pp_he.o]::ppCalSubFrameLength computes round4(payload_length)+4*(metadata_byte4+1)+4*(metadata_byte7&1). The live vendor raw frame supplies payload_length 28 for the 24-byte MPDU plus hardware FCS, metadata byte4 zero and byte7 zero, yielding the qualified 32-byte HE S-MPDU APEP."
+
+[[sources]]
+id = "BLOB_LIBPP_TRC_AMPDU_PARAM"
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete trc.o rcUpdateAMPDUParam body, size 0xde. For non-HE HT peer types it maps HT A-MPDU Parameters bits 1:0, the maximum-length exponent, to byte ceilings 0x1fff, 0x3fff, 0x7fff and 0xffff, and maps minimum MPDU start-spacing code 0..4,5,6,7 to finite hardware values 20,40,76,148 stored at peer-state offset 0x82. Complete pp.o libpp[pp.o]::ppCheckTxAMPDUlength compares the accumulated aggregate against that peer byte ceiling. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_htsig, size 0x23c, reads the spacing halfword and copies it into bits 9:0, 19:10 and 29:20 of the ordinary queue PROTECTION word through three fresh-read RMW edges."
+
+[[sources]]
+id = "BLOB_LIBPP_HE_CONTROL_20260904"
+description = "espressif/esp32-wifi-lib commit dda243ecef8005c7499448569b3800ebe462fb2b, esp32s31/libpp.a, sha256 1b5a3a9e93c5a63e619b0f4f2cc75ff889db99ce2dc6ca6cf2827d28d77abbab; Complete hal_he_init, hal_he_set_co_hosted_bss, hal_he_set_multi_bssid, hal_he_clr_multi_bssid and nontransmitted-BSSID wakeup setter/getter. Co-hosted control uses bit 18 and wakeup-only uses bit 19 of 0x20104020; bit 17 remains unclassified."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_TSF_TBTT_20260927"
+description = "espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete hal_tsf.o hal_enable_sta_tbtt (0x2c), hal_disable_sta_tbtt (0x20), hal_set_sta_tbtt_ahead_time (0x18), tsf_hal_set_tbtt_enable (0x4e), tsf_hal_set_tbtt_disable (0x50), tsf_hal_set_tbtt_early_time (0x4e), libpp[hal_tsf.o]::tsf_hal_set_tbtt_intr_enable (0x2e) and libpp[hal_tsf.o]::tsf_hal_set_tbtt_intr_disable (0x2e); complete wdev.o libpp[wdev.o]::wDev_ProcessFiq (0x1c6) and libpp[wdev.o]::wdev_process_tbtt (0x0c); complete pm.o libpp[pm.o]::pm_on_tbtt (0x2c). The TBTT interrupt leaves of TSF index n set or clear bit 3-n (8 >> n) in both 0x2010d8b4 and 0x2010d8c0; the station leaves use index 0 and bit 3. libpp[wdev.o]::wDev_ProcessFiq passes the masked power-interrupt event bits 3:0 to libpp[wdev.o]::wdev_process_tbtt, and libpp[pm.o]::pm_on_tbtt runs the station TBTT process for bit 3. hal_enable_sta_tbtt sets bit 26 of 0x2010d858 and hal_disable_sta_tbtt clears only that bit; the per-index enable and disable leaves do the same at 0x2010d858, 0x2010d860, 0x2010d868 and 0x2010d870. hal_set_sta_tbtt_ahead_time and the index-0 early-time leaf replace bits 15:0 of 0x2010d858. Complete hal_set_sta_tbtt (0x6e) and tsf_hal_set_tbtt_start_time (0x48) write the TBTT start target to 0x2010d82c and then set bit 8 + n of 0x2010d814 for TSF index n; the station uses bit 8. Complete hal_set_sta_tbtt_interval (0x18) replaces bits 25:0 of 0x2010d85c with its argument shifted right by ten and preserves bits 31:26; complete tsf_hal_get_tbtt_interval (0x52) returns that field shifted left by ten."
+
+[[sources]]
+id = "BLOB_LIBPP_PM_TX_BLOCK_20260927"
+description = "espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a, sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete pm.o pm_coex_go_to_sleep (0x162) and pm_coex_schm_process (0x1f4) set bits 19:17 of 0x20104cac through a fresh-read RMW; complete pm.o hal_pm_unblock_txq (0x16) clears exactly those bits; complete pm.o pm_get_tx_blocks_retention_mask (0x24) returns every bit except 19:17 while an associated station runs power management, and all ones otherwise, as the mask hal_mac_init and libpp[hal_mac.o]::hal_mac_deinit apply to bits 23:16. Complete hal_coex.o hal_set_rx_beacon_time (0x2c) replaces bits 15:0 of 0x2010d854 with its first argument and bits 7:0 of 0x2010d8a0 with bits 15:8 of its second."
+
+[[sources]]
+id = "BLOB_LIBPP_MAC_LOCAL_TIME"
+description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4 (knowledge/esp32s31/vendor/artifacts.toml libpp); complete lmac.o libpp[lmac.o]::lmacAdjustTimestamp, analyzed in process as function records with complete coverage and value semantics. With p the word at argument+0x34, it reads *p, and when bit 5 is set it loads 0x2010d800 at offset 0x18; when bit 22 of *p is clear it computes 0x2010d800 minus the word at p+0x18 as the frame's age, compares it unsigned, and stores 0x2010d800 minus ((g[0]-g[4]) << 10) back to p+0x18, a TU-scaled sleep interval from a module-local block g. A register-access analysis of range 0x2010d800:0x200 over the same archive shows the 0x2010d800 loads of libpp[pm_twt.o]::pm_twt_set_target_wdev_time, ic_update_sta_tsf, libpp[pm_coex.o]::pm_get_null_max_tx_time and libpp[pm_coex.o]::pm_coex_recalculate_wifi_time_slice. The word is therefore the MAC's local time and the receive timestamp counts in it; its unit, rate and relation to the system timer are not established by these functions."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_SET_PRI20_CHAN_OFFSET"
+description = "espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f08c0c21, esp32s31/libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4; complete hal_set_pri20_chan_offset body, size 0x14, replaces exactly 0x20104400 bits 3:0 with the low four bits of its primary-20 channel-offset argument in one fresh-read RMW."
+
+[[sources]]
+id = "BLOB_LIBPP_SPP_AMSDU"
+description = "ESP32-S31 esp32-wifi-lib pin af55a0ca258ce9d791d1661d7c2bbb65f08c0c21: complete libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp -> libpp[if_hwctrl.o]::ic_set_key provides the association decision. It controls SPP A-MSDU at bit 9 of the selected interface control, not an individual key entry."

@@ -1,0 +1,87 @@
+//! Platform-supplied entropy behind the standard LE Rand command.
+
+use bt_hci::{
+    cmd::{Cmd, Opcode, le::LeRand},
+    param::{Error as HciError, Status},
+};
+
+/// A cryptographic entropy service retained by the HCI endpoint's owner.
+///
+/// Implementations must keep their entropy source enabled for every call and
+/// return fresh cryptographically suitable bytes. They must not depend on an
+/// active radio role or fall back to a deterministic generator on failure.
+/// Calls run synchronously in command dispatch and must be bounded and short.
+/// This contract deliberately contains no peripheral or executor types.
+pub trait LeRandomSource: Sync {
+    /// Produce eight fresh octets, or fail without returning partial output.
+    fn random_bytes(&self) -> Result<[u8; 8], LeRandomUnavailable>;
+}
+
+/// The configured entropy service could not provide a complete random value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LeRandomUnavailable;
+
+/// Entropy may only be attached once, before the epoch's first successful Reset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LeRandomSourceAlreadyConfigured;
+
+/// Validated parameterless LE Rand request, separate from software bootstrap.
+#[derive(Debug)]
+pub struct LeRandCommand(pub(crate) ());
+
+impl LeRandCommand {
+    /// Standard Bluetooth opcode, owned by the typed HCI command definition.
+    pub const OPCODE: Opcode = LeRand::OPCODE;
+}
+
+/// Complete LE Rand response retained across output backpressure.
+///
+/// Debug output intentionally excludes random material. Failure responses
+/// contain zeroed, invalid return octets, never partial entropy.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct LeRandCommandCompleteEvent {
+    bytes: [u8; 14],
+}
+
+impl core::fmt::Debug for LeRandCommandCompleteEvent {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LeRandCommandCompleteEvent")
+            .field("status", &self.bytes[5])
+            .finish_non_exhaustive()
+    }
+}
+
+impl LeRandCommandCompleteEvent {
+    /// Successful completion carrying `random`.
+    pub fn success(random: [u8; 8]) -> Self {
+        Self::new(Status::SUCCESS, random)
+    }
+
+    /// Failed completion with zeroed return octets.
+    pub fn error(error: HciError) -> Self {
+        Self::new(error.to_status(), [0; 8])
+    }
+
+    fn new(status: Status, random: [u8; 8]) -> Self {
+        let mut bytes = [0; 14];
+        bytes[..3].copy_from_slice(&[0x0e, 12, 1]);
+        bytes[3..5].copy_from_slice(&LeRandCommand::OPCODE.to_raw().to_le_bytes());
+        bytes[5] = status.into_inner();
+        bytes[6..].copy_from_slice(&random);
+        Self { bytes }
+    }
+
+    /// Complete HCI Event without an H4 indicator.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl crate::HciControllerResponse for LeRandCommandCompleteEvent {
+    fn kind(&self) -> bt_hci::PacketKind {
+        bt_hci::PacketKind::Event
+    }
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}

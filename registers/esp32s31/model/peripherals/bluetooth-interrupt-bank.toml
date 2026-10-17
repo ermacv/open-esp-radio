@@ -1,0 +1,907 @@
+schema = 2
+
+[[peripherals]]
+name = "BLUETOOTH_INTERRUPT_BANK"
+description = """
+Bluetooth controller interrupt programming, enable, status, acknowledgement,
+snapshot and diagnostic registers. This physical view is independent from the
+controller task lifecycle so ownership can transfer to the hard ISR without
+also exposing scheduler, sleep or memory-management state.
+"""
+baseAddress = 0x20101000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_CONTROL_0"
+description = "BTDM interrupt setup and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+addressOffset = 0x0C
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "COMMAND"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_CONTROL_1"
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+addressOffset = 0x10
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "COMMAND"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_CONTROL_2"
+description = "BTDM interrupt teardown and the complete reset leaf write the finite complete image 1. Inner action remains unknown."
+addressOffset = 0x14
+size = 32
+access = "write-only"
+[[peripherals.registers.register.fields]]
+name = "COMMAND"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_ENABLE_0"
+description = "First controller interrupt-enable bank. Primary setup clears stale image 0x00008000 then ORs that baseline into this word; another complete helper independently controls 0x18200000."
+addressOffset = 0x54
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "SOURCE_0"
+bitOffset = 0
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_1"
+bitOffset = 1
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_8"
+bitOffset = 8
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_13"
+bitOffset = 13
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_15"
+bitOffset = 15
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_16"
+bitOffset = 16
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_21"
+bitOffset = 21
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCES_27_28"
+bitOffset = 27
+bitWidth = 2
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_CLEAR_0"
+description = "First controller interrupt-clear bank. Primary and NRT handlers copy their respective first-bank status images here as complete words."
+addressOffset = 0x58
+size = 32
+access = "write-only"
+modifiedWriteValues = "oneToClear"
+[[peripherals.registers.register.fields]]
+name = "BITS_0_6_OPAQUE"
+bitOffset = 0
+bitWidth = 7
+[[peripherals.registers.register.fields]]
+name = "SOURCE_7"
+description = "Acknowledged with complete image 0x80 by the scheduler cancellation path before it sets BLUETOOTH_CONTROLLER_CORE.WORD_0204_OPAQUE bit zero."
+bitOffset = 7
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_8_14_OPAQUE"
+bitOffset = 8
+bitWidth = 7
+[[peripherals.registers.register.fields]]
+name = "SOURCE_15"
+bitOffset = 15
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_16_20_OPAQUE"
+bitOffset = 16
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "SOURCE_21"
+bitOffset = 21
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_22_26_OPAQUE"
+bitOffset = 22
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "SOURCES_27_28"
+bitOffset = 27
+bitWidth = 2
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+bitOffset = 29
+bitWidth = 3
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_STATUS_0"
+description = "First masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement."
+addressOffset = 0x5C
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "BITS_0_14_OPAQUE"
+bitOffset = 0
+bitWidth = 15
+[[peripherals.registers.register.fields]]
+name = "SOURCE_15"
+bitOffset = 15
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_16_20_OPAQUE"
+bitOffset = 16
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "SOURCE_21"
+bitOffset = 21
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_22_26_OPAQUE"
+bitOffset = 22
+bitWidth = 5
+[[peripherals.registers.register.fields]]
+name = "SOURCES_27_28"
+bitOffset = 27
+bitWidth = 2
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+bitOffset = 29
+bitWidth = 3
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_ENABLE_1"
+description = "Second controller interrupt-enable bank. Primary setup clears stale image 0x00001300 then ORs that baseline into this word; another complete helper independently controls bit 3."
+addressOffset = 0x60
+size = 32
+access = "read-write"
+[[peripherals.registers.register.fields]]
+name = "SOURCE_3"
+bitOffset = 3
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_4"
+bitOffset = 4
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_5"
+bitOffset = 5
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_6"
+bitOffset = 6
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_8"
+bitOffset = 8
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_9"
+bitOffset = 9
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_12"
+bitOffset = 12
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_13"
+bitOffset = 13
+bitWidth = 1
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_CLEAR_1"
+description = "Second controller interrupt-clear bank. Primary and NRT handlers copy their respective second-bank status images here as complete words."
+addressOffset = 0x64
+size = 32
+access = "write-only"
+modifiedWriteValues = "oneToClear"
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+bitOffset = 0
+bitWidth = 3
+[[peripherals.registers.register.fields]]
+name = "SOURCE_3"
+bitOffset = 3
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_4_7_OPAQUE"
+bitOffset = 4
+bitWidth = 4
+[[peripherals.registers.register.fields]]
+name = "SOURCE_8"
+bitOffset = 8
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_9"
+bitOffset = 9
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_10_11_OPAQUE"
+bitOffset = 10
+bitWidth = 2
+[[peripherals.registers.register.fields]]
+name = "SOURCE_12"
+bitOffset = 12
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_13_31_OPAQUE"
+bitOffset = 13
+bitWidth = 19
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_STATUS_1"
+description = "Second masked controller interrupt-status bank; the primary source-124 handler reads this complete word before acknowledgement."
+addressOffset = 0x68
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+bitOffset = 0
+bitWidth = 3
+[[peripherals.registers.register.fields]]
+name = "SOURCE_3"
+bitOffset = 3
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_4_7_OPAQUE"
+bitOffset = 4
+bitWidth = 4
+[[peripherals.registers.register.fields]]
+name = "SOURCE_8"
+bitOffset = 8
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "SOURCE_9"
+bitOffset = 9
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_10_11_OPAQUE"
+bitOffset = 10
+bitWidth = 2
+[[peripherals.registers.register.fields]]
+name = "SOURCE_12"
+bitOffset = 12
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_13_31_OPAQUE"
+bitOffset = 13
+bitWidth = 19
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_DIAGNOSTIC_STATE"
+description = "Complete word read by the primary source-124 fault prefix when masked bank-one source 12 is pending. Inner state encoding remains unknown."
+addressOffset = 0x70
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_DIAGNOSTIC_DETAIL_0"
+description = "First complete detail word read by the primary source-124 fault prefix when masked bank-one source 9 is pending. Inner encoding remains unknown."
+addressOffset = 0x1C8
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_DIAGNOSTIC_DETAIL_1"
+description = "Second complete detail word read by the primary source-124 fault prefix when masked bank-one source 9 is pending. Inner encoding remains unknown."
+addressOffset = 0x1CC
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_STATUS_SNAPSHOT_0"
+description = "Raw first-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_0."
+addressOffset = 0x340
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "PENDING_BITS"
+bitOffset = 0
+bitWidth = 32
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "IRQ_STATUS_SNAPSHOT_1"
+description = "Raw second-bank status snapshot read by the NRT ISR and copied to IRQ_CLEAR_1."
+addressOffset = 0x348
+size = 32
+access = "read-only"
+[[peripherals.registers.register.fields]]
+name = "PENDING_BITS"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK"
+sources = [
+    "BLOB_LIBBTDM_CONTROLLER_IRQ",
+    "BLOB_LIBBLE_ISO_COEX_REGISTERS",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_0.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_1.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_2"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CONTROL_2.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_13"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_15"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_16"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCE_21"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_0.SOURCES_27_28"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_0_6_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_7"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION", "PUBLIC_ESP32S31_BT_SCHEDULER_CANCELLATION_ROLES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_8_14_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_15"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_16_20_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCE_21"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_22_26_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.SOURCES_27_28"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_0.BITS_29_31_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_0_14_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCE_15"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_16_20_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCE_21"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_22_26_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.SOURCES_27_28"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_0.BITS_29_31_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_3"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_4"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_5"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_6"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_9"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_12"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_ENABLE_1.SOURCE_13"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_COEX_REGISTERS"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_0_2_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_3"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_4_7_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_9"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_10_11_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.SOURCE_12"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_CLEAR_1.BITS_13_31_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_0_2_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_3"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_4_7_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_8"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_9"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_10_11_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.SOURCE_12"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_1.BITS_13_31_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_STATE"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_STATE.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_0.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_DIAGNOSTIC_DETAIL_1.VALUE"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_0"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_0.PENDING_BITS"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_1"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "BLUETOOTH_INTERRUPT_BANK.IRQ_STATUS_SNAPSHOT_1.PENDING_BITS"
+naming = "descriptive"
+sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

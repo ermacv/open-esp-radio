@@ -1,0 +1,362 @@
+schema = 2
+
+[[peripherals]]
+name = "MODEM_LPCON_SHARED_CLOCK"
+description = "Role-neutral MODEM_LPCON clock-map, gate and low-power selector registers shared by the exclusive Wi-Fi, Bluetooth and IEEE 802.15.4 routes."
+baseAddress = 0x2010F000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "LP_TIMER_CONF"
+description = "Bluetooth low-power timer source selector and twelve-bit divider."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_TIMER_SEL_OSC_SLOW"
+description = "Select the slow oscillator."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_TIMER_SEL_OSC_FAST"
+description = "Select the fast oscillator."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_TIMER_SEL_XTAL"
+description = "Select the crystal clock."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_TIMER_SEL_XTAL32K"
+description = "Select the 32 kHz crystal clock."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_TIMER_DIV_NUM"
+description = "Twelve-bit low-power timer divider image."
+bitOffset = 4
+bitWidth = 12
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 4095
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "COEX_LP_CLK_CONF"
+description = "Coexistence low-power source selector and twelve-bit divider sampled by the coexistence time conversion."
+addressOffset = 0x08
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_LP_SEL_OSC_SLOW"
+description = "Select the slow oscillator."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_LP_SEL_OSC_FAST"
+description = "Select the fast oscillator."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_LP_SEL_XTAL"
+description = "Select the crystal clock."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_LP_SEL_XTAL32K"
+description = "Select the 32 kHz crystal clock."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_LP_DIV_NUM"
+description = "Twelve-bit coexistence low-power clock divider image."
+bitOffset = 4
+bitWidth = 12
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 4095
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WIFI_LP_CLK_CONF"
+description = "Wi-Fi power-domain low-power source selector and twelve-bit divider."
+addressOffset = 0x0C
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_LP_SEL_OSC_SLOW"
+description = "Select the slow oscillator."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_LP_SEL_OSC_FAST"
+description = "Select the fast oscillator."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_LP_SEL_XTAL"
+description = "Select the main crystal clock."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_LP_SEL_XTAL32K"
+description = "Select the modem 32 kHz clock chosen by MODEM_32K_CLK_CONF."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_LP_DIV_NUM"
+description = "Twelve-bit Wi-Fi power-domain low-power divider image."
+bitOffset = 4
+bitWidth = 12
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 4095
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "MODEM_32K_CLK_CONF"
+description = "Source of the modem 32 kHz clock selected by the low-power XTAL32K selectors."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_32K_SEL"
+description = "Modem 32 kHz source: zero is the 32 kHz crystal, one the RC32K oscillator and two the external 32 kHz clock."
+bitOffset = 0
+bitWidth = 2
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF_POWER_ST"
+description = "Four shared clock power-state map fields programmed with the reviewed active-state image."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+resetValue = 0x00000000
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_ST_MAP_BIT_ONE"
+description = "Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIPWR_ST_MAP_BIT_TWO"
+description = "Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_ST_MAP_BIT_ONE"
+description = "Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_COEX_ST_MAP_BIT_TWO"
+description = "Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_I2C_MST_ST_MAP_BIT_ONE"
+description = "Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_I2C_MST_ST_MAP_BIT_TWO"
+description = "Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_APB_ST_MAP_BIT_ONE"
+description = "Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_LP_APB_ST_MAP_BIT_TWO"
+description = "Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization."
+bitOffset = 30
+bitWidth = 1
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK"
+sources = ["S31_MODEM_LPCON_STRUCT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.MODEM_32K_CLK_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_LPCON_STRUCT", "ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_SLOW"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_OSC_FAST"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_SEL_XTAL32K"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.LP_TIMER_CONF.CLK_LP_TIMER_DIV_NUM"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_SLOW"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_OSC_FAST"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_SEL_XTAL32K"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.COEX_LP_CLK_CONF.CLK_COEX_LP_DIV_NUM"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_SLOW"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_OSC_FAST"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_SEL_XTAL32K"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.WIFI_LP_CLK_CONF.CLK_WIFIPWR_LP_DIV_NUM"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.MODEM_32K_CLK_CONF.CLK_MODEM_32K_SEL"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_WIFIPWR_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_WIFIPWR_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_COEX_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_COEX_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_LP_APB_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_LPCON_SHARED_CLOCK.CLK_CONF_POWER_ST.CLK_LP_APB_ST_MAP_BIT_TWO"
+naming = "descriptive"

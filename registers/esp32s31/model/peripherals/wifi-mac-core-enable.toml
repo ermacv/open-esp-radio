@@ -1,0 +1,76 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_CORE_ENABLE"
+description = """
+Shared MAC enable gate recovered from the complete hal_enable_mac and
+        hal_disable_mac leaves. The four individual disable-bit meanings are
+        not independently known."""
+baseAddress = 0x20104C00
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Complete hal_enable_mac clears bits 7:4 in one fresh-read RMW before publishing its interrupt-mask argument; complete hal_disable_mac sets the same four bits. Complete esp_test_clr_hw_statistics independently asserts bit 16 around the separate 0x20104308 bit-zero clear pulse, then clears bit 16."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_4_7_OPAQUE"
+description = "Zero is the complete hal_enable_mac image and all ones is the complete hal_disable_mac image; individual gate identities remain unknown."
+bitOffset = 4
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+description = "Clear all four disable gates."
+value = 0
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+description = "Set all four disable gates."
+value = 15
+
+[[peripherals.registers.register.fields]]
+name = "HARDWARE_STATISTICS_CLEAR_ARM"
+description = "Set before and cleared after the 0x20104308 clear pulse by complete esp_test_clr_hw_statistics."
+bitOffset = 16
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_CORE_ENABLE"
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_CORE_ENABLE.CONTROL"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_ENABLE_MAC",
+    "BLOB_LIBPP_DEBUG_STATISTICS_CONTROL",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_CORE_ENABLE.CONTROL.BITS_4_7_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_ENABLE_MAC"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CORE_ENABLE.CONTROL.HARDWARE_STATISTICS_CLEAR_ARM"
+naming = "descriptive"

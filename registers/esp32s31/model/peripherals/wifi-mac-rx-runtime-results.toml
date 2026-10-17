@@ -1,0 +1,91 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_RUNTIME_RESULTS"
+description = "Sparse receive statistics-clear and end-result words recovered from complete hal_sniffer_rx_clr_statistics and hal_mac_rx_get_end_info leaves."
+baseAddress = 0x20104E28
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STATISTICS_CLEAR"
+description = "Complete hal_sniffer_rx_clr_statistics pulses bit 31 high then low using a fresh read before each write."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CLEAR_PULSE"
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "END_RESULT_LOW"
+description = "First full result word returned by hal_mac_rx_get_end_info."
+addressOffset = 0x8
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "END_RESULT_HIGH"
+description = "Second full result word returned by hal_mac_rx_get_end_info."
+addressOffset = 0xC
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+bitOffset = 0
+bitWidth = 32
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.STATISTICS_CLEAR"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_LOW"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_HIGH"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.STATISTICS_CLEAR.CLEAR_PULSE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_LOW.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_RUNTIME_RESULTS.END_RESULT_HIGH.VALUE"
+naming = "descriptive"

@@ -1,0 +1,19 @@
+schema = 3
+chip = "esp32s31"
+address-space = "cpu"
+fragments = ["lp-aon-reset-cause.toml"]
+
+[device]
+name = "ESP32S31_PLATFORM"
+version = "1"
+description = """
+ESP32-S31 platform registers the host reads through the chip's JTAG, never
+    firmware: no PAC is generated from this model. ESP-HAL owns these blocks
+    at runtime."""
+vendor = "Espressif"
+vendor-id = "ESP"
+series = "ESP32-S31"
+license-text = "MIT OR Apache-2.0"
+address-unit-bits = 8
+width = 32
+svd-schema = "1.3"

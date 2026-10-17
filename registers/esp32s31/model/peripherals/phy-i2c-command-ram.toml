@@ -1,0 +1,132 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_I2C_COMMAND_RAM"
+description = """
+Official S31
+        reg_base.h names this aperture DR_REG_I2C_ANA_MST_MEM_BASE. The
+        complete blob establishes its forty-five-entry command layout and the
+        population order in phy_i2c_master_cmd_mem_init. Complete
+        phy_i2c_check independently names ten logical banks, their block IDs,
+        selected host and finite register-index ranges."""
+baseAddress = 0x2010FC00
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 45
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44"
+name = "COMMAND_MEMORY%s"
+description = "One PHY-I2C master command-memory entry; the public header proves the containing memory aperture while the complete blob proves this word layout."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BLOCK"
+description = "Logical PHY-I2C block ID. The bank host and valid half-open register-index ranges are: SAR1 host 0 [0,7), ULP host 1 [0,11), RFPLL host 1 [0,22), RFPLL_SDM host 1 [0,7), BBPLL host 0 [0,11), BBTOP host 1 [0,57), PERIF host 0 [0,13), BIAS host 1 [0,4), TXRF host 1 [1,22), DIG_REG host 0 [0,15)."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "SAR1"
+value = 16
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ULP"
+value = 97
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "RFPLL"
+value = 98
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "RFPLL_SDM"
+value = 99
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "BBPLL"
+value = 102
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "BBTOP"
+value = 103
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "PERIF"
+value = 105
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "BIAS"
+value = 106
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "TXRF"
+value = 107
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DIG_REG"
+value = 109
+
+[[peripherals.registers.register.fields]]
+name = "REGISTER"
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[review]]
+entity = "PHY_I2C_COMMAND_RAM"
+sources = [
+    "ESP_IDF_ESP32S31_MODEM_REG_BASE",
+    "BLOB_LIBPHY_PHY_I2C",
+    "BLOB_LIBPHY_PHY_DEBUG_I2C",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s"
+naming = "descriptive"
+sources = [
+    "ESP_IDF_ESP32S31_MODEM_REG_BASE",
+    "BLOB_LIBPHY_PHY_I2C",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s.BLOCK"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_DEBUG_I2C"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s.REGISTER"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_I2C_COMMAND_RAM.COMMAND_MEMORY%s.DATA"
+naming = "descriptive"

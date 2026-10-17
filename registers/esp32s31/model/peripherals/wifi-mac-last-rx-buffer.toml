@@ -1,0 +1,165 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_LAST_RX_BUFFER"
+description = "Six three-word last-RX-buffer entries and their shared two-edge enable control, recovered from the complete mac_last_rxbuf_init leaf."
+baseAddress = 0x20104120
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "Complete leaf sets bits 13:8 first, then sets bits 6:1 through a second fresh-read RMW."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_1_6_OPAQUE"
+description = "All six bits are set by the second control RMW."
+bitOffset = 1
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_13_OPAQUE"
+description = "All six bits are set by the first control RMW."
+bitOffset = 8
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5"
+name = "ENTRY_CONTROL%s"
+description = "First full-word image for each of six entries."
+addressOffset = 0x4
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5"
+name = "ENTRY_PARAMETER_A%s"
+description = "Second full-word image for each of six entries."
+addressOffset = 0x20
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 6
+dimIncrement = 0x4
+dimIndex = "0,1,2,3,4,5"
+name = "ENTRY_PARAMETER_B%s"
+description = "Third full-word image for each of six entries."
+addressOffset = 0x3C
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_1_6_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.CONTROL.BITS_8_13_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_CONTROL%s.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_A%s.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_LAST_RX_BUFFER.ENTRY_PARAMETER_B%s.BITS_0_31_OPAQUE"
+naming = "opaque"

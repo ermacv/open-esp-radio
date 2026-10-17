@@ -1,0 +1,452 @@
+schema = 2
+
+[[peripherals]]
+name = "ZBBB_RADIO_CONTROL"
+description = """
+Independently bounded words in the ZBBB window touched by complete Bluetooth
+baseband receive-setup and reset-idle leaves. Names describe only those exact
+operations; they do not claim that the physical block is owned exclusively by
+Bluetooth or assign a wider ZBBB protocol meaning."""
+baseAddress = 0x20102C00
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_SETUP_IMAGE"
+description = "bt_bb_rx_set preserves the low 12 bits and replaces bits 31:12 with the finite image 0x001CB; after the shared receive prefix, bt_bb_v2_init_cmplx(1) independently replaces the same field with 0x0019F."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_12_31_OPAQUE"
+bitOffset = 12
+bitWidth = 20
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RX_SETUP_CONTROL"
+description = "bt_bb_rx_set clears bit 8 and the low two-bit field through separate fresh-read RMW operations; the complete shared receive initializer independently replaces bits 10:20."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_8_OPAQUE"
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_20_OPAQUE"
+description = "The complete shared receive initializer replaces bits 10:20 with the finite image 0x79C."
+bitOffset = 10
+bitWidth = 11
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_IMAGE_0"
+description = "The complete shared receive initializer replaces two disjoint positional fields with finite images while preserving every other bit."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_20_OPAQUE"
+description = "The complete initializer replaces bits 13:20 with the finite image 0xA6."
+bitOffset = 13
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_31_OPAQUE"
+description = "The complete initializer replaces bits 21:31 with the finite image 0x792."
+bitOffset = 21
+bitWidth = 11
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_CONTROL_0"
+description = "The complete shared receive initializer clears one positional control bit and preserves the remainder of the word."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_1_OPAQUE"
+description = "The complete initializer clears bit 1."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_IMAGE_1"
+description = "The complete shared receive initializer replaces the low eleven bits with one finite image."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_10_OPAQUE"
+description = "The complete initializer replaces bits 0:10 with the finite image 0x7A6."
+bitOffset = 0
+bitWidth = 11
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_CONTROL_1"
+description = "The complete shared receive initializer sets one positional control bit and preserves the remainder of the word."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "The complete initializer sets bit 30."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_IMAGE_2"
+description = "The complete shared receive initializer replaces the high twenty-four bits and low byte through two disjoint fresh-read updates."
+addressOffset = 0x2C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "The complete initializer replaces bits 0:7 with the finite image 0xF1."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "The complete initializer replaces bits 8:31 with the finite image 0x07A120."
+bitOffset = 8
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_IMAGE_3"
+description = "The complete shared receive initializer replaces the high twenty-four bits with one finite image."
+addressOffset = 0x30
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "The complete initializer replaces bits 8:31 with the finite image 0xF85EDF."
+bitOffset = 8
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SHARED_RX_INIT_IMAGE_4"
+description = "The complete shared receive initializer replaces three disjoint positional fields with finite images."
+addressOffset = 0x34
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "The complete initializer sets bit 0."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_19_OPAQUE"
+description = "The complete initializer replaces bits 9:19 with the finite image 0x7ED."
+bitOffset = 9
+bitWidth = 11
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_30_OPAQUE"
+description = "The complete initializer replaces bits 20:30 with the finite image 0x7E1."
+bitOffset = 20
+bitWidth = 11
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "SOFTWARE_RESET_IDLE_STATUS"
+description = "bbmac_idle_for_swrst reports idle only when the observed low three-bit image equals one."
+addressOffset = 0x38
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "LOW_3_REQUIRED_IMAGE"
+description = "The reset-idle predicate compares this exact field with the finite image 1."
+bitOffset = 0
+bitWidth = 3
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "BLOB_LIBBTBB_SHARED_RX_INIT", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_IMAGE"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_IMAGE.BITS_12_31_OPAQUE"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_BT_BB_V2_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP", "BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_0_1_OPAQUE"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BIT_8_OPAQUE"
+sources = ["BLOB_LIBBTBB_BT_RX_SETUP"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.RX_SETUP_CONTROL.BITS_10_20_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_13_20_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_0.BITS_21_31_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_0.BIT_1_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_1.BITS_0_10_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_CONTROL_1.BIT_30_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_0_7_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_2.BITS_8_31_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_3.BITS_8_31_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BIT_0_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_9_19_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SHARED_RX_INIT_IMAGE_4.BITS_20_30_OPAQUE"
+sources = ["BLOB_LIBBTBB_SHARED_RX_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "opaque"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SOFTWARE_RESET_IDLE_STATUS"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "ZBBB_RADIO_CONTROL.SOFTWARE_RESET_IDLE_STATUS.LOW_3_REQUIRED_IMAGE"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

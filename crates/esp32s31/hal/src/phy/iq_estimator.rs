@@ -1,0 +1,144 @@
+//! Owned ESP32-S31 DC/IQ estimator register leaves.
+//!
+//! The methods in this module perform only finite PAC-described MMIO. Timer
+//! boundaries, readiness repetition, estimator lifetime and calibration
+//! arithmetic remain explicit in the PHY state machines.
+
+#[cfg(target_arch = "riscv32")]
+use crate::{owner::SharedPhyAccess, phy_pac_mut};
+
+/// One observation of the estimator completion signals.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReadinessSnapshot {
+    pub ready: bool,
+    pub activity: bool,
+}
+
+/// Three signed accumulators consumed by `phy_dc_iq_est`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DcIqAccumulatorSnapshot {
+    pub i: i32,
+    pub q: i32,
+    pub power: i32,
+}
+
+/// Four signed signal-power words consumed by IQ mismatch calculations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SignalPowerSnapshot {
+    pub sum_i: i32,
+    pub difference_i: i32,
+    pub difference_q: i32,
+    pub sum_q: i32,
+}
+
+/// Apply the finite register prefix of complete rev0 ROM
+/// `phy_iq_est_enable`.
+///
+/// The body at `0x2f82_89d4`, size `0xb4`, first replaces
+/// `ESTIMATOR_CONFIG.BITS_26_27_OPAQUE` with one, then replaces
+/// `ESTIMATOR_CONTROL.BITS_19_20_OPAQUE` with two, and finally publishes the
+/// caller's low fifteen control bits. The diagnostic halfword write, delays
+/// and readiness loop are deliberately owned by the PHY transition.
+#[cfg(target_arch = "riscv32")]
+pub fn configure(registers: &mut impl SharedPhyAccess, control: u16) {
+    let registers = phy_pac_mut(registers);
+    registers.configure_iq_estimator(control);
+}
+
+/// Set or clear the first estimator enable phase.
+///
+/// Complete rev0 ROM `phy_iq_est_enable` sets bit zero before its first
+/// one-microsecond delay. Complete `phy_iq_est_disable` at `0x2f82_8a88`,
+/// size `0x2c`, clears the same bit after its final delay.
+#[cfg(target_arch = "riscv32")]
+pub fn set_start_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
+    let registers = phy_pac_mut(registers);
+    registers.set_iq_estimator_start_enabled(enabled);
+}
+
+/// Set or clear the second estimator enable phase.
+///
+/// Complete rev0 ROM `phy_iq_est_enable` sets bit one after the first
+/// one-microsecond delay. Complete `phy_iq_est_disable` clears it before its
+/// one-microsecond delay.
+#[cfg(target_arch = "riscv32")]
+pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
+    let registers = phy_pac_mut(registers);
+    registers.set_iq_estimator_measurement_enabled(enabled);
+}
+
+/// Sample the ready word and shared activity word exactly once each.
+///
+/// Complete rev0 ROM `phy_iq_est_enable` tests the PAC ready field and, while
+/// it is clear, tests the PAC activity field. Rust retains repeat policy
+/// outside this finite observation leaf.
+#[cfg(target_arch = "riscv32")]
+pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> ReadinessSnapshot {
+    let registers = phy_pac_mut(registers);
+    let (ready, activity) = registers.sample_iq_estimator_readiness();
+    ReadinessSnapshot { ready, activity }
+}
+
+/// Read the three signed accumulators in complete `phy_dc_iq_est` order.
+///
+/// The complete rev0 ROM body at `0x2f82_8ab4`, size `0x84`, reads
+/// `DC_I_ACCUMULATOR`, `DC_Q_ACCUMULATOR`, then `POWER_ACCUMULATOR`.
+#[cfg(target_arch = "riscv32")]
+pub fn read_dc_iq_accumulators(registers: &mut impl SharedPhyAccess) -> DcIqAccumulatorSnapshot {
+    let registers = phy_pac_mut(registers);
+    let [i, q, power] = registers.read_iq_estimator_dc_accumulators();
+    DcIqAccumulatorSnapshot { i, q, power }
+}
+
+/// Read the signed total-power accumulator exactly once.
+///
+/// Complete rev0 ROM `phy_set_rx_gain_cal_iq` at `0x2f82_964c`, size
+/// `0x20c`, and complete `phy_rxiq_get_mis` both consume this identity.
+#[cfg(target_arch = "riscv32")]
+pub fn read_total_power(registers: &mut impl SharedPhyAccess) -> i32 {
+    let registers = phy_pac_mut(registers);
+    registers.read_iq_estimator_total_power()
+}
+
+/// Read four signed words in complete `phy_rxiq_get_mis` order.
+///
+/// The complete rev0 ROM body at `0x2f82_8b84`, size `0x13e`, reads the
+/// physical addresses in order `0x0454`, `0x0460`, `0x045c`, `0x0458`.
+#[cfg(target_arch = "riscv32")]
+pub fn read_rxiq_mismatch(registers: &mut impl SharedPhyAccess) -> SignalPowerSnapshot {
+    let registers = phy_pac_mut(registers);
+    let [sum_i, difference_i, difference_q, sum_q] = registers.read_iq_estimator_rxiq_mismatch();
+    SignalPowerSnapshot {
+        sum_i,
+        difference_i,
+        difference_q,
+        sum_q,
+    }
+}
+
+/// Read four signed words in complete `phy_get_rx_sig_pwr` order.
+///
+/// The complete rev0 ROM body at `0x2f82_9ea2`, size `0x76`, reads the
+/// physical addresses in order `0x0454`, `0x0460`, `0x0458`, `0x045c`.
+#[cfg(target_arch = "riscv32")]
+pub fn read_signal_power(registers: &mut impl SharedPhyAccess) -> SignalPowerSnapshot {
+    let registers = phy_pac_mut(registers);
+    let [sum_i, difference_i, difference_q, sum_q] = registers.read_iq_estimator_signal_power();
+    SignalPowerSnapshot {
+        sum_i,
+        difference_i,
+        difference_q,
+        sum_q,
+    }
+}
+
+/// Sample the shared activity/saturation field exactly once.
+///
+/// Complete pinned `libphy.a[phy_rx_cal.o]::phy_check_rx_sat`, size `0x76`,
+/// samples the PAC activity field exactly 100 times. The bounded repeat count
+/// remains in the caller-driven PHY transition.
+#[cfg(target_arch = "riscv32")]
+pub fn sample_activity(registers: &mut impl SharedPhyAccess) -> bool {
+    let registers = phy_pac_mut(registers);
+    registers.iq_estimator_active()
+}

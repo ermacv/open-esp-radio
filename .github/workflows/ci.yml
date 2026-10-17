@@ -1,0 +1,47 @@
+# One plain check of main and pull requests. It gates nothing: the owner
+# reads the result and decides. No review, no planning, no caches beyond
+# Cargo's own.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked
+      - name: Tests
+        run: cargo test --workspace --locked
+
+  chip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Radio crates for the chip target
+        run: |
+          packages=$(cargo metadata --format-version 1 --no-deps --locked \
+            | jq -r '.packages[] | select(.manifest_path | contains("/crates/")) | "-p " + .name')
+          cargo check --locked --target riscv32imafc-unknown-none-elf $packages
+      - name: Firmware workspace
+        working-directory: firmware
+        run: |
+          # The bootstrap embeds a packed stage-two runtime; an empty one
+          # suffices to type-check it.
+          : > "$RUNNER_TEMP/empty-runtime.bin"
+          PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
+            cargo check --locked --target riscv32imafc-unknown-none-elf --workspace

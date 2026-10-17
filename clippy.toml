@@ -1,0 +1,10 @@
+disallowed-methods = [
+    { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
+]
+
+# The workspace panic lints (`unwrap_used`, `expect_used`, `panic`,
+# `indexing_slicing`) apply to production code; tests may assert freely.
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true

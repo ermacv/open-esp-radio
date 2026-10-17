@@ -1,0 +1,675 @@
+schema = 2
+
+[[peripherals]]
+name = "MODEM_SYSCON_RADIO"
+description = "Route-owned MODEM_SYSCON clocks, resets and shared Wi-Fi-baseband control used by the exclusive Wi-Fi, Bluetooth and IEEE 802.15.4 lifecycles."
+baseAddress = 0x20109C00
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF"
+description = "Shared modem clock selectors and protocol clock gates."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0x00200002
+
+[[peripherals.registers.register.fields]]
+name = "CLK_I2C_MST_SEL_160M"
+description = "Select the 160 MHz PHY-I2C-master source."
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ETM_EN"
+description = "Enable the modem ETM clock."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZB_APB_EN"
+description = "Enable the IEEE 802.15.4 APB clock."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZBMAC_EN"
+description = "Enable the IEEE 802.15.4 MAC clock."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_ECB_EN"
+description = "Enable the modem-security ECB clock."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_CCM_EN"
+description = "Enable the modem-security CCM clock."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_BAH_EN"
+description = "Enable the modem-security BAH clock."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_APB_EN"
+description = "Enable the modem-security APB clock."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_EN"
+description = "Enable the modem-security functional clock."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_BLE_TIMER_EN"
+description = "Enable the Bluetooth low-power timer clock."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF_POWER_ST"
+description = "Six modem-domain power-state clock-map fields."
+addressOffset = 0x0C
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZB_ST_MAP_BIT_TWO"
+description = "Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization."
+bitOffset = 10
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_ST_MAP_BIT_ONE"
+description = "Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization."
+bitOffset = 13
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_ST_MAP_BIT_TWO"
+description = "Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization."
+bitOffset = 14
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_BT_ST_MAP_BIT_TWO"
+description = "Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFI_ST_MAP_BIT_ONE"
+description = "Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization."
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFI_ST_MAP_BIT_TWO"
+description = "Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_PERI_ST_MAP_BIT_TWO"
+description = "Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_APB_ST_MAP_BIT_ONE"
+description = "Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_APB_ST_MAP_BIT_TWO"
+description = "Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "MODEM_RST_CONF"
+description = "Shared radio-domain reset controls."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "RST_WIFIBB"
+description = "Wi-Fi baseband reset."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_WIFIMAC"
+description = "Wi-Fi MAC reset."
+bitOffset = 9
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_BTMAC_APB"
+description = "Bluetooth MAC APB reset."
+bitOffset = 15
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_BTMAC"
+description = "Bluetooth MAC reset."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_ZBMAC_APB"
+description = "IEEE 802.15.4 MAC APB reset."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_ZBMAC"
+description = "IEEE 802.15.4 MAC reset."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_MODEM_ECB"
+description = "Modem-security ECB reset."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_MODEM_CCM"
+description = "Modem-security CCM reset."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_MODEM_BAH"
+description = "Modem-security BAH reset."
+bitOffset = 27
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_MODEM_SEC"
+description = "Modem-security reset."
+bitOffset = 29
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_BLE_TIMER"
+description = "Bluetooth low-power timer reset."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF1"
+description = "Wi-Fi, Bluetooth and front-end clock gates."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_22M_EN"
+bitOffset = 0
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_40M_EN"
+bitOffset = 1
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_44M_EN"
+bitOffset = 2
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_80M_EN"
+bitOffset = 3
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_40X_EN"
+bitOffset = 4
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_80X_EN"
+bitOffset = 5
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_40X1_EN"
+bitOffset = 6
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_80X1_EN"
+bitOffset = 7
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIBB_160X1_EN"
+bitOffset = 8
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFIMAC_EN"
+bitOffset = 9
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_WIFI_APB_EN"
+bitOffset = 10
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_80M_EN"
+bitOffset = 13
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_160M_EN"
+bitOffset = 14
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_APB_EN"
+bitOffset = 15
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_BT_APB_EN"
+bitOffset = 16
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_BTBB_EN"
+bitOffset = 17
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_BTMAC_EN"
+bitOffset = 18
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_PWDET_ADC_EN"
+bitOffset = 19
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_ADC_EN"
+bitOffset = 20
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "CLK_FE_DAC_EN"
+bitOffset = 21
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WIFI_BB_CFG"
+description = "Instruction-reviewed Wi-Fi baseband shared control."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+bitOffset = 0
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "WIFI_ENABLE"
+bitOffset = 1
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BSS_CBW_40_DIGITAL"
+description = "Digital BSS 40 MHz channel-width control that complete phy_bb_bss_cbw40_dig publishes; zero disables and one enables the recovered path."
+bitOffset = 2
+bitWidth = 1
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "DISABLED"
+value = 0
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "ENABLED"
+value = 1
+[[peripherals.registers.register.fields]]
+name = "BIT_3_OPAQUE"
+description = "Cleared by complete phy_bb_bss_cbw40_dig together with BSS_CBW_40_DIGITAL."
+bitOffset = 3
+bitWidth = 1
+[[peripherals.registers.register.fields]]
+name = "BITS_11_13_OPAQUE"
+description = "Reviewed baseband AGC update mode used by initialization and subsequent register updates."
+bitOffset = 11
+bitWidth = 3
+[peripherals.registers.register.fields.writeConstraint]
+useEnumeratedValues = true
+[[peripherals.registers.register.fields.enumeratedValues]]
+usage = "write"
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "INITIALIZATION"
+value = 1
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REGISTER_UPDATES_ENABLED"
+value = 7
+[[peripherals.registers.register.fields]]
+name = "BIT_28_OPAQUE"
+bitOffset = 28
+bitWidth = 1
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST"
+naming = "vendor"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF"
+naming = "vendor"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1"
+naming = "vendor"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG"
+naming = "vendor"
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_I2C_MST_SEL_160M"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ETM_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZB_APB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZBMAC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_ECB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_CCM_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_BAH_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_APB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_BLE_TIMER_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_ZB_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_FE_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_FE_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_BT_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_WIFI_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_WIFI_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_MODEM_PERI_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP_BIT_ONE"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF_POWER_ST.CLK_MODEM_APB_ST_MAP_BIT_TWO"
+naming = "descriptive"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_WIFIBB"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_WIFIMAC"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BTMAC_APB"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BTMAC"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC_APB"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_ECB"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_CCM"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_BAH"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_MODEM_SEC"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_BLE_TIMER"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_22M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_44M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40X_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80X_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_40X1_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_80X1_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIBB_160X1_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFIMAC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_WIFI_APB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_80M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_160M_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_APB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BT_APB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BTBB_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BTMAC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_PWDET_ADC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_ADC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_FE_DAC_EN"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_0_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.WIFI_ENABLE"
+naming = "vendor"
+sources = ["S31_ESP_PACS_SVD"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BSS_CBW_40_DIGITAL"
+naming = "descriptive"
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_3_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_RADIO_ACCESSOR_FIELDS"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BITS_11_13_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.WIFI_BB_CFG.BIT_28_OPAQUE"
+naming = "opaque"

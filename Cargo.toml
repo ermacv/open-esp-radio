@@ -1,0 +1,113 @@
+[workspace]
+members = [
+    "crates/base/memory",
+    "crates/base/time",
+    "crates/base/network",
+    "crates/radio/coex",
+    "crates/radio/port",
+    "crates/exec/interrupt-table",
+    "crates/radio/permit-pool",
+    "crates/ieee80211/runtime",
+    "crates/adapters/embassy/time",
+    "crates/exec/executor",
+    "crates/adapters/embassy/net",
+    "crates/base/time-virtual",
+    "crates/adapters/esp-hal/soc",
+    "crates/exec/esp-hal-irq",
+    "crates/bluetooth/hci",
+    "crates/bluetooth/le/controller",
+    "crates/bluetooth/le/ll",
+    "crates/bluetooth/le/radio",
+    "crates/ieee802154/mac",
+    "crates/ieee80211/ap",
+    "crates/ieee80211/arbiter",
+    "crates/ieee80211/sta",
+    "crates/ieee80211/mac",
+    "crates/ieee80211/lower-mac",
+    "crates/ieee80211/upper-mac",
+    "crates/ieee80211/softmac",
+    "crates/ieee80211/datapath",
+    "crates/ieee80211/rsn",
+    "crates/espressif/ieee80211-policy",
+    "crates/ieee80211/rsn-service",
+    "crates/esp32s31/pac",
+    "crates/esp32s31/pac-raw",
+    "crates/esp32s31/hal",
+    "crates/esp32s31/phy",
+    "crates/esp32s31/radio/coex",
+    "crates/esp32s31/ieee80211/driver",
+    "crates/esp32s31/ieee80211/dma",
+    "crates/esp32s31/ieee80211/mac",
+    "crates/espressif/coex",
+    "crates/espressif/ieee802154-engine",
+    "crates/espressif/ieee80211-pac",
+    "crates/espressif/ieee80211-pac-raw",
+    "crates/espressif/ieee802154-pac",
+    "crates/espressif/analog",
+    "crates/espressif/modem-clock",
+    "crates/base/deadline",
+    "tools/lib/command-tree",
+    "tools/lib/durable",
+    "tools/lib/process",
+    "tools/registers",
+    "tools/registers/bindings",
+    "tools/registers/contracts",
+    "tools/registers/model",
+    "tools/registers/review",
+]
+# The firmware workspaces build for the chip target and own their lockfiles.
+exclude = ["firmware"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ermacv/open-esp-radio"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# A mutable call inside `debug_assert!` disappears from optimized firmware.
+# Driver protocol state must advance identically in debug and release builds.
+debug_assert_with_mut_call = "deny"
+# `clippy.toml` lists methods radio code must not call, such as busy waiting
+# instead of yielding; an intentional use carries a local `allow` with a reason.
+disallowed_methods = "deny"
+# Panics are visible but do not block yet: each crate moves to `deny` once
+# its sites are fixed, air-input parsers first.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unreachable = "warn"
+indexing_slicing = "warn"
+
+[profile.release]
+opt-level = 3
+debug = true
+lto = "fat"
+codegen-units = 1
+
+# Full debug info was most of each checkout's target/debug, tens of GB in
+# millions of files, and a large share of host link time. Line tables keep
+# panics and backtraces readable.
+[profile.dev]
+debug = "line-tables-only"
+
+# The register tool runs its generator optimized; ordinary builds and tests
+# keep the dev profile.
+[profile.tools]
+inherits = "dev"
+opt-level = 3
+debug = 1
+incremental = true
+codegen-units = 16
+
+# The async-platform branch uses register accessor fixes that are
+# still carried by the matching PAC fork.
+[patch."https://github.com/ermacv/embassy.git"]
+embassy-futures = { version = "0.1.2", registry = "crates-io" }
+embassy-sync = { version = "0.8.0", registry = "crates-io" }
+embassy-time = { version = "0.5.1", registry = "crates-io" }

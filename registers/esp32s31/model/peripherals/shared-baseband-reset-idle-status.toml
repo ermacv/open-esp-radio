@@ -1,0 +1,47 @@
+schema = 2
+
+[[peripherals]]
+name = "SHARED_BASEBAND_RESET_IDLE_STATUS"
+description = """
+One independently bounded shared-baseband reset-idle status word. The complete
+Bluetooth bbmac_idle_for_swrst leaf proves the exact predicate, but its location
+inside another protocol aperture prevents Bluetooth-exclusive ownership."""
+baseAddress = 0x20103088
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STATUS"
+description = "bbmac_idle_for_swrst requires the observed low four-bit field to be zero before reporting idle."
+addressOffset = 0x0
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "TXRX_STATE"
+description = "The reset-idle predicate fails when this exact field is nonzero."
+bitOffset = 0
+bitWidth = 4
+
+[[review]]
+entity = "SHARED_BASEBAND_RESET_IDLE_STATUS"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "SHARED_BASEBAND_RESET_IDLE_STATUS.STATUS"
+naming = "descriptive"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "SHARED_BASEBAND_RESET_IDLE_STATUS.STATUS.TXRX_STATE"
+naming = "vendor"
+sources = ["BLOB_LIBBTBB_BBMAC_IDLE_FOR_SWRST", "ESP_IDF_7B9CC1AC_S31_IEEE802154_REG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

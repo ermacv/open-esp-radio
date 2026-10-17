@@ -1,0 +1,57 @@
+# Reviewed register evidence: hil vendor.
+schema = 1
+
+[[sources]]
+id = "HIL_VENDOR_CONNECTED_VECTOR_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust firmware wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver, 2026-07-29. A synchronous connected HT queue snapshot read HT_DESCRIPTOR_COUNTS 0x00004081 and preserved the complete vector image before queue enable."
+
+[[sources]]
+id = "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/bin/wifi_sta.rs wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver and Android shiva HE20/WPA2 AP, captured in /tmp/vendor-he-control-oracle-20260730.log and /tmp/vendor-he-control-oracle-air-20260730.pcapng. The synchronous post-formatter snapshot captured descriptor rate 35, Order set in DMA Frame Control, no four-byte placeholder before CCMP, metadata word one 0x01000000, software HE-Control disabled, and APEP length 0x76. Air frames 11 and 58 carried hardware BSR HE-Control 0x0404320f followed by intact CCMP. Frame 113 independently carried BSR 0x0303004f followed by intact CCMP. Complete _oracles/libpp[pp_he.o]::ppCalSubFrameLength reads metadata byte seven bit zero from 0x01000000 and adds exactly four to the assembled subframe, while the low fourteen-bit metadata MPDU length remains unchanged. Earlier open frame 3010 in /tmp/open-radio-android-arp-air-20260730.pcapng omitted this metadata bit and corrupted the CCMP boundary; a temporary DMA placeholder restored length but was not vendor-equivalent."
+
+[[sources]]
+id = "HIL_VENDOR_HE20_MCS9_SU_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/bin/wifi_sta.rs wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver and a nearby FRITZ!Box HE20 WPA2 BSS, 2026-07-29. The probe replaced pp_wdev_funcs callback slot 0xec, called the original formatter and synchronously copied all four queue-control words, 31 vector words and descriptor inputs before queue enable. Two MCS9 uplink A-MPDU captures returned descriptor rate 35 and flags 0xc0403009. APEP length 0x76 produced PLCP1 0x04083000, HE A1 0xfc205b4f or 0xfc605b4f as GI/LTF changed, HE A2/length 0x1003b105, power 0x05050505, counts 0x00004081 and length control 0x00400244. The subsequent vendor throughput path reported HE A1 0xfc205b4f and HE A2/length 0x1030d105, independently proving APEP length 0x061a. The public fixed-rate request value and live descriptor rate are both 35; certification-test value 0x29 belongs to a separate domain."
+
+[[sources]]
+id = "HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/bin/wifi_sta.rs wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver and a controlled AX211 HE20 WPA2 BSS, 2026-07-29. After HE association, esp_wifi_config_80211_tx accepted phymode six, public rate 26/MCS0/GI800 and DCM true. A deliberately submitted 24-byte non-QoS raw data frame then traversed the only blob consumer of that configuration. Synchronous interposition captured descriptor flags 0xc0407008, rate 0x1a, PLCP0 0x01631630, PLCP1 0x0401a000, HE-SIG-A1 0xfc204087, HE-SIG-A2 0x00010105, power 0x05050505 and LENGTH_CONTROL 0x004002c4. Its DMA descriptor word 0xc0090040 encoded capacity 64 and used length 36; the buffer began with metadata 0x0100001c followed by a 24-byte MPDU and a four-byte hardware-FCS slot. The vendor completion callback subsequently reported rate 26 and status zero, qualifying ordinary ACK reception. This distinguishes explicit DCM from libpp[trc.o]::rcGetDCMMaxRate fallback codes 0x10/0x11/0x13."
+
+[[sources]]
+id = "HIL_VENDOR_ACTIVE_HT_VECTOR_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust firmware wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver and a controlled Linux WPA2 HT20 AP, 2026-07-29. The probe polled all four queue owners and copied the complete 31-word vector plus four control words before logging only while PLCP0 format two was hardware-owned. The coherent HT queue contained PROTECTION=0x0280a028 and HT_DESCRIPTOR_COUNTS=0x00004081. The former is exactly three copies of negotiated spacing value 40; the latter is three copies of descriptor count one. This distinguishes the two physical registers and HIL-qualifies the complete blob field mapping."
+
+[[sources]]
+id = "HIL_VENDOR_HT20_MCS0_SINGLE_PPDU_2026_07_29"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust/firmware/esp32s31/app/src/bin/wifi_sta.rs wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver and a controlled Linux WPA2 HT20 AP, 2026-07-29. After connection the probe replaced pp_wdev_funcs callback slot 0xec, called the original executable SRAM formatter thunk and copied the queue image synchronously before returning. Complete ROM rom[]::lmacSetTxFrame at 0x2f835590..0x2f8355ae reaches that callback; complete ROM rom[]::hal_mac_tx_set_ppdu is at 0x2f8352bc. A fixed-rate MCS0 non-A-MPDU frame of length 0x6e returned descriptor flags 0x00003009, PLCP0 control 0x016312fc before ownership publication, PLCP1 0x02090000, HT_SIGNAL 0x07006e00, DATA_LENGTH 0x0000006e, LENGTH_CONTROL 0x000002c4, HT_DESCRIPTOR_COUNTS 0x00004081 and PROTECTION 0x0280a028. This exact synchronous single-MPDU image distinguishes PLCP format one and entry class zero from the earlier active MCS7 A-MPDU image, which used format two and entry class one."
+
+[[sources]]
+id = "HIL_VENDOR_HT_AMPDU_PPDU"
+kind = "unattested-hil-observation"
+description = "Earlier ESP32-S31 complete-vendor HIL final-link wrappers around libpp[pp.o]::ppAssembleAMPDU and libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu, retained in docs/esp32s31-async-boundaries.md. A two-MPDU HT20 MCS7/SGI chain had aggregate length 0x0c2e, QoS sequences 0x014/0x015, first descriptor flags 0x004c2009 after assembly, PLCP format two, HT_SIGNAL 0x8f0c2e07, DATA_LENGTH 0x70400c2e and LENGTH_CONTROL 0x00400244. A separate six-MPDU capture proved aggregate byte accounting and descriptor-count publication. The oracle-only vendor/RTOS run reached about 53.4 Mbit/s UDP; this source qualifies the finite aggregate formatter and topology, not the current open-driver throughput."
+
+[[sources]]
+id = "HIL_VENDOR_STA_AUTH_POLICY_2026_07_28"
+kind = "unattested-hil-observation"
+description = "../esp32s31_rust firmware wifi-sta-auth-probe on ESP32-S31 rev0 with the complete vendor driver, 2026-07-28. The first Open Authentication TX capture showed queue-zero RX filter 0x0001c387. This exactly matches wifi_set_rx_policy jump-table case six, including UBSSID-policy bits 8 and 1 set; the vendor station then associated, completed WPA2 and obtained DHCP. Applying only these two bits to the open driver reproduced the register image but did not independently cure its intermittent TX status-five/authentication timeout."
+
+[[sources]]
+id = "HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27"
+kind = "unattested-hil-observation"
+description = "Vendor-firmware calibration run on ESP32-S31 rev0, 2026-09-27: after cold Wi-Fi PHY calibration with the pinned ESP-IDF 7b9cc1ac and libphy 20f1db05, the firmware read every readable register of the published RadioPhyPeripherals partition on host request over three boots. 173 of 209 registers read without effect and 9 varied between boots; 36 registers of PHY_BTAGC_RECOVERED and PHY_BRX_RECOVERED reset the chip when read with their clock domain off. The partition image observes the calibrated register state for the hardware calibration cross-check; it performs no writes."
+
+[[sources]]
+id = "HIL_VENDOR_SCAN_BACKOFF_UPPER_LIMIT_2026_09_28"
+kind = "unattested-hil-observation"
+description = "Vendor-firmware BLE scan reference on ESP32-S31 rev0 with the pinned esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8 Controller and ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, 2026-09-28. During an active legacy scan that received scan responses, a single read at the first completed scanner item returned 0x00000020 at 0x20101970 and 0x00000001 at 0x20101974 and 0x20101978. BLOB_LIBBLE_SCAN_BACKOFF writes 0x20101970 only at scanner start from the Controller configuration's nine-bit upper limit, so the S31 build's configuration carries 32; the ESP-IDF S31 glue has no scan_backoff_upperlimitmax option, and the 256 default belongs to other chips' ble_user_cfg.h."
+
+[[sources]]
+id = "HIL_VENDOR_ACCEPT_LIST_2026_09_29"
+kind = "unattested-hil-observation"
+description = "Vendor-firmware BLE scan reference on ESP32-S31 rev0 with the pinned esp32s31-bt-lib 10c507788e9da0993709cf82e405c896561172d8 Controller and ESP-IDF 4d59230ddff16327812782151ef0afef202dc6d7, 2026-09-29. LE Read Filter Accept List Size returned 12. Adding a public and then a random device and clearing the list changed the Controller-SRAM table at 0x2f07e4f0: entries of 8 bytes from 0x2f07e508 read 02 80 <public address> and 02 c0 <random address>, clear zeroed only their valid bit, and the header count byte read 1, 2 and 0. During a filter-policy-1 scan with one accepted ESP32-C5 advertiser, 0x20101870 read 0x00000001 and 0x20101874 read 0x0001f942, the compressed 0x2f07e508; an unfiltered scan read 0 and the same address. All 118 filtered reports came from the accepted device, and the scanner link state carried +0x18 bit 25 and +0x2c bits 25:24 = 1, which an unfiltered scan leaves clear."

@@ -1,0 +1,167 @@
+use oer_esp32s31_hal::{
+    ieee80211::client::{WifiClocked, WifiCold},
+    owner::PhyInitializationAccess,
+    root::RadioHardware,
+    shared_radio::SharedRadio,
+};
+use oer_time_virtual::VirtualClock;
+
+use super::*;
+use crate::concurrent::ConcurrentAcquire;
+use crate::{
+    PhyConfig, PhyState, RegisteredPhyState,
+    domain::PhyDomain,
+    state::client::{DEFAULT_PLL_TRACK_PERIOD_MICROS, PhyClientState},
+};
+
+fn registered() -> (SharedRadio<ConcurrentPhy>, WifiClocked) {
+    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    {
+        let mut lease = radio
+            .try_acquire()
+            .unwrap_or_else(|_| panic!("a fresh arbiter grants its lease"));
+        let epoch = lease.phy_hal().begin_registration_epoch();
+        *lease.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
+            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
+            PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
+        ));
+    }
+    (
+        radio,
+        WifiClocked::for_validation(WifiCold::from_partition(partitions.wifi)),
+    )
+}
+
+#[test]
+fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
+    let (radio, clocked) = registered();
+    let mut lease = radio
+        .try_acquire()
+        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let (membership, acquired) =
+        join_wifi_prepared(&mut lease, &clocked, &VirtualClock::<8>::new())
+            .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    assert_eq!(acquired, ConcurrentAcquire::Settled);
+    assert!(
+        lease
+            .attachment()
+            .client_snapshot()
+            .is_some_and(|clients| clients.contains(RadioClient::Wifi))
+    );
+    // A second membership would double the client bit.
+    assert!(matches!(
+        join_wifi_prepared(&mut lease, &clocked, &VirtualClock::<8>::new()),
+        Err(ConcurrentPhyError::Acquire(_))
+    ));
+    assert_eq!(
+        leave_wifi(&mut lease, &clocked, membership).ok(),
+        Some(true)
+    );
+}
+
+#[test]
+fn an_unregistered_domain_admits_no_wifi_client() {
+    let (radio, partitions) = RadioHardware::for_validation().into_concurrent(ConcurrentPhy::new());
+    let clocked = WifiClocked::for_validation(WifiCold::from_partition(partitions.wifi));
+    let mut lease = radio
+        .try_acquire()
+        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let _ = clocked;
+    assert!(matches!(
+        crate::concurrent::phy_ready(&mut lease),
+        Err(ConcurrentPhyError::NotRegistered)
+    ));
+}
+
+#[test]
+fn a_suspended_wifi_leaves_the_domain_and_resumes_as_a_client() {
+    let (radio, clocked) = registered();
+    let mut lease = radio
+        .try_acquire()
+        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let (membership, _) = join_wifi_prepared(&mut lease, &clocked, &VirtualClock::<8>::new())
+        .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    let (suspended, last) = suspend_wifi(&mut lease, clocked.clocks_on(), membership)
+        .unwrap_or_else(|failure| panic!("suspend failed: {failure:?}"));
+    assert!(last, "Wi-Fi was the only client");
+    assert!(
+        lease
+            .attachment()
+            .client_snapshot()
+            .is_some_and(|clients| !clients.contains(RadioClient::Wifi))
+    );
+    let (membership, acquired) = resume_wifi_prepared(
+        &mut lease,
+        clocked.clocks_on(),
+        suspended,
+        &VirtualClock::<8>::new(),
+    )
+    .unwrap_or_else(|failure| panic!("resume failed: {failure:?}"));
+    assert_eq!(acquired, ConcurrentAcquire::Settled);
+    assert!(
+        lease
+            .attachment()
+            .client_snapshot()
+            .is_some_and(|clients| clients.contains(RadioClient::Wifi))
+    );
+    let (suspended, _) = suspend_wifi(&mut lease, clocked.clocks_on(), membership)
+        .unwrap_or_else(|failure| panic!("second suspend failed: {failure:?}"));
+    leave_suspended_wifi(suspended);
+}
+
+#[test]
+fn a_rejected_resume_returns_the_suspended_client() {
+    let (radio, clocked) = registered();
+    let mut lease = radio
+        .try_acquire()
+        .unwrap_or_else(|_| panic!("a free arbiter grants its lease"));
+    let (membership, _) = join_wifi_prepared(&mut lease, &clocked, &VirtualClock::<8>::new())
+        .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    let (suspended, _) = suspend_wifi(&mut lease, clocked.clocks_on(), membership)
+        .unwrap_or_else(|failure| panic!("suspend failed: {failure:?}"));
+    // Another membership holds the client bit, so the resume is rejected.
+    let (other, _) = join_wifi_prepared(&mut lease, &clocked, &VirtualClock::<8>::new())
+        .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    let failure = resume_wifi_prepared(
+        &mut lease,
+        clocked.clocks_on(),
+        suspended,
+        &VirtualClock::<8>::new(),
+    )
+    .err()
+    .unwrap_or_else(|| panic!("a held client bit rejects the resume"));
+    assert!(matches!(failure.error(), ConcurrentPhyError::Acquire(_)));
+    leave_suspended_wifi(failure.into_suspended());
+    assert!(leave_wifi(&mut lease, &clocked, other).is_ok());
+}
+
+/// Join with a proof for the lease's registration.
+fn join_wifi_prepared(
+    lease: &mut oer_esp32s31_hal::shared_radio::SharedRadioLease<
+        '_,
+        crate::concurrent::ConcurrentPhy,
+    >,
+    clocked: &WifiClocked,
+    clock: &impl oer_time::Clock,
+) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
+    let ready = PhyReady::for_test(lease);
+    join_wifi(ready, clocked, clock)
+        .map(|joined| (joined.membership, joined.acquired))
+        .map_err(|refused| refused.error)
+}
+
+/// Resume with a proof for the lease's registration.
+fn resume_wifi_prepared(
+    lease: &mut oer_esp32s31_hal::shared_radio::SharedRadioLease<
+        '_,
+        crate::concurrent::ConcurrentPhy,
+    >,
+    clocks: &oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
+    suspended: WifiPhySuspended,
+    clock: &impl oer_time::Clock,
+) -> Result<(WifiPhyMembership, ConcurrentAcquire), WifiPhySuspendedFailure> {
+    let ready = PhyReady::for_test(lease);
+    resume_wifi(ready, clocks, suspended, clock)
+        .map(|joined| (joined.membership, joined.acquired))
+        .map_err(|refused| refused.error)
+}

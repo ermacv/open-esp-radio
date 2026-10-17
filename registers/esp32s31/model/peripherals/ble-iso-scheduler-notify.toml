@@ -1,0 +1,48 @@
+schema = 2
+
+[[peripherals]]
+name = "BLE_ISO_SCHEDULER_NOTIFY"
+description = """
+Narrow late-feature owner for the command written by two complete ISO-path
+functions. A positional capability is intentional: the observed write strobe
+is exact, while the undocumented hardware action is not inferred from the
+software queue context.
+"""
+baseAddress = 0x20101424
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "COMMAND"
+description = "Both observed ISO-path publications write the complete value one."
+addressOffset = 0x0
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "TRIGGER"
+description = "Observed command image is one; hardware self-clear and command meaning remain unknown."
+bitOffset = 0
+bitWidth = 1
+
+[[review]]
+entity = "BLE_ISO_SCHEDULER_NOTIFY"
+sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_ISO_SCHEDULER_NOTIFY.COMMAND"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "BLE_ISO_SCHEDULER_NOTIFY.COMMAND.TRIGGER"
+naming = "descriptive"
+sources = ["BLOB_LIBBLE_ISO_SCHEDULER_NOTIFY"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

@@ -1,0 +1,389 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_ADC_DUMP_RECOVERED"
+description = "Receive sample-dump words programmed by complete librftest adctrig and set_dump_mode. Dumped words are read back from 0x2f060000 as signed ten-bit components in bits 9:0 and 19:10 (complete print_dump_data and sampledeal); that aperture is not radio MMIO."
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_08CC_OPAQUE"
+description = "Complete set_dump_mode clears bits 22:19 in one fresh-read RMW before selecting the dump mode."
+addressOffset = 0x8CC
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_22_OPAQUE"
+description = "Four bits cleared by complete set_dump_mode for every mode."
+bitOffset = 19
+bitWidth = 4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_20B4_OPAQUE"
+description = "One path of the selector jump table of complete adctrig clears bit 0 before programming the dump source; the analysis does not resolve which selector values take that path."
+addressOffset = 0x20B4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_0_OPAQUE"
+description = "Cleared by one selector path of complete adctrig."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_70B8_OPAQUE"
+description = "Complete set_dump_mode replaces bits 2:0 in one fresh-read RMW."
+addressOffset = 0x70B8
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+description = "Complete set_dump_mode writes one for mode zero and zero for every other mode."
+bitOffset = 0
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DUMP_CONTROL"
+description = "Sample-dump length, start and completion word. Complete adctrig programs LENGTH, clears bits 17 and 21:20, sets ENABLE, pulses TRIGGER for selector zero, polls DONE with a bounded wait and finally clears ENABLE."
+addressOffset = 0x9004
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "LENGTH"
+description = "Number of dump words: complete adctrig writes its first argument plus one."
+bitOffset = 0
+bitWidth = 17
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1FFFF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_17_OPAQUE"
+description = "Cleared by complete adctrig after LENGTH is written."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DONE"
+description = "Dump completion: complete adctrig polls this bit after starting the dump and stops waiting once it is set or its 1,000,000-count bound of WIFI_MAC_LOCAL_TIME.COUNTER elapses."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TRIGGER"
+description = "Software dump start: complete adctrig sets and then clears this bit for selector zero after setting ENABLE; selector twelve starts Bluetooth reception instead."
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_21_OPAQUE"
+description = "Cleared by complete adctrig before the dump starts."
+bitOffset = 20
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "ENABLE"
+description = "Dump enable: complete adctrig sets this bit before starting the dump and clears it after the completion wait."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DUMP_CONFIG"
+description = "Sample-dump source and rate word. Complete adctrig replaces bits 24:21 at entry, replaces SOURCE_SELECT on one selector path and reads the whole word after the completion wait."
+addressOffset = 0x9008
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_15_OPAQUE"
+description = "Read by complete adctrig after the completion wait; it prints the low sixteen bits."
+bitOffset = 0
+bitWidth = 16
+
+[[peripherals.registers.register.fields]]
+name = "SOURCE_SELECT"
+description = "Dump source: one selector path of complete adctrig replaces these bits with its selector argument."
+bitOffset = 17
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_21_24_OPAQUE"
+description = "Complete adctrig writes half its fourth argument, or zero when that argument is below two."
+bitOffset = 21
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "DUMP_LANE_SELECT"
+description = "Four six-bit dump lane selectors and an enable bit, programmed by complete adctrig: 24, 25, 26 and 27 by default, with other values for selector arguments 11 and 12."
+addressOffset = 0x9018
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "LANE_0"
+description = "First lane selector; complete adctrig writes 24 by default."
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "LANE_1"
+description = "Second lane selector; complete adctrig writes 25 by default."
+bitOffset = 6
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "LANE_2"
+description = "Third lane selector; complete adctrig writes 26 by default."
+bitOffset = 12
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "LANE_3"
+description = "Fourth lane selector; complete adctrig writes 27 by default."
+bitOffset = 18
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "BIT_24_OPAQUE"
+description = "Set by complete adctrig after the lane selectors."
+bitOffset = 24
+bitWidth = 1
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED"
+sources = [
+    "BLOB_LIBRFTEST_ADCTRIG",
+    "BLOB_LIBRFTEST_SET_DUMP_MODE",
+    "BLOB_LIBRFTEST_PRINT_DUMP_DATA",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_08CC_OPAQUE.BITS_19_22_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_20B4_OPAQUE.BIT_0_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.WORD_70B8_OPAQUE.BITS_0_2_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_SET_DUMP_MODE"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.LENGTH"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BIT_17_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.DONE"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.TRIGGER"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.BITS_20_21_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONTROL.ENABLE"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_0_15_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.SOURCE_SELECT"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_CONFIG.BITS_21_24_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_0"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_1"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_2"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.LANE_3"
+naming = "descriptive"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_ADC_DUMP_RECOVERED.DUMP_LANE_SELECT.BIT_24_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBRFTEST_ADCTRIG"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

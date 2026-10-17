@@ -1,0 +1,878 @@
+schema = 2
+
+[[peripherals]]
+name = "PHY_FREQUENCY_CHANNEL_ORACLE"
+description = """
+Frequency-memory, hardware channel-switch, NRX and channel-bandwidth
+        registers recovered from complete finite ROM/blob bodies. Names retain
+        UNKNOWN where the instructions prove a field but not its electrical
+        meaning. One physical word has one identity even when a bit has
+        different mode-dependent roles."""
+baseAddress = 0x20100000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FREQUENCY_CONTROL"
+description = """
+Shared frequency module control word. Bit 18 is both the high bit
+            of an eleven-bit command-memory address and the reset/release bit
+            pulsed by phy_freq_module_resetn."""
+addressOffset = 0x1C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "CHANNEL_INDEX"
+description = "Complete phy_freq_chan_en_sw replaces the low byte with the caller's frequency-table index."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_17_OPAQUE"
+description = "Low ten bits of the eleven-bit address selected by phy_freq_i2c_mem_write."
+bitOffset = 8
+bitWidth = 10
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3FF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_18_OPAQUE"
+description = "High address bit during frequency-memory writes; independently cleared then set by complete phy_freq_module_resetn."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CHANNEL_SWITCH_PULSE"
+description = "Complete phy_freq_chan_en_sw sets bit 19, delays one microsecond, then clears it."
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MEMORY_WRITE_PULSE"
+description = "Complete phy_freq_i2c_mem_write sets then clears bit 20 after publishing data."
+bitOffset = 20
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_22_29_OPAQUE"
+description = "Complete phy_freq_reg_init replaces bits 29:22 with its two input nibbles; the electrical encoding is unknown."
+bitOffset = 22
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "BIT_30_OPAQUE"
+description = "Complete phy_freq_reg_init sets bit 30."
+bitOffset = 30
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HARDWARE_FREQUENCY_DISABLE"
+description = "Complete phy_dis_hw_set_freq sets bit 31 before its two-microsecond delay; complete phy_en_hw_set_freq clears it."
+bitOffset = 31
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FREQUENCY_MEMORY_READ_CONTROL"
+description = "Complete phy_read_rf_freq_mem pulses bit 16 after publishing the address and read mode; all other bits remain preserved and unnamed."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "READ_PULSE"
+description = "Set and then cleared by complete phy_read_rf_freq_mem for one synchronous frequency-memory read transaction."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "WORD_0024_OPAQUE"
+description = "Complete phy_freq_reg_init writes the full constant 0x19800249; no constituent electrical fields are public."
+addressOffset = 0x24
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_31_OPAQUE"
+bitOffset = 0
+bitWidth = 32
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FREQUENCY_PARAMETER_1_STATUS"
+description = "Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+description = "Complete phy_bb_init writes encoding two before calibration and zero after the initial channel setup."
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_7_OPAQUE"
+description = "Bits 7:2 of the complete initialization image."
+bitOffset = 2
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "FREQUENCY_READY"
+description = "The complete channel parent samples bit 8 after the frequency-switch delay and branches on its asserted edge."
+bitOffset = 8
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_31_OPAQUE"
+description = "Bits 31:9 of the complete initialization image."
+bitOffset = 9
+bitWidth = 23
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7FFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FREQUENCY_MEMORY_DATA"
+description = "Data/mode word published by complete phy_freq_i2c_mem_write."
+addressOffset = 0x2C
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+bitOffset = 0
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "MODE"
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "I2C_NUMBER_CONTROL"
+description = "First two five-bit PHY-I2C number addresses packed by complete phy_freq_i2c_num_addr."
+addressOffset = 0x30
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "MEMORY_READ_MODE"
+description = "Complete phy_read_rf_freq_mem replaces only the low two bits with its read-mode argument."
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_12_OPAQUE"
+bitOffset = 8
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_13_17_OPAQUE"
+bitOffset = 13
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+dim = 3
+dimIncrement = 0x4
+dimIndex = "0,1,2"
+name = "I2C_NUMBER_WORD%s"
+description = "Six consecutive five-bit PHY-I2C number addresses packed by complete phy_freq_num_get_data; unused slots are zero."
+addressOffset = 0x34
+size = 32
+access = "write-only"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_4_OPAQUE"
+bitOffset = 0
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_5_9_OPAQUE"
+bitOffset = 5
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_10_14_OPAQUE"
+bitOffset = 10
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_15_19_OPAQUE"
+bitOffset = 15
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_24_OPAQUE"
+bitOffset = 20
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_29_OPAQUE"
+bitOffset = 25
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_30_31_OPAQUE"
+description = "High two bits of the complete caller-prepared word; the recovered producer normally leaves them zero."
+bitOffset = 30
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FREQUENCY_MEMORY_READ_RESULT"
+description = "Complete phy_read_rf_freq_mem returns this full word after the read pulse; individual result fields are interpreted by the caller."
+addressOffset = 0x40
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "VALUE"
+description = "Complete phy_read_rf_freq_mem returns this full read-only result to its caller."
+bitOffset = 0
+bitWidth = 32
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "FBW_BT_FILTER_CONTROL"
+description = "Shared filter-bandwidth and Bluetooth-filter word independently updated by complete phy_wifi_fbw_sel and phy_bt_filter_reg."
+addressOffset = 0x874
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BIT_16_OPAQUE"
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_17_18_OPAQUE"
+bitOffset = 17
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_19_OPAQUE"
+bitOffset = 19
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_21_OPAQUE"
+bitOffset = 20
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_22_OPAQUE"
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_23_24_OPAQUE"
+bitOffset = 23
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_25_OPAQUE"
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CHANNEL_TX_OFFSET_CONTROL"
+description = "Canonical multifunction PHY/MAC word. Complete phy_mac_tx_chan_offset and phy_bb_cbw_chan_cfg update the low channel-offset field; complete hal_set_tx_min_pwr updates bits 9:4 and the HE init parent independently sets bit 17."
+addressOffset = 0x4400
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "PRIMARY_20_CHANNEL_OFFSET"
+bitOffset = 0
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "MINIMUM_POWER_LOW"
+description = "Low four bits of the signed six-bit minimum-power value. Complete hal_set_tx_min_pwr(-11) writes five. Complete phy_mac_tx_chan_offset and phy_bb_cbw_chan_cfg preserve this field when updating the adjacent channel offset."
+bitOffset = 4
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xF
+
+[[peripherals.registers.register.fields]]
+name = "MINIMUM_POWER_HIGH"
+description = "High two bits of the signed six-bit minimum-power value. Complete hal_set_tx_min_pwr(-11) writes three."
+bitOffset = 8
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BIT_17_OPAQUE"
+description = "The complete HE init parent sets bit 17 through a separate fresh-read RMW."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "NRX_FREQUENCY_CONTROL"
+description = "NRX initialization and frequency quotient word. Complete phy_nrx_freq_set samples and preserves the high byte and writes a twenty-four-bit quotient. Initialization writes the same complete low twenty-four-bit region with its own image."
+addressOffset = 0x7848
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_23_OPAQUE"
+bitOffset = 0
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "BITS_24_28_OPAQUE"
+bitOffset = 24
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x1F
+
+[[peripherals.registers.register.fields]]
+name = "BITS_29_31_OPAQUE"
+bitOffset = 29
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CHANNEL_CBW_CONTROL_0"
+description = "Complete phy_bb_cbw_chan_cfg replaces the low two-bit CBW-derived field."
+addressOffset = 0x7CE0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CHANNEL_CBW_CONTROL_1"
+description = "Complete phy_bb_cbw_chan_cfg performs two fresh-read CBW-derived replacements; complete phy_vht_support independently replaces bit five."
+addressOffset = 0x7CE4
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_1_OPAQUE"
+bitOffset = 0
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_2_4_OPAQUE"
+bitOffset = 2
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x7
+
+[[peripherals.registers.register.fields]]
+name = "VHT_SUPPORT"
+bitOffset = 5
+bitWidth = 1
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "BLOB_LIBPHY_PHY_BB_INIT",
+    "BLOB_LIBPHY_REGISTER_CHIPV7_PHY",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "BLOB_LIBPHY_REGISTER_CHIPV7_PHY",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.CHANNEL_INDEX"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_8_17_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_18_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.CHANNEL_SWITCH_PULSE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.MEMORY_WRITE_PULSE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BITS_22_29_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.BIT_30_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_CONTROL.HARDWARE_FREQUENCY_DISABLE"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "BLOB_LIBPHY_REGISTER_CHIPV7_PHY",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_CONTROL.READ_PULSE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "BLOB_LIBPHY_PHY_BB_INIT",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPHY_PHY_BB_INIT"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_2_7_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.FREQUENCY_READY"
+naming = "descriptive"
+sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_PARAMETER_1_STATUS.BITS_9_31_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.MEMORY_READ_MODE"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_30_31_OPAQUE"
+naming = "opaque"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "BLOB_LIBPP_HAL_HE_INIT_SUFFIX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.BIT_17_OPAQUE"
+naming = "opaque"
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "unknown"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0"
+naming = "descriptive"
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1"
+naming = "descriptive"
+sources = [
+    "ROM_REV0_PHY_FREQUENCY_CHANNEL",
+    "ROM_REV0_PHY_CBW_FEATURE_WATCHDOG",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.WORD_0024_OPAQUE.BITS_0_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA.DATA"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_DATA.MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_8_12_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_CONTROL.BITS_13_17_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_0_4_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_5_9_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_10_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_15_19_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_20_24_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.I2C_NUMBER_WORD%s.BITS_25_29_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FREQUENCY_MEMORY_READ_RESULT.VALUE"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_16_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_17_18_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_19_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_20_21_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BITS_23_24_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.FBW_BT_FILTER_CONTROL.BIT_25_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.PRIMARY_20_CHANNEL_OFFSET"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_HAL_SET_PRI20_CHAN_OFFSET"]
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.MINIMUM_POWER_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_TX_OFFSET_CONTROL.MINIMUM_POWER_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_24_28_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.NRX_FREQUENCY_CONTROL.BITS_29_31_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_0.BITS_0_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_0_1_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.BITS_2_4_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PHY_FREQUENCY_CHANNEL_ORACLE.CHANNEL_CBW_CONTROL_1.VHT_SUPPORT"
+naming = "descriptive"

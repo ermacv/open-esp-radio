@@ -1,0 +1,67 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_RX_BSSID_LIST"
+description = "Canonical WDEVRXCTR_BSSIDLIST word. Complete dbg_read_rx_misc names bits 19:18 RXCTL9_BSSID_POS; the HE init prefix independently writes encoding two to that same field."
+baseAddress = 0x20104110
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_17_OPAQUE"
+bitOffset = 0
+bitWidth = 18
+
+[[peripherals.registers.register.fields]]
+name = "RX_CONTROL_9_BSSID_POSITION"
+description = "Debug-decoded BSSID position field; complete hal_he_init writes encoding two."
+bitOffset = 18
+bitWidth = 2
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0x3
+
+[[peripherals.registers.register.fields]]
+name = "BITS_20_31_OPAQUE"
+bitOffset = 20
+bitWidth = 12
+
+[[review]]
+entity = "WIFI_MAC_RX_BSSID_LIST"
+sources = [
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.RX_CONTROL_9_BSSID_POSITION"
+naming = "descriptive"
+sources = [
+    "BLOB_LIBPP_HAL_RX_MISC_DEBUG",
+    "BLOB_LIBPP_HAL_HE_INIT_PREFIX",
+]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_0_17_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_MAC_RX_BSSID_LIST.CONTROL.BITS_20_31_OPAQUE"
+naming = "opaque"
