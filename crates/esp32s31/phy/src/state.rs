@@ -647,44 +647,8 @@ impl PhyState {
         }
     }
 
-    /// Semantic fixture only; does not mint a registered epoch or RF access.
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn calibration_tracking_fixture(
-        parameters: PhyCalibrationTrackingParameters,
-    ) -> Self {
-        let mut state = Self::default();
-        state.common.temperature = parameters.current_temperature;
-        state.common.references.common = parameters.common_reference_temperature;
-        state.common.references.transmit = parameters.transmit_reference_temperature;
-        state.common.crystal_selector = parameters.crystal_selector;
-        state.wifi.current_channel = parameters.current_channel;
-        state.wifi.channel_bandwidth = parameters.channel_bandwidth;
-        if let Some(threshold) = parameters.threshold_override {
-            state.common.temperature_debug = [2, threshold];
-        }
-        state
-    }
-
     pub const fn config(&self) -> &PhyConfig {
         &self.config
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn parameter_tracking_fixture(
-        parameters: PhyCalibrationTrackingParameters,
-        gain_adjustment: i8,
-        relaxed_threshold: bool,
-    ) -> Self {
-        let mut state = Self::calibration_tracking_fixture(parameters);
-        state.wifi.tx_gain_adjustment = gain_adjustment;
-        state.wifi.tx_power_tracking_slow = relaxed_threshold.into();
-        state
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn seed_rx_table_last_indices(&mut self, shared: u8, wifi: u8) {
-        self.wifi.shared_rx_table_last_index = shared;
-        self.wifi.wifi_rx_table_last_index = wifi;
     }
 
     pub fn set_tx_power_tracking_slow(&mut self, value: u8) {
@@ -1622,26 +1586,6 @@ impl PhyState {
         restored.common.registered = false;
         *self = restored;
         Ok(())
-    }
-
-    /// The state retaining exactly `cache`: the replay restoration, with the
-    /// RX-gain table flag the replay deliberately clears kept as captured.
-    #[cfg(feature = "validation-probes")]
-    pub(crate) fn retained_calibration(
-        config: PhyConfig,
-        cache: &PhyCalibrationCache,
-    ) -> Result<Self, PhyCalibrationCacheError> {
-        let mut state = Self::new(config);
-        state.begin_cached_calibration(config, cache, cache.snapshot.identity)?;
-        state.wifi.calibration.set(
-            WifiCalibrationStatus::RX_GAIN_TABLES,
-            cache.snapshot.wifi.rx_gain_tables_initialized,
-        );
-        // The snapshot is captured after registration, whose temperature
-        // step restarts TX-power tracking from the TX-power reference
-        // (`apply_register_temperature_outcome`, as `phy_get_temp_init`).
-        state.common.references.restart_power_tracking();
-        Ok(state)
     }
 
     pub(crate) const fn calibration_snapshot(

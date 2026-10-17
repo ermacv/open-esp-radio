@@ -166,8 +166,8 @@ pub enum PowerIrqDisposition {
 
 /// Select one action from a driver-local task event set in recovered vendor order.
 ///
-/// Keeping selection pure lets validation probes exercise the same production
-/// decision without depending on the executor's atomic-instruction model.
+/// Keeping selection pure lets host tests exercise the production decision
+/// without depending on the executor's atomic-instruction model.
 pub const fn next_irq_work(pending: u32) -> Option<IrqWork> {
     if pending & EVENT_RX_SUCCESS != 0 {
         Some(IrqWork::RxSuccess)

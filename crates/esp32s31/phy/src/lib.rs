@@ -47,46 +47,27 @@
 //! Timing types identify raw ticks, microseconds, or absolute deadlines at
 //! their owning API. [`HARDWARE_EDGE_LIMIT`] is an observation-attempt limit,
 //! not a wall-clock duration. The chip Wi-Fi and Bluetooth drivers are the
-//! real target consumers; host tests exercise the pure transitions and
-//! validation probes without claiming RF readiness.
+//! real target consumers; host tests exercise the pure transitions without
+//! claiming RF readiness.
 
 #[cfg(test)]
 extern crate std;
 
 pub mod executor;
-#[cfg(all(target_arch = "riscv32", feature = "validation-probes"))]
-pub mod target_executor;
-#[cfg(all(target_arch = "riscv32", not(feature = "validation-probes")))]
+#[cfg(target_arch = "riscv32")]
 mod target_executor;
-#[cfg(all(target_arch = "riscv32", feature = "validation-probes"))]
-pub mod target_port;
-#[cfg(all(target_arch = "riscv32", not(feature = "validation-probes")))]
+#[cfg(target_arch = "riscv32")]
 mod target_port;
 
-#[cfg(feature = "validation-probes")]
-pub mod analog;
-#[cfg(not(feature = "validation-probes"))]
 mod analog;
-#[cfg(feature = "validation-probes")]
-pub mod calibration;
-#[cfg(not(feature = "validation-probes"))]
 mod calibration;
-#[cfg(feature = "validation-probes")]
-pub mod channel;
-#[cfg(not(feature = "validation-probes"))]
 mod channel;
 mod hardware;
 #[cfg(any(target_arch = "riscv32", test))]
 mod lifecycle;
-#[cfg(feature = "validation-probes")]
-pub mod rx;
-#[cfg(not(feature = "validation-probes"))]
 mod rx;
 pub mod state;
 pub mod tracking;
-#[cfg(feature = "validation-probes")]
-pub mod tx;
-#[cfg(not(feature = "validation-probes"))]
 mod tx;
 
 pub mod bluetooth_client;
@@ -94,8 +75,6 @@ pub mod concurrent;
 pub mod domain;
 pub mod ieee802154_client;
 mod size_limits;
-#[cfg(feature = "validation-probes")]
-pub mod validation;
 pub mod wifi_client;
 
 /// Vendor RF-calibration version stamped into calibration caches.
@@ -110,22 +89,7 @@ pub use calibration::registration::{
     PhyCalibrationIdentity, PhyCalibrationPath, PhyRegisterBindingError, PhyRegisterFailure,
     PhyRegisterOutcome, PhyRegisterStage, RegisteredPhyState,
 };
-#[cfg(feature = "validation-probes")]
-pub use calibration::registration::{
-    PhyRegisterAction, PhyRegisterCompletion, PhyRegisterExternalBinding, PhyRegisterLocalStep,
-    PhyRegisterTransition,
-};
-#[cfg(feature = "validation-probes")]
-pub use executor::{
-    PhyCalibrationTrackingPort, PhyParamTrackingPort, PhyRegisterPort,
-    run_phy_calibration_tracking, run_phy_param_tracking, run_phy_register,
-};
 pub use executor::{PhyCalibrationTrackingRunError, PhyParamTrackingRunError, PhyRegisterRunError};
-#[cfg(all(any(target_arch = "riscv32", test), feature = "validation-probes"))]
-pub use lifecycle::{
-    PhyRfWakeAction, PhyRfWakeCompletion, PhyRfWakeOperation, PhyRfWakeOutcome,
-    PhyRfWakeTransition, PhyRfWakeTransitionError,
-};
 pub use state::{
     PHY_CALIBRATION_SNAPSHOT_SCHEMA, PhyBluetoothCalibration, PhyCalibrationCache,
     PhyCalibrationSnapshot, PhyCommonCalibration, PhyConfig, PhyState, PhyWifiCalibration,
@@ -164,9 +128,4 @@ pub use target_port::{
     NoopPhyTargetObserver, PhyDomainRegisterFailure, PhyDomainRegistered, PhyGrantProtectPort,
     PhyRegisterConfig, PhyRfBoundary, PhyTargetObserver, PhyTargetPortCounters,
     TargetPhyParamTrackingError, TargetPhyRegisterError,
-};
-#[cfg(all(target_arch = "riscv32", feature = "validation-probes"))]
-pub use target_port::{
-    TargetPhyCalibrationTrackingPort, TargetPhyParamTrackingPort, TargetPhyRegisterPort,
-    WeakPhyGrantProtect,
 };

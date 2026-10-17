@@ -333,12 +333,12 @@ impl<T> SharedRadio<T> {
             .map_err(|_| SharedRadioBusy)
     }
 
-    /// Take the lease of an arbiter this caller borrows uniquely, for a
-    /// validation image whose memory model admits no atomic access to it.
+    /// Take the lease of an arbiter this caller borrows uniquely, without an
+    /// atomic access to it.
     ///
     /// The unique borrow proves that no lease is alive, so the flag is set
     /// without an atomic exchange; dropping the lease releases it normally.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn lease_for_validation(&mut self) -> SharedRadioLease<'_, T> {
         *self.held.get_mut() = true;
@@ -430,17 +430,9 @@ impl<T> SharedRadio<T> {
         self.state.get_mut().btbb_clients |= client_bit(client);
     }
 
-    /// Record a BTBB reference of `client` without register access, for
-    /// ownership tests of upper layers over an isolated validation root.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn hold_btbb_for_validation(&mut self, client: RadioClient) {
-        self.state.get_mut().btbb_clients |= client_bit(client);
-    }
-
     /// Record a programmed PHY grant-protect request without register
-    /// access, so a validation image can compare the release alone.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// access, so a host test can check the release alone.
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn hold_phy_grant_protect_for_validation(&mut self) {
         self.state.get_mut().phy_grant_protected = true;
@@ -450,7 +442,7 @@ impl<T> SharedRadio<T> {
     /// reset, and forget them: the explicit end of a terminal validation
     /// image or test that drops its shared radio. Each guard ends with
     /// `abandon`, so none is dropped.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn abandon_platform_clocks(&mut self) {
         let state = self.state.get_mut();

@@ -312,57 +312,6 @@ impl<R: route::Route> sealed::PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
 impl<R: route::Route> PhyInitializationAccess for SharedPhyHal<'_, R> {}
 
-/// Shared PHY capability over externally supplied registers in an isolated
-/// validation image.
-///
-/// Compiled vendor-comparison entry points receive the register partition by
-/// pointer. This wrapper owns a fresh restore slot for one call, so a probe
-/// cannot observe or leak another route's calibration restore obligation.
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub struct ValidationSharedPhy<'registers> {
-    registers: &'registers mut RadioPhyRegisters,
-    restore: PhyRouteState,
-}
-
-#[cfg(feature = "validation-probes")]
-impl<'registers> ValidationSharedPhy<'registers> {
-    pub fn new(registers: &'registers mut RadioPhyRegisters) -> Self {
-        Self {
-            registers,
-            restore: PhyRouteState::for_validation(),
-        }
-    }
-}
-
-#[cfg(feature = "validation-probes")]
-impl sealed::SharedPhyAccess for ValidationSharedPhy<'_> {
-    fn pac(&self) -> &RadioPhyRegisters {
-        self.registers
-    }
-
-    fn route_state(&self) -> &PhyRouteState {
-        &self.restore
-    }
-
-    fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState) {
-        (self.registers, &mut self.restore)
-    }
-}
-
-#[cfg(feature = "validation-probes")]
-impl sealed::SharedPhyContext for ValidationSharedPhy<'_> {
-    fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
-        WifiBasebandEnableObservation::from_pac_readback(self.registers.wifi_baseband_is_enabled())
-    }
-}
-
-#[cfg(feature = "validation-probes")]
-impl SharedPhyAccess for ValidationSharedPhy<'_> {}
-
-#[cfg(feature = "validation-probes")]
-impl SharedPhyContext for ValidationSharedPhy<'_> {}
-
 pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegisters {
     sealed::SharedPhyAccess::pac(access)
 }
@@ -394,7 +343,7 @@ pub struct RadioRuntimeOwner {
 impl RadioRuntimeOwner {
     /// Construct the running register owner inside an isolated validation
     /// image without exposing the underlying PAC owner.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn claim_for_validation() -> Self {
         let (_shared, partitions) =
@@ -593,37 +542,6 @@ impl MacInterruptRegisters {
         MacInterruptSetup {
             inner: self.inner.deactivate(power.inner),
         }
-    }
-}
-
-/// Construct the task-side interrupt setup owner inside an isolated probe.
-///
-/// The returned value is the same finite capability consumed by production
-/// connected-STA setup; only its singleton acquisition is validation-only.
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub fn validation_mac_interrupt_setup() -> MacInterruptSetup {
-    MacInterruptSetup {
-        inner: oer_esp32s31_pac::validation::mac_interrupt_setup(),
-    }
-}
-
-/// Construct the hard-MAC interrupt capability inside an isolated validation
-/// image without exposing the PAC partition.
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub fn validation_mac_interrupt_registers() -> MacInterruptRegisters {
-    MacInterruptRegisters {
-        inner: oer_esp32s31_pac::validation::mac_interrupt_registers(),
-    }
-}
-
-/// Construct the hard power-interrupt capability inside an isolated probe.
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub fn validation_mac_power_interrupt_registers() -> MacPowerInterruptRegisters {
-    MacPowerInterruptRegisters {
-        inner: oer_esp32s31_pac::validation::mac_power_interrupt_registers(),
     }
 }
 

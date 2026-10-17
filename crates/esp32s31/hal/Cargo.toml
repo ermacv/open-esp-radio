@@ -10,7 +10,6 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 [features]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
 test-support = ["oer-esp32s31-pac/test-support"]
-validation-probes = ["oer-esp32s31-pac/validation-probes"]
 
 [dependencies]
 oer-radio-analog = { path = "../../espressif/analog" }
@@ -23,7 +22,7 @@ oer-radio-coex = { path = "../../radio/coex" }
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-oer-esp32s31-pac = { path = "../pac", features = ["validation-probes"] }
+oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
 
 [lints]
 workspace = true

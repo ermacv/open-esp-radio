@@ -37,7 +37,7 @@ handwritten modules in this package.
 `esp32s31/pac/` contains the handwritten semantic radio PAC and its
 generated capability catalog in `src/generated.rs`. The
 [PAC provenance map](esp32s31/pac/README.md) distinguishes both generated
-Rust outputs from its handwritten ownership, domain and validation modules,
+Rust outputs from its handwritten ownership and domain modules,
 including the IEEE 802.15.4 task/interrupt split. Non-radio register
 access through upstream `esp-hal`/`esp-pacs` belongs to
 `adapters/esp-hal/soc/`, which also contains cache/MMU and GDMA

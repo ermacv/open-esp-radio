@@ -9,7 +9,6 @@ description = "Allocation-free Rust ESP32-S31 PHY state machines"
 
 [features]
 default = []
-validation-probes = []
 # Retain value-only RF measurements in registration and role start reports.
 registration-diagnostics = []
 # Let a diagnostic image set the vendor's temperature-tracking debug policy,
@@ -24,7 +23,7 @@ oer-esp32s31-hal = { path = "../hal" }
 [dev-dependencies]
 oer-time-virtual = { path = "../../base/time-virtual" }
 pin-project-lite = "0.2.17"
-oer-esp32s31-hal = { path = "../hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }
 
 [lints]
 workspace = true

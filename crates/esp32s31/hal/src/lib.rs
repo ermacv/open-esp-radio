@@ -39,9 +39,6 @@ pub mod power;
 pub mod root;
 pub mod shared_radio;
 pub mod types;
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub mod validation;
 
 pub mod owner;
 

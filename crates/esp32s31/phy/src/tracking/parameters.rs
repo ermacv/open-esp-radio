@@ -45,14 +45,14 @@ impl PhyParamTrackRequest {
 pub enum PhyTrackingDiagnostics {
     Disabled,
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(dead_code, reason = "only validation bindings construct this variant")
     )]
     Enabled,
 }
 
 impl PhyTrackingDiagnostics {
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn enabled(self) -> bool {
         matches!(self, Self::Enabled)
     }
@@ -241,7 +241,7 @@ pub struct PhyParamTrackingCalibrationCompletion {
 
 // Host tests and the vendor probe read back the committed branches;
 // production consumes them through the parent transition.
-#[cfg(any(test, feature = "validation-probes"))]
+#[cfg(test)]
 impl PhyParamTrackingCalibrationCompletion {
     /// The common calibration references were recalibrated and committed.
     pub const fn common_updated(&self) -> bool {
@@ -556,7 +556,7 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         self.parent_action
     }
@@ -639,7 +639,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         self.parent_action
     }
@@ -739,7 +739,7 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         crate::tracking::calibration::PhyCalibrationTrackingExternalBinding::lower(self.action())
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -822,7 +822,7 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn parent_action(&self) -> PhyParamTrackingAction {
         self.parent_action
     }
@@ -849,7 +849,7 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         crate::tracking::power::PhyTxPowerTrackingExternalBinding::lower(self.action(), self.state)
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -917,7 +917,7 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::tracking::i2c::PhyWifiI2cTrackingAction {
         self.child.action()
     }
@@ -938,7 +938,7 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         self.child.lower_external()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
@@ -1005,14 +1005,14 @@ impl<'state> PhyParamTrackingTemperatureTransition<'state> {
         crate::analog::temperature::PhyTemperatureExternalBinding::lower(self.action())
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn state(&self) -> &crate::state::PhyState {
         self.state
     }
 
     /// Commit a successful sensor outcome and mint the exact parent
     /// completion. Failed and incomplete children are returned unchanged.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn commit(self) -> Result<PhyParamTrackingCompletion, Self> {
         self.commit_observed(None, None)
     }

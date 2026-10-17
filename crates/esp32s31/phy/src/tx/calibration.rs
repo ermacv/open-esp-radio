@@ -5,21 +5,6 @@
 //! delay and a synchronous SAR callback. Rust exposes both as one externally
 //! completed operation per transition step.
 
-/// Complete pinned debug helper; this ESP32-S31 archive always returns zero.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn get_bias_ref_code() -> u32 {
-    0
-}
-
-/// Apply complete pinned `phy_tx_atten_comp` wrapping byte arithmetic.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub fn phy_tx_atten_comp(values: &mut [u8; 3]) {
-    values[1] = values[1].wrapping_add(3);
-    values[2] = values[2].wrapping_add(4);
-}
-
 use crate::{
     analog::{
         i2c::analog_registers,
@@ -85,7 +70,7 @@ pub enum PhyTxCalibrationEnvironmentCompletion {
     PbusDebugModeConfigured,
     PbusCompleted(PhyPbusForceTest),
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(
             dead_code,
             reason = "only the validation binding constructs this timeout"
@@ -427,7 +412,7 @@ pub enum PhyToneSarCompletion {
         ready: bool,
     },
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(dead_code, reason = "only validation bindings construct this variant")
     )]
     ReadyDeadlineElapsed {
@@ -1524,11 +1509,6 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
         }
     }
 
-    #[cfg(feature = "validation-probes")]
-    pub const fn action(&self) -> PhyTxCalibrationEnvironmentAction {
-        self.action
-    }
-
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
@@ -1587,11 +1567,6 @@ impl PhyTxCapSearchMmioBinding {
         }
     }
 
-    #[cfg(feature = "validation-probes")]
-    pub const fn action(&self) -> PhyTxCapSearchAction {
-        self.action
-    }
-
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
@@ -1648,17 +1623,17 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
         })
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1697,7 +1672,7 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
             .map_err(PhyTxCapExternalBindingError::Pbus)
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn into_timeout_completion(self) -> PhyTxCalibrationEnvironmentCompletion {
         PhyTxCalibrationEnvironmentCompletion::PbusTimedOut(self.transaction)
     }

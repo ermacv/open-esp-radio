@@ -95,7 +95,7 @@ pub enum PhyTxDcCompletion {
     },
     PbusCompleted(PhyPbusForceTest),
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(
             dead_code,
             reason = "only the validation binding constructs this timeout"
@@ -122,7 +122,7 @@ pub enum PhyTxDcCompletion {
         ready: bool,
     },
     #[cfg_attr(
-        not(any(test, feature = "validation-probes")),
+        not(test),
         allow(
             dead_code,
             reason = "only the validation binding constructs this timeout"
@@ -970,27 +970,6 @@ impl PhyTxDcPbusBinding {
         })
     }
 
-    #[cfg(feature = "validation-probes")]
-    pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
-        self.hardware.action()
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
-        self.hardware.started()
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub fn observe_completed(
-        &mut self,
-        completed: bool,
-    ) -> Result<
-        crate::analog::pbus::PhyPbusHardwareObservation,
-        crate::analog::pbus::PhyPbusHardwareBindingError,
-    > {
-        self.hardware.observe_completed(completed)
-    }
-
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
@@ -1015,11 +994,6 @@ impl PhyTxDcPbusBinding {
             .into_transaction()
             .map(PhyTxDcCompletion::PbusCompleted)
             .map_err(PhyTxDcExternalBindingError::Pbus)
-    }
-
-    #[cfg(feature = "validation-probes")]
-    pub const fn into_timeout_completion(self) -> PhyTxDcCompletion {
-        PhyTxDcCompletion::PbusTimedOut(self.transaction)
     }
 }
 

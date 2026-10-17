@@ -864,44 +864,5 @@ impl<'registers> WifiMacHal<'registers> {
     }
 }
 
-/// Execute the exact role-policy HAL transaction in an isolated validation
-/// image without exposing the PAC owner to the probe crate.
-///
-/// Only singleton acquisition is replaced. Register ownership and the named
-/// production HAL operation are unchanged.
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub fn validation_configure_role_receive_policy(policy: MacRoleReceivePolicy) {
-    crate::owner::RadioRuntimeOwner::claim_for_validation()
-        .wifi_mac_hal()
-        .configure_role_receive_policy(policy);
-}
-
-/// Apply complete rev0 ROM `phy_enable_cca` or `phy_disable_cca`.
-#[cfg(all(feature = "validation-probes", target_arch = "riscv32"))]
-fn set_cca_enabled(registers: &mut WifiRadioRegisters, enabled: bool) {
-    registers.set_phy_wifi_cca_enabled(enabled);
-}
-
-/// Apply complete rev0 ROM `phy_sifs_reg_init`.
-#[cfg(all(feature = "validation-probes", target_arch = "riscv32"))]
-fn initialize_sifs(registers: &mut WifiRadioRegisters) {
-    registers.initialize_phy_wifi_sifs();
-}
-
-#[cfg(all(feature = "validation-probes", target_arch = "riscv32"))]
-#[doc(hidden)]
-pub fn validation_set_cca_enabled(enabled: bool) {
-    let mut owner = crate::owner::RadioRuntimeOwner::claim_for_validation();
-    set_cca_enabled(owner.pac_mut(), enabled);
-}
-
-#[cfg(all(feature = "validation-probes", target_arch = "riscv32"))]
-#[doc(hidden)]
-pub fn validation_initialize_sifs() {
-    let mut owner = crate::owner::RadioRuntimeOwner::claim_for_validation();
-    initialize_sifs(owner.pac_mut());
-}
-
 #[cfg(test)]
 mod tests;

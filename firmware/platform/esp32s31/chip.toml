@@ -198,7 +198,6 @@ bluetooth = ["oer-esp32s31-bluetooth"]
 
 # What the repository gate builds and audits for the chip.
 [gate]
-validation-probes = ["oer-esp32s31-bluetooth"]
 # Borrowed DMA memory needs `unsafe`: the SoC adapter's doctests run on the
 # chip target. The Wi-Fi and Bluetooth drivers' owner rules hold only for the
 # chip, so their compile-fail tests and twins build there too.

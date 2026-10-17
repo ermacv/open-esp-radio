@@ -59336,18 +59336,13 @@ pub mod interrupt_snapshot {
         snapshot: MacInterruptSnapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .clear()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn mac_interrupt_for_validation(bits: u32) -> MacInterruptSnapshot {
-        MacInterruptSnapshot(bits)
     }
 
     /// Opaque event image sampled from `WIFI_MAC_POWER_INTERRUPT`.`STATUS`.
@@ -59425,18 +59420,13 @@ pub mod interrupt_snapshot {
         snapshot: MacPowerInterruptSnapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .clear()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn mac_power_interrupt_for_validation(bits: u32) -> MacPowerInterruptSnapshot {
-        MacPowerInterruptSnapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_SNAPSHOT_0`.
@@ -59474,20 +59464,13 @@ pub mod interrupt_snapshot {
         snapshot: BluetoothInterruptBank0Snapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .irq_clear_0()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn bluetooth_interrupt_bank_0_for_validation(
-        bits: u32,
-    ) -> BluetoothInterruptBank0Snapshot {
-        BluetoothInterruptBank0Snapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_SNAPSHOT_1`.
@@ -59525,20 +59508,13 @@ pub mod interrupt_snapshot {
         snapshot: BluetoothInterruptBank1Snapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .irq_clear_1()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn bluetooth_interrupt_bank_1_for_validation(
-        bits: u32,
-    ) -> BluetoothInterruptBank1Snapshot {
-        BluetoothInterruptBank1Snapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_0`.
@@ -59606,20 +59582,13 @@ pub mod interrupt_snapshot {
         snapshot: BluetoothPrimaryInterruptBank0Snapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .irq_clear_0()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn bluetooth_primary_interrupt_bank_0_for_validation(
-        bits: u32,
-    ) -> BluetoothPrimaryInterruptBank0Snapshot {
-        BluetoothPrimaryInterruptBank0Snapshot(bits)
     }
 
     /// Opaque event image sampled from `BLUETOOTH_INTERRUPT_BANK`.`IRQ_STATUS_1`.
@@ -59692,20 +59661,13 @@ pub mod interrupt_snapshot {
         snapshot: BluetoothPrimaryInterruptBank1Snapshot,
     ) {
         // SAFETY: the opaque value can only be constructed by the paired
-        // STATUS read (or in a validation-only build) and CLEAR is an
-        // SVD-validated full-width write-one-to-clear register.
+        // STATUS read and CLEAR is an SVD-validated full-width
+        // write-one-to-clear register.
         unsafe {
             registers
                 .irq_clear_1()
                 .write_with_zero(|writer| writer.bits(snapshot.0));
         }
-    }
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn bluetooth_primary_interrupt_bank_1_for_validation(
-        bits: u32,
-    ) -> BluetoothPrimaryInterruptBank1Snapshot {
-        BluetoothPrimaryInterruptBank1Snapshot(bits)
     }
 }
 
@@ -60145,15 +60107,6 @@ pub mod peripheral_ownership {
                 ieee802154_interrupt_route,
             },
         }
-    }
-
-    /// Acquire a fresh singleton in an isolated compiled-validation image.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    #[inline]
-    pub fn peripherals_for_validation() -> crate::Peripherals {
-        // SAFETY: validation images contain one closed probe and no runtime driver.
-        unsafe { crate::Peripherals::steal() }
     }
 }
 

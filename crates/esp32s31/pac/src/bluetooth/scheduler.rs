@@ -243,15 +243,6 @@ pub struct BluetoothSchedulerHardwareListsCleared {
     _private: (),
 }
 
-#[cfg(feature = "validation-probes")]
-impl BluetoothSchedulerHardwareListsCleared {
-    /// Construct host-only initialization evidence without MMIO.
-    #[doc(hidden)]
-    pub const fn for_validation() -> Self {
-        Self { _private: () }
-    }
-}
-
 /// Affine evidence that the synchronous scheduler-run subscriber completed.
 ///
 /// The exact current subscriber acknowledges stale BTMAC source 14, enables
@@ -312,21 +303,6 @@ impl BluetoothSchedulerHardwareListHeadEmptyObserved {
     /// Originally published head retained by the completed RUN epoch.
     pub const fn completed_head(&self) -> BluetoothSchedulerHardwareListHead {
         self.completed_head
-    }
-}
-
-#[cfg(feature = "validation-probes")]
-impl BluetoothSchedulerHardwareListHeadEmptyObserved {
-    /// Construct semantic empty-head evidence for host-only ownership tests.
-    #[doc(hidden)]
-    pub const fn from_identity_for_validation(
-        index: BluetoothSchedulerHardwareListIndex,
-        completed_head: BluetoothSchedulerHardwareListHead,
-    ) -> Self {
-        Self {
-            index,
-            completed_head,
-        }
     }
 }
 

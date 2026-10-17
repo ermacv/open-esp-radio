@@ -367,15 +367,6 @@ pub struct BluetoothNrtInterruptAcknowledged {
     _private: (),
 }
 
-#[cfg(feature = "validation-probes")]
-impl BluetoothNrtInterruptAcknowledged {
-    /// Construct an acknowledged token for host-only controller tests.
-    #[doc(hidden)]
-    pub const fn for_validation() -> Self {
-        Self { _private: () }
-    }
-}
-
 /// One complete primary source-124 sample, acknowledgement and fault capture.
 ///
 /// The PAC projects raw status into positional source facts before this value
@@ -410,67 +401,6 @@ impl BluetoothPrimaryInterruptEpoch {
     /// Semantic fault-source presence captured in the acknowledged epoch.
     pub const fn fault_sources(&self) -> BluetoothPrimaryFaultSources {
         self.fault_sources
-    }
-
-    /// Construct one fault-free epoch from positional source presence without
-    /// exposing interrupt-bank bit geometry above the PAC.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn for_dynamic_validation(
-        bank_0_source_21_pending: bool,
-        bank_0_sources_27_or_28_pending: bool,
-        bank_1_source_3_pending: bool,
-    ) -> Self {
-        Self {
-            bank_0_source_21_pending,
-            bank_0_sources_27_or_28_pending,
-            bank_1_source_3_pending,
-            fault_sources: BluetoothPrimaryFaultSources {
-                bank_0_source_15_pending: false,
-                bank_1_source_8_pending: false,
-                bank_1_source_9_pending: false,
-                bank_1_source_12_pending: false,
-                unclassified_pending: false,
-            },
-        }
-    }
-
-    /// Construct one representative baseline-fault epoch for upper-layer
-    /// fail-stop validation without exporting the matching hardware mask.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn for_fault_validation() -> Self {
-        Self {
-            bank_0_source_21_pending: false,
-            bank_0_sources_27_or_28_pending: false,
-            bank_1_source_3_pending: false,
-            fault_sources: BluetoothPrimaryFaultSources {
-                bank_0_source_15_pending: false,
-                bank_1_source_8_pending: true,
-                bank_1_source_9_pending: false,
-                bank_1_source_12_pending: false,
-                unclassified_pending: false,
-            },
-        }
-    }
-
-    /// Construct one epoch containing only a source whose handler semantics
-    /// remain unclassified, for upper-layer fail-closed validation.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn for_unclassified_validation() -> Self {
-        Self {
-            bank_0_source_21_pending: false,
-            bank_0_sources_27_or_28_pending: false,
-            bank_1_source_3_pending: false,
-            fault_sources: BluetoothPrimaryFaultSources {
-                bank_0_source_15_pending: false,
-                bank_1_source_8_pending: false,
-                bank_1_source_9_pending: false,
-                bank_1_source_12_pending: false,
-                unclassified_pending: true,
-            },
-        }
     }
 }
 

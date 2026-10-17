@@ -11,16 +11,6 @@
 //! SRAM. Every hardware-memory publication is an identity-bound finite MMIO
 //! action completed by the caller.
 
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_freq_mem_backup() {}
-
-/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
-#[inline]
-#[cfg(feature = "validation-probes")]
-pub const fn phy_freq_offset_set() {}
-
 use crate::analog::{
     i2c::{PhyI2cAddress, PhyI2cField, analog_registers},
     rfpll::{
@@ -62,7 +52,7 @@ pub struct PhyFrequencyMemoryRecord {
 }
 
 impl PhyFrequencyMemoryRecord {
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn words(self) -> [u32; 3] {
         self.words
     }
@@ -486,7 +476,7 @@ impl PhyFrequencyCapMemoryExternalBinding {
         }
     }
 
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(test)]
     pub const fn action(&self) -> PhyFrequencyCapMemoryAction {
         self.action
     }

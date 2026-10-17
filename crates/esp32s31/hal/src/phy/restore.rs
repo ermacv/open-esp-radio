@@ -107,8 +107,8 @@ impl PhyRouteState {
         }
     }
 
-    /// Fresh state for an isolated validation image or a host test.
-    #[cfg(any(test, feature = "validation-probes"))]
+    /// Fresh state for a host test.
+    #[cfg(test)]
     pub(crate) const fn for_validation() -> Self {
         Self::new(PhyRegistration::new())
     }

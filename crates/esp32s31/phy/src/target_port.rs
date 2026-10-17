@@ -14,8 +14,6 @@ use core::marker::PhantomData;
 
 pub mod calibration;
 pub mod rfpll;
-#[cfg(feature = "validation-probes")]
-pub mod temperature;
 
 use crate::{
     HARDWARE_EDGE_LIMIT, PhyParamTrackingRunError, PhyRegisterRunError,
@@ -142,8 +140,6 @@ pub use domain::{PhyDomainRegisterFailure, PhyDomainRegistered, PhyRegisterConfi
 
 mod radio_lifecycle;
 pub(crate) use radio_lifecycle::PhyRfCloseTemperatureFailure;
-#[cfg(all(target_arch = "riscv32", feature = "validation-probes"))]
-pub(crate) use radio_lifecycle::reset_wake_i2c_master;
 
 use oer_esp32s31_hal::owner::{PhyInitializationAccess, SharedPhyAccess, SharedPhyContext};
 
@@ -182,10 +178,10 @@ impl<G: PhyGrantProtectPort + ?Sized> PhyGrantProtectPort for &mut G {
 /// The weak `phy_acquire_grant_protect` and `phy_release_grant_protect` of the
 /// PHY archive linked without the coexistence archive: both return without
 /// effect. Vendor comparison of PHY-only leaves uses this port.
-#[cfg(any(test, feature = "validation-probes"))]
+#[cfg(test)]
 pub struct WeakPhyGrantProtect;
 
-#[cfg(any(test, feature = "validation-probes"))]
+#[cfg(test)]
 impl PhyGrantProtectPort for WeakPhyGrantProtect {
     fn set_grant_protect(&mut self, _enabled: bool) -> Result<(), PhyTargetPortError> {
         Ok(())

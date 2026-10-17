@@ -53,7 +53,7 @@ pub struct BluetoothSchedulerLockModifyTaskObservation {
 
 impl BluetoothSchedulerLockModifyTaskObservation {
     /// Construct semantic task fields for host-side controller validation.
-    #[cfg(any(feature = "validation-probes", test))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn from_fields_for_validation(start: bool, result: u8) -> Self {
         assert!(
@@ -116,7 +116,7 @@ impl BluetoothSchedulerLockModifyObservation {
 
     /// Construct semantic fields for host validation without reproducing PAC
     /// register geometry in a controller test.
-    #[cfg(any(feature = "validation-probes", test))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn from_fields_for_validation(busy: bool, start: bool, result: u8) -> Self {
         assert!(
@@ -158,7 +158,7 @@ pub struct BluetoothSchedulerLockModifyPublished {
     _private: (),
 }
 
-#[cfg(any(feature = "validation-probes", test))]
+#[cfg(test)]
 impl BluetoothSchedulerLockModifyPublished {
     /// Construct a host-only publication proof for controller state-machine
     /// validation. Production builds can obtain this value only from live PAC

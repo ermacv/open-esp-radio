@@ -610,22 +610,13 @@ impl PacApiPack {
                      snapshot: {snapshot_type},\n\
                  ) {{\n\
                      // SAFETY: the opaque value can only be constructed by the paired\n\
-                     // STATUS read (or in a validation-only build) and CLEAR is an\n\
-                     // SVD-validated full-width write-one-to-clear register.\n\
+                     // STATUS read and CLEAR is an SVD-validated full-width\n\
+                     // write-one-to-clear register.\n\
                      unsafe {{\n\
                          registers.{clear}().write_with_zero(|writer| writer.bits(snapshot.0));\n\
                      }}\n\
-                 }}\n\
-                 #[cfg(feature = \"validation-probes\")]\n\
-                 #[doc(hidden)]\n\
-                 pub const fn {}_for_validation(bits: u32) -> {snapshot_type} {{\n\
-                     {snapshot_type}(bits)\n\
                  }}\n",
-                binding.peripheral,
-                binding.status_register,
-                binding.name,
-                binding.name,
-                binding.name,
+                binding.peripheral, binding.status_register, binding.name, binding.name,
             ));
         }
         output.push_str("}\n");
@@ -716,14 +707,6 @@ impl PacApiPack {
         }
         output.push_str(
             "        }\n\
-                 }\n\
-                 \n    /// Acquire a fresh singleton in an isolated compiled-validation image.\n\
-                 #[cfg(feature = \"validation-probes\")]\n\
-                 #[doc(hidden)]\n\
-                 #[inline]\n\
-                 pub fn peripherals_for_validation() -> crate::Peripherals {\n\
-                     // SAFETY: validation images contain one closed probe and no runtime driver.\n\
-                     unsafe { crate::Peripherals::steal() }\n\
                  }\n\
                  }\n",
         );

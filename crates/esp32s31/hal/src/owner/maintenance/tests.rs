@@ -68,7 +68,7 @@ fn release_rechecks_hardware_instead_of_reusing_admission_observation() {
 
 fn setup() -> super::MacInterruptSetup {
     super::MacInterruptSetup {
-        inner: oer_esp32s31_pac::validation::mac_interrupt_setup(),
+        inner: oer_esp32s31_pac::RadioPartitions::for_validation().wifi_interrupts,
     }
 }
 

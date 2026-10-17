@@ -19,13 +19,6 @@ impl BluetoothSchedulerReferenceGateObservation {
         Self { busy }
     }
 
-    /// Construct a semantic gate observation for upper-layer validation.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub const fn from_busy_for_validation(busy: bool) -> Self {
-        Self::new(busy)
-    }
-
     /// Whether the scheduler was busy at the reference-gate temporal point.
     pub const fn is_busy(self) -> bool {
         self.busy
@@ -67,7 +60,7 @@ impl BluetoothSchedulerWorkObservation {
     }
 
     /// Construct semantic deferred-work fields for upper-layer validation.
-    #[cfg(any(feature = "validation-probes", test))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn from_fields_for_validation(
         busy: bool,
@@ -117,7 +110,7 @@ impl BluetoothSchedulerBusyObservation {
     }
 
     /// Construct a semantic BUSY sample for upper-layer validation.
-    #[cfg(any(feature = "validation-probes", test))]
+    #[cfg(test)]
     #[doc(hidden)]
     pub const fn from_busy_for_validation(busy: bool) -> Self {
         Self::new(busy)
@@ -202,17 +195,6 @@ impl BluetoothSchedulerSoftwareListRemovalReady {
     }
 }
 
-#[cfg(feature = "validation-probes")]
-impl BluetoothSchedulerSoftwareListRemovalReady {
-    /// Bind host-only semantic empty-head evidence to a simulated ready gate.
-    #[doc(hidden)]
-    pub const fn from_head_for_validation(
-        head: BluetoothSchedulerHardwareListHeadEmptyObserved,
-    ) -> Self {
-        Self { head }
-    }
-}
-
 /// Result of consuming one finite scheduler software-list removal observation.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "pending requires a new scheduler event; ready must advance ownership"]
@@ -294,21 +276,6 @@ impl BluetoothSchedulerFinishedHardwareListObserved {
 }
 
 impl BluetoothSchedulerFinishedListObservation {
-    /// Construct a semantic set of finished hardware lists for host-only
-    /// controller tests.
-    #[cfg(feature = "validation-probes")]
-    #[doc(hidden)]
-    pub fn from_lists_for_validation(lists: &[u8]) -> Option<Self> {
-        let mut image = 0u16;
-        for &list in lists {
-            if list >= 16 {
-                return None;
-            }
-            image |= 1u16 << list;
-        }
-        Some(Self(image))
-    }
-
     /// Whether no hardware list was reported finished.
     pub const fn is_empty(&self) -> bool {
         self.0 == 0

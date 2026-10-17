@@ -9,17 +9,13 @@ description = "Closed typed ESP32-S31 radio peripheral access crate"
 
 [features]
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
-test-support = []
-validation-probes = ["oer-esp32s31-pac-raw/validation-probes", "oer-ieee802154-pac/validation-probes"]
+test-support = ["oer-ieee802154-pac/test-support"]
 
 [dependencies]
 oer-ieee802154-pac = { path = "../../espressif/ieee802154-pac" }
 oer-memory = { path = "../../base/memory" }
 oer-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
-
-[dev-dependencies]
-oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["validation-probes"] }
 
 [lints]
 workspace = true
