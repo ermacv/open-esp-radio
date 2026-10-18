@@ -10,7 +10,7 @@ analysis read this model; neither owns a second copy.
 | Path | Owner and purpose |
 | --- | --- |
 | `model/device.toml`, `model/peripherals/` | Reviewed hardware register geometry and semantics |
-| `model/memory.toml` | MMIO regions, including platform-owned regions outside radio publication |
+| `model/memory.toml` | MMIO regions, including platform-owned regions outside radio publication, and the RAM regions memory layouts are placed in (`dma-window`) |
 | `model/reviewed.toml` | Typed reviewed assertions with their applicability and evidence |
 | `policy/api.toml` | Schema-5 production PAC ownership partitions and typed transactions |
 | `policy/ownership.toml` | Schema-1 shared publication scope of named MMIO ranges |

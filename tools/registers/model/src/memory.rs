@@ -60,6 +60,20 @@ impl Memory {
             .collect()
     }
 
+    /// Every RAM region of the default address space that is no alias, by
+    /// name, as `start..end`: the regions a memory layout's placement names.
+    pub fn ram_regions(&self) -> std::collections::BTreeMap<String, (u64, u64)> {
+        self.regions
+            .iter()
+            .filter(|r| {
+                r.kind == "ram"
+                    && r.address_space == self.default_address_space
+                    && r.alias_of.is_none()
+            })
+            .map(|r| (r.name.clone(), (r.start, r.end_exclusive)))
+            .collect()
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         Ok(toml_edit::de::from_str(&std::fs::read_to_string(path)?)?)
     }
@@ -155,6 +169,25 @@ impl Memory {
             {
                 return Err(invalid(format!(
                     "register {name} is outside owned MMIO ranges"
+                )));
+            }
+        }
+        let ram = self.ram_regions();
+        for layout in model.layouts() {
+            let fields = layout
+                .units
+                .iter()
+                .flat_map(|unit| unit.fields.iter())
+                .flat_map(|field| field.placement.iter());
+            if let Some(region) = layout
+                .placement
+                .iter()
+                .chain(fields)
+                .find(|region| !ram.contains_key(region.as_str()))
+            {
+                return Err(invalid(format!(
+                    "layout {} is placed in {region}, which is not a RAM region of the memory map",
+                    layout.name
                 )));
             }
         }
