@@ -131,6 +131,8 @@ radio.
 `oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-lower-mac`) are
 carried unfrozen. Steps W0–W2 drive the chip driver directly; the port backend
 is written at W3 and the contract is frozen after W4.
+[Radio ports](radio-ports.md) states the principles they follow,
+[time](time.md) the clock domains and their relations.
 
 ## Placement
 
