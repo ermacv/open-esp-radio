@@ -319,7 +319,7 @@ fn stop_releases_every_owned_slot_in_sequence_order() {
 
 #[test]
 fn station_rx_sessions_bind_protocol_window_hardware_bank_and_response() {
-    let peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let mut sessions = RxBlockAckSessions::<RX_BLOCK_ACK_BANK_COUNT>::new();
     sessions
         .offer(rx_request!(
@@ -383,7 +383,7 @@ fn station_rx_sessions_bind_protocol_window_hardware_bank_and_response() {
 
 #[test]
 fn integration_can_narrow_the_negotiated_rx_window_without_changing_hardware_geometry() {
-    let peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let mut sessions = RxBlockAckSessions::<1>::with_maximum_window(HALF_WINDOW).unwrap();
     assert_eq!(sessions.maximum_window(), HALF_WINDOW);
     sessions
@@ -428,7 +428,7 @@ fn integration_can_narrow_the_negotiated_rx_window_without_changing_hardware_geo
 
 #[test]
 fn replacement_and_cancel_remove_the_previous_hardware_owner() {
-    let peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let mut sessions = RxBlockAckSessions::<RX_BLOCK_ACK_BANK_COUNT>::new();
     sessions
         .offer(rx_request!(
@@ -466,7 +466,7 @@ fn replacement_and_cancel_remove_the_previous_hardware_owner() {
 
 #[test]
 fn station_rx_sessions_reject_every_unsupported_request_class() {
-    let peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let mut sessions = RxBlockAckSessions::<RX_BLOCK_ACK_BANK_COUNT>::new();
     assert_eq!(
         sessions.offer(rx_request!(
@@ -524,7 +524,7 @@ fn station_rx_sessions_reject_every_unsupported_request_class() {
 
 #[test]
 fn access_point_peers_with_the_same_tid_receive_distinct_hardware_banks() {
-    let first_peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let first_peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let second_peer = [0x70, 0x15, 0xfb, 0xa8, 0x48, 0xf0];
     let mut sessions = RxBlockAckSessions::<RX_BLOCK_ACK_BANK_COUNT>::new();
 
@@ -575,7 +575,7 @@ fn access_point_peers_with_the_same_tid_receive_distinct_hardware_banks() {
 
 #[test]
 fn station_and_access_point_with_the_same_peer_tid_use_distinct_banks() {
-    let peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let mut sessions = RxBlockAckSessions::<2>::new();
 
     sessions
@@ -628,7 +628,7 @@ fn station_and_access_point_with_the_same_peer_tid_use_distinct_banks() {
 
 #[test]
 fn preparing_access_point_preserves_station_banks() {
-    let station_peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let station_peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let access_point_peer = [0x70, 0x15, 0xfb, 0xa8, 0x48, 0xf0];
     let mut sessions = RxBlockAckSessions::<2>::new();
     sessions
@@ -774,7 +774,7 @@ fn explicit_decline_removes_only_the_selected_pending_request() {
 
 #[test]
 fn peer_teardown_removes_pending_and_active_agreements_only_for_that_peer() {
-    let first_peer = [0x30, 0xed, 0xa0, 0xf3, 0xf6, 0xd0];
+    let first_peer = [0x02, 0x00, 0x00, 0x00, 0xf6, 0xd0];
     let second_peer = [0x70, 0x15, 0xfb, 0xa8, 0x48, 0xf0];
     let mut sessions = RxBlockAckSessions::<RX_BLOCK_ACK_BANK_COUNT>::new();
     sessions

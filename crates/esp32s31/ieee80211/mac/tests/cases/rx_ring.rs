@@ -21,10 +21,14 @@ fn cold_rx_ring_publishes_links_and_hardware_in_order() {
             Operation::ObserveRxLastDescriptor,
             Operation::Fence,
             Operation::ConfigureRxDescriptorWindow,
-            Operation::PublishRxDescriptorBase(arena.base),
+            Operation::PublishRxDescriptorBase(arena.address(2)),
             Operation::Fence,
         ]
     );
+    // BASE names the reserved descriptor, which leads to the ring head.
+    let reserved = arena.storage.reserved_descriptor();
+    assert_eq!(reserved.next_address(), arena.base);
+    assert_eq!(reserved.word0(), rx_armed_word(1700).unwrap());
 
     // The walker enable is the later, separate edge of the cold path.
     mmio.operations.clear();
@@ -100,7 +104,7 @@ fn recycled_rx_buffer_restores_both_migration_sentinels() {
 }
 
 #[test]
-fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
+fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbell() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
@@ -118,7 +122,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
     assert_eq!(descriptors[3].next_address(), 0);
     assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
-    assert_eq!(mmio.rx_descriptor_base(), base);
+    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
     let disable = mmio
         .operations()
         .iter()
@@ -209,9 +213,9 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
     assert!(storage.take_completed(&mut live, 2).unwrap().is_some());
     assert!(storage.take_completed(&mut live, 3).unwrap().is_some());
 
-    // Model bit-0 self-clear at a terminal frontier. ROM repairs BASE from the
-    // last accepted descriptor's now-published next link before accepting the
-    // pending tail and appending the following group.
+    // Model bit-0 self-clear at a terminal frontier: the walker exhausted
+    // the old tail three before it followed the new link. The ring rings
+    // the doorbell once more (no BASE write) and keeps the tail pending.
     mmio.set_rx_walker_enabled(true);
     mmio.set_rx_reload_pending(false);
     mmio.set_rx_next_descriptor_address(0);
@@ -219,26 +223,37 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
     mmio.operations.clear();
     assert_eq!(
         live.poll_pending_reload(&mut mmio).unwrap(),
-        RxReloadObservation::Settled
+        RxReloadObservation::Pending
     );
     assert_eq!(
-        &mmio.operations()[..6],
+        mmio.operations(),
         &[
             Operation::ObserveRxReloadPending,
             Operation::ObserveRxNextDescriptor,
             Operation::Fence,
             Operation::ObserveRxLastDescriptor,
             Operation::Fence,
-            Operation::PublishRxDescriptorBase(base),
+            Operation::Fence,
+            Operation::RequestRxReload,
+            Operation::Fence,
         ],
-        "reload repair must preserve vendor NEXT -> conditional LAST -> BASE order",
+        "the settle keeps the vendor NEXT -> conditional LAST order, then re-rings",
+    );
+    assert_eq!(live.accepted_tail().get(), 3);
+    assert!(live.reload_pending());
+    assert_eq!(live.reload_evidence().reload_rerings, 1);
+
+    // The doorbell, rung with NEXT zero, resumed the walker at three's link.
+    mmio.set_rx_reload_pending(false);
+    mmio.set_rx_next_descriptor_address(base);
+    assert_eq!(
+        live.poll_pending_reload(&mut mmio).unwrap(),
+        RxReloadObservation::Settled
     );
     assert_eq!(live.accepted_tail().get(), 1);
     assert!(!live.reload_pending());
-    assert!(live.exhausted_republication_probe_pending());
-    // LAST reached descriptor three while NEXT was zero, so the base-repair
-    // write has been issued but hardware has not yet proved that it fetched
-    // descriptor three's newly appended link to descriptor zero.
+    // LAST is still descriptor three: its new link to descriptor zero stays
+    // the walker's until a later descriptor completes.
     assert!(
         storage
             .recycle_completed_half(&mut live, &mut mmio)
@@ -246,7 +261,6 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
             .is_none()
     );
     assert!(live.completion_release_probe_pending());
-    mmio.set_rx_next_descriptor_address(base);
     assert!(
         storage
             .recycle_completed_half(&mut live, &mut mmio)
@@ -267,8 +281,11 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
     assert_eq!(second.tail_index.get(), 3);
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
     assert!(
-        mmio.operations()
-            .contains(&Operation::PublishRxDescriptorBase(base))
+        !mmio
+            .operations()
+            .iter()
+            .any(|operation| matches!(operation, Operation::PublishRxDescriptorBase(_))),
+        "BASE is written once per epoch"
     );
     assert_eq!(live.accepted_tail().get(), 1);
     assert!(live.reload_pending());
@@ -276,13 +293,13 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rom_base_repair() {
 }
 
 #[test]
-fn reload_repair_observation_reads_last_only_after_zero_next() {
+fn reload_observation_reads_last_only_after_zero_next() {
     const BASE: u32 = 0x2f00_1000;
     let mut mmio = MockMmio::default();
     mmio.set_rx_next_descriptor_address(BASE + DESCRIPTOR_BYTES);
     mmio.set_rx_last_descriptor_address(BASE);
 
-    let active = mmio.with_reload_repair_observation(|observation| {
+    let active = mmio.with_reload_observation(|observation| {
         (
             observation.next_descriptor_low(),
             observation.exhausted_last_descriptor_low(),
@@ -296,7 +313,7 @@ fn reload_repair_observation_reads_last_only_after_zero_next() {
 
     mmio.operations.clear();
     mmio.set_rx_next_descriptor_address(0);
-    let exhausted = mmio.with_reload_repair_observation(|observation| {
+    let exhausted = mmio.with_reload_observation(|observation| {
         (
             observation.next_descriptor_low(),
             observation.exhausted_last_descriptor_low(),
@@ -358,7 +375,11 @@ fn stopped_rx_ring_rebuilds_from_the_retained_hardware_next_cursor() {
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
     assert_eq!(descriptors[3].next_address(), base);
     assert_eq!(descriptors[0].next_address(), 0);
-    assert_eq!(mmio.rx_descriptor_base(), base + DESCRIPTOR_BYTES);
+    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert_eq!(
+        stopped.reserved_snapshot().next_address,
+        base + DESCRIPTOR_BYTES
+    );
     assert!(stopped.topology_snapshot().valid);
 }
 
@@ -368,7 +389,8 @@ fn stopped_rx_ring_rejects_a_nonzero_cursor_outside_its_owned_arena() {
     let arena = Arena::<COUNT>::new();
     let mut mmio = MockMmio::default();
     mmio.set_rx_walker_enabled(true);
-    mmio.set_rx_next_descriptor_address(arena.address(COUNT));
+    // The descriptor after the reserved one, outside the table.
+    mmio.set_rx_next_descriptor_address(arena.address(COUNT + 1));
 
     assert!(matches!(
         arena.prepare(&mut mmio),
@@ -390,7 +412,8 @@ fn stopped_rx_ring_avoids_a_cold_head_on_the_final_descriptor() {
     assert_eq!(stopped.accepted_tail().get(), COUNT - 1);
     assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
     assert_eq!(descriptors[COUNT - 1].next_address(), 0);
-    assert_eq!(mmio.rx_descriptor_base(), base);
+    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert_eq!(stopped.reserved_snapshot().next_address, base);
     assert!(stopped.topology_snapshot().valid);
 }
 
@@ -496,7 +519,7 @@ fn live_rx_ring_can_replenish_one_descriptor_per_rom_append() {
 }
 
 #[test]
-fn live_rx_ring_republishes_an_exhausted_software_list_without_a_self_link() {
+fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
     const COUNT: usize = 2;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
@@ -524,9 +547,10 @@ fn live_rx_ring_republishes_an_exhausted_software_list_without_a_self_link() {
     assert_eq!(live.accepted_tail().get(), 0);
 
     // Hardware then exhausts that whole list before software returns either
-    // node. Discarding 1 -> 0 leaves the vendor software head null, so the
-    // returned chain must become the new BASE directly. Linking old tail zero
-    // to head one would create the invalid cycle 1 -> 0 -> 1.
+    // node. The whole ring cannot follow its own tail: linking tail zero to
+    // head one would create the cycle 1 -> 0 -> 1. Descriptor one appends
+    // behind tail zero through the doorbell; zero, the walker's LAST, stays
+    // observed.
     descriptors[1].write_word0(COMPLETED);
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_next_descriptor_address(0);
@@ -540,38 +564,64 @@ fn live_rx_ring_republishes_an_exhausted_software_list_without_a_self_link() {
         .unwrap();
 
     assert_eq!(append.head_index.get(), 1);
-    assert_eq!(append.tail_index.get(), 0);
-    assert_eq!(descriptors[1].next_address(), base);
-    assert_eq!(descriptors[0].next_address(), 0);
-    assert_eq!(mmio.rx_descriptor_base(), base + DESCRIPTOR_BYTES);
-    assert_eq!(live.recycle_start().get(), 1);
-    assert!(!live.reload_pending());
-    assert!(live.exhausted_republication_probe_pending());
-    assert!(!mmio.operations().contains(&Operation::RequestRxReload));
-
-    // A timer is not evidence that hardware accepted BASE. Keep polling while
-    // NEXT is still exhausted. Even an exact cursor match retains one final
-    // cooperative probe: the returned head may complete while this task is
-    // still consuming the IRQ which exhausted the preceding list.
-    live.observe_exhausted_republication(&mut mmio);
-    assert!(live.exhausted_republication_probe_pending());
-    mmio.set_rx_next_descriptor_address(base);
-    live.observe_exhausted_republication(&mut mmio);
-    assert!(
-        live.exhausted_republication_probe_pending(),
-        "a nonzero cursor outside the republished head is stale evidence"
+    assert_eq!(append.tail_index.get(), 1);
+    assert_eq!(append.descriptor_count, COUNT - 1);
+    assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
+    assert_eq!(descriptors[1].next_address(), 0);
+    assert_eq!(descriptors[1].word0() & BIT_30, 0);
+    assert_ne!(
+        descriptors[0].word0() & BIT_30,
+        0,
+        "the old LAST stays observed"
     );
-    mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
-    live.observe_exhausted_republication(&mut mmio);
-    assert!(live.exhausted_republication_probe_pending());
-    live.observe_exhausted_republication(&mut mmio);
-    assert!(!live.exhausted_republication_probe_pending());
+    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert!(mmio.operations().contains(&Operation::RequestRxReload));
+    assert!(
+        !mmio
+            .operations()
+            .iter()
+            .any(|operation| matches!(operation, Operation::PublishRxDescriptorBase(_)))
+    );
+    assert_eq!(live.recycle_start().get(), 0);
+    assert!(live.reload_pending());
 
-    // Hardware resumes at the newly published head. The next RX edge must
-    // inspect that same descriptor rather than the physical slot after the
-    // returned chain's tail.
+    // The doorbell, rung with NEXT zero, resumed the walker at zero's link.
+    mmio.set_rx_reload_pending(false);
+    mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
+    assert_eq!(
+        live.poll_pending_reload(&mut mmio).unwrap(),
+        RxReloadObservation::Settled
+    );
+    assert_eq!(live.accepted_tail().get(), 1);
+    assert!(live.topology_snapshot().valid);
+
+    // Until the walker moves past zero, zero's link is the walker's.
+    assert!(
+        storage
+            .recycle_completed_prefix::<COUNT, _>(&mut live, &mut mmio)
+            .unwrap()
+            .is_none()
+    );
+    // A frame lands in one: zero rejoins behind it.
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
+    mmio.set_rx_next_descriptor_address(0);
+    let rejoined = storage
+        .recycle_completed_prefix::<COUNT, _>(&mut live, &mut mmio)
+        .unwrap()
+        .unwrap();
+    assert_eq!(rejoined.head_index.get(), 0);
+    assert_eq!(rejoined.descriptor_count, 1);
+    assert_eq!(descriptors[1].next_address(), base);
+    assert_eq!(live.recycle_start().get(), 1);
+
+    // The next RX edge inspects descriptor one, which hardware filled.
+    mmio.set_rx_reload_pending(false);
+    mmio.set_rx_next_descriptor_address(base);
+    assert_eq!(
+        live.poll_pending_reload(&mut mmio).unwrap(),
+        RxReloadObservation::Settled
+    );
     let frontier = live.completed_unit_frontier_through_with(mmio.last_descriptor_low(), |_| true);
     assert_eq!(frontier.unit_count, 1);
     assert_eq!(frontier.descriptor_count, 1);

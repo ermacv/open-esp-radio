@@ -72,14 +72,33 @@ its holder when it refuses.
   `beacons`; other BSSIDs carrying the SSID never stand in for an absent
   stand), `channel` (the applied channel is the configured one and the
   router AP's), `exit` (`StopRequested`,
-  `Halted`), `walker_restart` (from `w1.hold`: a hold short of every
-  staging slot is unexercised, `pool-not-exhausted`; units received while
-  every lease was held fail it, `received-while-held`, as does
-  `no-frames-after-release`; how the ring recovered, `w1.reload` and the
-  walker snapshot `w1.exhaust`, is report-only), `irq_stack` (4096 bytes
-  free), `service_errors` and `unserviced` (zero) and `timer_wake` (no
+  `Halted`), `walker_restart` (from the first of the two hold cycles,
+  `w1.hold cycle=0`: a hold that was not full, `full=0` (every staging
+  slot, `reason=all`, or one short and stuck at LAST,
+  `reason=stuck-at-last`; both checked against `reached=`, and a stuck
+  hold's `end_*=` must show `slots − 1` buffers staged and detached, at
+  most one released, every descriptor observed and NEXT zero, or the
+  image and the host disagree), is
+  unexercised, `pool-not-exhausted`; units received while every lease was held fail
+  it, `received-while-held`, as does `no-frames-after-release`; how the
+  ring recovered, `w1.reload` and the walker snapshots `w1.exhaust`, one
+  per cycle, is report-only), `ownership` (from both `w1.own` lines: any
+  `hold_mismatch=`, `dwell_mismatch=`, `release_mismatch=` or `chained=`
+  above zero fails it, `foreign-write`; otherwise a `w1.hold full=0` is
+  unexercised, `pool-not-exhausted`, and `first_drop=-` too,
+  `ring-order`; the host recomputes `order_breaks=` from
+  `first_after_release=` and the `arena=` ring size, validates
+  `discards=<reason>:<n>,…` and in the summary sets the descriptors the
+  list skips against the runner's drops in it), `irq_stack` (4096 bytes
+  free), `service_errors` and `unserviced` (zero), `timer_wake` (no
   timer wait of the image returned before its deadline, `woke_early=` of
-  every `w1.timer` and `w1.wake` line; `woke-early`). It compares them with the
+  every `w1.timer` and `w1.wake` line; `woke-early`), `base_writes` (the
+  epoch wrote `RX_DESCRIPTOR_BASE` once, `w1.reload base_writes=1`;
+  `base-writes`) and `reserved` (`w1.reload reserved_landings=` at most 1
+  and `reserved_late_landings=0`; `reserved-landing`). The `w1.reload`
+  keys are exactly `max_attempts limit observations reload_rerings
+  rering_failures base_writes reserved_landings reserved_late_landings`,
+  and `w1.hold fill_ms=` must lie in 3000..=10000. It compares them with the
   image's `w1.gate` lines, `w1.verdict` and the `OER-RESULT:` line, whose
   fail reasons each start with a gate's name (`walker-restart not
   exercised`), the block's `channel=` and masked `stand=` with the router

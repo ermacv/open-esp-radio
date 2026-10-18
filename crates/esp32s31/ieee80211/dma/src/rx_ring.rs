@@ -38,22 +38,83 @@ fn rx_buffer_address_snapshot<const COUNT: usize>(
 
 const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
 
-/// Whether a descriptor of the ring at `descriptor_base` has a zero low
-/// address. The walker's NEXT register reports only the low 20 address bits,
-/// and a zero NEXT means the list is exhausted
+/// Whether a descriptor of the table at `descriptor_base` (the ring's
+/// `COUNT` descriptors and the reserved descriptor R at index `COUNT`) has a
+/// zero low address. The walker's NEXT register reports only the low 20
+/// address bits, and a zero NEXT means the list is exhausted
 /// ([`RxDmaNextDescriptor::is_zero`](crate::rx_dma::RxDmaNextDescriptor::is_zero),
 /// read by [`RxRingLive::accepted_list_remaining_from_next`] and the
 /// exhausted-list reclaim): such a descriptor could not be told apart from
 /// the end of the list, whatever the linker's layout.
 fn descriptor_aliases_an_exhausted_list<const COUNT: usize>(descriptor_base: u32) -> bool {
-    (0..COUNT as u32).any(|index| {
+    (0..=COUNT as u32).any(|index| {
         index
             .checked_mul(DESCRIPTOR_BYTES)
             .and_then(|offset| descriptor_base.checked_add(offset))
             .is_none_or(|address| address & RX_DESCRIPTOR_ADDRESS_LOW_MASK == 0)
     })
 }
-const RX_EXHAUSTED_REPUBLICATION_ACCEPTED: u32 = 0x8000_0000;
+
+/// The descriptors one RX arena publishes: the ring and, right after it, the
+/// reserved descriptor R.
+///
+/// R is the only descriptor `RX_DESCRIPTOR_BASE` ever names. The cold
+/// publication of an epoch writes BASE = R with `R.next` = the ring head;
+/// every later publication links the accepted tail and rings the reload
+/// doorbell. R lies outside the rotation: it is never observed, taken,
+/// leased or recycled, and its buffer is not one of the ring's. It is
+/// contiguous with the ring so the bound DMA range and the descriptor window
+/// cover it.
+#[repr(C)]
+#[derive(bytemuck::Zeroable)]
+pub struct RxDescriptorTable<const COUNT: usize> {
+    ring: [Descriptor; COUNT],
+    reserved: Descriptor,
+}
+
+impl<const COUNT: usize> RxDescriptorTable<COUNT> {
+    pub const fn new() -> Self {
+        Self {
+            ring: [const { Descriptor::new() }; COUNT],
+            reserved: Descriptor::new(),
+        }
+    }
+
+    pub const fn ring(&self) -> &[Descriptor; COUNT] {
+        &self.ring
+    }
+
+    pub const fn reserved(&self) -> &Descriptor {
+        &self.reserved
+    }
+}
+
+impl<const COUNT: usize> Default for RxDescriptorTable<COUNT> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Whether no legitimate receive unit can span the whole ring of `count`
+/// descriptors of `buffer` bytes.
+///
+/// A unit of `count` descriptors carries more than `(count - 1) * buffer`
+/// bytes. When that exceeds [`MAX_ENCODED_MPDU_LEN`], the largest MPDU
+/// length the vendor encodes, such a unit is no frame: the ring rejects it
+/// as `Corrupt` instead of republishing the whole ring, which the reload
+/// doorbell cannot do (its link point, the accepted tail, would be part of
+/// the group). Each product geometry asserts this at compile time.
+///
+/// [`MAX_ENCODED_MPDU_LEN`]: crate::alignment::MAX_ENCODED_MPDU_LEN
+pub const fn rx_ring_outspans_any_unit(count: usize, buffer: usize) -> bool {
+    match (count.checked_sub(1), buffer) {
+        (Some(rest), buffer) => match rest.checked_mul(buffer) {
+            Some(bytes) => bytes > crate::alignment::MAX_ENCODED_MPDU_LEN,
+            None => true,
+        },
+        (None, _) => false,
+    }
+}
 /// Exact maximum number of `APPEND_DESCRIPTOR_RELOAD` observations recovered
 /// from `wDev_AppendRxBlocks`.
 ///
@@ -129,14 +190,14 @@ pub struct RxRingTopologySnapshot {
     pub valid: bool,
 }
 
-/// Raw observations made while completing the vendor reload-repair suffix.
+/// Raw observations of one epoch's publications and reload settles.
 ///
 /// These counters deliberately record decisions and field observations without
 /// assigning hardware meaning to unknown state. They remain attached to the live ring
-/// so a later disconnect can explain whether a direct BASE repair preceded a
-/// fault.
+/// so a later disconnect can explain what preceded a fault. The epoch begins
+/// at the ring's preparation, so its one BASE write is counted.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RxReloadRepairEvidence {
+pub struct RxReloadEvidence {
     /// The most `APPEND_DESCRIPTOR_RELOAD` observations one
     /// [`RxRingLive::complete_pending_reload`] made in this epoch, the one
     /// which saw the doorbell clear included. It equals
@@ -145,21 +206,29 @@ pub struct RxReloadRepairEvidence {
     pub max_reload_attempts: u32,
     pub observations: u32,
     pub unknown_upper_with_zero_address: u32,
-    pub base_repairs: u32,
+    /// Settled doorbells rung once more because the walker read NEXT = 0
+    /// with LAST short of the new tail: it had exhausted the old list
+    /// before it followed the new link. At most one per appended tail.
+    pub reload_rerings: u32,
+    /// Re-rung doorbells after which NEXT was still zero with LAST short
+    /// of the new tail. Each contradicts the doorbell's observed rule and
+    /// poisons the arena.
+    pub rering_failures: u32,
     pub last_next_low: u32,
     pub last_last_low: Option<u32>,
-    pub last_repair_head: Option<u32>,
-    /// Direct `RX_DESCRIPTOR_BASE` publications after the walker reached a
-    /// zero successor: appends to an empty software list and reload base
-    /// repairs alike.
-    pub exhausted_republications: u32,
-    /// Republished heads the walker was seen to fetch (its NEXT equalled
-    /// the head), at most one per publication.
-    pub republications_accepted: u32,
+    /// `RX_DESCRIPTOR_BASE` writes in this epoch: one, the cold
+    /// publication of the reserved descriptor.
+    pub base_writes: u32,
+    /// Frames that landed in the reserved descriptor before the walker
+    /// reached the ring: dropped uncopied, the reserved descriptor rearmed.
+    pub reserved_landings: u32,
+    /// Writes into the reserved descriptor after the walker reached the
+    /// ring. Each poisons the arena.
+    pub reserved_late_landings: u32,
 }
 
 /// The words a static RX arena keeps beside its descriptors: the sticky
-/// lifecycle and the reload-repair evidence of its live epoch.
+/// lifecycle and the reload evidence of its epoch.
 ///
 /// The evidence lives here, not in the movable ring token, so the token
 /// (carried through nested async state) stays one pointer wide. Its zero
@@ -172,12 +241,13 @@ pub struct RxArenaWords {
     max_reload_attempts: AtomicU32,
     observations: AtomicU32,
     unknown_upper_with_zero_address: AtomicU32,
-    base_repairs: AtomicU32,
+    reload_rerings: AtomicU32,
+    rering_failures: AtomicU32,
     last_next_low: AtomicU32,
     last_last_low_plus_one: AtomicU32,
-    last_repair_head_plus_one: AtomicU32,
-    exhausted_republications: AtomicU32,
-    republications_accepted: AtomicU32,
+    base_writes: AtomicU32,
+    reserved_landings: AtomicU32,
+    reserved_late_landings: AtomicU32,
 }
 
 impl RxArenaWords {
@@ -187,12 +257,13 @@ impl RxArenaWords {
             max_reload_attempts: AtomicU32::new(0),
             observations: AtomicU32::new(0),
             unknown_upper_with_zero_address: AtomicU32::new(0),
-            base_repairs: AtomicU32::new(0),
+            reload_rerings: AtomicU32::new(0),
+            rering_failures: AtomicU32::new(0),
             last_next_low: AtomicU32::new(0),
             last_last_low_plus_one: AtomicU32::new(0),
-            last_repair_head_plus_one: AtomicU32::new(0),
-            exhausted_republications: AtomicU32::new(0),
-            republications_accepted: AtomicU32::new(0),
+            base_writes: AtomicU32::new(0),
+            reserved_landings: AtomicU32::new(0),
+            reserved_late_landings: AtomicU32::new(0),
         }
     }
 
@@ -205,32 +276,31 @@ impl RxArenaWords {
             &self.max_reload_attempts,
             &self.observations,
             &self.unknown_upper_with_zero_address,
-            &self.base_repairs,
+            &self.reload_rerings,
+            &self.rering_failures,
             &self.last_next_low,
             &self.last_last_low_plus_one,
-            &self.last_repair_head_plus_one,
-            &self.exhausted_republications,
-            &self.republications_accepted,
+            &self.base_writes,
+            &self.reserved_landings,
+            &self.reserved_late_landings,
         ] {
             word.store(0, Ordering::Relaxed);
         }
     }
 
-    fn evidence(&self) -> RxReloadRepairEvidence {
-        RxReloadRepairEvidence {
-            max_reload_attempts: self.max_reload_attempts.load(Ordering::Relaxed),
-            observations: self.observations.load(Ordering::Relaxed),
-            unknown_upper_with_zero_address: self
-                .unknown_upper_with_zero_address
-                .load(Ordering::Relaxed),
-            base_repairs: self.base_repairs.load(Ordering::Relaxed),
-            last_next_low: self.last_next_low.load(Ordering::Relaxed),
-            last_last_low: decode_optional(self.last_last_low_plus_one.load(Ordering::Relaxed)),
-            last_repair_head: decode_optional(
-                self.last_repair_head_plus_one.load(Ordering::Relaxed),
-            ),
-            exhausted_republications: self.exhausted_republications.load(Ordering::Relaxed),
-            republications_accepted: self.republications_accepted.load(Ordering::Relaxed),
+    fn evidence(&self) -> RxReloadEvidence {
+        let load = |word: &AtomicU32| word.load(Ordering::Relaxed);
+        RxReloadEvidence {
+            max_reload_attempts: load(&self.max_reload_attempts),
+            observations: load(&self.observations),
+            unknown_upper_with_zero_address: load(&self.unknown_upper_with_zero_address),
+            reload_rerings: load(&self.reload_rerings),
+            rering_failures: load(&self.rering_failures),
+            last_next_low: load(&self.last_next_low),
+            last_last_low: decode_optional(load(&self.last_last_low_plus_one)),
+            base_writes: load(&self.base_writes),
+            reserved_landings: load(&self.reserved_landings),
+            reserved_late_landings: load(&self.reserved_late_landings),
         }
     }
 }
@@ -433,6 +503,9 @@ pub struct RxCompletedUnit {
     staged_word0: Option<u32>,
     total_length: usize,
     segment_lengths: RxCompletedUnitLengths,
+    /// The frame began in the reserved descriptor and continued into this
+    /// unit: this unit is only its tail.
+    continues_reserved_landing: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -470,6 +543,12 @@ impl RxCompletedUnit {
         self.total_length
     }
 
+    /// Whether this unit is the tail of a frame that began in the reserved
+    /// descriptor. Its consumer drops it like a chained unit.
+    pub const fn continues_reserved_landing(&self) -> bool {
+        self.continues_reserved_landing
+    }
+
     pub fn segment_length(&self, step: usize) -> Option<usize> {
         if step >= self.descriptor_count {
             return None;
@@ -497,12 +576,26 @@ pub enum RxReloadObservation {
     Settled,
 }
 
+/// The reserved descriptor's buffer, as the live ring needs it.
+///
+/// The storage arena implements it over R's buffer, which is never one of
+/// the ring's buffers and is never leased.
+pub(crate) trait RxReservedBuffer {
+    /// Whether DMA overwrote the buffer's leading recycle guard.
+    fn guard_overwritten(&self) -> bool;
+    /// Restore both recycle guards. Called only after the walker finished
+    /// writing the buffer.
+    fn restore_guards(&self) -> Result<(), RxRingError>;
+}
+
 /// Prepared zero-terminated RX ring while the hardware walker is stopped.
 ///
 /// This type owns the right to start the descriptor walker. Consuming
 /// [`try_start`](Self::try_start) transfers that authority into [`RxRingLive`].
 pub struct RxRingStopped<'a, const COUNT: usize> {
     descriptors: &'a [Descriptor; COUNT],
+    table: &'a RxDescriptorTable<COUNT>,
+    reserved_buffer_address: u32,
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
@@ -533,6 +626,8 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 /// ```
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [Descriptor; COUNT],
+    table: &'a RxDescriptorTable<COUNT>,
+    reserved_buffer_address: u32,
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
@@ -545,7 +640,11 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     pending_tail_plus_one: usize,
     cursor_generation: u32,
     completion_release_probe_pending: bool,
-    exhausted_republication_head_low: Option<u32>,
+    /// Whether the first ring take of this epoch proved that the walker
+    /// left the reserved descriptor and cleared its link.
+    reserved_left: bool,
+    /// Whether the pending tail's doorbell was already rung a second time.
+    reload_rerung: bool,
     binding: RxDmaBinding<'a>,
     arena: &'a RxArenaWords,
     requires_stop: bool,
@@ -558,7 +657,9 @@ pub struct RxRingLive<'a, const COUNT: usize> {
 /// [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted), never resume descriptors from the previous
 /// peer epoch.
 pub struct RxRingHalted<'a, const COUNT: usize> {
+    table: &'a RxDescriptorTable<COUNT>,
     descriptors: &'a [Descriptor; COUNT],
+    reserved_buffer_address: u32,
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
@@ -578,6 +679,10 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         self.buffer_addresses
     }
 
+    pub(crate) const fn reserved_buffer_address(&self) -> u32 {
+        self.reserved_buffer_address
+    }
+
     /// Observe one halted descriptor without recovering mutation authority.
     ///
     /// A halted ring can contain the terminal image of the preceding DMA
@@ -592,15 +697,17 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     /// Failure returns the halted authority even if hardware observations or
     /// descriptor preparation rejected the attempt. The caller can then
     /// retry after a higher-level reset without stealing the static storage.
-    pub(crate) fn prepare_owned<M, F>(
+    pub(crate) fn prepare_owned<M, F, R>(
         self,
         mmio: &mut M,
         buffer_size: u32,
         prepare_buffer: F,
+        prepare_reserved_buffer: R,
     ) -> Result<RxRingStopped<'a, COUNT>, (Self, RxRingError)>
     where
         M: RxDma,
         F: FnMut(usize) -> Result<(), RxRingError>,
+        R: FnOnce() -> Result<(), RxRingError>,
     {
         if u32::from(self.buffer_size) != buffer_size {
             return Err((self, RxRingError::Size));
@@ -609,11 +716,13 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         let buffer_addresses = self.buffer_addresses;
         match RxRingStopped::prepare_inner(
             mmio,
-            self.descriptors,
+            self.table,
             self.descriptor_base,
             buffer_addresses,
+            self.reserved_buffer_address,
             buffer_size,
             prepare_buffer,
+            prepare_reserved_buffer,
             self.arena,
         ) {
             Ok(stopped) => Ok(stopped),
@@ -641,7 +750,9 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// halted frontier without manufacturing or re-reading static addresses.
     pub fn into_halted(self) -> RxRingHalted<'a, COUNT> {
         RxRingHalted {
+            table: self.table,
             descriptors: self.descriptors,
+            reserved_buffer_address: self.reserved_buffer_address,
             descriptor_base: self.descriptor_base,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
@@ -651,48 +762,67 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
 
     /// Stops the walker, prepares all buffers and publishes one physical-order
     /// cold list beginning at the retained hardware cursor, or descriptor zero
-    /// when the preceding list was exhausted.
+    /// when the preceding list was exhausted, behind the reserved descriptor.
     ///
     /// `prepare_buffer` must restore any buffer-side DMA contract for `index`;
-    /// for the S31 ROM layout this means the two `0xdead_beef` sentinels. It is
-    /// invoked only while the walker is confirmed stopped.
+    /// for the S31 ROM layout this means the two `0xdead_beef` sentinels, and
+    /// `prepare_reserved_buffer` does the same for the reserved descriptor's
+    /// buffer at `reserved_buffer_address`. Both are invoked only while the
+    /// walker is confirmed stopped.
+    ///
+    /// The publication is the epoch's only `RX_DESCRIPTOR_BASE` write:
+    /// BASE = R, `R.next` = the ring head, R armed with its own buffer. A
+    /// frame the walker writes into R is dropped uncopied; the first ring
+    /// take clears `R.next` ([`RxRingLive`]).
     ///
     /// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS,ROM_REV0_HAL_MAC_RX_GATE,
-    /// ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR]. Live append/base repair is
-    /// qualified by HIL_OPEN_RX_LIVE_APPEND_2026_07_27. A retained nonzero
-    /// NEXT cursor is authoritative because WALKER_ENABLE does not clear it;
-    /// the rebuilt zero-terminated list is rotated to that exact descriptor.
+    /// ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR]. A retained nonzero NEXT cursor
+    /// is authoritative because WALKER_ENABLE does not clear it; the rebuilt
+    /// zero-terminated list is rotated to that exact descriptor. A retained
+    /// NEXT naming R resumes at R, which is this cold publication itself.
     ///
     /// Only the storage arena calls this, through
     /// [`RxDmaStorage::prepare_ring`](crate::rx_storage::RxDmaStorage::prepare_ring)
     /// and [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted),
     /// which bind every descriptor to its arena buffer.
-    pub(crate) fn prepare_inner<M, F>(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "each argument is one validated part of the arena's layout"
+    )]
+    pub(crate) fn prepare_inner<M, F, R>(
         mmio: &mut M,
-        descriptors: &'a [Descriptor; COUNT],
+        table: &'a RxDescriptorTable<COUNT>,
         descriptor_base: u32,
         buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
+        reserved_buffer_address: u32,
         buffer_size: u32,
         mut prepare_buffer: F,
+        prepare_reserved_buffer: R,
         arena: &'a RxArenaWords,
     ) -> Result<Self, RxRingError>
     where
         M: RxDma,
         F: FnMut(usize) -> Result<(), RxRingError>,
+        R: FnOnce() -> Result<(), RxRingError>,
     {
         validate_live_ring_geometry::<COUNT>()?;
         if descriptor_aliases_an_exhausted_list::<COUNT>(descriptor_base) {
             return Err(RxRingError::Address);
         }
         let buffer_size_u16 = u16::try_from(buffer_size).map_err(|_| RxRingError::Size)?;
-        if rx_armed_word(buffer_size).is_none() {
+        let Some(armed_word) = rx_armed_word(buffer_size) else {
             return Err(RxRingError::Size);
+        };
+        if !dma_range_valid(reserved_buffer_address, buffer_size) {
+            return Err(RxRingError::Address);
         }
-        let binding =
-            RxDmaBinding::new(descriptors, descriptor_base, arena).ok_or(RxRingError::Count)?;
+        let descriptors = table.ring();
+        let binding = RxDmaBinding::new(table, descriptor_base, arena).ok_or(RxRingError::Count)?;
         if mmio.walker_enabled() {
             disable_receive_inner(mmio, &binding, arena)?;
         }
+        // The epoch's evidence starts here, so its one BASE write counts.
+        arena.reset_evidence();
         // NEXT and LAST belong to the walker. They are stable handoff
         // frontiers only after WALKER_ENABLE has been confirmed clear.
         mmio.fence();
@@ -702,9 +832,11 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         // enable resumes that cursor when it is nonzero, even if software has
         // written a different BASE. Rebuild the zero-terminated list from the
         // retained cursor so hardware and the Rust recycle frontier name the
-        // same first descriptor. An exhausted cursor is zero; in that case a
-        // fresh BASE publication legitimately starts from physical slot zero.
-        let initial_start = if retained_next_low == 0 {
+        // same first descriptor. An exhausted cursor is zero, and a cursor
+        // naming R resumes at the cold publication itself; in both cases the
+        // list starts at physical slot zero behind R.
+        let reserved_low = binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
+        let initial_start = if retained_next_low == 0 || retained_next_low == reserved_low {
             RingIndex::<COUNT>::checked(0).ok_or(RxRingError::Count)?
         } else {
             // A nonzero cursor is what hardware resumes from. Falling back to
@@ -718,6 +850,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         for index in 0..COUNT {
             prepare_buffer(index)?;
         }
+        prepare_reserved_buffer()?;
         build_cold_ring_inner(
             descriptors,
             descriptor_base,
@@ -731,10 +864,15 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             initial_start,
         )?;
         let head = descriptor_address(descriptor_base, initial_start.get())?;
-        publish_cold_ring_inner(mmio, &binding, head)?;
+        table
+            .reserved()
+            .publish_owned(armed_word, reserved_buffer_address, head);
+        publish_cold_ring_inner(mmio, &binding, arena)?;
 
         Ok(Self {
             descriptors,
+            table,
+            reserved_buffer_address,
             descriptor_base,
             buffer_addresses,
             buffer_size: buffer_size_u16,
@@ -784,6 +922,20 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         )
     }
 
+    /// The reserved descriptor R, published ahead of the ring.
+    pub fn reserved_snapshot(&self) -> RxDescriptorSnapshot {
+        reserved_snapshot(self.table, self.descriptor_base)
+    }
+
+    /// Whether R is armed with its own buffer and links to the ring head.
+    fn reserved_published(&self) -> bool {
+        let reserved = self.table.reserved();
+        descriptor_address(self.descriptor_base, self.initial_start.get())
+            .is_ok_and(|head| reserved.next_address() == head)
+            && reserved.buffer_address() == self.reserved_buffer_address
+            && rx_armed_word(u32::from(self.buffer_size)) == Some(reserved.word0())
+    }
+
     /// Opens the walker and consumes the stopped-state authority.
     ///
     /// The caller owns any platform-specific settle delay between
@@ -801,7 +953,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
                 return Err((self, RxRingError::Busy));
             }
         }
-        if !self.topology_snapshot().valid {
+        if !self.topology_snapshot().valid || !self.reserved_published() {
             return Err((self, RxRingError::Corrupt));
         }
         if let Err(error) = enable_receive_inner(mmio, &self.binding) {
@@ -815,9 +967,10 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             return Err((self, error));
         }
         RxDmaArenaState::Live.store(self.arena.lifecycle());
-        self.arena.reset_evidence();
         Ok(RxRingLive {
             descriptors: self.descriptors,
+            table: self.table,
+            reserved_buffer_address: self.reserved_buffer_address,
             descriptor_base: self.descriptor_base,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
@@ -827,7 +980,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             pending_tail_plus_one: 0,
             cursor_generation: 0,
             completion_release_probe_pending: false,
-            exhausted_republication_head_low: None,
+            reserved_left: false,
+            reload_rerung: false,
             binding: self.binding,
             arena: self.arena,
             requires_stop: true,
@@ -887,16 +1041,25 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         )
     }
 
-    /// The reload-repair evidence of this live epoch.
-    pub fn reload_repair_evidence(&self) -> RxReloadRepairEvidence {
+    /// The reload evidence of this epoch.
+    pub fn reload_evidence(&self) -> RxReloadEvidence {
         self.arena.evidence()
     }
 
-    fn record_reload_repair_observation(
+    /// The reserved descriptor R, published ahead of the ring.
+    pub fn reserved_snapshot(&self) -> RxDescriptorSnapshot {
+        reserved_snapshot(self.table, self.descriptor_base)
+    }
+
+    /// Whether the first ring take of this epoch cleared R's link.
+    pub const fn reserved_left(&self) -> bool {
+        self.reserved_left
+    }
+
+    fn record_reload_observation(
         &mut self,
         next_descriptor: crate::rx_dma::RxDmaNextDescriptor,
         last_descriptor_low: Option<u32>,
-        repair_head: Option<u32>,
     ) {
         let arena = self.arena;
         increment_saturating(&arena.observations);
@@ -909,12 +1072,91 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         arena
             .last_last_low_plus_one
             .store(encode_optional(last_descriptor_low), Ordering::Relaxed);
-        if let Some(repair_head) = repair_head {
-            increment_saturating(&arena.base_repairs);
-            arena
-                .last_repair_head_plus_one
-                .store(encode_optional(Some(repair_head)), Ordering::Relaxed);
+    }
+
+    /// Check the reserved descriptor R once per service pass.
+    ///
+    /// Before the first ring take a frame may land in R: the cold
+    /// publication points the walker at it. Such a landing is counted and
+    /// dropped uncopied, and R's ownership word and buffer guards are
+    /// rearmed. That rewrite is safe: `RX_DONE` on R means the DMA finished
+    /// with R's buffer, and R's link, which the walker follows next, is not
+    /// touched. A frame still being written into R (guard overwritten, no
+    /// `RX_DONE`) is left alone; the first take accounts for it.
+    ///
+    /// After the first take nothing names R: any write into it (`RX_DONE`,
+    /// an overwritten guard, LAST naming R) is a late landing. It is counted
+    /// and fails closed: the arena needs a radio reset.
+    pub(crate) fn observe_reserved_owned<M: RxDma, B: RxReservedBuffer>(
+        &mut self,
+        mmio: &mut M,
+        buffer: &B,
+    ) -> Result<(), RxRingError> {
+        let reserved = self.table.reserved();
+        let word0 = reserved.word0();
+        if !self.reserved_left {
+            if rx_done(word0) {
+                increment_saturating(&self.arena.reserved_landings);
+                if let Err(error) = self.rearm_reserved(word0, buffer) {
+                    self.require_reset();
+                    return Err(error);
+                }
+            }
+            return Ok(());
         }
+        let reserved_low = self.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
+        if rx_done(word0)
+            || buffer.guard_overwritten()
+            || mmio.last_descriptor_low() == reserved_low
+        {
+            increment_saturating(&self.arena.reserved_late_landings);
+            self.require_reset();
+            return Err(RxRingError::Corrupt);
+        }
+        Ok(())
+    }
+
+    /// Rearm R's buffer guards and, after a terminal landing, its ownership
+    /// word. R's link is not touched.
+    fn rearm_reserved<B: RxReservedBuffer>(
+        &self,
+        word0: u32,
+        buffer: &B,
+    ) -> Result<(), RxRingError> {
+        buffer.restore_guards()?;
+        if rx_done(word0) {
+            self.table
+                .reserved()
+                .publish_word0(rx_rearm_word(word0).ok_or(RxRingError::Size)?);
+        }
+        Ok(())
+    }
+
+    /// The first ring take of the epoch: account for a frame in R and clear
+    /// R's link. Returns whether the frame in R continued into the ring,
+    /// so the taken unit is only its tail.
+    ///
+    /// Proof that the walker left R: a ring descriptor completed, and the
+    /// walker reaches the ring only through `R.next` (the cold publication)
+    /// or through a NEXT it resumed with (a rotated restart, which never
+    /// visits R). Either way it has already fetched `R.next`, and nothing
+    /// will name R again: BASE is written once per epoch and no ring link
+    /// names R. Clearing `R.next` makes R a dead end, so no walk can
+    /// re-enter the ring through a stale head. The leading guard is read
+    /// after the ring descriptor's `RX_DONE`, so R's bytes, which precede
+    /// it on the walk, are visible.
+    fn leave_reserved<B: RxReservedBuffer>(&mut self, buffer: &B) -> Result<bool, RxRingError> {
+        let reserved = self.table.reserved();
+        let word0 = reserved.word0();
+        let landed = rx_done(word0);
+        let continued = !landed && buffer.guard_overwritten();
+        if landed || continued {
+            increment_saturating(&self.arena.reserved_landings);
+            self.rearm_reserved(word0, buffer)?;
+        }
+        reserved.publish_next_address(0);
+        self.reserved_left = true;
+        Ok(continued)
     }
 
     /// Irreversibly poison the static arena after an ownership invariant can
@@ -941,7 +1183,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Err((self, error));
         }
         let halted = RxRingHalted {
+            table: self.table,
             descriptors: self.descriptors,
+            reserved_buffer_address: self.reserved_buffer_address,
             descriptor_base: self.descriptor_base,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
@@ -1266,7 +1510,28 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// [`completed_unit_frontier`](Self::completed_unit_frontier) snapshot. It
     /// prevents a saturated producer from extending this ownership transfer
     /// to a later completion epoch.
-    pub(crate) fn take_completed_unit_owned<F>(
+    pub(crate) fn take_completed_unit_owned<F, B>(
+        &mut self,
+        descriptor_limit: usize,
+        nonterminal_consumed: F,
+        reserved: &B,
+    ) -> Result<Option<RxCompletedUnit>, RxRingError>
+    where
+        F: FnMut(usize) -> bool,
+        B: RxReservedBuffer,
+    {
+        let Some(mut unit) =
+            self.take_completed_unit_inner(descriptor_limit, nonterminal_consumed)?
+        else {
+            return Ok(None);
+        };
+        if !self.reserved_left {
+            unit.continues_reserved_landing = self.leave_reserved(reserved)?;
+        }
+        Ok(Some(unit))
+    }
+
+    fn take_completed_unit_inner<F>(
         &mut self,
         descriptor_limit: usize,
         mut nonterminal_consumed: F,
@@ -1302,6 +1567,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 staged_word0: Some(staged_word0(first_word0, first_length)),
                 total_length: first_length as usize,
                 segment_lengths: RxCompletedUnitLengths::Single(segment_length),
+                continues_reserved_landing: false,
             }));
         }
 
@@ -1360,6 +1626,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 staged_word0: staged,
                 total_length,
                 segment_lengths: RxCompletedUnitLengths::Chained(segment_lengths),
+                continues_reserved_landing: false,
             }));
         }
         Ok(None)
@@ -1373,7 +1640,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// showed that executing the complete poll/copy path from PSRAM capped
     /// useful UDP RX near 65 Mbit/s.
     #[inline(never)]
-    pub(crate) fn take_completed_owned(&mut self, index: usize) -> Option<RxCompletedDescriptor> {
+    pub(crate) fn take_completed_owned<B: RxReservedBuffer>(
+        &mut self,
+        index: usize,
+        reserved: &B,
+    ) -> Option<RxCompletedDescriptor> {
         if index >= COUNT {
             return None;
         }
@@ -1387,6 +1658,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         self.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
         let descriptor_address = descriptor_address(self.descriptor_base, index).ok()?;
+        if !self.reserved_left && self.leave_reserved(reserved).is_err() {
+            self.require_reset();
+            return None;
+        }
         self.observed_mask.insert(index);
         Some(RxCompletedDescriptor {
             index,
@@ -1441,8 +1716,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// This is the allocation-free Rust ownership form of the recovered
     /// `wDevCtrl.head/tail` transaction. The future tail is kept private until
     /// RX_CONTROL bit 0 self-clears. If the walker exhausted the old frontier
-    /// during reload, the exact ROM base-repair rule is applied before the new
-    /// tail becomes accepted.
+    /// during reload, the doorbell is rung once more before the new tail
+    /// becomes accepted.
     #[inline(never)]
     pub(crate) fn recycle_completed_half_owned<M, F>(
         &mut self,
@@ -1500,6 +1775,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(None);
         }
         self.settle_reload(mmio)?;
+        if self.reload_pending() {
+            return Ok(None);
+        }
 
         let mut completed = 0;
         while completed < MAX_BATCH {
@@ -1606,7 +1884,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     fn recycle_completed_group<M, F>(
         &mut self,
         mmio: &mut M,
-        group_size: usize,
+        requested_group_size: usize,
         shape: RxRecycleGroupShape,
         mut prepare_buffer: F,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
@@ -1618,11 +1896,48 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(None);
         }
         self.settle_reload(mmio)?;
+        if self.reload_pending() {
+            // The settle rang the doorbell once more; the next pass settles
+            // that ring before anything else is appended.
+            return Ok(None);
+        }
 
         if !self
             .observed_mask
-            .contains_group::<COUNT>(self.recycle_start, group_size)
+            .contains_group::<COUNT>(self.recycle_start, requested_group_size)
         {
+            return Ok(None);
+        }
+        let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
+        if requested_group_size - 1 > accepted_distance {
+            // A completed-looking descriptor beyond the accepted hardware
+            // tail is not part of the live list. Reject the complete
+            // transaction before modifying buffer guards or descriptor words.
+            self.require_reset();
+            return Err(RxRingError::Corrupt);
+        }
+        // The accepted tail is the doorbell's link point: the walker parks
+        // on it (LAST) when the list runs out, and the reload doorbell with
+        // NEXT = 0 resumes it at `accepted_tail.next`. A group that covers
+        // the accepted tail, the whole ring, cannot be appended behind
+        // itself. Independent terminal descriptors stop one short: the old
+        // tail stays observed and rejoins in a later group, once the walker
+        // has moved past it (the later-frontier link-release proof). One
+        // unit spanning the whole ring is no frame
+        // ([`rx_ring_outspans_any_unit`]) and fails closed.
+        let group_size = if requested_group_size - 1 == accepted_distance {
+            match shape {
+                RxRecycleGroupShape::EveryDescriptorTerminal => requested_group_size - 1,
+                RxRecycleGroupShape::OneCompletedUnit
+                | RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast => {
+                    self.require_reset();
+                    return Err(RxRingError::Corrupt);
+                }
+            }
+        } else {
+            requested_group_size
+        };
+        if group_size == 0 {
             return Ok(None);
         }
 
@@ -1657,16 +1972,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let head_index = self.recycle_start;
         let head_address = descriptor_address(self.descriptor_base, head_index.get())?;
         let tail_index = head_index.advance(group_size - 1);
-        let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
-        if group_size - 1 > accepted_distance {
-            // A completed-looking descriptor beyond the accepted hardware
-            // tail is not part of the live list. Reject the complete
-            // transaction before modifying buffer guards or descriptor words.
-            self.require_reset();
-            return Err(RxRingError::Corrupt);
-        }
-        let append_to_empty = tail_index == self.accepted_tail;
-        if !append_to_empty && self.descriptors[self.accepted_tail.get()].next_address() != 0 {
+        if self.descriptors[self.accepted_tail.get()].next_address() != 0 {
             // The accepted tail is the only legal append point. Validate it
             // before the first irreversible buffer/descriptor mutation so a
             // corrupt list cannot become a partially rearmed live arena.
@@ -1717,42 +2023,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             );
         }
 
-        // `wDev_DiscardFrame` advances the software head before calling
-        // `wDev_AppendRxBlocks`. If the discarded unit was also the accepted
-        // tail, that advance makes the old list empty. The vendor append path
-        // then publishes the returned chain directly through RX_DESCRIPTOR_BASE;
-        // it must not link the descriptor to itself and ring the reload
-        // doorbell. `accepted_tail` is our tail authority, so membership of
-        // that exact terminal node in this prefix is the equivalent proof.
-        if append_to_empty {
-            mmio.fence();
-            self.publish_exhausted_descriptor_base(mmio, head_address);
-            self.cursor_generation = next_cursor_generation;
-            self.accepted_tail = tail_index;
-            self.pending_tail_plus_one = 0;
-            // A terminal-only list can be filled and exhausted without a
-            // second usable RX-success edge. The vendor worker continues to
-            // inspect its durable software list after this direct BASE path.
-            // Preserve that behavior explicitly instead of relying on an IRQ
-            // from a walker which may already have reached NEXT=0 again.
-            self.observed_mask
-                .remove_group::<COUNT>(self.recycle_start, group_size);
-            // The software list was empty before this append. Its new head is
-            // therefore the returned chain's head, not the physical slot
-            // following its tail. `wDev_DiscardFrame` first stores the old
-            // `head->next` (null here) into `wDevCtrl.head`, after which the
-            // empty branch of `wDev_AppendRxBlocks` stores its argument head
-            // back into `wDevCtrl.head` and RX_DESCRIPTOR_BASE. Advancing to
-            // the following slot would make software skip the very list that
-            // hardware has just started consuming.
-            self.recycle_start = head_index;
-            return Ok(Some(RxLiveAppend {
-                head_index,
-                head_address,
-                tail_index,
-                descriptor_count: group_size,
-            }));
-        }
         let accepted_tail = &self.descriptors[self.accepted_tail.get()];
         // This type is the sole publication authority. All descriptors in the
         // appended group were observed complete, rearmed and remain
@@ -1764,6 +2034,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
         self.cursor_generation = next_cursor_generation;
         self.pending_tail_plus_one = tail_index.get() + 1;
+        self.reload_rerung = false;
         self.observed_mask
             .remove_group::<COUNT>(self.recycle_start, group_size);
         self.recycle_start = self.recycle_start.advance(group_size);
@@ -1981,61 +2252,19 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         false
     }
 
-    /// Whether direct BASE publication of a previously empty software list
-    /// requires one durable follow-up ownership probe.
-    pub const fn exhausted_republication_probe_pending(&self) -> bool {
-        self.exhausted_republication_head_low.is_some()
-    }
-
-    /// Publish a descriptor head after the walker reached a zero successor.
-    ///
-    /// A BASE store is not an interrupt-producing ownership edge. The newly
-    /// published list can be consumed through its terminal descriptor before
-    /// software receives another usable RX-success interrupt, so every live
-    /// direct BASE publication must retain a cooperative follow-up probe.
-    fn publish_exhausted_descriptor_base<M: RxDma>(&mut self, mmio: &mut M, head_address: u32) {
-        mmio.write_descriptor_base(&self.binding, head_address);
-        mmio.fence();
-        self.exhausted_republication_head_low = Some(head_address & RX_DESCRIPTOR_ADDRESS_LOW_MASK);
-        increment_saturating(&self.arena.exhausted_republications);
-    }
-
-    /// Observe whether the walker has accepted a directly republished head.
-    ///
-    /// Time is not ownership evidence. Keep the cooperative probe armed while
-    /// NEXT remains zero: the BASE store may not yet have reached the walker,
-    /// and an exhausted walker cannot provide a later interrupt edge. Any
-    /// matching NEXT proves that hardware has fetched the published head, but
-    /// it does not immediately retire the probe. One further cooperative
-    /// observation closes the race where that head completes while the task
-    /// is still consuming the IRQ which exhausted the previous list. After
-    /// that yield, either the completion is visible to the ordinary
-    /// LAST-bounded frontier or a later completion produces a fresh IRQ. A
-    /// different nonzero cursor may be the retained image of the exhausted
-    /// list and is not an ownership edge.
-    pub fn observe_exhausted_republication<M: RxDma>(&mut self, mmio: &mut M) {
-        let Some(probe) = self.exhausted_republication_head_low else {
-            return;
-        };
-        if probe & RX_EXHAUSTED_REPUBLICATION_ACCEPTED != 0 {
-            self.exhausted_republication_head_low = None;
-        } else if mmio.next_descriptor_low() == probe {
-            self.exhausted_republication_head_low =
-                Some(probe | RX_EXHAUSTED_REPUBLICATION_ACCEPTED);
-            increment_saturating(&self.arena.republications_accepted);
-        }
-    }
-
     /// Observe one live-append doorbell edge without waiting.
     ///
     /// SOURCE\[ROM_REV0_WDEV_APPEND_RX_BLOCKS]: the complete ROM body at
     /// `0x2f83_8a7e` spins on `RX_CONTROL.APPEND_DESCRIPTOR_RELOAD` with the
     /// exact `0x186a1` bound, then immediately samples `RX_NEXT_DESCRIPTOR`
-    /// and repairs `RX_DESCRIPTOR_BASE` from `last->next` when the old
-    /// frontier was exhausted. Deferring this suffix until after another RX
-    /// processing pass is observably unsafe: the appended half can itself
-    /// reach the terminal descriptor first, making `RX_LAST_DESCRIPTOR`
-    /// indistinguishable from the no-repair case.
+    /// to learn whether the walker exhausted the old frontier. Deferring
+    /// that sample until after another RX processing pass is observably
+    /// unsafe: the appended half can itself reach the terminal descriptor
+    /// first, making `RX_LAST_DESCRIPTOR` indistinguishable from the case
+    /// that needs no re-ring.
+    ///
+    /// A settle that rings the doorbell once more leaves the reload
+    /// [`Pending`](RxReloadObservation::Pending).
     pub fn poll_pending_reload<M: RxDma>(
         &mut self,
         mmio: &mut M,
@@ -2047,95 +2276,105 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(RxReloadObservation::Pending);
         }
         self.settle_reload(mmio)?;
-        Ok(RxReloadObservation::Settled)
+        Ok(if self.reload_pending() {
+            RxReloadObservation::Pending
+        } else {
+            RxReloadObservation::Settled
+        })
     }
 
-    /// Complete the reload doorbell and its conditional BASE-repair suffix as
-    /// one unscheduled transaction.
+    /// Complete the reload doorbell and its settle as one unscheduled
+    /// transaction.
     ///
     /// `SOURCE[ROM_REV0_WDEV_APPEND_RX_BLOCKS]`: the vendor function performs
     /// the bounded `RX_CONTROL` loop and immediately samples `NEXT`, then
     /// conditional `LAST`, without returning to its scheduler. Yielding after
-    /// a pending sample lets a later RX completion replace that cursor epoch
-    /// and can authorize a stale BASE repair for the descriptor just recycled.
+    /// a pending sample lets a later RX completion replace that cursor epoch.
     ///
-    /// The doorbell is observed at most [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`]
+    /// Each doorbell is observed at most [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`]
     /// times. When it is still pending after the last one, the reload stays
-    /// pending in this owner and the call returns `Busy`. Each call records
-    /// its observation count in
-    /// [`RxReloadRepairEvidence::max_reload_attempts`].
+    /// pending in this owner and the call returns `Busy`. Each wait records
+    /// its observation count in [`RxReloadEvidence::max_reload_attempts`].
+    /// A settle rings the doorbell at most once more per appended tail, so
+    /// this waits for at most two doorbells.
     pub fn complete_pending_reload<M: RxDma>(&mut self, mmio: &mut M) -> Result<(), RxRingError> {
-        if self.pending_tail().is_none() {
-            return Ok(());
-        }
-        for attempt in 1..=RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT {
-            if mmio.try_with_reload_settled(|_settled| ()).is_some() {
-                record_maximum(&self.arena.max_reload_attempts, attempt);
-                return self.settle_reload(mmio);
+        while self.pending_tail().is_some() {
+            let mut settled = false;
+            for attempt in 1..=RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT {
+                if mmio.try_with_reload_settled(|_settled| ()).is_some() {
+                    record_maximum(&self.arena.max_reload_attempts, attempt);
+                    settled = true;
+                    break;
+                }
             }
+            if !settled {
+                record_maximum(
+                    &self.arena.max_reload_attempts,
+                    RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT,
+                );
+                return Err(RxRingError::Busy);
+            }
+            self.settle_reload(mmio)?;
         }
-        record_maximum(
-            &self.arena.max_reload_attempts,
-            RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT,
-        );
-        Err(RxRingError::Busy)
+        Ok(())
     }
 
+    /// Accept the pending tail after its doorbell cleared, or ring the
+    /// doorbell once more.
+    ///
+    /// NEXT nonzero: the walker holds a descriptor of the list, which now
+    /// ends at the pending tail. NEXT zero with LAST at the pending tail: the
+    /// walker consumed the appended group too. NEXT zero with LAST short of
+    /// the pending tail: the walker reached the old tail's zero link before
+    /// it followed the new one. The vendor republishes `LAST->next` through
+    /// `RX_DESCRIPTOR_BASE` there; this owner never writes BASE after the
+    /// cold publication and rings the doorbell once more instead: with NEXT
+    /// zero the doorbell resumes the walker at `LAST->next`
+    /// (HIL_W1_RX_WALKER_2026_10_18). Still zero after that second ring
+    /// contradicts that rule and fails closed.
     fn settle_reload<M: RxDma>(&mut self, mmio: &mut M) -> Result<(), RxRingError> {
         let Some(pending_tail) = self.pending_tail() else {
             return Ok(());
         };
         let mut next_descriptor = crate::rx_dma::RxDmaNextDescriptor::default();
         let mut last_descriptor_low = None;
-        let repair_head = mmio.with_reload_repair_observation(|observation| {
+        let exhausted_short = mmio.with_reload_observation(|observation| {
             next_descriptor = observation.next_descriptor();
             last_descriptor_low = observation.exhausted_last_descriptor_low();
             if !next_descriptor.is_zero() {
-                return Ok(None);
+                return Ok(false);
             }
             let last_descriptor_low = last_descriptor_low.ok_or(RxRingError::Corrupt)?;
             let last_index = descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
                 .ok_or(RxRingError::Corrupt)?;
-            if last_index == pending_tail {
-                return Ok(None);
-            }
-            {
-                // SOURCE: `libpp[wdev.o]::wDev_AppendRxBlocks`: after reload clears,
-                // `NEXT=0` and `LAST != new_tail` lead directly to
-                // `BASE = LAST->next`. LAST may still name an earlier node of
-                // the accepted list when several completed units are detached
-                // and appended in one worker turn; it is not restricted to
-                // the immediately preceding software tail. Keep only the
-                // vendor's actual safety conditions: LAST and its nonzero
-                // successor must both belong to this descriptor arena.
-                let repair_head = self.descriptors[last_index.get()].next_address();
-                if repair_head == 0
-                    || descriptor_index_full::<COUNT>(repair_head, self.descriptor_base).is_none()
-                {
-                    return Err(RxRingError::Corrupt);
-                }
-                Ok(Some(repair_head))
-            }
+            Ok(last_index != pending_tail)
         });
-        let repair_head = match repair_head {
-            Ok(repair_head) => repair_head,
+        self.record_reload_observation(next_descriptor, last_descriptor_low);
+        let exhausted_short = match exhausted_short {
+            Ok(exhausted_short) => exhausted_short,
             Err(error) => {
-                self.record_reload_repair_observation(next_descriptor, last_descriptor_low, None);
                 self.require_reset();
                 return Err(error);
             }
         };
-        self.record_reload_repair_observation(next_descriptor, last_descriptor_low, repair_head);
-        if let Some(repair_head) = repair_head {
-            // The reload suffix is a second direct BASE publication path, not
-            // merely completion of the doorbell transaction. Preserve a
-            // durable service continuation exactly as for publication of a
-            // previously empty software list; an exhausted walker cannot be
-            // relied on to produce another IRQ after this store.
-            self.publish_exhausted_descriptor_base(mmio, repair_head);
+        if !exhausted_short {
+            self.accepted_tail = pending_tail;
+            self.pending_tail_plus_one = 0;
+            self.reload_rerung = false;
+            return Ok(());
         }
-        self.accepted_tail = pending_tail;
-        self.pending_tail_plus_one = 0;
+        if self.reload_rerung {
+            increment_saturating(&self.arena.rering_failures);
+            self.require_reset();
+            return Err(RxRingError::Corrupt);
+        }
+        // The old tail's link to the appended head was published before the
+        // first doorbell and is unchanged; only the doorbell is repeated.
+        mmio.fence();
+        mmio.request_reload(&self.binding);
+        mmio.fence();
+        self.reload_rerung = true;
+        increment_saturating(&self.arena.reload_rerings);
         Ok(())
     }
 }
@@ -2410,16 +2649,32 @@ fn build_cold_ring_inner(
 fn publish_cold_ring_inner<M: RxDma>(
     mmio: &mut M,
     binding: &RxDmaBinding<'_>,
-    descriptor_dma_base: u32,
+    arena: &RxArenaWords,
 ) -> Result<(), RxRingError> {
-    if !descriptor_address_valid(descriptor_dma_base) {
+    if !descriptor_address_valid(binding.reserved_address()) {
         return Err(RxRingError::Address);
     }
     mmio.fence();
     mmio.configure_descriptor_window(binding);
-    mmio.write_descriptor_base(binding, descriptor_dma_base);
+    mmio.write_descriptor_base(binding);
+    increment_saturating(&arena.base_writes);
     mmio.fence();
     Ok(())
+}
+
+/// The reserved descriptor R of `table`, at index `COUNT`.
+fn reserved_snapshot<const COUNT: usize>(
+    table: &RxDescriptorTable<COUNT>,
+    descriptor_base: u32,
+) -> RxDescriptorSnapshot {
+    let reserved = table.reserved();
+    RxDescriptorSnapshot {
+        index: COUNT,
+        address: descriptor_address(descriptor_base, COUNT).unwrap_or(0),
+        word0: reserved.word0(),
+        buffer_address: reserved.buffer_address(),
+        next_address: reserved.next_address(),
+    }
 }
 
 /// Opens the RX walker after a cold ring was published.

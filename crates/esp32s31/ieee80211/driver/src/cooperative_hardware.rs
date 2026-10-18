@@ -497,8 +497,8 @@ impl RxDma for CooperativeRadioHardware<'_> {
         RxDma::configure_descriptor_window(&mut self.wifi_mac_hal(), binding);
     }
 
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding, address: u32) {
-        RxDma::write_descriptor_base(&mut self.wifi_mac_hal(), binding, address);
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding) {
+        RxDma::write_descriptor_base(&mut self.wifi_mac_hal(), binding);
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding) {

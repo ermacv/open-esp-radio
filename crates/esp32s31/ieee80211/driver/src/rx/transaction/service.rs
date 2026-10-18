@@ -59,11 +59,12 @@ where
     if O::SAMPLE_ENTRY_REMAINING {
         hooks.entry_remaining(ring.accepted_list_remaining_from_next(hardware.next_descriptor()));
     }
-    // A direct BASE publication has no reload doorbell and may consume
-    // its only completion edge while the previous IRQ is still being
-    // serviced. Advance its durable two-turn probe before freezing the
-    // next LAST-bounded completion frontier.
-    ring.observe_exhausted_republication(hardware);
+    // The reserved descriptor: count a frame the epoch's cold publication
+    // let land in it, and fail closed on a write into it after the walker
+    // reached the ring.
+    storage
+        .observe_reserved(ring, hardware)
+        .map_err(RxStageTransactionError::Ring)?;
     let mut recycled_descriptors = 0_usize;
     // Upper ownership returns the exact original DMA allocations.
     // Rearm only the longest ordered released prefix before freezing
@@ -94,7 +95,6 @@ where
             }
             return Err(RxStageTransactionError::Ring(error));
         }
-        ring.observe_exhausted_republication(hardware);
     }
     // Freeze the completion frontier before any descriptor is rearmed.
     // A saturated producer can therefore only create a later epoch; it
@@ -140,7 +140,6 @@ where
             }
             return Err(RxStageTransactionError::Ring(error));
         }
-        ring.observe_exhausted_republication(hardware);
         frozen_cursor = ring.freeze_cursor(hardware);
     }
     let frontier_snapshot = storage
@@ -328,9 +327,11 @@ where
             });
         // A chain longer than one descriptor's length field has no staged
         // word: received air input, dropped like any chain but named apart.
+        // The tail of a frame that began in the reserved descriptor is a
+        // chain too: its head was never copied.
         let recoverable_discard = if unit.metadata().staged_word0().is_none() {
             Some(Discard::Oversized)
-        } else if unit_descriptor_count != 1 {
+        } else if unit_descriptor_count != 1 || unit.metadata().continues_reserved_landing() {
             Some(Discard::Chained)
         } else if unit_observation.payload_length == 0 {
             Some(Discard::Empty)
@@ -442,7 +443,7 @@ where
             }
             recycled_descriptors = recycled_descriptors.saturating_add(unit_descriptor_count);
             // The vendor append path does not yield between its reload
-            // doorbell and conditional BASE-repair suffix. Preserve
+            // doorbell and the NEXT/LAST sample that settles it. Preserve
             // that transaction boundary so a later completion cannot
             // replace the cursor observation used to settle this
             // append.
@@ -511,13 +512,11 @@ where
     // Retain a cooperative pass until the exhausted finite list has
     // been staged and republished.
     let exhausted_writeback_pending = ring.exhausted_terminal_writeback_pending(hardware);
-    let exhausted_republication_probe_pending = ring.exhausted_republication_probe_pending();
 
     hooks.probe_reasons(
         recycled_descriptors != 0,
         completed_frontier_remaining,
         exhausted_writeback_pending,
-        exhausted_republication_probe_pending,
     );
 
     let budget_exhausted = frontier > BUDGET_UNITS;
@@ -565,10 +564,7 @@ where
         DatapathRxProgress::StageCapacityBlocked
     } else if budget_exhausted {
         DatapathRxProgress::BudgetExhausted
-    } else if completed_frontier_remaining
-        || exhausted_writeback_pending
-        || exhausted_republication_probe_pending
-    {
+    } else if completed_frontier_remaining || exhausted_writeback_pending {
         DatapathRxProgress::ProbePending
     } else if recycled_probe_pending || deferred_recycle_pending {
         DatapathRxProgress::RecycledAppendPending

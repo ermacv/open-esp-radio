@@ -42,7 +42,7 @@ pub trait Hooks {
     fn recycled_probe_pending(&self, recycled_descriptors: usize) -> bool {
         recycled_descriptors != 0
     }
-    fn probe_reasons(&self, recycled: bool, frontier: bool, writeback: bool, republication: bool) {}
+    fn probe_reasons(&self, recycled: bool, frontier: bool, writeback: bool) {}
     fn finish(self, units: usize)
     where
         Self: Sized,

@@ -21,7 +21,9 @@
 //!   exhausted then, with no RX interrupt to come. When a drain left every
 //!   staging slot claimed or every buffer detached, the next wake that
 //!   carries a returned lease first reads the walker registers and the
-//!   ring's view into the counters' exhaustion snapshot (report-only).
+//!   ring's view, and after the capacity drain's first service pass what
+//!   that pass's reload read, into the counters' exhaustion snapshot
+//!   (report-only).
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
 //!   silence the routes; close promiscuous receive and request the MAC
@@ -40,7 +42,9 @@ use core::{
     task::Poll,
 };
 
-use oer_esp32s31_ieee80211_dma::{rx_storage::RxDmaStorage, space::DmaSpace};
+use oer_esp32s31_ieee80211_dma::{
+    descriptor::Descriptor, rx_storage::RxDmaStorage, space::DmaSpace,
+};
 use oer_esp32s31_ieee80211_mac::{
     init::{
         MacRuntimeStopHardware, MacSnifferHardware, activate_promiscuous_receive,
@@ -59,7 +63,7 @@ use oer_time::{Duration, Instant, Timer};
 use super::{
     arena::WifiRxParts,
     control::{ReceiveRunnerControl, WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
-    counters::{WifiRxCounters, WifiRxExhaustion},
+    counters::{WifiRxCounters, WifiRxDrainEnd, WifiRxExhaustion},
     frontier::{ReceiveFrontier, RxFrontierPhase},
     transaction::{Admission, Counters, Publisher, service},
 };
@@ -69,18 +73,21 @@ use crate::{
 };
 
 /// Immediate self-wakes before a continuation waits on the timer.
-/// Provisional: measured in PR 5.
+/// Measured: the W1 runs of 2026-10-18 took a longest continuation streak
+/// of 1, one continuation per frame, well inside this bound.
 pub const IMMEDIATE_CONTINUATIONS: u32 = 4;
-/// The timer wait after the immediate self-wakes. Provisional: measured in
-/// PR 5.
+/// The timer wait after the immediate self-wakes. Provisional: not
+/// exercised on hardware (timed continuations 0 in the W1 runs of
+/// 2026-10-18).
 pub const CONTINUATION_WAIT: Duration = Duration::from_micros(20);
-/// How long teardown waits for the line to confirm the mask. Provisional:
-/// measured in PR 5.
+/// How long teardown waits for the line to confirm the mask. Measured: the
+/// W1 runs of 2026-10-18 confirmed the mask in 17 µs.
 pub const MASK_CONFIRM_TIMEOUT: Duration = Duration::from_millis(1);
 /// How long teardown waits for staged leases and the MAC runtime to drain.
-/// Provisional: measured in PR 5.
+/// Measured: the W1 runs of 2026-10-18 drained in 11–14 µs with 0 polls.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
-/// The timer wait between two drain checks. Provisional: measured in PR 5.
+/// The timer wait between two drain checks. Provisional: not exercised on
+/// hardware (drain polls 0 in the W1 runs of 2026-10-18).
 pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 
 /// Run one receive epoch over `parts`; publish its exit and park.
@@ -257,8 +264,9 @@ struct Receiver<
     /// The service's cumulative descriptors, units and bytes.
     totals: [u64; 3],
     /// Since when the drains ended with every staging slot claimed or every
-    /// buffer detached; until the next wake that carries a returned lease.
-    full_since: Option<Instant>,
+    /// buffer detached, and the hash of every descriptor word then; until
+    /// the next wake that carries a returned lease.
+    full_since: Option<(Instant, u32)>,
 }
 
 impl<
@@ -302,41 +310,62 @@ where
             let Some(capacity) = wake else {
                 return WifiRxCause::StopRequested;
             };
-            let full_since = if capacity {
+            let (full_since, snapshot) = if capacity {
                 self.counters.capacity_drain();
-                let full_since = self.full_since.take();
-                if let Some(since) = full_since {
-                    self.observe_exhaustion(ring, since);
-                }
-                None
+                let snapshot = self
+                    .full_since
+                    .take()
+                    .map(|full| self.observe_exhaustion(ring, full));
+                (None, snapshot)
             } else {
-                self.full_since.take()
+                (self.full_since.take(), None)
             };
-            if let Err(cause) = self.drain(ring).await {
+            if let Err(cause) = self.drain(ring, snapshot).await {
                 return cause;
             }
+            self.record_drain_end(ring);
             // Every lease out: the walker has no buffer to fill until one
-            // comes back. The first full drain marks the time.
+            // comes back. The first full drain marks the time and hashes
+            // the descriptors.
             if usize::try_from(self.stage.claimed_slots())
                 .is_ok_and(|claimed| claimed == STAGE_SLOTS)
                 || self.rx.detached_buffer_count() == COUNT
             {
-                self.full_since = Some(full_since.unwrap_or_else(|| self.timer.now()));
+                self.full_since = Some(full_since.unwrap_or_else(|| {
+                    (
+                        self.timer.now(),
+                        descriptor_words_hash(self.rx.descriptors()),
+                    )
+                }));
             }
         }
     }
 
     /// Service until the frontier drained or staging blocked, keeping RX
     /// masked meanwhile; unmask through the doorbell only once drained.
-    async fn drain(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> Result<(), WifiRxCause> {
+    /// `snapshot`, the exhaustion snapshot of a capacity drain, is completed
+    /// with what the first pass's reload read and recorded after that pass.
+    async fn drain(
+        &mut self,
+        ring: &mut RxRingLive<'static, COUNT>,
+        mut snapshot: Option<WifiRxExhaustion>,
+    ) -> Result<(), WifiRxCause> {
         // Self-wakes since the last timer wait; continuations of this drain.
         let (mut streak, mut continuations) = (0, 0);
         loop {
             if self.control.stop_requested() {
+                if let Some(snapshot) = snapshot.take() {
+                    self.counters.exhaustion(snapshot);
+                }
                 return Err(WifiRxCause::StopRequested);
             }
             let admitted_before = self.totals[1];
-            let progress = self.service_once(ring)?;
+            let observations = ring.reload_evidence().observations;
+            let progress = self.service_once(ring);
+            if let Some(snapshot) = snapshot.take() {
+                self.record_exhaustion(ring, snapshot, observations);
+            }
+            let progress = progress?;
             // Units this pass staged were released into the sink after the
             // pass's own rearm step: run once more to rearm them. A released
             // buffer that is still the walker's LAST descriptor cannot be
@@ -374,10 +403,15 @@ where
     }
 
     /// Read the walker registers and the ring's view when a lease returned
-    /// to a pool that was full since `since`, before the capacity drain
-    /// services anything. Only reads: no register is written and no
-    /// descriptor changes hands.
-    fn observe_exhaustion(&mut self, ring: &RxRingLive<'static, COUNT>, since: Instant) {
+    /// to a pool that was full since `since`, whose descriptor words hashed
+    /// to `hash` then, before the capacity drain services anything. Only
+    /// reads: no register is written and no descriptor changes hands. The
+    /// drain's first pass completes the snapshot ([`Self::record_exhaustion`]).
+    fn observe_exhaustion(
+        &mut self,
+        ring: &RxRingLive<'static, COUNT>,
+        (since, hash): (Instant, u32),
+    ) -> WifiRxExhaustion {
         let blocked = self.timer.now().saturating_duration_since(since);
         let next = self.hardware.next_descriptor();
         let last_low = self.hardware.last_descriptor_low();
@@ -386,7 +420,7 @@ where
         let reload_doorbell = RxDma::reload_pending(self.hardware);
         let buffer_full = self.hardware.buffer_full_count();
         let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
-        self.counters.exhaustion(WifiRxExhaustion {
+        WifiRxExhaustion {
             blocked_us: u32::try_from(blocked.as_micros()).unwrap_or(u32::MAX),
             next_low: next.address_low(),
             next_upper: next.has_unknown_upper_state(),
@@ -405,7 +439,46 @@ where
             released: narrow(self.rx.released_buffer_count()),
             detached: narrow(self.rx.detached_buffer_count()),
             staged: self.stage.claimed_slots(),
+            next_after_doorbell: None,
+            last_after_doorbell: None,
+            descriptors_changed: descriptor_words_hash(self.rx.descriptors()) != hash,
+        }
+    }
+
+    /// Record the buffers, the ring and the walker's NEXT and LAST at the
+    /// end of a drain. Only reads.
+    fn record_drain_end(&mut self, ring: &RxRingLive<'static, COUNT>) {
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let next = self.hardware.next_descriptor();
+        let last_low = self.hardware.last_descriptor_low();
+        self.counters.drain_end(&WifiRxDrainEnd {
+            released: narrow(self.rx.released_buffer_count()),
+            detached: narrow(self.rx.detached_buffer_count()),
+            staged: self.stage.claimed_slots(),
+            observed: ring.observed_mask().count_ones(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low,
         });
+    }
+
+    /// Record `snapshot` after the capacity drain's first pass, with the
+    /// NEXT and LAST its reload read when the pass made a reload
+    /// observation (the ring's count moved from `observations`).
+    fn record_exhaustion(
+        &self,
+        ring: &RxRingLive<'static, COUNT>,
+        mut snapshot: WifiRxExhaustion,
+        observations: u32,
+    ) {
+        let evidence = ring.reload_evidence();
+        if evidence.observations != observations {
+            snapshot.next_after_doorbell = Some(evidence.last_next_low);
+            snapshot.last_after_doorbell = evidence.last_last_low;
+        }
+        self.counters.exhaustion(snapshot);
     }
 
     fn service_once(
@@ -428,7 +501,7 @@ where
             self.hardware,
             (),
         );
-        self.counters.reload_evidence(ring.reload_repair_evidence());
+        self.counters.reload_evidence(ring.reload_evidence());
         result.map_err(|error| {
             self.counters.service_error();
             WifiRxCause::Service(error)
@@ -583,6 +656,26 @@ async fn yield_now() {
         }
     })
     .await;
+}
+
+/// The 32-bit FNV-1a hash of every descriptor word (status, buffer address,
+/// link) in ring order; each word is one volatile read. Report-only.
+fn descriptor_words_hash(descriptors: &[Descriptor]) -> u32 {
+    const OFFSET: u32 = 0x811c_9dc5;
+    const PRIME: u32 = 0x0100_0193;
+    descriptors
+        .iter()
+        .flat_map(|descriptor| {
+            [
+                descriptor.word0(),
+                descriptor.buffer_address(),
+                descriptor.next_address(),
+            ]
+        })
+        .flat_map(u32::to_le_bytes)
+        .fold(OFFSET, |hash, byte| {
+            (hash ^ u32::from(byte)).wrapping_mul(PRIME)
+        })
 }
 
 /// Run `future` until `deadline`; `None` when it did not finish in time.

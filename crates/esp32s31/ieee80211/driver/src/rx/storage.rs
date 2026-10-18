@@ -10,6 +10,13 @@ use oer_esp32s31_ieee80211_dma::{
 pub const ESP32S31_RX_DESCRIPTOR_COUNT: usize = 96;
 pub const ESP32S31_RX_BUFFER_SIZE: usize = 4_608;
 pub const ESP32S31_RX_BUFFER_STORAGE_SIZE: usize = ESP32S31_RX_BUFFER_SIZE + 4;
+const _: () = assert!(
+    oer_esp32s31_ieee80211_dma::rx_ring::rx_ring_outspans_any_unit(
+        ESP32S31_RX_DESCRIPTOR_COUNT,
+        ESP32S31_RX_BUFFER_SIZE,
+    ),
+    "one receive unit could span the whole ring"
+);
 /// Platform settle edge between stopped-ring publication and walker enable.
 pub const ESP32S31_RX_WALKER_ENABLE_SETTLE_US: u32 = 5;
 

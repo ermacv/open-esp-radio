@@ -250,9 +250,9 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     ///
     /// Complete vendor `datapathProcessRxSucDataAll` processes through its saved
     /// LAST descriptor, refreshes LAST and continues in the same `ppTask`
-    /// invocation. A terminal descriptor writeback, a deferred link-release
-    /// proof, or an exhausted-list BASE publication therefore cannot require
-    /// another RX-success interrupt: none is guaranteed after `NEXT=0`.
+    /// invocation. A terminal descriptor writeback or a deferred link-release
+    /// proof therefore cannot require another RX-success interrupt: none is
+    /// guaranteed after `NEXT=0`.
     pub fn service_continuation<M: RxDma>(
         &mut self,
         hardware: &mut M,
@@ -260,7 +260,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         let ring = self.live_mut()?;
         let probe_pending = ring.reload_pending()
             || ring.completion_release_probe_pending()
-            || ring.exhausted_republication_probe_pending()
             // RX_DONE can become visible before LAST advances far enough to
             // authorize recycling. The current PP event already covers that
             // writeback; waiting for another interrupt would lose the vendor

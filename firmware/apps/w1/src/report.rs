@@ -22,6 +22,7 @@ use oer_ieee80211_runtime::survey::{BssTally, Survey};
 use crate::{
     irq::{BUFFER, COUNT, SLOTS},
     measure::{self, CLOCKS, ClockOp, Phase, TIMED_PHASES, Tick, TimerLine},
+    own::{CYCLES, Cycle, DISCARDS},
 };
 
 /// The survey's table size.
@@ -298,9 +299,8 @@ pub struct Run<'a> {
     pub rx: WifiRxReport,
     pub unserviced_mac: u32,
     pub unserviced_pwr: u32,
-    pub frames_after_release: u32,
-    /// The hold; all zero when no frame opened the window.
-    pub hold: Hold,
+    /// The hold cycles; all zero when no frame opened the window.
+    pub cycles: &'a [Cycle; CYCLES],
     /// The first window units' handoff lags.
     pub lags: &'a LagLog,
     /// The first stand beacons' TSF and handoff.
@@ -426,17 +426,43 @@ fn woke_early() -> bool {
     })
 }
 
-/// Every gate, in the block's order, and the beacon figures.
-pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 8]) {
-    let (verdict, beacons) = beacons(run);
-    // Every lease held, nothing received meanwhile (the walker ran out),
-    // frames after the release; how the ring recovered is report-only.
-    let walker_restart = if run.hold.reached < SLOTS {
+/// Both cycles: a changed held lease or a chained drop in a release window
+/// fails it (`foreign-write`); otherwise a cycle whose hold was not full
+/// (`pool-not-exhausted`) or whose leases did not cover the ring
+/// (`ring-order`) leaves it unexercised.
+fn ownership(cycles: &[Cycle]) -> Outcome {
+    if cycles.iter().any(|cycle| {
+        cycle.hold_mismatch > 0
+            || cycle.dwell_mismatch > 0
+            || cycle.release_mismatch > 0
+            || cycle.chained > 0
+    }) {
+        Outcome::Fail("foreign-write")
+    } else if cycles.iter().any(|cycle| !cycle.exercised()) {
         Outcome::Unexercised("pool-not-exhausted")
-    } else if run.hold.units > 0 {
+    } else if cycles.iter().any(|cycle| cycle.first_drop.is_none()) {
+        Outcome::Unexercised("ring-order")
+    } else {
+        Outcome::Pass
+    }
+}
+
+/// The number of gates.
+pub const GATES: usize = 11;
+
+/// Every gate, in the block's order, and the beacon figures.
+pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
+    let (verdict, beacons) = beacons(run);
+    // The first cycle: every lease held, nothing received meanwhile (the
+    // walker ran out), frames after the release; how the ring recovered is
+    // report-only.
+    let first = &run.cycles[0];
+    let walker_restart = if !first.full.held() {
+        Outcome::Unexercised("pool-not-exhausted")
+    } else if first.hold.units > 0 {
         Outcome::Fail("received-while-held")
     } else {
-        check(run.frames_after_release > 0, "no-frames-after-release")
+        check(first.frames_after_release > 0, "no-frames-after-release")
     };
     let gates = [
         Gate {
@@ -459,6 +485,10 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 8]) {
             outcome: walker_restart,
         },
         Gate {
+            name: "ownership",
+            outcome: ownership(run.cycles),
+        },
+        Gate {
             name: "irq_stack",
             outcome: check(run.irq_free >= MIN_IRQ_STACK_FREE, "irq-stack-low"),
         },
@@ -476,6 +506,21 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 8]) {
         Gate {
             name: "timer_wake",
             outcome: check(!woke_early(), "woke-early"),
+        },
+        // The epoch wrote BASE once: the cold publication of the reserved
+        // descriptor; every later publication went through the doorbell.
+        Gate {
+            name: "base_writes",
+            outcome: check(run.rx.reload.base_writes == 1, "base-writes"),
+        },
+        // At most the epoch's first frame landed in the reserved
+        // descriptor, and nothing after the walker reached the ring.
+        Gate {
+            name: "reserved",
+            outcome: check(
+                run.rx.reload.reserved_landings <= 1 && run.rx.reload.reserved_late_landings == 0,
+                "reserved-landing",
+            ),
         },
     ];
     (verdict, gates)
@@ -678,14 +723,54 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         rx.service_passes,
         rx.service_errors,
         rx.capacity_drains,
-        run.frames_after_release,
+        run.cycles[0].frames_after_release,
     ))?;
-    let hold = &run.hold;
-    block.line(format_args!(
-        "w1.hold reached={} slots={SLOTS} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={}",
-        hold.reached, hold.units, hold.mac_irqs, hold.stage_capacity_blocks, hold.admission_blocks,
-    ))?;
-    exhaust(block, rx)?;
+    for (index, cycle) in run.cycles.iter().enumerate() {
+        let hold = &cycle.hold;
+        let end = cycle.end.as_ref();
+        block.line(format_args!(
+            "w1.hold cycle={index} fill_ms={} reached={} slots={SLOTS} full={} reason={} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={} end_released={} end_detached={} end_staged={} end_observed={} end_recycle_start={} end_accepted_tail={} end_next={} end_last={}",
+            cycle.fill_ms,
+            hold.reached,
+            u8::from(cycle.full.held()),
+            cycle.full.reason(),
+            hold.units,
+            hold.mac_irqs,
+            hold.stage_capacity_blocks,
+            hold.admission_blocks,
+            OrDash(end.map(|end| end.released)),
+            OrDash(end.map(|end| end.detached)),
+            OrDash(end.map(|end| end.staged)),
+            OrDash(end.map(|end| end.observed)),
+            OrDash(end.map(|end| end.recycle_start)),
+            OrDash(end.map(|end| end.accepted_tail)),
+            HexOrDash(end.map(|end| end.next_low)),
+            HexOrDash(end.map(|end| end.last_low)),
+        ))?;
+    }
+    for (index, cycle) in run.cycles.iter().enumerate() {
+        exhaust(block, index, cycle)?;
+    }
+    for (index, cycle) in run.cycles.iter().enumerate() {
+        block.line(format_args!(
+            "w1.own cycle={index} order={} held={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={} discards={}",
+            cycle.order.name(),
+            cycle.held,
+            OrDash(cycle.first_drop.and_then(|index| u32::try_from(index).ok())),
+            cycle.hold_mismatch,
+            cycle.dwell_mismatch,
+            cycle.release_mismatch,
+            match cycle.first_mismatch {
+                None => IndexOrDash::Dash,
+                Some(index) => IndexOrDash::Index(index),
+            },
+            Indices(&cycle.first_after_release),
+            cycle.order_breaks,
+            cycle.chained,
+            cycle.oversized,
+            Discards(&cycle.discards),
+        ))?;
+    }
     let prefix = &rx.prefix;
     block.line(format_args!(
         "w1.prefix invalid={} chain={} bounds={} rx_failure={} mic_failure={} quarantined={} output_small={} metadata={} ignored={} unsupported={} strict_rxend_refusable={} strict_dump_refusable={} admitted={}",
@@ -705,12 +790,14 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     ))?;
     let reload = &rx.reload;
     block.line(format_args!(
-        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} base_repairs={} exhausted_republications={} republications_accepted={}",
+        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={}",
         reload.max_reload_attempts,
         reload.observations,
-        reload.base_repairs,
-        reload.exhausted_republications,
-        reload.republications_accepted,
+        reload.reload_rerings,
+        reload.rering_failures,
+        reload.base_writes,
+        reload.reserved_landings,
+        reload.reserved_late_landings,
     ))?;
     let continuations = &rx.continuations;
     block.line(format_args!(
@@ -927,15 +1014,72 @@ impl fmt::Display for Flag {
     }
 }
 
-/// The walker and ring snapshot of the longest stage-capacity block that a
-/// returned lease ended; every value `-` without one.
-fn exhaust<W: Write>(block: &mut Block<'_, W>, rx: &WifiRxReport) -> fmt::Result {
-    let snapshot = rx.exhaustion.longest;
+/// The nonzero discard counts as `<reason>:<n>` joined by `,`, or `-`.
+struct Discards<'a>(&'a [u32; 15]);
+
+impl fmt::Display for Discards<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut first = true;
+        for (reason, &count) in DISCARDS.iter().zip(self.0) {
+            if count == 0 {
+                continue;
+            }
+            if !first {
+                f.write_char(',')?;
+            }
+            write!(f, "{reason}:{count}")?;
+            first = false;
+        }
+        if first {
+            f.write_str("-")?;
+        }
+        Ok(())
+    }
+}
+
+/// A descriptor index, `x` when unknown, or `-`.
+enum IndexOrDash {
+    Dash,
+    Index(Option<usize>),
+}
+
+impl fmt::Display for IndexOrDash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Dash => f.write_str("-"),
+            Self::Index(Some(index)) => write!(f, "{index}"),
+            Self::Index(None) => f.write_str("x"),
+        }
+    }
+}
+
+/// Descriptor indices joined by `,` (`x` when unknown), or `-` without one.
+struct Indices<'a>(&'a [Option<usize>]);
+
+impl fmt::Display for Indices<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0.is_empty() {
+            return f.write_str("-");
+        }
+        for (position, index) in self.0.iter().enumerate() {
+            if position > 0 {
+                f.write_char(',')?;
+            }
+            IndexOrDash::Index(*index).fmt(f)?;
+        }
+        Ok(())
+    }
+}
+
+/// The walker and ring snapshot that the first drop of hold cycle `index`
+/// took; every value `-` without one.
+fn exhaust<W: Write>(block: &mut Block<'_, W>, index: usize, cycle: &Cycle) -> fmt::Result {
+    let snapshot = cycle.exhaust;
     let take = |field: fn(&WifiRxExhaustion) -> Option<u32>| snapshot.as_ref().and_then(field);
     let flag = |field: fn(&WifiRxExhaustion) -> bool| Flag(snapshot.as_ref().map(field));
     block.line(format_args!(
-        "w1.exhaust snapshots={} blocked_us={} next_low={} next_upper={} last_low={} base={} walker={} doorbell={} buffer_full={} ring_base={} recycle_start={} accepted_tail={} observed={} completed={} remaining={} reload_pending={} released={} detached={} staged={}",
-        rx.exhaustion.snapshots,
+        "w1.exhaust cycle={index} snapshots={} blocked_us={} next_low={} next_upper={} last_low={} base={} walker={} doorbell={} buffer_full={} ring_base={} recycle_start={} accepted_tail={} observed={} completed={} remaining={} reload_pending={} released={} detached={} staged={} next_after_doorbell={} last_after_doorbell={} desc_hash_changed={}",
+        cycle.snapshots,
         OrDash(take(|s| Some(s.blocked_us))),
         HexOrDash(take(|s| Some(s.next_low))),
         flag(|s| s.next_upper),
@@ -954,6 +1098,9 @@ fn exhaust<W: Write>(block: &mut Block<'_, W>, rx: &WifiRxReport) -> fmt::Result
         OrDash(take(|s| Some(s.released))),
         OrDash(take(|s| Some(s.detached))),
         OrDash(take(|s| Some(s.staged))),
+        HexOrDash(take(|s| s.next_after_doorbell)),
+        HexOrDash(take(|s| s.last_after_doorbell)),
+        flag(|s| s.descriptors_changed),
     ))
 }
 

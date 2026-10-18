@@ -85,8 +85,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         Ok(())
     }
 
-    /// The ring buffer holding `address .. address + len` and the offset of
-    /// `address` in it.
+    /// The published buffer (a ring buffer or the reserved descriptor's)
+    /// holding `address .. address + len` and the offset of `address` in it.
     fn dma_range(
         &self,
         ring: &RxRingLive<'_, COUNT>,
@@ -96,7 +96,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         if !ring.belongs_to_arena(&self.arena) {
             return Err(HostDmaAccessError::ForeignRing);
         }
-        for buffer in &self.buffers {
+        for buffer in self.buffers.iter().chain([&self.reserved_buffer]) {
             let start = self
                 .buffer_dma_address(buffer)
                 .map_err(|_| HostDmaAccessError::OutsideBuffers)?;
