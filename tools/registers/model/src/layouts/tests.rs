@@ -511,3 +511,47 @@ fn rendering_needs_every_named_region() {
 fn a_model_without_layouts_renders_nothing() {
     assert_eq!(super::render(&[], &regions()).unwrap(), "");
 }
+
+fn twin() -> String {
+    NODE.replace("NODE", "TWIN").replacen(
+        "placement = [\"dma-window\"]",
+        "placement = [\"dma-window\"]\nsame-geometry-as = \"NODE\"",
+        1,
+    )
+}
+
+#[test]
+fn a_layout_repeating_another_s_geometry_is_cross_checked() {
+    let renamed = twin().replace("OWNER", "TX_OWNED");
+    let model = load(&[("node.toml", NODE), ("twin.toml", &renamed)]).unwrap();
+    assert_eq!(model.layouts()[1].same_geometry_as.as_deref(), Some("NODE"));
+    let cases = [
+        (
+            twin().replacen("bits = \"27:14\"", "bits = \"26:14\"", 1),
+            "field CONTROL.LENGTH",
+        ),
+        (
+            twin().replacen("align = 4", "align = 8", 1),
+            "size, alignment or kind",
+        ),
+        (
+            twin().replacen(
+                "same-geometry-as = \"NODE\"",
+                "same-geometry-as = \"OTHER\"",
+                1,
+            ),
+            "not another layout",
+        ),
+        (
+            twin().replacen("placement = [\"dma-window\"]", "placement = [\"sram\"]", 1),
+            "placement",
+        ),
+    ];
+    for (text, reason) in cases {
+        let message = match load(&[("node.toml", NODE), ("twin.toml", &text)]) {
+            Ok(_) => panic!("{reason}: accepted"),
+            Err(error) => error.to_string(),
+        };
+        assert!(message.contains(reason), "{reason}: {message}");
+    }
+}

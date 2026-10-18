@@ -79,7 +79,10 @@ offset order) or `[[layout.bytes]]` (`access = "owned"`, ranges of one, two
 or four little-endian bytes). A word or range has `fields` with `bits`
 (`"N"` or `"HIGH:LOW"`), `writer` (`cpu` or `hardware`) and an optional
 `description`; a whole-word address field may name the `placement` of what
-it points at or the `layout` it links to. Fields do not overlap.
+it points at or the `layout` it links to. Fields do not overlap. A layout
+that repeats another's geometry names it in `same-geometry-as`; the tool
+checks that size, alignment, placement, words and the bits of every field
+both name agree (the RX and TX DMA descriptors).
 
 Its `[[review]]` entries follow the register rules: for publication the
 layout, every word or range and every field carry sources, provenance (not

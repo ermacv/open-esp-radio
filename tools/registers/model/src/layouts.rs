@@ -49,6 +49,10 @@ struct LayoutSource {
     align: u32,
     #[serde(default)]
     placement: Vec<String>,
+    /// A layout whose geometry this one repeats: the same size, alignment,
+    /// placement, words or ranges, and bits for every field both name.
+    #[serde(default)]
+    same_geometry_as: Option<String>,
     #[serde(default)]
     words: Vec<UnitSource>,
     #[serde(default)]
@@ -127,6 +131,8 @@ pub struct MemoryLayout {
     pub align: u32,
     /// RAM regions of the memory map the structure must lie in.
     pub placement: Vec<String>,
+    /// The layout whose geometry this one repeats.
+    pub same_geometry_as: Option<String>,
     pub kind: LayoutKind,
     /// Words or byte ranges, in offset order.
     pub units: Vec<LayoutUnit>,
@@ -278,6 +284,7 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         size: source.size,
         align: source.align,
         placement: source.placement,
+        same_geometry_as: source.same_geometry_as,
         kind,
         units,
         review: file.review,
@@ -500,6 +507,18 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
         }
     }
     for layout in layouts {
+        if let Some(other) = &layout.same_geometry_as {
+            let other = layouts
+                .iter()
+                .find(|candidate| &candidate.name == other && candidate.name != layout.name)
+                .ok_or_else(|| {
+                    Error::message(format!(
+                        "{} repeats the geometry of {other}, which is not another layout of this model",
+                        layout.name
+                    ))
+                })?;
+            validate_same_geometry(layout, other)?;
+        }
         for unit in &layout.units {
             for field in &unit.fields {
                 if let Some(target) = &field.layout
@@ -510,6 +529,39 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
                         layout.name, unit.name, field.name
                     )));
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `layout` repeats `other`'s geometry: kind, size, alignment, placement,
+/// the words or ranges, and the bits of every field both units name.
+fn validate_same_geometry(layout: &MemoryLayout, other: &MemoryLayout) -> Result<()> {
+    let differs = |what: &str| {
+        Error::message(format!(
+            "{} repeats the geometry of {} but its {what} differs",
+            layout.name, other.name
+        ))
+    };
+    if layout.kind != other.kind || layout.size != other.size || layout.align != other.align {
+        return Err(differs("size, alignment or kind"));
+    }
+    if layout.placement != other.placement {
+        return Err(differs("placement"));
+    }
+    if layout.units.len() != other.units.len() {
+        return Err(differs("set of words"));
+    }
+    for (unit, peer) in layout.units.iter().zip(&other.units) {
+        if unit.name != peer.name || unit.offset != peer.offset || unit.size != peer.size {
+            return Err(differs(&format!("word {}", unit.name)));
+        }
+        for field in &unit.fields {
+            if let Some(peer) = peer.fields.iter().find(|peer| peer.name == field.name)
+                && (peer.low, peer.width) != (field.low, field.width)
+            {
+                return Err(differs(&format!("field {}.{}", unit.name, field.name)));
             }
         }
     }
