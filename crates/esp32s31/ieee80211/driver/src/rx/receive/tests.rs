@@ -1365,6 +1365,142 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     assert_eq!(harness.report().exhaustion.snapshots, 1);
 }
 
+/// Hold every staging slot of a returning harness for `hold_ms`.
+fn hold_full_pool(harness: &mut Harness, held: &Returned, hold_ms: u32) {
+    for _ in 0..STAGE {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    assert_eq!(held.borrow().len(), STAGE);
+    let release_at = oer_time::Clock::now(harness.clock)
+        .saturating_add(oer_time::Duration::from_millis(hold_ms));
+    harness.clock.advance_to(release_at);
+}
+
+#[test]
+fn a_snapshot_keeps_the_next_its_first_passs_reload_read() {
+    let (mut harness, held, _, _) = returning_harness();
+    hold_full_pool(&mut harness, held, 1_000);
+    let next_low = harness.host.walker.borrow().next_descriptor_low;
+    assert_ne!(next_low, 0);
+    // The oldest lease comes back: it heads the released prefix, so the
+    // drain's first pass appends it and completes a reload, which reads
+    // NEXT (nonzero: LAST is not read).
+    let before = harness.report().reload.observations;
+    held.borrow_mut().remove(0);
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.reload.observations, before + 1);
+    let snapshot = report
+        .exhaustion
+        .latest
+        .expect("the return took a snapshot");
+    assert_eq!(snapshot.next_after_doorbell, Some(next_low));
+    assert_eq!(snapshot.last_after_doorbell, None);
+    // Nothing wrote a descriptor while the pool was full.
+    assert!(!snapshot.descriptors_changed);
+    assert_eq!(report.exhaustion.longest, Some(snapshot));
+}
+
+#[test]
+fn a_snapshot_without_a_reload_in_its_first_pass_has_no_doorbell_read() {
+    let (mut harness, held, _, _) = returning_harness();
+    hold_full_pool(&mut harness, held, 1_000);
+    // The newest lease comes back: it is not at the recycle frontier, so
+    // the first pass appends nothing and completes no reload.
+    let before = harness.report().reload.observations;
+    held.borrow_mut().pop();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.reload.observations, before);
+    let snapshot = report
+        .exhaustion
+        .latest
+        .expect("the return took a snapshot");
+    assert_eq!(
+        (snapshot.next_after_doorbell, snapshot.last_after_doorbell),
+        (None, None)
+    );
+}
+
+#[test]
+fn a_snapshot_of_an_exhausted_walker_keeps_the_last_its_reload_read() {
+    let (mut harness, held, _, _) = returning_harness();
+    // Every descriptor completes behind the held leases and the walker
+    // reaches NEXT = 0 at the last one.
+    for _ in 0..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    assert_eq!(held.borrow().len(), STAGE);
+    let last_low = harness.host.walker.borrow().last_descriptor_low;
+    held.borrow_mut().remove(0);
+    harness.settle();
+    let snapshot = harness
+        .report()
+        .exhaustion
+        .latest
+        .expect("the return took a snapshot");
+    // The registers before the drain: the exhausted walker.
+    assert_eq!((snapshot.next_low, snapshot.last_low), (0, last_low));
+    // The first pass's reload read NEXT = 0 and then LAST.
+    assert_eq!(
+        (snapshot.next_after_doorbell, snapshot.last_after_doorbell),
+        (Some(0), Some(last_low))
+    );
+}
+
+#[test]
+fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
+    let (mut harness, held, _, _) = returning_harness();
+    hold_full_pool(&mut harness, held, 1_000);
+    // A word of a held lease's descriptor changes during the hold.
+    harness.rx.descriptors()[3]
+        .write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | BIT_30 | BIT_31);
+    held.borrow_mut().pop();
+    harness.settle();
+    let snapshot = harness
+        .report()
+        .exhaustion
+        .latest
+        .expect("the return took a snapshot");
+    assert!(snapshot.descriptors_changed);
+}
+
+#[test]
+fn the_latest_snapshot_follows_every_return_and_the_longest_keeps_the_longest() {
+    let (mut harness, held, _, _) = returning_harness();
+    hold_full_pool(&mut harness, held, 1_000);
+    held.borrow_mut().remove(0);
+    harness.settle();
+    let first = harness.report().exhaustion.latest.expect("a snapshot");
+    // One more frame fills the pool again; a shorter hold, then the newest
+    // lease comes back.
+    harness.frame(80);
+    harness.settle();
+    assert_eq!(held.borrow().len(), STAGE);
+    let release_at =
+        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(500));
+    harness.clock.advance_to(release_at);
+    held.borrow_mut().pop();
+    harness.settle();
+    let exhaustion = harness.report().exhaustion;
+    assert_eq!(exhaustion.snapshots, 2);
+    let latest = exhaustion.latest.expect("a snapshot");
+    assert!(latest.blocked_us < first.blocked_us, "{latest:?} {first:?}");
+    assert_eq!(latest.next_after_doorbell, None);
+    assert_eq!(exhaustion.longest, Some(first));
+}
+
 #[test]
 fn a_walker_restart_counts_one_republication_one_capacity_drain_and_frames_after() {
     let (mut harness, held, holding, _) = returning_harness();

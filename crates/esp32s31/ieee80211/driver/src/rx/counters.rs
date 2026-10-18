@@ -6,8 +6,8 @@
 //! at any time. Counts wrap. The reload evidence is the ring's own
 //! (saturating, its maximum stops at the attempt limit), copied after every
 //! service pass; the teardown durations are written once, by the teardown.
-//! The exhaustion snapshot is the runner's, written when a lease returns to
-//! a full staging pool ([`WifiRxExhaustion`]).
+//! The exhaustion snapshots are the runner's, written when a lease returns
+//! to a full staging pool ([`WifiRxExhaustion`]): the longest and the latest.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -400,8 +400,9 @@ impl PrefixCounters {
 /// The walker and the ring as the runner read them when a lease returned
 /// after a drain had left every staging slot claimed or every buffer
 /// detached: the registers before the capacity drain's first service pass,
-/// in the state of the full pool (one lease already back). Report-only: no
-/// field takes part in descriptor ownership.
+/// in the state of the full pool (one lease already back), and what that
+/// first pass's reload read. Report-only: no field takes part in descriptor
+/// ownership.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxExhaustion {
     /// How long the pool stayed full, from the first drain that left it so
@@ -437,6 +438,21 @@ pub struct WifiRxExhaustion {
     pub released: u32,
     pub detached: u32,
     pub staged: u32,
+    /// After the capacity drain's first service pass: `RX_NEXT_DESCRIPTOR`
+    /// (low address) as the ring's reload completion read it right after
+    /// the doorbell cleared, and `RX_LAST_DESCRIPTOR` (low), which that
+    /// completion reads only when NEXT is zero. The ring's latest reload
+    /// observation ([`RxReloadRepairEvidence::last_next_low`],
+    /// [`RxReloadRepairEvidence::last_last_low`]) when that pass made one,
+    /// otherwise both `None`; a pass that completed several reloads leaves
+    /// its last one.
+    pub next_after_doorbell: Option<u32>,
+    pub last_after_doorbell: Option<u32>,
+    /// Whether any descriptor word (status, buffer address or link of any
+    /// descriptor) differed between the first drain that left the pool
+    /// full and the return: a 32-bit FNV-1a hash of every word, taken at
+    /// both points.
+    pub descriptors_changed: bool,
 }
 
 const NEXT_UPPER: u32 = 1 << 0;
@@ -446,12 +462,13 @@ const RELOAD_DOORBELL: u32 = 1 << 3;
 const BUFFER_FULL_READ: u32 = 1 << 4;
 const REMAINING_KNOWN: u32 = 1 << 5;
 const RELOAD_PENDING: u32 = 1 << 6;
+const NEXT_AFTER_DOORBELL: u32 = 1 << 7;
+const LAST_AFTER_DOORBELL: u32 = 1 << 8;
+const DESCRIPTORS_CHANGED: u32 = 1 << 9;
 
-/// The exhaustion snapshot of the longest full-pool stretch, and how many
-/// such stretches a returned lease ended.
+/// One stored [`WifiRxExhaustion`], a word per field and one flag word.
 #[derive(bytemuck::Zeroable, Default)]
-struct ExhaustionCounters {
-    snapshots: AtomicU32,
+struct SnapshotWords {
     blocked_us: AtomicU32,
     flags: AtomicU32,
     next_low: AtomicU32,
@@ -467,21 +484,13 @@ struct ExhaustionCounters {
     released: AtomicU32,
     detached: AtomicU32,
     staged: AtomicU32,
+    next_after_doorbell: AtomicU32,
+    last_after_doorbell: AtomicU32,
 }
 
-/// One reading of the exhaustion snapshot.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct WifiRxExhaustionReport {
-    /// Full-pool stretches a returned lease ended.
-    pub snapshots: u32,
-    /// The snapshot of the longest of them; `None` before the first.
-    pub longest: Option<WifiRxExhaustion>,
-}
-
-impl ExhaustionCounters {
+impl SnapshotWords {
     const fn new() -> Self {
         Self {
-            snapshots: AtomicU32::new(0),
             blocked_us: AtomicU32::new(0),
             flags: AtomicU32::new(0),
             next_low: AtomicU32::new(0),
@@ -497,15 +506,12 @@ impl ExhaustionCounters {
             released: AtomicU32::new(0),
             detached: AtomicU32::new(0),
             staged: AtomicU32::new(0),
+            next_after_doorbell: AtomicU32::new(0),
+            last_after_doorbell: AtomicU32::new(0),
         }
     }
 
-    /// Count `snapshot`; keep it when its block is the longest so far.
-    fn record(&self, snapshot: WifiRxExhaustion) {
-        let previous = self.snapshots.fetch_add(1, Ordering::Relaxed);
-        if previous != 0 && snapshot.blocked_us < self.blocked_us.load(Ordering::Relaxed) {
-            return;
-        }
+    fn store(&self, snapshot: &WifiRxExhaustion) {
         let flag = |set: bool, bit: u32| if set { bit } else { 0 };
         let flags = flag(snapshot.next_upper, NEXT_UPPER)
             | flag(snapshot.base.is_some(), BASE_READ)
@@ -513,7 +519,10 @@ impl ExhaustionCounters {
             | flag(snapshot.reload_doorbell, RELOAD_DOORBELL)
             | flag(snapshot.buffer_full.is_some(), BUFFER_FULL_READ)
             | flag(snapshot.remaining.is_some(), REMAINING_KNOWN)
-            | flag(snapshot.reload_pending, RELOAD_PENDING);
+            | flag(snapshot.reload_pending, RELOAD_PENDING)
+            | flag(snapshot.next_after_doorbell.is_some(), NEXT_AFTER_DOORBELL)
+            | flag(snapshot.last_after_doorbell.is_some(), LAST_AFTER_DOORBELL)
+            | flag(snapshot.descriptors_changed, DESCRIPTORS_CHANGED);
         let store = |counter: &AtomicU32, value: u32| counter.store(value, Ordering::Relaxed);
         store(&self.blocked_us, snapshot.blocked_us);
         store(&self.flags, flags);
@@ -533,14 +542,21 @@ impl ExhaustionCounters {
         store(&self.released, snapshot.released);
         store(&self.detached, snapshot.detached);
         store(&self.staged, snapshot.staged);
+        store(
+            &self.next_after_doorbell,
+            snapshot.next_after_doorbell.unwrap_or(0),
+        );
+        store(
+            &self.last_after_doorbell,
+            snapshot.last_after_doorbell.unwrap_or(0),
+        );
     }
 
-    fn report(&self) -> WifiRxExhaustionReport {
+    fn load(&self) -> WifiRxExhaustion {
         let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
-        let snapshots = load(&self.snapshots);
         let flags = load(&self.flags);
         let set = |bit: u32| flags & bit != 0;
-        let longest = (snapshots != 0).then(|| WifiRxExhaustion {
+        WifiRxExhaustion {
             blocked_us: load(&self.blocked_us),
             next_low: load(&self.next_low),
             next_upper: set(NEXT_UPPER),
@@ -560,8 +576,62 @@ impl ExhaustionCounters {
             released: load(&self.released),
             detached: load(&self.detached),
             staged: load(&self.staged),
-        });
-        WifiRxExhaustionReport { snapshots, longest }
+            next_after_doorbell: set(NEXT_AFTER_DOORBELL).then(|| load(&self.next_after_doorbell)),
+            last_after_doorbell: set(LAST_AFTER_DOORBELL).then(|| load(&self.last_after_doorbell)),
+            descriptors_changed: set(DESCRIPTORS_CHANGED),
+        }
+    }
+}
+
+/// How many full-pool stretches a returned lease ended, and the exhaustion
+/// snapshots of the longest and of the latest of them. The runner is the
+/// one writer; a reader concurrent with a write may see a mix of two
+/// snapshots, so a reader that needs one whole reads while no lease
+/// returns.
+#[derive(bytemuck::Zeroable, Default)]
+struct ExhaustionCounters {
+    snapshots: AtomicU32,
+    longest: SnapshotWords,
+    latest: SnapshotWords,
+}
+
+/// One reading of the exhaustion snapshots.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxExhaustionReport {
+    /// Full-pool stretches a returned lease ended.
+    pub snapshots: u32,
+    /// The snapshot of the longest of them; `None` before the first.
+    pub longest: Option<WifiRxExhaustion>,
+    /// The snapshot of the latest of them; `None` before the first.
+    pub latest: Option<WifiRxExhaustion>,
+}
+
+impl ExhaustionCounters {
+    const fn new() -> Self {
+        Self {
+            snapshots: AtomicU32::new(0),
+            longest: SnapshotWords::new(),
+            latest: SnapshotWords::new(),
+        }
+    }
+
+    /// Count `snapshot`, keep it as the latest, and as the longest when its
+    /// block is the longest so far.
+    fn record(&self, snapshot: WifiRxExhaustion) {
+        let previous = self.snapshots.fetch_add(1, Ordering::Relaxed);
+        self.latest.store(&snapshot);
+        if previous == 0 || snapshot.blocked_us >= self.longest.blocked_us.load(Ordering::Relaxed) {
+            self.longest.store(&snapshot);
+        }
+    }
+
+    fn report(&self) -> WifiRxExhaustionReport {
+        let snapshots = self.snapshots.load(Ordering::Relaxed);
+        WifiRxExhaustionReport {
+            snapshots,
+            longest: (snapshots != 0).then(|| self.longest.load()),
+            latest: (snapshots != 0).then(|| self.latest.load()),
+        }
     }
 }
 
@@ -803,7 +873,7 @@ impl WifiRxCounters {
     }
 
     /// A lease returned to a full pool; `snapshot` is what the runner read
-    /// before its capacity drain.
+    /// before its capacity drain and after that drain's first pass.
     pub(crate) fn exhaustion(&self, snapshot: WifiRxExhaustion) {
         self.exhaustion.record(snapshot);
     }
