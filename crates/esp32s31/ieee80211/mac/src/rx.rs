@@ -1,6 +1,6 @@
 //! RX descriptor metadata decoding and bounded raw MPDU extraction.
 
-use oer_esp32s31_ieee80211_dma::descriptor::{length as descriptor_length, rx_done};
+use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
 pub use oer_esp32s31_ieee80211_dma::{
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
@@ -27,35 +27,15 @@ pub const INGRESS_STRICT_RXEND: u32 = 0x01;
 pub const INGRESS_STRICT_DUMP: u32 = 0x02;
 pub const INGRESS_VALID_FLAGS: u32 = 0x03;
 
-pub const FIXED_PREFIX_SIZE: usize = 0x38;
-pub const DYNAMIC_TAIL_SIZE: usize = 0x08;
-pub const PUBLIC_HEADER_SIZE: usize = 0x40;
+/// The fixed RX-control prefix's bytes ([`WifiRxControlPrefix`]).
+pub const FIXED_PREFIX_SIZE: usize = WifiRxControlPrefix::SIZE;
+/// The dynamic tail's bytes ([`WifiRxControlTail`]).
+pub const DYNAMIC_TAIL_SIZE: usize = WifiRxControlTail::SIZE;
+pub const PUBLIC_HEADER_SIZE: usize = FIXED_PREFIX_SIZE + DYNAMIC_TAIL_SIZE;
 pub const FCS_SIZE: usize = 4;
 pub const CCMP_HEADER_SIZE: usize = 8;
 pub const CCMP_MIC_SIZE: usize = 8;
-pub const PREFIX_RXEND_STATE_OFFSET: usize = 0x08;
-pub const TAIL_STATE_OFFSET: usize = 0x04;
-pub const TAIL_INTERNAL_OFFSET: usize = 0x05;
 
-const RX_PHY_RATE_OFFSET: usize = 0x01;
-const RX_PHY_RSSI_OFFSET: usize = 0x00;
-const RX_PHY_HE_SIGA1_OFFSET: usize = 0x04;
-const RX_PHY_HE_SIGA2_OFFSET: usize = 0x09;
-const RX_LOCAL_TIMESTAMP_OFFSET: usize = 0x0c;
-const RX_PHY_SINGLE_MPDU_OFFSET: usize = 0x1f;
-const RX_PHY_BB_FORMAT_OFFSET: usize = 0x25;
-const RX_PHY_HE_MU_RU_SIZE_OFFSET: usize = 0x1a;
-const RX_PHY_HE_MU_RU_POSITION_OFFSET: usize = 0x1e;
-const RX_PHY_HE_MU_USER_INFO_OFFSET: usize = 0x28;
-const RX_PHY_HE_MU_SIG_B_LENGTH_REMAINDER_OFFSET: usize = 0x2a;
-const RX_PHY_HE_MU_SIG_B_LENGTH_FLAGS_OFFSET: usize = 0x2b;
-const RX_PHY_HE_MU_COMMON_INFO_OFFSET: usize = 0x2d;
-const RX_PHY_COMPLETE_SIG_B_OFFSET: usize = 0x38;
-
-const CSI_LENGTH_LOW_OFFSET: usize = 0x26;
-const CSI_LENGTH_FLAGS_OFFSET: usize = 0x27;
-const OPTION_LENGTH_HINT_OFFSET: usize = 0x2a;
-const OPTION_LENGTH_FLAGS_OFFSET: usize = 0x2b;
 const CSI_APPEND_ENABLE: u32 = 0x0080_0000;
 
 const MLME_HEADER_SIZE: usize = 24;
@@ -108,7 +88,7 @@ pub struct RxFirstSegmentLayout {
 
 /// Stable radio fields from the public 64-byte ESP32-S31 RX-control prefix.
 ///
-/// SOURCE: public ESP32-S31 `esp_wifi_rxctrl_t` definition. The packed ABI
+/// SOURCE\[ESP_WIFI_SYS_S31_RXCTRL]: public ESP32-S31 `esp_wifi_rxctrl_t`. The packed ABI
 /// places the five-bit `rate`
 /// at byte 1, HE-SIGA1 at bytes 4..8, HE-SIGA2 at bytes 9..11 and the
 /// four-bit `cur_bb_format` in the high nibble of byte 37.
@@ -670,36 +650,26 @@ impl RxHeMuSigBInfo<'_> {
 }
 
 pub fn decode_rx_he_mu_sig_b(buffer: &[u8]) -> Option<RxHeMuSigBInfo<'_>> {
-    if buffer.len() < FIXED_PREFIX_SIZE {
-        return None;
-    }
+    let prefix = WifiRxControlPrefix::new(buffer.first_chunk::<FIXED_PREFIX_SIZE>()?);
     let phy = decode_rx_phy_info(buffer)?;
     let signal = phy.he_mu_signal()?;
-    let length_remainder = *buffer.get(RX_PHY_HE_MU_SIG_B_LENGTH_REMAINDER_OFFSET)? >> 5;
-    let length_flags = *buffer.get(RX_PHY_HE_MU_SIG_B_LENGTH_FLAGS_OFFSET)?;
-    let bit_length = u16::from(length_flags & 0x7f) * 8 + u16::from(length_remainder);
+    let sig_b = prefix.he_sig_b();
+    let bit_length = u16::from(sig_b.length_bytes()) * 8 + u16::from(sig_b.length_bits());
     let byte_length = usize::from(bit_length).div_ceil(8);
-    let complete_bytes = if length_flags & 0x80 != 0 {
-        buffer.get(
-            RX_PHY_COMPLETE_SIG_B_OFFSET..RX_PHY_COMPLETE_SIG_B_OFFSET.checked_add(byte_length)?,
-        )?
+    let complete_bytes = if sig_b.present() {
+        buffer.get(FIXED_PREFIX_SIZE..FIXED_PREFIX_SIZE.checked_add(byte_length)?)?
     } else {
         &[]
     };
-    let selected_user_info_raw = u32::from(*buffer.get(RX_PHY_HE_MU_USER_INFO_OFFSET)?)
-        | (u32::from(*buffer.get(RX_PHY_HE_MU_USER_INFO_OFFSET + 1)?) << 8)
-        | (u32::from(*buffer.get(RX_PHY_HE_MU_SIG_B_LENGTH_REMAINDER_OFFSET)? & 0x1f) << 16);
-    let common_info_raw = u32::from(*buffer.get(RX_PHY_HE_MU_COMMON_INFO_OFFSET)? >> 2)
-        | (u32::from(*buffer.get(RX_PHY_HE_MU_COMMON_INFO_OFFSET + 1)?) << 6)
-        | (u32::from(*buffer.get(RX_PHY_HE_MU_COMMON_INFO_OFFSET + 2)? & 0x7f) << 14);
+    let selected_user_info_raw = sig_b.selected_user();
     Some(RxHeMuSigBInfo {
         signal,
         bit_length,
-        common_info_raw,
+        common_info_raw: prefix.he_mu_common().common_info(),
         selected_user_info_raw,
         selected_user: HeMuSigBUser::decode(selected_user_info_raw, signal.sig_b_compression),
-        ru_size: *buffer.get(RX_PHY_HE_MU_RU_SIZE_OFFSET)? & 0x03,
-        ru_position: *buffer.get(RX_PHY_HE_MU_RU_POSITION_OFFSET)? >> 4,
+        ru_size: prefix.he_mu_ru_size().ru_size(),
+        ru_position: prefix.he_mu_ru_position().ru_position(),
         complete_bytes,
     })
 }
@@ -888,7 +858,7 @@ fn copy_frame(
         if copied == length {
             break;
         }
-        let segment_length = descriptor_length(segment.descriptor_word0) as usize;
+        let segment_length = usize::from(segment.descriptor_word0.length());
         let offset = if index == 0 { first_offset } else { 0 };
         let Some(available) = segment_length.checked_sub(offset) else {
             return false;
@@ -928,13 +898,13 @@ fn extract_mpdu_allowing_consumed_trailer(
             return Err(RxError::Chain);
         }
         if let Some(next) = segments.get(index + 1)
-            && (rx_done(segment.descriptor_word0)
+            && (segment.descriptor_word0.rx_done()
                 || segment.next_descriptor_address != next.descriptor_address)
         {
             return Err(RxError::Chain);
         }
     }
-    if !rx_done(segments.last().unwrap().descriptor_word0) {
+    if !segments.last().unwrap().descriptor_word0.rx_done() {
         return Err(RxError::Chain);
     }
 
@@ -942,7 +912,7 @@ fn extract_mpdu_allowing_consumed_trailer(
     let mut available = layout.available_frame_bytes;
     for segment in &segments[1..] {
         available = available
-            .checked_add(descriptor_length(segment.descriptor_word0) as usize)
+            .checked_add(usize::from(segment.descriptor_word0.length()))
             .ok_or(RxError::Bounds)?;
     }
     let expected_frame_length = layout.expected_frame_length;
@@ -1179,7 +1149,7 @@ fn view_ccmp_data_with_fragment_admission<'frame>(
     if config.ring_entry_limit == 0
         || config.flags & !INGRESS_VALID_FLAGS != 0
         || !segment_valid(segment)
-        || !rx_done(segment.descriptor_word0)
+        || !segment.descriptor_word0.rx_done()
     {
         return Err(RxError::Invalid);
     }

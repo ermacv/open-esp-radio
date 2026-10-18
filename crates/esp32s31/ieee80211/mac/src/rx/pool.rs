@@ -63,7 +63,7 @@ pub enum RxDmaDeferredStageUnitOutcome<'pool, const SLOTS: usize, const CAPACITY
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StagedMetadata {
     descriptor_address: u32,
-    descriptor_word0: u32,
+    descriptor_word0: oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
     next_descriptor_address: u32,
     length: usize,
 }

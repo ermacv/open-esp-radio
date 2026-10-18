@@ -20,11 +20,13 @@ use svd_rs::{
 mod descriptions;
 mod draft;
 mod geometry;
+mod layouts;
 pub mod memory;
 pub use descriptions::{description_directories, descriptions};
 pub use draft::{ModelDraft, ModelInit, PeripheralInit};
 mod model_validation;
 pub use geometry::{FieldGeometry, PeripheralRegion, RegisterGeometry, svd_geometry, svd_regions};
+pub use layouts::{LayoutAccess, LayoutField, LayoutKind, LayoutUnit, LayoutWriter, MemoryLayout};
 mod pac_api;
 mod pac_api_render;
 mod pac_api_svd;
@@ -144,6 +146,9 @@ pub struct RegisterModelManifest {
     /// Library layouts this chip places at its own base addresses.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_fragments: Vec<SharedFragmentReference>,
+    /// Memory layouts: structures in RAM whose format the hardware defines.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layouts: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -218,6 +223,7 @@ pub struct RegisterModel {
     review: Vec<ReviewAnnotation>,
     reviewed_register_facts: Vec<EffectiveAssertion>,
     shared_peripherals: BTreeMap<String, SharedPeripheral>,
+    layouts: Vec<MemoryLayout>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -282,6 +288,11 @@ impl RegisterModel {
         }
         for reference in &manifest.shared_fragments {
             paths.extend(shared::placed_fragment_inputs(path, reference)?);
+        }
+        for relative in &manifest.layouts {
+            validate_relative_fragment(relative)
+                .map_err(|error| Error::manifest("register model manifest", path, error))?;
+            paths.push(base.join(relative));
         }
         Ok(paths)
     }
@@ -405,6 +416,21 @@ impl RegisterModel {
         }
         validate_peripheral_names(&peripherals)
             .map_err(|error| Error::manifest("register model", path, error))?;
+        let layouts = layouts::load_layouts(base, &manifest.layouts, &mut loaded_inputs, naming)
+            .map_err(|error| match error {
+                Error::Manifest { .. } => error,
+                error => Error::manifest("register model manifest", path, error),
+            })?;
+        if let Some(layout) = layouts
+            .iter()
+            .find(|layout| peripherals.iter().any(|p| p.name == layout.name))
+        {
+            return Err(Error::manifest(
+                "register model",
+                path,
+                format!("layout {} has the name of a peripheral", layout.name),
+            ));
+        }
         validate_review_annotations(&fragments, naming)
             .map_err(|error| Error::manifest("register model", path, error))?;
         let review = fragments
@@ -423,6 +449,7 @@ impl RegisterModel {
             review,
             reviewed_register_facts: Vec::new(),
             shared_peripherals,
+            layouts,
         };
         model
             .register_identities()
@@ -564,6 +591,17 @@ impl RegisterModel {
     }
 
     /// Peripherals whose layout comes from a register library, by name.
+    /// The model's memory layouts.
+    pub fn layouts(&self) -> &[MemoryLayout] {
+        &self.layouts
+    }
+
+    /// The `layouts` module of the PAC API: the layouts and the RAM regions
+    /// of `memory` they name. Empty for a model without layouts.
+    pub fn render_layouts_rust(&self, memory: &memory::Memory) -> Result<String> {
+        layouts::render(&self.layouts, &memory.ram_regions())
+    }
+
     pub fn shared_peripherals(&self) -> &BTreeMap<String, SharedPeripheral> {
         &self.shared_peripherals
     }

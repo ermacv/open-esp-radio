@@ -5,7 +5,7 @@
 
 use std::vec::Vec;
 
-use oer_esp32s31_ieee80211_dma::descriptor::{LENGTH_SHIFT, OWNER, RX_DONE, SIZE_MASK};
+use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
 use oer_ieee80211_mac::{
     channel::{Channel, ChannelWidth},
     fuzz::{FULL, QUICK, XorShift, inputs},
@@ -39,9 +39,16 @@ fn unit(format: u8, siga1: u32, mpdu_length: usize) -> Vec<u8> {
 }
 
 /// The descriptor word of a completed single-descriptor unit of `length`.
-fn completed_word(length: usize) -> u32 {
-    let length = (length as u32).min(SIZE_MASK);
-    length | (length << LENGTH_SHIFT) | RX_DONE | OWNER
+/// Lengths beyond the length field are clamped to its largest value.
+fn completed_word(length: usize) -> WifiRxDmaDescriptorControl {
+    let largest = WifiRxDmaDescriptorControl::from_bits(u32::MAX).length();
+    let length = u16::try_from(length).unwrap_or(u16::MAX).min(largest);
+    WifiRxDmaDescriptorControl::ZERO
+        .with_size(length)
+        .and_then(|word0| word0.with_length(length))
+        .expect("a clamped length fits")
+        .with_rx_done(true)
+        .with_owner(true)
 }
 
 fn config(flags: u32, csi_config: u32) -> RxIngressConfig {
@@ -74,9 +81,9 @@ fn a_seed_unit_decodes_at_the_normalized_boundary() {
 /// whether the normalized view admitted the unit.
 fn exercise(buffer: &[u8], rng: &mut XorShift) -> bool {
     let descriptor_word0 = match rng.below(8) {
-        0 => rng.next() as u32,
+        0 => WifiRxDmaDescriptorControl::from_bits(rng.next() as u32),
         1 => completed_word(rng.below(buffer.len().saturating_add(64))),
-        2 => completed_word(buffer.len()) & !RX_DONE,
+        2 => completed_word(buffer.len()).with_rx_done(false),
         _ => completed_word(buffer.len()),
     };
     let descriptor_address = if rng.below(16) == 0 {

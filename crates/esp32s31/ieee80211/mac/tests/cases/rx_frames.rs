@@ -15,7 +15,7 @@ fn single_frame_segment<'a>(storage: &'a mut [u8; 128], frame_control_low: u8) -
 
     RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: storage,
         next_descriptor_address: 0,
     }
@@ -106,7 +106,7 @@ fn data_rx_reports_qos_llc_payload_offset() {
         .copy_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e]);
     let segment = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };
@@ -156,7 +156,7 @@ fn ccmp_data_rx_reproduces_the_oracle_header_and_mic_adjustment() {
         .copy_from_slice(&[1, 2, 3, 4]);
     let segment = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };
@@ -210,7 +210,7 @@ fn ccmp_data_rx_rejects_reserved_header_encodings() {
             .copy_from_slice(&header);
         let segment = RxSegment {
             descriptor_address: 0x2f00_4000,
-            descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+            descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
             buffer: &storage,
             next_descriptor_address: 0,
         };
@@ -245,7 +245,7 @@ fn first_segment_layout_exposes_a_consumed_ccmp_mic_shortfall() {
     );
     let segment = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };
@@ -292,7 +292,7 @@ fn ccmp_data_rx_accepts_a_hardware_consumed_mic() {
         .copy_from_slice(&[1, 2, 3, 4]);
     let segment = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };
@@ -342,7 +342,7 @@ fn ccmp_data_rx_accepts_a_dma_view_ending_inside_the_verified_mic() {
         .copy_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x08, 0x06]);
     let segment = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 192 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(192, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };
@@ -388,7 +388,7 @@ fn ccmp_data_rx_rejects_missing_extiv_and_hardware_mic_failure() {
     {
         let segment = RxSegment {
             descriptor_address: 0x2f00_4000,
-            descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+            descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
             buffer: &storage,
             next_descriptor_address: 0,
         };
@@ -402,7 +402,7 @@ fn ccmp_data_rx_rejects_missing_extiv_and_hardware_mic_failure() {
     storage[TAIL_OFFSET + 4] = 0xf5;
     let failed = RxSegment {
         descriptor_address: 0x2f00_4000,
-        descriptor_word0: 128 | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
+        descriptor_word0: rx_landed_word(128, RECEIVED as u32, true),
         buffer: &storage,
         next_descriptor_address: 0,
     };

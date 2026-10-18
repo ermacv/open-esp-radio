@@ -6,9 +6,7 @@
 use std::{boxed::Box, vec, vec::Vec};
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE},
-    rx_dma::model::RxWalkerModel,
-    rx_storage::RxDmaStorage,
+    descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
 };
 use oer_esp32s31_ieee80211_mac::rx::{
@@ -74,12 +72,11 @@ impl Ring {
                     .dma_write(&self.live, self.buffers[index], &[0; 4])
                     .unwrap();
             }
-            self.storage.descriptors()[index].write_word0(
-                BUFFER as u32
-                    | (length << LENGTH_SHIFT)
-                    | if terminal { RX_DONE } else { 0 }
-                    | OWNER,
-            );
+            self.storage.descriptors()[index].write_word0(rx_landed_word(
+                BUFFER as u32,
+                length,
+                terminal,
+            ));
         }
         self.next += lengths.len();
         self.walker

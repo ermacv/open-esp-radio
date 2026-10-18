@@ -39,7 +39,7 @@ and invariants in `tools/registers/model`. Reviewed model, ownership policy and 
 | --- | --- |
 | [Radio SVD](../../../registers/esp32s31/published/radio.svd) | Published from the reviewed chip register model and project policy |
 | [raw/src/lib.rs](../pac-raw/src/lib.rs) | Generated svd2rust register accessors from that SVD |
-| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../../../registers/esp32s31/policy/api.toml) |
+| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../../../registers/esp32s31/policy/api.toml), and the `layouts` module of the model's memory layouts (`registers/esp32s31/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts` |
 | [Radio bindings](../../../registers/esp32s31/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
 | [src/ownership.rs](src/ownership.rs) and domain modules | Handwritten authority, register-local operations and restricted access |
 

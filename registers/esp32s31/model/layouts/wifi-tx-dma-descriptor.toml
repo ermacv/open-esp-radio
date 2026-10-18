@@ -1,0 +1,143 @@
+schema = 1
+
+[layout]
+name = "WIFI_TX_DMA_DESCRIPTOR"
+description = """
+The 12-byte node the Wi-Fi TX DMA engine follows: the control word, the
+buffer address and the link to the next node of a chain."""
+size = 12
+align = 4
+placement = ["dma-window"]
+same-geometry-as = "WIFI_RX_DMA_DESCRIPTOR"
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0x00
+access = "shared"
+
+[[layout.words.fields]]
+name = "TX_OWNED"
+bits = "31"
+writer = "cpu"
+description = "Set by software to hand the descriptor to the MAC. Whether the TX engine checks it as the RX walker checks OWNER is not verified."
+
+[[layout.words.fields]]
+name = "TX_LAST"
+bits = "30"
+writer = "cpu"
+description = "Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; not the RX RX_DONE."
+
+[[layout.words.fields]]
+name = "LENGTH"
+bits = "27:14"
+writer = "cpu"
+description = "The populated source bytes of the buffer."
+
+[[layout.words.fields]]
+name = "SIZE"
+bits = "13:0"
+writer = "cpu"
+description = "The buffer's capacity in bytes."
+
+[[layout.words]]
+name = "BUFFER"
+offset = 0x04
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "The buffer's address."
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "NEXT"
+offset = 0x08
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "The next descriptor's address, or zero at the end."
+layout = "WIFI_TX_DMA_DESCRIPTOR"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.TX_OWNED"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.TX_LAST"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.LENGTH"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.SIZE"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.BUFFER"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.BUFFER.ADDRESS"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.NEXT"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.NEXT.ADDRESS"
+sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

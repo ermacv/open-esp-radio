@@ -4,7 +4,6 @@ use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaR
 use std::{boxed::Box, cell::Cell, rc::Rc};
 
 use super::*;
-use crate::descriptor::{length, size};
 
 use crate::space::{HOST_ARENA_BASE, HostDma};
 
@@ -157,8 +156,8 @@ fn internal_chain_publishes_phased_dma_authority() {
     publication.commit(|start| start_head = start.descriptor_head());
     assert_eq!(start_head, DESCRIPTOR_BASE);
     assert_eq!(storage.state(), AmpduDmaState::HardwareOwned);
-    assert_eq!(size(storage.descriptor_word0(0).unwrap()), 256);
-    assert_eq!(length(storage.descriptor_word0(0).unwrap()), 100);
+    assert_eq!(storage.descriptor_word0(0).unwrap().size(), 256);
+    assert_eq!(storage.descriptor_word0(0).unwrap().length(), 100);
     assert_eq!(
         storage.descriptor_next_address(0),
         Some(DESCRIPTOR_BASE + DESCRIPTOR_BYTES)
@@ -204,15 +203,21 @@ fn terminal_release_clears_only_the_last_published_prefix() {
         .unwrap()
         .commit(|_| {});
     let stale_suffix = storage.descriptor_word0(2).unwrap();
-    assert_ne!(stale_suffix, 0);
+    assert_ne!(stale_suffix, WifiTxDmaDescriptorControl::ZERO);
     storage.mark_completed().unwrap();
     storage
         .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
         .unwrap();
     storage.release_detached().unwrap();
 
-    assert_eq!(storage.descriptor_word0(0), Some(0));
-    assert_eq!(storage.descriptor_word0(1), Some(0));
+    assert_eq!(
+        storage.descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
+    assert_eq!(
+        storage.descriptor_word0(1),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(storage.descriptor_word0(2), Some(stale_suffix));
     assert_eq!(storage.state(), AmpduDmaState::Free);
 }
@@ -252,7 +257,10 @@ fn late_internal_word_overflow_does_not_partially_publish_the_chain() {
         ]),
         Err(AmpduDmaStorageError::InvalidLength)
     ));
-    assert_eq!(storage.descriptor_word0(0), Some(0));
+    assert_eq!(
+        storage.descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(storage.descriptor_buffer_address(0), Some(0));
     storage.cancel().unwrap();
 }
@@ -295,7 +303,10 @@ fn late_external_word_overflow_does_not_partially_publish_the_chain() {
         owner.publish_external_chain(&entries),
         Err(AmpduDmaStorageError::InvalidLength)
     ));
-    assert_eq!(owner.dma().descriptor_word0(0), Some(0));
+    assert_eq!(
+        owner.dma().descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
     owner.cancel().unwrap();
 }
@@ -604,7 +615,10 @@ fn retained_publication_fails_closed_when_descriptor_image_is_missing() {
         Err(AmpduDmaStorageError::StaleBacking)
     ));
     assert_eq!(owner.state(), AmpduDmaState::Reserved);
-    assert_eq!(owner.dma().descriptor_word0(0), Some(0));
+    assert_eq!(
+        owner.dma().descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
     owner.cancel().unwrap();
     assert_eq!(drops.get(), 2);
@@ -684,7 +698,10 @@ fn stale_external_chain_is_not_partially_published_after_slot_reuse() {
     ));
     assert_eq!(owner.state(), AmpduDmaState::Reserved);
     assert_eq!(owner.held_backing_count(), 1);
-    assert_eq!(owner.dma().descriptor_word0(0), Some(0));
+    assert_eq!(
+        owner.dma().descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
     assert_eq!(drops.get(), 1);
 
@@ -821,7 +838,7 @@ impl crate::space::DmaSpace for WindowTail {
     fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
         let arena: *const Arena = arena;
         let offset = u32::try_from(field.addr().checked_sub(arena.addr())?).ok()?;
-        (crate::descriptor::DMA_HIGH - 64).checked_add(offset)
+        (oer_esp32s31_hal::layouts::DMA_WINDOW.end - 64).checked_add(offset)
     }
 }
 
@@ -897,7 +914,10 @@ fn external_lease_beyond_the_dma_window_is_rejected_before_publication() {
         owner.publish_external_chain(&[beyond]),
         Err(AmpduDmaStorageError::Address)
     ));
-    assert_eq!(owner.dma().descriptor_word0(0), Some(0));
+    assert_eq!(
+        owner.dma().descriptor_word0(0),
+        Some(WifiTxDmaDescriptorControl::ZERO)
+    );
     assert_eq!(
         owner.commit_backing_descriptor(&backing, start + 8, 64, 40),
         Err(AmpduDmaStorageError::Address)
@@ -911,7 +931,7 @@ fn external_lease_beyond_the_dma_window_is_rejected_before_publication() {
         .commit(|_| {});
     assert_eq!(
         owner.dma().descriptor_buffer_address(0),
-        Some(crate::descriptor::DMA_HIGH - 64)
+        Some(oer_esp32s31_hal::layouts::DMA_WINDOW.end - 64)
     );
     owner.quarantine();
 }

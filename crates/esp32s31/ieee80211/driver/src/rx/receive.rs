@@ -43,7 +43,7 @@ use core::{
 };
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::Descriptor, rx_storage::RxDmaStorage, space::DmaSpace,
+    descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
 use oer_esp32s31_ieee80211_mac::{
     init::{
@@ -660,14 +660,14 @@ async fn yield_now() {
 
 /// The 32-bit FNV-1a hash of every descriptor word (status, buffer address,
 /// link) in ring order; each word is one volatile read. Report-only.
-fn descriptor_words_hash(descriptors: &[Descriptor]) -> u32 {
+fn descriptor_words_hash(descriptors: &[RxDescriptor]) -> u32 {
     const OFFSET: u32 = 0x811c_9dc5;
     const PRIME: u32 = 0x0100_0193;
     descriptors
         .iter()
         .flat_map(|descriptor| {
             [
-                descriptor.word0(),
+                descriptor.word0().bits(),
                 descriptor.buffer_address(),
                 descriptor.next_address(),
             ]

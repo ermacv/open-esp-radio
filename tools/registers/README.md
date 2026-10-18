@@ -68,6 +68,38 @@ index, since a library has no addresses. A chip that places a library layout
 re-exports the library's module from its raw PAC and may not define
 transactions on that peripheral. See [`registers/ieee80211`](../../registers/ieee80211/README.md).
 
+## Memory layouts
+
+A device manifest's `layouts` lists memory layouts: structures in RAM whose
+format the hardware defines ([hardware memory](../../docs/hardware-memory.md)).
+Each schema-1 file holds one `[layout]` with `name`, `description`, `size`,
+`align` and `placement` (RAM regions of `memory.toml`), and either
+`[[layout.words]]` (`access = "shared"`, every 32-bit word declared, in
+offset order) or `[[layout.bytes]]` (`access = "owned"`, ranges of one, two
+or four little-endian bytes). A word or range has `fields` with `bits`
+(`"N"` or `"HIGH:LOW"`), `writer` (`cpu` or `hardware`) and an optional
+`description`; a whole-word address field may name the `placement` of what
+it points at or the `layout` it links to. Fields do not overlap. A layout
+that repeats another's geometry names it in `same-geometry-as`; the tool
+checks that size, alignment, placement, words and the bits of every field
+both name agree (the RX and TX DMA descriptors).
+
+Its `[[review]]` entries follow the register rules: for publication the
+layout, every word or range and every field carry sources, provenance (not
+a hint), accuracy and completeness, and every word, range and field a
+`naming`. An opaque word is `WORD_<offset>_OPAQUE`, a range
+`BYTE_<offset>_OPAQUE`, a field `BIT_<n>_OPAQUE` or `BITS_<low>_<high>_OPAQUE`.
+Review sources must exist in the evidence catalogs.
+
+A layout has no address: it is not in the SVD or the binding index. The PAC
+API output gains a `layouts` module: a constant per named RAM region; per
+word layout a `#[repr(C, align(N))]` type of volatile cells with `zeroed`,
+`SIZE`, `ALIGN`, `PLACEMENT` and `bytemuck::Zeroable`, each cell with `read`
+and `write` of a value type, which has `from_bits`, `bits`, a getter per
+field and a `with_*` builder (`Option<Self>` when the value may not fit);
+per byte layout a decoder over `&[u8; N]` with a value type per range and a
+getter per field. No ordering, fence or ownership is generated.
+
 The schema-1 manifest selects model, sparse reviewed assertions, applicability,
 memory map, ownership policy, API/lint packs, evidence catalogs and output paths.
 Paths are relative to that manifest. No configuration is inferred from a vendor

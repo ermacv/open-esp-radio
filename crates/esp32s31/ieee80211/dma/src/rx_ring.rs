@@ -9,11 +9,12 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::ring_index::RingIndex;
 
+use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
+
 use crate::{
     descriptor::{
-        BIT_29_OPAQUE, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT, OWNER, RX_DONE,
-        SIZE_MASK, descriptor_address_valid, dma_range_valid, length as descriptor_length,
-        rx_armed_word, rx_detached_word, rx_done, rx_owner, rx_rearm_word, size as descriptor_size,
+        DESCRIPTOR_BYTES, RxDescriptor, descriptor_address_valid, dma_range_valid, rx_armed_word,
+        rx_detached_word, rx_rearm_word,
     },
     rx_dma::{RxDma, RxDmaBinding},
 };
@@ -68,23 +69,23 @@ fn descriptor_aliases_an_exhausted_list<const COUNT: usize>(descriptor_base: u32
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 pub struct RxDescriptorTable<const COUNT: usize> {
-    ring: [Descriptor; COUNT],
-    reserved: Descriptor,
+    ring: [RxDescriptor; COUNT],
+    reserved: RxDescriptor,
 }
 
 impl<const COUNT: usize> RxDescriptorTable<COUNT> {
     pub const fn new() -> Self {
         Self {
-            ring: [const { Descriptor::new() }; COUNT],
-            reserved: Descriptor::new(),
+            ring: [const { RxDescriptor::new() }; COUNT],
+            reserved: RxDescriptor::new(),
         }
     }
 
-    pub const fn ring(&self) -> &[Descriptor; COUNT] {
+    pub const fn ring(&self) -> &[RxDescriptor; COUNT] {
         &self.ring
     }
 
-    pub const fn reserved(&self) -> &Descriptor {
+    pub const fn reserved(&self) -> &RxDescriptor {
         &self.reserved
     }
 }
@@ -105,11 +106,11 @@ impl<const COUNT: usize> Default for RxDescriptorTable<COUNT> {
 /// doorbell cannot do (its link point, the accepted tail, would be part of
 /// the group). Each product geometry asserts this at compile time.
 ///
-/// [`MAX_ENCODED_MPDU_LEN`]: crate::alignment::MAX_ENCODED_MPDU_LEN
+/// [`MAX_ENCODED_MPDU_LEN`]: crate::descriptor::MAX_ENCODED_MPDU_LEN
 pub const fn rx_ring_outspans_any_unit(count: usize, buffer: usize) -> bool {
     match (count.checked_sub(1), buffer) {
         (Some(rest), buffer) => match rest.checked_mul(buffer) {
-            Some(bytes) => bytes > crate::alignment::MAX_ENCODED_MPDU_LEN,
+            Some(bytes) => bytes > crate::descriptor::MAX_ENCODED_MPDU_LEN,
             None => true,
         },
         (None, _) => false,
@@ -125,7 +126,7 @@ pub const RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT: u32 = 0x0001_86a1;
 #[derive(Clone, Copy, Debug)]
 pub struct RxSegment<'a> {
     pub descriptor_address: u32,
-    pub descriptor_word0: u32,
+    pub descriptor_word0: WifiRxDmaDescriptorControl,
     pub buffer: &'a [u8],
     pub next_descriptor_address: u32,
 }
@@ -154,7 +155,7 @@ pub enum RxRingError {
 pub struct RxDescriptorSnapshot {
     pub index: usize,
     pub address: u32,
-    pub word0: u32,
+    pub word0: WifiRxDmaDescriptorControl,
     pub buffer_address: u32,
     pub next_address: u32,
 }
@@ -393,7 +394,7 @@ impl RxDmaArenaState {
 pub struct RxCompletedDescriptor {
     index: usize,
     descriptor_address: u32,
-    word0: u32,
+    word0: WifiRxDmaDescriptorControl,
     next_descriptor_address: u32,
 }
 
@@ -406,7 +407,7 @@ impl RxCompletedDescriptor {
         self.descriptor_address
     }
 
-    pub const fn word0(&self) -> u32 {
+    pub const fn word0(&self) -> WifiRxDmaDescriptorControl {
         self.word0
     }
 
@@ -535,7 +536,7 @@ pub struct RxCompletedUnit {
     descriptor_count: usize,
     descriptor_address: u32,
     /// `None` when the total length does not fit the descriptor length field.
-    staged_word0: Option<u32>,
+    staged_word0: Option<WifiRxDmaDescriptorControl>,
     total_length: usize,
     segment_lengths: RxCompletedUnitLengths,
     /// The frame began in the reserved descriptor and continued into this
@@ -567,10 +568,10 @@ impl RxCompletedUnit {
     /// describing the complete unit length and terminal ownership.
     ///
     /// `None` for a chain whose total length exceeds the descriptor's
-    /// 14-bit length field ([`SIZE_MASK`]): no single descriptor word can
+    /// 14-bit length field: no single descriptor word can
     /// describe it. Such a unit is still a complete owned unit; its consumer
     /// drops it like any other chained unit and recycles its descriptors.
-    pub const fn staged_word0(&self) -> Option<u32> {
+    pub const fn staged_word0(&self) -> Option<WifiRxDmaDescriptorControl> {
         self.staged_word0
     }
 
@@ -628,7 +629,7 @@ pub(crate) trait RxReservedBuffer {
 /// This type owns the right to start the descriptor walker. Consuming
 /// [`try_start`](Self::try_start) transfers that authority into [`RxRingLive`].
 pub struct RxRingStopped<'a, const COUNT: usize> {
-    descriptors: &'a [Descriptor; COUNT],
+    descriptors: &'a [RxDescriptor; COUNT],
     table: &'a RxDescriptorTable<COUNT>,
     reserved_buffer_address: u32,
     descriptor_base: u32,
@@ -660,7 +661,7 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 /// shared::<oer_esp32s31_ieee80211_dma::rx_ring::RxRingLive<'static, 2>>();
 /// ```
 pub struct RxRingLive<'a, const COUNT: usize> {
-    descriptors: &'a [Descriptor; COUNT],
+    descriptors: &'a [RxDescriptor; COUNT],
     table: &'a RxDescriptorTable<COUNT>,
     reserved_buffer_address: u32,
     descriptor_base: u32,
@@ -685,7 +686,7 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     requires_stop: bool,
 }
 
-/// Descriptor storage authority after the hardware walker is confirmed off.
+/// RxDescriptor storage authority after the hardware walker is confirmed off.
 ///
 /// Live frontier bookkeeping is deliberately discarded at this lifecycle
 /// edge. A later association must rebuild and republish the ring through
@@ -693,7 +694,7 @@ pub struct RxRingLive<'a, const COUNT: usize> {
 /// peer epoch.
 pub struct RxRingHalted<'a, const COUNT: usize> {
     table: &'a RxDescriptorTable<COUNT>,
-    descriptors: &'a [Descriptor; COUNT],
+    descriptors: &'a [RxDescriptor; COUNT],
     reserved_buffer_address: u32,
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
@@ -706,7 +707,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         self.descriptor_base
     }
 
-    pub const fn descriptors(&self) -> &'a [Descriptor; COUNT] {
+    pub const fn descriptors(&self) -> &'a [RxDescriptor; COUNT] {
         self.descriptors
     }
 
@@ -1036,7 +1037,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         self.descriptor_base
     }
 
-    pub(crate) const fn descriptors(&self) -> &'a [Descriptor; COUNT] {
+    pub(crate) const fn descriptors(&self) -> &'a [RxDescriptor; COUNT] {
         self.descriptors
     }
 
@@ -1137,7 +1138,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let reserved = self.table.reserved();
         let word0 = reserved.word0();
         if !self.reserved_left {
-            if rx_done(word0) {
+            if word0.rx_done() {
                 increment_saturating(&self.arena.reserved_landings);
                 if let Err(error) = self.rearm_reserved(word0, buffer) {
                     self.require_reset();
@@ -1147,7 +1148,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(());
         }
         let reserved_low = self.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK;
-        if rx_done(word0)
+        if word0.rx_done()
             || buffer.guard_overwritten()
             || mmio.last_descriptor_low() == reserved_low
         {
@@ -1162,11 +1163,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// word. R's link is not touched.
     fn rearm_reserved<B: RxReservedBuffer>(
         &self,
-        word0: u32,
+        word0: WifiRxDmaDescriptorControl,
         buffer: &B,
     ) -> Result<(), RxRingError> {
         buffer.restore_guards()?;
-        if rx_done(word0) {
+        if word0.rx_done() {
             self.table
                 .reserved()
                 .publish_word0(rx_rearm_word(word0).ok_or(RxRingError::Size)?);
@@ -1190,7 +1191,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     fn leave_reserved<B: RxReservedBuffer>(&mut self, buffer: &B) -> Result<bool, RxRingError> {
         let reserved = self.table.reserved();
         let word0 = reserved.word0();
-        let landed = rx_done(word0);
+        let landed = word0.rx_done();
         let continued = !landed && buffer.guard_overwritten();
         if landed || continued {
             increment_saturating(&self.arena.reserved_landings);
@@ -1205,13 +1206,16 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// buffer is detached: its completed image with the owner bit clear
     /// ([`rx_detached_word`]). Validated before the buffer leaves the ring,
     /// so [`Self::publish_detached`] cannot fail after it did.
-    pub(crate) fn detached_word(&self, index: usize) -> Result<u32, RxRingError> {
+    pub(crate) fn detached_word(
+        &self,
+        index: usize,
+    ) -> Result<WifiRxDmaDescriptorControl, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
         if !self.observed_mask.contains(index) {
             return Err(RxRingError::Corrupt);
         }
         let word0 = descriptor.word0();
-        if !rx_done(word0) {
+        if !word0.rx_done() {
             return Err(RxRingError::Corrupt);
         }
         Ok(rx_detached_word(word0))
@@ -1227,7 +1231,12 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// for the accepted tail too: a doorbell with NEXT = 0 follows
     /// `LAST.next` without checking LAST's owner bit (H1). The rearm sets
     /// the bit again ([`rx_rearm_word`]).
-    pub(crate) fn publish_detached<M: RxDma>(&mut self, mmio: &mut M, index: usize, word0: u32) {
+    pub(crate) fn publish_detached<M: RxDma>(
+        &mut self,
+        mmio: &mut M,
+        index: usize,
+        word0: WifiRxDmaDescriptorControl,
+    ) {
         if let Some(descriptor) = self.descriptors.get(index) {
             descriptor.publish_word0(word0);
         }
@@ -1243,7 +1252,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                     && self
                         .descriptors
                         .get(index.get())
-                        .is_some_and(|descriptor| !rx_owner(descriptor.word0()))
+                        .is_some_and(|descriptor| !descriptor.word0().owner())
             })
     }
 
@@ -1323,7 +1332,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         while observed + completed < COUNT {
             let index = start_index.advance(completed);
             if self.observed_mask.contains(index.get())
-                || !rx_done(self.descriptors[index.get()].word0())
+                || !self.descriptors[index.get()].word0().rx_done()
             {
                 break;
             }
@@ -1344,7 +1353,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         while completed < COUNT {
             let index = self.recycle_start.advance(completed);
             if self.observed_mask.contains(index.get())
-                || !rx_done(self.descriptors[index.get()].word0())
+                || !self.descriptors[index.get()].word0().rx_done()
             {
                 break;
             }
@@ -1486,12 +1495,12 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return RxCompletedUnitFrontier::default();
         }
         let first_index = self.recycle_start.advance(observed);
-        if rx_done(self.descriptors[first_index.get()].word0()) {
+        if self.descriptors[first_index.get()].word0().rx_done() {
             let mut completed = 0;
             while completed < descriptor_limit {
                 let index = first_index.advance(completed);
                 if self.observed_mask.contains(index.get())
-                    || !rx_done(self.descriptors[index.get()].word0())
+                    || !self.descriptors[index.get()].word0().rx_done()
                 {
                     break;
                 }
@@ -1513,7 +1522,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if self.observed_mask.contains(index.get()) {
                 break;
             }
-            if rx_done(self.descriptors[index.get()].word0()) {
+            if self.descriptors[index.get()].word0().rx_done() {
                 return RxCompletedUnitFrontier {
                     unit_count: 1,
                     descriptor_count: step + 1,
@@ -1543,7 +1552,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return RxCompletedUnitFrontier::default();
         }
         let first_index = self.recycle_start.advance(observed);
-        if rx_done(self.descriptors[first_index.get()].word0()) {
+        if self.descriptors[first_index.get()].word0().rx_done() {
             // The caller only needs one ownership proof. Avoid walking the
             // rest of a terminal-only burst merely to truncate its unit count
             // back to one: the next finite cursor check will prove the next
@@ -1564,7 +1573,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if self.observed_mask.contains(index.get()) {
                 break;
             }
-            if rx_done(self.descriptors[index.get()].word0()) {
+            if self.descriptors[index.get()].word0().rx_done() {
                 return RxCompletedUnitFrontier {
                     unit_count: 1,
                     descriptor_count: step + 1,
@@ -1633,8 +1642,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Ok(None);
         }
         let first_word0 = self.validate_descriptor_image(first_index)?;
-        let first_length = descriptor_length(first_word0);
-        if rx_done(first_word0) {
+        let first_length = u32::from(first_word0.length());
+        if first_word0.rx_done() {
             let descriptor_address = descriptor_address(self.descriptor_base, first_index.get())?;
             let segment_length = u16::try_from(first_length).map_err(|_| RxRingError::Size)?;
             self.observed_mask.insert(first_index.get());
@@ -1642,7 +1651,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 head_index: first_index.get(),
                 descriptor_count: 1,
                 descriptor_address,
-                staged_word0: Some(staged_word0(first_word0, first_length)),
+                staged_word0: staged_word0(first_word0, first_length),
                 total_length: first_length as usize,
                 segment_lengths: RxCompletedUnitLengths::Single(segment_length),
                 continues_reserved_landing: false,
@@ -1668,9 +1677,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                     return Err(error);
                 }
             };
-            let consumed = rx_done(word0) || nonterminal_consumed(index.get());
+            let consumed = word0.rx_done() || nonterminal_consumed(index.get());
             let length = if consumed {
-                descriptor_length(word0)
+                u32::from(word0.length())
             } else {
                 0
             };
@@ -1682,7 +1691,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             total_length = total_length
                 .checked_add(length as usize)
                 .ok_or(RxRingError::Overflow)?;
-            if !rx_done(word0) {
+            if !word0.rx_done() {
                 continue;
             }
             let descriptor_count = step + 1;
@@ -1691,8 +1700,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             // every complete unit, so its consumer can drop and recycle it.
             let staged = u32::try_from(total_length)
                 .ok()
-                .filter(|length| *length <= SIZE_MASK)
-                .map(|length| staged_word0(metadata_word0, length));
+                .and_then(|length| staged_word0(metadata_word0, length));
             let descriptor_address =
                 descriptor_address(self.descriptor_base, metadata_index.get())?;
             self.observed_mask
@@ -1731,7 +1739,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         }
         let descriptor = &self.descriptors[index];
         let word0 = descriptor.word0();
-        if !rx_done(word0) {
+        if !word0.rx_done() {
             return None;
         }
         self.validate_descriptor_image(RingIndex::checked(index)?).ok()?;
@@ -1752,22 +1760,25 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     pub(crate) fn validate_completed_descriptor(&self, index: usize) -> Result<bool, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
         let word0 = descriptor.word0();
-        if !rx_done(word0) {
+        if !word0.rx_done() {
             return Ok(false);
         }
         self.validate_descriptor_image(RingIndex::checked(index).ok_or(RxRingError::Count)?)?;
         Ok(true)
     }
 
-    fn validate_descriptor_image(&self, index: RingIndex<COUNT>) -> Result<u32, RxRingError> {
+    fn validate_descriptor_image(
+        &self,
+        index: RingIndex<COUNT>,
+    ) -> Result<WifiRxDmaDescriptorControl, RxRingError> {
         let descriptor = self
             .descriptors
             .get(index.get())
             .ok_or(RxRingError::Count)?;
         let word0 = descriptor.word0();
         let expected_size = u32::from(self.buffer_size);
-        if descriptor_size(word0) != expected_size
-            || descriptor_length(word0) > expected_size
+        if u32::from(word0.size()) != expected_size
+            || u32::from(word0.length()) > expected_size
             || descriptor.buffer_address()
                 != self
                     .bound_buffer_address(index.get())
@@ -1860,7 +1871,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let mut completed = 0;
         while completed < MAX_BATCH {
             let index = self.recycle_start.advance(completed);
-            if !self.observed_mask.contains(index.get()) || !rx_done(self.descriptors[index.get()].word0()) {
+            if !self.observed_mask.contains(index.get()) || !self.descriptors[index.get()].word0().rx_done() {
                 break;
             }
             completed += 1;
@@ -2029,10 +2040,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 }
             };
             let valid_completion_shape = match shape {
-                RxRecycleGroupShape::EveryDescriptorTerminal => rx_done(word0),
+                RxRecycleGroupShape::EveryDescriptorTerminal => word0.rx_done(),
                 RxRecycleGroupShape::OneCompletedUnit
                 | RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast => {
-                    rx_done(word0) == (step + 1 == group_size)
+                    word0.rx_done() == (step + 1 == group_size)
                 }
             };
             if !valid_completion_shape {
@@ -2211,7 +2222,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// Return whether an exhausted finite hardware list still owes software
     /// the accepted terminal descriptor's writeback.
     ///
-    /// Descriptor writeback can become visible after this cursor edge and no
+    /// RxDescriptor writeback can become visible after this cursor edge and no
     /// later RX-success IRQ is guaranteed. Callers use the result only to keep
     /// a cooperative ownership probe alive; it never authorizes rearm.
     pub fn exhausted_terminal_writeback_pending<M: RxDma>(&mut self, mmio: &mut M) -> bool {
@@ -2344,7 +2355,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let later_completed_frontier = last_distance > tail_distance
             && last_distance <= accepted_distance
             && (tail_distance + 1..=last_distance).all(|distance| {
-                rx_done(self.descriptors[self.recycle_start.advance(distance).get()].word0())
+                self.descriptors[self.recycle_start.advance(distance).get()]
+                    .word0()
+                    .rx_done()
             });
         // A zero link describes the software topology, not the walker's
         // current ownership. RX_DONE/LAST may become visible before hardware
@@ -2510,10 +2523,24 @@ impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
     }
 }
 
-/// One descriptor word describing a complete unit of `length` bytes, which
-/// fits the length field, with `word0`'s status bits.
-const fn staged_word0(word0: u32, length: u32) -> u32 {
-    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | RX_DONE | OWNER
+/// One descriptor word describing a complete unit of `length` bytes with
+/// `word0`'s status bits: size and length both `length`, `RX_DONE` and
+/// `OWNER` set. `None` when `length` does not fit the length field.
+const fn staged_word0(
+    word0: WifiRxDmaDescriptorControl,
+    length: u32,
+) -> Option<WifiRxDmaDescriptorControl> {
+    if length > u16::MAX as u32 {
+        return None;
+    }
+    let length = length as u16;
+    match word0.with_size(length) {
+        Some(word0) => match word0.with_length(length) {
+            Some(word0) => Some(word0.with_rx_done(true).with_owner(true)),
+            None => None,
+        },
+        None => None,
+    }
 }
 
 fn validate_live_ring_geometry<const COUNT: usize>() -> Result<(), RxRingError> {
@@ -2536,7 +2563,7 @@ fn descriptor_address(descriptor_base: u32, index: usize) -> Result<u32, RxRingE
 }
 
 fn descriptor_snapshot<const COUNT: usize>(
-    descriptors: &[Descriptor; COUNT],
+    descriptors: &[RxDescriptor; COUNT],
     descriptor_base: u32,
     index: usize,
 ) -> Option<RxDescriptorSnapshot> {
@@ -2563,7 +2590,7 @@ fn descriptor_index_full<const COUNT: usize>(
 }
 
 fn ring_topology_snapshot<const COUNT: usize>(
-    descriptors: &[Descriptor; COUNT],
+    descriptors: &[RxDescriptor; COUNT],
     descriptor_base: u32,
     buffer_addresses: &[u32; COUNT],
     start: RingIndex<COUNT>,
@@ -2608,12 +2635,13 @@ fn ring_topology_snapshot<const COUNT: usize>(
             return snapshot;
         }
         if require_armed {
-            let capacity = descriptor_size(word0);
+            let capacity = u32::from(word0.size());
             if capacity == 0
                 || !dma_range_valid(buffer_address, capacity)
-                || descriptor_length(word0) != capacity
-                || word0 & OWNER == 0
-                || word0 & (BIT_29_OPAQUE | RX_DONE) != 0
+                || u32::from(word0.length()) != capacity
+                || !word0.owner()
+                || word0.bit_29_opaque()
+                || word0.rx_done()
             {
                 return snapshot;
             }
@@ -2693,7 +2721,7 @@ fn observed_prefix_len<const COUNT: usize>(
 }
 
 fn relink_rotated_ring<const COUNT: usize>(
-    descriptors: &[Descriptor; COUNT],
+    descriptors: &[RxDescriptor; COUNT],
     descriptor_base: u32,
     buffer_addresses: &[u32; COUNT],
     start: RingIndex<COUNT>,
@@ -2734,7 +2762,7 @@ pub fn prepare_recycled_buffer(buffer: &mut [u8], capacity: usize) -> Result<(),
 
 /// Builds the cold, zero-terminated list used by the recovered S31 RX path.
 fn build_cold_ring_inner(
-    descriptors: &[Descriptor],
+    descriptors: &[RxDescriptor],
     descriptor_dma_base: u32,
     buffer_addresses: &[u32],
     buffer_size: u32,

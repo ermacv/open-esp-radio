@@ -145,6 +145,8 @@ impl Publication {
 pub struct ChipPublication {
     model: RegisterModel,
     api: Option<PacApiPack>,
+    /// The memory map, which supplies the RAM regions layouts name.
+    memory: oer_register_model::memory::Memory,
     outputs: Outputs,
 }
 impl ChipPublication {
@@ -198,6 +200,17 @@ impl ChipPublication {
                         .flat_map(|a| a.metadata.evidence.iter().map(|e| e.source.as_str())),
                 ),
         )?;
+        evidence.validate_references(
+            "memory layout review",
+            model
+                .layouts()
+                .iter()
+                .flat_map(|layout| &layout.review)
+                .flat_map(|r| r.sources.iter().map(String::as_str)),
+        )?;
+        if !model.layouts().is_empty() && m.outputs.pac.is_none() {
+            return Err("a model with memory layouts publishes them through a PAC".into());
+        }
         let api_sources = api.iter().flat_map(PacApiPack::source_ids);
         evidence.validate_references("PAC API", api_sources)?;
         if let Some(peripheral) = api
@@ -261,6 +274,7 @@ impl ChipPublication {
         Ok(Self {
             model,
             api,
+            memory,
             outputs,
         })
     }
@@ -313,7 +327,9 @@ impl ChipPublication {
             shared_blocks::reexport_library_blocks(&raw, self.model.shared_peripherals())?;
         raw.push_str(&policy.render_rust(svd)?);
         let raw = host::format(&raw, &pac.edition)?;
-        let api = host::format(&policy.render_facade_rust()?, &pac.edition)?;
+        let mut api = policy.render_facade_rust()?;
+        api.push_str(&self.model.render_layouts_rust(&self.memory)?);
+        let api = host::format(&api, &pac.edition)?;
         Ok((raw, api))
     }
 }

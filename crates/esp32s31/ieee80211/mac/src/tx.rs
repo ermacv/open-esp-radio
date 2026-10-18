@@ -3320,7 +3320,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     }
 
     /// Current descriptor ownership word for bounded diagnostics.
-    pub fn descriptor_word0(&self) -> u32 {
+    pub fn descriptor_word0(&self) -> oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
         self.dma.descriptor_word0()
     }
 

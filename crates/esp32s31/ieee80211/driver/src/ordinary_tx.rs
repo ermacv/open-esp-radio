@@ -604,7 +604,7 @@ where
     }
 
     /// Current hardware-visible descriptor ownership word.
-    pub fn descriptor_word0(&self) -> u32 {
+    pub fn descriptor_word0(&self) -> oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
         self.slot.as_ref().get_ref().descriptor_word0()
     }
 

@@ -13,7 +13,7 @@ use std::{
     vec::Vec,
 };
 
-use oer_esp32s31_ieee80211_dma::descriptor::SIZE_MASK;
+use oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word;
 use oer_esp32s31_ieee80211_mac::irq::consumer::{IrqPublisher, IrqStorage};
 use oer_time::Duration;
 use oer_time_virtual::VirtualClock;
@@ -164,7 +164,7 @@ fn chained_and_oversized_units_never_reach_p1() {
     fixture.ring.complete(&[BUFFER as u32, 100]);
     let mut oversized = [BUFFER as u32; 10];
     oversized[9] = 1_500;
-    assert!(oversized.iter().sum::<u32>() > SIZE_MASK);
+    assert!(rx_armed_word(oversized.iter().sum::<u32>()).is_none());
     fixture.ring.complete(&oversized);
     let beacon = S31Prefix::new().unit(&management_header(8));
     fixture.ring.complete_with(&beacon);

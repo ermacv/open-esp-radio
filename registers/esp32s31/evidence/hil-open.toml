@@ -170,3 +170,13 @@ description = "ESP32-S31 rev0, 2026-09-21, diagnostic-tx-protection-air run 1790
 id = "HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03"
 kind = "unattested-hil-observation"
 description = "Diagnostic RX-clock run on ESP32-S31 rev0, open PHY/MAC, diagnostic-rx-clock image and a controlled AP over HE20, 2026-10-03, run 1791029233233-001511d2. 335 readings of WIFI_MAC_LOCAL_TIME.COUNTER, each between two system-timer readings 1-3 us apart, over 34 s fitted one microsecond per tick at 1.000000003 times the system-timer rate with a residual of -0.5 to +0.6 ticks and no step; receive timestamps of the RX-control prefix were readings of the same counter, 131-442 us before their executor handoff."
+
+[[sources]]
+id = "HIL_W1_RX_WALKER_2026_10_18"
+kind = "unattested-hil-observation"
+description = "W1 stand runs 1-6 of 2026-10-18 on ESP32-S31 rev0, the open driver on the W1 image (firmware/apps/w1): a 32-descriptor ring of 1664-byte buffers, 32 staging leases, 2.4 GHz, two hold cycles per run. A doorbell rung with NEXT = 0 resumed the walker at LAST.next; a bare RX_DESCRIPTOR_BASE write with NEXT = 0 was picked up; no held lease changed. Armed descriptors carried word0 0x81a00680: size 1664 in bits 13:0, length 1664 in bits 27:14, bit 31 set, bits 30:29 clear; completed ones bit 30 set with the received length in bits 27:14. Described in knowledge/esp32s31/wifi/rx-walker.md; console logs in the ignored target/fw/runs/."
+
+[[sources]]
+id = "HIL_W1_OWNER_BIT_2026_10_18"
+kind = "unattested-hil-observation"
+description = "ESP32-S31 rev0 (board s31-a), receive-only on channel 13 with the stand AP, ring of 32 descriptors x 1664 bytes plus the reserved descriptor, 2026-10-18, six runs. Clearing bit 31 of an armed descriptor word0 (0x81a00680 to 0x01a00680) ahead of the walker stopped it there without writing the descriptor or its buffer (12 repeats); restoring the bit and one reload doorbell resumed it in place (9); with bit 31 cleared on LAST at exhaustion, a rearm behind it and a doorbell continued in order: the walker does not check LAST's own bit (6). Hardware leaves bit 31 set when it completes a descriptor and sets bit 30. Method and results in knowledge/esp32s31/wifi/rx-walker.md, \"Owner bit\"."
