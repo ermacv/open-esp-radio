@@ -203,6 +203,7 @@ defaults, queue bounds) live in the code that applies them, not here.
   contracts stabilize. The stand tooling (boards, fixtures, power, runner,
   arbiter and a local status page in the browser) is built now, for manual
   use (owner, 2026-10-18).
+
 ## 2026-10-18: analysis and verification
 
 - **Analysis platform.** Binary analysis returns as a set of building blocks
