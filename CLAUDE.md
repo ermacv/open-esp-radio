@@ -101,5 +101,8 @@ dependency set, or an independent consumer; otherwise it is a module.
 - The stand is shared: hardware runs hold the board's lock; never kill another
   holder, wait for it. Stand runs need no extra approval; the owner's limits
   on secrets, eFuse writes, protected boards and hub ports still apply.
-- `git push` the branch and open a pull request (`gh pr create`); the architect
-  session reviews it and merges it when CI is green.
+- Open the pull request as a draft at the start (`gh pr create --draft`) and
+  push the work to it. Pull requests run no CI: the architect session reviews
+  the draft and marks it ready, which squash-merges it and deletes the branch
+  (`.github/workflows/merge.yml`). CI runs on main after each merge; a red
+  main is fixed by whoever broke it, in the next pull request.

@@ -106,9 +106,12 @@ tree is a selection of a predecessor repository, without its history.
 - **Host tools.** One folder per CLI under `tools/cli`, libraries under
   `tools/lib` by layer (base, data, analysis, service); dependencies only
   downward, checked by a test (owner, 2026-10-18).
-- **Review and merge.** A developer session opens a pull request and reports
-  it to the architect session; the architect reviews it and merges it when CI
-  is green, or returns it with remarks.
+- **Review and merge.** A developer session opens its pull request as a
+  draft at the start, pushes its work and reports it to the architect
+  session; the architect reviews it and marks it ready, which squash-merges
+  it and deletes its branch, or returns it with remarks. Pull requests run no
+  CI; CI checks main after every merge, and a red main is not a blocker: whoever
+  broke it fixes it (owner, 2026-10-18).
 - **Working rules.** The predecessor's working rules for agents return in
   `CLAUDE.md` (Work); its process bureaucracy (evidence bundles, seals,
   qualification, contract-change procedure, tracking-issue lists) does not.
