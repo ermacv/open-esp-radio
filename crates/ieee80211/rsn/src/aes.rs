@@ -1,4 +1,14 @@
 //! Allocation-free RFC 3394 AES-128 key wrap and unwrap for WPA2 key data.
+//!
+//! Received key data reaches the unwrap; nothing here panics on it.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use core::future::Future;
 
@@ -35,7 +45,7 @@ pub struct RsnWrappedKeyData {
 
 impl RsnWrappedKeyData {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.bytes.get(..self.len).unwrap_or_default()
     }
 }
 
@@ -56,19 +66,20 @@ impl RsnUnwrappedKeyData {
     /// [`AsyncRsnKeyUnwrap`] outside this crate; keeping the fields private
     /// still prevents an invalid length from being fabricated.
     pub fn try_copy(bytes: &[u8]) -> Result<Self, RsnUnwrappedKeyDataCapacityError> {
-        if bytes.len() > RSN_UNWRAPPED_KEY_DATA_CAPACITY {
-            return Err(RsnUnwrappedKeyDataCapacityError);
-        }
         let mut owned = Self {
             len: bytes.len(),
             bytes: [0; RSN_UNWRAPPED_KEY_DATA_CAPACITY],
         };
-        owned.bytes[..bytes.len()].copy_from_slice(bytes);
+        owned
+            .bytes
+            .get_mut(..bytes.len())
+            .ok_or(RsnUnwrappedKeyDataCapacityError)?
+            .copy_from_slice(bytes);
         Ok(owned)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.bytes.get(..self.len).unwrap_or_default()
     }
 }
 
@@ -139,71 +150,92 @@ pub fn software_aes128_key_wrap(
         return Err(SoftwareAesKeyWrapError::CapacityExceeded);
     }
 
-    let cipher = Aes128::new(GenericArray::from_slice(kek));
+    let cipher = Aes128::new(&GenericArray::from(*kek));
     let mut output = RsnWrappedKeyData {
         len,
         bytes: [0; RSN_KEY_DATA_CAPACITY],
     };
-    output.bytes[..8].copy_from_slice(&RFC3394_IV);
-    output.bytes[8..len].copy_from_slice(plaintext);
-    let blocks = plaintext.len() / 8;
-    let mut block = GenericArray::default();
-
+    let (accumulator, data) = output
+        .bytes
+        .get_mut(..len)
+        .and_then(|bytes| bytes.split_first_chunk_mut::<8>())
+        .ok_or(SoftwareAesKeyWrapError::CapacityExceeded)?;
+    *accumulator = RFC3394_IV;
+    data.copy_from_slice(plaintext);
+    let blocks = data.len() as u64 / 8;
+    let mut block = [0; 16];
     for round in 0..=5_u64 {
-        for index in 1..=blocks {
-            block[..8].copy_from_slice(&output.bytes[..8]);
-            let offset = 8 + (index - 1) * 8;
-            block[8..].copy_from_slice(&output.bytes[offset..offset + 8]);
-            cipher.encrypt_block(&mut block);
-            let counter = (round * blocks as u64 + index as u64).to_be_bytes();
-            for byte in 0..8 {
-                output.bytes[byte] = block[byte] ^ counter[byte];
+        for (index, chunk) in (1_u64..).zip(data.chunks_exact_mut(8)) {
+            let (high, low) = block.split_at_mut(8);
+            high.copy_from_slice(accumulator);
+            low.copy_from_slice(chunk);
+            encrypt(&cipher, &mut block);
+            let counter = round.wrapping_mul(blocks).wrapping_add(index).to_be_bytes();
+            let (high, low) = block.split_at(8);
+            for ((out, value), count) in accumulator.iter_mut().zip(high).zip(counter) {
+                *out = value ^ count;
             }
-            output.bytes[offset..offset + 8].copy_from_slice(&block[8..]);
+            chunk.copy_from_slice(low);
         }
     }
     block.zeroize();
     Ok(output)
 }
 
+fn encrypt(cipher: &Aes128, block: &mut [u8; 16]) {
+    let mut array = GenericArray::from(*block);
+    cipher.encrypt_block(&mut array);
+    *block = array.into();
+    array.zeroize();
+}
+
+fn decrypt(cipher: &Aes128, block: &mut [u8; 16]) {
+    let mut array = GenericArray::from(*block);
+    cipher.decrypt_block(&mut array);
+    *block = array.into();
+    array.zeroize();
+}
+
 pub fn software_aes128_key_unwrap(
     kek: &[u8; 16],
     encrypted: &[u8],
 ) -> Result<RsnUnwrappedKeyData, SoftwareAesKeyUnwrapError> {
-    if encrypted.len() < 24 || !encrypted.len().is_multiple_of(8) {
+    let Some((&first, wrapped)) = encrypted.split_first_chunk::<8>() else {
+        return Err(SoftwareAesKeyUnwrapError::InvalidLength);
+    };
+    if wrapped.len() < 16 || !wrapped.len().is_multiple_of(8) {
         return Err(SoftwareAesKeyUnwrapError::InvalidLength);
     }
-    let len = encrypted.len() - 8;
-    if len > RSN_UNWRAPPED_KEY_DATA_CAPACITY {
-        return Err(SoftwareAesKeyUnwrapError::CapacityExceeded);
-    }
-
-    let cipher = Aes128::new(GenericArray::from_slice(kek));
-    let mut accumulator = [0; 8];
-    accumulator.copy_from_slice(&encrypted[..8]);
+    let len = wrapped.len();
+    let cipher = Aes128::new(&GenericArray::from(*kek));
+    let mut accumulator = first;
     let mut output = RsnUnwrappedKeyData {
         len,
         bytes: [0; RSN_UNWRAPPED_KEY_DATA_CAPACITY],
     };
-    output.bytes[..len].copy_from_slice(&encrypted[8..]);
-    let blocks = len / 8;
-    let mut block = GenericArray::default();
-
+    let data = output
+        .bytes
+        .get_mut(..len)
+        .ok_or(SoftwareAesKeyUnwrapError::CapacityExceeded)?;
+    data.copy_from_slice(wrapped);
+    let blocks = len as u64 / 8;
+    let mut block = [0; 16];
     for round in (0..=5_u64).rev() {
-        for index in (1..=blocks).rev() {
-            let counter = (round * blocks as u64 + index as u64).to_be_bytes();
-            for byte in 0..8 {
-                block[byte] = accumulator[byte] ^ counter[byte];
+        for (index, chunk) in data.chunks_exact_mut(8).enumerate().rev() {
+            let index = (index as u64).wrapping_add(1);
+            let counter = round.wrapping_mul(blocks).wrapping_add(index).to_be_bytes();
+            let (high, low) = block.split_at_mut(8);
+            for ((out, value), count) in high.iter_mut().zip(accumulator).zip(counter) {
+                *out = value ^ count;
             }
-            let offset = (index - 1) * 8;
-            block[8..].copy_from_slice(&output.bytes[offset..offset + 8]);
-            cipher.decrypt_block(&mut block);
-            accumulator.copy_from_slice(&block[..8]);
-            output.bytes[offset..offset + 8].copy_from_slice(&block[8..]);
+            low.copy_from_slice(chunk);
+            decrypt(&cipher, &mut block);
+            let (high, low) = block.split_at(8);
+            accumulator.copy_from_slice(high);
+            chunk.copy_from_slice(low);
         }
     }
     block.zeroize();
-
     let mut difference = 0;
     for (actual, expected) in accumulator.iter().zip(RFC3394_IV) {
         difference |= actual ^ expected;

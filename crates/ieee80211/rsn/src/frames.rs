@@ -74,6 +74,6 @@ pub use security_ies::{OwnedAssociationSecurityIes, OwnedRsnIe};
 pub use transmit::{RsnEthernetFrame, RsnTxFrame, build_ap_action_frame, build_sta_action_frame};
 
 #[cfg(test)]
-mod captured_m3;
+pub(crate) mod captured_m3;
 #[cfg(test)]
 mod tests;

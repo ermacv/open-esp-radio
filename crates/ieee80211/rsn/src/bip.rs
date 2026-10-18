@@ -7,9 +7,19 @@
 //! field zeroed, and its IGTK packet number must exceed every earlier one.
 //!
 //! SOURCE: IEEE 802.11-2016 12.5.4 (BIP), 9.4.2.55 (Management MIC element).
+//!
+//! Received frames reach [`BipReceiver::verify`]; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use aes::Aes128;
-use cmac::{Cmac, Mac};
+use cmac::{Cmac, Mac, digest::KeyInit};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
@@ -80,40 +90,57 @@ impl BipReceiver {
     /// Frame Control field to the end of its body, and advance the replay
     /// state when it verifies.
     pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipError> {
-        if frame.len() < MANAGEMENT_HEADER_LEN + MANAGEMENT_MIC_ELEMENT_LEN {
+        let Some((header, rest)) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>() else {
             return Err(BipError::Truncated);
-        }
-        let mme_start = frame.len() - MANAGEMENT_MIC_ELEMENT_LEN;
-        let mme = &frame[mme_start..];
-        if mme_start < MANAGEMENT_HEADER_LEN
-            || mme[0] != MANAGEMENT_MIC_ELEMENT_ID
-            || usize::from(mme[1]) != MANAGEMENT_MIC_BODY_LEN
-        {
+        };
+        let Some((body, mme)) = rest.split_last_chunk::<MANAGEMENT_MIC_ELEMENT_LEN>() else {
+            return Err(BipError::Truncated);
+        };
+        let Some((&[id, length, key_low, key_high], fields)) = mme.split_first_chunk::<4>() else {
+            return Err(BipError::Truncated);
+        };
+        if id != MANAGEMENT_MIC_ELEMENT_ID || usize::from(length) != MANAGEMENT_MIC_BODY_LEN {
             return Err(BipError::MissingManagementMic);
         }
-        if u16::from_le_bytes([mme[2], mme[3]]) != u16::from(self.key_id) {
+        if u16::from_le_bytes([key_low, key_high]) != u16::from(self.key_id) {
             return Err(BipError::UnknownKeyId);
         }
-        let mut ipn = [0; RSN_IPN_LEN];
-        ipn.copy_from_slice(&mme[4..4 + RSN_IPN_LEN]);
+        let Some((&ipn, mic)) = fields.split_first_chunk::<RSN_IPN_LEN>() else {
+            return Err(BipError::Truncated);
+        };
+        let Some(mme_before_mic) = mme.get(..4 + RSN_IPN_LEN) else {
+            return Err(BipError::Truncated);
+        };
         let received = packet_number(ipn);
         if received <= self.last_packet_number {
             return Err(BipError::Replay);
         }
-        let mut mac =
-            Cmac::<Aes128>::new_from_slice(&self.key).expect("a 16-byte IGTK is an AES-128 key");
-        mac.update(&[frame[0], frame[1] & !AAD_MASKED_FLAGS]);
-        mac.update(&frame[4..MANAGEMENT_HEADER_LEN - 2]);
-        mac.update(&frame[MANAGEMENT_HEADER_LEN..frame.len() - BIP_MIC_LEN]);
+        let mut mac = cmac(&self.key);
+        update_aad(&mut mac, header);
+        mac.update(body);
+        mac.update(mme_before_mic);
         mac.update(&[0; BIP_MIC_LEN]);
-        mac.verify_truncated_left(&mme[4 + RSN_IPN_LEN..])
+        mac.verify_truncated_left(mic)
             .map_err(|_| BipError::InvalidMic)?;
         self.last_packet_number = received;
         Ok(())
     }
 }
 
-/// The transmit state of one IGTK: its key and the next IPN.
+/// AES-128-CMAC over a 16-byte IGTK.
+fn cmac(key: &[u8; RSN_IGTK_LEN]) -> Cmac<Aes128> {
+    <Cmac<Aes128> as KeyInit>::new(&(*key).into())
+}
+
+/// The BIP additional authentication data of a management header: frame
+/// control with Retry, Power Management and More Data masked, and the
+/// three addresses; duration and sequence control are left out.
+fn update_aad(mac: &mut Cmac<Aes128>, header: &[u8; MANAGEMENT_HEADER_LEN]) {
+    let [frame_control, flags, _, _, addresses @ .., _, _] = header;
+    mac.update(&[*frame_control, flags & !AAD_MASKED_FLAGS]);
+    mac.update(addresses);
+}
+
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct BipTransmitter {
     key_id: u8,
@@ -129,56 +156,67 @@ impl BipTransmitter {
         Self {
             key_id: igtk.key_id(),
             key: *igtk.key(),
-            next_packet_number: packet_number(igtk.packet_number()) + 1,
+            // A 48-bit packet number plus one fits.
+            next_packet_number: packet_number(igtk.packet_number()).wrapping_add(1),
         }
     }
 
-    /// The last allocated IPN, or the initial delivered IPN before any
-    /// transmission. A new peer must receive this frontier with its IGTK.
     pub fn packet_number(&self) -> [u8; RSN_IPN_LEN] {
-        let bytes = (self.next_packet_number - 1).to_le_bytes();
-        let mut ipn = [0; RSN_IPN_LEN];
-        ipn.copy_from_slice(&bytes[..RSN_IPN_LEN]);
-        ipn
+        ipn_bytes(self.next_packet_number.wrapping_sub(1))
     }
 
-    /// Protect one group-addressed robust management frame in place: `frame`
-    /// holds the header and body, and `MANAGEMENT_MIC_ELEMENT_LEN` spare
-    /// octets after them receive the Management MIC element. Returns the
-    /// protected frame's length, or `None` when the spare octets are missing
-    /// or the 48-bit IPN space is exhausted. Failure consumes no IPN.
     pub fn protect(&mut self, frame: &mut [u8], length: usize) -> Option<usize> {
         let protected = length.checked_add(MANAGEMENT_MIC_ELEMENT_LEN)?;
-        if length < MANAGEMENT_HEADER_LEN
-            || frame.len() < protected
-            || self.next_packet_number >= (1_u64 << 48)
-        {
+        if length < MANAGEMENT_HEADER_LEN || self.next_packet_number >= (1_u64 << 48) {
             return None;
         }
-        let ipn = self.next_packet_number.to_le_bytes();
-        self.next_packet_number += 1;
-        let mme = &mut frame[length..protected];
-        mme[0] = MANAGEMENT_MIC_ELEMENT_ID;
-        mme[1] = MANAGEMENT_MIC_BODY_LEN as u8;
-        mme[2..4].copy_from_slice(&u16::from(self.key_id).to_le_bytes());
-        mme[4..4 + RSN_IPN_LEN].copy_from_slice(&ipn[..RSN_IPN_LEN]);
-        mme[4 + RSN_IPN_LEN..].fill(0);
-        let mut mac =
-            Cmac::<Aes128>::new_from_slice(&self.key).expect("a 16-byte IGTK is an AES-128 key");
-        mac.update(&[frame[0], frame[1] & !AAD_MASKED_FLAGS]);
-        mac.update(&frame[4..MANAGEMENT_HEADER_LEN - 2]);
-        mac.update(&frame[MANAGEMENT_HEADER_LEN..protected]);
+        let (frame, _) = frame.split_at_mut_checked(protected)?;
+        let (header, rest) = frame.split_first_chunk_mut::<MANAGEMENT_HEADER_LEN>()?;
+        let (body, mme) = rest.split_last_chunk_mut::<MANAGEMENT_MIC_ELEMENT_LEN>()?;
+        let [k0, k1] = u16::from(self.key_id).to_le_bytes();
+        let [i0, i1, i2, i3, i4, i5] = ipn_bytes(self.next_packet_number);
+        self.next_packet_number = self.next_packet_number.wrapping_add(1);
+        *mme = [
+            MANAGEMENT_MIC_ELEMENT_ID,
+            MANAGEMENT_MIC_BODY_LEN as u8,
+            k0,
+            k1,
+            i0,
+            i1,
+            i2,
+            i3,
+            i4,
+            i5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
+        let mut mac = cmac(&self.key);
+        update_aad(&mut mac, header);
+        mac.update(body);
+        mac.update(mme.as_slice());
         let tag = mac.finalize().into_bytes();
-        frame[protected - BIP_MIC_LEN..protected].copy_from_slice(&tag[..BIP_MIC_LEN]);
+        let (_, mic) = mme.split_last_chunk_mut::<BIP_MIC_LEN>()?;
+        for (out, byte) in mic.iter_mut().zip(tag) {
+            *out = byte;
+        }
         Some(protected)
     }
 }
 
-/// A little-endian six-byte IPN as an integer.
+fn ipn_bytes(value: u64) -> [u8; RSN_IPN_LEN] {
+    let [b0, b1, b2, b3, b4, b5, _, _] = value.to_le_bytes();
+    [b0, b1, b2, b3, b4, b5]
+}
+
 fn packet_number(bytes: [u8; RSN_IPN_LEN]) -> u64 {
-    let mut value = [0; 8];
-    value[..RSN_IPN_LEN].copy_from_slice(&bytes);
-    u64::from_le_bytes(value)
+    let [b0, b1, b2, b3, b4, b5] = bytes;
+    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0])
 }
 
 #[cfg(test)]

@@ -3,6 +3,16 @@
 //! An authenticator validates a station's Association element with it, and a
 //! supplicant derives the suite of its own element. Peer queues, callbacks and
 //! chip node pointers are deliberately outside this crate.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use oer_ieee80211_mac::security::rsn::{
     RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP,
@@ -70,19 +80,26 @@ impl ValidatedRsnElement {
     }
 
     /// Whether the element's AKM list names `akm`.
+    ///
+    /// The element was validated when copied; were it not to parse again, it
+    /// would list nothing.
     pub fn lists_akm(&self, akm: Akm) -> bool {
-        RsnElement::parse(self.owned.as_bytes())
-            .expect("a validated element parses again")
-            .akm_suites()
-            .iter()
-            .any(|selector| Akm::from_suite_selector(selector) == Some(akm))
+        RsnElement::parse(self.owned.as_bytes()).is_ok_and(|element| {
+            element
+                .akm_suites()
+                .iter()
+                .any(|selector| Akm::from_suite_selector(selector) == Some(akm))
+        })
     }
 
     /// The PMKIDs the element lists, in order.
+    ///
+    /// Were the validated element not to parse again, it would list none.
     pub fn pmkids(&self) -> impl Iterator<Item = [u8; RSN_PMKID_LEN]> + '_ {
         RsnElement::parse(self.owned.as_bytes())
-            .expect("a validated element parses again")
-            .pmkids()
+            .ok()
+            .into_iter()
+            .flat_map(|element| element.pmkids())
     }
 
     pub const fn management_frame_protection(&self) -> ManagementFrameProtection {

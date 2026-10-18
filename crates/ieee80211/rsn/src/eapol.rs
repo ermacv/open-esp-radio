@@ -1,4 +1,14 @@
 //! Validated borrowed and owned RSN EAPOL-Key packets and MIC verification.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
@@ -124,51 +134,126 @@ impl EapolKeyInfo {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EapolKeyFrame<'a> {
     bytes: &'a [u8],
+    fixed: &'a [u8; EAPOL_KEY_PACKET_LEN],
     key_data: &'a [u8],
     key_info: EapolKeyInfo,
 }
 
+/// The fixed EAPOL-Key fields, in wire order.
+struct Fields<'a> {
+    key_length: [u8; 2],
+    replay_counter: [u8; 8],
+    nonce: &'a [u8; 32],
+    key_iv: &'a [u8; 16],
+    key_receive_sequence: &'a [u8; 8],
+    key_identifier: &'a [u8; 8],
+    mic: &'a [u8; 16],
+}
+
+/// Split the fixed part into its fields. The chunks add up to the fixed
+/// length, so every split succeeds.
+fn fields(fixed: &[u8; EAPOL_KEY_PACKET_LEN]) -> Option<Fields<'_>> {
+    let (_header, rest) = fixed.split_first_chunk::<7>()?;
+    let (&key_length, rest) = rest.split_first_chunk::<2>()?;
+    let (&replay_counter, rest) = rest.split_first_chunk::<8>()?;
+    let (nonce, rest) = rest.split_first_chunk::<32>()?;
+    let (key_iv, rest) = rest.split_first_chunk::<16>()?;
+    let (key_receive_sequence, rest) = rest.split_first_chunk::<8>()?;
+    let (key_identifier, rest) = rest.split_first_chunk::<8>()?;
+    let (mic, _key_data_length) = rest.split_first_chunk::<16>()?;
+    Some(Fields {
+        key_length,
+        replay_counter,
+        nonce,
+        key_iv,
+        key_receive_sequence,
+        key_identifier,
+        mic,
+    })
+}
+
+/// A field split that cannot fail: [`fields`] covers exactly the fixed part.
+const FIELDS_COVER_THE_FIXED_PART: () = assert!(
+    7 + 2 + 8 + 32 + 16 + 8 + 8 + 16 + 2 == EAPOL_KEY_PACKET_LEN
+        && EAPOL_KEY_MIC_START == 7 + 2 + 8 + 32 + 16 + 8 + 8
+        && EAPOL_KEY_MIC_END == EAPOL_KEY_MIC_START + 16
+);
+
 impl<'a> EapolKeyFrame<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, EapolParseError> {
-        if bytes.len() < EAPOL_KEY_PACKET_LEN {
-            return Err(EapolParseError::Truncated);
-        }
-        if bytes[1] != EAPOL_PACKET_TYPE_KEY {
+        let () = FIELDS_COVER_THE_FIXED_PART;
+        let (fixed, key_data) = bytes
+            .split_first_chunk::<EAPOL_KEY_PACKET_LEN>()
+            .ok_or(EapolParseError::Truncated)?;
+        let &[
+            _,
+            packet_type,
+            length_high,
+            length_low,
+            descriptor,
+            info_high,
+            info_low,
+            ..,
+            key_data_high,
+            key_data_low,
+        ] = fixed;
+        if packet_type != EAPOL_PACKET_TYPE_KEY {
             return Err(EapolParseError::NotKeyPacket);
         }
 
-        let body_len = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
+        let body_len = usize::from(u16::from_be_bytes([length_high, length_low]));
         let packet_len = EAPOL_HEADER_LEN
             .checked_add(body_len)
             .ok_or(EapolParseError::LengthMismatch)?;
         if packet_len != bytes.len() || body_len < EAPOL_KEY_FIXED_LEN {
             return Err(EapolParseError::LengthMismatch);
         }
-        if bytes[4] != RSN_KEY_DESCRIPTOR_TYPE {
+        if descriptor != RSN_KEY_DESCRIPTOR_TYPE {
             return Err(EapolParseError::NotRsnKeyDescriptor);
         }
 
-        let key_data_len = u16::from_be_bytes([bytes[97], bytes[98]]) as usize;
-        let key_data_end = EAPOL_KEY_PACKET_LEN
-            .checked_add(key_data_len)
-            .ok_or(EapolParseError::LengthMismatch)?;
-        if key_data_end != packet_len {
+        let key_data_len = usize::from(u16::from_be_bytes([key_data_high, key_data_low]));
+        if key_data_len != key_data.len() {
             return Err(EapolParseError::LengthMismatch);
         }
 
         Ok(Self {
             bytes,
-            key_data: &bytes[EAPOL_KEY_PACKET_LEN..key_data_end],
-            key_info: EapolKeyInfo(u16::from_be_bytes([bytes[5], bytes[6]])),
+            fixed,
+            key_data,
+            key_info: EapolKeyInfo(u16::from_be_bytes([info_high, info_low])),
         })
     }
+
+    /// The fixed fields. `FIELDS_COVER_THE_FIXED_PART` proves the split
+    /// total; were it not, the frame would read as all zeros and fail every
+    /// check, never pass one.
+    fn fields(self) -> Fields<'a> {
+        fields(self.fixed).unwrap_or(Fields {
+            key_length: [0; 2],
+            replay_counter: [0; 8],
+            nonce: &[0; 32],
+            key_iv: &[0; 16],
+            key_receive_sequence: &[0; 8],
+            key_identifier: &[0; 8],
+            mic: &[0; 16],
+        })
+    }
+
+    /// A frame that matches no message and verifies under no key.
+    const CLOSED: EapolKeyFrame<'static> = EapolKeyFrame {
+        bytes: &[],
+        fixed: &[0; EAPOL_KEY_PACKET_LEN],
+        key_data: &[],
+        key_info: EapolKeyInfo(0),
+    };
 
     pub const fn bytes(self) -> &'a [u8] {
         self.bytes
     }
 
     pub const fn protocol_version(self) -> u8 {
-        self.bytes[0]
+        self.fixed[0]
     }
 
     pub const fn key_info(self) -> EapolKeyInfo {
@@ -180,57 +265,37 @@ impl<'a> EapolKeyFrame<'a> {
     }
 
     pub fn key_length(self) -> u16 {
-        u16::from_be_bytes([self.bytes[7], self.bytes[8]])
+        u16::from_be_bytes(self.fields().key_length)
     }
 
     pub fn replay_counter(self) -> u64 {
-        u64::from_be_bytes([
-            self.bytes[9],
-            self.bytes[10],
-            self.bytes[11],
-            self.bytes[12],
-            self.bytes[13],
-            self.bytes[14],
-            self.bytes[15],
-            self.bytes[16],
-        ])
+        u64::from_be_bytes(self.fields().replay_counter)
     }
 
     pub fn nonce(self) -> &'a [u8; 32] {
-        self.bytes[17..49]
-            .try_into()
-            .expect("validated EAPOL-Key nonce range")
+        self.fields().nonce
     }
 
     pub fn key_iv(self) -> &'a [u8; 16] {
-        self.bytes[49..65]
-            .try_into()
-            .expect("validated EAPOL-Key IV range")
+        self.fields().key_iv
     }
 
     pub fn mic(self) -> &'a [u8; 16] {
-        self.bytes[81..97]
-            .try_into()
-            .expect("validated EAPOL-Key MIC range")
+        self.fields().mic
     }
 
     pub fn key_receive_sequence(self) -> &'a [u8; 8] {
-        self.bytes[65..73]
-            .try_into()
-            .expect("validated EAPOL-Key RSC range")
+        self.fields().key_receive_sequence
     }
 
     pub fn key_identifier(self) -> &'a [u8; 8] {
-        self.bytes[73..81]
-            .try_into()
-            .expect("validated EAPOL-Key identifier range")
+        self.fields().key_identifier
     }
 
     pub const fn key_data(self) -> &'a [u8] {
         self.key_data
     }
 
-    /// Verifies the MIC of the suite that derived `ptk` without copying the frame.
     pub fn verify_mic(self, ptk: &Ptk) -> bool {
         self.verify_mic_with_kck(ptk.akm(), ptk.kck())
     }
@@ -240,15 +305,21 @@ impl<'a> EapolKeyFrame<'a> {
     }
 
     fn verify_mic_with_kck(self, akm: Akm, kck: &[u8; RSN_KCK_LEN]) -> bool {
+        let Some((before_mic, rest)) = self.fixed.split_first_chunk::<EAPOL_KEY_MIC_START>() else {
+            return false;
+        };
+        let Some((mic, after_mic)) = rest.split_first_chunk::<16>() else {
+            return false;
+        };
         let mut mac = akm.mic(kck);
-        mac.update(&self.bytes[..EAPOL_KEY_MIC_START]);
+        mac.update(before_mic);
         mac.update(&[0; EAPOL_KEY_MIC_END - EAPOL_KEY_MIC_START]);
-        mac.update(&self.bytes[EAPOL_KEY_MIC_END..]);
-        mac.verify(self.mic())
+        mac.update(after_mic);
+        mac.update(self.key_data);
+        mac.verify(mic)
     }
 }
 
-/// Complete validated EAPOL-Key packet with fixed, Rust-owned storage.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedEapolFrame<const N: usize = DEFAULT_EAPOL_FRAME_CAPACITY> {
     interface: RsnInterface,
@@ -264,12 +335,11 @@ impl<const N: usize> OwnedEapolFrame<N> {
         bytes: &[u8],
     ) -> Result<Self, EapolCopyError> {
         EapolKeyFrame::parse(bytes).map_err(EapolCopyError::Invalid)?;
-        if bytes.len() > N {
-            return Err(EapolCopyError::CapacityExceeded);
-        }
-
         let mut owned = [0; N];
-        owned[..bytes.len()].copy_from_slice(bytes);
+        owned
+            .get_mut(..bytes.len())
+            .ok_or(EapolCopyError::CapacityExceeded)?
+            .copy_from_slice(bytes);
         Ok(Self {
             interface,
             peer,
@@ -287,11 +357,13 @@ impl<const N: usize> OwnedEapolFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes[..self.len]
+        self.bytes.get(..self.len).unwrap_or_default()
     }
 
+    /// The frame view. The bytes were validated when copied; were they not,
+    /// the view would match no message and verify under no key.
     pub fn key_frame(&self) -> EapolKeyFrame<'_> {
-        EapolKeyFrame::parse(self.as_bytes()).expect("owned EAPOL frame was validated on creation")
+        EapolKeyFrame::parse(self.as_bytes()).unwrap_or(EapolKeyFrame::CLOSED)
     }
 }
 
