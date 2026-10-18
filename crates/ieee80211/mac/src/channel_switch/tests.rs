@@ -134,3 +134,65 @@ fn an_extended_announcement_round_trips_with_its_operating_class() {
         assert_eq!(parsed.target(Band::Ghz5), Ok(target));
     }
 }
+
+fn read_announcement(announcement: Option<ChannelSwitch>) {
+    if let Some(announcement) = announcement {
+        let _ = announcement.target(Band::Ghz2_4);
+        let _ = announcement.target(Band::Ghz5);
+        let _ = announcement.encode_elements(&mut [0; 8]);
+        let _ = announcement.encode_action(&mut [0; 10]);
+    }
+}
+
+fn channel_switch_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
+    std::vec![
+        std::vec![37, 3, 0, 6, 9, 60, 4, 1, 117, 40, 2, 7, 1, 1],
+        std::vec![0, 2, b'h', b'i', 37, 3, 0, 36, 4],
+        std::vec![37, 3, 1, 11, 4, 62, 1, 3],
+        std::vec![60, 4, 0, 128, 42, 1],
+        std::vec![0, 4, 37, 3, 0, 1, 2],
+        std::vec![4, 4, 0, 81, 13, 3],
+        std::vec![4, 4, 0, 83, 1, 3, 62, 1, 1],
+    ]
+}
+
+fn parse_channel_switch_never_panics(count: usize) {
+    let seeds = channel_switch_seeds();
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 64, |bytes| {
+        read_announcement(parse_channel_switch(bytes).ok().flatten());
+        read_announcement(parse_channel_switch_action(bytes).ok().flatten());
+    });
+}
+
+#[test]
+fn channel_switch_parsers_never_panic_on_received_bytes() {
+    parse_channel_switch_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn channel_switch_parsers_never_panic_on_received_bytes_full() {
+    parse_channel_switch_never_panics(crate::fuzz::FULL);
+}
+
+#[test]
+fn an_announcement_encodes_nothing_into_a_short_buffer() {
+    let plain = ChannelSwitch::to(
+        channel(Band::Ghz2_4, 6, ChannelWidth::Mhz20),
+        ChannelSwitchMode::Continue,
+        2,
+    );
+    assert_eq!(plain.encode_elements(&mut [0; 4]), None);
+    assert_eq!(plain.encode_action(&mut [0; 1]), None);
+    assert_eq!(plain.encode_action(&mut [0; 6]), None);
+    let mut action = [0; 7];
+    assert_eq!(plain.encode_action(&mut action), Some(7));
+    assert_eq!(action, [0, 4, 37, 3, 0, 6, 2]);
+    let extended = ChannelSwitch::extended_to(
+        channel(Band::Ghz5, 36, ChannelWidth::Mhz20),
+        ChannelSwitchMode::Continue,
+        2,
+    );
+    assert_eq!(extended.encode_elements(&mut [0; 5]), None);
+}

@@ -249,6 +249,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     }
 
     /// Route one ADDBA Response body by its Dialog Token.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn on_response(
         &mut self,
         body: &[u8],
@@ -260,6 +268,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
 
     /// Route one parsed ADDBA Response by its Dialog Token. The peer's
     /// answer, an agreement or a refusal, ends the TID's attempts.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn on_response_action(
         &mut self,
         action: BlockAckAction,

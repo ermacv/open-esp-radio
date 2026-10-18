@@ -133,3 +133,71 @@ fn local_profile_cannot_override_channel_geometry() {
         }
     }
 }
+
+fn ht_peer_capabilities_never_panics(count: usize) {
+    let above = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Above).unwrap();
+    let twenty = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let mut mcs32 = ht_capability_ie(TEST_HT_CAPABILITIES, above);
+    HtDuplicateMcs32::new().advertise_receive_only(&mut mcs32);
+    let mut stream = std::vec![0, 2, b'a', b'p', 1, 1, 0x82];
+    stream.extend_from_slice(&ht_capability_ie(TEST_HT_CAPABILITIES, twenty));
+    stream.extend_from_slice(&ht_operation_ie(twenty, HtOperationProtection::default()));
+    let seeds: [&[u8]; 3] = [
+        &mcs32,
+        &ht_capability_ie(TEST_HT_CAPABILITIES, twenty),
+        &stream,
+    ];
+    crate::fuzz::inputs(&seeds, count, 96, |bytes| {
+        if let Some(peer) = ht_peer_capabilities(bytes) {
+            let _ = peer.supports_40_mhz();
+            let _ = peer.supports_greenfield();
+            let _ = peer.supports_short_guard_interval(WifiChannelWidth::Mhz20);
+            let _ = peer.supports_short_guard_interval(WifiChannelWidth::Mhz40Below);
+            let _ = peer.ampdu_parameters();
+            let _ = peer.ht_duplicate_mcs32();
+            let _ = peer.highest_rx_mcs();
+            let _ = ht_capability_ie_for_peer(TEST_HT_CAPABILITIES, above, Some(peer));
+        }
+    });
+}
+
+#[test]
+fn ht_peer_capabilities_never_panics_on_received_bytes() {
+    ht_peer_capabilities_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn ht_peer_capabilities_never_panics_on_received_bytes_full() {
+    ht_peer_capabilities_never_panics(crate::fuzz::FULL);
+}
+
+#[test]
+fn a_zero_receive_mcs_bitmap_is_refused() {
+    // `highest_rx_mcs` expects a nonzero MCS bitmap: the parser, its only
+    // constructor, refuses a zero one.
+    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
+    assert!(ht_peer_capabilities(&record).is_some());
+    record[5] = 0;
+    assert_eq!(ht_peer_capabilities(&record), None);
+}
+
+#[test]
+fn the_highest_receive_mcs_is_the_top_bit_of_the_bitmap() {
+    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
+    for (bitmap, highest) in [(0x01, 0), (0x0f, 3), (0x10, 4), (0x80, 7)] {
+        record[5] = bitmap;
+        assert_eq!(
+            ht_peer_capabilities(&record).unwrap().highest_rx_mcs(),
+            highest
+        );
+    }
+    // A truncated element ends the stream without capabilities.
+    assert_eq!(ht_peer_capabilities(&record[..27]), None);
+    // A later element follows a shorter one with the same ID.
+    let mut stream = std::vec![45, 1, 0];
+    stream.extend_from_slice(&record);
+    assert!(ht_peer_capabilities(&stream).is_some());
+}

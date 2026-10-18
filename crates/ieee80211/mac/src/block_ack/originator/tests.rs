@@ -266,3 +266,44 @@ fn an_originator_owns_at_most_its_tids() {
     let mut tids = originator.tids();
     assert_eq!((tids.next(), tids.next()), (Some(0), None));
 }
+
+fn responses(count: usize) {
+    let mut seeds = std::vec::Vec::new();
+    for (dialog_token, tid, status) in [(1, 0_u8, 0), (2, 7, 0), (3, 5, 37), (42, 0, 0)] {
+        let parameters = (1_u16 << 1 | u16::from(tid) << 2 | 16 << 6).to_le_bytes();
+        let status = u16::to_le_bytes(status);
+        seeds.push([
+            3,
+            1,
+            dialog_token,
+            status[0],
+            status[1],
+            parameters[0],
+            parameters[1],
+            7,
+            0,
+        ]);
+    }
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(|seed| seed.as_slice()).collect();
+    crate::fuzz::inputs(&seeds, count, 32, |bytes| {
+        let mut originator = originator(32, 1);
+        let at = Instant::from_micros(0);
+        for tid in [0, 7, 5] {
+            originator.begin(tid, sequence(0x100), at).unwrap();
+        }
+        if let Ok(TxBlockAckResponseDisposition::Matched(matched)) = originator.on_response(bytes) {
+            let _ = originator.operational(matched.tid);
+        }
+    });
+}
+
+#[test]
+fn response_routing_never_panics() {
+    responses(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn response_routing_never_panics_full() {
+    responses(crate::fuzz::FULL);
+}

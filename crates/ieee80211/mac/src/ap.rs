@@ -512,6 +512,14 @@ pub struct ApAssociationSecurityObservation<'a> {
 /// Beacons, responses, foreign BSS traffic and unsupported authentication
 /// algorithms are intentionally ignored rather than being promoted into AP
 /// state transitions.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_ap_management_request<'a>(
     profile: &Advertisement,
     frame: &'a [u8],
@@ -652,6 +660,14 @@ pub enum ApManagementSubtype {
     Deauthentication,
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl ApManagementSubtype {
     const fn frame_control(self) -> u16 {
         match self {
@@ -663,7 +679,8 @@ impl ApManagementSubtype {
 
     /// A robust subtype in a management header, without authenticating it.
     pub fn parse(frame: &[u8]) -> Option<Self> {
-        let control = u16::from_le_bytes([*frame.first()?, *frame.get(1)?]);
+        let (control, _) = frame.split_first_chunk()?;
+        let control = u16::from_le_bytes(*control);
         if control & 0x030f != 0 {
             return None;
         }
@@ -759,21 +776,40 @@ impl ApProtectedManagementFrame<'_> {
     }
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 fn supports_wmm(bytes: &[u8]) -> bool {
     let mut remaining = bytes;
-    while remaining.len() >= 2 {
-        let length = usize::from(remaining[1]);
-        let Some(record) = remaining.get(..length.saturating_add(2)) else {
+    while let [_, length, ..] = *remaining {
+        let length = usize::from(length);
+        let Some((record, tail)) = length
+            .checked_add(2)
+            .and_then(|record_len| remaining.split_at_checked(record_len))
+        else {
             return false;
         };
-        if remaining[0] == 221 && length >= 6 && record[2..6] == [0x00, 0x50, 0xf2, 0x02] {
+        if length >= 6 && matches!(record, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]) {
             return true;
         }
-        remaining = &remaining[record.len()..];
+        remaining = tail;
     }
     false
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 fn association_security_observation(
     bytes: &[u8],
     privacy: bool,
@@ -789,40 +825,47 @@ fn association_security_observation(
         malformed_elements: false,
     };
     while !remaining.is_empty() {
-        if remaining.len() < 2 {
-            observation.malformed_elements = true;
-            break;
-        }
-        let length = usize::from(remaining[1]);
-        let Some(record) = remaining.get(..length.saturating_add(2)) else {
+        let [id, length, ..] = *remaining else {
             observation.malformed_elements = true;
             break;
         };
-        if remaining[0] == 48 {
+        let length = usize::from(length);
+        let Some((record, tail)) = length
+            .checked_add(2)
+            .and_then(|record_len| remaining.split_at_checked(record_len))
+        else {
+            observation.malformed_elements = true;
+            break;
+        };
+        if id == 48 {
             observation.rsn_ie_count = observation.rsn_ie_count.saturating_add(1);
             observation.rsn_ie.get_or_insert(record);
         }
-        if remaining[0] == 244 {
+        if id == 244 {
             observation.rsnxe_count = observation.rsnxe_count.saturating_add(1);
             observation.rsnxe.get_or_insert(record);
         }
-        if remaining[0] == 221 && length >= 4 && record[2..6] == [0x00, 0x50, 0xf2, 0x01] {
+        if id == 221 && length >= 4 && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..]) {
             observation.legacy_wpa_present = true;
         }
-        remaining = &remaining[record.len()..];
+        remaining = tail;
     }
     observation
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
     let mut maximum = 0;
     let mut remaining = bytes;
-    while let Some((&id, tail)) = remaining.split_first() {
-        let Some((&length, payload)) = tail.split_first() else {
-            break;
-        };
-        let length = usize::from(length);
-        let Some(value) = payload.get(..length) else {
+    while let Some((&[id, length], payload)) = remaining.split_first_chunk() {
+        let Some((value, tail)) = payload.split_at_checked(usize::from(length)) else {
             break;
         };
         if id == 1 || id == 50 {
@@ -833,7 +876,7 @@ fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
                 }
             }
         }
-        remaining = &payload[length..];
+        remaining = tail;
     }
     maximum
 }
@@ -1034,39 +1077,84 @@ pub enum ApPowerSaveObservation {
 ///
 /// Association validation is intentionally separate: the AP peer table must
 /// confirm that `peer` currently owns the reported association ID.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
-    if frame.len() < 2 {
-        return None;
-    }
-    let frame_control = u16::from_le_bytes([frame[0], frame[1]]);
+    observe_power_save(frame).map(|(observation, _)| observation)
+}
+
+/// A power-save edge and the Receiver Address of the frame that carried it.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
+fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
+    let (&[fc0, fc1], _) = frame.split_first_chunk()?;
+    let frame_control = u16::from_le_bytes([fc0, fc1]);
     let frame_type = (frame_control >> 2) & 3;
     let subtype = (frame_control >> 4) & 0x0f;
 
-    if frame_type == 1 && subtype == 10 && frame.len() >= 16 {
-        let raw_association_id = u16::from_le_bytes([frame[2], frame[3]]);
+    // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
+    if frame_type == 1
+        && subtype == 10
+        && let Some((ps_poll, _)) = frame.split_first_chunk::<16>()
+    {
+        let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
+        let raw_association_id = u16::from_le_bytes([a0, a1]);
         let association_id = raw_association_id & 0x3fff;
         if raw_association_id & 0xc000 != 0xc000 || association_id == 0 {
             return None;
         }
-        return Some(ApPowerSaveObservation::PsPoll {
-            peer: frame[10..16].try_into().ok()?,
-            association_id,
-        });
+        return Some((
+            ApPowerSaveObservation::PsPoll {
+                peer: [t0, t1, t2, t3, t4, t5],
+                association_id,
+            },
+            [r0, r1, r2, r3, r4, r5],
+        ));
     }
 
-    if frame.len() < 24 {
-        return None;
-    }
+    let (header, _) = frame.split_first_chunk::<24>()?;
+    let [
+        _,
+        _,
+        _,
+        _,
+        r0,
+        r1,
+        r2,
+        r3,
+        r4,
+        r5,
+        t0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        ..,
+    ] = *header;
     let to_ds = frame_control & 0x0100 != 0;
     let from_ds = frame_control & 0x0200 != 0;
     if frame_type != 2 || !to_ds || from_ds {
         return None;
     }
-    let peer = frame[10..16].try_into().ok()?;
+    let peer = [t0, t1, t2, t3, t4, t5];
+    let receiver = [r0, r1, r2, r3, r4, r5];
     if frame_control & 0x1000 != 0 {
-        Some(ApPowerSaveObservation::Sleeping { peer })
+        Some((ApPowerSaveObservation::Sleeping { peer }, receiver))
     } else {
-        Some(ApPowerSaveObservation::Active { peer })
+        Some((ApPowerSaveObservation::Active { peer }, receiver))
     }
 }
 
@@ -1074,14 +1162,20 @@ pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
 /// active BSSID. Protected data admission validates its address mapping in the
 /// data owner; the unprotected control frame needs this explicit check before
 /// its TA/AID tuple can reserve buffered traffic.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn observe_ap_power_save_for_access_point(
     frame: &[u8],
     access_point: [u8; 6],
 ) -> Option<ApPowerSaveObservation> {
-    let observation = observe_ap_power_save(frame)?;
-    if matches!(observation, ApPowerSaveObservation::PsPoll { .. })
-        && frame.get(4..10) != Some(access_point.as_slice())
-    {
+    let (observation, receiver) = observe_power_save(frame)?;
+    if matches!(observation, ApPowerSaveObservation::PsPoll { .. }) && receiver != access_point {
         return None;
     }
     Some(observation)
@@ -1097,6 +1191,14 @@ pub fn observe_ap_power_save_for_access_point(
 /// BSSID address fields must name the active AP, the transmitter must be a
 /// valid unicast address, and fragmentation is rejected. Only the Retry and
 /// Power Management flag bits may vary.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn observe_ap_null_data_power_save_for_access_point(
     frame: &[u8],
     access_point: [u8; 6],
@@ -1105,18 +1207,46 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     const RETRY: u16 = 0x0800;
     const POWER_MANAGEMENT: u16 = 0x1000;
 
-    if frame.len() != STA_NULL_DATA_FRAME_LEN {
+    let Ok(
+        &[
+            c0,
+            c1,
+            _,
+            _,
+            r0,
+            r1,
+            r2,
+            r3,
+            r4,
+            r5,
+            t0,
+            t1,
+            t2,
+            t3,
+            t4,
+            t5,
+            b0,
+            b1,
+            b2,
+            b3,
+            b4,
+            b5,
+            sequence0,
+            _,
+        ],
+    ) = <&[u8; STA_NULL_DATA_FRAME_LEN]>::try_from(frame)
+    else {
         return None;
-    }
-    let frame_control = u16::from_le_bytes([frame[0], frame[1]]);
+    };
+    let frame_control = u16::from_le_bytes([c0, c1]);
     if frame_control & !(RETRY | POWER_MANAGEMENT) != NULL_DATA_TO_DS_FRAME_CONTROL
-        || frame[4..10] != access_point
-        || frame[16..22] != access_point
-        || frame[22] & 0x0f != 0
+        || [r0, r1, r2, r3, r4, r5] != access_point
+        || [b0, b1, b2, b3, b4, b5] != access_point
+        || sequence0 & 0x0f != 0
     {
         return None;
     }
-    let peer: [u8; 6] = frame[10..16].try_into().ok()?;
+    let peer = [t0, t1, t2, t3, t4, t5];
     if peer == [0; 6] || peer == [0xff; 6] || peer[0] & 1 != 0 {
         return None;
     }
@@ -1127,5 +1257,7 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     }
 }
 
+#[cfg(test)]
+mod fuzz_tests;
 #[cfg(test)]
 mod tests;

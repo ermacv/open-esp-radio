@@ -81,3 +81,49 @@ fn ambiguous_and_unknown_headers_fail_closed() {
         StaApRxRoute::Malformed
     );
 }
+
+fn classify_sta_ap_rx_never_panics(count: usize) {
+    let seeds = [
+        frame(DATA_FRAME | FROM_DS, STA, UPLINK, PEER),
+        frame(DATA_FRAME | TO_DS, AP, PEER, STA),
+        frame(PROBE_REQUEST_SUBTYPE << 4, GROUP, PEER, GROUP),
+        frame(8 << 4, GROUP, UPLINK, UPLINK),
+        frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER),
+    ];
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(<[u8; 24]>::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 40, |mpdu| {
+        let _ = classify_sta_ap_rx(mpdu, ADDRESSES);
+    });
+}
+
+#[test]
+fn classify_sta_ap_rx_never_panics_on_received_bytes() {
+    classify_sta_ap_rx_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn classify_sta_ap_rx_never_panics_on_received_bytes_full() {
+    classify_sta_ap_rx_never_panics(crate::fuzz::FULL);
+}
+
+#[test]
+fn a_header_without_its_addresses_is_malformed() {
+    let beacon = frame(8 << 4, GROUP, UPLINK, UPLINK);
+    for length in [0, 1, 9, 15, 21] {
+        assert_eq!(
+            classify_sta_ap_rx(&beacon[..length], ADDRESSES),
+            StaApRxRoute::Malformed
+        );
+    }
+    assert_eq!(
+        classify_sta_ap_rx(&beacon[..22], ADDRESSES),
+        StaApRxRoute::Interface(StaApVif::Station)
+    );
+    // A control frame needs only its receiver address.
+    let control = frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER);
+    assert_eq!(
+        classify_sta_ap_rx(&control[..10], ADDRESSES),
+        StaApRxRoute::Interface(StaApVif::AccessPoint)
+    );
+}

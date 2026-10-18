@@ -1,3 +1,8 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test fixtures frame elements of a few known bytes"
+)]
+
 use super::*;
 
 const CCMP: [u8; 4] = ieee_suite(RSN_CIPHER_CCMP);
@@ -137,4 +142,44 @@ fn header_must_name_an_rsn_element_of_exact_length() {
         Err(RsnSyntaxError::Malformed)
     );
     assert_eq!(RsnElement::parse(&[]), Err(RsnSyntaxError::Malformed));
+}
+
+fn rsn_element_parse_never_panics(count: usize) {
+    let mut tail = [0; 2 + 2 + RSN_PMKID_LEN + 4];
+    tail[..2].copy_from_slice(&(RSN_CAPABILITY_MFPR | RSN_CAPABILITY_MFPC).to_le_bytes());
+    tail[2..4].copy_from_slice(&1_u16.to_le_bytes());
+    tail[4..4 + RSN_PMKID_LEN].fill(0xa5);
+    tail[4 + RSN_PMKID_LEN..].copy_from_slice(&BIP);
+    let (complete, complete_length) = with_tail(&[PSK], &tail);
+    let (minimal, minimal_length) = with_tail(&[SAE, PSK], &[]);
+    let (capabilities, capabilities_length) = with_tail(&[PSK], &[0x80, 0]);
+    let seeds: [&[u8]; 3] = [
+        &complete[..complete_length],
+        &minimal[..minimal_length],
+        &capabilities[..capabilities_length],
+    ];
+    crate::fuzz::inputs(&seeds, count, 96, |element| {
+        if let Ok(parsed) = RsnElement::parse(element) {
+            let _ = parsed.group_data_cipher();
+            for list in [parsed.pairwise_ciphers(), parsed.akm_suites()] {
+                let _ = (list.len(), list.is_empty(), list.contains(CCMP));
+                let _ = list.iter().map(Akm::from_suite_selector).count();
+            }
+            let _ = parsed.capabilities();
+            let _ = parsed.pmkid_count();
+            let _ = parsed.pmkids().count();
+            let _ = parsed.group_management_cipher();
+        }
+    });
+}
+
+#[test]
+fn rsn_element_parse_never_panics_on_received_bytes() {
+    rsn_element_parse_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn rsn_element_parse_never_panics_on_received_bytes_full() {
+    rsn_element_parse_never_panics(crate::fuzz::FULL);
 }

@@ -18,12 +18,25 @@
 //! the retained-MPDU table; `SLOT_CAPACITY` is the size of the caller's slot
 //! domain. A backend whose memory profile needs a smaller window chooses a
 //! smaller `WINDOW_CAPACITY`.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::sequence::SequenceNumber;
 
 /// The widest window a [`RxReorderBuffer`] holds: its occupancy bitmap has
 /// one bit per window position.
 pub const MAX_RX_REORDER_WINDOW: u16 = 64;
+
+/// The slots a one-octet [`RxReorderMpdu::slot`] can name: `u8::MAX + 1`.
+const SLOT_DOMAIN: usize = 256;
 
 /// One received MPDU of the agreement: its sequence number and the slot of
 /// the caller's storage that holds it.
@@ -123,6 +136,14 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
 {
     /// An empty window of `window` positions starting at the agreement's
     /// starting sequence.
+    ///
+    /// A buffer without window positions does not compile, so the window
+    /// arithmetic never reduces modulo zero:
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_ieee80211_mac::{block_ack::RxReorderBuffer, sequence::SequenceNumber};
+    /// let _ = RxReorderBuffer::<0, 8>::new(SequenceNumber::ZERO, 1);
+    /// ```
     pub const fn new(
         starting_sequence: SequenceNumber,
         window: u16,
@@ -187,7 +208,8 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         if use_received_sequence
             || self.starting_sequence.forward_distance(sequence) >= SequenceNumber::HALF_SPACE
         {
-            next_sequence = sequence.wrapping_sub(self.window - 1);
+            // `new` refuses a zero window, so `window - 1` does not wrap.
+            next_sequence = sequence.wrapping_sub(self.window.wrapping_sub(1));
             if use_received_sequence {
                 next_sequence = sequence;
             }
@@ -215,7 +237,8 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             return Err(RxReorderError::DuplicateSequence(sequence));
         }
         let distance_after_advance = if distance >= self.window {
-            self.window - 1
+            // `new` refuses a zero window, so `window - 1` does not wrap.
+            self.window.wrapping_sub(1)
         } else {
             distance
         };
@@ -263,8 +286,8 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             return Err(RxReorderError::DuplicateSequence(frame.sequence));
         }
         let advance = if distance >= self.window {
-            // distance < 2048 and window is nonzero, so this is 1..=2047.
-            distance - self.window + 1
+            // 1 <= window <= distance < 2048, so this is 1..=2047 and does not wrap.
+            distance.wrapping_sub(self.window).wrapping_add(1)
         } else {
             0
         };
@@ -331,10 +354,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     }
 
     const fn check_slot(&self, slot: u8) -> Result<(), RxReorderError> {
-        if SLOT_CAPACITY == 0
-            || SLOT_CAPACITY > u8::MAX as usize + 1
-            || slot as usize >= SLOT_CAPACITY
-        {
+        if SLOT_CAPACITY == 0 || SLOT_CAPACITY > SLOT_DOMAIN || slot as usize >= SLOT_CAPACITY {
             Err(RxReorderError::InvalidSlot(slot))
         } else {
             Ok(())
@@ -366,29 +386,30 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         let start = self.next_sequence;
         // advance < 2048 and contiguous <= 64: this span fits u16 and
         // never wraps the 4096-value sequence space while selecting frames.
-        let span = advance + contiguous;
+        let span = advance.wrapping_add(contiguous);
         let before_run = self
             .frames
             .iter()
             .flatten()
             .filter(|frame| start.forward_distance(frame.sequence) < advance)
             .count() as u16;
-        // There is at most one MPDU per skipped sequence, so before_run <= advance.
         let mut release = RxReorderRelease {
-            frames: core::array::from_fn(|index| {
-                if self.frames[index]
-                    .is_some_and(|frame| start.forward_distance(frame.sequence) < span)
-                {
-                    self.occupied &= !(1_u64 << index);
-                    self.frames[index].take()
-                } else {
-                    None
-                }
-            }),
-            missing: advance - before_run,
-            rejected: None,
-            buffered: false,
+            // There is at most one MPDU per skipped sequence, so
+            // before_run <= advance and this does not wrap.
+            missing: advance.wrapping_sub(before_run),
+            ..RxReorderRelease::empty()
         };
+        for (index, (released, retained)) in release
+            .frames
+            .iter_mut()
+            .zip(self.frames.iter_mut())
+            .enumerate()
+        {
+            if retained.is_some_and(|frame| start.forward_distance(frame.sequence) < span) {
+                self.occupied &= !Self::bit(index);
+                *released = retained.take();
+            }
+        }
         let received_place = self.head;
         self.head = self.relative_index(span);
         self.next_sequence = start.wrapping_add(span);
@@ -396,15 +417,25 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             if start.forward_distance(frame.sequence) < span {
                 // The original head was a gap, so no old frame can have
                 // occupied this reserved result position.
-                release.frames[received_place] = Some(frame);
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "the head is reduced modulo WINDOW_CAPACITY, the length of `frames`"
+                )]
+                let place = &mut release.frames[received_place];
+                *place = Some(frame);
             } else {
                 // Retained old frames and the checked incoming sequence
                 // are distinct and inside the new window. Its relative
                 // indexing therefore maps the input to a vacant position.
                 let index =
                     self.relative_index(self.next_sequence.forward_distance(frame.sequence));
-                self.frames[index] = Some(frame);
-                self.occupied |= 1_u64 << index;
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "`relative_index` reduces modulo WINDOW_CAPACITY, the length of `frames`"
+                )]
+                let place = &mut self.frames[index];
+                *place = Some(frame);
+                self.occupied |= Self::bit(index);
                 release.buffered = true;
             }
         }
@@ -418,14 +449,30 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             return false;
         }
         let index = self.relative_index(distance);
-        self.occupied & (1_u64 << index) != 0
-            && self.frames[index].is_some_and(|frame| frame.sequence == sequence)
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "`relative_index` reduces modulo WINDOW_CAPACITY, the length of `frames`"
+        )]
+        let retained = self.frames[index];
+        self.occupied & Self::bit(index) != 0
+            && retained.is_some_and(|frame| frame.sequence == sequence)
     }
 
+    /// The occupancy bit of a physical position below WINDOW_CAPACITY.
+    const fn bit(index: usize) -> u64 {
+        // index < WINDOW_CAPACITY <= 64, the width of the bitmap, so the
+        // shift is in range.
+        1_u64.wrapping_shl(index as u32)
+    }
+
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "`new` const-asserts that WINDOW_CAPACITY, the modulus, is nonzero"
+    )]
     fn relative_index(&self, distance: u16) -> usize {
-        // head < 64; every internal caller supplies a span below 2112.
+        // head < 64 and distance < 4096, so the sum does not wrap.
         // Modulo here rotates the bounded storage, independently of SN wrap.
-        (self.head + usize::from(distance)) % WINDOW_CAPACITY
+        self.head.wrapping_add(usize::from(distance)) % WINDOW_CAPACITY
     }
 }
 

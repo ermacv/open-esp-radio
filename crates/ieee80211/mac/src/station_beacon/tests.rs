@@ -130,3 +130,84 @@ fn a_beacon_carries_its_bss_s_channel_switch_announcement() {
     );
     assert!(observation.tim.is_some());
 }
+
+fn parse_sta_beacon_never_panics(count: usize) {
+    let mut protection = std::vec![ERP_ELEMENT_ID, 1, 0x07];
+    let mut ht_operation = [0_u8; 24];
+    ht_operation[..3].copy_from_slice(&[HT_OPERATION_ELEMENT_ID, 22, 6]);
+    ht_operation[4] = 0x05;
+    protection.extend_from_slice(&ht_operation);
+    protection.extend_from_slice(&[
+        EXTENSION_ELEMENT_ID,
+        7,
+        HE_OPERATION_EXTENSION_ID,
+        0x00,
+        0x04,
+        0,
+        5,
+        0xfd,
+        0xff,
+    ]);
+    let seeds = [
+        beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0x03, 0x02]),
+        beacon(&[TIM_ELEMENT_ID, 6, 1, 3, 0xfe, 0, 0, 0xff]),
+        beacon(&protection),
+        beacon(&[37, 3, 1, 11, 4, 62, 1, 3]),
+        beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
+        beacon(&[60, 4, 0, 117, 40, 2]),
+    ];
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    let mut round = 0_usize;
+    crate::fuzz::inputs(&seeds, count, 160, |mpdu| {
+        round = round.wrapping_add(1);
+        let association_id = [0, 1, 17, 2007, 0x3fff, 0xffff][round % 6];
+        if let Ok(observation) = parse_sta_beacon(mpdu, BSSID, association_id)
+            && let Some(Ok(announcement)) = observation.channel_switch
+        {
+            let _ = announcement.target(crate::channel::Band::Ghz2_4);
+            let _ = announcement.target(crate::channel::Band::Ghz5);
+        }
+    });
+}
+
+#[test]
+fn parse_sta_beacon_never_panics_on_received_bytes() {
+    parse_sta_beacon_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn parse_sta_beacon_never_panics_on_received_bytes_full() {
+    parse_sta_beacon_never_panics(crate::fuzz::FULL);
+}
+
+#[test]
+fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
+    // AID 2007 is bit seven of octet 250; a bitmap offset of 250 (encoded
+    // 250 in bits 7:1) makes it the first bitmap octet.
+    let frame = beacon(&[TIM_ELEMENT_ID, 4, 1, 3, 250, 0x80]);
+    let tim = parse_sta_beacon(&frame, BSSID, 2007).unwrap().tim.unwrap();
+    assert!(tim.unicast_buffered);
+    assert!(!tim.group_buffered);
+    // A TIM without a bitmap octet, or with DTIM period zero, is malformed.
+    for tim in [
+        &[TIM_ELEMENT_ID, 3, 0, 3, 0][..],
+        &[TIM_ELEMENT_ID, 4, 0, 0, 0, 0],
+    ] {
+        assert_eq!(
+            parse_sta_beacon(&beacon(tim), BSSID, 1),
+            Err(StaBeaconError::MalformedTim)
+        );
+    }
+    // A lone trailing octet cannot be an element header.
+    let mut frame = beacon(&[]);
+    frame.push(TIM_ELEMENT_ID);
+    assert_eq!(
+        parse_sta_beacon(&frame, BSSID, 1),
+        Err(StaBeaconError::MalformedInformationElement)
+    );
+    assert_eq!(
+        parse_sta_beacon(&frame[..FIXED_BEACON_LENGTH - 1], BSSID, 1),
+        Err(StaBeaconError::Truncated)
+    );
+}

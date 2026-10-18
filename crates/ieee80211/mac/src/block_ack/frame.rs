@@ -1,4 +1,14 @@
 //! Stateless Block Ack Action body parsing and wire identifiers.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::sequence::SequenceNumber;
 
@@ -40,42 +50,45 @@ pub enum BlockAckAction {
 /// This is a stateless leaf: it only reads the supplied bytes and does not
 /// allocate, wait, access global state or call into the vendor library.
 pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
-    if body.len() < 2 || body[0] != BLOCK_ACK_CATEGORY {
+    let [BLOCK_ACK_CATEGORY, action, fields @ ..] = body else {
         return None;
-    }
-    match body[1] {
-        ADDBA_REQUEST_ACTION if body.len() >= ADDBA_ACTION_BODY_LEN => {
-            let parameters = u16::from_le_bytes([body[3], body[4]]);
-            let starting_sequence =
-                SequenceNumber::from_sequence_control(u16::from_le_bytes([body[7], body[8]]));
+    };
+    match *action {
+        ADDBA_REQUEST_ACTION => {
+            let (&[dialog_token, p0, p1, t0, t1, s0, s1], _) = fields.split_first_chunk()?;
+            let parameters = u16::from_le_bytes([p0, p1]);
             Some(BlockAckAction::AddbaRequest {
-                dialog_token: body[2],
+                dialog_token,
                 tid: ((parameters >> 2) & 0x0f) as u8,
                 immediate: parameters & 0x0002 != 0,
                 amsdu: parameters & 0x0001 != 0,
                 window: (parameters >> 6) & 0x03ff,
-                timeout_tu: u16::from_le_bytes([body[5], body[6]]),
-                starting_sequence,
+                timeout_tu: u16::from_le_bytes([t0, t1]),
+                starting_sequence: SequenceNumber::from_sequence_control(u16::from_le_bytes([
+                    s0, s1,
+                ])),
             })
         }
-        ADDBA_RESPONSE_ACTION if body.len() >= ADDBA_ACTION_BODY_LEN => {
-            let parameters = u16::from_le_bytes([body[5], body[6]]);
+        ADDBA_RESPONSE_ACTION => {
+            let (&[dialog_token, s0, s1, p0, p1, t0, t1], _) = fields.split_first_chunk()?;
+            let parameters = u16::from_le_bytes([p0, p1]);
             Some(BlockAckAction::AddbaResponse {
-                dialog_token: body[2],
-                status: u16::from_le_bytes([body[3], body[4]]),
+                dialog_token,
+                status: u16::from_le_bytes([s0, s1]),
                 tid: ((parameters >> 2) & 0x0f) as u8,
                 immediate: parameters & 0x0002 != 0,
                 amsdu: parameters & 0x0001 != 0,
                 window: (parameters >> 6) & 0x03ff,
-                timeout_tu: u16::from_le_bytes([body[7], body[8]]),
+                timeout_tu: u16::from_le_bytes([t0, t1]),
             })
         }
-        DELBA_ACTION if body.len() >= 6 => {
-            let parameters = u16::from_le_bytes([body[2], body[3]]);
+        DELBA_ACTION => {
+            let (&[p0, p1, r0, r1], _) = fields.split_first_chunk()?;
+            let parameters = u16::from_le_bytes([p0, p1]);
             Some(BlockAckAction::Delba {
                 tid: ((parameters >> 12) & 0x0f) as u8,
                 initiator: parameters & 0x0800 != 0,
-                reason: u16::from_le_bytes([body[4], body[5]]),
+                reason: u16::from_le_bytes([r0, r1]),
             })
         }
         _ => None,
@@ -129,9 +142,10 @@ pub fn write_successful_addba_response(
     tid: u8,
     window: u16,
 ) -> Result<(), RxAddbaResponseError> {
-    if body.len() != 9 {
-        return Err(RxAddbaResponseError::InvalidBodyLength(body.len()));
-    }
+    let length = body.len();
+    let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
+        return Err(RxAddbaResponseError::InvalidBodyLength(length));
+    };
     if tid > 15 {
         return Err(RxAddbaResponseError::InvalidTid(tid));
     }
@@ -161,9 +175,10 @@ pub fn write_declined_addba_response(
     tid: u8,
     requested_window: u16,
 ) -> Result<(), RxAddbaResponseError> {
-    if body.len() != 9 {
-        return Err(RxAddbaResponseError::InvalidBodyLength(body.len()));
-    }
+    let length = body.len();
+    let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
+        return Err(RxAddbaResponseError::InvalidBodyLength(length));
+    };
     if tid > 15 {
         return Err(RxAddbaResponseError::InvalidTid(tid));
     }

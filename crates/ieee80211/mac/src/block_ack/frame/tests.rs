@@ -91,3 +91,38 @@ fn declined_response_preserves_request_identity_without_claiming_success() {
         })
     );
 }
+
+/// The Block Ack Action bodies of the tests above and the bodies the
+/// writers produce.
+fn action_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
+    let mut successful = [0; 9];
+    write_successful_addba_response(&mut successful, 137, 0, 16).unwrap();
+    let mut declined = [0; 9];
+    write_declined_addba_response(&mut declined, 23, 6, 64).unwrap();
+    std::vec![
+        std::vec![3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12],
+        std::vec![3, 1, 7, 0, 0, 0x86, 0x07, 5, 0],
+        std::vec![3, 2, 0, 0x58, 39, 0],
+        successful.to_vec(),
+        declined.to_vec(),
+    ]
+}
+
+fn actions(count: usize) {
+    let seeds = action_seeds();
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 32, |bytes| {
+        let _ = parse_block_ack_action(bytes);
+    });
+}
+
+#[test]
+fn block_ack_action_parser_never_panics() {
+    actions(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn block_ack_action_parser_never_panics_full() {
+    actions(crate::fuzz::FULL);
+}
