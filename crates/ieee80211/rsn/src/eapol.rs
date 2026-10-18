@@ -225,19 +225,14 @@ impl<'a> EapolKeyFrame<'a> {
         })
     }
 
-    /// The fixed fields. `FIELDS_COVER_THE_FIXED_PART` proves the split
-    /// total; were it not, the frame would read as all zeros and fail every
-    /// check, never pass one.
+    /// The fixed fields; `FIELDS_COVER_THE_FIXED_PART` proves the split
+    /// total.
     fn fields(self) -> Fields<'a> {
-        fields(self.fixed).unwrap_or(Fields {
-            key_length: [0; 2],
-            replay_counter: [0; 8],
-            nonce: &[0; 32],
-            key_iv: &[0; 16],
-            key_receive_sequence: &[0; 8],
-            key_identifier: &[0; 8],
-            mic: &[0; 16],
-        })
+        #[expect(
+            clippy::expect_used,
+            reason = "FIELDS_COVER_THE_FIXED_PART proves the split total"
+        )]
+        fields(self.fixed).expect("the EAPOL-Key fields cover the fixed part")
     }
 
     pub const fn bytes(self) -> &'a [u8] {
