@@ -447,8 +447,11 @@ fn ownership(cycles: &[Cycle]) -> Outcome {
     }
 }
 
+/// The number of gates.
+pub const GATES: usize = 11;
+
 /// Every gate, in the block's order, and the beacon figures.
-pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 9]) {
+pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
     let (verdict, beacons) = beacons(run);
     // The first cycle: every lease held, nothing received meanwhile (the
     // walker ran out), frames after the release; how the ring recovered is
@@ -503,6 +506,21 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 9]) {
         Gate {
             name: "timer_wake",
             outcome: check(!woke_early(), "woke-early"),
+        },
+        // The epoch wrote BASE once: the cold publication of the reserved
+        // descriptor; every later publication went through the doorbell.
+        Gate {
+            name: "base_writes",
+            outcome: check(run.rx.reload.base_writes == 1, "base-writes"),
+        },
+        // At most the epoch's first frame landed in the reserved
+        // descriptor, and nothing after the walker reached the ring.
+        Gate {
+            name: "reserved",
+            outcome: check(
+                run.rx.reload.reserved_landings <= 1 && run.rx.reload.reserved_late_landings == 0,
+                "reserved-landing",
+            ),
         },
     ];
     (verdict, gates)
@@ -711,7 +729,8 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         let hold = &cycle.hold;
         let end = cycle.end.as_ref();
         block.line(format_args!(
-            "w1.hold cycle={index} reached={} slots={SLOTS} full={} reason={} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={} end_released={} end_detached={} end_staged={} end_observed={} end_recycle_start={} end_accepted_tail={} end_next={} end_last={}",
+            "w1.hold cycle={index} fill_ms={} reached={} slots={SLOTS} full={} reason={} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={} end_released={} end_detached={} end_staged={} end_observed={} end_recycle_start={} end_accepted_tail={} end_next={} end_last={}",
+            cycle.fill_ms,
             hold.reached,
             u8::from(cycle.full.held()),
             cycle.full.reason(),
@@ -771,12 +790,14 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     ))?;
     let reload = &rx.reload;
     block.line(format_args!(
-        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} base_repairs={} exhausted_republications={} republications_accepted={}",
+        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={}",
         reload.max_reload_attempts,
         reload.observations,
-        reload.base_repairs,
-        reload.exhausted_republications,
-        reload.republications_accepted,
+        reload.reload_rerings,
+        reload.rering_failures,
+        reload.base_writes,
+        reload.reserved_landings,
+        reload.reserved_late_landings,
     ))?;
     let continuations = &rx.continuations;
     block.line(format_args!(

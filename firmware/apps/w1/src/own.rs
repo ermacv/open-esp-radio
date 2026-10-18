@@ -330,6 +330,8 @@ pub enum Check {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Cycle {
     pub order: Order,
+    /// The fill window the hold had, in ms; zero before the hold.
+    pub fill_ms: u32,
     /// Leases held when the hold began.
     pub held: usize,
     /// Whether the hold was full, and the runner's drain end as the fill

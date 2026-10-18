@@ -225,7 +225,7 @@ struct Spec {
     count: Count,
 }
 
-const GATE_NAMES: [&str; 9] = [
+const GATE_NAMES: [&str; 11] = [
     "beacons",
     "channel",
     "exit",
@@ -235,7 +235,12 @@ const GATE_NAMES: [&str; 9] = [
     "service_errors",
     "unserviced",
     "timer_wake",
+    "base_writes",
+    "reserved",
 ];
+
+/// The hold fill window's bounds, in ms (the image's `hold_fill_ms`).
+const HOLD_FILL_MS: core::ops::RangeInclusive<u64> = 3_000..=10_000;
 
 macro_rules! numbers {
     ($($name:literal),* $(,)?) => {
@@ -341,6 +346,7 @@ const SPECS: &[Spec] = &[
         keyword: "w1.hold",
         keys: &[
             key("cycle", CYCLE),
+            key("fill_ms", U32),
             key("reached", U64),
             key("slots", U64),
             key("full", Kind::OneOf(&["0", "1"])),
@@ -427,9 +433,11 @@ const SPECS: &[Spec] = &[
             "max_attempts",
             "limit",
             "observations",
-            "base_repairs",
-            "exhausted_republications",
-            "republications_accepted",
+            "reload_rerings",
+            "rering_failures",
+            "base_writes",
+            "reserved_landings",
+            "reserved_late_landings",
         ),
         open: false,
         count: Count::Once,
@@ -955,10 +963,12 @@ pub enum GateName {
     ServiceErrors,
     Unserviced,
     TimerWake,
+    BaseWrites,
+    Reserved,
 }
 
 impl GateName {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Beacons,
         Self::Channel,
         Self::Exit,
@@ -968,6 +978,8 @@ impl GateName {
         Self::ServiceErrors,
         Self::Unserviced,
         Self::TimerWake,
+        Self::BaseWrites,
+        Self::Reserved,
     ];
 
     /// The name in a `w1.gate` line.
@@ -982,6 +994,8 @@ impl GateName {
             Self::ServiceErrors => "service_errors",
             Self::Unserviced => "unserviced",
             Self::TimerWake => "timer_wake",
+            Self::BaseWrites => "base_writes",
+            Self::Reserved => "reserved",
         }
     }
 
@@ -1241,6 +1255,14 @@ impl Report {
                     )));
                 }
                 if keyword == "w1.hold" {
+                    let fill_ms = line.number("fill_ms")?;
+                    if !HOLD_FILL_MS.contains(&fill_ms) {
+                        return Err(malformed(format!(
+                            "w1.hold cycle={cycle} fill_ms={fill_ms} is outside {}..={}",
+                            HOLD_FILL_MS.start(),
+                            HOLD_FILL_MS.end()
+                        )));
+                    }
                     let (reached, slots) = (line.number("reached")?, line.number("slots")?);
                     let consistent = match (line.text("full")?, line.text("reason")?) {
                         ("1", "all") => reached == slots,
@@ -1621,6 +1643,19 @@ pub fn recompute(report: &Report, expected: &Config) -> Result<Host, ReportError
             false,
         ),
         timer_wake_gate(report)?,
+        gate(
+            GateName::BaseWrites,
+            report.reload.number("base_writes")? == 1,
+            "base-writes",
+            false,
+        ),
+        gate(
+            GateName::Reserved,
+            report.reload.number("reserved_landings")? <= 1
+                && report.reload.number("reserved_late_landings")? == 0,
+            "reserved-landing",
+            false,
+        ),
     ];
     Ok(Host {
         gates,
@@ -2143,14 +2178,14 @@ mod tests {
             "w1.gaps dropped=0",
             "w1.tick start=900000 end=900200 ok=1",
             "w1.rx units=500 bytes=90000 mac_irqs=480 power_irqs=3 unserviced_mac=0 unserviced_pwr=0 doorbell_unmasks=470 ignored_unmasks=0 chained=0 oversized=0 empty=0 too_long=0 overload=0 admission_blocks=0 stage_capacity_blocks=0 service_passes=480 service_errors=0 capacity_drains=1 frames_after_release=12",
-            "w1.hold cycle=0 reached=32 slots=32 full=1 reason=all units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0 end_released=0 end_detached=32 end_staged=32 end_observed=32 end_recycle_start=4 end_accepted_tail=3 end_next=0x0 end_last=0x17000",
-            "w1.hold cycle=1 reached=32 slots=32 full=1 reason=all units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0 end_released=- end_detached=- end_staged=- end_observed=- end_recycle_start=- end_accepted_tail=- end_next=- end_last=-",
+            "w1.hold cycle=0 fill_ms=5324 reached=32 slots=32 full=1 reason=all units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0 end_released=0 end_detached=32 end_staged=32 end_observed=32 end_recycle_start=4 end_accepted_tail=3 end_next=0x0 end_last=0x17000",
+            "w1.hold cycle=1 fill_ms=5324 reached=32 slots=32 full=1 reason=all units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0 end_released=- end_detached=- end_staged=- end_observed=- end_recycle_start=- end_accepted_tail=- end_next=- end_last=-",
             "w1.exhaust cycle=0 snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0 last_low=0x16fe0 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=32 reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=0x17030 last_after_doorbell=- desc_hash_changed=0",
             "w1.exhaust cycle=1 snapshots=9 blocked_us=1000200 next_low=0x0 next_upper=0 last_low=0x17024 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=- reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=- last_after_doorbell=- desc_hash_changed=0",
             "w1.own cycle=0 order=forward held=32 first_drop=4 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,6,7,8 order_breaks=0 chained=0 oversized=0 discards=-",
             "w1.own cycle=1 order=reverse held=32 first_drop=3 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,7,x,31,0 order_breaks=3 chained=0 oversized=1 discards=oversized:1,rx_failure:2",
             "w1.prefix fcs=0 strict_rxend_refusable=0 strict_dump_refusable=0 admitted=500",
-            "w1.reload max_attempts=3 limit=100001 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1",
+            "w1.reload max_attempts=3 limit=100001 observations=2 reload_rerings=0 rering_failures=0 base_writes=1 reserved_landings=1 reserved_late_landings=0",
             "w1.continuation stale_doorbell=2 longest_streak=1",
             "w1.teardown mask_confirm_us=4 drain_us=30 drain_polls=2",
             "w1.exit cause=StopRequested end=Halted",
@@ -2179,6 +2214,8 @@ mod tests {
             "w1.gate name=service_errors result=pass",
             "w1.gate name=unserviced result=pass",
             "w1.gate name=timer_wake result=pass",
+            "w1.gate name=base_writes result=pass",
+            "w1.gate name=reserved result=pass",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -2797,13 +2834,103 @@ mod tests {
 
         // The recovery path is report-only.
         let mut recovered = body();
-        set(&mut recovered, "w1.reload", "exhausted_republications", "0");
+        set(&mut recovered, "w1.reload", "reload_rerings", "1");
         set(&mut recovered, "w1.rx", "capacity_drains", "0");
         set(&mut recovered, "w1.exhaust", "snapshots", "0");
         assert_eq!(
             host_gate(&recovered, GateName::WalkerRestart).result,
             GateResult::Pass
         );
+    }
+
+    #[test]
+    fn the_base_writes_gate_requires_one_base_write() {
+        assert_eq!(
+            host_gate(&body(), GateName::BaseWrites).result,
+            GateResult::Pass
+        );
+        for writes in ["0", "2"] {
+            let mut written = body();
+            set(&mut written, "w1.reload", "base_writes", writes);
+            let gate = host_gate(&written, GateName::BaseWrites);
+            assert_eq!(
+                (gate.result, gate.reason),
+                (GateResult::Fail, Some("base-writes")),
+                "base_writes={writes}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_reserved_gate_allows_one_cold_landing_and_no_late_one() {
+        for (cold, late, pass) in [
+            ("0", "0", true),
+            ("1", "0", true),
+            ("2", "0", false),
+            ("1", "1", false),
+            ("0", "1", false),
+        ] {
+            let mut landed = body();
+            set(&mut landed, "w1.reload", "reserved_landings", cold);
+            set(&mut landed, "w1.reload", "reserved_late_landings", late);
+            let gate = host_gate(&landed, GateName::Reserved);
+            let expected = if pass {
+                (GateResult::Pass, None)
+            } else {
+                (GateResult::Fail, Some("reserved-landing"))
+            };
+            assert_eq!(
+                (gate.result, gate.reason),
+                expected,
+                "reserved_landings={cold} reserved_late_landings={late}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_reload_line_is_strict() {
+        // The keys of the removed BASE writers are refused.
+        let mut old = body();
+        let line = old
+            .iter_mut()
+            .find(|line| line.starts_with("w1.reload"))
+            .unwrap();
+        *line = "w1.reload max_attempts=3 limit=100001 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1".to_owned();
+        assert!(Report::parse(&console(&old)).is_err());
+        // Every key is required.
+        for key in [
+            "reload_rerings",
+            "rering_failures",
+            "base_writes",
+            "reserved_landings",
+            "reserved_late_landings",
+        ] {
+            let mut missing = body();
+            let line = missing
+                .iter_mut()
+                .find(|line| line.starts_with("w1.reload"))
+                .unwrap();
+            *line = line
+                .split_whitespace()
+                .filter(|token| !token.starts_with(&format!("{key}=")))
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(Report::parse(&console(&missing)).is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn the_hold_fill_window_is_bounded() {
+        for (fill, ok) in [
+            ("3000", true),
+            ("10000", true),
+            ("2999", false),
+            ("10001", false),
+        ] {
+            let mut hold = body();
+            set(&mut hold, "w1.hold", "fill_ms", fill);
+            assert_eq!(Report::parse(&console(&hold)).is_ok(), ok, "fill_ms={fill}");
+        }
     }
 
     #[test]

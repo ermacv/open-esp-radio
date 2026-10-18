@@ -119,8 +119,14 @@ const BIND: Duration = Duration::from_millis(2_000);
 const BIND_POLL: Duration = Duration::from_millis(1);
 /// The timer stress phase.
 const STRESS: Duration = Duration::from_millis(5_000);
-/// How long the hold may take to collect every staging lease.
-const HOLD_FILL: Duration = Duration::from_millis(3_000);
+/// The shortest window a hold has to collect every staging lease.
+const HOLD_FILL_MIN_MS: u32 = 3_000;
+/// The longest such window.
+const HOLD_FILL_MAX_MS: u32 = 10_000;
+/// The window when the survey has no beacon interval of the stand.
+const HOLD_FILL_WITHOUT_STAND_MS: u32 = 6_000;
+/// Beacon intervals past the staging slots a fill waits for.
+const HOLD_FILL_SPARE_BEACONS: u32 = 4;
 /// How long the full hold lasts.
 const HOLD: Duration = Duration::from_millis(1_000);
 /// How long the application takes no frame after the first drop.
@@ -393,9 +399,29 @@ async fn drain(receiver: &mut Receiver, channel: Channel, admitted: &mut u32) ->
     }
 }
 
-/// One hold cycle into `cycle`: take every staging lease (at most
-/// [`HOLD_FILL`]; one short, until [`HOLD_FILL`] passed without a unit
-/// since the last lease, which may leave the hold stuck at LAST, see
+/// How long a hold may take to collect every staging lease, in ms:
+/// `(SLOTS + 4)` beacon intervals of the stand (`bi_tu`, 1024 µs each, from
+/// the survey), at least [`HOLD_FILL_MIN_MS`] and at most
+/// [`HOLD_FILL_MAX_MS`]; [`HOLD_FILL_WITHOUT_STAND_MS`] without the stand or
+/// at a zero interval. On a quiet channel the stand's beacons are most of
+/// the frames, so a fixed 3 s fill could end before the pool was full.
+fn hold_fill_ms(bi_tu: Option<u16>) -> u32 {
+    match bi_tu {
+        Some(bi_tu) if bi_tu != 0 => {
+            let slots = u32::try_from(SLOTS).unwrap_or(u32::MAX);
+            let fill_us = slots
+                .saturating_add(HOLD_FILL_SPARE_BEACONS)
+                .saturating_mul(u32::from(bi_tu))
+                .saturating_mul(1_024);
+            (fill_us / 1_000).clamp(HOLD_FILL_MIN_MS, HOLD_FILL_MAX_MS)
+        }
+        _ => HOLD_FILL_WITHOUT_STAND_MS,
+    }
+}
+
+/// One hold cycle into `cycle`: take every staging lease (at most the fill
+/// window, [`hold_fill_ms`]; one short, until that window passed without a
+/// unit since the last lease, which may leave the hold stuck at LAST, see
 /// [`own::fullness`]) and fingerprint each, hold them [`HOLD`] and recheck
 /// them, drop the first in `cycle.order`, dwell [`DWELL`] without taking a
 /// frame and recheck the rest, drop them one at a time [`RELEASE_STEP`]
@@ -407,17 +433,20 @@ async fn hold_cycle(
     ring_base: u32,
     channel: Channel,
     admitted: &mut u32,
+    fill_ms: u32,
     cycle: &mut Cycle,
 ) {
+    let fill = Duration::from_millis(fill_ms);
+    cycle.fill_ms = fill_ms;
     let mut leases = heapless::Vec::<(Held, Fingerprint), SLOTS>::new();
-    let fill_deadline = after(HOLD_FILL);
+    let fill_deadline = after(fill);
     // When the last lease was taken, and the units received then.
     let mut last_lease = (EmbassyClock.now(), counters.report().units);
     while !leases.is_full() {
         // One short: the fill waits until no unit came for the fill
         // timeout, so a stuck hold is told from a slow one.
         let deadline = if leases.len() + 1 == SLOTS {
-            fill_deadline.max(last_lease.0.saturating_add(HOLD_FILL))
+            fill_deadline.max(last_lease.0.saturating_add(fill))
         } else {
             fill_deadline
         };
@@ -445,7 +474,7 @@ async fn hold_cycle(
     let filled = counters.report();
     cycle.end = filled.drain_end;
     let quiet = filled.units == last_lease.1
-        && EmbassyClock.now().saturating_duration_since(last_lease.0) >= HOLD_FILL;
+        && EmbassyClock.now().saturating_duration_since(last_lease.0) >= fill;
     cycle.full = own::fullness(&indices, cycle.end.as_ref(), quiet, ring_base);
     let before = counters.report();
     measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
@@ -695,6 +724,12 @@ async fn run(
         // staged release restarts it. The second cycle starts after the
         // first one's frames after the release: the ring has recovered.
         measure::enter(Phase::Hold);
+        let fill_ms = hold_fill_ms(
+            survey
+                .entries()
+                .find(|(record, _)| record.bssid == stand)
+                .map(|(record, _)| record.beacon_interval_tu),
+        );
         for cycle in &mut cycles {
             hold_cycle(
                 &mut receiver,
@@ -702,6 +737,7 @@ async fn run(
                 ring_base,
                 rx_channel,
                 &mut admitted,
+                fill_ms,
                 cycle,
             )
             .await;
