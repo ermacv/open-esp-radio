@@ -44,6 +44,7 @@ use crate::{
         control::ReceiveStopHandle,
         counters::WifiRxReport,
         frontier::RxFrontierError,
+        returns::{HeldRxFrame, RxReturnNotifier},
         sink::{CountingAdmission, CountingSink},
         transaction::{CompletedUnit, CreditPolicy, IngressClass, IngressRoute, Preview},
     },
@@ -383,12 +384,25 @@ where
     E: Publisher<'static, BUFFER, SLOTS> + 'static,
     M: Admission + 'static,
 {
+    harness_staged::<SLOTS, E, M>(|counters, _| owners(counters))
+}
+
+/// A harness whose arena has `STAGE` staging slots; `owners` also gets the
+/// upper layer's return notifier.
+fn harness_staged<const STAGE: usize, E, M>(
+    owners: impl FnOnce(&'static WifiRxCounters, RxReturnNotifier<'static>) -> (E, M),
+) -> Harness
+where
+    E: Publisher<'static, BUFFER, STAGE> + 'static,
+    M: Admission + 'static,
+{
     let host: &'static Host = leak(Host::new());
-    let arena: &'static mut HostArena = leak(bytemuck::Zeroable::zeroed());
+    let arena: &'static mut WifiRxArena<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
+        leak(bytemuck::Zeroable::zeroed());
     let (parts, stop) = arena.bind().expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
-    let (publisher, admission) = owners(counters);
+    let (publisher, admission) = owners(counters, parts.returns());
     let (publisher, admission) = (&*leak(publisher), &*leak(admission));
     let clock: &'static VirtualClock = leak(VirtualClock::new());
     let hardware = leak(HostRadio { host });
@@ -932,4 +946,210 @@ fn report_counts_units_bytes_and_drops() {
     // The empty unit's discard and the staged units' rearm each settled
     // one reload doorbell, on its first observation.
     assert_eq!(report.max_reload_attempts, 1);
+}
+
+const STAGE: usize = 8;
+
+type Returned = RefCell<Vec<HeldRxFrame<'static, 'static, STAGE, BUFFER>>>;
+
+/// An upper layer that holds its leases while `holding`, through the
+/// notifier, as a network queue would; otherwise it drops them at once.
+struct ReturningSink {
+    held: &'static Returned,
+    holding: &'static Cell<bool>,
+    returns: RxReturnNotifier<'static>,
+    counters: &'static WifiRxCounters,
+}
+
+impl Publisher<'static, BUFFER, STAGE> for ReturningSink {
+    const DEPTH: usize = STAGE;
+
+    fn free_capacity(&self) -> usize {
+        STAGE - self.held.borrow().len()
+    }
+
+    fn preview(&self, unit: CompletedUnit, _: [u8; 24]) -> Preview {
+        self.unclassified_preview(unit)
+    }
+
+    fn unclassified_preview(&self, unit: CompletedUnit) -> Preview {
+        Preview {
+            unit,
+            frame_control: None,
+            class: IngressClass::Unclassified,
+            route: IngressRoute::Malformed,
+        }
+    }
+
+    fn try_send(
+        &self,
+        frame: NetworkRxFrame<'static, STAGE, BUFFER>,
+    ) -> Result<(), NetworkRxFrame<'static, STAGE, BUFFER>> {
+        self.counters.received(frame.length());
+        if self.holding.get() {
+            self.held.borrow_mut().push(self.returns.hold(frame));
+        }
+        Ok(())
+    }
+}
+
+fn returning_harness() -> (
+    Harness,
+    &'static Returned,
+    &'static Cell<bool>,
+    RxReturnNotifier<'static>,
+) {
+    let held: &'static Returned = leak(RefCell::new(Vec::new()));
+    let holding: &'static Cell<bool> = leak(Cell::new(true));
+    let mut notifier = None;
+    let harness = harness_staged::<STAGE, _, _>(|counters, returns| {
+        notifier = Some(returns);
+        (
+            ReturningSink {
+                held,
+                holding,
+                returns,
+                counters,
+            },
+            CountingAdmission::new(counters),
+        )
+    })
+    .started();
+    (
+        harness,
+        held,
+        holding,
+        notifier.expect("the harness lends the notifier"),
+    )
+}
+
+fn mac_lines(log: &[Event]) -> usize {
+    log.iter().filter(|event| **event == Event::MacLine).count()
+}
+
+#[test]
+fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
+    let (mut harness, held, holding, _) = returning_harness();
+    // The upper layer takes every staging slot and keeps it.
+    for _ in 0..STAGE {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    assert_eq!(held.borrow().len(), STAGE);
+    assert_eq!(harness.rx.detached_buffer_count(), STAGE);
+
+    // The rest of the ring fills behind them and the walker runs out: the
+    // held head keeps every later descriptor from being rearmed.
+    for _ in STAGE..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    harness.settle();
+    for _ in 0..3 {
+        harness.settle();
+    }
+    let report = harness.report();
+    assert_eq!(report.units, STAGE as u32);
+    assert!(report.stage_capacity_blocks >= 1);
+    // No descriptor is armed and the walker is exhausted: the model can
+    // produce no further RX completion, so no further MAC interrupt.
+    assert!(
+        harness
+            .rx
+            .descriptors()
+            .iter()
+            .all(|descriptor| oer_esp32s31_ieee80211_dma::descriptor::rx_done(descriptor.word0()))
+    );
+    assert_eq!(harness.host.walker.borrow().next_descriptor_low, 0);
+    assert!(!harness.host.mac().line_asserted());
+    assert!(!harness.host.mac().rx_delivery_enabled());
+    harness.host.take_log();
+
+    // The upper layer returns its leases; nothing else happens.
+    holding.set(false);
+    held.borrow_mut().clear();
+    harness.settle();
+    let log = harness.host.take_log();
+    assert_eq!(mac_lines(&log), 0, "the wake came from the return");
+    // The runner rearmed the returned prefix, staged what waited behind it
+    // and republished the head of the exhausted list through BASE.
+    let report = harness.report();
+    assert_eq!(report.units, COUNT as u32);
+    let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    for descriptor in &harness.rx.descriptors()[..STAGE] {
+        assert_eq!(descriptor.word0(), armed);
+    }
+    assert!(
+        harness
+            .host
+            .walker
+            .borrow()
+            .operations()
+            .contains(&RxWalkerOperation::WriteDescriptorBase(harness.base))
+    );
+    // Until the walker is seen to take the republished list, RX stays
+    // masked and the runner probes.
+    assert!(!harness.host.mac().rx_delivery_enabled());
+    assert!(!log.iter().any(|event| matches!(event, Event::Ring { .. })));
+
+    // The walker fetches the new head; the probe ends and RX is unmasked,
+    // still without a MAC interrupt.
+    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
+    harness.settle();
+    let log = harness.host.take_log();
+    assert_eq!(mac_lines(&log), 0);
+    assert!(log.contains(&Event::Acknowledge));
+    assert!(harness.host.mac().rx_delivery_enabled());
+    assert_eq!(harness.report().service_errors, 0);
+
+    // A new frame lands in a rearmed descriptor and raises its own edge.
+    harness.frame(150);
+    harness.settle();
+    assert_eq!(mac_lines(&harness.host.take_log()), 1);
+    assert_eq!(harness.report().units, COUNT as u32 + 1);
+}
+
+#[test]
+fn a_return_while_rx_is_live_is_harmless() {
+    let (mut harness, held, holding, notifier) = returning_harness();
+    harness.frame(100);
+    harness.settle();
+    assert_eq!(held.borrow().len(), 1);
+    assert!(harness.host.mac().rx_delivery_enabled());
+    let before = harness.report();
+    harness.host.take_log();
+
+    // RX is live: the return starts one pass, which re-enables what is
+    // enabled already.
+    holding.set(false);
+    held.borrow_mut().clear();
+    harness.settle();
+    let log = harness.host.take_log();
+    assert_eq!(mac_lines(&log), 0);
+    let after = harness.report();
+    assert_eq!(after.doorbell_unmasks, before.doorbell_unmasks + 1);
+    assert_eq!((after.service_errors, after.ignored_unmasks), (0, 0));
+    assert!(harness.host.mac().rx_delivery_enabled());
+    assert!(harness.host.line(|line| !line.masked()));
+
+    harness.frame(120);
+    harness.settle();
+    assert_eq!(harness.report().units, 2);
+
+    // A notice after the epoch parked reaches no one.
+    harness.stop.request_stop();
+    harness.settle();
+    let exit = harness.stop.try_exit();
+    assert_eq!(exit.map(|exit| exit.end), Some(WifiRxEnd::Halted));
+    harness.host.take_log();
+    notifier.notify();
+    harness.settle();
+    assert!(harness.host.take_log().is_empty());
+    assert_eq!(harness.walker_stops(), 1);
 }

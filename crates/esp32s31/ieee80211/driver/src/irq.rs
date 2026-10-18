@@ -122,7 +122,7 @@ impl WifiIrqRequests {
 /// on the chip, over the host models in tests.
 pub struct WifiIrqLine<E> {
     epoch: E,
-    mac: IrqPublisher<'static>,
+    mac: &'static IrqPublisher<'static>,
     power: PowerIrqPublisher<'static>,
     requests: &'static WifiIrqRequests,
     counters: &'static WifiRxCounters,
@@ -132,7 +132,7 @@ pub struct WifiIrqLine<E> {
 impl<E> WifiIrqLine<E> {
     const fn new(
         epoch: E,
-        mac: IrqPublisher<'static>,
+        mac: &'static IrqPublisher<'static>,
         power: PowerIrqPublisher<'static>,
         requests: &'static WifiIrqRequests,
         counters: &'static WifiRxCounters,
@@ -237,7 +237,7 @@ pub fn run_doorbell<I: MacInterrupt, P: MacPowerInterrupt>(
 
 /// The arena's parts of one interrupt line, before its epoch exists.
 pub struct WifiIrqLineParts<'a, E> {
-    pub(crate) mac: IrqPublisher<'a>,
+    pub(crate) mac: &'a IrqPublisher<'a>,
     pub(crate) power: PowerIrqPublisher<'a>,
     pub(crate) requests: &'a WifiIrqRequests,
     pub(crate) counters: &'a WifiRxCounters,

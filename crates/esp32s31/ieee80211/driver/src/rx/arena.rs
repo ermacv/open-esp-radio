@@ -21,7 +21,7 @@ use oer_esp32s31_ieee80211_dma::{
 };
 use oer_esp32s31_ieee80211_mac::{
     irq::{
-        consumer::{IrqConsumer, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
+        consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
         epoch::{ActiveEpoch, Moderated},
     },
     rx::{RxDmaBufferAddresses, pool::RxStagePool},
@@ -30,6 +30,7 @@ use oer_esp32s31_ieee80211_mac::{
 use super::{
     control::{ReceiveControl, ReceiveRunnerControl, ReceiveStopHandle},
     counters::WifiRxCounters,
+    returns::RxReturnNotifier,
 };
 use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 
@@ -50,6 +51,9 @@ pub struct WifiRxArena<
     E = ActiveEpoch<Moderated>,
 > {
     irq: MaybeUninit<IrqStorage>,
+    /// The one MAC fact publisher: the line posts hardware facts through it,
+    /// the upper layer the return of a staged lease.
+    irq_publisher: MaybeUninit<IrqPublisher<'static>>,
     power: MaybeUninit<PowerIrqStorage>,
     requests: WifiIrqRequests,
     counters: WifiRxCounters,
@@ -80,6 +84,7 @@ pub struct WifiRxParts<
     pub(crate) counters: &'a WifiRxCounters,
     pub(crate) control: ReceiveRunnerControl<'a>,
     pub(crate) line: WifiIrqLineParts<'a, E>,
+    pub(crate) returns: RxReturnNotifier<'a>,
 }
 
 impl<
@@ -114,6 +119,7 @@ impl<
     > {
         let Self {
             irq,
+            irq_publisher: publisher_slot,
             power,
             requests,
             counters,
@@ -127,6 +133,7 @@ impl<
         let (requests, counters): (&'static WifiIrqRequests, &'static WifiRxCounters) =
             (requests, counters);
         let (irq_publisher, irq) = irq.write(IrqStorage::new()).split();
+        let irq_publisher: &'static IrqPublisher<'static> = publisher_slot.write(irq_publisher);
         let (power_publisher, power) = power.write(PowerIrqStorage::new()).split();
         let (control, stop) = control.write(ReceiveControl::new()).split();
         Ok((
@@ -140,6 +147,7 @@ impl<
                 requests,
                 counters,
                 control,
+                returns: RxReturnNotifier::new(irq_publisher),
                 line: WifiIrqLineParts {
                     mac: irq_publisher,
                     power: power_publisher,
@@ -182,6 +190,11 @@ impl<
 
     pub const fn counters(&self) -> &'a WifiRxCounters {
         self.counters
+    }
+
+    /// The handle the upper layer returns staged leases through.
+    pub const fn returns(&self) -> RxReturnNotifier<'a> {
+        self.returns
     }
 }
 

@@ -16,7 +16,9 @@
 //!   pending recycled append or an exhausted budget keeps RX masked and runs
 //!   again: up to [`IMMEDIATE_CONTINUATIONS`] immediate self-wakes, then one
 //!   [`CONTINUATION_WAIT`] timer wait. A pass blocked on staging capacity
-//!   stays masked and waits for the capacity fact.
+//!   stays masked and waits for the capacity fact, which the upper layer
+//!   posts when it returns a lease ([`super::returns`]): the walker may be
+//!   exhausted then, with no RX interrupt to come.
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
 //!   silence the routes; close promiscuous receive and request the MAC
@@ -147,6 +149,8 @@ where
         counters,
         control,
         line,
+        // The upper layer holds its copy of the return notifier.
+        returns: _,
     } = parts;
     let mut receiver = Receiver {
         hardware,

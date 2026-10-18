@@ -46,7 +46,7 @@ fn parts() -> (
     let (mac, irq) = leak(IrqStorage::new()).split();
     let (power, power_consumer) = leak(PowerIrqStorage::new()).split();
     let parts = WifiIrqLineParts {
-        mac,
+        mac: leak(mac),
         power,
         requests: leak(WifiIrqRequests::new()),
         counters: leak(WifiRxCounters::new()),

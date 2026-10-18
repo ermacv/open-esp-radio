@@ -51,7 +51,10 @@ the masked fact; an unmask after it is ignored and counted. P2 requests
 `UNMASK_RX` only after the RX frontier drained with no released buffer left
 to rearm. Installing a line clears a stale request. The doorbell route is
 enabled at boot; the MAC and WDEVPWR routes are enabled after the line is
-installed and silenced right after the mask is confirmed.
+installed and silenced right after the mask is confirmed. A lease the upper
+layer returns posts the RX-capacity fact (`RxReturnNotifier`), so the runner
+rearms the returned descriptors even when an exhausted walker raises no RX
+interrupt; the notice touches no ring state.
 
 ## Ownership
 
