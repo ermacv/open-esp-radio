@@ -42,22 +42,12 @@
 #[cfg(test)]
 extern crate std;
 
-#[cfg(any(target_arch = "riscv32", test))]
-mod channel;
-#[cfg(target_arch = "riscv32")]
-pub use channel::{PhyChannel, lower_wifi_channel, switch_esp32s31_wifi_channel};
-#[cfg(target_arch = "riscv32")]
-pub use channel::{PublishedWifiChannelError, switch_published_esp32s31_wifi_channel};
 pub mod ampdu_tx;
 pub mod coex;
-#[cfg(target_arch = "riscv32")]
-pub mod cold_start;
 pub mod cooperative_hardware;
 pub mod datapath;
 pub mod esp_now;
 pub mod lower_mac;
-#[cfg(target_arch = "riscv32")]
-pub mod mac_start;
 pub mod monitor_injection;
 pub mod ordinary_tx;
 pub mod protected_data_rx;

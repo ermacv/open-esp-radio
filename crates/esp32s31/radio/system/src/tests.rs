@@ -32,8 +32,6 @@ use super::*;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Event {
     Prepare(Result<PhyPreparation, Fault>),
-    CoexEnter,
-    CoexLeave,
     Enter,
     Track,
     Exit,
@@ -47,8 +45,10 @@ struct Script {
     rf_open: bool,
     fail_prepare: bool,
     refuse_enter: bool,
+    client_fails_enter: bool,
     poison_track: bool,
     not_last: bool,
+    close_recoverable: bool,
     deadline: Option<Instant>,
     log: Vec<Event>,
 }
@@ -87,10 +87,14 @@ impl PhyDomain for Model {
         result
     }
 
-    async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), Fault> {
+    async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault> {
         let LastClientLeft(()) = last;
-        self.0.borrow_mut().rf_open = false;
-        self.push(Event::CloseRf);
+        let mut script = self.0.borrow_mut();
+        script.log.push(Event::CloseRf);
+        if script.close_recoverable {
+            return Err(CloseFault::Recoverable);
+        }
+        script.rf_open = false;
         Ok(())
     }
 
@@ -109,14 +113,6 @@ impl PhyDomain for Model {
 }
 
 impl ClientBackend<Wifi, RcSlow> for Model {
-    fn enter_coex(&mut self) {
-        self.push(Event::CoexEnter);
-    }
-
-    fn leave_coex(&mut self) {
-        self.push(Event::CoexLeave);
-    }
-
     async fn enter(
         &mut self,
         join: WifiJoin,
@@ -124,10 +120,20 @@ impl ClientBackend<Wifi, RcSlow> for Model {
         _lp: &LpClock<RcSlow>,
     ) -> Result<WifiJoined, Failed<WifiReturned>> {
         self.push(Event::Enter);
-        if self.0.borrow().refuse_enter {
+        let cause = {
+            let mut script = self.0.borrow_mut();
+            // A client failure happens once; the retry enters.
+            let client_failed = core::mem::take(&mut script.client_fails_enter);
+            if script.refuse_enter {
+                Some(Failure::Refused)
+            } else {
+                client_failed.then_some(Failure::ClientFailed)
+            }
+        };
+        if let Some(cause) = cause {
             return Err(Failed {
                 returned: WifiReturned::Cold(join.wifi),
-                cause: Failure::Refused,
+                cause,
             });
         }
         Ok(WifiJoined {
@@ -148,7 +154,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             wifi: track.wifi,
             report: TrackReport {
                 tracking_micros: Some(7),
-                temperature: None,
+                temperature: PhyState::default().temperature_observation(),
                 tx_power: PhyState::default().tx_target_power_profile(),
                 mac: MacColdStartOutcome {
                     handshake_samples: 1,
@@ -255,11 +261,9 @@ fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {
         model.log(),
         vec![
             REGISTERED,
-            Event::CoexEnter,
             Event::Enter,
             Event::Track,
             Event::Exit,
-            Event::CoexLeave,
             Event::CloseRf,
         ]
     );
@@ -289,13 +293,11 @@ fn a_join_after_rf_closed_wakes_rf_with_a_new_epoch() {
         assert_eq!((first.epoch.get(), second.epoch.get()), (0, 1));
     });
     assert_eq!(
-        model.log()[..7],
+        model.log()[..5],
         [
             REGISTERED,
-            Event::CoexEnter,
             Event::Enter,
             Event::Exit,
-            Event::CoexLeave,
             Event::CloseRf,
             Event::Prepare(Ok(PhyPreparation::Woke { micros: 3 })),
         ]
@@ -316,16 +318,7 @@ fn a_refused_first_member_leaves_rf_closed_and_gets_its_partition_back() {
         assert_eq!(failed.cause, Failure::Refused);
         assert!(matches!(failed.returned, WifiReturned::Cold(_)));
     });
-    assert_eq!(
-        model.log(),
-        vec![
-            REGISTERED,
-            Event::CoexEnter,
-            Event::Enter,
-            Event::CoexLeave,
-            Event::CloseRf,
-        ]
-    );
+    assert_eq!(model.log(), vec![REGISTERED, Event::Enter, Event::CloseRf,]);
 }
 
 #[test]
@@ -443,5 +436,71 @@ fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
             .filter(|event| **event == Event::Tick)
             .count(),
         2
+    );
+}
+
+#[test]
+fn a_recoverable_close_keeps_rf_open_in_the_same_epoch() {
+    let model = model(Script {
+        close_recoverable: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Ok(first) = joined else {
+            panic!("a cold join registers")
+        };
+        let (cell, left) = cell
+            .leave(
+                Leaving::Untracked(first.member),
+                WifiLeave {
+                    wifi: first.payload.wifi,
+                },
+            )
+            .await;
+        assert_eq!(left.domain, DomainHealth::Healthy);
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        let Ok(second) = joined else {
+            panic!("the domain stays healthy")
+        };
+        assert_eq!(second.payload.phy, PhyPreparation::AlreadyOpen);
+        assert_eq!(second.epoch, first.epoch);
+    });
+    assert_eq!(
+        model.log(),
+        vec![
+            REGISTERED,
+            Event::Enter,
+            Event::Exit,
+            Event::CloseRf,
+            Event::Prepare(Ok(PhyPreparation::AlreadyOpen)),
+            Event::Enter,
+        ]
+    );
+}
+
+#[test]
+fn a_client_failure_keeps_the_domain_healthy_and_closes_rf_it_opened() {
+    let model = model(Script {
+        client_fails_enter: true,
+        ..Script::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let Err(failed) = joined else {
+            panic!("the client failed")
+        };
+        assert_eq!(failed.cause, Failure::ClientFailed);
+        let (_cell, joined) = cell.join(WifiJoin { wifi: cold() }).await;
+        assert!(joined.is_ok(), "a client failure poisons nothing");
+    });
+    assert_eq!(
+        model.log()[..4],
+        [
+            REGISTERED,
+            Event::Enter,
+            Event::CloseRf,
+            Event::Prepare(Ok(PhyPreparation::Woke { micros: 3 }))
+        ]
     );
 }

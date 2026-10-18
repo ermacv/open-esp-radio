@@ -38,7 +38,9 @@ fn a_posted_request_rings_once_and_is_answered_once() {
     assert!(slot.poll_answer(&mut cx).is_pending());
     // The slot is idle again and takes the next request.
     slot.post(8);
-    assert_eq!(slot.take_request().map(|(request, _)| request), Some(8));
+    let (request, responder) = slot.take_request().unwrap();
+    assert_eq!(request, 8);
+    responder.answer(80);
 }
 
 struct Flag(AtomicBool);
@@ -113,4 +115,13 @@ fn post_take_and_answer_race_without_loss_or_duplication() {
             .zip(0..)
             .all(|(answer, round)| *answer == round * 3)
     );
+}
+
+#[test]
+#[should_panic(expected = "a taken request must be answered")]
+fn a_responder_dropped_unanswered_panics() {
+    let slot = slot();
+    slot.post(7);
+    let (_request, responder) = slot.take_request().unwrap();
+    drop(responder);
 }
