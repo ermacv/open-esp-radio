@@ -40,12 +40,11 @@ pub fn test_snapshot_into(inputs: &Path, objects: Option<&Path>) -> (tempfile::T
     fs::write(root.path().join(".gitignore"), "snapshots/\n").unwrap();
     for relative in [
         "Cargo.lock",
-        "hil/targets/chip-a/Cargo.lock",
-        "hil/targets/chip-a/Cargo.toml",
-        "hil/targets/chip-a/stack.toml",
-        "platform/chip-a/stack.toml",
-        "platform/chip-a/partitions/applications.csv",
-        "platform/chip-a/chip.toml",
+        "firmware/hil/chip-a-agent/Cargo.toml",
+        "firmware/hil/chip-a/stack.toml",
+        "firmware/platform/chip-a/stack.toml",
+        "firmware/platform/chip-a/partitions/applications.csv",
+        "firmware/platform/chip-a/chip.toml",
     ] {
         let target = root.path().join(relative);
         fs::create_dir_all(target.parent().unwrap()).unwrap();

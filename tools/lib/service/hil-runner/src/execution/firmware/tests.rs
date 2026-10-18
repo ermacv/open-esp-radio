@@ -10,24 +10,24 @@ fn write(path: &Path, bytes: &[u8]) {
 fn build_inputs(root: &Path) -> Artifacts {
     for relative in [
         "Cargo.lock",
-        "hil/targets/chip-a/Cargo.lock",
-        "hil/targets/chip-a/Cargo.toml",
-        "hil/targets/chip-a/stack.toml",
-        "platform/chip-a/stack.toml",
-        "platform/chip-a/Cargo.lock",
-        "platform/chip-a/partitions/applications.csv",
+        "Cargo.lock",
+        "firmware/hil/chip-a-agent/Cargo.toml",
+        "firmware/hil/chip-a/stack.toml",
+        "firmware/platform/chip-a/stack.toml",
+        "Cargo.lock",
+        "firmware/platform/chip-a/partitions/applications.csv",
     ] {
         write(&root.join(relative), relative.as_bytes());
     }
     // The fixture chip's profile and the HIL policy's base, which the build
     // provenance reads.
     write(
-        &root.join("platform/chip-a/chip.toml"),
+        &root.join("firmware/platform/chip-a/chip.toml"),
         oer_tool_service_hil_run_bundle::run::test_support::TEST_CHIP_PROFILE.as_bytes(),
     );
     write(
-        &root.join("hil/targets/chip-a/stack.toml"),
-        b"extends = \"../../../platform/chip-a/stack.toml\"\n",
+        &root.join("firmware/hil/chip-a/stack.toml"),
+        b"extends = \"../../platform/chip-a/stack.toml\"\n",
     );
     let build = root.join("build");
     for (name, bytes) in [
@@ -60,8 +60,8 @@ fn build_inputs(root: &Path) -> Artifacts {
     });
     bundle.otadata = true;
     for (committed, file) in [
-        ("hil/targets/chip-a/Cargo.lock", "runtime-Cargo.lock"),
-        ("platform/chip-a/Cargo.lock", "bootstrap-Cargo.lock"),
+        ("Cargo.lock", "runtime-Cargo.lock"),
+        ("Cargo.lock", "bootstrap-Cargo.lock"),
     ] {
         bundle.locks.push(oer_tool_service_image_bundle::Lock {
             committed: committed.into(),

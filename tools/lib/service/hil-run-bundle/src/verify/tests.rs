@@ -221,7 +221,7 @@ fn add_build_provenance(run: &Path) {
             files: vec![
                 oer_tool_data_hil_run_bundle_format::build::BuildFileMaterial {
                     name: String::from("embedded-lock"),
-                    path: PathBuf::from("hil/targets/chip-a/Cargo.lock"),
+                    path: PathBuf::from("Cargo.lock"),
                     archive_path: Some(effective_lock_path.clone()),
                     size_bytes: 14,
                     sha256: sha256_file(&run.join(&effective_lock_path)).unwrap(),
