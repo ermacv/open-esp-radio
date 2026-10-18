@@ -62,9 +62,10 @@ fn cargo() -> Command {
     Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
 }
 
-/// The image parameters' variables a cargo build of `image`'s runtime sets
-/// (`Some`) or removes (`None`): only `w1`'s runtime gets them, so a value
-/// left in the caller's environment reaches no other build.
+/// The stand identity's variables a cargo build of `image`'s runtime sets
+/// (`Some`) or removes (`None`): only a configured `w1` runtime gets them,
+/// so a value left in the caller's environment reaches no other build, nor
+/// the unconfigured `w1`.
 pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, Option<String>)> {
     match w1.filter(|_| image == w1::IMAGE) {
         Some(config) => config
@@ -72,7 +73,7 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, O
             .into_iter()
             .map(|(name, value)| (name, Some(value)))
             .collect(),
-        None => vec![(w1::ENV_CHANNEL, None), (w1::ENV_BSSID, None)],
+        None => w1::ENV.into_iter().map(|name| (name, None)).collect(),
     }
 }
 
@@ -240,16 +241,22 @@ mod tests {
     fn only_w1s_runtime_build_gets_its_parameters() {
         let config = w1::Config {
             channel: 11,
-            expect: w1::Bssid::new([0x02, 0, 0, 0, 0xF6, 0xD0]),
+            bssid: w1::Bssid::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
+            ssid: w1::Ssid::new(b"Lab").unwrap(),
         };
         assert_eq!(
             runtime_env("w1", Some(&config)),
             [
                 (w1::ENV_CHANNEL, Some("11".to_owned())),
                 (w1::ENV_BSSID, Some("02:00:00:00:F6:D0".to_owned())),
+                (w1::ENV_SSID, Some("4c6162".to_owned())),
             ]
         );
-        let removed = [(w1::ENV_CHANNEL, None), (w1::ENV_BSSID, None)];
+        let removed = [
+            (w1::ENV_CHANNEL, None),
+            (w1::ENV_BSSID, None),
+            (w1::ENV_SSID, None),
+        ];
         // The unconfigured w1, another image and the bootstrap remove them.
         assert_eq!(runtime_env("w1", None), removed);
         assert_eq!(runtime_env("w0", Some(&config)), removed);

@@ -108,6 +108,6 @@ jobs:
           cargo fw build boot-smoke
           cargo fw build radio-root
           cargo fw build w0
-          # Unconfigured: without --channel/--expect-bssid it reports
-          # `fail w1 unconfigured` when run, and builds the same layout.
+          # Unconfigured: only `run w1` builds it for the stand router; this
+          # one reports `fail w1 unconfigured` when run, same layout.
           cargo fw build w1

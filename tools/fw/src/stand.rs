@@ -1,9 +1,13 @@
 //! The owner's stand file: which boards the stand has and which hub port
-//! powers each.
+//! powers each, and, for image `w1`, the stand router.
 //!
-//! Only `schema`, `[[hub]]` and `[[board]]` are read. The file also holds the
-//! stand's network credentials, so nothing else is deserialized, and a parse
-//! error names its line, never the file's text.
+//! Read are `schema`, `[[hub]]`, `[[board]]`, `[station].ssid` and of
+//! `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`,
+//! `ap_section` and `channel`. The file also holds the stand's network
+//! credentials, so nothing else is deserialized (`[station].passphrase` and
+//! `[access_point]` are never read), and a parse error names its line and
+//! never a value. The SSID, the SSH target and the interface are
+//! [`Secret`]s: their `Debug` shows nothing of them.
 
 use std::path::{Path, PathBuf};
 
@@ -66,6 +70,65 @@ pub struct Board {
     pub port: Option<HubPort>,
 }
 
+/// A value of the stand file that is never shown: its `Debug` is
+/// `<hidden>`, and it has no `Display`.
+#[derive(Clone, Deserialize, Eq, PartialEq)]
+#[serde(transparent)]
+pub struct Secret(String);
+
+impl Secret {
+    /// The value, for the one place that uses it.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("<hidden>")
+    }
+}
+
+/// `[station]`: only its SSID. The passphrase beside it is not read.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct Station {
+    #[serde(default)]
+    pub ssid: Option<Secret>,
+}
+
+/// `[station_fixture]`: the router that serves the stand's AP.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct StationFixture {
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub ssh_target: Option<Secret>,
+    #[serde(default)]
+    pub wireless_interface: Option<Secret>,
+    /// The UCI `wifi-device` section.
+    #[serde(default)]
+    pub radio: Option<String>,
+    /// The UCI `wifi-iface` section of the stand's AP.
+    #[serde(default)]
+    pub ap_section: Option<String>,
+    #[serde(default)]
+    pub channel: Option<u8>,
+}
+
+/// The fixture kind image `w1` drives.
+pub const OPEN_WRT: &str = "open-wrt";
+
+/// What image `w1` needs of the stand router.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Router<'a> {
+    pub ssid: &'a Secret,
+    pub ssh_target: &'a Secret,
+    pub wireless_interface: &'a Secret,
+    pub radio: &'a str,
+    pub ap_section: &'a str,
+    pub channel: u8,
+}
+
 /// The parts of the stand file this tool reads.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct Stand {
@@ -74,6 +137,10 @@ pub struct Stand {
     pub hubs: Vec<Hub>,
     #[serde(default, rename = "board")]
     pub boards: Vec<Board>,
+    #[serde(default)]
+    pub station: Station,
+    #[serde(default)]
+    pub station_fixture: StationFixture,
 }
 
 impl Stand {
@@ -92,9 +159,10 @@ impl Stand {
             let line = error
                 .span()
                 .map(|span| text[..span.start.min(text.len())].matches('\n').count() + 1);
+            let message = shown_message(error.message());
             match line {
-                Some(line) => format!("line {line}: {}", error.message()),
-                None => error.message().to_owned(),
+                Some(line) => format!("line {line}: {message}"),
+                None => message,
             }
         })?;
         if stand.schema != SCHEMA {
@@ -104,6 +172,48 @@ impl Stand {
             ));
         }
         Ok(stand)
+    }
+
+    /// The stand router of image `w1`: every key present, `kind` `open-wrt`.
+    /// An error names the missing key, never a value.
+    pub fn router(&self) -> std::result::Result<Router<'_>, String> {
+        let fixture = &self.station_fixture;
+        let missing = |key: &str| format!("the stand file has no {key}, which image w1 needs");
+        match fixture.kind.as_deref() {
+            Some(OPEN_WRT) => {}
+            Some(_) => {
+                return Err(format!(
+                    "[station_fixture].kind is not `{OPEN_WRT}`: image w1 drives an OpenWrt router"
+                ));
+            }
+            None => return Err(missing("[station_fixture].kind")),
+        }
+        Ok(Router {
+            ssid: self
+                .station
+                .ssid
+                .as_ref()
+                .ok_or_else(|| missing("[station].ssid"))?,
+            ssh_target: fixture
+                .ssh_target
+                .as_ref()
+                .ok_or_else(|| missing("[station_fixture].ssh_target"))?,
+            wireless_interface: fixture
+                .wireless_interface
+                .as_ref()
+                .ok_or_else(|| missing("[station_fixture].wireless_interface"))?,
+            radio: fixture
+                .radio
+                .as_deref()
+                .ok_or_else(|| missing("[station_fixture].radio"))?,
+            ap_section: fixture
+                .ap_section
+                .as_deref()
+                .ok_or_else(|| missing("[station_fixture].ap_section"))?,
+            channel: fixture
+                .channel
+                .ok_or_else(|| missing("[station_fixture].channel"))?,
+        })
     }
 
     /// The board named `selector`: its id, or its MAC in any case.
@@ -149,6 +259,20 @@ impl Stand {
     }
 }
 
+/// A deserializer's `message`, without the value it may quote: serde's
+/// `invalid type: string "…", expected …` keeps only what was expected.
+fn shown_message(message: &str) -> String {
+    for prefix in ["invalid type", "invalid value", "invalid length"] {
+        if message.starts_with(prefix) {
+            return match message.split_once(", expected ") {
+                Some((_, expected)) => format!("{prefix}, expected {expected}"),
+                None => prefix.to_owned(),
+            };
+        }
+    }
+    message.to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,9 +304,117 @@ usb-serial = "AA:BB:CC:DD:EE:FF"
 chip = "esp32s31"
 port = { hub = "top", port = 3 }
 
-[[station]]
-password = "hunter2"
+[station]
+ssid = "Made Up Lab Net"
+passphrase = "made-up-passphrase"
+
+[station_fixture]
+kind = "open-wrt"
+ssh_target = "made-up-router.lab"
+wireless_interface = "phy7-ap3"
+radio = "radio9"
+ap_section = "lab_ap"
+channel = 6
+ingress_interface = "made-up-ingress"
+
+[access_point]
+ssid = "made-up-ap-ssid"
+passphrase = "made-up-ap-passphrase"
 "#;
+
+    /// Every value the file holds that may never be shown.
+    const SECRETS: [&str; 7] = [
+        "Made Up Lab Net",
+        "made-up-passphrase",
+        "made-up-router",
+        "phy7-ap3",
+        "made-up-ingress",
+        "made-up-ap-ssid",
+        "made-up-ap-passphrase",
+    ];
+
+    #[test]
+    fn reads_the_router_and_nothing_secret_is_kept_or_shown() {
+        let stand = Stand::parse(STAND).unwrap();
+        let router = stand.router().unwrap();
+        assert_eq!(router.ssid.expose(), "Made Up Lab Net");
+        assert_eq!(router.ssh_target.expose(), "made-up-router.lab");
+        assert_eq!(router.wireless_interface.expose(), "phy7-ap3");
+        assert_eq!(
+            (router.radio, router.ap_section, router.channel),
+            ("radio9", "lab_ap", 6)
+        );
+        let shown = format!("{stand:?}\n{router:?}");
+        for secret in SECRETS {
+            assert!(!shown.contains(secret), "{secret}: {shown}");
+        }
+        // The passphrase is not deserialized: the parsed stand is the same
+        // without it.
+        let without = STAND.replace("passphrase = \"made-up-passphrase\"\n", "");
+        assert_eq!(Stand::parse(&without).unwrap(), stand);
+    }
+
+    #[test]
+    fn the_router_names_what_is_missing() {
+        let base = "schema = 1\n[station]\nssid = \"Made Up Lab Net\"\n[station_fixture]\n";
+        let full = "kind = \"open-wrt\"\nssh_target = \"made-up-router.lab\"\nwireless_interface = \"phy7-ap3\"\nradio = \"radio9\"\nap_section = \"lab_ap\"\nchannel = 6\n";
+        Stand::parse(&format!("{base}{full}"))
+            .unwrap()
+            .router()
+            .unwrap();
+        for key in [
+            "kind",
+            "ssh_target",
+            "wireless_interface",
+            "radio",
+            "ap_section",
+            "channel",
+        ] {
+            let text = full
+                .lines()
+                .filter(|line| !line.starts_with(key))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let error = Stand::parse(&format!("{base}{text}\n"))
+                .unwrap()
+                .router()
+                .unwrap_err();
+            assert!(
+                error.contains(&format!("[station_fixture].{key}")),
+                "{error}"
+            );
+        }
+        let error = Stand::parse(&format!("schema = 1\n[station_fixture]\n{full}"))
+            .unwrap()
+            .router()
+            .unwrap_err();
+        assert!(error.contains("[station].ssid"), "{error}");
+        let error = Stand::parse(&format!(
+            "{base}{}",
+            full.replace("open-wrt", "local-linux")
+        ))
+        .unwrap()
+        .router()
+        .unwrap_err();
+        assert!(error.contains("is not `open-wrt`"), "{error}");
+        // Without a router the stand still serves the boards.
+        assert!(Stand::parse("schema = 1\n").unwrap().router().is_err());
+    }
+
+    #[test]
+    fn a_type_error_does_not_quote_the_value() {
+        for text in [
+            "schema = 1\n[station_fixture]\nchannel = \"made-up-router\"\n",
+            "schema = 1\n[station]\nssid = [\"Made Up Lab Net\"]\n",
+            "schema = 1\n[station_fixture]\nssh_target = 7\n",
+        ] {
+            let error = Stand::parse(text).unwrap_err();
+            for secret in SECRETS {
+                assert!(!error.contains(secret), "{error}");
+            }
+            assert!(error.starts_with("line "), "{error}");
+        }
+    }
 
     #[test]
     fn reads_hubs_and_boards_and_ignores_the_rest() {

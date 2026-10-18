@@ -1,10 +1,11 @@
-//! Image `w1`: its build parameters (the stand AP's BSSID and the channel)
-//! and the check of the report block it prints after its exit.
+//! Image `w1`: its stand identity (the BSSID and channel of the stand
+//! router's AP after the profile, `router.rs`, and the stand's SSID) and the
+//! check of the report block it prints after its exit.
 //!
-//! The expected BSSID is never printed whole: its `Debug` and `Display`, the
-//! lock file's command line and every message show only its last two octets
-//! (`xx:xx:xx:xx:F6:D0`). The full value goes only into the environment of
-//! the image's runtime build.
+//! The BSSID is never printed whole: its `Debug` and `Display` and every
+//! message show only its last two octets (`xx:xx:xx:xx:F6:D0`); the SSID is
+//! never shown at all. Both go only into the environment of the image's
+//! runtime build.
 //!
 //! The host recomputes every gate of the block from its other lines and
 //! compares the result with the image's `w1.gate` lines and its
@@ -15,12 +16,14 @@ use std::fmt;
 
 /// The image these parameters belong to.
 pub const IMAGE: &str = "w1";
-/// The environment variable of the channel, read by `cargo fw` when
-/// `--channel` is absent and passed to the image's runtime build.
+/// The runtime build's variable of the channel.
 pub const ENV_CHANNEL: &str = "OER_W1_CHANNEL";
-/// The environment variable of the expected BSSID, read by `cargo fw` when
-/// `--expect-bssid` is absent and passed to the image's runtime build.
-pub const ENV_BSSID: &str = "OER_W1_EXPECT_BSSID";
+/// The runtime build's variable of the stand's BSSID.
+pub const ENV_BSSID: &str = "OER_W1_BSSID";
+/// The runtime build's variable of the stand's SSID, in hex.
+pub const ENV_SSID: &str = "OER_W1_SSID_HEX";
+/// Every variable of the runtime build.
+pub const ENV: [&str; 3] = [ENV_CHANNEL, ENV_BSSID, ENV_SSID];
 /// The first line of the report block.
 pub const BEGIN: &str = "OER-W1-BEGIN";
 /// The last line of the report block.
@@ -47,9 +50,15 @@ const TU_US: u64 = 1024;
 pub struct Bssid([u8; 6]);
 
 impl Bssid {
-    #[cfg(test)]
-    pub const fn new(octets: [u8; 6]) -> Self {
-        Self(octets)
+    /// `octets`, unicast and nonzero; the message never repeats them.
+    pub fn new(octets: [u8; 6]) -> Result<Self, String> {
+        if octets == [0; 6] {
+            return Err("the BSSID is all zero".to_owned());
+        }
+        if octets[0] & 1 != 0 {
+            return Err("the BSSID is a multicast address".to_owned());
+        }
+        Ok(Self(octets))
     }
 
     /// `xx:xx:xx:xx:HH:HH`: the only form in which a BSSID is shown.
@@ -80,105 +89,50 @@ impl fmt::Display for Bssid {
     }
 }
 
-/// Six two-digit hex octets separated by `:` or `-` (one separator
-/// throughout), any case; a multicast or all-zero address is refused. The
-/// message never repeats the text.
-pub fn parse_bssid(text: &str) -> Result<Bssid, String> {
-    const FORM: &str = "a BSSID is six hex octets such as 02:00:00:00:F6:D0";
-    let separator = if text.contains(':') { ':' } else { '-' };
-    let parts = text.split(separator).collect::<Vec<_>>();
-    if parts.len() != 6 {
-        return Err(format!("{FORM} (got {} parts)", parts.len()));
-    }
-    let mut octets = [0; 6];
-    for (octet, part) in octets.iter_mut().zip(&parts) {
-        if part.len() != 2 || !part.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(FORM.to_owned());
+/// The stand's SSID, 1 to 32 bytes; its `Debug` shows only its length and
+/// it has no `Display`.
+#[derive(Clone, Eq, PartialEq)]
+pub struct Ssid(Vec<u8>);
+
+impl Ssid {
+    pub fn new(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.is_empty() || bytes.len() > 32 {
+            return Err(format!("the SSID is {} bytes, not 1 to 32", bytes.len()));
         }
-        *octet = u8::from_str_radix(part, 16).map_err(|_| FORM.to_owned())?;
+        Ok(Self(bytes.to_vec()))
     }
-    if octets == [0; 6] {
-        return Err("the BSSID is all zero".to_owned());
+
+    /// Two lower-case hex digits per byte, for the runtime build only.
+    fn hex(&self) -> String {
+        self.0.iter().map(|byte| format!("{byte:02x}")).collect()
     }
-    if octets[0] & 1 != 0 {
-        return Err("the BSSID is a multicast address".to_owned());
-    }
-    Ok(Bssid(octets))
 }
 
-/// A 2.4 GHz channel, 1 to 13.
-pub fn parse_channel(text: &str) -> Result<u8, String> {
-    text.parse::<u8>()
-        .ok()
-        .filter(|channel| (1..=13).contains(channel))
-        .ok_or_else(|| format!("`{text}` is no 2.4 GHz channel 1 to 13"))
+impl fmt::Debug for Ssid {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "Ssid(<{} bytes>)", self.0.len())
+    }
 }
 
-/// The configuration image `w1` is built with.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The stand image `w1` is built for and checked against.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
+    /// The router AP's channel after the profile.
     pub channel: u8,
-    pub expect: Bssid,
+    /// The router AP's BSSID: the stand.
+    pub bssid: Bssid,
+    /// The SSID the stand's beacons carry.
+    pub ssid: Ssid,
 }
 
 impl Config {
     /// The variables of the runtime build.
-    pub fn runtime_env(&self) -> [(&'static str, String); 2] {
+    pub fn runtime_env(&self) -> [(&'static str, String); 3] {
         [
             (ENV_CHANNEL, self.channel.to_string()),
-            (ENV_BSSID, self.expect.unmasked()),
+            (ENV_BSSID, self.bssid.unmasked()),
+            (ENV_SSID, self.ssid.hex()),
         ]
-    }
-}
-
-/// `flag`, or else the variable `name` that `env` looks up; both present
-/// and different is an error.
-fn resolve<T: PartialEq>(
-    flag: Option<T>,
-    flag_name: &str,
-    name: &str,
-    env: &dyn Fn(&str) -> Option<String>,
-    parse: fn(&str) -> Result<T, String>,
-) -> Result<Option<T>, String> {
-    let from_env = env(name)
-        .map(|text| parse(&text).map_err(|error| format!("{name}: {error}")))
-        .transpose()?;
-    match (flag, from_env) {
-        (Some(flag), Some(from_env)) if flag != from_env => Err(format!(
-            "{flag_name} and {name} disagree: unset {name} or pass the same value"
-        )),
-        (Some(value), _) | (None, Some(value)) => Ok(Some(value)),
-        (None, None) => Ok(None),
-    }
-}
-
-/// The parameters `image` is built with: for `w1` the flags or their
-/// environment variables, both or neither (neither builds the unconfigured
-/// image, refused when `required`); another image refuses the flags.
-pub fn params(
-    image: &str,
-    expect: Option<Bssid>,
-    channel: Option<u8>,
-    env: &dyn Fn(&str) -> Option<String>,
-    required: bool,
-) -> Result<Option<Config>, String> {
-    if image != IMAGE {
-        if expect.is_some() || channel.is_some() {
-            return Err(format!(
-                "--expect-bssid and --channel are parameters of image {IMAGE}, not of {image}"
-            ));
-        }
-        return Ok(None);
-    }
-    let expect = resolve(expect, "--expect-bssid", ENV_BSSID, env, parse_bssid)?;
-    let channel = resolve(channel, "--channel", ENV_CHANNEL, env, parse_channel)?;
-    match (expect, channel) {
-        (Some(expect), Some(channel)) => Ok(Some(Config { channel, expect })),
-        (None, None) if !required => Ok(None),
-        _ => Err(format!(
-            "image {IMAGE} needs --expect-bssid and --channel (or {ENV_BSSID} and {ENV_CHANNEL}){}",
-            if required { "" } else { ", both or neither" }
-        )),
     }
 }
 
@@ -292,6 +246,7 @@ const SPECS: &[Spec] = &[
             key("channel", U8),
             key("applied_channel", U8),
             key("stand", Kind::Masked),
+            key("ssid_matches", U64),
             key("window_ms", U64),
             key("cpu_hz", U64),
             key("arena", Kind::Text),
@@ -319,6 +274,7 @@ const SPECS: &[Spec] = &[
             key("missed", U32),
             key("lag_us", Kind::Range { signed: false }),
             key("ssid_len", U8),
+            key("ssid_ok", Kind::OneOf(&["0", "1"])),
             key("stamp_span_us", U32_OR_DASH),
             key("handoff_span_us", U32_OR_DASH),
         ],
@@ -1343,6 +1299,10 @@ fn beacons_gate(report: &Report) -> Result<(HostGate, Option<BeaconFigures>), Re
         };
         return Ok((gate(GateName::Beacons, false, reason, true), None));
     };
+    // The stand BSSID heard without the stand's SSID is another network.
+    if stand.text("ssid_ok")? != "1" {
+        return Ok((gate(GateName::Beacons, false, "stand-mismatch", true), None));
+    }
     let beacons = stand
         .number("beacons")?
         .checked_sub(stand.number("dup")?)
@@ -1616,15 +1576,25 @@ fn disagreements(
     let channel = report.config.number("channel")?;
     if channel != u64::from(expected.channel) {
         problems.push(format!(
-            "the image was built for channel {channel}, --channel is {} (a stale build?)",
+            "the image was built for channel {channel}, the router's AP is on {} (a stale build?)",
             expected.channel
         ));
     }
     let stand = report.config.text("stand")?;
-    if stand != expected.expect.masked() {
+    if stand != expected.bssid.masked() {
         problems.push(format!(
-            "the image expects {stand}, --expect-bssid is {} (a stale build?)",
-            expected.expect.masked()
+            "the image expects {stand}, the router's AP is {} (a stale build?)",
+            expected.bssid.masked()
+        ));
+    }
+    let mut carrying = 0_u64;
+    for bss in &report.bss {
+        carrying += u64::from(bss.text("ssid_ok")? == "1");
+    }
+    let matches = report.config.number("ssid_matches")?;
+    if matches != carrying {
+        problems.push(format!(
+            "w1.config ssid_matches={matches}, the w1.bss lines carry ssid_ok=1 {carrying} times"
         ));
     }
     for (image, host) in report.gates.iter().zip(&host.gates) {
@@ -1729,13 +1699,17 @@ fn narrow_u32(value: u64) -> Result<u32, ReportError> {
 
 fn summary(report: &Report, host: &Host, expected: &Config) -> Vec<String> {
     let mut lines = vec![format!(
-        "expects {} on channel {}; the image applied channel {}",
-        expected.expect.masked(),
+        "expects {} on channel {}; the image applied channel {}; {} BSS carry the stand's SSID",
+        expected.bssid.masked(),
         expected.channel,
-        report.config.text("applied_channel").unwrap_or("-")
+        report.config.text("applied_channel").unwrap_or("-"),
+        report.config.text("ssid_matches").unwrap_or("-")
     )];
     match (report.stand(), host.beacons) {
-        (None, _) | (_, None) => lines.push("the stand AP was not heard".to_owned()),
+        (None, _) => lines.push("the stand AP was not heard".to_owned()),
+        (Some(_), None) => {
+            lines.push("the stand AP's BSSID was heard without the stand's SSID".to_owned())
+        }
         (Some(_), Some(figures)) => lines.push(format!(
             "stand beacons {} of {} required in {} us at {} us intervals",
             figures.beacons,
@@ -1863,19 +1837,21 @@ mod tests {
     use super::*;
 
     const STAND: Bssid = Bssid([0x02, 0, 0, 0, 0xF6, 0xD0]);
+    const SSID: &str = "Made Up 'Lab' Net";
 
     fn expected() -> Config {
         Config {
             channel: 6,
-            expect: STAND,
+            bssid: STAND,
+            ssid: Ssid::new(SSID.as_bytes()).unwrap(),
         }
     }
 
     fn body() -> Vec<String> {
         [
-            "w1.config channel=6 applied_channel=6 stand=xx:xx:xx:xx:F6:D0 window_ms=10000 cpu_hz=160000000 arena=32x1664 slots=32 mask=0x19a879e0",
-            "w1.bss idx=0 who=stand bssid=xx:xx:xx:xx:F6:D0 bi_tu=100 ch=6 beacons=98 dup=1 probe_rsp=0 rssi=-61..-40 no_rssi=0 gaps_late=2 max_gap_us=310000 missed=2 lag_us=120..900 ssid_len=8 stamp_span_us=9932800 handoff_span_us=9932810",
-            "w1.bss idx=1 who=other bssid=xx:xx:xx:xx:12:34 bi_tu=100 ch=- beacons=40 dup=0 probe_rsp=1 rssi=- no_rssi=40 gaps_late=0 max_gap_us=0 missed=0 lag_us=- ssid_len=0 stamp_span_us=- handoff_span_us=-",
+            "w1.config channel=6 applied_channel=6 stand=xx:xx:xx:xx:F6:D0 ssid_matches=1 window_ms=10000 cpu_hz=160000000 arena=32x1664 slots=32 mask=0x19a879e0",
+            "w1.bss idx=0 who=stand bssid=xx:xx:xx:xx:F6:D0 bi_tu=100 ch=6 beacons=98 dup=1 probe_rsp=0 rssi=-61..-40 no_rssi=0 gaps_late=2 max_gap_us=310000 missed=2 lag_us=120..900 ssid_len=8 ssid_ok=1 stamp_span_us=9932800 handoff_span_us=9932810",
+            "w1.bss idx=1 who=other bssid=xx:xx:xx:xx:12:34 bi_tu=100 ch=- beacons=40 dup=0 probe_rsp=1 rssi=- no_rssi=40 gaps_late=0 max_gap_us=0 missed=0 lag_us=- ssid_len=0 ssid_ok=0 stamp_span_us=- handoff_span_us=-",
             "w1.gap stamp=1000000 gap_us=204800 missed=1",
             "w1.gap stamp=4294967000 gap_us=307200 missed=-",
             "w1.gaps dropped=0",
@@ -1961,35 +1937,8 @@ mod tests {
     }
 
     #[test]
-    fn bssids_parse_in_either_separator_and_case() {
-        assert_eq!(parse_bssid("02:00:00:00:f6:d0"), Ok(STAND));
-        assert_eq!(parse_bssid("02-00-00-00-F6-D0"), Ok(STAND));
-        assert!(parse_bssid("02:00:00:00:F6").is_err());
-        assert!(parse_bssid("02:00:00:00:F6:D0:11").is_err());
-        assert!(parse_bssid("02:00:00:00:F6-D0").is_err());
-        assert!(parse_bssid("2:00:00:00:F6:D0").is_err());
-        assert!(parse_bssid("02:00:00:00:F6:G0").is_err());
-        assert!(parse_bssid("").is_err());
-        assert!(parse_bssid("+2:00:00:00:F6:D0").is_err());
-        assert!(
-            parse_bssid("00:00:00:00:00:00")
-                .unwrap_err()
-                .contains("zero")
-        );
-        assert!(
-            parse_bssid("03:00:00:00:F6:D0")
-                .unwrap_err()
-                .contains("multicast")
-        );
-        assert!(parse_bssid("FF:FF:FF:FF:FF:FF").is_err());
-        // The message never repeats the text.
-        let error = parse_bssid("02:00:5E:AB:F6").unwrap_err();
-        assert!(!error.contains("5E"), "{error}");
-    }
-
-    #[test]
     fn a_bssid_shows_only_its_last_two_octets() {
-        let bssid = parse_bssid("02:AB:CD:EF:F6:D0").unwrap();
+        let bssid = Bssid::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap();
         assert_eq!(bssid.masked(), "xx:xx:xx:xx:F6:D0");
         for shown in [
             format!("{bssid}"),
@@ -2001,79 +1950,32 @@ mod tests {
                 assert!(!shown.contains(hidden), "{shown}");
             }
         }
-        let config = Config {
-            channel: 6,
-            expect: bssid,
-        };
-        let shown = format!("{config:?}");
-        assert!(!shown.contains("AB:CD") && !shown.contains("EF"), "{shown}");
+        assert!(Bssid::new([0; 6]).unwrap_err().contains("zero"));
+        assert!(
+            Bssid::new([0x03, 0, 0, 0, 0xF6, 0xD0])
+                .unwrap_err()
+                .contains("multicast")
+        );
     }
 
     #[test]
-    fn channels_are_1_to_13() {
-        assert_eq!(parse_channel("1"), Ok(1));
-        assert_eq!(parse_channel("13"), Ok(13));
-        for refused in ["0", "14", "-1", "six", "", "256"] {
-            assert!(parse_channel(refused).is_err(), "{refused}");
-        }
+    fn an_ssid_is_1_to_32_bytes_and_never_shown() {
+        assert!(Ssid::new(b"").is_err());
+        assert!(Ssid::new(&[b'x'; 33]).is_err());
+        let ssid = Ssid::new(b"Made Up Lab Net").unwrap();
+        assert_eq!(format!("{ssid:?}"), "Ssid(<15 bytes>)");
     }
 
     #[test]
-    fn the_runtime_build_gets_the_full_bssid_and_the_channel() {
+    fn the_runtime_build_gets_the_full_bssid_the_ssid_and_the_channel() {
         assert_eq!(
             expected().runtime_env(),
             [
                 (ENV_CHANNEL, "6".to_owned()),
-                (ENV_BSSID, "02:00:00:00:F6:D0".to_owned())
+                (ENV_BSSID, "02:00:00:00:F6:D0".to_owned()),
+                (ENV_SSID, "4d61646520557020274c616227204e6574".to_owned()),
             ]
         );
-    }
-
-    fn no_env(_: &str) -> Option<String> {
-        None
-    }
-
-    #[test]
-    fn params_come_from_flags_or_the_environment() {
-        assert_eq!(
-            params("w1", Some(STAND), Some(6), &no_env, true),
-            Ok(Some(expected()))
-        );
-        let env = |name: &str| match name {
-            ENV_BSSID => Some("02-00-00-00-f6-d0".to_owned()),
-            ENV_CHANNEL => Some("6".to_owned()),
-            _ => None,
-        };
-        assert_eq!(params("w1", None, None, &env, true), Ok(Some(expected())));
-        // The same value in both is accepted, a different one refused.
-        assert_eq!(
-            params("w1", Some(STAND), Some(6), &env, true),
-            Ok(Some(expected()))
-        );
-        let error = params("w1", None, Some(7), &env, true).unwrap_err();
-        assert!(error.contains("disagree"), "{error}");
-        let other = Bssid([0x02, 0, 0, 0, 0xF6, 0xD1]);
-        assert!(params("w1", Some(other), None, &env, true).is_err());
-        // An invalid variable is refused without its value.
-        let bad = |name: &str| (name == ENV_BSSID).then(|| "02:AB:CD:EF:F6".to_owned());
-        let error = params("w1", None, Some(6), &bad, true).unwrap_err();
-        assert!(
-            error.contains(ENV_BSSID) && !error.contains("AB"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn w1_needs_both_and_other_images_refuse_them() {
-        assert!(params("w1", None, None, &no_env, true).is_err());
-        assert!(params("w1", Some(STAND), None, &no_env, true).is_err());
-        assert!(params("w1", None, Some(6), &no_env, false).is_err());
-        // `cargo fw build w1` alone builds the unconfigured image.
-        assert_eq!(params("w1", None, None, &no_env, false), Ok(None));
-        assert!(params("w0", Some(STAND), None, &no_env, false).is_err());
-        assert!(params("w0", None, Some(6), &no_env, true).is_err());
-        let env = |_: &str| Some("6".to_owned());
-        assert_eq!(params("boot-smoke", None, None, &env, true), Ok(None));
     }
 
     #[test]
@@ -2329,6 +2231,120 @@ mod tests {
         assert_eq!(checked.outcome.exit_code(), 1);
     }
 
+    /// The image's block and verdict when its stand BSSID was heard without
+    /// the stand's SSID.
+    fn mismatched() -> Vec<String> {
+        let mut body = body();
+        set(&mut body, "w1.bss idx=0", "ssid_ok", "0");
+        set(&mut body, "w1.config", "ssid_matches", "0");
+        set(&mut body, "w1.verdict", "beacons", "0");
+        set(&mut body, "w1.verdict", "bi_us", "0");
+        set(&mut body, "w1.verdict", "required", "0");
+        set_gate(&mut body, "beacons", "result=fail reason=stand-mismatch");
+        body
+    }
+
+    #[test]
+    fn the_stand_is_its_bssid_carrying_the_stand_ssid() {
+        // Present with the SSID: the good block passes.
+        assert_eq!(
+            check(&console(&body()), PASS, &expected()).outcome,
+            Outcome::Pass
+        );
+        // Present without it: stand-mismatch, and the host agrees.
+        let mismatch = mismatched();
+        let gate = host_gate(&mismatch, GateName::Beacons);
+        assert_eq!(
+            (gate.result, gate.reason),
+            (GateResult::Fail, Some("stand-mismatch"))
+        );
+        let checked = check(
+            &console(&mismatch),
+            "OER-RESULT: fail w1 beacons stand-mismatch",
+            &expected(),
+        );
+        assert_eq!(
+            checked.outcome,
+            Outcome::Fail(vec!["beacons stand-mismatch".to_owned()])
+        );
+        assert!(
+            checked
+                .summary
+                .iter()
+                .any(|line| line.contains("without the stand's SSID")),
+            "{:?}",
+            checked.summary
+        );
+        // The image passing a mismatched stand is a contradiction.
+        let mut passing = mismatched();
+        set_gate(&mut passing, "beacons", "result=pass");
+        assert_eq!(
+            check(&console(&passing), PASS, &expected())
+                .outcome
+                .exit_code(),
+            3
+        );
+        // Other BSSIDs carrying the stand's SSID do not stand in for an
+        // absent stand: still stand-absent.
+        let mut absent = body();
+        absent.retain(|line| !line.contains("who=stand"));
+        set(&mut absent, "w1.bss idx=1", "ssid_ok", "1");
+        let gate = host_gate(&absent, GateName::Beacons);
+        assert_eq!(gate.reason, Some("stand-absent"));
+    }
+
+    #[test]
+    fn ssid_matches_counts_the_bss_lines_carrying_the_ssid() {
+        let mut two = body();
+        set(&mut two, "w1.bss idx=1", "ssid_ok", "1");
+        set(&mut two, "w1.config", "ssid_matches", "2");
+        let checked = check(&console(&two), PASS, &expected());
+        assert_eq!(checked.outcome, Outcome::Pass);
+        assert!(
+            checked.summary[0].contains("2 BSS carry"),
+            "{:?}",
+            checked.summary
+        );
+        set(&mut two, "w1.config", "ssid_matches", "1");
+        let Outcome::Contradiction(problems) = check(&console(&two), PASS, &expected()).outcome
+        else {
+            panic!("a miscounted ssid_matches passes");
+        };
+        assert!(problems[0].contains("ssid_matches=1"), "{problems:?}");
+        // Each value is validated.
+        for (prefix, key, value) in [
+            ("w1.bss idx=0", "ssid_ok", "2"),
+            ("w1.bss idx=0", "ssid_ok", "-"),
+            ("w1.config", "ssid_matches", "x"),
+        ] {
+            let mut lines = body();
+            set(&mut lines, prefix, key, value);
+            assert!(Report::parse(&console(&lines)).is_err(), "{key}={value}");
+        }
+    }
+
+    #[test]
+    fn nothing_of_the_stand_is_shown_but_its_mask() {
+        let config = Config {
+            channel: 6,
+            bssid: Bssid::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap(),
+            ssid: Ssid::new(SSID.as_bytes()).unwrap(),
+        };
+        let mut shown = vec![format!("{config:?}"), format!("{config:#?}")];
+        for (body, result) in [
+            (body(), PASS),
+            (mismatched(), "OER-RESULT: fail w1 beacons stand-mismatch"),
+        ] {
+            let checked = check(&console(&body), result, &config);
+            shown.push(format!("{checked:?}"));
+            shown.extend(checked.summary);
+        }
+        let shown = shown.join("\n");
+        for secret in [SSID, "Made Up", "AB:CD", "ab:cd", "4d61646520"] {
+            assert!(!shown.contains(secret), "{secret}: {shown}");
+        }
+    }
+
     #[test]
     fn the_channel_gate_compares_the_applied_channel() {
         let mut applied = body();
@@ -2344,7 +2360,7 @@ mod tests {
                 .exit_code(),
             3
         );
-        // A build for another channel than --channel is a stale build.
+        // A build for another channel than the router's is a stale build.
         let mut stale = body();
         set(&mut stale, "w1.config", "channel", "7");
         set(&mut stale, "w1.config", "applied_channel", "7");

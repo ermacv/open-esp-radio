@@ -27,7 +27,10 @@ After the exit the image prints a block from `OER-W1-BEGIN v=1` to
 `tools/fw/src/w1.rs`), then `OER-RESULT: pass w1 beacons=<N> required=<R>`
 or `OER-RESULT: fail w1 <gate> <reason>[; …]`. The gates: the stand's
 beacons in the window (N = beacons − duplicates, at least
-⌊8·window / (10·interval)⌋), the applied channel, a clean exit, the walker's
+⌊8·window / (10·interval)⌋; the stand is the BSSID of the stand router's
+AP interface, and its stored SSID must be the stand's: heard with another
+SSID it fails `stand-mismatch`, not heard `stand-absent`, however many other
+BSSIDs carry the SSID), the applied channel, a clean exit, the walker's
 restart (every staging lease held, no unit received during the 1 s hold,
 frames after the release; `w1.hold`), at least 4096 free bytes of the
 interrupt stack, no service error, no MAC or WDEVPWR entry without the line,
@@ -36,7 +39,8 @@ its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`). A
 failure before the runner hands over its ends prints only
 `OER-RESULT: fail w1 <reason>`.
 
-Report-only: `w1.exhaust`, the walker registers (NEXT with its unknown
+Report-only: `w1.config ssid_matches=`, how many BSSIDs carry the stand's
+SSID (each `w1.bss` line says whether it does, `ssid_ok=`); `w1.exhaust`, the walker registers (NEXT with its unknown
 upper flag, LAST, BASE, the walker enable, the reload doorbell, the
 starvation counter) and the ring's view (base, recycle frontier, accepted
 tail, observed and completed descriptors, the list left from NEXT, a
@@ -67,13 +71,17 @@ maximum of residual less the smallest residual, and `slope_ppm`, the slope
 less one in ppm (floored); `-` below two pairs.
 
 ```sh
-cargo fw run w1 --board s31-a --expect-bssid 02:00:00:00:F6:D0 --channel 6
+cargo fw run w1 --board s31-a
 ```
 
-The BSSID and channel reach the image as build-time values
-(`OER_W1_EXPECT_BSSID`, `OER_W1_CHANNEL`) that `build.rs` writes to
-`$OUT_DIR/w1_config.rs`; built without them the image prints
-`OER-RESULT: fail w1 unconfigured`. BSSIDs are printed with only their last
-two octets, SSIDs only as their length, and the base MAC never.
+`cargo fw run w1` first brings the stand router to the W1 profile (the
+stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;
+`tools/fw/README.md`) and reads its AP's BSSID and channel. They and the
+SSID reach the image as build-time values (`OER_W1_CHANNEL`,
+`OER_W1_BSSID`, `OER_W1_SSID_HEX`) that `build.rs` writes to
+`$OUT_DIR/w1_config.rs`; built without them (`cargo fw build w1`) the image
+prints `OER-RESULT: fail w1 unconfigured`. BSSIDs are printed with only
+their last two octets, SSIDs only as their length and `ssid_ok=`, and the
+base MAC never.
 
 Nothing is transmitted. eFuse is only read, as in W0.

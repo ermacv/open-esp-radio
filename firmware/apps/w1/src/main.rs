@@ -10,10 +10,12 @@
 //! restarts) and the stop follow; after the exit the image prints its
 //! report block and verdict ([`report`]).
 //!
-//! Nothing is transmitted. The stand's BSSID and channel come from the
-//! build (`OER_W1_EXPECT_BSSID`, `OER_W1_CHANNEL`); without them the image
-//! prints `OER-RESULT: fail w1 unconfigured`. No SSID, unmasked BSSID or
-//! base MAC is printed.
+//! Nothing is transmitted. The stand's identity comes from the build
+//! (`OER_W1_CHANNEL`, `OER_W1_BSSID`, `OER_W1_SSID_HEX`): the BSSID of the
+//! stand router's AP interface, which identifies the stand, and the SSID its
+//! beacons must carry; without them the image prints
+//! `OER-RESULT: fail w1 unconfigured`. No SSID, unmasked BSSID or base MAC is
+//! printed.
 
 mod irq;
 mod measure;
@@ -78,6 +80,8 @@ pub struct W1Config {
     pub channel: u8,
     /// The stand AP's BSSID: unicast, nonzero.
     pub stand: [u8; 6],
+    /// The stand's SSID, 1 to 32 bytes, which the stand's beacons carry.
+    pub ssid: &'static [u8],
 }
 
 include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
@@ -639,6 +643,7 @@ async fn run(
         channel: config.channel,
         applied_channel: applied.primary(),
         stand,
+        ssid: config.ssid,
         window_ms: WINDOW_MS,
         cpu_hz,
         survey: &*survey,
