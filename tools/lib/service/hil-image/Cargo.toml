@@ -1,0 +1,39 @@
+[package]
+name = "oer-hil-image"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL images: each image class's spec for the image pipeline, snapshot builds and the records they hand to run evidence"
+
+[dependencies]
+oer-image-check-interrupts = { path = "../../../tools/image/check/interrupts" }
+oer-image-compare = { path = "../../../tools/image/compare" }
+oer-hil-run-bundle-format = { path = "../run-bundle/format" }
+oer-hil-schema = { path = "../../schema" }
+oer-image-bundle = { path = "../../../tools/image/bundle" }
+oer-chip-profile = { path = "../../../tools/chip-profile" }
+oer-durable = { path = "../../../tools/durable" }
+oer-hil-run-bundle = { path = "../run-bundle" }
+oer-hil-image-class = { path = "../image-class" }
+oer-hil-source-snapshot = { path = "../source-snapshot" }
+oer-image = { path = "../../../tools/image/pipeline" }
+oer-image-checks = { path = "../../../tools/image/checks" }
+oer-repo = { path = "../../../tools/repo" }
+oer-process = { path = "../../../tools/process" }
+oer-toolchain = { path = "../../../tools/toolchain" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3"
+toml = "1.1"
+
+[dev-dependencies]
+oer-hil-scenario = { path = "../scenario", features = ["test-support"] }
+oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
+oer-hil-source-snapshot = { path = "../source-snapshot", features = ["test-support"] }
+
+[lints]
+workspace = true
+

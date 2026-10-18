@@ -1,0 +1,42 @@
+[package]
+name = "oer-hil-lab"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL run-level stand operation: the laboratory configuration, the run's fixture lock, the cell's pre-run observation, fixture software leases, recovery and post-mortem"
+
+[features]
+# The laboratory fixtures of the runner's cross-package tests.
+test-support = []
+
+[dependencies]
+oer-devices = { path = "../../../tools/device/devices" }
+oer-hil-run-bundle-format = { path = "../run-bundle/format" }
+oer-hil-scenario-catalog = { path = "../scenario/catalog" }
+oer-elf = { path = "../../../tools/elf" }
+oer-chip-profile = { path = "../../../tools/chip-profile" }
+oer-stand-arbiter = { path = "../../../stand/arbiter" }
+oer-stand-file = { path = "../../../stand/file" }
+oer-stand-board = { path = "../../../stand/board" }
+oer-stand-ssh = { path = "../../../stand/ssh" }
+oer-durable = { path = "../../../tools/durable" }
+oer-stand-fixture-install = { path = "../../../stand/fixture-install" }
+oer-hil-link = { path = "../link" }
+oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
+oer-process = { path = "../../../tools/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3"
+toml = "1.1"
+zeroize = "1.8.1"
+
+oer-device-lock = { path = "../../../tools/device/lock" }
+oer-stand-claims = { path = "../../../stand/claims" }
+oer-stand-journal = { path = "../../../stand/journal" }
+oer-stand-resource-lock = { path = "../../../stand/resource-lock" }
+[lints]
+workspace = true
+

@@ -1,0 +1,46 @@
+[package]
+name = "oer-stand"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "cargo stand: the shared stand's queue, leases, boards, owners, host setup and fixture software"
+
+[[bin]]
+name = "oer-stand"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "=4.5.48", features = ["derive"] }
+oer-chip-profile = { path = "../../tools/chip-profile" }
+oer-command-tree = { path = "../../tools/command-tree", features = ["clap"] }
+oer-devices = { path = "../../tools/device/devices", features = ["image"] }
+oer-device-lock = { path = "../../tools/device/lock" }
+oer-device-peer-line = { path = "../../tools/device/peer-line" }
+oer-durable = { path = "../../tools/durable" }
+oer-process = { path = "../../tools/process" }
+oer-stand-arbiter = { path = "../arbiter" }
+oer-stand-board = { path = "../board" }
+oer-stand-claims = { path = "../claims" }
+oer-stand-discover = { path = "../discover" }
+oer-stand-doctor = { path = "../doctor" }
+oer-stand-file = { path = "../file" }
+oer-stand-fixture-install = { path = "../fixture-install" }
+oer-stand-fixtures = { path = "../fixtures" }
+oer-stand-hostapd = { path = "../hostapd" }
+oer-stand-journal = { path = "../journal" }
+oer-stand-owners = { path = "../owners" }
+oer-stand-power = { path = "../power" }
+oer-toolchain = { path = "../../tools/toolchain" }
+rustix = { version = "=1.1.4", features = ["process"] }
+serde_json = "=1.0.151"
+
+[dev-dependencies]
+libc = "0.2"
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

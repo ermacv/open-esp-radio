@@ -1,0 +1,55 @@
+[workspace]
+resolver = "3"
+members = [
+    "agent",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# A mutable call inside `debug_assert!` disappears from optimized firmware.
+debug_assert_with_mut_call = "deny"
+# The repository `clippy.toml` lists methods radio code must not call.
+disallowed_methods = "deny"
+
+[workspace.dependencies]
+embassy-executor = { version = "0.10.0", default-features = false }
+embassy-sync = "0.8.0"
+embassy-time = "0.5.1"
+embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"] }
+embassy-time-queue-utils = "0.3"
+esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+esp-sync = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02" }
+log = { version = "0.4.27", features = ["max_level_trace", "release_max_level_info"] }
+oer-espressif-executor-embassy = { path = "../../../crates/adapters/embassy/espressif/executor", features = ["esp32s31"] }
+oer-espressif-interrupt-table-esp-hal = { path = "../../../crates/adapters/esp-hal/espressif/interrupt-table", features = ["esp32s31"] }
+oer-esp32s31-pac = { path = "../../../crates/hardware/esp32s31/pac", features = ["validation-probes"] }
+oer-esp32s31-soc-esp-hal = { path = "../../../crates/adapters/esp-hal/esp32s31/soc", features = ["esp32s31"] }
+oer-hil-protocol = { path = "../../protocol", default-features = false }
+oer-hil-image-keys = { path = "../../image-keys" }
+portable-atomic = { version = "1.11", default-features = false }
+postcard = { version = "1.1.3", default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+static_cell = "2.1.1"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+debug = true
+panic = "abort"
+strip = false
+
+[patch."https://github.com/ermacv/embassy.git"]
+embassy-futures = { version = "0.1.2", registry = "crates-io" }
+embassy-sync = { version = "0.8.0", registry = "crates-io" }
+embassy-time = { version = "0.5.1", registry = "crates-io" }

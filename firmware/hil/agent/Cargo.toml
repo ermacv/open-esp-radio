@@ -1,0 +1,26 @@
+[package]
+name = "oer-hil-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Chip-independent HIL target logic shared by the firmware runtime and its host tests"
+
+[dependencies]
+crc = "3.3.0"
+embassy-sync = "0.8.0"
+heapless = "0.9.3"
+oer-hil-protocol = { path = "../protocol", default-features = false, features = ["async-io"] }
+embedded-io-async = "0.7.0"
+embassy-futures = "0.1.2"
+log = "0.4"
+
+[dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+embassy-time = { version = "0.5.1", features = ["std", "generic-queue-64"] }
+
+[lints]
+workspace = true
+

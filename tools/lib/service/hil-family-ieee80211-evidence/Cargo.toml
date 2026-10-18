@@ -1,0 +1,23 @@
+[package]
+name = "oer-hil-family-ieee80211-evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Wi-Fi radio evidence of HIL runs: typed monitor-capture frames, BSS protection and receive-delivery assessments"
+
+[features]
+# Analyzer test frames for the Wi-Fi fixture and family tests.
+test-support = []
+
+[dependencies]
+oer-hil-lab = { path = "../../lab" }
+oer-hil-protocol = { path = "../../../protocol" }
+oer-process = { path = "../../../../tools/process" }
+serde = { version = "1.0", features = ["derive"] }
+
+[lints]
+workspace = true
+

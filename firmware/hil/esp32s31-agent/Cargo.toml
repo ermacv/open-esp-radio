@@ -1,0 +1,61 @@
+[package]
+name = "oer-esp32s31-hil-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[features]
+# The HIL report of a panic instead of the product's record-and-reset; every
+# image but `system-panic-reset` has it.
+panic-hook = ["oer-espressif-staged-runtime/panic-hook"]
+boot-smoke = ["panic-hook"]
+system-watchdog = [
+    "panic-hook",
+    "dep:oer-hil-protocol",
+    "dep:embassy-sync",
+    "dep:log",
+    "dep:oer-hil-agent",
+    "dep:oer-hil-image-keys",
+    "dep:critical-section",
+]
+# The system image that, on request, switches its USB Serial/JTAG off its
+# pads: the board leaves USB, as a stand recovery must handle.
+usb-jtag-off = ["system-watchdog"]
+# The product panic entry alone: a panic records itself and resets the chip,
+# and the next boot reports the record.
+system-panic-reset = [
+    "dep:oer-hil-protocol",
+    "dep:embassy-sync",
+    "dep:log",
+    "dep:oer-hil-agent",
+    "dep:oer-hil-image-keys",
+    "dep:critical-section",
+]
+[dependencies]
+oer-memory = { path = "../../../../crates/memory" }
+embassy-executor.workspace = true
+embassy-sync = { workspace = true, optional = true }
+embassy-time.workspace = true
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+log = { workspace = true, optional = true }
+critical-section = { version = "1.2.0", optional = true }
+oer-esp32s31-soc-esp-hal.workspace = true
+oer-espressif-executor-embassy.workspace = true
+oer-espressif-interrupt-table-esp-hal.workspace = true
+oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
+oer-hil-agent = { path = "../../../agent", optional = true, default-features = false }
+oer-hil-image-keys = { workspace = true, optional = true }
+oer-espressif-staged-runtime = { path = "../../../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-esp32s31-platform-board = { path = "../../../../platform/esp32s31/board", features = ["stage-two"] }
+oer-esp32s31-platform-layout = { path = "../../../../platform/esp32s31/layout" }
+static_cell.workspace = true
+
+[lints]
+workspace = true
+
+[build-dependencies]
+oer-esp32s31-platform-layout = { path = "../../../../platform/esp32s31/layout", features = ["build"] }
+

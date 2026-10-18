@@ -1,0 +1,25 @@
+[package]
+name = "oer-stand-board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "A board of the stand file and, under its device access, its write, start, reset ladder, console and hub power"
+
+[dependencies]
+oer-devices = { path = "../../tools/device/devices", features = ["image"] }
+oer-device-lock = { path = "../../tools/device/lock" }
+oer-chip-profile = { path = "../../tools/chip-profile" }
+oer-stand-file = { path = "../file" }
+oer-stand-power = { path = "../power" }
+oer-image-bundle = { path = "../../tools/image/bundle" }
+oer-process = { path = "../../tools/process" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+

@@ -1,0 +1,27 @@
+[package]
+name = "oer-hil-flash"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL flash operation: a leased board written by the devices layer's one write, receipted, then journaled as history"
+
+[dependencies]
+oer-image-bundle = { path = "../../../tools/image/bundle" }
+oer-chip-profile = { path = "../../../tools/chip-profile" }
+oer-durable = { path = "../../../tools/durable" }
+oer-devices = { path = "../../../tools/device/devices", features = ["image"] }
+oer-device-lock = { path = "../../../tools/device/lock" }
+oer-stand-board = { path = "../../../stand/board" }
+oer-stand-journal = { path = "../../../stand/journal" }
+oer-image = { path = "../../../tools/image/pipeline" }
+oer-process = { path = "../../../tools/process" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+

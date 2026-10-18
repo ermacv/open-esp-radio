@@ -1,0 +1,18 @@
+[package]
+name = "oer-hil-scenario-catalog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL scenario catalog format: the scenario header, its schema and role, the laboratory requirements and the discovery of a catalog's documents"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+
+[lints]
+workspace = true
+

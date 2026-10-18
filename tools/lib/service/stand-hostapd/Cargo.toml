@@ -1,0 +1,19 @@
+[package]
+name = "oer-stand-hostapd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The pinned hostapd build of the Linux fixture software"
+
+[dependencies]
+oer-durable = { path = "../../tools/durable" }
+oer-process = { path = "../../tools/process" }
+serde_json = "1.0"
+tempfile = "3"
+
+[lints]
+workspace = true
+

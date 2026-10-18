@@ -1,0 +1,25 @@
+[package]
+name = "oer-hil-net-traffic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL network traffic: the target's traffic sessions and their typed evidence, service readiness, and the host's UDP, TCP and ICMP traffic"
+
+[dependencies]
+oer-hil-fixture = { path = "../fixture" }
+oer-hil-link = { path = "../link" }
+oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
+oer-process = { path = "../../../tools/process" }
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+oer-hil-link = { path = "../link", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+

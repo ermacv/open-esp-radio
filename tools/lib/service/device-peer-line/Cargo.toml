@@ -1,0 +1,13 @@
+[package]
+name = "oer-device-peer-line"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The text protocol line grammar of the stand's reference peer firmwares"
+
+[lints]
+workspace = true
+

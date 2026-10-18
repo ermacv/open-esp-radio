@@ -1,0 +1,22 @@
+[package]
+name = "oer-hil-fixture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Finite Linux probe helper for open ESP radio HIL, with its runner contract"
+
+[dependencies]
+libc = "0.2"
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process"] }
+oer-ieee80211-mac = { path = "../../../crates/protocols/ieee80211/mac" }
+oer-process = { path = "../../../tools/process" }
+oer-stand-fixture-install = { path = "../../../stand/fixture-install" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lints]
+workspace = true
+

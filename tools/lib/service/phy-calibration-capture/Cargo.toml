@@ -1,0 +1,17 @@
+[package]
+workspace = "../../.."
+name = "oer-phy-calibration-capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The chip-neutral capture of the vendor-versus-production PHY calibration cross-check: boots, register spaces and the vendor console protocol"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[lints]
+workspace = true
+

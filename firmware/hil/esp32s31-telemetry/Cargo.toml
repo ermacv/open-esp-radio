@@ -1,0 +1,23 @@
+[package]
+name = "oer-hil-esp32s31-telemetry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "ESP32-S31 qualification observers for open-esp-radio HIL"
+
+[features]
+tx-wait-probe = []
+rx-ownership-observation = ["dep:oer-esp32s31-ieee80211-dma", "oer-esp32s31-ieee80211-dma/rx-ownership-observation"]
+
+[dependencies]
+oer-esp32s31-ieee80211-dma = { path = "../../../../crates/hardware/esp32s31/driver/ieee80211/dma", optional = true }
+oer-ieee80211-softmac = { path = "../../../../crates/protocols/ieee80211/softmac" }
+oer-ieee80211-mac = { path = "../../../../crates/protocols/ieee80211/mac" }
+oer-esp32s31-ieee80211-mac = { path = "../../../../crates/hardware/esp32s31/driver/ieee80211/mac" }
+oer-esp32s31-ieee80211-runtime = { path = "../../../../crates/runtime/esp32s31/ieee80211", default-features = false }
+oer-hil-protocol = { path = "../../../protocol", default-features = false, features = ["wifi"] }
+
+
+[lints]
+workspace = true

@@ -1,0 +1,4 @@
+# open-esp-radio HIL stand: uhubctl without sudo, only for the RSHTECH cascade
+# (Realtek RTS5423 / RTS5411, USB 2 and USB 3 halves). Group uucp.
+SUBSYSTEM=="usb", DRIVER=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="5423|5411|0423|0411", MODE="0660", GROUP="uucp"
+SUBSYSTEM=="usb", DRIVER=="hub", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="5423|5411|0423|0411", RUN+="/bin/sh -c 'chgrp uucp $sys$devpath/*-port*/disable; chmod g+w $sys$devpath/*-port*/disable'"

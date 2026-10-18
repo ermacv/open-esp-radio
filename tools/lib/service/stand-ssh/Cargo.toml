@@ -1,0 +1,16 @@
+[package]
+name = "oer-stand-ssh"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The one way the host reaches the stand's OpenWrt hosts: non-interactive SSH, and the resource key of a host's boot"
+
+[lints]
+workspace = true
+
+
+[dependencies]
+oer-process = { path = "../../tools/process" }

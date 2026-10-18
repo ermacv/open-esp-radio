@@ -1,0 +1,16 @@
+[package]
+name = "oer-esp32s31-hil-calibration-artifact"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Wire representation of the retained ESP32-S31 PHY calibration the HIL target hands its host"
+
+[dependencies]
+oer-esp32s31-phy.workspace = true
+postcard.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
+

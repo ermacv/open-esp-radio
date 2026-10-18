@@ -1,0 +1,22 @@
+[package]
+workspace = "../../../.."
+name = "oer-esp32s31-phy-relation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The reviewed ESP32-S31 PHY calibration relation: committed phy_param fields and the production calibration projection, shared by the comparison probes, the Blobray tracking scenario and the hardware calibration cross-check"
+readme = "README.md"
+
+[features]
+# The production calibration projection; needs the PHY crate's validation
+# view. The Blobray scenario reads only the committed fields.
+projection = ["dep:oer-esp32s31-phy"]
+
+[dependencies]
+oer-esp32s31-phy = { path = "../../../../crates/hardware/esp32s31/phy", features = ["validation-probes"], optional = true }
+
+[lints]
+workspace = true
+

@@ -1,0 +1,9 @@
+schema = 5
+id = "system-panic-reset"
+description = "An intentional panic in thread context runs the product panic entry alone: it records the panic in reset-retained memory and resets the chip; the boot ROM and bootloader start again and the next boot reports the record"
+role = "investigation"
+repetitions = 1
+tags = ["soc", "fault-injection", "post-mortem"]
+
+[system]
+kind = "panic-reset"

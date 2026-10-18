@@ -1,0 +1,30 @@
+[package]
+name = "oer-hil-trace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL platform trace events a board records and the host decodes"
+
+[features]
+# The host's decoding of a drained trace: the event sets an image's trace
+# holds and the snapshots a domain knows.
+describe = [
+    "dep:oer-bluetooth-trace",
+    "dep:oer-ieee80211-trace",
+    "dep:oer-ieee802154-trace",
+    "dep:oer-phy-trace",
+]
+
+[dependencies]
+oer-trace = { path = "../../crates/trace" }
+oer-bluetooth-trace = { path = "../../crates/protocols/bluetooth/trace", optional = true }
+oer-ieee80211-trace = { path = "../../crates/protocols/ieee80211/trace", optional = true }
+oer-ieee802154-trace = { path = "../../crates/hardware/ieee802154/trace", optional = true }
+oer-phy-trace = { path = "../../crates/hardware/radio/trace", optional = true }
+
+[lints]
+workspace = true
+

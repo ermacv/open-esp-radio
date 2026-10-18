@@ -1,0 +1,132 @@
+# The HIL stand file: copy to ~/.config/open-esp-radio/stand.toml and make it
+# private (chmod 600); it holds Wi-Fi credentials. Every checkout of the host
+# reads the same file. `cargo stand discover` prints the [[board]] of each
+# attached board; `cargo stand doctor` checks the host around it.
+schema = 1
+
+[stand]
+id = "berlin-open-radio"
+# A run that uses the air holds all of it while it executes.
+air = "exclusive"
+
+# USB hubs with per-port power, by their USB 2 and USB 3 locations.
+[[hub]]
+id = "rsh-top"
+usb2 = "3-8"
+usb3 = "4-1"
+# A cascaded hub hangs on port 3: never switched.
+protected = [3]
+# Port 2 reports `off` but keeps its power (checked 2026-10-02).
+switchable = [1, 4]
+# Port → touch button, counted from the top of the stand.
+buttons = { 1 = 1, 2 = 2, 4 = 3 }
+
+[[hub]]
+id = "rsh-mid"
+usb2 = "3-8.3"
+usb3 = "4-1.3"
+protected = [4]
+switchable = [1, 2, 3]
+buttons = { 1 = 4, 2 = 5, 3 = 6 }
+
+[[hub]]
+id = "rsh-bottom"
+usb2 = "3-8.3.4"
+usb3 = "4-1.3.4"
+switchable = [1, 2, 3, 4]
+buttons = { 1 = 7, 2 = 8, 3 = 9, 4 = 10 }
+
+# The pool. A board's role in a run comes from what the run flashes on it:
+# our image for a device under test, ESP-IDF firmware for a peer.
+[[board]]
+# The name written on the board.
+id = "s31-a"
+# The MAC its USB Serial/JTAG port reports as USB serial number.
+usb-serial = "xx:xx:xx:xx:00:01"
+chip = "esp32s31"
+radios = ["wifi-2g4", "ble", "ieee802154"]
+roles = ["dut", "peer"]
+port = { hub = "rsh-mid", port = 3 }
+# Tried in order.
+reset = ["usb-jtag-rts", "jtag", "power"]
+
+[[board]]
+id = "c5-a"
+usb-serial = "xx:xx:xx:xx:00:01"
+chip = "esp32c5"
+radios = ["wifi-2g4", "wifi-5g", "ble", "ieee802154"]
+roles = ["dut", "peer"]
+port = { hub = "rsh-mid", port = 2 }
+# RTS through USB Serial/JTAG sends a C5 rev 1.0 into the UART0 download
+# mode (docs/hardware-errata.md).
+reset = ["jtag", "power"]
+
+# The fixture sections, as the HIL host reads them.
+[bluetooth]
+adapter = "hci0"
+
+[station]
+ssid = "laboratory-ssid"
+passphrase = "replace-me"
+
+[station.ipv4]
+mode = "dhcp"
+# Static alternative:
+# mode = "static"
+# address = "192.168.1.182/24"
+# gateway = "192.168.1.1"
+
+# Target-owned AP fixture. These credentials are sent over the typed UART
+# protocol; the laptop joins with the isolated address below and no gateway.
+[access_point]
+ssid = "open-radio-device"
+passphrase = "replace-me-too"
+channel = 13
+# `mhz20`, `mhz40-above`, or `mhz40-below`; HT40 geometry must keep the
+# secondary channel inside channels 1..=13.
+channel_width = "mhz40-below"
+# Admission limit enforced before an association obtains an AID/key slot.
+# The ESP32-S31 AP implementation accepts 1..=15.
+client_limit = 4
+target_address = "10.43.0.1/24"
+client_address = "10.43.0.2/24"
+# Optional second physical client hosted by the OpenWrt fixture. It is used
+# only by scenarios whose minimum_concurrent_ap_clients is two.
+secondary_client_address = "10.43.0.3/24"
+
+[station_fixture]
+# Select exactly one explicit owner. Other valid forms are:
+# kind = "local-linux"
+# interface = "wlan0"
+# country = "DE"
+# channel = 13
+# address = "10.42.0.1/24"
+# coexistence = "respect" # or "force-ht40" for an explicit lab override
+# phys = ["ht20", "ht40", "he20"]
+# or `kind = "external"` with `phys = ["he20"]` for a FRITZ fixture.
+kind = "open-wrt"
+# Optional protected AP: verify existing identity/security/channel, never apply
+# or restore settings. Incompatible profiles fail; AP control, rate changes and
+# creation of a monitor on this router are forbidden. Default is false.
+# read_only = true
+# Stable UCI ownership; discovery also works when the netdev is absent.
+radio = "radio0"
+ap_section = "default_radio0"
+channel = 13
+ssh_target = "open-radio-ap"
+wireless_interface = "phy0-ap0"
+ingress_interface = "br-lan"
+monitor_interface = "open-radio-mon"
+# Allowed scenario modes; actual AP capabilities are discovered from OpenWrt.
+# The runner applies channel, mode, WPA2 credentials and WMM, verifies hostapd
+# and channel geometry, then restores the original settings.
+phys = ["legacy", "ht20", "ht40", "he20"]
+# Uses the laptop's Intel adapter as an independent passive observer while
+# OpenWrt remains the AP. Requires the schema-10 open-radio-net helper.
+independent_laptop_monitor = true
+
+# Optional: the laptop radio may host a non-ERP 802.11b BSS on the station
+# fixture's channel, a real overlapping legacy BSS for protection scenarios.
+# Requires the schema-13 open-radio-net helper.
+[legacy_bss]
+country = "DE"

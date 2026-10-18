@@ -1,0 +1,41 @@
+[package]
+name = "oer-hil-family-bluetooth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Bluetooth LE HIL workloads and the Linux Bluetooth fixture"
+
+[dependencies]
+oer-hil-schema = { path = "../../../schema" }
+oer-hil-lab = { path = "../../lab" }
+oer-hil-link = { path = "../../link" }
+oer-hil-scenario = { path = "../../scenario" }
+oer-hil-scenario-catalog = { path = "../../scenario/catalog" }
+oer-hil-run-bundle-format = { path = "../../run-bundle/format" }
+oer-durable = { path = "../../../../tools/durable" }
+oer-hil-workload = { path = "../../workload" }
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+oer-process = { path = "../../../../tools/process" }
+oer-hil-fixture = { path = "../../fixture" }
+tempfile = "3"
+oer-hil-protocol = { path = "../../../protocol" }
+oer-bluetooth-trace = { path = "../../../../crates/protocols/bluetooth/trace" }
+oer-trace = { path = "../../../../crates/trace" }
+heapless = "0.9.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zbus = "=5.19.0"
+async-channel = "2.5"
+async-io = "2.6"
+futures-lite = "2.6"
+
+[dev-dependencies]
+toml = "1.1"
+oer-hil-workload = { path = "../../workload", features = ["test-support"] }
+
+[lints]
+workspace = true
+
