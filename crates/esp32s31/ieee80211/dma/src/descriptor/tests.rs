@@ -86,28 +86,6 @@ fn a_tx_word_is_size_length_last_and_owned() {
 }
 
 #[test]
-fn a_descriptor_publishes_its_three_words() {
-    let descriptor = RxDescriptor::new();
-    let armed = rx_armed_word(1664).expect("fits");
-    descriptor.publish_owned(armed, 0x2f00_1000, 0x2f00_2000);
-    assert_eq!(
-        (
-            descriptor.word0(),
-            descriptor.buffer_address(),
-            descriptor.next_address()
-        ),
-        (armed, 0x2f00_1000, 0x2f00_2000)
-    );
-    let tx = TxDescriptor::new();
-    let owned = tx_owned_word(512, 123).expect("fits");
-    tx.publish_owned(owned, 0x2f00_3000, 0);
-    assert_eq!(
-        (tx.word0(), tx.buffer_address(), tx.next_address()),
-        (owned, 0x2f00_3000, 0)
-    );
-}
-
-#[test]
 fn the_dma_window_bounds_descriptors_and_buffers() {
     assert!(descriptor_address_valid(DMA_WINDOW.start));
     assert!(!descriptor_address_valid(DMA_WINDOW.start + 2));

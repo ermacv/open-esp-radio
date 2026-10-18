@@ -1435,13 +1435,6 @@ register = "VALUE_HIGH"
 sources = ["BLOB_LIBPP_HAL_TSF"]
 
 [[opaque-domains]]
-name = "MacRxDescriptorBaseAddress"
-description = "RX descriptor-base address already validated against a stable DMA binding by the closed PAC."
-peripheral = "WIFI_MAC_RX_DMA"
-register = "RX_DESCRIPTOR_BASE"
-sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
-
-[[opaque-domains]]
 name = "PhyMemoryData0"
 description = "Opaque table-memory word for PHY memory data register 0."
 peripheral = "PHY_MEMORY"
@@ -1753,7 +1746,7 @@ name = "rx_descriptor_base"
 peripheral = "WIFI_MAC_RX_DMA"
 register = "RX_DESCRIPTOR_BASE"
 field = "ADDRESS"
-domain = "MacRxDescriptorBaseAddress"
+points-to = "WIFI_RX_DMA_DESCRIPTOR"
 exposure = "facade"
 sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "BLOB_LIBPP_MAC_RXBUF_INIT_PREFIX"]
 

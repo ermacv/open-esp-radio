@@ -299,15 +299,44 @@ pub struct FullRegisterWrite {
     pub peripheral: String,
     pub register: String,
     pub field: String,
-    /// Reviewed value domain accepted by the closed-PAC bridge.
+    /// What the closed-PAC bridge accepts: a reviewed value domain or, for a
+    /// register the hardware reads as a pointer, a reference to a memory
+    /// layout.
     ///
     /// Schema 5 intentionally has no untyped compatibility path: every
     /// complete-register write crossing from the closed PAC into the raw PAC
     /// must carry a register-specific or otherwise reviewed value type.
-    pub domain: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+    /// The memory layout a pointer register's `DmaRef` refers to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_to: Option<String>,
     pub exposure: PacApiExposure,
     pub sources: Vec<String>,
 }
+/// The typed value a complete-register write takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FullRegisterValue<'a> {
+    /// A reviewed value domain.
+    Domain(&'a str),
+    /// A pointer register: a `DmaRef` to this memory layout of the model.
+    PointsTo(&'a str),
+}
+
+impl FullRegisterWrite {
+    /// The value the write takes: exactly one of `domain` and `points-to`.
+    pub fn value(&self) -> Result<FullRegisterValue<'_>> {
+        match (&self.domain, &self.points_to) {
+            (Some(domain), None) => Ok(FullRegisterValue::Domain(domain)),
+            (None, Some(layout)) => Ok(FullRegisterValue::PointsTo(layout)),
+            _ => Err(Error::message(format!(
+                "PAC API full-register-write {:?} takes exactly one of domain and points-to",
+                self.name
+            ))),
+        }
+    }
+}
+
 /// One complete-register observation returned through a reviewed data domain.
 ///
 /// The raw generated leaf returns `u32`; the optional facade bridge wraps that
@@ -720,14 +749,19 @@ impl PacApiPack {
         }
         for operation in &self.full_register_writes {
             validate_component("field", &operation.name, &operation.field)?;
-            self.validate_operation_domain(
-                "full-register-write",
-                &operation.name,
-                &operation.peripheral,
-                &operation.register,
-                &operation.domain,
-                &domain_names,
-            )?;
+            match operation.value()? {
+                FullRegisterValue::Domain(domain) => self.validate_operation_domain(
+                    "full-register-write",
+                    &operation.name,
+                    &operation.peripheral,
+                    &operation.register,
+                    domain,
+                    &domain_names,
+                )?,
+                FullRegisterValue::PointsTo(layout) => {
+                    validate_component("points-to", &operation.name, layout)?;
+                }
+            }
         }
         for operation in &self.full_register_reads {
             validate_component("field", &operation.name, &operation.field)?;
@@ -2289,7 +2323,8 @@ peripheral-ownership = true
             peripheral: "RADIO".to_owned(),
             register: "ENABLE".to_owned(),
             field: "EVENTS".to_owned(),
-            domain: "InterruptMask".to_owned(),
+            domain: Some("InterruptMask".to_owned()),
+            points_to: None,
             exposure: PacApiExposure::Facade,
             sources: vec!["VENDOR_IRQ".to_owned()],
         });

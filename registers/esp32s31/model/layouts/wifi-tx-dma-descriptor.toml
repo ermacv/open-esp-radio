@@ -61,7 +61,7 @@ name = "ADDRESS"
 bits = "31:0"
 writer = "cpu"
 description = "The next descriptor's address, or zero at the end."
-layout = "WIFI_TX_DMA_DESCRIPTOR"
+points-to = "WIFI_TX_DMA_DESCRIPTOR"
 
 [[review]]
 entity = "WIFI_TX_DMA_DESCRIPTOR"

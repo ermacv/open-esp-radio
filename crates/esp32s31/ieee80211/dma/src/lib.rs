@@ -8,6 +8,8 @@
 //! executor policy deliberately remain above this leaf.
 
 pub mod descriptor;
+#[cfg(test)]
+mod descriptor_publish_tests;
 pub mod ring_index;
 pub mod rx_dma;
 pub mod rx_ring;

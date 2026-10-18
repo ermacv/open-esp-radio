@@ -325,6 +325,7 @@ impl ChipPublication {
         }
         let mut raw =
             shared_blocks::reexport_library_blocks(&raw, self.model.shared_peripherals())?;
+        self.model.validate_pointer_writes(policy)?;
         raw.push_str(&policy.render_rust(svd)?);
         let raw = host::format(&raw, &pac.edition)?;
         let mut api = policy.render_facade_rust()?;

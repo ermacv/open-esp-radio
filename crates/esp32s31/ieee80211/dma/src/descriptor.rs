@@ -5,9 +5,9 @@
 #![forbid(unsafe_code)]
 
 use oer_esp32s31_hal::layouts::{
-    DMA_WINDOW, WifiRxDmaDescriptor, WifiRxDmaDescriptorBuffer, WifiRxDmaDescriptorControl,
-    WifiRxDmaDescriptorNext, WifiTxDmaDescriptor, WifiTxDmaDescriptorBuffer,
-    WifiTxDmaDescriptorControl, WifiTxDmaDescriptorNext,
+    DMA_WINDOW, DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorBuffer,
+    WifiRxDmaDescriptorControl, WifiRxDmaDescriptorNext, WifiTxDmaDescriptor,
+    WifiTxDmaDescriptorBuffer, WifiTxDmaDescriptorControl, WifiTxDmaDescriptorNext,
 };
 
 /// The bytes of one descriptor, RX or TX: the layouts share their geometry.
@@ -65,13 +65,13 @@ impl RxDescriptor {
     pub(crate) fn publish_owned(
         &self,
         word0: WifiRxDmaDescriptorControl,
-        buffer_address: u32,
-        next_address: u32,
+        buffer: DmaWindowAddress,
+        next: Option<DmaRef<WifiRxDmaDescriptor>>,
     ) {
         self.0
             .buffer()
-            .write(WifiRxDmaDescriptorBuffer::ZERO.with_address(buffer_address));
-        self.publish_next_address(next_address);
+            .write(WifiRxDmaDescriptorBuffer::ZERO.with_address(buffer));
+        self.publish_next(next);
         self.0.control().write(word0);
     }
 
@@ -85,7 +85,13 @@ impl RxDescriptor {
         buffer_address: u32,
         next_address: u32,
     ) {
-        self.publish_owned(word0, buffer_address, next_address);
+        self.0
+            .buffer()
+            .write(WifiRxDmaDescriptorBuffer::from_bits(buffer_address));
+        self.0
+            .next()
+            .write(WifiRxDmaDescriptorNext::from_bits(next_address));
+        self.0.control().write(word0);
     }
 
     /// Model one hardware ownership-word update.
@@ -111,10 +117,10 @@ impl RxDescriptor {
     /// it has validated the accepted tail and prepared an unreachable append
     /// chain. Publication is completed by the MAC append-reload doorbell.
     #[inline]
-    pub(crate) fn publish_next_address(&self, next_address: u32) {
+    pub(crate) fn publish_next(&self, next: Option<DmaRef<WifiRxDmaDescriptor>>) {
         self.0
             .next()
-            .write(WifiRxDmaDescriptorNext::ZERO.with_address(next_address));
+            .write(WifiRxDmaDescriptorNext::ZERO.with_address(next));
     }
 
     /// Rewrites only the ownership word, keeping the buffer and the link.
@@ -171,16 +177,24 @@ impl TxDescriptor {
     pub(crate) fn publish_owned(
         &self,
         word0: WifiTxDmaDescriptorControl,
-        buffer_address: u32,
-        next_address: u32,
+        buffer: DmaWindowAddress,
+        next: Option<DmaRef<WifiTxDmaDescriptor>>,
     ) {
         self.0
             .buffer()
-            .write(WifiTxDmaDescriptorBuffer::ZERO.with_address(buffer_address));
+            .write(WifiTxDmaDescriptorBuffer::ZERO.with_address(buffer));
         self.0
             .next()
-            .write(WifiTxDmaDescriptorNext::ZERO.with_address(next_address));
+            .write(WifiTxDmaDescriptorNext::ZERO.with_address(next));
         self.0.control().write(word0);
+    }
+
+    /// Returns all three words to zero: no buffer, no link, not owned.
+    #[inline]
+    pub(crate) fn clear(&self) {
+        self.0.buffer().write(WifiTxDmaDescriptorBuffer::ZERO);
+        self.0.next().write(WifiTxDmaDescriptorNext::ZERO);
+        self.0.control().write(WifiTxDmaDescriptorControl::ZERO);
     }
 }
 

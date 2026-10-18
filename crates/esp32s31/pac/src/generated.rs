@@ -2278,22 +2278,6 @@ impl StationTsfHighWord {
     }
 }
 
-/// RX descriptor-base address already validated against a stable DMA binding by the closed PAC.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxDescriptorBaseAddress(u32);
-
-impl MacRxDescriptorBaseAddress {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// Opaque table-memory word for PHY memory data register 0.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PhyMemoryData0(u32);
@@ -2986,9 +2970,9 @@ pub(crate) fn station_tsf_value_high(
 #[inline]
 pub(crate) fn rx_descriptor_base(
     registers: &crate::svd::WifiMacRxDma,
-    value: MacRxDescriptorBaseAddress,
+    value: crate::layouts::DmaRef<crate::layouts::WifiRxDmaDescriptor>,
 ) {
-    crate::svd::full_register_write::rx_descriptor_base(registers, value.get());
+    crate::svd::full_register_write::rx_descriptor_base(registers, value.bits());
 }
 
 /// Typed bridge for the reviewed `phy_memory_data_0` complete-register transaction.
@@ -8600,6 +8584,100 @@ pub mod layouts {
     /// The `dma-window` RAM region of the memory map.
     pub const DMA_WINDOW: core::ops::Range<u32> = 0x2f000000..0x2f080000;
 
+    /// An address inside [`DMA_WINDOW`] whose memory stays reserved for the
+    /// hardware while it may read the address, as the hardware reads it.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct DmaWindowAddress(u32);
+
+    impl DmaWindowAddress {
+        /// The address `address`.
+        ///
+        /// # Safety
+        ///
+        /// `address` lies inside [`DMA_WINDOW`], in a static placed there or a
+        /// buffer lent to the hardware, which stays reserved for as long as
+        /// the hardware may read the address.
+        #[allow(unsafe_code, reason = "the caller promises a placed address")]
+        pub const unsafe fn new_unchecked(address: u32) -> Self {
+            Self(address)
+        }
+
+        /// The address as the hardware reads it.
+        pub const fn get(self) -> u32 {
+            self.0
+        }
+    }
+
+    mod sealed {
+        pub trait Sealed {}
+    }
+
+    /// A layout placed in [`DMA_WINDOW`] only, which a [`DmaRef`] may point at.
+    pub trait DmaLayout: sealed::Sealed {}
+
+    /// The address of an `L` inside [`DMA_WINDOW`].
+    pub struct DmaRef<L: DmaLayout> {
+        address: DmaWindowAddress,
+        layout: core::marker::PhantomData<fn() -> L>,
+    }
+
+    impl<L: DmaLayout> DmaRef<L> {
+        /// The reference to the `L` at `address`.
+        ///
+        /// # Safety
+        ///
+        /// An `L`, aligned as `L` requires, lies at `address` for as long as
+        /// the hardware may follow the reference.
+        #[allow(unsafe_code, reason = "the caller promises a placed layout")]
+        pub const unsafe fn new_unchecked(address: DmaWindowAddress) -> Self {
+            Self {
+                address,
+                layout: core::marker::PhantomData,
+            }
+        }
+
+        /// The referenced address.
+        pub const fn address(self) -> DmaWindowAddress {
+            self.address
+        }
+
+        /// The address as the hardware reads it.
+        pub const fn bits(self) -> u32 {
+            self.address.0
+        }
+    }
+
+    impl<L: DmaLayout> Clone for DmaRef<L> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
+
+    impl<L: DmaLayout> Copy for DmaRef<L> {}
+
+    impl<L: DmaLayout> PartialEq for DmaRef<L> {
+        fn eq(&self, other: &Self) -> bool {
+            self.address == other.address
+        }
+    }
+
+    impl<L: DmaLayout> Eq for DmaRef<L> {}
+
+    impl<L: DmaLayout> core::fmt::Debug for DmaRef<L> {
+        fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            formatter
+                .debug_tuple("DmaRef")
+                .field(&self.address)
+                .finish()
+        }
+    }
+
+    impl sealed::Sealed for WifiRxDmaDescriptor {}
+    impl DmaLayout for WifiRxDmaDescriptor {}
+
+    impl sealed::Sealed for WifiTxDmaDescriptor {}
+    impl DmaLayout for WifiTxDmaDescriptor {}
+
     /// The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
     /// buffer address and the link to the next node.
     ///
@@ -8831,8 +8909,8 @@ pub mod layouts {
         }
 
         /// This value with `ADDRESS` set to `value`.
-        pub const fn with_address(self, value: u32) -> Self {
-            Self(value)
+        pub const fn with_address(self, value: DmaWindowAddress) -> Self {
+            Self(value.get())
         }
     }
 
@@ -8883,8 +8961,11 @@ pub mod layouts {
         }
 
         /// This value with `ADDRESS` set to `value`.
-        pub const fn with_address(self, value: u32) -> Self {
-            Self(value)
+        pub const fn with_address(self, value: Option<DmaRef<WifiRxDmaDescriptor>>) -> Self {
+            Self(match value {
+                Some(reference) => reference.bits(),
+                None => 0,
+            })
         }
     }
 
@@ -9102,8 +9183,8 @@ pub mod layouts {
         }
 
         /// This value with `ADDRESS` set to `value`.
-        pub const fn with_address(self, value: u32) -> Self {
-            Self(value)
+        pub const fn with_address(self, value: DmaWindowAddress) -> Self {
+            Self(value.get())
         }
     }
 
@@ -9154,8 +9235,11 @@ pub mod layouts {
         }
 
         /// This value with `ADDRESS` set to `value`.
-        pub const fn with_address(self, value: u32) -> Self {
-            Self(value)
+        pub const fn with_address(self, value: Option<DmaRef<WifiTxDmaDescriptor>>) -> Self {
+            Self(match value {
+                Some(reference) => reference.bits(),
+                None => 0,
+            })
         }
     }
 
