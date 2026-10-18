@@ -381,39 +381,35 @@ fn list_boards() -> Result<()> {
     let stand = stand::Stand::load(&path)
         .map_err(|error| eprintln!("warning: {error}"))
         .ok();
+    let report = oer_lab::hub::status()
+        .map_err(|error| eprintln!("warning: {error}"))
+        .unwrap_or_default();
+    let devices = std::path::Path::new(oer_lab::hub::SYSFS_USB_DEVICES);
     println!(
-        "{:<10} {:<18} {:<14} {:<13} STAND PORT",
-        "BOARD", "MAC", "USB", "TTY"
+        "{:<10} {:<18} {:<14} {:<13} {:<16} POWER-CYCLE",
+        "BOARD", "MAC", "USB", "TTY", "HUB PORT"
     );
     for attached in boards::attached() {
-        let known = stand
+        let board = stand
             .as_ref()
-            .and_then(|stand| Some((stand, stand.board_by_mac(&attached.mac)?)));
-        let id = known.map_or("-", |(_, board)| board.id.as_str());
-        let port = known.map_or_else(
-            || "-".to_owned(),
-            |(stand, board)| match &board.port {
-                None => "-".to_owned(),
-                Some(port) => {
-                    let location = stand
-                        .hub(&port.hub)
-                        .map(|hub| format!("{}.{}", hub.usb2, port.port));
-                    let agrees = location.as_deref() == Some(attached.location.as_str());
-                    format!(
-                        "{}:{}{}",
-                        port.hub,
-                        port.port,
-                        if agrees { "" } else { " (disagrees with USB)" }
-                    )
-                }
-            },
-        );
+            .and_then(|stand| stand.board_by_mac(&attached.mac));
+        let id = board.map_or("-", |board| board.id.as_str());
+        let detected = oer_lab::hub::parent(&attached.location)
+            .map_or_else(|| "-".to_owned(), |(hub, port)| format!("{hub}:{port}"));
+        let power =
+            match oer_lab::hub::power_port(devices, &report, stand.as_ref(), &attached.location) {
+                Ok(_) => "yes".to_owned(),
+                Err(why) => format!("no: {why}"),
+            };
+        if let Some(warning) = board.and_then(|board| board.ignored_port(&detected)) {
+            eprintln!("warning: {warning}");
+        }
         let tty = attached
             .tty
             .as_ref()
             .map_or_else(|| "-".to_owned(), |tty| tty.display().to_string());
         println!(
-            "{id:<10} {:<18} {:<14} {tty:<13} {port}",
+            "{id:<10} {:<18} {:<14} {tty:<13} {detected:<16} {power}",
             attached.mac, attached.location
         );
     }
@@ -424,9 +420,19 @@ fn power_cycle(selector: &str) -> Result<()> {
     let (stand, board) = board(selector)?;
     let _lock = lock::acquire(&board.mac)?;
     let attached = boards::find(&board.mac);
-    let (hub, port) = power::port_of(&stand, &board, attached.as_ref())?;
-    eprintln!("fw: power-cycling {} on {} port {port}", board.id, hub.id);
-    let returned = power::cycle(hub, port, &board.mac)?;
+    let report = oer_lab::hub::status()?;
+    let port = power::port_of(
+        Some(&stand),
+        &board.id,
+        attached.as_ref(),
+        &report,
+        std::path::Path::new(oer_lab::hub::SYSFS_USB_DEVICES),
+    )?;
+    if let Some(warning) = board.ignored_port(&format!("{}:{}", port.hub, port.port)) {
+        eprintln!("warning: {warning}");
+    }
+    eprintln!("fw: power-cycling {} on {port}", board.id);
+    let returned = power::cycle(&port, &board.mac)?;
     eprintln!(
         "fw: {} is back at USB {} ({})",
         board.id,

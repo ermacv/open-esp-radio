@@ -126,10 +126,13 @@ its holder when it refuses.
   smallest residual: lower median, p90, maximum; slope − 1 in ppm), checks
   `bss=` against the stand's `w1.bss idx=` and `n=` against the pairs.
 - `monitor` opens the console without a reset: RTS is released before DTR.
-- `power-cycle` switches the board's hub port off and on with `uhubctl`, only
-  when the stand file lists the port as switchable and not protected and the
-  board's USB location in sysfs is that very port; it then waits for the
-  board to return.
+- `boards` lists each attached board with the hub port found on the host and
+  whether that port may be power-cycled (or why not).
+- `power-cycle` switches the board's hub port off and on with `uhubctl`. The
+  port is found on the host and switched only when the board is the one
+  device below it and the stand file's hub policy allows it (the stand file,
+  in `tools/lab`). The board must leave USB while the port is off, or the
+  port "did not cut power"; then it waits for the board to return.
 
 ## The stand router
 

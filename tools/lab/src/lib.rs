@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod hub;
 pub mod lock;
 pub mod mac;
 pub mod router;

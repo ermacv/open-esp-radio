@@ -10,20 +10,12 @@ pub const PRODUCT: &str = "1001";
 /// One attached board.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Attached {
-    /// Its USB location, such as `3-8.3.4.4`: the hub location and, after
-    /// the last dot, the hub port.
+    /// Its USB location, such as `3-8.3.4.4` ([`oer_lab::hub::parent`]
+    /// names its hub and port).
     pub location: String,
     pub mac: String,
     /// `/dev/ttyACM…`, once the kernel bound its CDC interface.
     pub tty: Option<PathBuf>,
-}
-
-impl Attached {
-    /// The hub location and port this board hangs on.
-    pub fn hub_port(&self) -> Option<(&str, u32)> {
-        let (hub, port) = self.location.rsplit_once('.')?;
-        Some((hub, port.parse().ok()?))
-    }
 }
 
 /// The boards below the sysfs USB device directory `devices`
@@ -107,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn finds_usb_serial_jtag_boards_with_their_tty_and_hub_port() {
+    fn finds_usb_serial_jtag_boards_with_their_tty() {
         let root = tempfile::tempdir().unwrap();
         device(
             root.path(),
@@ -131,6 +123,5 @@ mod tests {
         assert_eq!(boards[0].tty, None);
         assert_eq!(boards[1].mac, "02:00:00:00:01:D0");
         assert_eq!(boards[1].tty.as_deref(), Some(Path::new("/dev/ttyACM1")));
-        assert_eq!(boards[1].hub_port(), Some(("3-8.3.4", 4)));
     }
 }
