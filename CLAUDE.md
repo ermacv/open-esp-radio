@@ -54,30 +54,27 @@ without vendor radio binaries. Owner decisions are in
 
 ## Where code goes
 
-Ask who knows the hardware: a chip's registers go to `crates/<chip>/`,
-Espressif IP and vendor algorithms shared by their chips to
-`crates/espressif/`, portable protocol code to its protocol directory, and
-code without chip or protocol to `crates/base/`, `crates/radio/` or
-`crates/exec/`. Bindings to external frameworks live in `crates/adapters/`.
-A crate never sits inside another crate's directory, and its package is named
-after its directory (`tools/README.md`). A new crate needs a
-reason: dependency direction, a license boundary, a different target or
-dependency set, or an independent consumer; otherwise it is a module.
+The layout is [docs/repository-layout.md](docs/repository-layout.md); the
+tree is migrating to it, and new packages go to their target root now.
 
-| Path | Holds |
-| --- | --- |
-| `crates/base/` | time, virtual time, memory, network values, deadline |
-| `crates/exec/` | interrupt table, Embassy executor, esp-hal interrupt binding |
-| `crates/radio/` | the radio port lifecycle, permit pool, coexistence vocabulary |
-| `crates/ieee80211/`, `bluetooth/`, `ieee802154/` | portable protocols |
-| `crates/espressif/` | Espressif PACs, coexistence, 802.15.4 engine, analog bus, modem clock, Wi-Fi policy data |
-| `crates/<chip>/` | per chip (`esp32s31`, `esp32c5`): PAC, HAL, PHY, drivers, radio coexistence |
-| `crates/adapters/` | Embassy time and network, esp-hal SoC |
-| `firmware/` | the chip-target workspace: staged boot platform, images |
-| `registers/` | the register model, its evidence and the published SVD and bindings |
-| `tools/cli/<tool>/` | one thin binary per host tool (`cargo registers`, `cargo fw`, …) |
-| `tools/lib/{base,data,analysis,service}/` | host libraries by layer; dependencies only downward (`tools/README.md`) |
-| `knowledge/` | recovered facts and research notes (data, not code) |
+- **Libraries by what they touch:** `portable/` touches neither hardware nor
+  an OS (protocol cores, the HIL protocol, chip knowledge such as tables and
+  pure functions); `chips/` accesses a chip's registers (PAC, HAL, PHY,
+  drivers, platform); `host/` needs an OS. A domain may split across roots
+  (`portable/hil/protocol`, `host/hil/runner`).
+- **Executables:** `firmware/` holds chip images, `tools/<tool>/` one host
+  program each (`main.rs` and its own modules).
+- **Dependencies:** `portable` → `portable`; `chips` → `portable`, `chips`;
+  `host` → `portable`, `host`; `firmware` → `portable`, `chips`; `tools` →
+  `portable`, `host`. No exceptions: a host tool that needs a chip fact takes
+  it from `portable/<chip>/`.
+- **Names:** a library is `oer-` and its path below the root
+  (`portable/ieee80211/mac` is `oer-ieee80211-mac`); an executable keeps its
+  root (`oer-firmware-apps-w1`, `oer-tool-fw`).
+- Only `cargo fw` builds images; other programs take artifacts.
+- A crate never sits inside another crate's directory. A new crate needs a
+  reason: dependency direction, a license boundary, a different target or
+  dependency set, or an independent consumer; otherwise it is a module.
 
 ## Work
 
