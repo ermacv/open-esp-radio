@@ -99,6 +99,16 @@ tree is a selection of a predecessor repository, without its history.
 - **Working rules.** The predecessor's working rules for agents return in
   `CLAUDE.md` (Work); its process bureaucracy (evidence bundles, seals,
   qualification, contract-change procedure, tracking-issue lists) does not.
+- **What else returns from the predecessor, and when.** The PHY calibration
+  cross-check against the vendor returns before PHY slicing (R1), which needs
+  it to stay within the vendor spread. Binary analysis (Blobray, the RV32
+  layers with the stack analyzer) returns in its own change at the first task
+  that needs a vendor-code fact absent from `registers/` and `knowledge/`.
+  The reset-retained trace returns when a failure cannot be explained from
+  the log. The ESP-IDF reference peers return with the second radio block.
+  The rest (verification harness, image and device tooling, the stand
+  arbiter, repository tooling, the Bluetooth driver, the old Wi-Fi execution
+  form, ESP32-C5 crates, the facade) stays out.
 
 ## Earlier decisions still in force
 
