@@ -73,18 +73,21 @@ use crate::{
 };
 
 /// Immediate self-wakes before a continuation waits on the timer.
-/// Provisional: measured in PR 5.
+/// Measured: the W1 runs of 2026-10-18 took a longest continuation streak
+/// of 1, one continuation per frame, well inside this bound.
 pub const IMMEDIATE_CONTINUATIONS: u32 = 4;
-/// The timer wait after the immediate self-wakes. Provisional: measured in
-/// PR 5.
+/// The timer wait after the immediate self-wakes. Provisional: not
+/// exercised on hardware (timed continuations 0 in the W1 runs of
+/// 2026-10-18).
 pub const CONTINUATION_WAIT: Duration = Duration::from_micros(20);
-/// How long teardown waits for the line to confirm the mask. Provisional:
-/// measured in PR 5.
+/// How long teardown waits for the line to confirm the mask. Measured: the
+/// W1 runs of 2026-10-18 confirmed the mask in 17 µs.
 pub const MASK_CONFIRM_TIMEOUT: Duration = Duration::from_millis(1);
 /// How long teardown waits for staged leases and the MAC runtime to drain.
-/// Provisional: measured in PR 5.
+/// Measured: the W1 runs of 2026-10-18 drained in 11–14 µs with 0 polls.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
-/// The timer wait between two drain checks. Provisional: measured in PR 5.
+/// The timer wait between two drain checks. Provisional: not exercised on
+/// hardware (drain polls 0 in the W1 runs of 2026-10-18).
 pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 
 /// Run one receive epoch over `parts`; publish its exit and park.
@@ -357,7 +360,7 @@ where
                 return Err(WifiRxCause::StopRequested);
             }
             let admitted_before = self.totals[1];
-            let observations = ring.reload_repair_evidence().observations;
+            let observations = ring.reload_evidence().observations;
             let progress = self.service_once(ring);
             if let Some(snapshot) = snapshot.take() {
                 self.record_exhaustion(ring, snapshot, observations);
@@ -470,7 +473,7 @@ where
         mut snapshot: WifiRxExhaustion,
         observations: u32,
     ) {
-        let evidence = ring.reload_repair_evidence();
+        let evidence = ring.reload_evidence();
         if evidence.observations != observations {
             snapshot.next_after_doorbell = Some(evidence.last_next_low);
             snapshot.last_after_doorbell = evidence.last_last_low;
@@ -498,7 +501,7 @@ where
             self.hardware,
             (),
         );
-        self.counters.reload_evidence(ring.reload_repair_evidence());
+        self.counters.reload_evidence(ring.reload_evidence());
         result.map_err(|error| {
             self.counters.service_error();
             WifiRxCause::Service(error)

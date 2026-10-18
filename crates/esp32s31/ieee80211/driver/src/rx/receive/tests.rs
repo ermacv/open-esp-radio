@@ -205,11 +205,8 @@ impl RxDma for HostRadio {
             .configure_descriptor_window(binding);
     }
 
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32) {
-        self.host
-            .walker
-            .borrow_mut()
-            .write_descriptor_base(binding, address);
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
+        self.host.walker.borrow_mut().write_descriptor_base(binding);
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
@@ -853,6 +850,79 @@ fn service_fault_masks_and_quarantines() {
     assert_eq!((report.service_errors, report.doorbell_unmasks), (1, 0));
 }
 
+impl Harness {
+    /// The reserved descriptor's low address, as the walker reports it.
+    fn reserved_low(&self) -> u32 {
+        (self.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES)
+            & 0x000f_ffff
+    }
+
+    /// The walker writes a frame of `length` bytes into the reserved
+    /// descriptor and moves to its link.
+    fn land_in_reserved(&self, length: u32) {
+        let reserved = self.rx.reserved_descriptor();
+        reserved.write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        let mut walker = self.host.walker.borrow_mut();
+        walker.last_descriptor_low = self.reserved_low();
+        walker.next_descriptor_low = reserved.next_address() & 0x000f_ffff;
+    }
+}
+
+#[test]
+fn the_epochs_first_frame_in_the_reserved_descriptor_is_counted_and_dropped() {
+    let mut harness = harness().started();
+    assert_eq!(
+        harness.host.walker.borrow().next_descriptor_low,
+        harness.reserved_low(),
+        "the started walker fetches the reserved descriptor"
+    );
+    harness.land_in_reserved(80);
+    harness.rx_event();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!((report.units, report.reload.reserved_landings), (0, 1));
+    assert_eq!(report.service_errors, 0);
+    assert!(harness.host.mac().rx_delivery_enabled());
+    // The next frame lands in the ring head and is received.
+    harness.frame(200);
+    harness.settle();
+    let report = harness.report();
+    assert_eq!((report.units, report.bytes), (1, 200));
+    assert_eq!(
+        (
+            report.reload.reserved_landings,
+            report.reload.reserved_late_landings,
+            report.reload.base_writes
+        ),
+        (1, 0, 1)
+    );
+    assert_eq!(harness.rx.reserved_descriptor().next_address(), 0);
+}
+
+#[test]
+fn a_late_frame_in_the_reserved_descriptor_quarantines_the_epoch() {
+    let mut harness = harness().started();
+    harness.frame(200);
+    harness.settle();
+    assert_eq!(harness.report().units, 1);
+    // After the walker reached the ring nothing names R; a write into it
+    // fails closed.
+    harness.land_in_reserved(80);
+    harness.rx_event();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.reload.reserved_late_landings, 1);
+    assert_eq!(report.service_errors, 1);
+    assert_eq!(
+        harness.stop.try_exit().map(|exit| exit.end),
+        Some(WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::Fault,
+            walker_stopped: true,
+        })
+    );
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+}
+
 #[test]
 fn a_mask_never_confirmed_quarantines_without_a_stop() {
     let mut harness = harness().started();
@@ -962,22 +1032,22 @@ fn report_counts_units_bytes_and_drops() {
 
 const STAGE: usize = 8;
 
-type Returned = RefCell<Vec<HeldRxFrame<'static, 'static, STAGE, BUFFER>>>;
+type Returned<const N: usize = STAGE> = RefCell<Vec<HeldRxFrame<'static, 'static, N, BUFFER>>>;
 
 /// An upper layer that holds its leases while `holding`, through the
 /// notifier, as a network queue would; otherwise it drops them at once.
-struct ReturningSink {
-    held: &'static Returned,
+struct ReturningSink<const N: usize = STAGE> {
+    held: &'static Returned<N>,
     holding: &'static Cell<bool>,
     returns: RxReturnNotifier<'static>,
     counters: &'static WifiRxCounters,
 }
 
-impl Publisher<'static, BUFFER, STAGE> for ReturningSink {
-    const DEPTH: usize = STAGE;
+impl<const N: usize> Publisher<'static, BUFFER, N> for ReturningSink<N> {
+    const DEPTH: usize = N;
 
     fn free_capacity(&self) -> usize {
-        STAGE - self.held.borrow().len()
+        N - self.held.borrow().len()
     }
 
     fn preview(&self, unit: CompletedUnit, _: [u8; 24]) -> Preview {
@@ -995,8 +1065,8 @@ impl Publisher<'static, BUFFER, STAGE> for ReturningSink {
 
     fn try_send(
         &self,
-        frame: NetworkRxFrame<'static, STAGE, BUFFER>,
-    ) -> Result<(), NetworkRxFrame<'static, STAGE, BUFFER>> {
+        frame: NetworkRxFrame<'static, N, BUFFER>,
+    ) -> Result<(), NetworkRxFrame<'static, N, BUFFER>> {
         self.counters.received(frame.length());
         if self.holding.get() {
             self.held.borrow_mut().push(self.returns.hold(frame));
@@ -1011,10 +1081,20 @@ fn returning_harness() -> (
     &'static Cell<bool>,
     RxReturnNotifier<'static>,
 ) {
-    let held: &'static Returned = leak(RefCell::new(Vec::new()));
+    returning_harness_with::<STAGE>()
+}
+
+/// [`returning_harness`] with `N` staging slots.
+fn returning_harness_with<const N: usize>() -> (
+    Harness,
+    &'static Returned<N>,
+    &'static Cell<bool>,
+    RxReturnNotifier<'static>,
+) {
+    let held: &'static Returned<N> = leak(RefCell::new(Vec::new()));
     let holding: &'static Cell<bool> = leak(Cell::new(true));
     let mut notifier = None;
-    let harness = harness_staged::<STAGE, _, _>(|counters, returns, _, _| {
+    let harness = harness_staged::<N, _, _>(|counters, returns, _, _| {
         notifier = Some(returns);
         (
             ReturningSink {
@@ -1084,41 +1164,38 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     harness.host.take_log();
 
     // The upper layer returns its leases; nothing else happens.
+    harness.host.walker.borrow_mut().clear_operations();
     holding.set(false);
     held.borrow_mut().clear();
     harness.settle();
     let log = harness.host.take_log();
     assert_eq!(mac_lines(&log), 0, "the wake came from the return");
-    // The runner rearmed the returned prefix, staged what waited behind it
-    // and republished the head of the exhausted list through BASE.
+    // The runner rearmed the returned prefix behind the exhausted tail and
+    // rang the doorbell, which resumed the walker at the prefix's head: no
+    // BASE write, no manual cursor.
     let report = harness.report();
     assert_eq!(report.units, COUNT as u32);
     let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..STAGE] {
         assert_eq!(descriptor.word0(), armed);
     }
+    let walker = harness.host.walker.borrow();
     assert!(
-        harness
-            .host
-            .walker
-            .borrow()
+        !walker
             .operations()
-            .contains(&RxWalkerOperation::WriteDescriptorBase(harness.base))
+            .iter()
+            .any(|operation| matches!(operation, RxWalkerOperation::WriteDescriptorBase(_)))
     );
-    // Until the walker is seen to take the republished list, RX stays
-    // masked and the runner probes.
-    assert!(!harness.host.mac().rx_delivery_enabled());
-    assert!(!log.iter().any(|event| matches!(event, Event::Ring { .. })));
-
-    // The walker fetches the new head; the probe ends and RX is unmasked,
-    // still without a MAC interrupt.
-    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
-    harness.settle();
-    let log = harness.host.take_log();
-    assert_eq!(mac_lines(&log), 0);
+    assert_eq!(walker.next_descriptor_low, harness.base & 0x000f_ffff);
+    drop(walker);
+    // RX is unmasked in the same settle.
     assert!(log.contains(&Event::Acknowledge));
     assert!(harness.host.mac().rx_delivery_enabled());
-    assert_eq!(harness.report().service_errors, 0);
+    assert_eq!(report.service_errors, 0);
+    assert_eq!(
+        (report.reload.reload_rerings, report.reload.base_writes),
+        (0, 1)
+    );
 
     // A new frame lands in a rearmed descriptor and raises its own edge.
     harness.frame(150);
@@ -1337,7 +1414,13 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
         (snapshot.next_low, snapshot.next_upper, snapshot.last_low),
         (next_low, false, last_low)
     );
-    assert_eq!(snapshot.base, Some(harness.base));
+    // BASE names the reserved descriptor after the ring.
+    assert_eq!(
+        snapshot.base,
+        Some(
+            harness.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES
+        )
+    );
     assert!(snapshot.walker_enabled);
     assert!(!snapshot.reload_doorbell);
     assert_eq!(snapshot.ring_base, harness.base);
@@ -1425,7 +1508,7 @@ fn a_snapshot_without_a_reload_in_its_first_pass_has_no_doorbell_read() {
 }
 
 #[test]
-fn a_snapshot_of_an_exhausted_walker_keeps_the_last_its_reload_read() {
+fn a_snapshot_of_an_exhausted_walker_keeps_what_its_doorbell_resumed() {
     let (mut harness, held, _, _) = returning_harness();
     // Every descriptor completes behind the held leases and the walker
     // reaches NEXT = 0 at the last one.
@@ -1452,11 +1535,50 @@ fn a_snapshot_of_an_exhausted_walker_keeps_the_last_its_reload_read() {
         .expect("the return took a snapshot");
     // The registers before the drain: the exhausted walker.
     assert_eq!((snapshot.next_low, snapshot.last_low), (0, last_low));
-    // The first pass's reload read NEXT = 0 and then LAST.
+    // The first pass's doorbell, rung with NEXT = 0, resumed the walker at
+    // the returned head: its settle read that NEXT and no LAST.
     assert_eq!(
         (snapshot.next_after_doorbell, snapshot.last_after_doorbell),
-        (Some(0), Some(last_low))
+        (Some(harness.base & 0x000f_ffff), None)
     );
+    assert_eq!(harness.report().reload.reload_rerings, 0);
+}
+
+#[test]
+fn a_lost_doorbell_is_rerung_and_the_snapshot_keeps_the_resumed_next() {
+    let (mut harness, held, _, _) = returning_harness();
+    for _ in 0..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    harness.host.walker.borrow_mut().lose_reloads = 1;
+    held.borrow_mut().remove(0);
+    harness.settle();
+    let report = harness.report();
+    // The settle saw NEXT = 0 with LAST short of the new tail and rang
+    // once more; the second doorbell resumed the walker.
+    assert_eq!(
+        (report.reload.reload_rerings, report.reload.rering_failures),
+        (1, 0)
+    );
+    let snapshot = report
+        .exhaustion
+        .latest
+        .expect("the return took a snapshot");
+    assert_eq!(
+        snapshot.next_after_doorbell,
+        Some(harness.base & 0x000f_ffff)
+    );
+    assert_eq!(report.service_errors, 0);
+    assert_eq!(report.reload.base_writes, 1);
 }
 
 #[test]
@@ -1544,7 +1666,7 @@ fn a_drain_end_records_the_buffers_and_the_walker_after_the_drain() {
 }
 
 #[test]
-fn a_walker_restart_counts_one_republication_one_capacity_drain_and_frames_after() {
+fn a_walker_restart_counts_no_republication_one_capacity_drain_and_frames_after() {
     let (mut harness, held, holding, _) = returning_harness();
     // Every lease is held while the ring fills behind them and the walker
     // reaches NEXT = 0.
@@ -1563,41 +1685,111 @@ fn a_walker_restart_counts_one_republication_one_capacity_drain_and_frames_after
     let before = harness.report();
     assert_eq!(before.units, STAGE as u32);
     assert_eq!(before.capacity_drains, 0);
-    assert_eq!(before.reload.exhausted_republications, 0);
+    assert_eq!(
+        (before.reload.base_writes, before.reload.reload_rerings),
+        (1, 0)
+    );
     assert_eq!(harness.host.walker.borrow().next_descriptor_low, 0);
 
-    // The release is one capacity drain, which republishes the exhausted
-    // list's head through BASE exactly once.
+    // The release is one capacity drain; its doorbell restarts the walker
+    // at the returned head. BASE is not written again.
     holding.set(false);
     held.borrow_mut().clear();
     harness.settle();
     let released = harness.report();
     assert_eq!(released.capacity_drains, 1);
     assert_eq!(
-        (
-            released.reload.exhausted_republications,
-            released.reload.republications_accepted
-        ),
+        (released.reload.base_writes, released.reload.reload_rerings),
         (1, 0)
     );
+    assert_eq!(
+        harness.host.walker.borrow().next_descriptor_low,
+        harness.base & 0x000f_ffff
+    );
 
-    // The walker fetches the head: the republication is accepted, and a
-    // frame lands after the release.
-    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
-    harness.settle();
+    // A frame lands after the release.
     harness.frame(150);
     harness.settle();
     let after = harness.report();
     assert_eq!(after.capacity_drains, 1);
     assert_eq!(
-        (
-            after.reload.exhausted_republications,
-            after.reload.republications_accepted
-        ),
-        (1, 1)
+        (after.reload.base_writes, after.reload.reload_rerings),
+        (1, 0)
     );
     assert_eq!(after.units, COUNT as u32 + 1);
     assert_eq!(after.service_errors, 0);
+    assert!(harness.host.mac().rx_delivery_enabled());
+}
+
+#[test]
+fn a_reverse_full_ring_release_ends_unmasked_with_frames_after() {
+    let (mut harness, held, holding, _) = returning_harness_with::<COUNT>();
+    // The upper layer holds a lease of every descriptor; the walker runs
+    // out at the last one.
+    for _ in 0..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    assert_eq!(held.borrow().len(), COUNT);
+    assert_eq!(harness.rx.detached_buffer_count(), COUNT);
+    harness.host.walker.borrow_mut().clear_operations();
+
+    // The leases return newest first: nothing can rearm until the head
+    // returns, and then the whole ring is released at once.
+    holding.set(false);
+    while held.borrow_mut().pop().is_some() {
+        harness.settle();
+    }
+    assert_eq!(harness.rx.detached_buffer_count(), 0);
+    // All but the walker's LAST went back through the doorbell, which
+    // resumed the walker at the head.
+    assert_eq!(harness.rx.released_buffer_count(), 1);
+    assert_eq!(
+        harness.host.walker.borrow().next_descriptor_low,
+        harness.base & 0x000f_ffff
+    );
+    assert!(
+        !harness
+            .host
+            .walker
+            .borrow()
+            .operations()
+            .iter()
+            .any(|operation| matches!(operation, RxWalkerOperation::WriteDescriptorBase(_)))
+    );
+    assert!(harness.host.mac().rx_delivery_enabled());
+
+    // Frames land after: the first moves the walker on and the old LAST
+    // rejoins.
+    for length in [100, 120, 140] {
+        harness.frame(length);
+        harness.settle();
+    }
+    let report = harness.report();
+    assert_eq!(report.units, COUNT as u32 + 3);
+    assert_eq!(report.service_errors, 0);
+    assert_eq!(
+        (
+            report.reload.base_writes,
+            report.reload.reload_rerings,
+            report.reload.reserved_late_landings
+        ),
+        (1, 0, 0)
+    );
+    assert!(harness.host.mac().rx_delivery_enabled());
+    assert_eq!(
+        harness.rx.released_buffer_count(),
+        1,
+        "the newest LAST waits"
+    );
 }
 
 #[test]

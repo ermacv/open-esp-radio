@@ -122,6 +122,15 @@ impl<
         ),
         RxDmaStorageError,
     > {
+        // A unit spanning the whole ring cannot be a frame, so the ring may
+        // reject one instead of republishing the whole ring
+        // (`rx_ring_outspans_any_unit`).
+        const {
+            assert!(
+                oer_esp32s31_ieee80211_dma::rx_ring::rx_ring_outspans_any_unit(COUNT, BUFFER),
+                "one receive unit could span the whole ring"
+            );
+        }
         let Self {
             irq,
             irq_publisher: publisher_slot,

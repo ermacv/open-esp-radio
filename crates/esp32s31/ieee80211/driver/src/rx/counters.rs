@@ -14,7 +14,7 @@
 
 use core::sync::atomic::{AtomicU32, Ordering, fence};
 
-use oer_esp32s31_ieee80211_dma::rx_ring::RxReloadRepairEvidence;
+use oer_esp32s31_ieee80211_dma::rx_ring::RxReloadEvidence;
 use oer_esp32s31_ieee80211_mac::rx::RxError;
 use oer_time::Duration;
 
@@ -158,19 +158,20 @@ impl ContinuationCounters {
     }
 }
 
-/// A copy of the ring's [`RxReloadRepairEvidence`]; optional values are
-/// stored as `value + 1`, so zero means `None`.
+/// A copy of the ring's [`RxReloadEvidence`]; optional values are stored
+/// as `value + 1`, so zero means `None`.
 #[derive(bytemuck::Zeroable, Default)]
 struct ReloadCounters {
     max_reload_attempts: AtomicU32,
     observations: AtomicU32,
     unknown_upper_with_zero_address: AtomicU32,
-    base_repairs: AtomicU32,
+    reload_rerings: AtomicU32,
+    rering_failures: AtomicU32,
     last_next_low: AtomicU32,
     last_last_low_plus_one: AtomicU32,
-    last_repair_head_plus_one: AtomicU32,
-    exhausted_republications: AtomicU32,
-    republications_accepted: AtomicU32,
+    base_writes: AtomicU32,
+    reserved_landings: AtomicU32,
+    reserved_late_landings: AtomicU32,
 }
 
 const fn encode_optional(value: Option<u32>) -> u32 {
@@ -190,26 +191,28 @@ impl ReloadCounters {
             max_reload_attempts: AtomicU32::new(0),
             observations: AtomicU32::new(0),
             unknown_upper_with_zero_address: AtomicU32::new(0),
-            base_repairs: AtomicU32::new(0),
+            reload_rerings: AtomicU32::new(0),
+            rering_failures: AtomicU32::new(0),
             last_next_low: AtomicU32::new(0),
             last_last_low_plus_one: AtomicU32::new(0),
-            last_repair_head_plus_one: AtomicU32::new(0),
-            exhausted_republications: AtomicU32::new(0),
-            republications_accepted: AtomicU32::new(0),
+            base_writes: AtomicU32::new(0),
+            reserved_landings: AtomicU32::new(0),
+            reserved_late_landings: AtomicU32::new(0),
         }
     }
 
-    fn record(&self, evidence: RxReloadRepairEvidence) {
-        let RxReloadRepairEvidence {
+    fn record(&self, evidence: RxReloadEvidence) {
+        let RxReloadEvidence {
             max_reload_attempts,
             observations,
             unknown_upper_with_zero_address,
-            base_repairs,
+            reload_rerings,
+            rering_failures,
             last_next_low,
             last_last_low,
-            last_repair_head,
-            exhausted_republications,
-            republications_accepted,
+            base_writes,
+            reserved_landings,
+            reserved_late_landings,
         } = evidence;
         let store = |counter: &AtomicU32, value| counter.store(value, Ordering::Relaxed);
         store(&self.max_reload_attempts, max_reload_attempts);
@@ -218,29 +221,28 @@ impl ReloadCounters {
             &self.unknown_upper_with_zero_address,
             unknown_upper_with_zero_address,
         );
-        store(&self.base_repairs, base_repairs);
+        store(&self.reload_rerings, reload_rerings);
+        store(&self.rering_failures, rering_failures);
         store(&self.last_next_low, last_next_low);
         store(&self.last_last_low_plus_one, encode_optional(last_last_low));
-        store(
-            &self.last_repair_head_plus_one,
-            encode_optional(last_repair_head),
-        );
-        store(&self.exhausted_republications, exhausted_republications);
-        store(&self.republications_accepted, republications_accepted);
+        store(&self.base_writes, base_writes);
+        store(&self.reserved_landings, reserved_landings);
+        store(&self.reserved_late_landings, reserved_late_landings);
     }
 
-    fn report(&self) -> RxReloadRepairEvidence {
+    fn report(&self) -> RxReloadEvidence {
         let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
-        RxReloadRepairEvidence {
+        RxReloadEvidence {
             max_reload_attempts: load(&self.max_reload_attempts),
             observations: load(&self.observations),
             unknown_upper_with_zero_address: load(&self.unknown_upper_with_zero_address),
-            base_repairs: load(&self.base_repairs),
+            reload_rerings: load(&self.reload_rerings),
+            rering_failures: load(&self.rering_failures),
             last_next_low: load(&self.last_next_low),
             last_last_low: decode_optional(load(&self.last_last_low_plus_one)),
-            last_repair_head: decode_optional(load(&self.last_repair_head_plus_one)),
-            exhausted_republications: load(&self.exhausted_republications),
-            republications_accepted: load(&self.republications_accepted),
+            base_writes: load(&self.base_writes),
+            reserved_landings: load(&self.reserved_landings),
+            reserved_late_landings: load(&self.reserved_late_landings),
         }
     }
 }
@@ -446,8 +448,8 @@ pub struct WifiRxExhaustion {
     /// (low address) as the ring's reload completion read it right after
     /// the doorbell cleared, and `RX_LAST_DESCRIPTOR` (low), which that
     /// completion reads only when NEXT is zero. The ring's latest reload
-    /// observation ([`RxReloadRepairEvidence::last_next_low`],
-    /// [`RxReloadRepairEvidence::last_last_low`]) when that pass made one,
+    /// observation ([`RxReloadEvidence::last_next_low`],
+    /// [`RxReloadEvidence::last_last_low`]) when that pass made one,
     /// otherwise both `None`; a pass that completed several reloads leaves
     /// its last one.
     pub next_after_doorbell: Option<u32>,
@@ -793,9 +795,10 @@ pub struct WifiRxReport {
     pub capacity_drains: u32,
     /// The runner's continuations.
     pub continuations: WifiRxContinuationReport,
-    /// The ring's reload-repair and republication evidence, as of the last
-    /// service pass.
-    pub reload: RxReloadRepairEvidence,
+    /// The ring's publication and reload evidence (BASE writes, re-rung
+    /// doorbells, reserved-descriptor landings), as of the last service
+    /// pass.
+    pub reload: RxReloadEvidence,
     /// The teardown's measured waits.
     pub teardown: WifiRxTeardownReport,
     /// The application's RX-control prefix decode.
@@ -999,7 +1002,7 @@ impl WifiRxCounters {
         self.drain_end.record(record);
     }
 
-    pub(crate) fn reload_evidence(&self, evidence: RxReloadRepairEvidence) {
+    pub(crate) fn reload_evidence(&self, evidence: RxReloadEvidence) {
         self.reload.record(evidence);
     }
 }
