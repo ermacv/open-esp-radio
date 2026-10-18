@@ -83,7 +83,8 @@ pub use analog::rfpll::phy_get_rf_cal_version;
 // evidence carry. The transitions that produce them stay crate-private.
 #[cfg(feature = "registration-diagnostics")]
 pub use calibration::registration::{
-    FrequencyCalibrationDiagnostics, RfCalibrationDiagnostics, RfpllCalibrationPoint,
+    FrequencyCalibrationDiagnostics, ReadyWaitDiagnostics, RfCalibrationDiagnostics,
+    RfpllCalibrationPoint,
 };
 pub use calibration::registration::{
     PhyCalibrationIdentity, PhyCalibrationPath, PhyRegisterBindingError, PhyRegisterFailure,

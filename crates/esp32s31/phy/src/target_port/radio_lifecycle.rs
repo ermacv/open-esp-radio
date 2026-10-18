@@ -246,10 +246,11 @@ fn clear_wake_pbus<D: PhyShortDelay>(
                 PhyPbusClearCompletion::DebugModeConfigured
             }
             PhyPbusClearAction::ForceTest(transaction) => {
-                if !crate::target_executor::force_pbus_direct(registers, transaction) {
-                    return Err(PhyTargetPortError::HardwareEdgeTimedOut);
+                if crate::target_executor::force_pbus_direct(registers, transaction) {
+                    PhyPbusClearCompletion::ForceTestCompleted(transaction)
+                } else {
+                    PhyPbusClearCompletion::ForceTestTimedOut(transaction)
                 }
-                PhyPbusClearCompletion::ForceTestCompleted(transaction)
             }
             PhyPbusClearAction::ConfigureWorkMode => {
                 let settle_required = oer_esp32s31_hal::phy::pbus::configure_work_mode(registers);

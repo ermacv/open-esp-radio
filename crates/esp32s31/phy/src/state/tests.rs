@@ -670,8 +670,12 @@ fn rx_saturation_is_one_way_and_failures_do_not_commit() {
     let mut state = PhyState::default();
     assert_eq!(state.rx_saturation_parameter_002(), 0xbf);
     assert_eq!(
-        state.apply_rx_saturation_outcome(PhyRxSaturationOutcome::CaptureTimedOut),
-        Err(PhyRxSaturationOutcome::CaptureTimedOut)
+        state.apply_rx_saturation_outcome(PhyRxSaturationOutcome::PbusTimedOut(
+            crate::analog::pbus::PhyPbusForceTest::new(3, 2, 0x100)
+        )),
+        Err(PhyRxSaturationOutcome::PbusTimedOut(
+            crate::analog::pbus::PhyPbusForceTest::new(3, 2, 0x100)
+        ))
     );
     assert!(!state.rx_gain_dc_parameters().rx_saturation_detected);
 

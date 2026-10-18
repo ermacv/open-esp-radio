@@ -94,13 +94,6 @@ pub enum PhyTxDcCompletion {
         value: u16,
     },
     PbusCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
     PbusTimedOut(PhyPbusForceTest),
     TxClockConfigured,
     ToneConfigured {
@@ -116,18 +109,14 @@ pub enum PhyTxDcCompletion {
         gain_index: u8,
         iteration: u8,
     },
-    ReadySampled {
+    /// The comparators became ready after `not_ready_samples` reads that
+    /// were not.
+    ReadyObserved {
         gain_index: u8,
         iteration: u8,
-        ready: bool,
+        not_ready_samples: u16,
     },
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
+    /// [`crate::HARDWARE_EDGE_LIMIT`] consecutive reads were not ready.
     ReadyDeadlineElapsed {
         gain_index: u8,
         iteration: u8,
@@ -616,17 +605,13 @@ impl PhyTxDcTransition {
             }
             (
                 Step::PollReady(search),
-                PhyTxDcCompletion::ReadySampled {
+                PhyTxDcCompletion::ReadyObserved {
                     gain_index,
                     iteration,
-                    ready,
+                    ..
                 },
             ) if gain_index == search.gain_index && iteration == search.iteration => {
-                if ready {
-                    Step::ReadComparators(search)
-                } else {
-                    Step::PollReady(search)
-                }
+                Step::ReadComparators(search)
             }
             (
                 Step::PollReady(search),
@@ -820,10 +805,19 @@ impl PhyTxDcReadyBinding {
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyTxDcCompletion {
-        PhyTxDcCompletion::ReadySampled {
-            gain_index: self.gain_index,
-            iteration: self.iteration,
-            ready: crate::hardware::read_phy_tx_dc_ready_status(registers),
+        // The read bound is this crate's, not a recovered value.
+        match crate::executor::wait::poll::counted(|| {
+            crate::hardware::read_phy_tx_dc_ready_status(registers)
+        }) {
+            Some(not_ready_samples) => PhyTxDcCompletion::ReadyObserved {
+                gain_index: self.gain_index,
+                iteration: self.iteration,
+                not_ready_samples,
+            },
+            None => PhyTxDcCompletion::ReadyDeadlineElapsed {
+                gain_index: self.gain_index,
+                iteration: self.iteration,
+            },
         }
     }
 }
@@ -994,6 +988,10 @@ impl PhyTxDcPbusBinding {
             .into_transaction()
             .map(PhyTxDcCompletion::PbusCompleted)
             .map_err(PhyTxDcExternalBindingError::Pbus)
+    }
+
+    pub const fn into_timeout_completion(self) -> PhyTxDcCompletion {
+        PhyTxDcCompletion::PbusTimedOut(self.transaction)
     }
 }
 

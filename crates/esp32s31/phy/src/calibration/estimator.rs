@@ -146,15 +146,6 @@ pub enum PhyDcIqAction {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PhyDcIqReadinessBatch {
-    request: PhyDcIqEstimateRequest,
-    observations: u16,
-    activity_edges: u16,
-    ready: bool,
-    accumulators: Option<PhyDcIqAccumulatorSnapshot>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcIqCompletion {
     Configured(PhyDcIqEstimateRequest),
     EnableSet {
@@ -171,13 +162,6 @@ pub enum PhyDcIqCompletion {
         request: PhyDcIqEstimateRequest,
         snapshot: PhyDcIqReadinessSnapshot,
     },
-    /// One uninterrupted, bounded execution of the ROM-shaped readiness
-    /// polling loop. The private payload can only be minted by its binding.
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
-    ReadinessBatchObserved(PhyDcIqReadinessBatch),
     ReadinessTimedOut(PhyDcIqEstimateRequest),
     AccumulatorsRead {
         request: PhyDcIqEstimateRequest,
@@ -519,26 +503,6 @@ impl PhyDcIqEstimateTransition {
                 }
                 PhyDcIqStep::AwaitReadiness
             }
-            (PhyDcIqStep::AwaitReadiness, PhyDcIqCompletion::ReadinessBatchObserved(batch))
-                if batch.request == self.request
-                    && batch.observations != 0
-                    && batch.ready == batch.accumulators.is_some() =>
-            {
-                self.readiness_samples = self.readiness_samples.saturating_add(batch.observations);
-                self.readiness_activity_edges = self
-                    .readiness_activity_edges
-                    .wrapping_add(batch.activity_edges);
-                match batch.accumulators {
-                    Some(snapshot) => PhyDcIqStep::DisableMeasurement(PhyDcIqTerminal::Complete(
-                        PhyDcIqEstimateOutcome {
-                            request: self.request,
-                            estimate: calculate_dc_iq_estimate(self.request, snapshot),
-                            readiness_activity_edges: self.readiness_activity_edges,
-                        },
-                    )),
-                    None => PhyDcIqStep::AwaitReadiness,
-                }
-            }
             (PhyDcIqStep::AwaitReadiness, PhyDcIqCompletion::ReadinessTimedOut(request))
                 if request == self.request =>
             {
@@ -694,65 +658,6 @@ impl PhyDcIqReadinessBinding {
             request,
             snapshot: read(),
         }
-    }
-
-    /// Execute the complete ROM-shaped direct polling loop behind one typed
-    /// binding. `maximum_samples` is a total per-estimator bound, so callers
-    /// can reduce it to preserve an enclosing operation budget. The returned
-    /// charge includes the accumulator-read edge when readiness is observed.
-    #[cfg(test)]
-    pub(crate) fn observe_until_ready_with<C>(
-        self,
-        maximum_samples: u16,
-        context: &mut C,
-        mut read: impl FnMut(&mut C) -> PhyDcIqReadinessSnapshot,
-        mut read_accumulators: impl FnMut(&mut C) -> PhyDcIqAccumulatorSnapshot,
-    ) -> (PhyDcIqCompletion, u16) {
-        let initial_samples = self.samples();
-        if initial_samples >= maximum_samples {
-            return (self.into_timeout_completion(), 0);
-        }
-        let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
-            unreachable!();
-        };
-        let allowance = maximum_samples - initial_samples;
-        let mut remaining = allowance;
-        let mut activity_edges = 0_u16;
-        loop {
-            let snapshot = read(context);
-            remaining -= 1;
-            if snapshot.ready {
-                let observations = allowance - remaining;
-                let batch = PhyDcIqReadinessBatch {
-                    request,
-                    observations,
-                    activity_edges,
-                    ready: true,
-                    // ROM reads all three accumulators immediately after the
-                    // ready-return epilogue. Keep that temporal boundary in
-                    // the same typed hardware transaction.
-                    accumulators: Some(read_accumulators(context)),
-                };
-                return (
-                    PhyDcIqCompletion::ReadinessBatchObserved(batch),
-                    observations.saturating_add(1),
-                );
-            }
-            if snapshot.activity {
-                activity_edges = activity_edges.wrapping_add(1);
-            }
-            if remaining == 0 {
-                break;
-            }
-        }
-        let batch = PhyDcIqReadinessBatch {
-            request,
-            observations: allowance,
-            activity_edges,
-            ready: false,
-            accumulators: None,
-        };
-        (PhyDcIqCompletion::ReadinessBatchObserved(batch), allowance)
     }
 
     #[cfg(target_arch = "riscv32")]

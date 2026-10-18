@@ -333,13 +333,6 @@ pub enum PhyChipChannelCompletion {
         phase: PhyChipChannelI2cPhase,
         address: PhyI2cAddress,
     },
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
-    I2cDeadlineExceeded {
-        address: PhyI2cAddress,
-    },
     TxGainCalculated {
         request: PhyWifiTxGainRequest,
         image: PhyWifiTxGainImage,
@@ -720,11 +713,6 @@ impl PhyChipChannelTransition {
                     _ => Step::Temperature(transition),
                 }
             }
-            (Step::Temperature(_), PhyChipChannelCompletion::I2cDeadlineExceeded { address }) => {
-                Step::DisableBbpll(CleanupContinuation::Failed(
-                    PhyChipChannelFailure::I2cTimedOut { address },
-                ))
-            }
             (
                 Step::StartFrequencySwitch,
                 PhyChipChannelCompletion::FrequencySwitchStarted {
@@ -806,16 +794,6 @@ impl PhyChipChannelTransition {
                 },
             )),
             (
-                Step::ProgramTxCap,
-                PhyChipChannelCompletion::I2cDeadlineExceeded {
-                    address: TX_CAP_ADDRESS,
-                },
-            ) => Step::DisableBbpll(CleanupContinuation::Failed(
-                PhyChipChannelFailure::I2cTimedOut {
-                    address: TX_CAP_ADDRESS,
-                },
-            )),
-            (
                 Step::ConfigureNrxSecond,
                 PhyChipChannelCompletion::NrxConfigured { frequency_mhz },
             ) if frequency_mhz == channel_to_frequency(self.channel) => Step::CalculateTxGain,
@@ -851,16 +829,6 @@ impl PhyChipChannelTransition {
                 Step::CaptureTxCap,
                 PhyChipChannelCompletion::I2cTimedOut {
                     phase: PhyChipChannelI2cPhase::CaptureTxCap,
-                    address: TX_CAP_ADDRESS,
-                },
-            ) => Step::DisableBbpll(CleanupContinuation::Failed(
-                PhyChipChannelFailure::I2cTimedOut {
-                    address: TX_CAP_ADDRESS,
-                },
-            )),
-            (
-                Step::CaptureTxCap,
-                PhyChipChannelCompletion::I2cDeadlineExceeded {
                     address: TX_CAP_ADDRESS,
                 },
             ) => Step::DisableBbpll(CleanupContinuation::Failed(

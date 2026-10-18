@@ -44,9 +44,16 @@ impl PhyParamTrackRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTrackingDiagnostics {
     Disabled,
+    /// The vendor's diagnostic printing. The pinned ESP32-S31 policy
+    /// ([`PhyParamTrackingPolicy::for_registered_state`]) never selects it;
+    /// host tests drive the children with it to show it changes no hardware
+    /// work.
     #[cfg_attr(
         not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
+        allow(
+            dead_code,
+            reason = "the pinned ESP32-S31 policy disables diagnostic printing"
+        )
     )]
     Enabled,
 }

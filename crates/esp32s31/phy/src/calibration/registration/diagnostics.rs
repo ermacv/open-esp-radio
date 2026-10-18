@@ -1,6 +1,12 @@
 //! Value-only results retained after RF calibration releases its temporary state.
 
-use crate::analog::{i2c::PhyRfInitPrefixOutcome, rfpll::RfpllFrequencyOutcome};
+use crate::{
+    analog::{i2c::PhyRfInitPrefixOutcome, rfpll::RfpllFrequencyOutcome},
+    calibration::{baseband::PhyBbInitCompletion, bluetooth::PhyBluetoothTxGainInitCompletion},
+    tx::{dc_offset::PhyTxDcCompletion, power_detector::PhyPwdetCompletion},
+};
+
+use super::PhyRegisterCompletion;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RfpllCalibrationPoint {
@@ -56,5 +62,87 @@ impl RfCalibrationDiagnostics {
                 }
             }),
         })
+    }
+}
+
+/// The longest runs of not-ready reads the registration's bounded readiness
+/// waits observed before their flag became ready. Each wait gives up after
+/// [`crate::HARDWARE_EDGE_LIMIT`] such reads.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReadyWaitDiagnostics {
+    /// TX DC comparator readiness, in Wi-Fi and Bluetooth TX DC search.
+    pub tx_dc_max_not_ready_samples: u16,
+    /// Power-detector SAR readiness.
+    pub pwdet_sar_max_not_ready_samples: u16,
+}
+
+impl ReadyWaitDiagnostics {
+    pub(super) fn observe(&mut self, completion: &PhyRegisterCompletion) {
+        let PhyRegisterCompletion::Baseband(completion) = completion else {
+            return;
+        };
+        match completion {
+            PhyBbInitCompletion::TxDc(PhyTxDcCompletion::ReadyObserved {
+                not_ready_samples,
+                ..
+            })
+            | PhyBbInitCompletion::BluetoothTxGain(PhyBluetoothTxGainInitCompletion::TxDc(
+                PhyTxDcCompletion::ReadyObserved {
+                    not_ready_samples, ..
+                },
+            )) => {
+                self.tx_dc_max_not_ready_samples =
+                    self.tx_dc_max_not_ready_samples.max(*not_ready_samples);
+            }
+            PhyBbInitCompletion::Pwdet(PhyPwdetCompletion::SarReadyObserved {
+                not_ready_samples,
+                ..
+            }) => {
+                self.pwdet_sar_max_not_ready_samples =
+                    self.pwdet_sar_max_not_ready_samples.max(*not_ready_samples);
+            }
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tx_dc(not_ready_samples: u16) -> PhyTxDcCompletion {
+        PhyTxDcCompletion::ReadyObserved {
+            gain_index: 0,
+            iteration: 0,
+            not_ready_samples,
+        }
+    }
+
+    #[test]
+    fn ready_waits_keep_the_longest_not_ready_run_of_each_wait() {
+        let mut waits = ReadyWaitDiagnostics::default();
+        for completion in [
+            PhyBbInitCompletion::TxDc(tx_dc(7)),
+            PhyBbInitCompletion::BluetoothTxGain(PhyBluetoothTxGainInitCompletion::TxDc(tx_dc(12))),
+            PhyBbInitCompletion::TxDc(tx_dc(3)),
+            PhyBbInitCompletion::Pwdet(PhyPwdetCompletion::SarReadyObserved {
+                measurement_index: 0,
+                sample_index: 0,
+                not_ready_samples: 5,
+            }),
+            PhyBbInitCompletion::TxDc(PhyTxDcCompletion::ReadyDeadlineElapsed {
+                gain_index: 0,
+                iteration: 0,
+            }),
+        ] {
+            waits.observe(&PhyRegisterCompletion::Baseband(completion));
+        }
+        assert_eq!(
+            waits,
+            ReadyWaitDiagnostics {
+                tx_dc_max_not_ready_samples: 12,
+                pwdet_sar_max_not_ready_samples: 5,
+            }
+        );
     }
 }

@@ -69,13 +69,6 @@ pub enum PhyTxCalibrationEnvironmentAction {
 pub enum PhyTxCalibrationEnvironmentCompletion {
     PbusDebugModeConfigured,
     PbusCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
     PbusTimedOut(PhyPbusForceTest),
     TxClockConfigured {
         enabled: bool,
@@ -339,10 +332,6 @@ pub struct PhyToneSarOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyToneSarFailure {
-    ReadyDeadlineElapsed {
-        measurement: u8,
-        sample: u8,
-    },
     /// Readiness was not observed within the bounded sample budget. This is
     /// independent of elapsed time and must not be reported as a timer expiry.
     ReadyObservationLimit {
@@ -410,14 +399,6 @@ pub enum PhyToneSarCompletion {
         measurement: u8,
         sample: u8,
         ready: bool,
-    },
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
-    ReadyDeadlineElapsed {
-        measurement: u8,
-        sample: u8,
     },
     ToneCleared {
         measurement: u8,
@@ -600,18 +581,6 @@ impl PhyToneSarTransition {
                         ToneSarStep::Poll
                     }
                 }
-            }
-            (
-                ToneSarStep::Poll,
-                PhyToneSarCompletion::ReadyDeadlineElapsed {
-                    measurement: completed,
-                    sample: completed_sample,
-                },
-            ) if completed == measurement && completed_sample == sample => {
-                ToneSarStep::Failed(PhyToneSarFailure::ReadyDeadlineElapsed {
-                    measurement,
-                    sample,
-                })
             }
             (
                 ToneSarStep::Clear,
@@ -1672,7 +1641,6 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
             .map_err(PhyTxCapExternalBindingError::Pbus)
     }
 
-    #[cfg(test)]
     pub const fn into_timeout_completion(self) -> PhyTxCalibrationEnvironmentCompletion {
         PhyTxCalibrationEnvironmentCompletion::PbusTimedOut(self.transaction)
     }

@@ -508,10 +508,6 @@ pub enum XtalDutyPrepareCompletion {
     },
     PbusDebugModeConfigured,
     PbusForceCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
     PbusForceTimedOut(PhyPbusForceTest),
     RxDcoControlRestorePrepared,
     RxDco(PhyRxDcoCompletion),
@@ -743,10 +739,6 @@ pub enum XtalDutyRestoreCompletion {
         enabled: bool,
     },
     PbusForceCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
     PbusForceTimedOut(PhyPbusForceTest),
     PbusWorkModeConfigured {
         settle_required: bool,
