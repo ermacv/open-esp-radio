@@ -1,5 +1,5 @@
-//! Build the runner and capture Cargo's compilation-unit record, which
-//! [`oer_tool_data_hil_run_bundle_format::observer::artifacts::apply`] binds to the executable's build identity.
+//! Build the runner with the registry's profile and find its executable in
+//! Cargo's artifact messages.
 use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
@@ -9,24 +9,22 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 pub struct Compilation {
     pub executable: PathBuf,
-    pub artifacts: Vec<Value>,
-    pub profile: String,
     _lock: std::fs::File,
 }
 
 /// Build the runner as a plain build of the root workspace does: into its
 /// `target/`, with the registry's profile and the caller's environment, so
 /// the observer reuses `target/debug` instead of compiling the runner's
-/// closure a second time. The receipt lock stays under `target/hil`.
+/// closure a second time. The build lock stays under `target/hil`.
 pub fn compile(root: &Path) -> Result<Compilation> {
-    let receipts = root.join("target/hil");
-    std::fs::create_dir_all(&receipts)?;
+    let locks = root.join("target/hil");
+    std::fs::create_dir_all(&locks)?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(receipts.join("observer-receipt.lock"))?;
+        .open(locks.join("observer-build.lock"))?;
     loop {
         oer_tool_base_process::check_cancelled()?;
         match lock.try_lock() {
@@ -66,7 +64,6 @@ pub fn compile(root: &Path) -> Result<Compilation> {
     if !output.status.success() {
         return Err("observer compilation failed".into());
     }
-    let mut artifacts = Vec::new();
     let mut executable = None;
     for line in std::str::from_utf8(&output.stdout)?.lines() {
         let message: Value = serde_json::from_str(line)?;
@@ -75,13 +72,10 @@ pub fn compile(root: &Path) -> Result<Compilation> {
             if message["target"]["name"] == "oer-tool-service-hil-runner" {
                 executable = message["executable"].as_str().map(PathBuf::from);
             }
-            artifacts.push(message);
         }
     }
     Ok(Compilation {
         executable: executable.ok_or("Cargo did not report the observer executable")?,
-        artifacts,
-        profile: profile.to_owned(),
         _lock: lock,
     })
 }

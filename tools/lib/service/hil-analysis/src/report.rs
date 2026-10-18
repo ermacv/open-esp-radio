@@ -1,5 +1,5 @@
 //! JUnit and HTML projections of the canonical run record, which a run
-//! seals beside its suite. They are views: no reader decides an outcome
+//! writes beside its suite. They are views: no reader decides an outcome
 //! from them.
 
 use std::fmt::Write as _;
@@ -12,7 +12,7 @@ use oer_tool_data_hil_run_bundle_format::run::ScenarioResult;
 use oer_tool_data_hil_run_bundle_format::run::SuiteResult;
 use oer_tool_service_hil_run_bundle::run::Views;
 
-/// Both views of a sealed run; the renderer the runner hands
+/// Both views of a finished run; the renderer the runner hands
 /// [`oer_tool_service_hil_run_bundle::run::RunSession::finish`].
 pub fn views(suite: &SuiteResult, manifest: &RunManifest) -> Views {
     Views {

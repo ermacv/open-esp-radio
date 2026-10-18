@@ -1,7 +1,7 @@
 //! HIL experiments: launching runs, A/B comparisons and bisection.
 //!
 //! - [`launch`]: [`launch::launch_run`], the one way a run is launched,
-//!   whose runs come back from the runner's receipt.
+//!   whose runs come back from the runner's launch run list.
 //! - [`job`]: the arbiter job a launch runs as.
 //! - [`ab`]: two firmware variants on the same scenarios, compared with
 //!   [`oer_tool_service_hil_analysis::arms`].

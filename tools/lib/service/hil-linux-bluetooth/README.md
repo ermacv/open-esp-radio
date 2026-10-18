@@ -191,7 +191,7 @@ public address. Missing access fails setup rather than changing permissions.
 The owner snapshots adapter identity and soft rfkill, powers it for the test,
 and verifies power/rfkill restoration on completion or error. The brief BlueZ
 re-registration interval after clearing rfkill has a bounded setup retry.
-Cleanup results are saved with the ordinary sealed HIL run. No helper reinstall
+Cleanup results are saved with the ordinary HIL run. No helper reinstall
 is required for this path.
 
 ### Connections the DUT never received

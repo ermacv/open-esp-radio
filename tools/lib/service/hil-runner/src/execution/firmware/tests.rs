@@ -189,7 +189,7 @@ fn replay_import_is_archived_before_flashing_the_new_run_local_path() {
         .finish(Vec::new(), oer_tool_service_hil_analysis::report::views)
         .unwrap();
 
-    let archived = oer_tool_service_hil_run_bundle::verify::archived_firmware(
+    let archived = oer_tool_service_hil_run_bundle::replay::archived_firmware(
         root.path(),
         "chip-a",
         &source_id,
@@ -228,7 +228,7 @@ fn corrupt_replay_is_rejected_before_flash_without_a_build_fallback() {
         .finish(Vec::new(), oer_tool_service_hil_analysis::report::views)
         .unwrap();
 
-    let archived = oer_tool_service_hil_run_bundle::verify::archived_firmware(
+    let archived = oer_tool_service_hil_run_bundle::replay::archived_firmware(
         root.path(),
         "chip-a",
         &source_id,

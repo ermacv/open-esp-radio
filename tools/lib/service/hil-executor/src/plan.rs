@@ -346,7 +346,7 @@ mod tests {
     use oer_tool_data_hil_model::{
         BoardCapability, BoardNeed, BoardOffer, BoardRole, ChipId, Composition, CompositionName,
         Conformance, ContractName, InstanceName, LpClockSource, MeasuredSpan, RawStandProfile,
-        RunId, RunRef, ScenarioId, Sha256, Subject, Support, Verdict, Wait, name,
+        RunId, ScenarioId, Subject, Support, Verdict, Wait, name,
     };
     use serde::{Deserialize, Serialize};
 
@@ -443,10 +443,7 @@ mod tests {
             margin: Factor::ONE,
             margin_reason: "test".into(),
             support: Support::Measured {},
-            evidence: vec![RunRef {
-                run: RunId::parse("1788729094522-000d170b").unwrap(),
-                sha256: Sha256([0; 32]),
-            }],
+            evidence: vec![RunId::parse("1788729094522-000d170b").unwrap()],
         }
     }
 

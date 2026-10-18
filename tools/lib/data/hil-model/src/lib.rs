@@ -53,7 +53,7 @@ pub use name::{
 };
 pub use profile::{
     CONFIDENCE, InvalidRunId, MeasuredSpan, ProfileError, ProfileErrors, QUANTILE, RawStandProfile,
-    RunId, RunRef, StandProfile, Support,
+    RunId, StandProfile, Support,
 };
 pub use purpose::{Conformance, Interop, Investigation, Measurement, OpenQuestion, PurposeKind};
 pub use resources::{

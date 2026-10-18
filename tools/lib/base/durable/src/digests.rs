@@ -1,6 +1,6 @@
 //! SHA-256 digests of files remembered across processes.
 //!
-//! An immutable file (a sealed run bundle's) is hashed once: its digest is
+//! An immutable file (a finished run bundle's) is hashed once: its digest is
 //! remembered for the file's device, inode, size, modification time and
 //! status-change time. Any write to the file changes its status-change time,
 //! which user code cannot set, so a changed file is always hashed again.

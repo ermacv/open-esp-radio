@@ -9,21 +9,18 @@ fn runner(directory: &Path, status: u8) -> Runner {
     std::fs::write(
         &executable,
         format!(
-            "#!/bin/sh\nfor run in \"$@\"; do echo \"$run\" >> \"$OER_HIL_RUN_RECEIPT\"; done\n\
-             echo \"${{OER_OBSERVER_RECEIPT:-none}} $EXPERIMENT ${{HIDDEN:-gone}}\" > observed\n\
+            "#!/bin/sh\nfor run in \"$@\"; do echo \"$run\" >> \"$OER_HIL_LAUNCH_RUNS\"; done\n\
+             echo \"$EXPERIMENT ${{HIDDEN:-gone}}\" > observed\n\
              exit {status}\n"
         ),
     )
     .unwrap();
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
-    Runner {
-        executable,
-        receipt: None,
-    }
+    Runner { executable }
 }
 
 #[test]
-fn a_launch_returns_the_runs_its_runner_names_in_its_receipt() {
+fn a_launch_returns_the_runs_its_runner_names_in_its_list() {
     let directory = tempfile::tempdir().unwrap();
     let runner = runner(directory.path(), 3);
     let launched = launch_run(
@@ -38,7 +35,7 @@ fn a_launch_returns_the_runs_its_runner_names_in_its_receipt() {
     assert_eq!(launched.status.code(), Some(3));
     assert_eq!(
         std::fs::read_to_string(directory.path().join("observed")).unwrap(),
-        "none arm-a gone\n"
+        "arm-a gone\n"
     );
 }
 

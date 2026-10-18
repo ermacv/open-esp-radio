@@ -442,11 +442,6 @@ fn contained(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Repository directories whose untracked files are recorded outputs, which a
-/// snapshot neither requires nor archives: the evidence archive's pin, which
-/// `cargo hil archive publish` writes after the runs it cites.
-const EVIDENCE_OUTPUTS: &[&str] = &["qualification/evidence"];
-
 /// The Git state a snapshot archives: the checkout's index view
 /// ([`checkout::IndexSnapshot`]), which names a tracked file the
 /// worktree deleted, keeps a symlink as one and skips no component, so a
@@ -461,12 +456,6 @@ fn select(name: &str, root: &Path) -> Result<Selection> {
     let mut untracked: BTreeSet<PathBuf> = paths(index.untracked);
     tracked.retain(|path| !is_agent_guidance(path));
     untracked.retain(|path| !is_agent_guidance(path));
-    // A written evidence pin is an output of earlier runs, not a build input.
-    untracked.retain(|path| {
-        !EVIDENCE_OUTPUTS
-            .iter()
-            .any(|output| path.starts_with(output))
-    });
     Ok(Selection {
         name: name.into(),
         root: root.into(),

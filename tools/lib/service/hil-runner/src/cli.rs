@@ -51,11 +51,6 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         command: ImageCommand,
     },
-    /// Check sealed run bundles offline.
-    Report {
-        #[command(subcommand)]
-        command: ReportCommand,
-    },
     /// Build, flash and execute catalog scenarios in one run under one stand
     /// lease. Images are built before the run waits for the stand.
     Run {
@@ -82,7 +77,7 @@ pub(crate) enum CliCommand {
             conflicts_with_all = ["firmware_from", "source_include", "include_untracked"]
         )]
         source_snapshot: Option<PathBuf>,
-        /// Use the scenarios' image class from a sealed earlier HIL run; every
+        /// Use the scenarios' image class from a finished earlier HIL run; every
         /// selected scenario must use that class.
         #[arg(long, value_name = "RUN_ID")]
         firmware_from: Option<String>,
@@ -245,17 +240,6 @@ pub(crate) enum ImageCommand {
         /// The chip to build for; without it, the one chip whose HIL agent
         /// builds every class.
         #[arg(long)]
-        chip: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub(crate) enum ReportCommand {
-    /// Verify one run bundle, or every bundle when RUN_ID is omitted.
-    Verify {
-        run_id: Option<String>,
-        /// Only this chip's runs; default: every chip's.
-        #[arg(long, value_name = "CHIP")]
         chip: Option<String>,
     },
 }

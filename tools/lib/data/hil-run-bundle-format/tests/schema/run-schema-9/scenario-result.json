@@ -1,12 +1,12 @@
 {
-  "schema": 8,
+  "schema": 9,
   "scenario": "system-watchdog",
   "image": "system-watchdog",
   "outcome": "failed",
   "required_repetitions": 3,
   "repetitions": [
     {
-      "schema": 8,
+      "schema": 9,
       "repetition": 1,
       "outcome": "failed",
       "started_unix_millis": 1791582365170,
@@ -55,7 +55,7 @@
       }
     },
     {
-      "schema": 8,
+      "schema": 9,
       "repetition": 2,
       "outcome": "failed",
       "started_unix_millis": 1791582391128,

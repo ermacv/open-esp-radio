@@ -28,8 +28,8 @@ use oer_tool_data_hil_run_bundle_format::run::fixtures::{
     AirMonitor, Applied, Protection, Reception,
 };
 use oer_tool_data_hil_run_bundle_format::run::{
-    ATTEMPT_SEAL_SCHEMA, AttemptSeal, CleanupRecord, IntegrityIndex, OBSERVATIONS_SCHEMA,
-    Observations, PlannedFirmware, RUN_SCHEMA, RunManifest, RunPlan, ScenarioResult, UsbEvent,
+    CleanupRecord, OBSERVATIONS_SCHEMA, Observations, PlannedFirmware, RUN_SCHEMA, RunManifest,
+    RunPlan, ScenarioResult, SuiteResult, UsbEvent,
 };
 use oer_tool_data_hil_schema::run::RunEvent;
 use oer_tool_data_hil_schema::snapshot::{MANIFEST_SCHEMA, Manifest as SnapshotManifest};
@@ -100,10 +100,8 @@ fn every_document_of_the_current_schema_reads_and_writes_back() {
             .iter()
             .any(|entry| entry.requirements.is_some())
     );
-    let attempt: AttemptSeal = read("attempt.json");
-    assert_eq!(attempt.schema, ATTEMPT_SEAL_SCHEMA);
-    assert_eq!(attempt.manifest.schema, RUN_SCHEMA);
-    assert_eq!(attempt.suite.schema, RUN_SCHEMA);
+    let suite: SuiteResult = read("suite.json");
+    assert_eq!(suite.schema, RUN_SCHEMA);
     let scenario: ScenarioResult = read("scenario-result.json");
     assert_eq!(scenario.schema, RUN_SCHEMA);
     let measurement = &scenario.repetitions[0].measurements[0];
@@ -128,8 +126,6 @@ fn every_document_of_the_current_schema_reads_and_writes_back() {
     let build: BuildProvenance = read("build-provenance.json");
     assert_eq!(build.schema, BUILD_PROVENANCE_SCHEMA);
     assert!(build.parameters.layout_seed.is_some() && !build.parameters.features.is_empty());
-    let integrity: IntegrityIndex = read("integrity.json");
-    assert_eq!(integrity.schema, RUN_SCHEMA);
     let snapshot: SnapshotManifest = read("source-snapshot-manifest.json");
     assert_eq!(snapshot.schema, MANIFEST_SCHEMA);
     // The fixture records a repetition carries; `helper.json` wraps a

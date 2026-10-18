@@ -1,4 +1,5 @@
 use super::*;
+use crate::run::sha256_file;
 use crate::run::test_support::TestRecipe;
 use oer_tool_base_durable::atomic_json;
 use oer_tool_data_hil_run_bundle_format::lab::AccessPointDefinition;
@@ -17,11 +18,21 @@ use oer_tool_data_hil_run_bundle_format::run::Outcome;
 use oer_tool_data_hil_run_bundle_format::run::RepetitionResult;
 use oer_tool_data_hil_run_bundle_format::run::ScenarioResult;
 use oer_tool_data_hil_run_bundle_format::run::SuiteCounts;
-use oer_tool_data_hil_run_bundle_format::run::write_integrity_index;
+use oer_tool_data_hil_run_bundle_format::run::SuiteResult;
 use oer_tool_data_hil_schema::image::ImageClass;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// The replay check of the fixture's run `run-1` of `chip-a`.
+fn validate(root: &Path) -> Result<RunManifest> {
+    validate_source(
+        &root.join(crate::store::CHECKOUT_RUNS),
+        "chip-a",
+        "run-1",
+        &TestRecipe,
+    )
+}
 
 fn fixture() -> (PathBuf, PathBuf) {
     let root = std::env::temp_dir().join(format!(
@@ -121,7 +132,6 @@ fn fixture() -> (PathBuf, PathBuf) {
     )
     .unwrap();
     fs::write(run.join("report.html"), b"generated report").unwrap();
-    write_integrity_index(&run, "run-1").unwrap();
     (root, run)
 }
 
@@ -241,7 +251,6 @@ fn add_build_provenance(run: &Path) {
         },
     )
     .unwrap();
-    write_integrity_index(run, "run-1").unwrap();
 }
 
 fn add_lab_provenance(run: &Path, device_id: &str) {
@@ -295,18 +304,14 @@ fn add_lab_provenance(run: &Path, device_id: &str) {
         },
     )
     .unwrap();
-    write_integrity_index(run, "run-1").unwrap();
 }
 
 #[test]
-fn verifies_firmware_and_attachment_content() {
+fn a_source_run_with_its_firmware_is_accepted() {
     let (root, _) = fixture();
-    let completion = verify(&root, Some("chip-a"), None, &TestRecipe).unwrap();
-    assert_eq!(completion.status, "verified");
-    assert_eq!(completion.runs, 1);
-    assert_eq!(completion.attachments, 1);
-    assert_eq!(completion.firmware_artifacts, 1);
-    assert_eq!(completion.verified_run_ids, ["run-1"]);
+    let manifest = validate(&root).unwrap();
+    assert_eq!(manifest.run_id, "run-1");
+    assert_eq!(manifest.firmware.len(), 1);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -332,11 +337,10 @@ fn lab_provenance_without_a_scope_or_with_the_old_peer_key_is_rejected() {
 fn verifies_typed_lab_provenance_and_rejects_wrong_device_binding() {
     let (root, run) = fixture();
     add_lab_provenance(&run, "dut-1");
-    verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap();
+    validate(&root).unwrap();
 
     add_lab_provenance(&run, "another-dut");
-    let error = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe)
-        .expect_err("reject lab snapshot for another device");
+    let error = validate(&root).expect_err("reject lab snapshot for another device");
     assert!(error.to_string().contains("not bound"));
     fs::remove_dir_all(root).unwrap();
 }
@@ -464,8 +468,7 @@ fn selects_only_verified_archived_firmware_for_replay() {
 fn verifies_complete_build_provenance_and_all_firmware_subjects() {
     let (root, run) = fixture();
     add_build_provenance(&run);
-    let completion = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap();
-    assert_eq!(completion.firmware_artifacts, 1);
+    assert_eq!(validate(&root).unwrap().firmware.len(), 1);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -476,8 +479,7 @@ fn a_manifest_seed_must_be_the_build_records_seed() {
     let mut manifest: RunManifest = read_json(&run.join("manifest.json")).unwrap();
     manifest.firmware[0].layout_seed = std::num::NonZeroU32::new(7);
     atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    write_integrity_index(&run, "run-1").unwrap();
-    let error = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap_err();
+    let error = validate(&root).unwrap_err();
     assert!(
         error.to_string().contains("build provenance inconsistent"),
         "{error}"
@@ -497,7 +499,7 @@ fn rejects_tampered_archived_runtime_elf() {
         &run.join("firmware/system-watchdog/runtime.elf"),
         b"runtime elF",
     );
-    let error = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap_err();
+    let error = validate(&root).unwrap_err();
     assert!(error.to_string().contains("SHA-256"));
     fs::remove_dir_all(root).unwrap();
 }
@@ -511,61 +513,13 @@ fn rejects_replay_origin_not_bound_to_the_firmware_build() {
     manifest.firmware[0].replayed_from = Some(
         oer_tool_data_hil_run_bundle_format::run::FirmwareReplayOrigin {
             source_run_id: String::from("source-run"),
-            source_integrity_sha256: "33".repeat(32),
             firmware_repository: repository,
             source_build_id: Some(String::from("wrong-build-id")),
         },
     );
     atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    write_integrity_index(&run, "run-1").unwrap();
-    let error = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap_err();
+    let error = validate(&root).unwrap_err();
     assert!(error.to_string().contains("inconsistent replay origin"));
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn rejects_tampered_attachment() {
-    let (root, run) = fixture();
-    fs::write(
-        run.join("scenarios/icmp/repetition-001/evidence.log"),
-        b"serial evidencE",
-    )
-    .unwrap();
-    let error = verify(&root, Some("chip-a"), Some("run-1"), &TestRecipe).unwrap_err();
-    assert!(error.to_string().contains("SHA-256"));
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn rejects_paths_escaping_the_run_bundle() {
-    let (root, run) = fixture();
-    let mut suite: SuiteResult = read_json(&run.join("suite.json")).unwrap();
-    suite.scenarios[0].repetitions[0].attachments[0].path = PathBuf::from("../outside");
-    atomic_json(&run.join("suite.json"), &suite).unwrap();
-    let error = verify(&root, Some("chip-a"), None, &TestRecipe).unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("invalid or duplicate attachment")
-    );
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn rejects_unindexed_files() {
-    let (root, run) = fixture();
-    fs::write(run.join("injected.log"), b"not sealed").unwrap();
-    let error = verify(&root, Some("chip-a"), None, &TestRecipe).unwrap_err();
-    assert!(error.to_string().contains("sealed file inventory"));
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn rejects_tampered_derived_report() {
-    let (root, run) = fixture();
-    fs::write(run.join("report.html"), b"tampered report").unwrap();
-    let error = verify(&root, Some("chip-a"), None, &TestRecipe).unwrap_err();
-    assert!(error.to_string().contains("sealed file inventory"));
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -587,54 +541,4 @@ fn the_runs_link_to_the_shared_store_is_followed() {
         runs_directory(&plain.join("runs")).unwrap(),
         plain.join("runs")
     );
-}
-
-#[test]
-fn a_referenced_observer_build_must_be_stored_under_its_digest() {
-    use oer_tool_data_hil_run_bundle_format::observer::store as observer_store;
-    let (root, run) = fixture();
-    let store = root.join("target/hil");
-    let build = serde_json::json!({"schema": 2, "resolved": {"nodes": []}});
-    let embedded = serde_json::json!({
-        "schema": observer_store::EMBEDDED,
-        "executable_sha256": "e".repeat(64),
-        "build_sha256": oer_tool_base_durable::sha256_bytes(&serde_json::to_vec(&build).unwrap()),
-        "build": build,
-    });
-    let reference = observer_store::detach(&embedded, &store).unwrap();
-    let mut manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(run.join("manifest.json")).unwrap()).unwrap();
-    manifest["runner"]["observer"] = embedded;
-    atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    write_integrity_index(&run, "run-1").unwrap();
-    assert!(
-        verify(&root, Some("chip-a"), None, &TestRecipe).is_err(),
-        "a manifest embedding its observer build"
-    );
-    manifest["runner"]["observer"] = reference.clone();
-    atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    write_integrity_index(&run, "run-1").unwrap();
-    verify(&root, Some("chip-a"), None, &TestRecipe).unwrap();
-
-    let file =
-        observer_store::path(&store, observer_store::build_digest(&reference).unwrap()).unwrap();
-    let stored = fs::read(&file).unwrap();
-    fs::remove_file(&file).unwrap();
-    assert!(
-        verify(&root, Some("chip-a"), None, &TestRecipe).is_err(),
-        "a missing build"
-    );
-    fs::write(&file, stored).unwrap();
-    fs::write(
-        store
-            .join("observers")
-            .join(format!("{}.json", "0".repeat(64))),
-        b"{}",
-    )
-    .unwrap();
-    assert!(
-        verify(&root, Some("chip-a"), None, &TestRecipe).is_err(),
-        "a build that does not hash to its name"
-    );
-    fs::remove_dir_all(root).unwrap();
 }

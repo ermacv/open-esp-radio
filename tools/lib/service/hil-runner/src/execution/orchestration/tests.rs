@@ -231,39 +231,7 @@ fn cancellation_stops_before_the_next_scenario() {
     assert_eq!(error.to_string(), "injected cancellation");
     assert!(fake.log.contains(&format!("execute:{}", selected[0].id())));
     assert!(!fake.log.contains(&format!("execute:{}", selected[1].id())));
-    let seal = session
-        .directory()
-        .join("attempts")
-        .join(format!("{}.json", selected[0].id()));
-    let before = fs::read(&seal).unwrap();
-    assert!(
-        !session
-            .directory()
-            .join("attempts")
-            .join(format!("{}.json", selected[1].id()))
-            .exists()
-    );
-    let record: serde_json::Value = serde_json::from_slice(&before).unwrap();
-    assert_eq!(record["suite"]["scenarios"][0]["outcome"], "passed");
     drop(session);
-    assert_eq!(fs::read(seal).unwrap(), before);
-}
-
-#[test]
-fn attempt_seal_is_write_once_and_partial_series_cannot_claim_completion() {
-    let catalog = catalog();
-    let scenario = catalog.get("boot-smoke").unwrap();
-    let root = tempfile::tempdir().unwrap();
-    let mut session = session(root.path());
-    let complete = passed(scenario);
-    let mut partial = complete.clone();
-    partial.repetitions.pop();
-    assert!(session.seal_scenario(scenario, &partial).is_err());
-    session.seal_scenario(scenario, &complete).unwrap();
-    let seal = session.directory().join("attempts/boot-smoke.json");
-    let before = fs::read(&seal).unwrap();
-    assert!(session.seal_scenario(scenario, &complete).is_err());
-    assert_eq!(fs::read(seal).unwrap(), before);
 }
 
 #[test]

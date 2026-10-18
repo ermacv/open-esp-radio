@@ -1,24 +1,24 @@
-//! The HIL run bundle's writer, store and verification; its format and
-//! reader are `oer-tool-data-hil-run-bundle-format`.
+//! The HIL run bundle's writer and store; its format and reader are
+//! `oer-tool-data-hil-run-bundle-format`.
 //!
-//! - [`run`]: the writer [`run::RunSession`] that creates, seals and
+//! - [`run`]: the writer [`run::RunSession`] that creates, finishes and
 //!   interrupts a run;
 //! - [`store`]: [`store::RunStore`], the run store every checkout shares, its
 //!   sidecars (pins, quarantine, performance baselines, caches).
-//! - [`receipt`]: the receipt a runner process names its runs in.
+//! - [`launch_runs`]: the list a runner process names its runs in.
 //! - [`build`]: the content-addressed object store and source capture of a
 //!   run's images; the image builder fills their provenance.
-//! - [`verify`]: the offline verification of a whole bundle, its build
-//!   records and its replays against the image builder's recipe.
+//! - [`replay`]: the archived firmware of an earlier run, its build records
+//!   checked against the image builder's recipe before a run replays it.
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 pub mod build;
-pub mod receipt;
+pub mod launch_runs;
+pub mod replay;
 pub mod run;
 pub mod store;
-pub mod verify;
 
-pub use receipt::RunId;
+pub use launch_runs::RunId;
 pub use store::RunStore;
 
 #[cfg(test)]

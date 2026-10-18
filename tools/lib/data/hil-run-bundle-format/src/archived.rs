@@ -113,7 +113,7 @@ fn deflated_identity(compressed: impl io::Read, stored: &Path) -> Result<Identit
 /// The uncompressed [`Identity`] of a compressed file whose stored bytes
 /// hash to `stored_sha256`, decompressing `stored` only the first time this
 /// process meets those bytes: a run store links one runtime ELF into many
-/// runs, and every sealed attempt of each names it.
+/// runs.
 pub fn decompressed_identity(stored: &Path, stored_sha256: &str) -> Result<Identity> {
     static KNOWN: Mutex<BTreeMap<String, Identity>> = Mutex::new(BTreeMap::new());
     let known = |known: &BTreeMap<String, Identity>| known.get(stored_sha256).cloned();

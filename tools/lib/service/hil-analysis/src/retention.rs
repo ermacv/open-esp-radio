@@ -163,17 +163,17 @@ impl Pruned {
 }
 
 /// Delete (with `apply`; else only list) the runs of `store` that no rule
-/// keeps: not pinned (by hand, by an archive selection or by an unpublished
-/// evidence archive version), not replayed, not younger than the rule, not
+/// keeps: not pinned, not replayed, not younger than the rule, not
 /// the latest pass or a recent failure of a scenario. With a `budget` in
 /// bytes, a store over it also loses its oldest runs that only their age
 /// kept.
 ///
-/// A run this build cannot read is deleted when its schema is older than
-/// this build's and it is older than the rule's days, and, with
-/// `unreadable`, when its schema is this build's; pinned runs stay. A run of
-/// a newer or unknown schema always stays: the store is shared by every
-/// checkout, and a newer branch's runs are only unreadable to this one.
+/// A run this build cannot read is deleted only with `unreadable`, when its
+/// schema is this build's or an older one, and never by its age or the
+/// budget: an older-schema run is its owner's data, which the automatic rule
+/// never passes `unreadable` for. Pinned runs stay. A run of a newer or
+/// unknown schema always stays: the store is shared by every checkout, and
+/// a newer branch's runs are only unreadable to this one.
 pub fn prune(
     store: &RunStore,
     rule: &Retention,
@@ -184,7 +184,7 @@ pub fn prune(
 ) -> Result<Pruned> {
     let all = Run::all(store)?;
     // From reading the pins until the last deletion, no pin can land: a pin
-    // taken meanwhile (`cargo hil archive ref`, `runs pin`) waits, then
+    // taken meanwhile (`runs pin`) waits, then
     // checks under the lock that its run still exists and fails if not.
     let mut pins_lock =
         Some(store.lock_notes(Sidecar::Pins, oer_tool_base_process::lock::Mode::Shared)?);
@@ -195,7 +195,6 @@ pub fn prune(
         .collect::<BTreeSet<_>>();
     let keep = retained(&all, rule, now, &pinned);
     let unreadable_runs = Run::unreadable(store)?;
-    let recent = now.saturating_sub(rule.keep_days * 24 * 3600 * 1000);
     let mut pruned = Pruned {
         total: all.len() + unreadable_runs.len(),
         ..Pruned::default()
@@ -204,8 +203,7 @@ pub fn prune(
         let kept = if pinned.contains(&run.id) {
             Some(String::from("pinned"))
         } else if run.older_schema() {
-            (run.started_millis >= recent)
-                .then(|| format!("older schema, younger than {} days", rule.keep_days))
+            (!unreadable).then(|| String::from("older schema; --unreadable deletes it"))
         } else if run.current_schema() {
             (!unreadable).then(|| String::from("this build's schema; --unreadable deletes it"))
         } else if run.schema.is_some() {
@@ -229,8 +227,8 @@ pub fn prune(
     }
     if let Some(budget) = budget {
         // Every run that stays counts, readable or not; a readable one only
-        // its age keeps and an older-schema one only its age keeps go,
-        // oldest first, until the store fits.
+        // its age keeps goes, oldest first, until the store fits. An
+        // unreadable run never goes for the budget.
         let sizes = remaining
             .iter()
             .map(|run| (run.id().to_owned(), exclusive_bytes(run.directory())))
@@ -268,7 +266,7 @@ pub fn prune(
                     Weighed {
                         id: &run.id,
                         bytes: sizes[&run.id],
-                        deletable: run.older_schema() && !pinned.contains(&run.id),
+                        deletable: false,
                     },
                 )
             }))

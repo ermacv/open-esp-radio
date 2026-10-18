@@ -3,8 +3,8 @@
 //! Whoever starts a runner (a `cargo hil run`, an A/B arm, a bisection
 //! step) describes it as a [`Launch`]; the runner executable runs
 //! supervised, with cancellation forwarded and a shutdown grace for fixture
-//! cleanup and sealing, and the runs it created come back from its run
-//! receipt ([`oer_tool_service_hil_run_bundle::receipt`]), never from the store's newest
+//! cleanup, and the runs it created come back from its launch run list
+//! ([`oer_tool_service_hil_run_bundle::launch_runs`]), never from the store's newest
 //! directories. No launcher runs `cargo hil`.
 
 use std::{
@@ -16,39 +16,26 @@ use std::{
 };
 
 use oer_tool_service_hil_run_bundle::RunId;
-use oer_tool_service_hil_run_bundle::receipt::Receipt;
+use oer_tool_service_hil_run_bundle::launch_runs::LaunchRuns;
 
 use crate::Result;
 
-/// How long a cancelled runner may take to restore its fixtures and seal
+/// How long a cancelled runner may take to restore its fixtures and finish
 /// its run: a shutdown allowance, never a run timeout.
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(300);
 
-/// A runner executable and the observer receipt it runs under.
+/// A runner executable.
 #[derive(Clone, Debug)]
 pub struct Runner {
     pub executable: PathBuf,
-    /// The prepared observer receipt; `None` runs the executable without
-    /// one, which records no observer artifacts.
-    pub receipt: Option<PathBuf>,
 }
 
 impl Runner {
-    /// The runner of the checkout at `root`, prepared with its receipt.
+    /// The runner of the checkout at `root`, built and kept as a private
+    /// copy.
     pub fn prepare(root: &Path) -> Result<Self> {
-        let prepared = oer_tool_service_hil_observer::prepare::prepare(root)?;
-        Ok(Self {
-            executable: prepared.runner,
-            receipt: Some(prepared.receipt),
-        })
-    }
-    /// The runner of a revision checked out at `root`, without an observer
-    /// receipt: its embedded build and receipt format are the revision's
-    /// own, which this checkout does not read.
-    pub fn revision(root: &Path) -> Result<Self> {
         Ok(Self {
             executable: oer_tool_service_hil_observer::prepare::build(root)?,
-            receipt: None,
         })
     }
 }
@@ -110,24 +97,17 @@ impl<'a> Launch<'a> {
         self
     }
 
-    /// The command the launch runs, with `receipt` as its run receipt.
-    fn command(&self, receipt: &Path) -> Result<Command> {
+    /// The command the launch runs, with `runs` as its launch run list.
+    fn command(&self, runs: &Path) -> Result<Command> {
         let mut command = oer_tool_base_process::command(&self.runner.executable);
         command.current_dir(self.checkout).args(&self.arguments);
-        match &self.runner.receipt {
-            Some(observer) => command.env(
-                oer_tool_data_hil_run_bundle_format::observer::receipt::ENV,
-                observer,
-            ),
-            None => command.env_remove(oer_tool_data_hil_run_bundle_format::observer::receipt::ENV),
-        };
         for (name, value) in &self.environment {
             command.env(name, value);
         }
         for name in &self.removed {
             command.env_remove(name);
         }
-        command.env(oer_tool_service_hil_run_bundle::receipt::ENV, receipt);
+        command.env(oer_tool_service_hil_run_bundle::launch_runs::ENV, runs);
         self.context.apply(&mut command)?;
         if let Some(path) = &self.log {
             let log = File::create(path)?;
@@ -157,15 +137,15 @@ impl Launched {
 
 /// Run `launch` to its end; the runs its runner created.
 pub fn launch_run(launch: &Launch<'_>) -> Result<Launched> {
-    let receipt = Receipt::new()?;
-    let mut command = launch.command(receipt.path())?;
+    let runs = LaunchRuns::new()?;
+    let mut command = launch.command(runs.path())?;
     let mut child = oer_tool_base_process::owned::Child::spawn_with_shutdown_grace(
         &mut command,
         SHUTDOWN_GRACE,
     )?;
     let status = child.wait_forwarding_cancellation()?;
     Ok(Launched {
-        runs: receipt.runs()?,
+        runs: runs.runs()?,
         status,
     })
 }

@@ -200,9 +200,7 @@ TEXT` stops another owner's lease the same way at once: its owner is charged
 no longer from that moment, the holder prints who preempted it and why when it
 releases, the history records it as `preempted-on-request`, and the user is
 notified. Estimates from earlier leases of
-the same work only predict when a waiting request starts. Packing cited runs
-into the evidence archive (`cargo hil archive pack`) reads finished bundles
-and never queues. `cargo hil doctor`
+the same work only predict when a waiting request starts. `cargo hil doctor`
 reports conflicting holders without queueing.
 
 A command started in the background returns when its lease ends; its exit is

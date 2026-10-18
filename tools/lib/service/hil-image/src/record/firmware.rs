@@ -7,9 +7,9 @@ use oer_tool_data_hil_run_bundle_format::build::BuildSubjectRole;
 use oer_tool_data_hil_run_bundle_format::run::FirmwareArtifact;
 use oer_tool_data_hil_schema::image::ImageClass;
 use oer_tool_service_hil_run_bundle::build;
+use oer_tool_service_hil_run_bundle::replay::FirmwareRecipe as _;
 use oer_tool_service_hil_run_bundle::run::FirmwareArchive;
 use oer_tool_service_hil_run_bundle::run::RunSession;
-use oer_tool_service_hil_run_bundle::verify::FirmwareRecipe as _;
 use std::path::{Path, PathBuf};
 
 /// Archive `artifacts` as the `image` firmware of `session` and bind it to

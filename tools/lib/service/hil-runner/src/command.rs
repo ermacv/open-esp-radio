@@ -6,8 +6,8 @@ use clap::Parser as _;
 
 use crate::scenario::{Catalog, requirements};
 use crate::{
-    Result, cli::Cli, cli::CliCommand, cli::ImageCommand, cli::ReportCommand, cli::ScenarioCommand,
-    emit_json, execution::firmware::RunFirmware, execution::orchestration,
+    Result, cli::Cli, cli::CliCommand, cli::ImageCommand, cli::ScenarioCommand, emit_json,
+    execution::firmware::RunFirmware, execution::orchestration,
 };
 use oer_tool_data_hil_scenario_catalog::SCENARIO_SCHEMA;
 use oer_tool_service_hil_image as image;
@@ -156,20 +156,6 @@ pub(crate) fn run() -> Result<()> {
                 Ok(())
             }
         },
-        CliCommand::Report {
-            command: ReportCommand::Verify { run_id, chip },
-        } => {
-            emit_json(
-                &oer_tool_service_hil_run_bundle::verify::verify(
-                    &root,
-                    chip.as_deref(),
-                    run_id.as_deref(),
-                    &oer_tool_service_hil_image::record::Recipe,
-                )?,
-                false,
-            )?;
-            Ok(())
-        }
         CliCommand::Run {
             scenarios,
             source_include,
@@ -263,7 +249,7 @@ pub(crate) fn run() -> Result<()> {
                 Some(run_id) => {
                     let class = orchestration::single_image_class(&selected)?;
                     RunFirmware::Replay(Box::new(
-                        oer_tool_service_hil_run_bundle::verify::archived_firmware(
+                        oer_tool_service_hil_run_bundle::replay::archived_firmware(
                             &root,
                             &chip,
                             &run_id,

@@ -2,8 +2,7 @@
 
 The vendor evidence shard format that verification producers write and the
 qualification evaluator reads. It belongs to the root workspace in
-`qualification/`. HIL evidence is not sharded: it is the runs of the pinned
-evidence archive ([`oer-hil-evidence-archive`](../../hil/host/evidence-archive/README.md)).
+`qualification/`. HIL evidence is not sharded: it is the runs of the run store.
 
 - `index`: the shard schema, validation, source and coverage-decision currency,
   and the cross-scenario views of a whole evidence directory.

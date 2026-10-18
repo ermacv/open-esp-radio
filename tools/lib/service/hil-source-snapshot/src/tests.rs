@@ -83,30 +83,6 @@ fn repository() -> tempfile::TempDir {
 }
 
 #[test]
-fn an_untracked_evidence_pin_neither_blocks_nor_enters_a_snapshot() {
-    let root = repository();
-    let output = tempfile::tempdir().unwrap();
-    let target = output.path().join("snapshots");
-    fs::create_dir_all(root.path().join("qualification/evidence")).unwrap();
-    fs::write(root.path().join("qualification/evidence/archive.toml"), "").unwrap();
-    fs::write(root.path().join("new.rs"), "pub fn new() {}\n").unwrap();
-    let roots = vec![("repository".into(), root.path().to_owned())];
-    let error = capture_roots(&roots, &[], &[], &target, &objects(&target))
-        .err()
-        .unwrap()
-        .to_string();
-    assert!(error.contains("\n  --source-include new.rs\n"), "{error}");
-    assert!(!error.contains("archive.toml"), "{error}");
-    let snapshot =
-        capture_roots(&roots, &["new.rs".into()], &[], &target, &objects(&target)).unwrap();
-    assert!(
-        !archived(&snapshot)
-            .iter()
-            .any(|path| path.starts_with("repository/qualification/evidence"))
-    );
-}
-
-#[test]
 fn untracked_selection_is_explicit_complete_and_does_not_archive_secrets() {
     let root = repository();
     let output = tempfile::tempdir().unwrap();

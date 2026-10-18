@@ -842,8 +842,7 @@ impl oer_tool_service_hil_workload::context::BoardImages for RunImages<'_> {
 /// the devices layer's receipt of its flash: the whole bundle's digest and
 /// the application's, with the source commit the board journal recorded
 /// beside the same application digest (a hint, never the identity).
-/// Written into the scenario's directory, so the scenario's seal binds the
-/// peer firmware.
+/// Written into the scenario's directory beside its results.
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct PeerImageRecord {
     pub schema: u8,
@@ -969,7 +968,6 @@ fn execute_selected(
                 None,
             )?;
             let result = effects.execute_scenario(scenario, session)?;
-            session.seal_scenario(scenario, &result)?;
             effects.after_scenario(scenario, session)?;
             session.record_event(
                 RunEventKind::ScenarioFinished,
@@ -1013,7 +1011,6 @@ fn execute_one(
         None,
     )?;
     let result = effects.execute_scenario(selected, session)?;
-    session.seal_scenario(selected, &result)?;
     effects.after_scenario(selected, session)?;
     session.record_event(
         RunEventKind::ScenarioFinished,
@@ -1161,7 +1158,7 @@ fn finish_run(session: RunSession, results: Vec<ScenarioResult>) -> Result<()> {
         session.finish(results, oer_tool_service_hil_analysis::report::views)?;
     emit_json(&completion, false)?;
     // Cancellation of a derived history update occurs after the run was
-    // sealed. Publish completion first, then preserve the CLI signal status.
+    // finished. Publish completion first, then preserve the CLI signal status.
     oer_tool_base_process::check_cancelled()?;
     if suite.outcome.is_passed() {
         Ok(())
@@ -1406,7 +1403,6 @@ fn write_blocked_scenario(
         selected.repetitions(),
         failure,
     );
-    session.seal_scenario(selected, &result)?;
     Ok(result)
 }
 

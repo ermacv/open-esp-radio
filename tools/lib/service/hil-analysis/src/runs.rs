@@ -810,7 +810,7 @@ pub fn wait(directory: &Path, mut report: impl FnMut(String)) -> Result<u8> {
                 report(String::from("abandoned: the run's runner is gone"));
                 return Ok(2);
             }
-            // A sealed run ends waiting even when its events stop short.
+            // A finished run ends waiting even when its events stop short.
             if run.state() != RunState::Running {
                 report(format!(
                     "{}: {}",

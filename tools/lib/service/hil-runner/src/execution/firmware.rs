@@ -12,8 +12,8 @@ use oer_tool_data_hil_schema::image::ImageClass;
 use oer_tool_service_device_lock::DeviceAccess;
 use oer_tool_service_hil_image::{Artifacts, CurrentBuild};
 use oer_tool_service_hil_lab::config::LabConfig;
+use oer_tool_service_hil_run_bundle::replay::ArchivedFirmware;
 use oer_tool_service_hil_run_bundle::run::RunSession;
-use oer_tool_service_hil_run_bundle::verify::ArchivedFirmware;
 
 pub(crate) enum RunFirmware {
     BuildCurrent(CurrentBuild),

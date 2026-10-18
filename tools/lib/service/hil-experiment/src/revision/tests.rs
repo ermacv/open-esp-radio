@@ -21,7 +21,6 @@ fn the_checked_out_tree_s_lock_selects_the_runner() {
         current: String::from("framing 1\n"),
         runner: launch::Runner {
             executable: PathBuf::from("runner"),
-            receipt: None,
         },
         store: RunStore::at(directory.path().join("store")),
         worktree: worktree.clone(),
@@ -82,7 +81,6 @@ fn revision(directory: &Path) -> Revision<'_> {
         current: String::from("framing 1\n"),
         runner: launch::Runner {
             executable: PathBuf::from("runner"),
-            receipt: None,
         },
         store: RunStore::at(directory.join("store")),
         worktree: directory.join("worktree"),
@@ -97,7 +95,6 @@ fn an_own_runner_reads_the_private_arbiter_and_owner_under_every_name() {
     let revision = revision(directory.path());
     let runner = launch::Runner {
         executable: PathBuf::from("runner"),
-        receipt: None,
     };
     let launch = revision.own_runner_launch(&runner, &[String::from("s")], &[String::from("-x")]);
     assert_eq!(launch.checkout, revision.worktree);
