@@ -11,10 +11,13 @@
 //! `ownership` gate.
 //!
 //! A hold is full when it holds every staging lease, or when it is stuck:
-//! one lease short, the missing descriptor's buffer released at the
-//! walker's LAST, every other buffer detached, NEXT zero (no armed
-//! descriptor) at the end of the runner's latest drain, and no unit
-//! received since the last lease, for at least the fill timeout.
+//! one lease short, every other buffer staged and detached, every
+//! descriptor observed, NEXT zero (no armed descriptor) and LAST the
+//! descriptor without a lease at the end of the runner's latest drain, and
+//! no unit received since the last lease, for at least the fill timeout.
+//! That descriptor's buffer is the walker's frozen LAST unit, still owned
+//! by the ring (no buffer released), or released but not yet rearmable
+//! because it is LAST (one released; see the receive runner's drain).
 //!
 //! A lease's descriptor index is `(descriptor_address − ring_base) / 12`,
 //! with `ring_base` the DMA address of descriptor 0 that the arena's bind
@@ -184,7 +187,8 @@ pub fn fullness(
     let one_short = |count: u32| usize::try_from(count).is_ok_and(|count| count + 1 == SLOTS);
     if one_short(end.staged)
         && one_short(end.detached)
-        && end.released == 1
+        && end.released <= 1
+        && usize::try_from(end.observed).is_ok_and(|observed| observed == COUNT)
         && end.next_low == 0
         && missing.is_some()
         && cursor_index(end.last_low, ring_base) == missing

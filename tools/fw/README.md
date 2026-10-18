@@ -75,7 +75,10 @@ its holder when it refuses.
   `Halted`), `walker_restart` (from the first of the two hold cycles,
   `w1.hold cycle=0`: a hold that was not full, `full=0` (every staging
   slot, `reason=all`, or one short and stuck at LAST,
-  `reason=stuck-at-last`; both checked against `reached=`), is
+  `reason=stuck-at-last`; both checked against `reached=`, and a stuck
+  hold's `end_*=` must show `slots − 1` buffers staged and detached, at
+  most one released, every descriptor observed and NEXT zero, or the
+  image and the host disagree), is
   unexercised, `pool-not-exhausted`; units received while every lease was held fail
   it, `received-while-held`, as does `no-frames-after-release`; how the
   ring recovered, `w1.reload` and the walker snapshots `w1.exhaust`, one

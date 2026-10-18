@@ -1494,6 +1494,27 @@ fn ownership_gate(report: &Report) -> Result<HostGate, ReportError> {
     })
 }
 
+/// Whether a `w1.hold` line's drain end shows a hold stuck at LAST in a
+/// ring of `count`: `slots − 1` buffers staged and detached, at most one
+/// released, every descriptor observed and NEXT zero. (That LAST is the
+/// descriptor without a lease only the image can tell.)
+fn stuck_evidence(hold: &Fields, count: u64) -> Result<bool, ReportError> {
+    let Some(one_short) = hold.number("slots")?.checked_sub(1) else {
+        return Ok(false);
+    };
+    let next_zero = hold
+        .text("end_next")?
+        .strip_prefix("0x")
+        .is_some_and(|digits| u32::from_str_radix(digits, 16) == Ok(0));
+    Ok(hold.number_or_dash("end_staged")? == Some(one_short)
+        && hold.number_or_dash("end_detached")? == Some(one_short)
+        && hold
+            .number_or_dash("end_released")?
+            .is_some_and(|released| released <= 1)
+        && hold.number_or_dash("end_observed")? == Some(count)
+        && next_zero)
+}
+
 /// The ring's descriptor count, from `w1.config arena=<count>x<buffer>`.
 fn ring_count(report: &Report) -> Result<u64, ReportError> {
     report
@@ -1769,6 +1790,14 @@ fn disagreements(
         ));
     }
     let count = ring_count(report)?;
+    for hold in &report.hold {
+        if hold.text("reason")? == "stuck-at-last" && !stuck_evidence(hold, count)? {
+            problems.push(format!(
+                "w1.hold cycle={} reason=stuck-at-last, but its end_*= do not show a hold stuck at LAST",
+                hold.text("cycle")?
+            ));
+        }
+    }
     for own in &report.own {
         let image = own.number("order_breaks")?;
         let host = order_breaks(&indices(own.text("first_after_release")?), count);
@@ -3054,19 +3083,69 @@ mod tests {
         );
     }
 
+    /// Mark cycle `cycle` of `body` stuck at LAST with the drain end of run
+    /// 5's reverse cycle: the buffer without a lease (descriptor 17, the
+    /// accepted tail) is the walker's frozen LAST unit, not released.
+    fn stuck_like_run_5(body: &mut [String], cycle: u8) {
+        set_cycle(body, "w1.hold", cycle, "reached", "31");
+        set_cycle(body, "w1.hold", cycle, "reason", "stuck-at-last");
+        set_cycle(body, "w1.own", cycle, "held", "31");
+        for (key, value) in [
+            ("end_released", "0"),
+            ("end_detached", "31"),
+            ("end_staged", "31"),
+            ("end_observed", "32"),
+            ("end_recycle_start", "18"),
+            ("end_accepted_tail", "17"),
+            ("end_next", "0x0"),
+            ("end_last", "0x17f90"),
+        ] {
+            set_cycle(body, "w1.hold", cycle, key, value);
+        }
+    }
+
     #[test]
     fn a_hold_stuck_at_last_is_full() {
-        // One short, stuck: both gates take it as full.
+        // One short, stuck as in run 5: both gates take it as full.
         let mut stuck = body();
         for cycle in [0, 1] {
-            set_cycle(&mut stuck, "w1.hold", cycle, "reached", "31");
-            set_cycle(&mut stuck, "w1.hold", cycle, "reason", "stuck-at-last");
-            set_cycle(&mut stuck, "w1.own", cycle, "held", "31");
+            stuck_like_run_5(&mut stuck, cycle);
         }
         assert_eq!(
             check(&console(&stuck), PASS, &expected()).outcome,
             Outcome::Pass
         );
+        // A released buffer at LAST is stuck as well.
+        set_cycle(&mut stuck, "w1.hold", 1, "end_released", "1");
+        assert_eq!(
+            check(&console(&stuck), PASS, &expected()).outcome,
+            Outcome::Pass
+        );
+        // A drain end without the stuck shape contradicts the image's
+        // reason.
+        for (key, value) in [
+            ("end_released", "2"),
+            ("end_detached", "32"),
+            ("end_staged", "30"),
+            ("end_observed", "31"),
+            ("end_next", "0x17e50"),
+            ("end_next", "-"),
+        ] {
+            let mut lines = body();
+            stuck_like_run_5(&mut lines, 1);
+            set_cycle(&mut lines, "w1.hold", 1, key, value);
+            let Outcome::Contradiction(problems) =
+                check(&console(&lines), PASS, &expected()).outcome
+            else {
+                panic!("{key}={value} is a contradiction");
+            };
+            assert!(
+                problems
+                    .iter()
+                    .any(|problem| problem.contains("stuck at LAST")),
+                "{key}={value}: {problems:?}"
+            );
+        }
         // full= and reason= must agree with reached=.
         for (reached, full, reason) in [
             ("32", "1", "stuck-at-last"),

@@ -43,9 +43,11 @@ failure before the runner hands over its ends prints only
 A hold is full (`w1.hold full=1`) with every staging lease held
 (`reason=all`), or stuck one short (`reason=stuck-at-last`): 31 leases,
 and the runner's latest drain end (`WifiRxReport::drain_end`, printed as
-`end_*=`) shows 31 buffers staged and detached, the one released buffer
-being the descriptor without a lease and the walker's LAST, NEXT zero
-(no armed descriptor), and no unit received since the last lease for the
+`end_*=`) shows 31 buffers staged and detached, at most one released
+(the buffer without a lease is the walker's frozen LAST unit, still owned
+by the ring, or released but not rearmable while it is LAST), all 32
+descriptors observed, NEXT zero (no armed descriptor) and LAST the
+descriptor without a lease, and no unit received since the last lease for the
 3 s fill timeout (one lease short, the fill waits that long after the last
 lease). Otherwise `full=0 reason=-`.
 
