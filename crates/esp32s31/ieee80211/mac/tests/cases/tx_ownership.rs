@@ -125,7 +125,9 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
     for payload in 0..32_u8 {
         slot.as_mut().buffer_mut().unwrap()[0] = payload;
         let cookie = slot.as_mut().reserve(512, 100).unwrap();
-        slot.as_mut().mark_hardware_owned(cookie).unwrap();
+        slot.as_mut()
+            .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+            .unwrap();
         assert!(
             slot.as_mut()
                 .acknowledge_completion(&mut hardware)
@@ -164,9 +166,11 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
 #[test]
 fn failed_completion_detach_quarantines_storage_despite_success_status() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
     let mut hardware = MockMmio::default();
+    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(0, 0));
     slot.as_mut()
         .acknowledge_completion(&mut hardware)
@@ -199,13 +203,18 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     assert_eq!(size(slot.descriptor_word0()), 512);
     assert_eq!(length(slot.descriptor_word0()), 100);
     assert_eq!(slot.state(), TxSlotState::Reserved);
-    assert_eq!(slot.as_mut().mark_hardware_owned(cookie), Ok(()));
+    let mut mmio = MockMmio::default();
     assert_eq!(
-        slot.as_mut().mark_hardware_owned(cookie),
+        slot.as_mut()
+            .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100)),
+        Ok(())
+    );
+    assert_eq!(
+        slot.as_mut()
+            .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100)),
         Err(TxError::Stale)
     );
 
-    let mut mmio = MockMmio::default();
     mmio.set_tx_completion(
         0,
         MacTxCompletionObservation::new_model(0, 0).with_trigger_flow_model(true),
@@ -246,8 +255,11 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
 #[test]
 fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() {
     let mut slot = std::boxed::Box::pin(TxSlot::<512>::new_model().unwrap());
+    let mut hardware = MockMmio::default();
     let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
 
     assert_eq!(slot.as_mut().require_reset(cookie), Ok(()));
     assert_eq!(slot.state(), TxSlotState::ResetRequired);
@@ -259,10 +271,12 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
 #[test]
 fn tx_completion_decodes_the_blob_ack_snr_byte() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
-
     let mut mmio = MockMmio::default();
+    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
+
     // Encoded 0x8b plus the pinned 0x60 offset narrows to signed -21.
     mmio.set_tx_completion(
         0,
@@ -289,10 +303,12 @@ fn tx_completion_decodes_the_blob_ack_snr_byte() {
 #[test]
 fn tx_slot_preserves_the_semantic_timeout_abort_order() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
-
     let mut mmio = MockMmio::default();
+    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
+
     mmio.set_tx_timeout_pending(0, true);
     mmio.set_tx_queue_attached(0, true);
 
@@ -332,10 +348,12 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
 #[test]
 fn tx_slot_disables_before_acknowledging_one_collision_queue() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
-
     let mut mmio = MockMmio::default();
+    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
+
     mmio.set_tx_collision_pending(0, true);
     mmio.set_tx_queue_attached(0, true);
 
@@ -363,9 +381,11 @@ fn tx_slot_disables_before_acknowledging_one_collision_queue() {
 fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     use oer_esp32s31_ieee80211_mac::tx::CompletionFault;
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    slot.as_mut().mark_hardware_owned(cookie).unwrap();
     let mut hardware = MockMmio::default();
+    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .unwrap();
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(1, 2));
     assert_eq!(
         slot.as_mut().acknowledge_completion(&mut hardware),

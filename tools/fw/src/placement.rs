@@ -4,7 +4,11 @@
 //!
 //! - every handler of the image's interrupt table (`__OER_INTERRUPT_TABLE`);
 //! - the panic entry (`rust_begin_unwind`) and the image's panic hook;
-//! - the DMA and critical sections (`.dma.*`, `.critical.*`).
+//! - the DMA and critical sections (`.dma.*`, `.critical.*`);
+//! - a DMA section starting at an address whose low 20 bits are zero
+//!   (`0x2f00_0000`): an RX descriptor there reads as an exhausted list,
+//!   which the ring refuses (`oer-esp32s31-ieee80211-dma`
+//!   `descriptor_aliases_an_exhausted_list`).
 
 use object::{Object as _, ObjectSection as _, ObjectSymbol as _, read::elf::ElfFile32};
 use oer_espressif_staged_layout::Region;
@@ -20,6 +24,9 @@ pub const HANDLER_OFFSET: u32 = 8;
 /// The panic entry's symbol, under its mangled path.
 pub const PANIC_ENTRY: &str = "rust_begin_unwind";
 pub const PANIC_HOOK: &str = "oer_platform_panic_hook";
+/// The address bits the Wi-Fi RX walker's NEXT register reports; a zero there
+/// means the descriptor list is exhausted (`RxDmaNextDescriptor::is_zero`).
+pub const RX_NEXT_LOW_MASK: u32 = 0x000f_ffff;
 /// Sections whose every byte must be in SRAM.
 pub const SRAM_SECTION_PREFIXES: [&str; 2] = [".dma", ".critical"];
 
@@ -92,6 +99,12 @@ pub fn check(image: &Image<'_>, sram: Region) -> Vec<String> {
         {
             warnings.push(format!(
                 "section `{name}` at {address:#010x}+{size:#x} is not in SRAM"
+            ));
+        }
+        if *size > 0 && name.starts_with(".dma") && address & RX_NEXT_LOW_MASK == 0 {
+            warnings.push(format!(
+                "section `{name}` starts at {address:#010x}: an RX descriptor base there reads \
+                 as an exhausted list and the ring refuses it"
             ));
         }
     }
@@ -225,6 +238,26 @@ mod tests {
         assert!(warnings[2].contains("panic hook"));
         assert!(warnings[3].contains(".dma.data"));
         assert!(warnings[4].contains(".critical.bss"));
+    }
+
+    #[test]
+    fn a_dma_section_at_a_zero_low_address_warns() {
+        let image = image(
+            HashMap::new(),
+            &[(TABLE_SYMBOL, 0), (PANIC_ENTRY, 0x2f00_1000)],
+            &[
+                (".dma.bss", 0x2f00_0000, 0x100),
+                (".dma.data", 0x2f00_0100, 0x10),
+            ],
+        );
+        let warnings = check(&image, SRAM);
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains(".dma.bss") && warning.contains("exhausted list")),
+            "{warnings:#?}"
+        );
+        assert!(!warnings.iter().any(|warning| warning.contains(".dma.data")));
     }
 
     #[test]

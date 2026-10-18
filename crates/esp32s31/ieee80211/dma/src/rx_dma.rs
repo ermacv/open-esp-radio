@@ -203,35 +203,16 @@ impl<'storage> RxDmaBinding<'storage> {
     ) -> Option<Self> {
         let descriptor_count = u8::try_from(COUNT).ok()?;
         let range_len = u32::try_from(core::mem::size_of_val(descriptors)).ok()?;
-        // SAFETY: the binding retains the descriptor borrow. The safe target
-        // entry requires static `RxDmaStorage`; the raw target entry states
-        // the equivalent allocation/lifetime proof in its unsafe contract.
-        // Native entry points have no asynchronous DMA actor.
+        // SAFETY: the binding retains the descriptor borrow. Only
+        // `RxDmaStorage` lends it, and its first ring requires static
+        // storage (`prepare_ring`). Native models have no asynchronous DMA
+        // actor.
         let range = unsafe { StableDmaRange::from_owner(descriptors, descriptor_base, range_len) }?;
         (descriptor_count != 0).then_some(Self {
             descriptor_base,
             descriptor_count,
             range,
         })
-    }
-
-    #[allow(
-        unsafe_code,
-        reason = "raw target publication is already an unsafe validation boundary"
-    )]
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn raw_for_host_test(descriptor_base: u32) -> RxDmaBinding<'static> {
-        // SAFETY: target callers cross an unsafe public API and retain the
-        // addressed ring; native callers use a model with no DMA actor.
-        let range = unsafe {
-            StableDmaRange::from_raw_parts(descriptor_base, DESCRIPTOR_BYTES)
-                .expect("one descriptor always forms a non-empty DMA range")
-        };
-        RxDmaBinding {
-            descriptor_base,
-            descriptor_count: 1,
-            range,
-        }
     }
 
     fn admits(&self, address: u32) -> bool {

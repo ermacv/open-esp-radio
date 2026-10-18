@@ -1,5 +1,8 @@
 //! Host-only value models used to qualify recovered A-MPDU transitions.
 //!
+//! Reference model of the vendor's ppAssembleAMPDU/ppResortTxAMPDU for
+//! cross-checking; not a product path.
+//!
 //! These functions intentionally do not form part of the 32-bit production
 //! driver. They preserve finite descriptor transformations for native oracle
 //! tests without exposing pointer-shaped vendor structures to the live path.

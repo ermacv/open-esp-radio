@@ -4,39 +4,13 @@ use super::{
     AmpduFrameSize, HeAmpduPolicy, HtAmpduLengthError, HtAmpduTxError, HtAmpduTxStorage,
     TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
 };
-#[cfg(any(test, feature = "test-support"))]
-use crate::tx::{HeEdcaTxopLimit, HeRate, HtAmpduDensity};
 use crate::tx::{HtRate, TxCookie, TxSlotState};
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFER_SIZE> {
-    /// Check whether one more encoded MPDU fits both its static slot and the
-    /// peer-advertised aggregate-byte ceiling.
-    ///
-    /// This does not reserve a slot or mutate the batch. A scheduler can
-    /// therefore stop at the byte limit without consuming a CCMP PN or
-    /// Sequence Control value for a frame that belongs in the next PPDU.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_frame(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        _empty_delimiters: u8,
-    ) -> Result<bool, HtAmpduTxError> {
-        self.can_commit_frame_in_capacity(
-            cookie,
-            frame_length,
-            hardware_mic_length,
-            false,
-            BUFFER_SIZE,
-        )
-    }
-
+impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Check a frame against a separately owned DMA allocation.
     ///
-    /// A descriptor-only storage uses `BUFFER_SIZE == 0`; its external
-    /// allocation capacity is supplied by the pinned lease instead of being
-    /// charged twice to the aggregate owner.
+    /// The allocation capacity is supplied by the pinned lease; the
+    /// aggregate owner holds descriptors only.
     pub(super) fn can_commit_referenced_frame(
         &self,
         cookie: TxCookie,
@@ -53,33 +27,13 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
         )
     }
 
-    /// Check one HT MPDU against both negotiated storage and the exact
-    /// rate-dependent `rx11NRate2AMPDULimit` ceiling.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_ht_frame(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        empty_delimiters: u8,
-        rate: HtRate,
-    ) -> Result<bool, HtAmpduTxError> {
-        if !self.can_commit_frame(cookie, frame_length, hardware_mic_length, empty_delimiters)? {
-            return Ok(false);
-        }
-        let psdu_length = frame_length
-            .checked_add(usize::from(hardware_mic_length))
-            .and_then(|length| length.checked_add(usize::from(TX_FCS_SIZE)))
-            .and_then(|length| u16::try_from(length).ok())
-            .filter(|length| *length != 0 && *length <= 0x3fff)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        match rate.vendor_ampdu_byte_limit() {
-            Some(limit) => Ok(self.length_after_append(psdu_length, false)? <= limit),
-            None => Ok(true),
-        }
-    }
-
-    /// Descriptor-only counterpart of the host-side `can_commit_ht_frame` check.
+    /// Check one referenced HT MPDU against its separately owned DMA
+    /// allocation, negotiated storage and the exact rate-dependent
+    /// `rx11NRate2AMPDULimit` ceiling.
+    ///
+    /// This does not reserve a slot or mutate the batch. A scheduler can
+    /// therefore stop at the byte limit without consuming a CCMP PN or
+    /// Sequence Control value for a frame that belongs in the next PPDU.
     pub fn can_commit_referenced_ht_frame(
         &self,
         cookie: TxCookie,
@@ -135,23 +89,6 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
             .is_none_or(|limit| aggregate_length <= u32::from(limit)))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn can_commit_frame_with_hardware_he_control(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        hardware_he_control: bool,
-    ) -> Result<bool, HtAmpduTxError> {
-        self.can_commit_frame_in_capacity(
-            cookie,
-            frame_length,
-            hardware_mic_length,
-            hardware_he_control,
-            BUFFER_SIZE,
-        )
-    }
-
     fn can_commit_frame_in_capacity(
         &self,
         cookie: TxCookie,
@@ -190,58 +127,6 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
             Err(HtAmpduTxError::Length(HtAmpduLengthError::AggregateTooLong(_))) => Ok(false),
             Err(error) => Err(error),
         }
-    }
-
-    /// Check one HE frame using the blob-derived delimiter padding policy.
-    ///
-    /// Unlike [`Self::can_commit_frame`], the caller cannot accidentally
-    /// publish an HE short subframe with a guessed metadata-byte-four value.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_he_frame(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        rate: HeRate,
-        density: HtAmpduDensity,
-    ) -> Result<bool, HtAmpduTxError> {
-        self.can_commit_he_frame_with_txop(
-            cookie,
-            frame_length,
-            hardware_mic_length,
-            rate,
-            density,
-            HeEdcaTxopLimit::DEFAULT,
-        )
-    }
-
-    /// Check one HE frame against both peer and rate/TXOP APEP ceilings.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_he_frame_with_txop(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        rate: HeRate,
-        density: HtAmpduDensity,
-        txop_limit: HeEdcaTxopLimit,
-    ) -> Result<bool, HtAmpduTxError> {
-        let psdu_length = frame_length
-            .checked_add(usize::from(hardware_mic_length))
-            .and_then(|length| length.checked_add(usize::from(TX_FCS_SIZE)))
-            .and_then(|length| u16::try_from(length).ok())
-            .filter(|length| *length != 0 && *length <= 0x3fff)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let empty_delimiters = rate
-            .ampdu_empty_delimiters(psdu_length, density)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        if !self.can_commit_frame(cookie, frame_length, hardware_mic_length, empty_delimiters)? {
-            return Ok(false);
-        }
-        let aggregate_length = u32::from(self.length_after_append(psdu_length, false)?);
-        Ok(rate
-            .checked_maximum_apep_bytes(txop_limit)
-            .is_some_and(|limit| aggregate_length <= limit))
     }
 
     /// Check one referenced HE frame against allocation, APEP and TXOP limits.
@@ -327,62 +212,5 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
             return Err(HtAmpduTxError::FrameTooLong);
         }
         Ok(psdu_length)
-    }
-
-    /// Check one HE frame whose four-byte HE-Control is inserted by hardware.
-    ///
-    /// The DMA-resident frame length remains unchanged. Only APEP accounting
-    /// gains four bytes through metadata byte seven bit zero.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_hardware_he_control_frame(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        rate: HeRate,
-        density: HtAmpduDensity,
-    ) -> Result<bool, HtAmpduTxError> {
-        self.can_commit_hardware_he_control_frame_with_txop(
-            cookie,
-            frame_length,
-            hardware_mic_length,
-            rate,
-            density,
-            HeEdcaTxopLimit::DEFAULT,
-        )
-    }
-
-    /// Check hardware HE-Control insertion under the same complete APEP gate.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn can_commit_hardware_he_control_frame_with_txop(
-        &self,
-        cookie: TxCookie,
-        frame_length: usize,
-        hardware_mic_length: u8,
-        rate: HeRate,
-        density: HtAmpduDensity,
-        txop_limit: HeEdcaTxopLimit,
-    ) -> Result<bool, HtAmpduTxError> {
-        let psdu_length = frame_length
-            .checked_add(usize::from(hardware_mic_length))
-            .and_then(|length| length.checked_add(usize::from(TX_FCS_SIZE)))
-            .and_then(|length| u16::try_from(length).ok())
-            .filter(|length| *length != 0 && *length <= 0x3fff)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let _empty_delimiters = rate
-            .ampdu_empty_delimiters(psdu_length, density)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        if !self.can_commit_frame_with_hardware_he_control(
-            cookie,
-            frame_length,
-            hardware_mic_length,
-            true,
-        )? {
-            return Ok(false);
-        }
-        let aggregate_length = u32::from(self.length_after_append(psdu_length, true)?);
-        Ok(rate
-            .checked_maximum_apep_bytes(txop_limit)
-            .is_some_and(|limit| aggregate_length <= limit))
     }
 }

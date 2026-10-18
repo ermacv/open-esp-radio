@@ -47,37 +47,36 @@ model had no MMIO. Which register reads prove DMA quiescence is still open.
 
 ## Host-test paths
 
-The DMA crates derive a descriptor or buffer address from a pointer as a
-`u32`, which does not fit on a 64-bit host. Host tests therefore swap or bypass
-product code under `cfg(any(test, feature = "test-support"))`:
+The tests of `dma`, `mac` and `driver` run through the product path. A
+descriptor or buffer address derives from a pointer as a `u32`, which does not
+fit on a 64-bit host, so the arenas carry a DMA address space
+(`dma/src/space.rs`): `ChipDma`, the product's, takes the field's own address;
+`HostDma` (test support only) places the arena at `HOST_ARENA_BASE` and gives
+each field its offset there. The range and alignment checks are the same in
+both spaces. RX arenas carry the space as a type parameter; TX and A-MPDU
+storages take it where the binding is built (`pin_static::<S>`), and the
+A-MPDU binding maps external lease regions through the same space.
 
-- A2: `dma/src/rx_storage.rs` `validate_descriptor_base` and
-  `validate_buffer_addresses` skip the address checks.
-- A3: `dma/src/rx_storage.rs` `prepare_halted` accepts a raw ring over a
-  `Reusable` arena; production returns `Busy`.
-- A4: `dma/src/tx_ampdu_storage.rs` `external_dma_address` truncates the
-  address without the range check.
-- A5: `mac/src/tx/ampdu.rs` gives `HtAmpduTxStorage` inline buffers and an
-  upper-only write path (`commit_*`, `can_commit_*`, `next_frame_buffer`,
-  `retry::{completed_frame, retain_for_ampdu_retry}`, `ampdu::model`);
-  production writes through `HtAmpduTxResources` and the DMA backing.
-- B: raw test entries into product types: `dma/src/rx_ring.rs`
-  `RxRingHalted::prepare`, `RxRingStopped::prepare`, `take_completed*`,
-  `recycle_completed_*`, `observe_completed_unit_link_release`,
-  `build_cold_ring`, `publish_cold_ring`, `enable_receive`, `disable_receive`,
-  `rearm_descriptor`; `dma/src/descriptor.rs` `publish`, `write_word0`;
-  `mac/src/tx.rs` `mark_hardware_owned`; `driver/src/rx/frontier/lifecycle.rs`
-  `start`.
+Test support holds models of the hardware, never bypasses of the product's
+checks:
 
-At W1 the tests of `dma`, `mac` and `driver` run through the product path. The
-choice of how is made then: (1) a DMA address-space type parameter whose
-default is the product's pointer-to-`u32` and range check, with a host space
-of synthetic low addresses; or (2) running the DMA crates' tests on a 32-bit
-host target (for example `i686-unknown-linux-gnu`), where a pointer fits a
-`u32` and only the range checks still differ.
+- the `HostDma` space;
+- the proofs a mock `RxDma`/`TxDma` reports from its registers
+  (`for_host_test` constructors);
+- `Descriptor::write_word0`, the DMA engine's completion write-back;
+- `RxDmaStorage<…, HostDma>::dma_write`/`dma_read`, the DMA engine's memory
+  port into the arena's ring buffers (an address outside them is an error);
+- `Descriptor::inject_corrupt_words`, a fault model (memory corruption or a
+  foreign write), used to show that the product's checks catch it;
+- `mac` `tx::ampdu::model`, a reference model of the vendor's A-MPDU assembly
+  for cross-checking, not a product path.
 
-A separate layout question, A1: `dma/src/rx_ring.rs` keeps the reload-repair
-evidence in six global `AtomicU32` in production, outside the movable ring
-token so as not to grow nested async state, but in a token field in tests so
-parallel tests cannot race. Whether it moves into the arena next to the
-lifecycle word is decided with the same change.
+The reload-repair evidence lives in the arena's words beside its lifecycle
+(`RxArenaWords`), so arenas do not share it and the ring token stays one
+pointer wide. The HE-Control and Trigger MSDU-length facts the removed
+test-only A-MPDU write path held are in [he-tb-ampdu.md](he-tb-ampdu.md).
+
+An RX descriptor whose low 20 address bits are zero would read as an exhausted
+list in the walker's NEXT register; the ring refuses such a layout
+(`descriptor_aliases_an_exhausted_list`) and `cargo fw` warns about a DMA
+section placed there.

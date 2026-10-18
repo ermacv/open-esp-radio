@@ -1,4 +1,7 @@
 use crate::*;
+use oer_esp32s31_ieee80211_dma::{
+    rx_ring::RxDmaBufferAddresses, rx_storage::RxDmaStorage, space::HostDma,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Operation {
@@ -89,10 +92,6 @@ impl MockMmio {
 
     pub(super) fn set_rx_last_descriptor_address(&mut self, address: u32) {
         self.rx_last_descriptor_low = rx_descriptor_low(address);
-    }
-
-    pub(super) fn set_rx_last_descriptor_low(&mut self, address_low: u32) {
-        self.rx_last_descriptor_low = address_low;
     }
 
     pub(super) fn set_rx_next_descriptor_address(&mut self, address: u32) {
@@ -241,29 +240,115 @@ pub(super) const fn rx_descriptor_low(address: u32) -> u32 {
     if address == 0 { 0 } else { address - DMA_LOW }
 }
 
+/// Prove a completed unit's link release through the product observation:
+/// LAST at the unit's tail still owns its link, and LAST at a later
+/// terminal-complete descriptor releases it.
 pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
     live: &mut RxRingLive<'_, COUNT>,
     mmio: &mut MockMmio,
     descriptors: &[Descriptor; COUNT],
     descriptor_base: u32,
-    last_descriptor_low: u32,
+    last_descriptor_address: u32,
     descriptor_count: usize,
 ) {
-    let last_descriptor_low = rx_descriptor_low(last_descriptor_low);
+    mmio.set_rx_last_descriptor_address(last_descriptor_address);
     assert!(
-        !live.observe_completed_unit_link_release(mmio, last_descriptor_low, descriptor_count,),
+        !live.observe_current_completed_unit_link_release(mmio, descriptor_count),
         "the current LAST descriptor still owns its nonterminal link",
     );
-    let tail_index = usize::try_from(
-        (last_descriptor_low.wrapping_sub(rx_descriptor_low(descriptor_base))) / DESCRIPTOR_BYTES,
-    )
-    .unwrap();
+    let tail_index =
+        usize::try_from((last_descriptor_address - descriptor_base) / DESCRIPTOR_BYTES).unwrap();
     let later_index = (tail_index + 1) % COUNT;
     descriptors[later_index].write_word0(descriptors[later_index].word0() | BIT_30);
-    let later_low = rx_descriptor_low(descriptor_base + later_index as u32 * DESCRIPTOR_BYTES);
-    mmio.set_rx_last_descriptor_low(later_low);
-    assert!(live.observe_completed_unit_link_release(mmio, later_low, descriptor_count,));
+    mmio.set_rx_last_descriptor_address(descriptor_base + later_index as u32 * DESCRIPTOR_BYTES);
+    assert!(live.observe_current_completed_unit_link_release(mmio, descriptor_count));
 }
+
+/// One leaked RX DMA arena in the host address space and the layout it
+/// published.
+pub(super) struct HostRxArena<const COUNT: usize, const BUFFER: usize, const STORAGE: usize> {
+    pub(super) storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>,
+    pub(super) base: u32,
+    pub(super) buffers: &'static RxDmaBufferAddresses<COUNT>,
+}
+
+impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
+    HostRxArena<COUNT, BUFFER, STORAGE>
+{
+    /// A fresh arena whose buffers hold [`STALE_PAYLOAD`] before its first
+    /// ring, as a previous epoch would leave them.
+    pub(super) fn new() -> Self {
+        let mut storage = Box::new(RxDmaStorage::new());
+        for index in 0..COUNT {
+            storage.buffer_mut(index).unwrap().fill(STALE_PAYLOAD);
+        }
+        let storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma> = Box::leak(storage);
+        let mut buffers = [0; COUNT];
+        let base = storage.dma_layout(&mut buffers).unwrap();
+        Self {
+            storage,
+            base,
+            buffers: Box::leak(Box::new(buffers)),
+        }
+    }
+
+    pub(super) fn descriptors(&self) -> &'static [Descriptor; COUNT] {
+        self.storage.descriptors()
+    }
+
+    pub(super) fn address(&self, index: usize) -> u32 {
+        self.base + index as u32 * DESCRIPTOR_BYTES
+    }
+
+    pub(super) fn prepare(
+        &self,
+        mmio: &mut MockMmio,
+    ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
+        self.storage.prepare_ring(mmio, self.base, self.buffers)
+    }
+
+    pub(super) fn start(&self, mmio: &mut MockMmio) -> RxRingLive<'static, COUNT> {
+        self.prepare(mmio)
+            .unwrap()
+            .try_start(mmio)
+            .map_err(|(_, error)| error)
+            .unwrap()
+    }
+
+    /// Model the DMA engine writing `bytes` at the start of the buffer it
+    /// published for descriptor `index`.
+    pub(super) fn dma_write(&self, live: &RxRingLive<'_, COUNT>, index: usize, bytes: &[u8]) {
+        self.storage
+            .dma_write(live, self.buffers[index], bytes)
+            .unwrap();
+    }
+
+    /// The leading and trailing recycle guards of descriptor `index`'s
+    /// buffer, as the DMA engine sees them.
+    pub(super) fn dma_guards(
+        &self,
+        live: &RxRingLive<'_, COUNT>,
+        index: usize,
+    ) -> ([u8; 4], [u8; 4]) {
+        let mut leading = [0; 4];
+        let mut trailing = [0; 4];
+        let address = self.buffers[index];
+        self.storage.dma_read(live, address, &mut leading).unwrap();
+        self.storage
+            .dma_read(live, address + BUFFER as u32, &mut trailing)
+            .unwrap();
+        (leading, trailing)
+    }
+
+    /// Whether descriptor `index`'s buffer carries both recycle guards.
+    pub(super) fn guards_restored(&self, live: &RxRingLive<'_, COUNT>, index: usize) -> bool {
+        let sentinel = RX_BUFFER_SENTINEL.to_le_bytes();
+        self.dma_guards(live, index) == (sentinel, sentinel)
+    }
+}
+
+/// Bytes a previous epoch left in a host arena's buffers.
+pub(super) const STALE_PAYLOAD: u8 = 0x5a;
 
 impl CcmpKeyHardware for MockMmio {
     fn configure_ccmp_association(

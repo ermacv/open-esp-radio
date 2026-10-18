@@ -12,7 +12,7 @@ use crate::tx::{
     CompletionObservation, TxCompletion, TxCookie, TxHardware, TxSlotState, decode_or_quarantine,
 };
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFER_SIZE> {
+impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Discard a software-owned partial batch.
     pub fn cancel(mut self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
         let storage = self.as_ref().get_ref();

@@ -78,6 +78,15 @@ between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
 Release store hands the place over and the other side's Acquire CAS takes it;
 the client posts only with the slot's token, which the answer returns.
 
+`esp32s31-ieee80211-dma` has one unsafe site that exists only under
+`test-support`: the host model of the DMA engine's memory port,
+`RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in `rx_storage/host_dma.rs`.
+It copies bytes into or out of one buffer's `UnsafeCell` at a published
+`HostDma` address, refusing any range outside a single buffer and any buffer
+detached to an upper owner. Its caller lends the arena's live ring shared:
+completed-descriptor views borrow that ring mutably, and the ring is not
+`Sync`, so no CPU view of the bytes is live meanwhile.
+
 `oer-memory` holds the shared proofs for executor-crossing storage.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space

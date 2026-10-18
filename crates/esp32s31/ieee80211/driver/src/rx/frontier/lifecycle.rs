@@ -120,56 +120,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         Ok(Self { state })
     }
 
-    /// Prepare a halted frontier if needed, wait the qualified walker settle
-    /// edge, and publish one live RX epoch.
-    ///
-    /// Native models may provide an explicit buffer-preparation callback.
-    /// Hardware builds must use [`Self::start_with_storage`] so the callback
-    /// cannot bypass the DMA arena's guard restoration.
-    #[cfg(any(test, feature = "test-support"))]
-    pub async fn start<M, F>(
-        &mut self,
-        timer: &impl oer_time::Timer,
-        hardware: &mut M,
-        prepare_buffer: F,
-    ) -> Result<(), RxFrontierError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        let state = core::mem::replace(&mut self.state, RxFrontierState::Vacant);
-        let prepared = match state {
-            RxFrontierState::Halted(halted) => {
-                match halted.prepare(hardware, DMA_BUFFER_SIZE as u32, prepare_buffer) {
-                    Ok(prepared) => prepared,
-                    Err((halted, error)) => {
-                        self.state = RxFrontierState::Halted(halted);
-                        return Err(error.into());
-                    }
-                }
-            }
-            RxFrontierState::Prepared(prepared) => prepared,
-            live @ RxFrontierState::Live(_) => {
-                self.state = live;
-                return Err(RxFrontierError::AlreadyStarted);
-            }
-            RxFrontierState::Vacant => {
-                return Err(RxFrontierError::OwnerUnavailable);
-            }
-        };
-        walker_enable_settle(timer).await;
-        match prepared.try_start(hardware) {
-            Ok(live) => {
-                self.state = RxFrontierState::Live(live);
-                Ok(())
-            }
-            Err((prepared, error)) => {
-                self.state = RxFrontierState::Prepared(prepared);
-                Err(error.into())
-            }
-        }
-    }
-
     /// Start RX using the production DMA storage bound to this ring.
     pub async fn start_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,

@@ -128,7 +128,7 @@ impl HtAmpduLengthAccumulator {
     }
 }
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFER_SIZE> {
+impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Snapshot the software-owned prefix for prospective HT burst admission.
     /// Appending to this value consumes no descriptor, sequence number or PN.
     /// It checks length only; publication still validates backing and ownership.

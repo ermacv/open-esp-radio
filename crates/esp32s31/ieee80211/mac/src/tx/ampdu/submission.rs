@@ -27,7 +27,7 @@ pub(super) struct PreparedHeSubmission {
     pub(super) trigger: Option<PreparedHeTrigger>,
 }
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFER_SIZE> {
+impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     pub(super) fn prepared_ht_submission(
         &self,
         cookie: TxCookie,
