@@ -13,10 +13,3 @@ trybuild = "=1.0.121"
 
 [lints]
 workspace = true
-
-[package.metadata.open-radio]
-layer = "tool"
-platform = "host"
-host-layer = "verification"
-host-app = "foundation"
-host-boundary = "library"
