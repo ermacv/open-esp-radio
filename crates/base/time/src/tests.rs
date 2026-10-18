@@ -7,7 +7,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use super::{Clock, Duration, Instant, TimeOverflow, Timer};
+use super::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
 
 /// A clock that stands still until the test moves it; a wait completes once
 /// the clock has reached its deadline.
@@ -155,4 +155,12 @@ fn without_features_the_crate_has_no_dependency() {
         defaults.is_none_or(|default| default.as_array().is_some_and(|list| list.is_empty())),
         "a default feature"
     );
+}
+
+#[test]
+fn the_clock_epoch_offset_sets_bit_31_of_the_low_word() {
+    assert_eq!(CLOCK_EPOCH_OFFSET.as_micros(), 1 << 31);
+    let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
+    assert_eq!(start.as_micros() as u32, 1 << 31);
+    assert_eq!((start.as_micros() as u32) as i32, i32::MIN);
 }

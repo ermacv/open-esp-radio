@@ -23,7 +23,12 @@ use core::{
 };
 
 use embassy_sync::waitqueue::MultiWakerRegistration;
-use oer_time::{Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
+
+/// Where [`VirtualClock::new`] and [`SkipClock::new`] start:
+/// [`CLOCK_EPOCH_OFFSET`] past [`Instant::EPOCH`], as the image's clock
+/// does, so code under test meets the 32-bit wrap at once.
+pub const START: Instant = Instant::from_micros(CLOCK_EPOCH_OFFSET.as_micros());
 
 /// The default number of tasks whose wakers a clock keeps apart; more
 /// waiters are still served, at the cost of waking them all together.
@@ -32,8 +37,8 @@ pub const DEFAULT_WAITERS: usize = 8;
 /// Virtual monotonic time, advanced explicitly by its owner.
 ///
 /// A read returns the time the owner last set, starting at the instant the
-/// clock was made with. Waits end when an advance reaches their deadline,
-/// or at once for a deadline already reached.
+/// clock was made with: [`START`] by default. Waits end when an advance
+/// reaches their deadline, or at once for a deadline already reached.
 pub struct VirtualClock<const WAITERS: usize = DEFAULT_WAITERS> {
     now: Cell<Instant>,
     earliest: Cell<Option<Instant>>,
@@ -47,12 +52,12 @@ impl<const WAITERS: usize> Default for VirtualClock<WAITERS> {
 }
 
 impl<const WAITERS: usize> VirtualClock<WAITERS> {
-    /// A clock at [`Instant::EPOCH`].
+    /// A clock at [`START`], [`CLOCK_EPOCH_OFFSET`] past the epoch.
     pub const fn new() -> Self {
-        Self::starting_at(Instant::EPOCH)
+        Self::starting_at(START)
     }
 
-    /// A clock at `start`.
+    /// A clock at `start`, for a test that places time itself.
     pub const fn starting_at(start: Instant) -> Self {
         Self {
             now: Cell::new(start),
@@ -142,12 +147,12 @@ impl Default for SkipClock {
 }
 
 impl SkipClock {
-    /// A clock at [`Instant::EPOCH`].
+    /// A clock at [`START`], [`CLOCK_EPOCH_OFFSET`] past the epoch.
     pub const fn new() -> Self {
-        Self::starting_at(Instant::EPOCH)
+        Self::starting_at(START)
     }
 
-    /// A clock at `start`.
+    /// A clock at `start`, for a test that places time itself.
     pub const fn starting_at(start: Instant) -> Self {
         Self {
             now: Cell::new(start),

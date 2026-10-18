@@ -307,7 +307,8 @@ mod survey {
         let mut fixture = fixture();
         let mut survey = Survey::<4>::new(bssid(STAND));
         let channel = Channel::ghz2_4(CHANNEL, ChannelWidth::Mhz20).unwrap();
-        let base = 1_000_000;
+        // One second past the clock's start.
+        let base = oer_time_virtual::START.as_micros() + 1_000_000;
         let stand = |tsf| management(8, STAND, tsf, b"stand", Some(CHANNEL));
         let mut data = std::vec![0_u8; 24];
         data[0] = 0x08;

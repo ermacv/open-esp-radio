@@ -424,6 +424,13 @@ impl WifiTxPowerProfile for Power {
 
 type Timer = oer_time_virtual::SkipClock;
 
+/// The instant `micros` past the test clock's start.
+fn at(micros: u64) -> oer_time::Instant {
+    oer_time_virtual::START
+        .checked_add(oer_time::Duration::from_micros(micros))
+        .unwrap()
+}
+
 fn entropy() -> u32 {
     0x1234_5678
 }
@@ -1016,10 +1023,7 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
         assert!(core.queue_busy(WmmAccessCategory::BestEffort));
         assert_eq!(hardware.legacy.len(), 1);
         assert_eq!(hardware.legacy[0].1.interface(), MacInterface::Station);
-        assert_eq!(
-            core.next_deadline(),
-            Some(oer_time::Instant::from_micros(TIMEOUT))
-        );
+        assert_eq!(core.next_deadline(), Some(at(TIMEOUT)));
 
         hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
         let mut events = Events::default();
@@ -2173,10 +2177,7 @@ fn each_queue_holds_one_attempt_and_they_complete_in_any_order() {
         let mut queues: Vec<u8> = hardware.legacy.iter().map(|(queue, _)| *queue).collect();
         queues.sort_unstable();
         assert_eq!(queues, [0, 1, 2, 3]);
-        assert_eq!(
-            core.next_deadline(),
-            Some(oer_time::Instant::from_micros(TIMEOUT))
-        );
+        assert_eq!(core.next_deadline(), Some(at(TIMEOUT)));
 
         // The last queue completes first; the others stay published.
         hardware.completion[queue_of(Background)] =
@@ -2228,7 +2229,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
         hardware.timeout_pending[queue_of(Voice)] = true;
         assert!(service(&mut core, &mut hardware, interrupt(EVENT_TX_TIMEOUT)).is_empty());
         let settle = core.next_deadline().unwrap();
-        assert_eq!(settle, oer_time::Instant::from_micros(16));
+        assert_eq!(settle, at(16));
         hardware.timeout_pending[queue_of(Video)] = true;
         assert!(service(&mut core, &mut hardware, interrupt(EVENT_TX_TIMEOUT)).is_empty());
         assert_eq!(core.next_deadline(), Some(settle));
@@ -2243,7 +2244,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
         // The waiting queue's abort began as the first settle ended.
         assert!(hardware.cca_forced);
         let settle = core.next_deadline().unwrap();
-        assert_eq!(settle, oer_time::Instant::from_micros(32));
+        assert_eq!(settle, at(32));
         core.tx
             .timer
             .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
@@ -2696,10 +2697,7 @@ fn an_aggregate_is_planned_published_once_and_reports_its_block_ack() {
         assert_eq!(hardware.ht[0].1.control().protection, MacTxProtection::None);
         assert_eq!(published.owner().frame_count(), 3);
         assert_eq!(published.owner().work().backoff_slots, 9);
-        assert_eq!(
-            published.deadline(),
-            oer_time::Instant::from_micros(TIMEOUT)
-        );
+        assert_eq!(published.deadline(), at(TIMEOUT));
 
         // A BlockAck arrived: the end carries its window, and the subframes go
         // back to their source.

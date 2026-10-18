@@ -214,6 +214,13 @@ fn run<F: Future<Output = ()>>(
     }
 }
 
+/// The instant `micros` past a default clock's start.
+fn at(micros: u64) -> Instant {
+    oer_time_virtual::START
+        .checked_add(Duration::from_micros(micros))
+        .unwrap()
+}
+
 fn clock() -> &'static VirtualClock {
     std::boxed::Box::leak(std::boxed::Box::new(VirtualClock::default()))
 }
@@ -401,7 +408,7 @@ fn a_member_that_is_not_the_last_keeps_rf_open() {
 fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
     let clock = clock();
     let model = model(Script {
-        deadline: Some(Instant::from_micros(1_000_000)),
+        deadline: Some(at(1_000_000)),
         ..Script::default()
     });
     run(&model, clock, |cells| async move {
@@ -419,15 +426,15 @@ fn a_tracked_member_gets_periodic_ticks_when_they_fall_due() {
         for _ in 0..4 {
             yield_now().await;
         }
-        clock.advance_to(Instant::from_micros(1_000_000));
+        clock.advance_to(at(1_000_000));
         for _ in 0..4 {
             yield_now().await;
         }
-        clock.advance_to(Instant::from_micros(2_000_000));
+        clock.advance_to(at(2_000_000));
         for _ in 0..4 {
             yield_now().await;
         }
-        assert_eq!(clock.now(), Instant::from_micros(2_000_000));
+        assert_eq!(clock.now(), at(2_000_000));
     });
     assert_eq!(
         model
