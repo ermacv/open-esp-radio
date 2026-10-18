@@ -39,7 +39,8 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 - A service depends on `analysis`, `data` and `base`, and on another service
   only along these edges: `firmware → lab`, `firmware → image-check-stack`,
   `firmware → image-check-interrupts`, `image-check-interrupts →
-  image-check-stack`, `symbol-lineage → vendor-provenance`. There is no
+  image-check-stack`, `symbol-lineage → vendor-provenance`, `registers → vendor-provenance`. There
+  is no
   reverse edge.
 - `analysis` depends on other `analysis` libraries, `base` and external
   crates; `data` on other `data` libraries and `base`.

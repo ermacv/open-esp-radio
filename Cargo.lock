@@ -3054,7 +3054,9 @@ dependencies = [
  "oer-tool-base-process",
  "oer-tool-data-chip-profile",
  "oer-tool-data-vendor-pins",
+ "serde",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -3142,11 +3144,15 @@ name = "oer-tool-service-registers"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "oer-tool-analysis-elf",
  "oer-tool-base-durable",
  "oer-tool-base-process",
+ "oer-tool-base-toolchain",
  "oer-tool-data-register-contracts",
  "oer-tool-data-register-model",
  "oer-tool-data-register-review",
+ "oer-tool-data-vendor-artifacts",
+ "oer-tool-service-vendor-provenance",
  "quote",
  "roxmltree",
  "serde",

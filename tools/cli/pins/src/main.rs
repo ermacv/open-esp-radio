@@ -29,6 +29,10 @@ enum Command {
         /// Artifact ids; all of the chip's when none is named.
         ids: Vec<String>,
     },
+    /// Fetch the inputs of Blobray's RISC-V conformance test (the
+    /// riscv-arch-test checkout and Sail) at their pins and print where
+    /// they lie.
+    Conformance,
 }
 
 /// The repository this tool runs in.
@@ -49,6 +53,12 @@ fn main() -> ExitCode {
         let root = root()?;
         match cli.command {
             Command::Fetch { chip, ids } => artifacts::run(&root, &chip, &ids),
+            Command::Conformance => {
+                let inputs = artifacts::conformance::fetch(&root)?;
+                println!("riscv-arch-test  {}", inputs.arch_test.display());
+                println!("sail             {}", inputs.sail.display());
+                Ok(())
+            }
         }
     })();
     match result {
@@ -77,7 +87,9 @@ mod tests {
     #[test]
     fn fetch_takes_a_chip_and_ids() {
         let cli = Cli::try_parse_from(["pins", "fetch", "--chip", "esp32c5", "libphy"]).unwrap();
-        let Command::Fetch { chip, ids } = cli.command;
+        let Command::Fetch { chip, ids } = cli.command else {
+            panic!("not a fetch");
+        };
         assert_eq!((chip.as_str(), ids), ("esp32c5", vec!["libphy".to_owned()]));
     }
 }

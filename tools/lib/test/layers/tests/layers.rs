@@ -6,12 +6,13 @@
 use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies `tools/README.md` allows, in order.
-const SERVICE_ORDER: [(&str, &str); 5] = [
+const SERVICE_ORDER: [(&str, &str); 6] = [
     ("firmware", "lab"),
     ("firmware", "image-check-stack"),
     ("firmware", "image-check-interrupts"),
     ("image-check-interrupts", "image-check-stack"),
     ("symbol-lineage", "vendor-provenance"),
+    ("registers", "vendor-provenance"),
 ];
 
 /// The portable parts of `crates/` that `tools/` may use.

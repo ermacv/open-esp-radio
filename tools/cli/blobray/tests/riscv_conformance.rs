@@ -9,9 +9,10 @@
 //! value fails, so a test whose body was not assembled cannot pass.
 //!
 //! The inputs are external and pinned in `riscv_conformance/inputs.toml`,
-//! which also lists the suites: set `BLOBRAY_RISCV_ARCH_TEST` to the pinned
-//! riscv-arch-test checkout, `BLOBRAY_RISCV_CC` to a clang with the riscv32
-//! target and lld and `BLOBRAY_SAIL` to the pinned `sail_riscv_sim`, then run
+//! which also lists the suites: `cargo pins conformance` fetches the
+//! riscv-arch-test checkout and Sail into the vendor store, where this test
+//! finds them. Set `BLOBRAY_RISCV_CC` to a clang with the riscv32 target and
+//! lld, then run
 //! `cargo test -p oer-tool-cli-blobray --test riscv_conformance -- --ignored`.
 use object::{Object, ObjectSymbol};
 use oer_tool_analysis_blobray_application as app;
@@ -66,7 +67,7 @@ const EXCLUDED: &[(&str, &str)] = &[
 fn environment(name: &str) -> PathBuf {
     std::env::var_os(name)
         .map(PathBuf::from)
-        .unwrap_or_else(|| panic!("{name} must name the conformance input"))
+        .unwrap_or_else(|| panic!("{name} must name a riscv32 clang with lld"))
 }
 
 fn assemble(
@@ -237,9 +238,10 @@ fn reference(sail: &Path, elf: &Path, directory: &Path) -> std::result::Result<V
 #[test]
 #[ignore = "needs the RISC-V architectural tests, a riscv32 clang and Sail"]
 fn architectural_tests_match_their_reference_signatures() {
-    let suite = environment("BLOBRAY_RISCV_ARCH_TEST");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let inputs = oer_tool_data_vendor_artifacts::conformance::inputs(&root).unwrap();
+    let (suite, sail) = (inputs.arch_test, inputs.sail);
     let cc = environment("BLOBRAY_RISCV_CC");
-    let sail = environment("BLOBRAY_SAIL");
     let output = tempfile::tempdir().unwrap();
     let mut passed = 0;
     let mut failures = vec![];

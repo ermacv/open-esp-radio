@@ -18,6 +18,7 @@
 use oer_tool_data_vendor_pins::{Artifact, CACHE, Manifest, Source, SourceKind, cache_directory};
 use std::path::{Path, PathBuf};
 
+pub mod conformance;
 pub mod project;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -124,7 +125,7 @@ fn github(repository: &str) -> Result<&str> {
         .ok_or_else(|| format!("unsupported repository {repository}").into())
 }
 
-fn download(url: &str, destination: &Path) -> Result<()> {
+pub(crate) fn download(url: &str, destination: &Path) -> Result<()> {
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent)?;
     }

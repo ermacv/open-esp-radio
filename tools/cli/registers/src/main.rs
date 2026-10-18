@@ -57,6 +57,16 @@ enum Check {
         #[arg(long)]
         pac_src: PathBuf,
     },
+    /// The vendor's statically resolved MMIO accesses in every pinned vendor
+    /// binary against the register model, the provenance registry's cited
+    /// functions first: `target/register-inventory/<chip>/report.txt`.
+    Inventory {
+        #[arg(long)]
+        chip: String,
+        /// The report directory, by default `target/register-inventory/<chip>`.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 fn run() -> oer_tool_service_registers::Result<()> {
     let _signals = oer_tool_base_process::install_signal_handlers()?;
@@ -111,6 +121,9 @@ fn run() -> oer_tool_service_registers::Result<()> {
                 &pac_src,
             )?;
             println!("shared MMIO words of {chip}: {shared} reviewed");
+        }
+        Command::Check(Check::Inventory { chip, output }) => {
+            oer_tool_service_registers::checks::inventory::run(&ctx, &chip, output)?;
         }
     }
     Ok(())
