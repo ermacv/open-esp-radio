@@ -19,7 +19,7 @@ use oer_esp32s31_hal::{
         BluetoothShutdownFailure, ClockedOwner, InterruptOutputAfterRoutesOwner,
         InterruptOutputReleasedOwner, ModemLpTimerInterruptReadyOwner,
     },
-    shared_radio::SharedRadioLease,
+    domain::RadioDomain,
 };
 use oer_esp32s31_phy::{bluetooth_client::BluetoothPhyClientError, concurrent::ConcurrentPhy};
 
@@ -141,7 +141,7 @@ pub struct ControllerShutDown {
     reason = "the failure retains every owner of the epoch"
 )]
 pub fn retire(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     task: ControllerPoweredTaskRuntime<'static>,
     retained: BlePhyRetainedOwners,
     output: InterruptOutputAfterRoutesOwner,
@@ -180,7 +180,7 @@ pub fn retire(
         storage,
         direction_finding,
     } = retained;
-    match crate::phy::leave_phy(lease, &task, membership) {
+    match crate::phy::leave_phy(radio, &task, membership) {
         Ok(last) => Ok((
             ControllerRetired {
                 task,
@@ -221,7 +221,7 @@ impl ControllerRetired {
     )]
     pub fn shut_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         cells: &ControllerEventCells,
     ) -> Result<ControllerShutDown, ControllerShutdownFailure> {
         let Self {
@@ -231,7 +231,7 @@ impl ControllerRetired {
             storage,
             direction_finding,
         } = self;
-        match task.shut_down(lease, output, timer) {
+        match task.shut_down(radio, output, timer) {
             Ok((clocked, reset)) => {
                 cells.clear_notifications_after_reset();
                 let mut ble_phy = storage;

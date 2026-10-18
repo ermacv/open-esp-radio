@@ -626,8 +626,19 @@ impl PacApiPack {
                      unsafe {{\n\
                          registers.{clear}().write_with_zero(|writer| writer.bits(snapshot.0));\n\
                      }}\n\
+                 }}\n\
+                 /// An event image of the vendor comparison's choosing, for a probe\n\
+                 /// image that replays a vendor acknowledgement.\n\
+                 #[cfg(oer_probe)]\n\
+                 #[doc(hidden)]\n\
+                 pub const fn {}_for_probe(bits: u32) -> {snapshot_type} {{\n\
+                     {snapshot_type}(bits)\n\
                  }}\n",
-                binding.peripheral, binding.status_register, binding.name, binding.name,
+                binding.peripheral,
+                binding.status_register,
+                binding.name,
+                binding.name,
+                binding.name,
             ));
         }
         output.push_str("}\n");

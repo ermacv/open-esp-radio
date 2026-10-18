@@ -125,7 +125,7 @@ fn perform(
 
 fn lock_modify(start: bool) -> SchedulerObservation {
     SchedulerObservation::LockModify(
-        BluetoothSchedulerLockModifyObservation::from_fields_for_validation(true, start, 0),
+        BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(true, start, 0),
     )
 }
 

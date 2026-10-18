@@ -5,8 +5,8 @@ use crate::controller_time::ControllerTimeWorkerPhase;
 use super::separate_interrupt_owner;
 
 fn clocked() -> ClockedOwner {
-    let (_shared, partitions) = RadioHardware::for_validation().into_concurrent(());
-    ClockedOwner::for_validation(partitions.bluetooth)
+    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    ClockedOwner::for_host_test(partitions.bluetooth)
 }
 
 #[test]
@@ -29,7 +29,7 @@ fn task_retirement_keeps_a_controller_time_ownership_fault() {
     let (mut task, setup) = separate_interrupt_owner(clocked);
     assert!(
         task.controller_time
-            .cancel_owned(crate::controller_time::ControllerTimeRequest::for_validation(1))
+            .cancel_owned(crate::controller_time::ControllerTimeRequest::for_host_test(1))
             .is_err()
     );
     assert_eq!(

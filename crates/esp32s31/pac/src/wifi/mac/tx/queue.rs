@@ -152,6 +152,19 @@ pub(crate) fn queue_in_trigger_flow(registers: &svd::WifiMacTxCommon, queue: u8)
     }
 }
 
+/// The trigger-flow bits of every ordinary queue and the opaque upper
+/// nibble, in the vendor's packed order, for a probe image.
+#[cfg(oer_probe)]
+#[inline(always)]
+pub(crate) fn trigger_flow_state_for_probe(registers: &svd::WifiMacTxCommon) -> u32 {
+    let state = registers.queue_state().read();
+    u32::from(state.trigger_flow_queue_0().bit_is_set())
+        + u32::from(state.trigger_flow_queue_1().bit_is_set()) * 2
+        + u32::from(state.trigger_flow_queue_2().bit_is_set()) * 4
+        + u32::from(state.trigger_flow_queue_3().bit_is_set()) * 8
+        + u32::from(state.bits_28_31_opaque().bits()) * 16
+}
+
 #[inline(always)]
 pub(crate) fn acknowledge_completion(registers: &svd::WifiMacTxCommon, queue: u8) {
     assert!(queue < ORDINARY_QUEUE_COUNT as u8);

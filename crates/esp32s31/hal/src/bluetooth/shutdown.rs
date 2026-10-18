@@ -28,7 +28,7 @@ pub struct BluetoothControllerReset {
 
 impl BluetoothControllerReset {
     /// Mint a proof for a host model of controller memory.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
         Self { _private: () }

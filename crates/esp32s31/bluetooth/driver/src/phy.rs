@@ -5,9 +5,9 @@
 //! are initialized and before the BLE base stack is enabled. The shared radio's
 //! owner must register or wake the shared domain first; this module only enters
 //! and leaves it. The BTBB gain byte is projected by the PHY client from the
-//! registration that describes the lease.
+//! registration that describes the domain.
 
-use oer_esp32s31_hal::shared_radio::SharedRadioLease;
+use oer_esp32s31_hal::domain::RadioDomain;
 use oer_esp32s31_phy::{
     bluetooth_client::{
         BluetoothPhyClientError, BluetoothPhyLeaveFailure, BluetoothPhyMembership, join_bluetooth,
@@ -119,7 +119,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     /// # Errors
     ///
     /// The proof names another registration, the domain is not settled for
-    /// the lease, Bluetooth already holds BTBB, or the client set rejected
+    /// the domain, Bluetooth already holds BTBB, or the client set rejected
     /// the client.
     #[allow(
         clippy::result_large_err,
@@ -127,7 +127,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     )]
     pub fn join_phy(
         self,
-        ready: PhyReady<'_, '_>,
+        ready: PhyReady<'_>,
         clock: &impl oer_base_time::Clock,
     ) -> Result<
         (
@@ -161,9 +161,9 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
 /// The domain rejected the release; nothing changed and the membership is
 /// returned.
 pub(crate) fn leave_phy(
-    lease: &mut SharedRadioLease<'_, ConcurrentPhy>,
+    radio: &mut RadioDomain<ConcurrentPhy>,
     task: &TaskResources,
     membership: BluetoothPhyMembership,
 ) -> Result<bool, BluetoothPhyLeaveFailure> {
-    leave_bluetooth(lease, task.hal(), membership)
+    leave_bluetooth(radio, task.hal(), membership)
 }

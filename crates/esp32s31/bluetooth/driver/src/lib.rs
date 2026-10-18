@@ -51,9 +51,6 @@ pub mod shutdown;
 /// Controller-time preparation shared by timed scheduler admissions.
 #[cfg(any(target_arch = "riscv32", test))]
 pub mod timed_preparation;
-#[cfg(feature = "validation-probes")]
-#[doc(hidden)]
-pub mod validation;
 
 #[cfg(target_arch = "riscv32")]
 pub use ble_phy::AlwaysAwakeTimingReady;

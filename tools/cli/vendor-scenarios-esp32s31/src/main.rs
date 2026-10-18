@@ -2,7 +2,7 @@
 //! commands.
 
 fn main() -> std::process::ExitCode {
-    oer_tool_cli_vendor_scenario::main(
+    oer_tool_service_vendor_scenario_command::main(
         env!("CARGO_PKG_NAME"),
         oer_tool_service_vendor_scenarios_esp32s31::install,
         |scenario, reviewer, verdict| {

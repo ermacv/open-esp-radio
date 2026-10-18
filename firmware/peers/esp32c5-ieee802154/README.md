@@ -1,7 +1,7 @@
 # ESP32-C5 IEEE 802.15.4 reference peer
 
 This ESP-IDF application turns an ESP32-C5 into the reference IEEE 802.15.4
-peer of the HIL cell. The vendor driver (`esp_i_*`) owns the radio;
+peer of the HIL cell. The vendor driver (`esp_ieee802154_*`) owns the radio;
 the application only drives it through a line protocol on the console, so
 exchanges with the device under test run against the vendor implementation.
 
@@ -10,15 +10,15 @@ exchanges with the device under test run against the vendor implementation.
 The peer is a [firmware catalog](../../host/stand.md#esp-idf-firmware-catalog) entry
 (`firmware.toml`). It builds against the ESP-IDF revision and ESP32-C5 archives
 pinned in
-[`verification/esp32c5/artifacts.toml`](../../../verification/esp32c5/artifacts.toml),
+[`knowledge/esp32c5/vendor/artifacts.toml`](../../../knowledge/esp32c5/vendor/artifacts.toml),
 installed below `target/` apart from any user installation:
 
 ```console
-cargo fw flash i-peer --device <MAC|PORT>
+cargo fw flash ieee802154-peer --device <MAC|PORT>
 ```
 
 This builds the image, flashes it under a lease of that board only and records
-it in the board journal as `i-peer`. The tracked
+it in the board journal as `ieee802154-peer`. The tracked
 `sdkconfig.defaults` selects the USB Serial/JTAG console the stand uses and a
 reproducible build.
 
@@ -88,7 +88,7 @@ Each command is answered by `@OK <command>` or `@ERR <command> <reason>`.
 | `RX` | Enter receive mode. |
 | `SLEEP` | Leave receive mode. |
 | `TX <cca> <mac>` | Transmit the MAC bytes (without FCS) given in hex, after a CCA when `cca` is `1`. The frame's own acknowledgement-request bit selects whether an ACK is awaited. |
-| `TXAT <delay_us> <mac>` | Transmit without CCA `delay_us` (at most 1000000) microseconds from now through `esp_i_transmit_at` on the `esp_timer` clock. |
+| `TXAT <delay_us> <mac>` | Transmit without CCA `delay_us` (at most 1000000) microseconds from now through `esp_ieee802154_transmit_at` on the `esp_timer` clock. |
 | `BURST <mac>` | Transmit the MAC bytes back to back without CCA until `BURST STOP`; the ends of these transmissions are counted, not reported. |
 | `BURST STOP` | Stop the burst, wait for its last transmission and print `@BURST sent=<n> failed=<n>` before the reply. |
 | `PENDING <mode>` | Set the automatic frame-pending mode: `0` disabled, `1` enabled, `2` enhanced, `3` Zigbee. |
@@ -96,8 +96,8 @@ Each command is answered by `@OK <command>` or `@ERR <command> <reason>`.
 | `PENDING CLEAR` | Clear the short-address pending table. |
 | `ED <symbols>` | Run one energy detection of the given number of 16 µs symbols. |
 | `SYNC` | Stop a burst, disable and enable the driver, clear both pending tables and pending reports, then print `@READY` again: the host takes over a running peer without resetting the chip. |
-| `OFF` | Disable the driver (`esp_i_disable`): the MAC, BTBB and the PHY client are released, and RF closes after the last client. |
-| `ON` | Enable the driver again (`esp_i_enable`); send `CFG` before the next operation. |
+| `OFF` | Disable the driver (`esp_ieee802154_disable`): the MAC, BTBB and the PHY client are released, and RF closes after the last client. |
+| `ON` | Enable the driver again (`esp_ieee802154_enable`); send `CFG` before the next operation. |
 | `PEEK <address>` | Read the 32-bit word at the word-aligned device address (eight hexadecimal digits) and print `@PEEK <address> <value>`, for register cross-checks. A register whose clock domain is off may reset the chip. |
 | `ANALOG <block> <register>` | Read one analog-I2C register (two hexadecimal digits each) through ESP-IDF's analog-I2C driver and print `@ANALOG <block> <register> <value>`. |
 
@@ -108,7 +108,7 @@ Events, printed when the driver reports them:
 | `@RX <mac> rssi=<dBm> lqi=<n> pending=<0/1> ch=<n>` | A frame was received; `<mac>` excludes PHR and FCS; `pending` reports whether the automatic ACK carried frame pending. |
 | `@TXDONE ack=-` | A frame without acknowledgement request was sent. |
 | `@TXDONE ack=<mac> pending=<0/1> rssi=<dBm> lqi=<n>` | A frame was acknowledged; `<mac>` is the ACK without FCS. |
-| `@TXFAIL <code>` | The driver reported `esp_i_tx_error_t` `<code>`. |
+| `@TXFAIL <code>` | The driver reported `esp_ieee802154_tx_error_t` `<code>`. |
 | `@ED <dBm>` | The energy detection result. |
 
 Driver callbacks run in interrupt context; the application copies each

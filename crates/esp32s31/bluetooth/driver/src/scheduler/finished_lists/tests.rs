@@ -20,7 +20,7 @@ impl SchedulerFinishedListBackend for Backend {
 fn backend(lists: &[u8]) -> Backend {
     Backend {
         observation: Some(
-            BluetoothSchedulerFinishedListObservation::from_lists_for_validation(lists)
+            BluetoothSchedulerFinishedListObservation::from_lists_for_host_test(lists)
                 .expect("semantic list set is valid"),
         ),
     }

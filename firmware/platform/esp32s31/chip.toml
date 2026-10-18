@@ -166,6 +166,17 @@ abi-version-offset = 4
 header-size-offset = 28
 crc-offset = 40
 
+# The Rust probe images of the vendor comparison (firmware/verification/esp32s31),
+# in build order: the artifact role each serves. The Bluetooth probe returns
+# with its hooks (knowledge/esp32s31/open-questions.md).
+[[probe]]
+role = "rust-artifact"
+package = "oer-firmware-verification-esp32s31-probe-radio-elf"
+
+[[probe]]
+role = "rust-artifact:wifi-registers"
+package = "oer-firmware-verification-esp32s31-probe-register-elf"
+
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
 # the platform publication's (registers/esp32s31/publication/platform.toml), with

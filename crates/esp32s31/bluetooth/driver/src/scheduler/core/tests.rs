@@ -12,8 +12,8 @@ use oer_esp32s31_hal::{
 
 #[test]
 fn controller_hal_precedes_complete_scheduler_init() {
-    let (_shared, partitions) = RadioHardware::for_validation().into_concurrent(());
-    let clocked = ClockedOwner::for_validation(partitions.bluetooth);
+    let (_shared, partitions) = RadioHardware::for_host_test().split(());
+    let clocked = ClockedOwner::for_host_test(partitions.bluetooth);
     let operations = Rc::new(RefCell::new(Vec::new()));
     let hal_operations = Rc::clone(&operations);
     let initialized = ControllerHalInitialized::initialize_for_validation(clocked, |_, _| {
@@ -25,7 +25,7 @@ fn controller_hal_precedes_complete_scheduler_init() {
     let mut scheduler =
         initialized.initialize_scheduler_with(ControllerRuntimeResources::<4>::new(&cells), |_| {
             scheduler_operations.borrow_mut().push("scheduler-hardware");
-            BluetoothSchedulerHardwareListsCleared::for_validation()
+            BluetoothSchedulerHardwareListsCleared::for_host_test()
         });
     assert_eq!(
         operations.borrow().as_slice(),

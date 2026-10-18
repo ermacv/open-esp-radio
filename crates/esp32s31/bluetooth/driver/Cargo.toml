@@ -7,12 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
 
-[features]
-validation-probes = [
-    "oer-esp32s31-hal/validation-probes",
-    "oer-esp32s31-phy/validation-probes",
-]
-
 [dependencies]
 oer-bluetooth-hci = { path = "../../../bluetooth/hci" }
 oer-bluetooth-le-radio = { path = "../../../bluetooth/le/radio" }
@@ -22,7 +16,7 @@ oer-esp32s31-phy = { path = "../../phy" }
 oer-base-time = { path = "../../../base/time" }
 
 [dev-dependencies]
-oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 # Host tests need the std implementation; chip doctests build without it.
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]

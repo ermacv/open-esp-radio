@@ -254,7 +254,7 @@ impl ModemPlatformClocks {
 
     /// Keep every reference still held on until a chip reset, and forget
     /// it.
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub(crate) fn abandon(self) {
         for guard in [self.pll_f160m, self.analog_i2c, self.coexistence]
             .into_iter()

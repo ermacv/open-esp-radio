@@ -7,9 +7,9 @@ use crate::{
 };
 
 fn scheduler(cells: &ControllerEventCells) -> SchedulerInitialized<'_, 4> {
-    let (_shared, partitions) = RadioHardware::for_validation().into_concurrent(());
+    let (_shared, partitions) = RadioHardware::for_host_test().split(());
     ControllerHalInitialized::initialize_for_validation(
-        ClockedOwner::for_validation(partitions.bluetooth),
+        ClockedOwner::for_host_test(partitions.bluetooth),
         |_, _| {},
     )
     .initialize_scheduler_for_validation(ControllerRuntimeResources::new(cells))

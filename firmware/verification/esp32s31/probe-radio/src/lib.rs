@@ -7,7 +7,6 @@
 //! verifier can compare the resulting instruction-level MMIO transaction
 //! sequence.
 
-use oer_esp32s31_hal::owner::RadioRuntimeOwner;
 // Leaf-level PHY comparison probes receive only a borrowed protocol-neutral
 // PHY partition. They cannot acquire, release, or recover the complete Wi-Fi
 // owner. Release-relevant production probes below acquire opaque HAL owners.
@@ -18,6 +17,7 @@ use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
 
 mod ampdu_resort;
 mod calibration_leaves;
+mod coex;
 use oer_tool_analysis_phy_relation_esp32s31::projection as calibration_projection;
 mod i2c;
 mod production_trace;
@@ -195,7 +195,9 @@ oer_tool_service_probe_macros::probe! {
     pub fn open_wifi_sta_trace_hal_disable_sta_beacon_filter() {
         // SAFETY: these validation-only PAC capabilities are used only by this
         // isolated probe image. The called helper is the production transaction.
-        oer_esp32s31_hal::validation::hal_disable_sta_beacon_filter();
+        let mut owner = oer_esp32s31_hal::validation::runtime_owner();
+        let _ = oer_esp32s31_hal::validation::mac_interrupt_setup()
+            .prepare_connected_sta_without_power_save(&mut owner);
     }
 }
 
@@ -257,22 +259,22 @@ oer_tool_service_probe_macros::probe! {
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_enable(index: u32) =>
-        oer_esp32s31_radio_coex::validation::enable_timer(index);
+        coex::enable_timer(index);
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_disable(index: u32) =>
-        oer_esp32s31_radio_coex::validation::disable_timer(index);
+        coex::disable_timer(index);
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_force(index: u32) =>
-        oer_esp32s31_radio_coex::validation::force_timer(index);
+        coex::force_timer(index);
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_unforce(index: u32) =>
-        oer_esp32s31_radio_coex::validation::unforce_timer(index);
+        coex::unforce_timer(index);
 }
 
 // External coexistence leaves of `libcoexist.a[hal_external_coexist.o]`.
@@ -343,7 +345,7 @@ oer_tool_service_probe_macros::probe! {
 }
 
 oer_tool_service_probe_macros::probe! {
-    /// `i_txon_delay_set` of libbtbb: the IEEE 802.15.4 MAC
+    /// `ieee802154_txon_delay_set` of libbtbb: the IEEE 802.15.4 MAC
     /// timing delays of the MAC foundation. Always zero.
     pub fn open_ieee802154_btbb_trace_txon_delay() -> u32 {
         oer_esp32s31_hal::ieee802154::coex_trace::set_txon_delay()
@@ -352,7 +354,7 @@ oer_tool_service_probe_macros::probe! {
 
 /// The priority the shared coexistence table assigns an IEEE 802.15.4
 /// level (1 high, 2 middle, 3 low, 4 idle), as libcoexist's local
-/// `coex_i_pti_get` reads it.
+/// `coex_ieee802154_pti_get` reads it.
 fn ieee802154_level_pti(level: u32) -> Option<u32> {
     use oer_esp32s31_hal::coex::{CoexPtiTable, Ieee802154CoexLevel};
     let level = match level {
@@ -368,7 +370,7 @@ fn ieee802154_level_pti(level: u32) -> Option<u32> {
 }
 
 oer_tool_service_probe_macros::probe! {
-    /// `esp_coex_i_txrx_pti_set` of libcoexist: the level's
+    /// `esp_coex_ieee802154_txrx_pti_set` of libcoexist: the level's
     /// priority from the shared table, written as the TX/RX PTI. Levels
     /// outside the four the vendor admits return `u32::MAX` without a write.
     pub fn open_ieee802154_coex_trace_txrx_level(level: u32) -> u32 {
@@ -378,7 +380,7 @@ oer_tool_service_probe_macros::probe! {
 }
 
 oer_tool_service_probe_macros::probe! {
-    /// `esp_coex_i_ack_pti_set` of libcoexist: the level's priority
+    /// `esp_coex_ieee802154_ack_pti_set` of libcoexist: the level's priority
     /// from the shared table, written as the ACK PTI.
     pub fn open_ieee802154_coex_trace_ack_level(level: u32) -> u32 {
         ieee802154_level_pti(level)
@@ -464,7 +466,7 @@ oer_tool_service_probe_macros::probe! {
     /// `coex_hw_timer_freq_set(selector, divisor)` transaction, returning its
     /// acceptance as the vendor's one or zero.
     pub fn open_coex_trace_timer_freq_set(selector: u32, divisor: u32) -> u32 {
-        u32::from(oer_esp32s31_radio_coex::validation::set_timer_clock(selector, divisor))
+        u32::from(coex::set_timer_clock(selector, divisor))
     }
 }
 
@@ -494,7 +496,7 @@ oer_tool_service_probe_macros::probe! {
         } else {
             CoexClient::Wifi
         };
-        let _ = oer_esp32s31_radio_coex::validation::program_timer(
+        let _ = coex::program_timer(
             is_real_chip != 0,
             index,
             client,
@@ -505,12 +507,15 @@ oer_tool_service_probe_macros::probe! {
     }
 }
 
-/// A lease on a fresh validation arbiter, kept for the whole entry: the
-/// vendor leaves hold no arbiter, so its release fence is not compared.
-fn grant_protect_lease(
-    radio: &mut oer_esp32s31_hal::shared_radio::SharedRadio<()>,
-) -> core::mem::ManuallyDrop<oer_esp32s31_hal::shared_radio::SharedRadioLease<'_, ()>> {
-    core::mem::ManuallyDrop::new(radio.lease_for_validation())
+/// The radio domain of a fresh probe root, kept for the whole entry and
+/// never dropped: the vendor leaves keep no domain, so its teardown is not
+/// compared.
+fn grant_protect_domain() -> core::mem::ManuallyDrop<oer_esp32s31_hal::domain::RadioDomain<()>> {
+    core::mem::ManuallyDrop::new(
+        oer_esp32s31_hal::root::RadioHardware::for_probe()
+            .split(())
+            .0,
+    )
 }
 
 /// The vendor status of a grant-protect edge: zero, as `coex_core_request`
@@ -527,11 +532,8 @@ oer_tool_service_probe_macros::probe! {
     /// `coex_core_request(2, 48, 0, 0)` on timer 5, client field 0. Zero
     /// timing arguments take no clock sample.
     pub fn open_coex_trace_phy_acquire_grant_protect() -> u32 {
-        let mut radio = oer_esp32s31_hal::root::RadioHardware::for_validation()
-            .into_concurrent(())
-            .0;
-        let mut lease = grant_protect_lease(&mut radio);
-        grant_protect_status(lease.acquire_phy_grant_protect())
+        let mut radio = grant_protect_domain();
+        grant_protect_status(radio.acquire_phy_grant_protect())
     }
 }
 
@@ -539,12 +541,9 @@ oer_tool_service_probe_macros::probe! {
     /// `phy_release_grant_protect`: the arbiter's `coex_core_release(2, 48)`,
     /// which disables timer 5, from a programmed request.
     pub fn open_coex_trace_phy_release_grant_protect() -> u32 {
-        let mut radio = oer_esp32s31_hal::root::RadioHardware::for_validation()
-            .into_concurrent(())
-            .0;
-        radio.hold_phy_grant_protect_for_validation();
-        let mut lease = grant_protect_lease(&mut radio);
-        grant_protect_status(lease.release_phy_grant_protect())
+        let mut radio = grant_protect_domain();
+        radio.hold_phy_grant_protect_for_host_test();
+        grant_protect_status(radio.release_phy_grant_protect())
     }
 }
 
@@ -569,7 +568,7 @@ oer_tool_service_probe_macros::probe! {
             duration,
         };
         let result =
-            oer_esp32s31_radio_coex::validation::core_request(is_real_chip != 0, client != 0, request);
+            coex::core_request(is_real_chip != 0, client != 0, request);
         match result {
             Ok(_) => 0,
             Err(CoexError::InvalidEvent) => 0x102,
@@ -587,7 +586,7 @@ oer_tool_service_probe_macros::probe! {
         let Some(event) = CoexEventId::new(event as u8) else {
             return 0x102;
         };
-        match oer_esp32s31_radio_coex::validation::core_release(event) {
+        match coex::core_release(event) {
             Ok(_) => 0,
             Err(CoexError::InvalidEvent) => 0x102,
             Err(_) => u32::MAX,
@@ -1137,10 +1136,7 @@ oer_tool_service_probe_macros::probe! {
         address_high: u32,
         mode: u32,
     ) -> u32 {
-        use oer_esp32s31_hal::{
-            ieee80211::mac::validation_configure_role_receive_policy,
-            types::{MacRoleReceivePolicy, MacStaPolicyMode},
-        };
+        use oer_esp32s31_hal::types::{MacRoleReceivePolicy, MacStaPolicyMode};
 
         let low = address_low.to_le_bytes();
         let high = address_high.to_le_bytes();
@@ -1159,7 +1155,9 @@ oer_tool_service_probe_macros::probe! {
             9 => MacRoleReceivePolicy::AccessPointDisabled,
             _ => return 0,
         };
-        validation_configure_role_receive_policy(policy);
+        oer_esp32s31_hal::validation::runtime_owner()
+            .wifi_mac_hal()
+            .configure_role_receive_policy(policy);
         1
     }
 }
@@ -1170,7 +1168,7 @@ oer_tool_service_probe_macros::probe! {
     /// cold transaction published the interface addresses.
     pub fn open_wifi_sta_ap_trace_disable_all_role_receive(_policy: u32) -> u32 {
         oer_esp32s31_ieee80211_mac::sta_ap_registers::disable_all_role_receive_registers(
-            &mut RadioRuntimeOwner::claim_for_validation().wifi_mac_hal(),
+            &mut oer_esp32s31_hal::validation::runtime_owner().wifi_mac_hal(),
         );
         1
     }
@@ -1609,10 +1607,10 @@ struct OrdinaryTxProbeCell<T>(core::cell::UnsafeCell<T>);
 // its exported stateful entry serially.
 unsafe impl<T> Sync for OrdinaryTxProbeCell<T> {}
 
-oer_base_memory::zeroed_static! {
-    static ORDINARY_TX_DMA: OrdinaryTxProbeCell<
-        oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage<ORDINARY_TX_PROBE_BUFFER_SIZE>,
-    > = zeroed in ".dma.bss.ordinary_tx";
+oer_esp32s31_hal::dma_static! {
+    static ORDINARY_TX_DMA:
+        oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage<ORDINARY_TX_PROBE_BUFFER_SIZE> =
+        zeroed in ".dma.bss.ordinary_tx";
 }
 static ORDINARY_TX_SLOT: OrdinaryTxProbeCell<
     core::mem::MaybeUninit<oer_esp32s31_ieee80211_mac::tx::TxSlot<ORDINARY_TX_PROBE_BUFFER_SIZE>>,
@@ -1637,11 +1635,9 @@ fn initialize_ordinary_tx_probe() -> Result<OrdinaryTxProbeState, u32> {
 
     use oer_ieee80211_softmac::MacTxPlan;
 
-    // SAFETY: initialization runs once in the single-threaded probe image;
-    // the resulting DMA owner permanently consumes this static allocation.
-    let dma = oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage::pin_static(unsafe {
-        &mut *ORDINARY_TX_DMA.0.get()
-    })
+    let dma = oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage::pin::<
+        oer_esp32s31_hal::ieee80211::dma::space::ChipDma,
+    >(ORDINARY_TX_DMA.take().ok_or(10_u32)?)
     .map_err(|_| 10_u32)?;
     // SAFETY: this storage is initialized once and then borrowed exclusively
     // by the retained `OrdinaryTxOwner` for the rest of the image lifetime.
@@ -1768,24 +1764,46 @@ oer_tool_service_probe_macros::probe! {
             1 => oer_esp32s31_hal::types::MacSppMode::Authenticated,
             _ => return,
         };
-        let mut owner = RadioRuntimeOwner::claim_for_validation();
+        let mut owner = oer_esp32s31_hal::validation::runtime_owner();
         owner.wifi_mac_hal().configure_ccmp_association(interface, spp);
     }
 }
 
-oer_tool_service_probe_macros::probe! {
-    pub fn open_libpp_interface_trace_hal_mac_set_addr(interface: u32, address: &[u8; 6]) =>
-        oer_esp32s31_hal::validation::hal_mac_set_addr(interface, address);
+/// The MAC interface of the vendor's interface index, or `None` past the four.
+fn mac_interface(interface: u32) -> Option<oer_esp32s31_hal::types::MacInterface> {
+    use oer_esp32s31_hal::types::MacInterface;
+    match interface {
+        0 => Some(MacInterface::Station),
+        1 => Some(MacInterface::AccessPoint),
+        2 => Some(MacInterface::Context2),
+        3 => Some(MacInterface::Context3),
+        _ => None,
+    }
 }
 
 oer_tool_service_probe_macros::probe! {
-    pub fn open_libpp_interface_trace_hal_mac_set_bssid(interface: u32, address: &[u8; 6]) =>
-        oer_esp32s31_hal::validation::hal_mac_set_bssid(interface, address);
+    pub fn open_libpp_interface_trace_hal_mac_set_addr(interface: u32, address: &[u8; 6]) {
+        if let Some(interface) = mac_interface(interface) {
+            oer_esp32s31_hal::validation::runtime_owner()
+                .wifi_mac_hal()
+                .program_interface_address(interface, *address);
+        }
+    }
+}
+
+oer_tool_service_probe_macros::probe! {
+    pub fn open_libpp_interface_trace_hal_mac_set_bssid(interface: u32, address: &[u8; 6]) {
+        if let Some(interface) = mac_interface(interface) {
+            oer_esp32s31_hal::validation::runtime_owner()
+                .wifi_mac_hal()
+                .program_interface_bssid(interface, *address);
+        }
+    }
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_libpp_ap_tsf_trace_hal_disable_softap_tsf() {
-        let mut owner = RadioRuntimeOwner::claim_for_validation();
+        let mut owner = oer_esp32s31_hal::validation::runtime_owner();
         let mut hardware = owner.wifi_mac_hal();
         AccessPointTsf::new(0).stop(&mut hardware);
     }
@@ -1794,7 +1812,7 @@ oer_tool_service_probe_macros::probe! {
 oer_tool_service_probe_macros::probe! {
     pub fn open_libpp_ap_tsf_start_trace_hal_mac_tsf_reset(selector: u32) {
         if selector == 0 {
-            let mut owner = RadioRuntimeOwner::claim_for_validation();
+            let mut owner = oer_esp32s31_hal::validation::runtime_owner();
             let mut hardware = owner.wifi_mac_hal();
             AccessPointTsf::new(0).restart(&mut hardware);
         }
@@ -2374,21 +2392,21 @@ oer_tool_service_probe_macros::probe! {
 oer_tool_service_probe_macros::probe! {
     pub fn open_phy_trace_enable_cca(registers: &mut RadioPhyRegisters) {
         let _ = registers;
-        oer_esp32s31_hal::ieee80211::mac::validation_set_cca_enabled(true);
+        oer_esp32s31_hal::validation::set_cca_enabled(true);
     }
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_phy_trace_disable_cca(registers: &mut RadioPhyRegisters) {
         let _ = registers;
-        oer_esp32s31_hal::ieee80211::mac::validation_set_cca_enabled(false);
+        oer_esp32s31_hal::validation::set_cca_enabled(false);
     }
 }
 
 oer_tool_service_probe_macros::probe! {
     pub fn open_phy_trace_sifs_reg_init(registers: &mut RadioPhyRegisters) {
         let _ = registers;
-        oer_esp32s31_hal::ieee80211::mac::validation_initialize_sifs();
+        oer_esp32s31_hal::validation::initialize_sifs();
     }
 }
 

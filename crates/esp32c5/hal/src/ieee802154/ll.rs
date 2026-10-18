@@ -1,7 +1,7 @@
 //! The ESP32-C5 implementation of the chip-neutral MAC low-level interface.
 //!
-//! [`IMacOwners`] implements
-//! [`oer_espressif_i_engine::ll::ILowLevel`] over the ESP32-C5 PAC:
+//! [`Ieee802154MacOwners`] implements
+//! [`oer_espressif_ieee802154_engine::ll::Ieee802154LowLevel`] over the ESP32-C5 PAC:
 //! each method is one accessor of the pinned public LL, and the functions
 //! below convert between the engine's semantic values and the PAC's
 //! register-level types. The accessor order is the engine's; nothing here
@@ -277,7 +277,7 @@ fn mac_pti(pti: CoexPti) -> PacPti {
 ///
 /// The public driver runs its operation starts, stops and interrupt handler
 /// under one critical section over the complete MAC register block, so this
-/// pair is the only implementation of [`ILowLevel`] over hardware.
+/// pair is the only implementation of [`Ieee802154LowLevel`] over hardware.
 #[must_use = "the MAC owners must be separated and returned to their route"]
 pub struct Ieee802154MacOwners {
     task: Ieee802154TaskOwner,

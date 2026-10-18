@@ -168,10 +168,10 @@ fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
 }
 
 fn host_stands(ctx: &Checkout) -> Result<()> {
-    let model = oer_repo::Model::load(&oer_repo::Repo::from_git(&ctx.root)?)?;
+    let workspace = oer_tool_service_vendor_evidence::workspace::Workspace::load(&ctx.root, None)?;
     for chip in verified_chips(ctx)? {
         for manifest in
-            oer_tool_service_vendor_evidence::producer::host_stand::stands(&model, &chip)?
+            oer_tool_service_vendor_evidence::producer::host_stand::stands(&workspace, &chip)
                 .into_values()
         {
             let manifest = ctx.root.join(manifest);

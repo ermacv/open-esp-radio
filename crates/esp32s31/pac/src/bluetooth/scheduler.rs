@@ -243,6 +243,15 @@ pub struct BluetoothSchedulerHardwareListsCleared {
     _private: (),
 }
 
+impl BluetoothSchedulerHardwareListsCleared {
+    /// Construct host-only initialization evidence without MMIO.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
 /// Affine evidence that the synchronous scheduler-run subscriber completed.
 ///
 /// The exact current subscriber acknowledges stale BTMAC source 14, enables

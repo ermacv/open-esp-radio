@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "esp_coex_i154.h"
-#include "esp_i.h"
+#include "esp_ieee802154.h"
 #include "esp_intr_alloc.h"
 #include "esp_phy_init.h"
 #include "esp_private/esp_modem_clock.h"

@@ -8,7 +8,7 @@ The harness holds the chip-neutral parts of vendor verification:
 | `oer-tool-service-probe-macros` | `macros/` | Procedural-macro frontend of the declarations |
 | `oer-tool-service-vendor-scenario-engine` | `scenarios/` | Scenario engine: authenticated artifacts, Blobray sessions, the comparison harness, coverage, point mutants and evidence shards |
 | `oer-tool-service-vendor-scenario-report` | `report/` | Reviewer reports: untriaged locations, function view, closure gateways, unclaimed compared pairs and the `xref`, `show`, `fields` and `prints` inspection of pinned vendor code |
-| `oer-tool-cli-vendor-scenario` | `cli/` | The one scenario command line, `vendor-scenarios <chip> <command>`, which each chip's entry package `oer-<chip>-vendor-scenarios-cli` (`verification/<chip>/scenarios/cli`) runs: the chip installs its verdict library (never a dependent of this report package), the command is one of its scenarios or a reviewer command; `cargo verification scenario <chip>` builds and runs it |
+| `oer-tool-service-vendor-scenario-command` | `tools/lib/service/vendor-scenario-command/` | The one scenario command line, `vendor-scenarios <chip> <command>`, which each chip's entry package `oer-tool-cli-vendor-scenarios-<chip>` (`tools/cli/vendor-scenarios-<chip>`) runs: the chip installs its verdict library (never a dependent of this report package), the command is one of its scenarios or a reviewer command; `cargo verification scenario <chip>` builds and runs it |
 
 Observation decisions name the file and trimmed source text ending at the
 reviewed line. Include preceding lines when an identical statement occurs in

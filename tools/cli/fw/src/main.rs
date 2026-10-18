@@ -21,6 +21,15 @@ enum Command {
     /// Image w1 is built unconfigured here; `run w1` builds it for the
     /// stand.
     Build { image: String },
+    /// Build a probe image of firmware/verification (a package named
+    /// `oer-firmware-verification-<chip>-…`) with `cfg(oer_probe)` into
+    /// target/fw-probe/ and print its path.
+    Probe {
+        package: String,
+        /// Parallel cargo jobs.
+        #[arg(long)]
+        jobs: Option<usize>,
+    },
     /// Write a built image into a board's flash and reset it.
     Flash {
         image: String,
@@ -85,6 +94,9 @@ fn main() -> ExitCode {
         let root = fw::root()?;
         match cli.command {
             Command::Build { image } => fw::build(&root, &image)?,
+            Command::Probe { package, jobs } => {
+                println!("{}", fw::probe::build(&root, &package, jobs)?.display());
+            }
             Command::Flash { image, board } => fw::flash_image(&root, &image, &board)?,
             Command::Run {
                 image,

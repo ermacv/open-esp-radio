@@ -53,7 +53,7 @@ pub struct BluetoothSchedulerLockModifyTaskObservation {
 
 impl BluetoothSchedulerLockModifyTaskObservation {
     /// Construct semantic task fields for host-side controller validation.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn from_fields_for_host_test(start: bool, result: u8) -> Self {
         assert!(
@@ -116,7 +116,7 @@ impl BluetoothSchedulerLockModifyObservation {
 
     /// Construct semantic fields for host validation without reproducing PAC
     /// register geometry in a controller test.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn from_fields_for_host_test(busy: bool, start: bool, result: u8) -> Self {
         assert!(

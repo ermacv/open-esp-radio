@@ -15,7 +15,7 @@ impl NrtInterruptBackend for Backend {
 #[test]
 fn default_profile_retains_one_epoch_without_synthetic_work() {
     let mut backend = Backend {
-        acknowledged: Some(BluetoothNrtInterruptAcknowledged::for_validation()),
+        acknowledged: Some(BluetoothNrtInterruptAcknowledged::for_host_test()),
         captures: 0,
     };
 

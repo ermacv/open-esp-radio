@@ -21,7 +21,7 @@ use core::fmt;
 use oer_esp32s31_pac::{
     BluetoothDirectionFindingDisabledBaselinePrepared, BluetoothInterruptRegisters,
     BluetoothInterruptSetup as PacBluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
-    BluetoothTaskRegisters,
+    BluetoothPhyRegisterInitInputs, BluetoothTaskRegisters,
 };
 
 use crate::{
@@ -46,23 +46,29 @@ pub use controller_time::{
     BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError,
 };
 pub use diagnostic::{BluetoothDiagnosticReadBudget, BluetoothDiagnosticUnsettled};
+pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
+pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::{BluetoothSchedulerStop, BluetoothSchedulerStopStep};
 pub use shutdown::{BluetoothControllerReset, BluetoothShutdownError, BluetoothShutdownFailure};
 
 pub use oer_esp32s31_pac::{
-    BlePhyEtmRouteDisabled, BluetoothControllerLatchedTime, BluetoothControllerOutputReleaseError,
-    BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished,
-    BluetoothLowPowerClockObservation, BluetoothLowPowerRuntimeControlObservation,
-    BluetoothMemoryListPointerImage, BluetoothMemoryListSelector, BluetoothMemoryListSlot,
+    BlePhyEtmRouteDisabled, BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime,
+    BluetoothControllerOutputReleaseError, BluetoothControllerSramAddress,
+    BluetoothControllerSramAddressError, BluetoothControllerTimeScale,
+    BluetoothDeviceTableEntryCount, BluetoothDeviceTablePublished, BluetoothHalInitPeriod,
+    BluetoothHalInitScale, BluetoothLowPowerClockObservation,
+    BluetoothLowPowerRuntimeControlObservation, BluetoothMemoryListPointerImage,
+    BluetoothMemoryListSelector, BluetoothMemoryListSlot, BluetoothMicrosecondDeltaProjection,
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerCounterObservation,
     BluetoothModemLpTimerEpoch, BluetoothModemLpTimerHandlerRegisterObservation,
     BluetoothModemLpTimerInstant, BluetoothModemLpTimerInterruptObservation,
     BluetoothNrtInterruptAcknowledged, BluetoothPrimaryFaultSources,
-    BluetoothPrimaryInterruptEpoch, BluetoothScanStartPublished, BluetoothSchedulerBusyObservation,
-    BluetoothSchedulerCancellationDisposition, BluetoothSchedulerCancellationIndexed,
-    BluetoothSchedulerCancellationReleased, BluetoothSchedulerCancellationRequested,
-    BluetoothSchedulerCancellationSourceAcknowledged,
+    BluetoothPrimaryInterruptEpoch, BluetoothRawTickDeltaProjection, BluetoothScanStartPublished,
+    BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
+    BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationReleased,
+    BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
+    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockRequest,
+    BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
     BluetoothSchedulerFinishedHardwareListObserved, BluetoothSchedulerFinishedListObservation,
     BluetoothSchedulerFinishedListPop, BluetoothSchedulerHardwareListHead,
     BluetoothSchedulerHardwareListHeadEmptyObserved, BluetoothSchedulerHardwareListHeadError,
@@ -545,6 +551,53 @@ impl TaskOwner {
     /// Bluetooth does not hold BTBB.
     pub fn release_btbb<T>(&self, radio: &mut RadioDomain<T>) -> Result<(), BtbbError> {
         radio.btbb_release(&self.registers)
+    }
+
+    /// Execute the complete reviewed BLE base-stack task-enable hardware transaction.
+    ///
+    /// # Safety
+    ///
+    /// The caller must retain the completed common-PHY and BTBB membership,
+    /// the initialized source-owned controller software, an inactive IRQ
+    /// route, and both pointed storage objects for every hardware consumer.
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "the caller must retain external lifecycle and pointed-storage owners"
+    )]
+    pub unsafe fn enable_ble_base_stack_hardware<T>(
+        &mut self,
+        radio: &mut RadioDomain<T>,
+        inputs: BluetoothPhyRegisterInitInputs,
+    ) {
+        self.reunitable = false;
+        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
+        // which states the PAC transaction's prerequisites.
+        unsafe {
+            self.registers
+                .enable_ble_base_stack_hardware(radio.registers_mut(), inputs);
+        }
+    }
+
+    /// Execute the complete reviewed 49-operation controller HAL-init body
+    /// at the upper controller lifecycle's verified transition.
+    ///
+    /// # Safety
+    ///
+    /// The caller must retain the selected controller-SRAM prefix and the
+    /// inactive interrupt bank. It must not infer scheduler, PHY, BTBB,
+    /// Link-Layer or HCI readiness from return.
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "the caller must retain the external SRAM-prefix and interrupt owners"
+    )]
+    pub unsafe fn initialize_controller_hal_transaction(
+        &mut self,
+        config: BluetoothControllerHalInitConfig,
+    ) {
+        self.reunitable = false;
+        self.registers.initialize_controller_hal(config);
     }
 
     /// Apply the exact modem low-power timer register prefix before source 127
@@ -1562,6 +1615,110 @@ impl ControllerHal<'_> {
         unsafe {
             self.registers
                 .clear_scheduler_insertion_command_start(command)
+        }
+    }
+
+    /// Admit one execution lock of the merge-selected item. Nothing is
+    /// written until its first step.
+    ///
+    /// # Safety
+    ///
+    /// The request must identify the exact merge-selected initialized item.
+    /// The caller must retain that pinned item and exclusive list ownership
+    /// through the complete insertion transaction and clear command-zero
+    /// START through [`Self::clear_scheduler_execution_lock_start`].
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "the caller retains merge-selected item lifetime and list serialization"
+    )]
+    pub unsafe fn admit_scheduler_execution_lock(
+        &mut self,
+        request: BluetoothSchedulerExecutionLockRequest,
+    ) -> BluetoothSchedulerExecutionLock {
+        BluetoothSchedulerExecutionLock::new(request)
+    }
+
+    /// Advance one finite execution-lock step under interrupt serialization:
+    /// the engine-idle preamble, publication of command zero and one
+    /// observation of it. Pending retains the request; the caller owns its
+    /// deadline. Each BUSY sample takes at most `budget` attempts.
+    pub fn step_scheduler_execution_lock(
+        &mut self,
+        interrupts: &mut InterruptRegistersOwner,
+        lock: &mut BluetoothSchedulerExecutionLock,
+        budget: BluetoothDiagnosticReadBudget,
+    ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
+        scheduler_execution_lock::step_hardware(
+            self.registers,
+            &mut interrupts.registers,
+            lock,
+            budget,
+        )
+    }
+
+    /// Clear command-zero START of a finished execution lock.
+    pub fn clear_scheduler_execution_lock_start(
+        &mut self,
+        mut lock: BluetoothSchedulerExecutionLock,
+    ) {
+        scheduler_execution_lock::clear_start(self.registers, &mut lock);
+    }
+
+    /// Admit one execution modify of `index`, in list-deletion mode when
+    /// `list_deletion`. Nothing is written until its first step.
+    ///
+    /// # Safety
+    ///
+    /// The caller must own insertion reconciliation or the deletion of
+    /// `index` and exclusive list ownership until it clears command-one
+    /// START through [`Self::clear_scheduler_execution_modify_start`].
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "the caller retains insertion reconciliation or list deletion and list serialization"
+    )]
+    pub unsafe fn admit_scheduler_execution_modify(
+        &mut self,
+        index: BluetoothSchedulerHardwareListIndex,
+        list_deletion: bool,
+    ) -> BluetoothSchedulerExecutionModify {
+        BluetoothSchedulerExecutionModify::new(index, list_deletion)
+    }
+
+    /// Advance one finite execution-modify step under interrupt
+    /// serialization: the engine-idle preamble, publication, the progress
+    /// and completion waits, the settle wait and a repeated request after a
+    /// conflict. Pending retains the request; the caller owns its deadline.
+    /// Each diagnostic sample takes at most `budget` attempts.
+    pub fn step_scheduler_execution_modify(
+        &mut self,
+        interrupts: &mut InterruptRegistersOwner,
+        modify: &mut BluetoothSchedulerExecutionModify,
+        budget: BluetoothDiagnosticReadBudget,
+    ) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
+        scheduler_execution_modify::step_hardware(
+            self.registers,
+            &mut interrupts.registers,
+            modify,
+            budget,
+        )
+    }
+
+    /// Clear command-one START of a finished execution modify.
+    pub fn clear_scheduler_execution_modify_start(
+        &mut self,
+        mut modify: BluetoothSchedulerExecutionModify,
+    ) {
+        if modify.take_published().is_some() {
+            // SAFETY: the consumed request is the published command this
+            // clear ends, and the task runtime serializes the command word.
+            #[allow(unsafe_code, reason = "the consumed request proves the command")]
+            let _cleared = unsafe {
+                self.registers.clear_scheduler_insertion_command_start(
+                    BluetoothSchedulerInsertionCommand::One,
+                )
+            };
         }
     }
 

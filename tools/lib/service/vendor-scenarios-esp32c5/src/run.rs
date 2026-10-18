@@ -1,7 +1,7 @@
 //! Run one authenticated ESP32-C5 vendor-comparison scenario: the scenario
 //! set, its inputs and the dispatch that decides its verdicts and evidence
 //! shard. The binary adds the reviewer commands.
-use crate::{LIBRARY, PROBES_MANIFEST, PROBES_PACKAGE, ROM, decisions, phy_i2c};
+use crate::{LIBRARY, PROBES_DIRECTORY, PROBES_PACKAGE, ROM, decisions, phy_i2c};
 use clap::Subcommand;
 use oer_tool_service_vendor_scenario_engine::findings::RunReport;
 use oer_tool_service_vendor_scenario_engine::harness::{Budget, Result};
@@ -15,7 +15,7 @@ use std::process::ExitCode;
 const PROBES_TARGET: &str = "riscv32imac-unknown-none-elf";
 /// The probe images of the ESP32-C5 scenarios.
 const PROBES: ProbeImages = ProbeImages {
-    manifest: PROBES_MANIFEST,
+    directory: PROBES_DIRECTORY,
     packages: &[PROBES_PACKAGE],
     target: PROBES_TARGET,
 };

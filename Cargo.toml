@@ -1,5 +1,24 @@
 [workspace]
 members = [
+    "crates/esp32s31/bluetooth/driver",
+    "crates/esp32s31/bluetooth/memory",
+    "tools/lib/analysis/phy-relation-esp32s31",
+    "tools/lib/service/phy-vendor-calibration-esp32s31",
+    "tools/lib/service/hil-family-phy-esp32s31",
+    "firmware/verification/esp32s31/probe-register",
+    "firmware/verification/esp32s31/probe-register-elf",
+    "firmware/verification/esp32s31/probe-radio",
+    "firmware/verification/esp32s31/probe-radio-elf",
+    "tools/lib/service/vendor-scenario-command",
+    "tools/cli/vendor-scenarios-esp32c5",
+    "tools/cli/vendor-scenarios-esp32s31",
+    "tools/cli/verification",
+    "tools/lib/service/esp32s31-ieee802154-vendor-host",
+    "tools/lib/service/vendor-evidence",
+    "tools/lib/service/vendor-scenario-engine",
+    "tools/lib/service/vendor-scenario-report",
+    "tools/lib/service/vendor-scenarios-esp32c5",
+    "tools/lib/service/vendor-scenarios-esp32s31",
     "firmware/verification/esp32c5/probe-radio",
     "firmware/verification/esp32c5/probe-radio-elf",
     "firmware/verification/esp32c5/register-probe",
@@ -177,6 +196,21 @@ members = [
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [
+    "crates/esp32s31/bluetooth/driver",
+    "crates/esp32s31/bluetooth/memory",
+    "tools/lib/analysis/phy-relation-esp32s31",
+    "tools/lib/service/phy-vendor-calibration-esp32s31",
+    "tools/lib/service/hil-family-phy-esp32s31",
+    "tools/lib/service/vendor-scenario-command",
+    "tools/cli/vendor-scenarios-esp32c5",
+    "tools/cli/vendor-scenarios-esp32s31",
+    "tools/cli/verification",
+    "tools/lib/service/esp32s31-ieee802154-vendor-host",
+    "tools/lib/service/vendor-evidence",
+    "tools/lib/service/vendor-scenario-engine",
+    "tools/lib/service/vendor-scenario-report",
+    "tools/lib/service/vendor-scenarios-esp32c5",
+    "tools/lib/service/vendor-scenarios-esp32s31",
     "tools/lib/data/vendor-evidence-shard",
     "tools/lib/service/hil-family-phy",
     "tools/lib/service/phy-archive",
@@ -337,46 +371,6 @@ default-members = [
 resolver = "3"
 # Ported packages that do not build yet, each with why; they join the
 # workspace when what they need is there.
-exclude = [
-    # needs tools/lib/analysis/phy-relation-esp32s31, which does not build
-    "tools/lib/service/phy-vendor-calibration-esp32s31",
-    # needs tools/lib/service/phy-vendor-calibration-esp32s31
-    "tools/lib/service/hil-family-phy-esp32s31",
-    # not building: its tests and probe feature need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
-    "crates/esp32s31/bluetooth/driver",
-    # not building: its tests need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
-    "crates/esp32s31/bluetooth/memory",
-    # not building: needs feature `validation-probes` of `oer-esp32s31-phy`, which main does not have
-    "tools/lib/analysis/phy-relation-esp32s31",
-    # not building: needs `oer-firmware-verification-esp32s31-probe-register`, which does not build
-    "firmware/verification/esp32s31/probe-register-elf",
-    # not building: needs feature `validation-probes` of `oer-esp32s31-hal`, which main does not have
-    "firmware/verification/esp32s31/probe-register",
-    # not building: needs `oer-firmware-verification-esp32s31-probe-radio`, which does not build
-    "firmware/verification/esp32s31/probe-radio-elf",
-    # not building: needs feature `validation-probes` of `oer-esp32s31-hal`, which main does not have
-    "firmware/verification/esp32s31/probe-radio",
-    # needs tools/lib/service/vendor-scenario-report
-    "tools/cli/vendor-scenario",
-    # needs tools/lib/service/vendor-scenarios-esp32c5
-    "tools/cli/vendor-scenarios-esp32c5",
-    # needs tools/lib/service/vendor-scenarios-esp32s31
-    "tools/cli/vendor-scenarios-esp32s31",
-    # not building: reads the predecessor's repository model (`oer-repo`) for its host stands
-    "tools/cli/verification",
-    # needs tools/lib/service/vendor-evidence
-    "tools/lib/service/esp32s31-ieee802154-vendor-host",
-    # not building: classifies packages by `[package.metadata.open-radio]`, which the single workspace dropped (layers by folder); its policy needs a new source of the evidence classes
-    "tools/lib/service/vendor-evidence",
-    # not building: its shard closures read the predecessor's repository model (`oer-repo`)
-    "tools/lib/service/vendor-scenario-engine",
-    # needs tools/lib/service/vendor-scenario-engine
-    "tools/lib/service/vendor-scenario-report",
-    # needs tools/lib/service/vendor-scenario-engine
-    "tools/lib/service/vendor-scenarios-esp32c5",
-    # needs tools/lib/service/vendor-scenario-engine
-    "tools/lib/service/vendor-scenarios-esp32s31",
-]
 
 [workspace.package]
 version = "0.1.0"
@@ -414,6 +408,10 @@ critical-section = "1.2.0"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+# `oer_probe` compiles the probe hooks of the HAL, PHY, PACs and BLE driver:
+# `cargo fw` sets it for the images of `firmware/verification/` alone, in
+# their own target directory.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(oer_probe)"] }
 
 [workspace.lints.clippy]
 # A mutable call inside `debug_assert!` disappears from optimized firmware.

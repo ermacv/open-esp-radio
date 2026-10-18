@@ -39,11 +39,12 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
     // Cargo keeps a `.d` only beside a root unit's output, so the verdict
     // libraries are built as roots first; the binary links the same units.
     let verdict = super::phase::timed("build vendor scenarios", || -> Result<Vec<PathBuf>> {
-        let libraries = oer_tool_base_toolchain::workspace::VERIFICATION
-            .cargo(&ctx.root, "build")
+        let libraries = oer_tool_base_toolchain::cargo_in(&ctx.root)
             .args([
+                "build",
+                "--locked",
                 "--profile",
-                oer_tool_base_toolchain::workspace::VERIFICATION.profile,
+                oer_tool_base_toolchain::workspace::PROFILE,
                 "-p",
                 ENGINE_PACKAGE,
                 "-p",
@@ -57,22 +58,21 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
             return Err(format!("building {ENGINE_PACKAGE} and {library} failed").into());
         }
         let verdict = verdict_dep_info(&libraries.stdout, &[ENGINE_PACKAGE, library])?;
-        process::run(
-            oer_tool_base_toolchain::workspace::VERIFICATION
-                .cargo(&ctx.root, "build")
-                .args([
-                    "--profile",
-                    oer_tool_base_toolchain::workspace::VERIFICATION.profile,
-                    "-p",
-                    package,
-                    "--bin",
-                    binary,
-                ]),
-        )?;
+        process::run(oer_tool_base_toolchain::cargo_in(&ctx.root).args([
+            "build",
+            "--locked",
+            "--profile",
+            oer_tool_base_toolchain::workspace::PROFILE,
+            "-p",
+            package,
+            "--bin",
+            binary,
+        ]))?;
         Ok(verdict)
     })?;
-    let mut command =
-        ctx.command(oer_tool_base_toolchain::workspace::VERIFICATION.binary(&ctx.root, binary));
+    let mut command = ctx.command(oer_tool_base_toolchain::workspace::binary(
+        &ctx.root, binary,
+    ));
     command.arg(scenario).args(rest);
     for file in verdict {
         command.arg(VERDICT_DEP_INFO).arg(file);

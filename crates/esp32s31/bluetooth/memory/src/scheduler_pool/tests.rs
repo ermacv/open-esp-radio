@@ -171,7 +171,7 @@ fn a_controller_reset_frees_even_withheld_instances() {
     let listed_id = pool.submit(&listed, 1).unwrap();
 
     pool.reset_after_controller_reset(
-        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_validation(),
+        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_host_test(),
     );
 
     assert!(!pool.is_listed(id));

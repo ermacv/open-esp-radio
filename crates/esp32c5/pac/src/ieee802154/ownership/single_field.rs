@@ -1,14 +1,14 @@
 //! Single-field transactions matching the public ESP-IDF common LL one to one.
 //!
-//! Each method is exactly one `i_ll_*` accessor of the pinned
-//! `i_common_ll.h`: one field read, one read-modify-write of one
+//! Each method is exactly one `ieee802154_ll_*` accessor of the pinned
+//! `ieee802154_common_ll.h`: one field read, one read-modify-write of one
 //! field, or one register write. Composite configuration methods elsewhere in
 //! this module are built from the same port steps, so both paths keep the
 //! vendor write order.
 
 use super::{MultipanIdentityProgrammingPort, TaskRegisters, TransmitSecurityProgrammingPort};
 
-/// Complete `RX_STATUS` observation (`i_ll_get_rx_status`).
+/// Complete `RX_STATUS` observation (`ieee802154_ll_get_rx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawRxStatus {
     pub filter_fail_reason: u8,
@@ -18,7 +18,7 @@ pub struct RawRxStatus {
     pub sfd_match: bool,
 }
 
-/// Complete `TX_STATUS` observation (`i_ll_get_tx_status`).
+/// Complete `TX_STATUS` observation (`ieee802154_ll_get_tx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawTxStatus {
     pub state: u8,
@@ -26,7 +26,7 @@ pub struct RawTxStatus {
     pub security_error: u8,
 }
 
-/// One diagnostic counter field (`i_ll_get_*_cnt`).
+/// One diagnostic counter field (`ieee802154_ll_get_*_cnt`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RawDebugCounter {
     SfdTimeout,
@@ -46,7 +46,7 @@ pub enum RawDebugCounter {
     CcaBusy,
 }
 
-/// Named event-enable bits (`i_ll_enable_events`/`disable_events`
+/// Named event-enable bits (`ieee802154_ll_enable_events`/`disable_events`
 /// with one event).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RawEvent {
@@ -65,7 +65,7 @@ pub enum RawEvent {
 }
 
 impl TaskRegisters {
-    /// `i_ll_set_tx_auto_ack`.
+    /// `ieee802154_ll_set_tx_auto_ack`.
     #[doc(hidden)]
     pub fn set_auto_ack_tx(&mut self, enable: bool) {
         self.registers
@@ -73,13 +73,13 @@ impl TaskRegisters {
             .modify(|_, writer| writer.auto_ack_tx().bit(enable));
     }
 
-    /// `i_ll_get_tx_auto_ack`.
+    /// `ieee802154_ll_get_tx_auto_ack`.
     #[doc(hidden)]
     pub fn auto_ack_tx(&self) -> bool {
         self.registers.control().read().auto_ack_tx().bit_is_set()
     }
 
-    /// `i_ll_set_rx_auto_ack`.
+    /// `ieee802154_ll_set_rx_auto_ack`.
     #[doc(hidden)]
     pub fn set_auto_ack_rx(&mut self, enable: bool) {
         self.registers
@@ -87,13 +87,13 @@ impl TaskRegisters {
             .modify(|_, writer| writer.auto_ack_rx().bit(enable));
     }
 
-    /// `i_ll_get_rx_auto_ack`.
+    /// `ieee802154_ll_get_rx_auto_ack`.
     #[doc(hidden)]
     pub fn auto_ack_rx(&self) -> bool {
         self.registers.control().read().auto_ack_rx().bit_is_set()
     }
 
-    /// `i_ll_set_tx_enhance_ack`.
+    /// `ieee802154_ll_set_tx_enhance_ack`.
     #[doc(hidden)]
     pub fn set_enhanced_ack_tx(&mut self, enable: bool) {
         self.registers
@@ -101,7 +101,7 @@ impl TaskRegisters {
             .modify(|_, writer| writer.enhanced_ack_tx().bit(enable));
     }
 
-    /// `i_ll_get_tx_enhance_ack`.
+    /// `ieee802154_ll_get_tx_enhance_ack`.
     #[doc(hidden)]
     pub fn enhanced_ack_tx(&self) -> bool {
         self.registers
@@ -111,7 +111,7 @@ impl TaskRegisters {
             .bit_is_set()
     }
 
-    /// `i_ll_set_coordinator`.
+    /// `ieee802154_ll_set_coordinator`.
     #[doc(hidden)]
     pub fn set_coordinator(&mut self, enable: bool) {
         self.registers
@@ -119,7 +119,7 @@ impl TaskRegisters {
             .modify(|_, writer| writer.coordinator().bit(enable));
     }
 
-    /// `i_ll_set_promiscuous`.
+    /// `ieee802154_ll_set_promiscuous`.
     #[doc(hidden)]
     pub fn set_promiscuous(&mut self, enable: bool) {
         self.registers
@@ -127,7 +127,7 @@ impl TaskRegisters {
             .modify(|_, writer| writer.promiscuous().bit(enable));
     }
 
-    /// `i_ll_set_pending_mode`.
+    /// `ieee802154_ll_set_pending_mode`.
     #[doc(hidden)]
     pub fn set_pending_enhanced(&mut self, enable: bool) {
         self.registers
@@ -135,7 +135,7 @@ impl TaskRegisters {
             .modify(|_, writer| writer.pending_enhanced().bit(enable));
     }
 
-    /// `i_ll_get_pending_mode`.
+    /// `ieee802154_ll_get_pending_mode`.
     #[doc(hidden)]
     pub fn pending_enhanced(&self) -> bool {
         self.registers
@@ -145,19 +145,19 @@ impl TaskRegisters {
             .bit_is_set()
     }
 
-    /// `i_ll_get_freq`.
+    /// `ieee802154_ll_get_freq`.
     #[doc(hidden)]
     pub fn frequency_code(&self) -> u8 {
         self.registers.channel().read().frequency_code().bits()
     }
 
-    /// `i_ll_get_ack_timeout`.
+    /// `ieee802154_ll_get_ack_timeout`.
     #[doc(hidden)]
     pub fn ack_timeout(&self) -> u16 {
         self.registers.ack_timeout().read().timeout().bits()
     }
 
-    /// `i_ll_set_multipan_panid`: enable the context, then write.
+    /// `ieee802154_ll_set_multipan_panid`: enable the context, then write.
     #[doc(hidden)]
     pub fn set_multipan_pan_id(&mut self, index: usize, pan_id: u16) {
         assert!(index < 4, "multipan index exceeds four contexts");
@@ -165,14 +165,14 @@ impl TaskRegisters {
         self.registers.write_pan_id(index, pan_id);
     }
 
-    /// `i_ll_get_multipan_panid`.
+    /// `ieee802154_ll_get_multipan_panid`.
     #[doc(hidden)]
     pub fn multipan_pan_id(&self, index: usize) -> u16 {
         assert!(index < 4, "multipan index exceeds four contexts");
         self.registers.multipan_pan_id(index).read().pan_id().bits()
     }
 
-    /// `i_ll_set_multipan_short_addr`: enable the context, then write.
+    /// `ieee802154_ll_set_multipan_short_addr`: enable the context, then write.
     #[doc(hidden)]
     pub fn set_multipan_short_address(&mut self, index: usize, short_address: u16) {
         assert!(index < 4, "multipan index exceeds four contexts");
@@ -180,7 +180,7 @@ impl TaskRegisters {
         self.registers.write_short_address(index, short_address);
     }
 
-    /// `i_ll_get_multipan_short_addr`.
+    /// `ieee802154_ll_get_multipan_short_addr`.
     #[doc(hidden)]
     pub fn multipan_short_address(&self, index: usize) -> u16 {
         assert!(index < 4, "multipan index exceeds four contexts");
@@ -191,7 +191,7 @@ impl TaskRegisters {
             .bits()
     }
 
-    /// `i_ll_set_multipan_ext_addr`: enable the context, then write
+    /// `ieee802154_ll_set_multipan_ext_addr`: enable the context, then write
     /// the low and high little-endian words.
     #[doc(hidden)]
     pub fn set_multipan_extended_address(&mut self, index: usize, address: [u8; 8]) {
@@ -204,13 +204,13 @@ impl TaskRegisters {
             .write_extended_address_high(index, u32::from_le_bytes([a4, a5, a6, a7]));
     }
 
-    /// `i_ll_get_multipan_ext_addr`.
+    /// `ieee802154_ll_get_multipan_ext_addr`.
     #[doc(hidden)]
     pub fn multipan_extended_address(&self, index: usize) -> [u8; 8] {
         self.multipan_identity(index).extended_address
     }
 
-    /// `i_ll_set_ed_sample_mode`.
+    /// `ieee802154_ll_set_ed_sample_mode`.
     #[doc(hidden)]
     pub fn set_ed_sample_mode(&mut self, average: bool) {
         self.registers.ed_config().modify(|_, writer| {
@@ -222,7 +222,7 @@ impl TaskRegisters {
         });
     }
 
-    /// `i_ll_enable_events(IEEE802154_EVENT_MASK)`: set all thirteen
+    /// `ieee802154_ll_enable_events(IEEE802154_EVENT_MASK)`: set all thirteen
     /// enable bits, including the two unclassified ones the public mask
     /// covers.
     #[doc(hidden)]
@@ -244,7 +244,7 @@ impl TaskRegisters {
         });
     }
 
-    /// `i_ll_enable_events`/`disable_events` of one named event.
+    /// `ieee802154_ll_enable_events`/`disable_events` of one named event.
     #[doc(hidden)]
     pub fn set_event_enabled(&mut self, event: RawEvent, enable: bool) {
         self.registers
@@ -265,8 +265,8 @@ impl TaskRegisters {
             });
     }
 
-    /// `i_ll_enable_rx_abort_events` (`|=`) and
-    /// `i_ll_disable_rx_abort_events` (`&= ~`) of one reviewed mask.
+    /// `ieee802154_ll_enable_rx_abort_events` (`|=`) and
+    /// `ieee802154_ll_disable_rx_abort_events` (`&= ~`) of one reviewed mask.
     #[doc(hidden)]
     #[allow(
         unsafe_code,
@@ -290,8 +290,8 @@ impl TaskRegisters {
         });
     }
 
-    /// `i_ll_enable_tx_abort_events` (`|=`) and
-    /// `i_ll_disable_tx_abort_events` (`&= ~`) of one reviewed mask.
+    /// `ieee802154_ll_enable_tx_abort_events` (`|=`) and
+    /// `ieee802154_ll_disable_tx_abort_events` (`&= ~`) of one reviewed mask.
     #[doc(hidden)]
     #[allow(
         unsafe_code,
@@ -315,7 +315,7 @@ impl TaskRegisters {
         });
     }
 
-    /// `i_ll_get_rx_status`, decoded field by field.
+    /// `ieee802154_ll_get_rx_status`, decoded field by field.
     #[doc(hidden)]
     pub fn rx_status(&self) -> RawRxStatus {
         let status = self.registers.rx_status().read();
@@ -328,7 +328,7 @@ impl TaskRegisters {
         }
     }
 
-    /// `i_ll_get_tx_status`, decoded field by field.
+    /// `ieee802154_ll_get_tx_status`, decoded field by field.
     #[doc(hidden)]
     pub fn tx_status(&self) -> RawTxStatus {
         let status = self.registers.tx_status().read();
@@ -339,13 +339,13 @@ impl TaskRegisters {
         }
     }
 
-    /// `i_ll_set_transmit_security`.
+    /// `ieee802154_ll_set_transmit_security`.
     #[doc(hidden)]
     pub fn set_transmit_security(&mut self, enable: bool) {
         self.registers.set_enabled(enable);
     }
 
-    /// `i_ll_set_security_offset`.
+    /// `ieee802154_ll_set_security_offset`.
     #[doc(hidden)]
     pub fn set_security_payload_offset(&mut self, offset: u8) {
         assert!(
@@ -355,7 +355,7 @@ impl TaskRegisters {
         self.registers.write_payload_offset(offset);
     }
 
-    /// `i_ll_get_security_offset`.
+    /// `ieee802154_ll_get_security_offset`.
     #[doc(hidden)]
     pub fn security_payload_offset(&self) -> u8 {
         self.registers
@@ -365,7 +365,7 @@ impl TaskRegisters {
             .bits()
     }
 
-    /// `i_ll_set_security_addr`: low then high little-endian word.
+    /// `ieee802154_ll_set_security_addr`: low then high little-endian word.
     #[doc(hidden)]
     pub fn set_security_address(&mut self, address: &[u8; 8]) {
         let [a0, a1, a2, a3, a4, a5, a6, a7] = *address;
@@ -375,7 +375,7 @@ impl TaskRegisters {
             .write_address_high(u32::from_le_bytes([a4, a5, a6, a7]));
     }
 
-    /// `i_ll_set_security_key`: four little-endian words in order.
+    /// `ieee802154_ll_set_security_key`: four little-endian words in order.
     #[doc(hidden)]
     pub fn set_security_key(&mut self, key: &[u8; 16]) {
         for (index, word) in key.chunks_exact(4).enumerate() {
@@ -386,8 +386,8 @@ impl TaskRegisters {
         }
     }
 
-    /// `i_ll_get_*_cnt`. The reviewed register model publishes each
-    /// counter as a sixteen-bit field, following `i_reg.h`; the
+    /// `ieee802154_ll_get_*_cnt`. The reviewed register model publishes each
+    /// counter as a sixteen-bit field, following `ieee802154_reg.h`; the
     /// public struct reads the complete word for the single-counter
     /// registers.
     #[doc(hidden)]
@@ -432,7 +432,7 @@ impl TaskRegisters {
         }
     }
 
-    /// `i_ll_clear_debug_cnt` of one counter: a complete write of
+    /// `ieee802154_ll_clear_debug_cnt` of one counter: a complete write of
     /// the clear register with only that counter's bit set.
     #[doc(hidden)]
     #[allow(

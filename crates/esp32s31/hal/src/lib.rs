@@ -53,3 +53,7 @@ pub use oer_esp32s31_pac::layouts;
 pub mod dma_address;
 pub mod dma_static;
 pub mod phy;
+/// Bridges of isolated probe images (`cfg(oer_probe)`).
+#[cfg(oer_probe)]
+#[doc(hidden)]
+pub mod validation;

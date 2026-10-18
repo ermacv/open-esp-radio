@@ -13,7 +13,7 @@ pin-project = "1.1.13"
 vcell = "0.1.3"
 
 [dev-dependencies]
-oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 [lints]
 workspace = true

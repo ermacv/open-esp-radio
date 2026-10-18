@@ -1,4 +1,4 @@
-# Firmware catalog entry: `cargo hil firmware flash i-peer --board esp32c5`.
+# Firmware catalog entry: `cargo hil firmware flash ieee802154-peer --board esp32c5`.
 # The runner requires this image on the IEEE 802.15.4 peer board.
 image = "ieee802154-peer"
 chip = "esp32c5"

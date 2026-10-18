@@ -74,14 +74,14 @@ pub static PHY_LAYOUT: PhyLayout = PhyLayout {
 /// The ESP32-C5 facts the scenario engine runs with.
 pub static CHIP: Chip = Chip {
     name: "esp32c5",
-    manifest: "verification/esp32c5/artifacts.toml",
-    manifest_text: include_str!("../../artifacts.toml"),
-    hardware_scope: "crates/hardware/esp32c5",
-    shared_scopes: &["crates/hardware/ieee80211"],
+    manifest: "knowledge/esp32c5/vendor/artifacts.toml",
+    manifest_text: include_str!("../../../../../knowledge/esp32c5/vendor/artifacts.toml"),
+    hardware_scope: "crates/esp32c5",
+    shared_scopes: &["crates/ieee80211"],
     rom_input: ROM_INPUT,
     rom_symbols: &[],
     stack: STACK,
-    coverage: "verification/esp32c5/decisions/coverage.toml",
+    coverage: "knowledge/esp32c5/vendor/coverage.toml",
     observation: decisions::observation::DECISIONS,
     state: decisions::state::DECISIONS,
     phy: Some(&PHY_LAYOUT),
@@ -94,7 +94,8 @@ pub fn install() {
     oer_tool_service_vendor_scenario_engine::install(&CHIP);
 }
 
-/// Probe workspace and the probe ELF package whose path dependencies are
-/// the compiled production sources, relative to the repository root.
-pub const PROBES_MANIFEST: &str = "verification/esp32c5/probes/Cargo.toml";
+/// The directory of the chip's probe packages, relative to the repository
+/// root, and the probe ELF package whose path dependencies are the compiled
+/// production sources.
+pub const PROBES_DIRECTORY: &str = "firmware/verification/esp32c5";
 pub const PROBES_PACKAGE: &str = "oer-firmware-verification-esp32c5-probe-radio-elf";

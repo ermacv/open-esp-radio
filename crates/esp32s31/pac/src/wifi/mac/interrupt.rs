@@ -303,6 +303,11 @@ impl InterruptBankMaskBackend for MacPowerInterruptRegisters {
 }
 
 impl MacPowerInterruptRegisters {
+    #[cfg(oer_probe)]
+    pub(crate) fn from_peripheral_for_probe(peripheral: svd::WifiMacPowerInterrupt) -> Self {
+        Self { peripheral }
+    }
+
     /// Mask every WDEVPWR cause of the live epoch without acknowledging one.
     ///
     /// Publishes the fixed all-zero ENABLE image, then orders the write. A
@@ -350,6 +355,11 @@ impl InterruptBankMaskBackend for MacInterruptRegisters {
 }
 
 impl MacInterruptRegisters {
+    #[cfg(oer_probe)]
+    pub(crate) fn from_peripheral_for_probe(peripheral: svd::WifiMacInterrupt) -> Self {
+        Self { peripheral }
+    }
+
     /// Mask every MAC interrupt source of the live epoch without
     /// acknowledging one.
     ///

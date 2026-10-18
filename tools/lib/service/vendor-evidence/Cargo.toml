@@ -11,22 +11,21 @@ readme = "README.md"
 
 [dependencies]
 oer-tool-base-process = { path = "../../base/process" }
-oer-repo = { path = "../../tools/repo" }
 oer-tool-data-vendor-evidence-shard = { path = "../../data/vendor-evidence-shard" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = "=1.1.4"
 oer-tool-data-chip-profile = { path = "../../data/chip-profile", optional = true }
-oer-tool-data-image-policy = { path = "../../data/image-policy", optional = true }
 oer-tool-service-probe-codegen = { path = "../probe-codegen", optional = true }
 oer-tool-base-toolchain = { path = "../../base/toolchain", optional = true }
 oer-tool-data-vendor-artifacts = { path = "../../data/vendor-artifacts", optional = true }
 oer-tool-service-image = { path = "../image", optional = true }
+oer-tool-service-firmware = { path = "../firmware", optional = true }
 
 [features]
 # The producers' orchestration (`run`): probe builds, the Blobray scenario
 # runs and shard regeneration. Off for the Blobray workspace and the stands.
-producers = ["dep:oer-tool-data-chip-profile", "dep:oer-tool-service-image", "dep:oer-tool-data-image-policy", "dep:oer-tool-service-probe-codegen", "dep:oer-tool-base-toolchain", "dep:oer-tool-data-vendor-artifacts"]
+producers = ["dep:oer-tool-data-chip-profile", "dep:oer-tool-service-image", "dep:oer-tool-service-firmware", "dep:oer-tool-service-probe-codegen", "dep:oer-tool-base-toolchain", "dep:oer-tool-data-vendor-artifacts"]
 
 [dev-dependencies]
 tempfile = "=3.27.0"

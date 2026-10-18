@@ -1,5 +1,5 @@
 /* ESP-IDF Kconfig defaults for an ESP32-S31 IEEE 802.15.4 build at the pinned
- * revision (`components/i/Kconfig`). Debug, record, statistic,
+ * revision (`components/ieee802154/Kconfig`). Debug, record, statistic,
  * multi-PAN, sleep, power-management and coexistence options keep their
  * default `n`, so they are left undefined exactly as sdkconfig.h does. */
 #pragma once

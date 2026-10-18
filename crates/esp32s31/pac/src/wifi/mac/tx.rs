@@ -647,13 +647,13 @@ impl MacTxCompletionObservation {
         }
     }
 
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub const fn with_trigger_flow_model(mut self, trigger_flow: bool) -> Self {
         self.trigger_flow = trigger_flow;
         self
     }
 
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub const fn with_trigger_packet_counts_model(
         mut self,
         primary: u8,
@@ -670,6 +670,20 @@ impl MacTxCompletionObservation {
     pub const fn with_ack_snr_encoded_model(mut self, encoded: u8) -> Self {
         self.ack_snr_encoded = encoded;
         self
+    }
+
+    /// Construct a semantic completion in a compiled validation image.
+    #[cfg(oer_probe)]
+    pub const fn new_validation(status: u8, detail: u8) -> Self {
+        Self {
+            status,
+            detail,
+            trigger_flow: false,
+            trigger_based_packet_count: 0,
+            last_tx_was_trigger_based: false,
+            secondary_trigger_based_packet_count: 0,
+            ack_snr_encoded: 0,
+        }
     }
 }
 
@@ -726,6 +740,24 @@ impl MacHtAmpduCompletionObservation {
             block_ack_received,
         }
     }
+    /// Construct a sampled A-MPDU completion in a compiled validation image,
+    /// where a hardware double supplies the BlockAck result.
+    #[cfg(oer_probe)]
+    pub const fn new_validation(
+        tx: MacTxCompletionObservation,
+        block_ack_control: u8,
+        block_ack_starting_sequence: u16,
+        block_ack_bitmap: u64,
+        block_ack_received: bool,
+    ) -> Self {
+        Self {
+            tx,
+            block_ack_control,
+            block_ack_starting_sequence,
+            block_ack_bitmap,
+            block_ack_received,
+        }
+    }
 }
 
 /// Hardware edge which must precede reuse of one TX descriptor chain.
@@ -752,7 +784,8 @@ pub enum MacTxDetachOutcome<T> {
 /// The value borrows the register owner, so it cannot be retained while that
 /// same owner starts another queue transaction. Its fields and target
 /// constructor remain private to this crate; safe production code can obtain
-/// it only from [`WifiRadioRegisters::with_detached_mac_tx`].
+/// it only from [`WifiRadioRegisters::with_detached_mac_tx`]. Validation builds
+/// additionally expose an isolated model constructor for compiled probes.
 pub struct MacTxQueueDetached<'registers> {
     descriptor_address_low: u32,
     _registers: PhantomData<&'registers mut WifiRadioRegisters>,
@@ -774,6 +807,19 @@ impl MacTxQueueDetached<'_> {
     /// Construct a detach edge in a native model with no asynchronous DMA.
     #[cfg(any(test, feature = "test-support"))]
     pub const fn new_model(descriptor_head: u32) -> Self {
+        Self {
+            descriptor_address_low: descriptor_head & DESCRIPTOR_ADDRESS_LOW_MASK,
+            _registers: PhantomData,
+        }
+    }
+
+    /// Construct a detach edge in an isolated compiled-validation image.
+    ///
+    /// This is unavailable in production feature sets. It lets a hardware
+    /// double drive the exact upper DMA/LMAC state machine without
+    /// claiming that a real target queue was detached.
+    #[cfg(oer_probe)]
+    pub const fn new_validation(descriptor_head: u32) -> Self {
         Self {
             descriptor_address_low: descriptor_head & DESCRIPTOR_ADDRESS_LOW_MASK,
             _registers: PhantomData,

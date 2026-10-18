@@ -1,6 +1,6 @@
 # ESP32-C5 compiled verification probes
 
-This isolated workspace builds retained Rust entry points that the
+These packages build retained Rust entry points that the
 [vendor scenarios](../../harness/README.md) compare with the ESP32-C5 vendor
 artifacts. The probes depend on production crates; no production crate or
 firmware depends on them.
@@ -9,12 +9,13 @@ firmware depends on them.
 cargo verification probes --chip esp32c5
 ```
 
-builds `oer-firmware-verification-esp32c5-probe-radio-elf` for `riscv32imac-unknown-none-elf` into
-`target/verification/esp32c5-probes/` and validates its `.blobray.probes`
-catalog against the image's executable symbols.
+builds `oer-firmware-verification-esp32c5-probe-radio-elf` for
+`riscv32imac-unknown-none-elf` with `cargo fw probe`, the only build that sets
+`cfg(oer_probe)`, copies it into `target/verification/esp32c5/` and validates
+its `.blobray.probes` catalog against the image's executable symbols.
 
-`radio/library` declares the entries with `oer_tool_service_probe_macros::probe!`;
-`radio/elf` owns only the image entry point and linker layout. Each analog
+`probe-radio` declares the entries with `oer_tool_service_probe_macros::probe!`;
+`probe-radio-elf` owns only the image entry point and linker layout. Each analog
 I2C entry is named `open_phy_i2c_trace_<vendor function>` and takes that
 `libphy.a[phy_i2c.o]` function's integer arguments in its order:
 

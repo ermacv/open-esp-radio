@@ -22,45 +22,30 @@ pub trait Producer {
     fn produce(&self, scenarios: &[String], index: &Path) -> Result<()>;
 }
 
-/// The host stands: a stand is a package below `verification/<chip>/host/`
-/// that compiles pinned vendor source for the host and compares the
-/// production engine with it. Its one shard is named after its directory
-/// ([`host_stand::scenario`]); the stand writes it with
-/// [`host_stand::shard`] from its own `shard` command.
+/// The host stands: a stand is a service
+/// `tools/lib/service/<chip>-<engine>-vendor-host` that compiles pinned
+/// vendor source for the host and compares the production engine with it.
+/// Its one shard is named after its engine ([`host_stand::scenario`]); the
+/// stand writes it with [`host_stand::shard`] from its own `shard` command.
 pub mod host_stand {
     use super::*;
 
-    /// The directory of `chip`'s host stands, relative to the root.
-    pub fn directory(chip: &str) -> String {
-        format!("verification/{chip}/host")
-    }
-
-    /// The shard name of the stand in `directory`: its directory name
-    /// followed by `-host`.
-    pub fn scenario(directory: &Path) -> Result<String> {
-        let name = directory
+    /// The shard name of the stand in `directory`
+    /// (`<chip>-<engine>-vendor-host`): its engine followed by `-host`.
+    pub fn scenario(chip: &str, directory: &Path) -> Result<String> {
+        directory
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| format!("{} names no stand", directory.display()))?;
-        Ok(format!("{name}-host"))
+            .and_then(|name| name.strip_prefix(chip)?.strip_prefix('-'))
+            .and_then(|name| name.strip_suffix(crate::workspace::HOST_STAND_SUFFIX))
+            .map(|engine| format!("{engine}-host"))
+            .ok_or_else(|| format!("{} names no {chip} stand", directory.display()).into())
     }
 
     /// The stand packages of `chip`, by shard name, with their manifests
     /// relative to the root.
-    pub fn stands(model: &oer_repo::Model, chip: &str) -> Result<BTreeMap<String, String>> {
-        let base = format!("{}/", directory(chip));
-        let mut stands = BTreeMap::new();
-        for package in model.packages() {
-            if let Some(name) = package.directory.strip_prefix(&base)
-                && !name.contains('/')
-            {
-                stands.insert(
-                    scenario(Path::new(&package.directory))?,
-                    package.manifest.clone(),
-                );
-            }
-        }
-        Ok(stands)
+    pub fn stands(workspace: &crate::workspace::Workspace, chip: &str) -> BTreeMap<String, String> {
+        workspace.host_stands(chip)
     }
 
     /// What one stand compares.
@@ -95,13 +80,13 @@ pub mod host_stand {
             .canonicalize()?
             .strip_prefix(&root)?
             .to_path_buf();
-        let model = oer_repo::Model::load(&oer_repo::Repo::load(&root)?)?;
+        let workspace = crate::workspace::Workspace::load(&root, None)?;
         let manifest = directory.join("Cargo.toml");
-        let package = model
+        let package = workspace
             .owner(&manifest.to_string_lossy())
             .ok_or_else(|| format!("{} is no package manifest", manifest.display()))?;
-        let scenario = scenario(&directory)?;
-        let closure = policy::closure(&model, package, None)?;
+        let scenario = scenario(stand.chip, &directory)?;
+        let closure = policy::closure(&workspace, package);
         policy::check_verdict_sources(&closure.directories, &closure.report)?;
         let mut directories: Vec<PathBuf> = closure.directories;
         directories.sort();
@@ -158,28 +143,36 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn a_stand_is_named_after_its_directory() {
+    fn a_stand_is_named_after_its_engine() {
         assert_eq!(
-            host_stand::scenario(Path::new("verification/chip-a/host/ieee802154")).unwrap(),
+            host_stand::scenario(
+                "chip-a",
+                Path::new("tools/lib/service/chip-a-ieee802154-vendor-host")
+            )
+            .unwrap(),
             "ieee802154-host"
+        );
+        assert!(
+            host_stand::scenario(
+                "chip-a",
+                Path::new("tools/lib/service/chip-b-x-vendor-host")
+            )
+            .is_err()
         );
     }
 
     #[test]
     fn this_checkout_registers_its_host_stands_by_directory() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let model = oer_repo::Model::load(&oer_repo::Repo::load(&root).unwrap()).unwrap();
-        // A chip's stands are the packages below `verification/<chip>/host`.
-        for chip in model.chips.ids() {
-            let stands = host_stand::stands(&model, chip).unwrap();
-            let directory = root.join("verification").join(chip).join("host");
-            for (scenario, manifest) in &stands {
-                assert!(
-                    manifest.starts_with(&format!("verification/{chip}/host/")),
-                    "{scenario}: {manifest}"
-                );
-            }
-            assert_eq!(stands.is_empty(), !directory.is_dir(), "{chip}");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+        let workspace = crate::workspace::Workspace::load(&root, None).unwrap();
+        let stands = host_stand::stands(&workspace, "esp32s31");
+        assert!(!stands.is_empty());
+        for (scenario, manifest) in &stands {
+            let directory = Path::new(manifest).parent().unwrap();
+            assert_eq!(
+                &host_stand::scenario("esp32s31", directory).unwrap(),
+                scenario
+            );
         }
     }
 }

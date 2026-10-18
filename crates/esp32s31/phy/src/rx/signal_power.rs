@@ -9,6 +9,11 @@
 //! signed accumulator values. This module preserves that order but exposes
 //! both one-microsecond intervals and readiness as external completions.
 
+/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn noise_check_loop() {}
+
 use crate::calibration::estimator::{
     PhyDcIqDelayPhase, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot,
 };

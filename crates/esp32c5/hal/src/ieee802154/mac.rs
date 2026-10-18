@@ -46,9 +46,9 @@ impl Ieee802154TaskOwner {
         self.registers.into_partition(interrupts.registers)
     }
 
-    /// `i_txon_delay_set` of the ESP32-C5 libbtbb: the vendor
+    /// `ieee802154_txon_delay_set` of the ESP32-C5 libbtbb: the vendor
     /// transmit-on, turnaround, receive-on and transmit-off delays, in the
-    /// vendor order. `i_mac_init` applies them after the register
+    /// vendor order. `ieee802154_mac_init` applies them after the register
     /// part of the MAC initialization, before interrupts are allocated, so
     /// the interrupt owner must still be inactive.
     pub fn apply_txon_delay(&mut self, interrupts: &mut Ieee802154InterruptSetupOwner) {

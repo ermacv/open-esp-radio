@@ -12,95 +12,95 @@ use crate::record::{self, Inputs, Record};
 /// Portable driver call or hardware edge.
 #[derive(Clone, Debug)]
 pub enum Step {
-    /// `esp_i_enable`.
+    /// `esp_ieee802154_enable`.
     Enable,
-    /// `esp_i_disable`.
+    /// `esp_ieee802154_disable`.
     Disable,
-    /// `esp_i_set_channel`.
+    /// `esp_ieee802154_set_channel`.
     SetChannel(u8),
-    /// `esp_i_set_panid`.
+    /// `esp_ieee802154_set_panid`.
     SetPanId(u16),
-    /// `esp_i_set_short_address`.
+    /// `esp_ieee802154_set_short_address`.
     SetShortAddress(u16),
-    /// `esp_i_set_extended_address`.
+    /// `esp_ieee802154_set_extended_address`.
     SetExtendedAddress([u8; 8]),
-    /// `esp_i_set_promiscuous`.
+    /// `esp_ieee802154_set_promiscuous`.
     SetPromiscuous(bool),
-    /// `esp_i_set_coordinator`.
+    /// `esp_ieee802154_set_coordinator`.
     SetCoordinator(bool),
-    /// `esp_i_set_rx_when_idle`.
+    /// `esp_ieee802154_set_rx_when_idle`.
     SetRxWhenIdle(bool),
-    /// `esp_i_set_cca_mode`.
+    /// `esp_ieee802154_set_cca_mode`.
     SetCcaMode(u32),
-    /// `esp_i_set_cca_threshold`.
+    /// `esp_ieee802154_set_cca_threshold`.
     SetCcaThreshold(i8),
-    /// `esp_i_set_ack_timeout` in microseconds.
+    /// `esp_ieee802154_set_ack_timeout` in microseconds.
     SetAckTimeout(u32),
-    /// `esp_i_set_txpower` in dBm: the power of every channel.
+    /// `esp_ieee802154_set_txpower` in dBm: the power of every channel.
     SetTxPower(i8),
-    /// `esp_i_set_power_with_channel` in dBm.
+    /// `esp_ieee802154_set_power_with_channel` in dBm.
     SetPowerWithChannel { channel: u8, power: i8 },
-    /// `esp_i_get_panid`, `get_short_address`,
+    /// `esp_ieee802154_get_panid`, `get_short_address`,
     /// `get_extended_address` and `get_ack_timeout`, in that order.
     GetIdentity,
-    /// `esp_i_get_recent_rssi`, reading the baseband receive
+    /// `esp_ieee802154_get_recent_rssi`, reading the baseband receive
     /// information the `bt_bb_get_cur_rx_info` input supplies.
     GetRecentRssi,
-    /// `esp_i_set_transmit_security` for `[length, psdu...]`.
+    /// `esp_ieee802154_set_transmit_security` for `[length, psdu...]`.
     SetTransmitSecurity {
         frame: Vec<u8>,
         key: [u8; 16],
         address: [u8; 8],
     },
-    /// `esp_i_set_pending_mode`.
+    /// `esp_ieee802154_set_pending_mode`.
     SetPendingMode(u32),
-    /// `esp_i_add_pending_addr`.
+    /// `esp_ieee802154_add_pending_addr`.
     AddPendingAddress { address: Vec<u8>, short: bool },
-    /// `esp_i_transmit` of `[length, psdu...]`.
+    /// `esp_ieee802154_transmit` of `[length, psdu...]`.
     Transmit { frame: Vec<u8>, cca: bool },
-    /// `esp_i_transmit_at` of `[length, psdu...]` at `time`.
+    /// `esp_ieee802154_transmit_at` of `[length, psdu...]` at `time`.
     TransmitAt {
         frame: Vec<u8>,
         cca: bool,
         time: u32,
     },
-    /// `esp_i_receive`.
+    /// `esp_ieee802154_receive`.
     Receive,
-    /// `esp_i_receive_at`.
+    /// `esp_ieee802154_receive_at`.
     ReceiveAt { time: u32, duration: u32 },
-    /// `esp_i_sleep`.
+    /// `esp_ieee802154_sleep`.
     Sleep,
-    /// `esp_i_energy_detect` in 16-microsecond symbols.
+    /// `esp_ieee802154_energy_detect` in 16-microsecond symbols.
     EnergyDetect(u32),
-    /// `esp_i_cca`.
+    /// `esp_ieee802154_cca`.
     Cca,
-    /// `esp_i_receive_handle_done` for the last received frame.
+    /// `esp_ieee802154_receive_handle_done` for the last received frame.
     ReceiveHandleDone,
-    /// `esp_i_set_multipan_panid`.
+    /// `esp_ieee802154_set_multipan_panid`.
     #[cfg(feature = "multipan")]
     SetMultipanPanId { index: u8, panid: u16 },
-    /// `esp_i_set_multipan_short_address`.
+    /// `esp_ieee802154_set_multipan_short_address`.
     #[cfg(feature = "multipan")]
     SetMultipanShortAddress { index: u8, address: u16 },
-    /// `esp_i_set_multipan_extended_address`.
+    /// `esp_ieee802154_set_multipan_extended_address`.
     #[cfg(feature = "multipan")]
     SetMultipanExtendedAddress { index: u8, address: [u8; 8] },
-    /// `esp_i_set_multipan_enable` of an interface mask.
+    /// `esp_ieee802154_set_multipan_enable` of an interface mask.
     #[cfg(feature = "multipan")]
     SetMultipanEnable(u8),
-    /// `esp_i_multipan_receive`.
+    /// `esp_ieee802154_multipan_receive`.
     #[cfg(feature = "multipan")]
     MultipanReceive(u8),
-    /// `esp_i_multipan_sleep`.
+    /// `esp_ieee802154_multipan_sleep`.
     #[cfg(feature = "multipan")]
     MultipanSleep(u8),
-    /// `esp_i_multipan_set_rx_when_idle`.
+    /// `esp_ieee802154_multipan_set_rx_when_idle`.
     #[cfg(feature = "multipan")]
     MultipanRxWhenIdle { index: u8, enable: bool },
-    /// `esp_i_multipan_set_pending_mode`.
+    /// `esp_ieee802154_multipan_set_pending_mode`.
     #[cfg(feature = "multipan")]
     MultipanSetPendingMode { index: u8, mode: u32 },
-    /// `esp_i_multipan_add_pending_addr`.
+    /// `esp_ieee802154_multipan_add_pending_addr`.
     #[cfg(feature = "multipan")]
     MultipanAddPendingAddress {
         index: u8,

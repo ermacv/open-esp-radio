@@ -300,6 +300,20 @@ impl RadioPartitions {
         // MMIO exists behind it, so the singleton need not be unique.
         Self::from_peripherals(unsafe { svd::Peripherals::steal() })
     }
+
+    /// Construct every partition in an isolated probe image.
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "a probe image runs one closed comparison and no runtime driver"
+    )]
+    pub fn for_probe() -> Self {
+        // SAFETY: a probe image (`cfg(oer_probe)`, built by `cargo fw` from
+        // `firmware/verification/` alone) contains one closed comparison and
+        // no runtime driver, so no other owner of these registers runs.
+        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+    }
 }
 
 /// Semantic MAC work causes recovered from reviewed vendor transactions.
@@ -460,6 +474,21 @@ impl MacInterruptSnapshot {
             || self.0.bits_29_31_opaque() != 0;
         MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
     }
+
+    /// The sampled image, for a probe image that reports it to a vendor
+    /// comparison.
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub const fn probe_bits(&self) -> u32 {
+        self.0.bits()
+    }
+
+    /// An image of the vendor comparison's choosing, to acknowledge.
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub const fn for_probe(bits: u32) -> Self {
+        Self(svd::interrupt_snapshot::mac_interrupt_for_probe(bits))
+    }
 }
 
 /// One sampled power-interrupt image with intentionally opaque bit semantics.
@@ -476,6 +505,21 @@ impl MacPowerInterruptSnapshot {
             // Only the station TSF's TBTT is ever enabled.
             self.0.tbtt_1() || self.0.tbtt_2() || self.0.tbtt_3() || self.0.bits_8_31_opaque() != 0,
         )
+    }
+
+    /// The sampled image, for a probe image that reports it to a vendor
+    /// comparison.
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub const fn probe_bits(&self) -> u32 {
+        self.0.bits()
+    }
+
+    /// An image of the vendor comparison's choosing, to acknowledge.
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub const fn for_probe(bits: u32) -> Self {
+        Self(svd::interrupt_snapshot::mac_power_interrupt_for_probe(bits))
     }
 }
 

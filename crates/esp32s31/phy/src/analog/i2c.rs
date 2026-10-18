@@ -254,7 +254,7 @@ impl OpenI2cXpdTransition {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn samples(self) -> u16 {
         self.samples
     }
@@ -432,17 +432,17 @@ impl MaskedI2cWriteBinding {
         self.transaction.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, PhyI2cError>,
@@ -453,7 +453,7 @@ impl MaskedI2cWriteBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), PhyI2cError>,
@@ -1728,3 +1728,49 @@ impl Default for RcCalibrationTransition {
 
 #[cfg(test)]
 mod tests;
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_get_i2c_data() {}
+
+/// Complete pinned target hook; the ESP32-S31 archive body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_i2c_enter_critical() {}
+
+/// Complete pinned target hook; the ESP32-S31 archive body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_i2c_exit_critical() {}
+
+/// Initialize the six-byte master-memory descriptor exactly as the pinned
+/// archive leaf.
+#[inline]
+#[cfg(oer_probe)]
+pub fn phy_i2c_master_mem_cfg(configuration: &mut [u8; 6]) {
+    configuration[0] = 0;
+    configuration[1] = 0;
+    configuration[3] = 1;
+    configuration[4] = 0x2c;
+    configuration[2] = 1;
+    configuration[5] = 1;
+}
+
+/// Initialize the command-memory descriptor and its two-word mode value.
+#[inline]
+#[cfg(oer_probe)]
+pub fn phy_i2c_master_command_mem_cfg(configuration: &mut [u8; 8], mode: &mut u32) {
+    configuration[3] = 1;
+    configuration[4] = 1;
+    configuration[5] = 1;
+    configuration[7] = 1;
+    configuration[0] = 0;
+    configuration[1] = 0;
+    configuration[2] = 0;
+    configuration[6] = 0x2c;
+    *mode = 2;
+}
+
+#[cfg(all(oer_probe, target_arch = "riscv32"))]
+pub(crate) use oer_esp32s31_hal::phy::i2c::PhyI2cBlock;

@@ -47,7 +47,7 @@ impl RxDcoControlField {
     }
 
     /// Construct one distinguishable capture for a host test.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     #[doc(hidden)]
     pub const fn for_host_test(value: u8) -> Self {
         Self(value)
@@ -56,7 +56,7 @@ impl RxDcoControlField {
 
 impl TxDcPwdetFields {
     /// Construct one distinguishable capture for a host test.
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     #[doc(hidden)]
     pub const fn for_host_test(table_low: u8, calibration: u8) -> Self {
         Self {

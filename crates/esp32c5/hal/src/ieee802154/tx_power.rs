@@ -1,7 +1,7 @@
 //! ESP32-C5 IEEE 802.15.4 transmit-power levels.
 //!
 //! The resolution itself is chip-neutral
-//! ([`oer_espressif_i_engine::tx_power`]); the level set is the BTBB
+//! ([`oer_espressif_ieee802154_engine::tx_power`]); the level set is the BTBB
 //! provider's, recovered from the ESP32-C5 vendor library.
 
 #![deny(missing_docs)]

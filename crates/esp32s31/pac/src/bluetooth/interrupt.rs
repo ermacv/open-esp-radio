@@ -307,6 +307,16 @@ pub struct BluetoothPrimaryFaultSources {
 }
 
 impl BluetoothPrimaryFaultSources {
+    /// No fault source pending, the base of the host-test epochs.
+    #[cfg(any(test, feature = "test-support"))]
+    const NONE_FOR_HOST_TEST: Self = Self {
+        bank_0_source_15_pending: false,
+        bank_1_source_8_pending: false,
+        bank_1_source_9_pending: false,
+        bank_1_source_12_pending: false,
+        unclassified_pending: false,
+    };
+
     const fn from_status(
         bank_0: BluetoothPrimaryBank0Status,
         bank_1: BluetoothPrimaryBank1Status,
@@ -367,6 +377,15 @@ pub struct BluetoothNrtInterruptAcknowledged {
     _private: (),
 }
 
+impl BluetoothNrtInterruptAcknowledged {
+    /// Construct an acknowledged token for host-only controller tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn for_host_test() -> Self {
+        Self { _private: () }
+    }
+}
+
 /// One complete primary source-124 sample, acknowledgement and fault capture.
 ///
 /// The PAC projects raw status into positional source facts before this value
@@ -383,6 +402,56 @@ pub struct BluetoothPrimaryInterruptEpoch {
 }
 
 impl BluetoothPrimaryInterruptEpoch {
+    /// Construct one fault-free epoch from positional source presence for
+    /// host tests, without exposing interrupt-bank bit geometry above the
+    /// PAC.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn for_dynamic_host_test(
+        bank_0_source_21_pending: bool,
+        bank_0_sources_27_or_28_pending: bool,
+        bank_1_source_3_pending: bool,
+    ) -> Self {
+        Self {
+            bank_0_source_21_pending,
+            bank_0_sources_27_or_28_pending,
+            bank_1_source_3_pending,
+            fault_sources: BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST,
+        }
+    }
+
+    /// Construct one representative baseline-fault epoch (bank-one source 8)
+    /// for upper-layer fail-stop host tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn for_fault_host_test() -> Self {
+        Self {
+            bank_0_source_21_pending: false,
+            bank_0_sources_27_or_28_pending: false,
+            bank_1_source_3_pending: false,
+            fault_sources: BluetoothPrimaryFaultSources {
+                bank_1_source_8_pending: true,
+                ..BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST
+            },
+        }
+    }
+
+    /// Construct one epoch with only a source whose handler semantics remain
+    /// unclassified, for upper-layer fail-closed host tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn for_unclassified_host_test() -> Self {
+        Self {
+            bank_0_source_21_pending: false,
+            bank_0_sources_27_or_28_pending: false,
+            bank_1_source_3_pending: false,
+            fault_sources: BluetoothPrimaryFaultSources {
+                unclassified_pending: true,
+                ..BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST
+            },
+        }
+    }
+
     /// Whether positional dynamic bank-zero source 21 was pending.
     pub const fn bank_0_source_21_pending(&self) -> bool {
         self.bank_0_source_21_pending

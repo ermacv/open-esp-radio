@@ -1,7 +1,7 @@
 //! Host differential stand for the ESP32-S31 IEEE 802.15.4 driver port.
 //!
 //! The pinned public ESP-IDF driver is compiled unmodified for the host (see
-//! `build.rs`). Its register layer (`i_ll_*`), the closed PHY, BTBB
+//! `build.rs`). Its register layer (`ieee802154_ll_*`), the closed PHY, BTBB
 //! and coexistence calls, modem clocks, interrupt allocation, time and the
 //! application callbacks are replaced by recorders. A [`Scenario`] drives the
 //! public API and delivers interrupts through the handler the driver
@@ -11,7 +11,7 @@
 //!
 //! The compiled driver keeps its state in C globals. One process therefore
 //! runs one scenario, which [`claim`] enforces; the
-//! `oer-esp32s31-i-vendor-host` binary runs a named catalog scenario
+//! `oer-tool-service-esp32s31-ieee802154-vendor-host` binary runs a named catalog scenario
 //! per invocation.
 
 pub mod catalog;

@@ -9,18 +9,17 @@
 //! layout entry reports where those backings hold each MPDU, so the vendor
 //! side can compare the same bytes.
 
-use oer_base_memory::{
-    HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease,
-    PreparedTxDma,
-};
+use oer_base_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 use oer_base_time::RadioDuration;
+use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
+    AmpduDmaStorage, RetainedAmpduDmaStorage,
+};
 use oer_esp32s31_hal::types::{
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerTxQueueSnapshot, MacHtAmpduCompletionObservation, MacHtTxProgram,
     MacLegacyTxProgram, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
     MacTxQueueDetached,
 };
-use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{AmpduDmaStorage, RetainedAmpduDmaStorage};
 use oer_esp32s31_ieee80211_mac::tx::ampdu::{
     AmpduFrameLayout, AmpduFrameSize, AmpduRepublication, HtAmpduFrameRequest, HtAmpduHardware,
     HtAmpduTxResources, HtAmpduTxStorage, RetainedDmaAmpduTx, TX_AMPDU_METADATA_SIZE,
@@ -84,7 +83,9 @@ fn radio_stamp(micros: u64) -> Ieee80211Stamp {
 }
 
 type Pool = PinnedDmaTxPool<FRAME_CAPACITY, 0, 0, SLOTS>;
-type Backing = PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, 0, 0>;
+type Backing = oer_esp32s31_hal::dma_static::PlacedTxLease<
+    PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, 0, 0>,
+>;
 
 #[derive(bytemuck::Zeroable)]
 struct ProbeCell<T>(core::cell::UnsafeCell<T>);
@@ -93,21 +94,30 @@ struct ProbeCell<T>(core::cell::UnsafeCell<T>);
 // exported entries serially.
 unsafe impl<T> Sync for ProbeCell<T> {}
 
-oer_base_memory::zeroed_static! {
-    static POOL: ProbeCell<Pool> = zeroed in ".dma.bss.ampdu_resort";
+oer_esp32s31_hal::dma_static! {
+    static POOL: Pool = zeroed in ".dma.bss.ampdu_resort";
 }
-static METADATA: ProbeCell<HtAmpduTxStorage<SLOTS, 0>> =
+static METADATA: ProbeCell<HtAmpduTxStorage<SLOTS>> =
     ProbeCell(core::cell::UnsafeCell::new(HtAmpduTxStorage::new()));
-oer_base_memory::zeroed_static! {
-    static DMA: ProbeCell<AmpduDmaStorage<SLOTS, 0>> = zeroed in ".dma.bss.ampdu_resort";
+oer_esp32s31_hal::dma_static! {
+    static DMA: AmpduDmaStorage<SLOTS, 0> = zeroed in ".dma.bss.ampdu_resort";
 }
 static RETENTION: ProbeCell<RetainedAmpduDmaStorage<Backing, SLOTS>> =
     ProbeCell(core::cell::UnsafeCell::new(RetainedAmpduDmaStorage::new()));
 
-/// The pinned pool; each entry runs on a freshly loaded image.
-fn pool() -> PinnedDmaTxPoolHandle<FRAME_CAPACITY, 0, 0, SLOTS> {
-    // SAFETY: the single-threaded image takes the pool once per entry.
-    Pool::pin_static(unsafe { &mut *POOL.0.get() })
+/// The pinned placed pool, pinned on first use of the loaded image.
+fn pool() -> &'static oer_esp32s31_hal::dma_static::PlacedTxPool<FRAME_CAPACITY, 0, 0, SLOTS> {
+    static mut PINNED: Option<
+        oer_esp32s31_hal::dma_static::PlacedTxPool<FRAME_CAPACITY, 0, 0, SLOTS>,
+    > = None;
+    // SAFETY: Blobray executes this probe image on one thread and invokes
+    // its exported entries serially, so no two references are alive.
+    let slot = unsafe { &mut *core::ptr::addr_of_mut!(PINNED) };
+    slot.get_or_insert_with(|| {
+        oer_esp32s31_hal::dma_static::PlacedTxPool::pin(
+            POOL.take().expect("the probe image pins its pool once"),
+        )
+    })
 }
 
 /// A hardware double: publication succeeds, the queue detaches at once, and
@@ -238,9 +248,10 @@ oer_tool_service_probe_macros::probe! {
         }
         let pool = pool();
         // SAFETY: each static is taken once for this entry's owner.
-        let resources = unsafe {
-            HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), &mut *DMA.0.get())
+        let Some(dma) = DMA.take() else {
+            return RESOURCES_FAILED;
         };
+        let resources = unsafe { HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), dma) };
         let Ok(resources) = resources else {
             return RESOURCES_FAILED;
         };
@@ -365,7 +376,7 @@ const STATUS_ACK_TIMEOUT: u8 = 5;
 /// Decision of a step with no aggregate in flight.
 const NO_AGGREGATE: u32 = 9;
 
-type TimeoutOwner = RetainedDmaAmpduTx<'static, Backing, SLOTS, 0>;
+type TimeoutOwner = RetainedDmaAmpduTx<'static, Backing, SLOTS>;
 
 /// The aggregate a timeout sequence republishes across warm phases, its
 /// cookie and retry state, and the publication it was built with.
@@ -416,9 +427,10 @@ oer_tool_service_probe_macros::probe! {
         }
         let pool = pool();
         // SAFETY: each static is taken once for this sequence's owner.
-        let resources = unsafe {
-            HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), &mut *DMA.0.get())
+        let Some(dma) = DMA.take() else {
+            return RESOURCES_FAILED;
         };
+        let resources = unsafe { HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), dma) };
         let Ok(resources) = resources else {
             return RESOURCES_FAILED;
         };

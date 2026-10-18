@@ -1,7 +1,7 @@
 //! Modem event-task matrix transactions used by the public IEEE 802.15.4
 //! driver for timed operations.
 //!
-//! The pinned ESP-IDF driver (`esp_i_util.c`) programs channel zero
+//! The pinned ESP-IDF driver (`esp_ieee802154_util.c`) programs channel zero
 //! from a TIMER0 overflow to a transmit start and channel one from a TIMER1
 //! overflow to a receive start. The Bluetooth runtime owns channels four
 //! through seven of the same matrix, so this surface holds only the
@@ -54,7 +54,7 @@ impl Ieee802154RegisterLease<'_> {
     }
 
     /// Read the clear word and write it back with `channel`'s bit added, as
-    /// `i_etm_channel_clear` does.
+    /// `ieee802154_etm_channel_clear` does.
     pub fn disable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
         let etm = &self.etm.registers;
         match channel {
@@ -68,7 +68,7 @@ impl Ieee802154RegisterLease<'_> {
     }
 
     /// Read the set word and write it back with `channel`'s bit added, as
-    /// `i_etm_set_event_task` does.
+    /// `ieee802154_etm_set_event_task` does.
     pub fn enable_etm_channel(&mut self, channel: Ieee802154EtmChannel) {
         let etm = &self.etm.registers;
         match channel {
@@ -104,8 +104,8 @@ mod tests {
     use super::{Ieee802154EtmChannel, Ieee802154EtmRoute};
 
     /// Timed transmit programs channel zero and timed receive channel one
-    /// (`esp_i_dev.c` `i_transmit_at` and
-    /// `i_receive_at`).
+    /// (`esp_ieee802154_dev.c` `ieee802154_transmit_at` and
+    /// `ieee802154_receive_at`).
     #[test]
     fn timed_transmit_and_receive_use_disjoint_channels() {
         assert_eq!(

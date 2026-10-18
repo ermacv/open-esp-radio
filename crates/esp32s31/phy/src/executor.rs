@@ -5,7 +5,7 @@
 //! the wait vocabulary in [`wait`] and the delay it supplies to the target
 //! ports, so the graphs run under Embassy, a custom interrupt executor, or a
 //! test harness without importing an RTOS. The graph drivers and their port
-//! traits are crate-private.
+//! traits are crate-private, and public only in probe images (`cfg(oer_probe)`).
 
 pub mod wait;
 
@@ -13,6 +13,12 @@ pub mod wait;
 // reach them only through the crate's target ports and registered owners.
 mod run;
 
+#[cfg(oer_probe)]
+pub use run::{
+    PhyCalibrationTrackingPort, PhyParamTrackingPort, PhyRegisterPort,
+    run_phy_calibration_tracking, run_phy_param_tracking, run_phy_register,
+};
+#[cfg(not(oer_probe))]
 pub(crate) use run::{
     PhyCalibrationTrackingPort, PhyParamTrackingPort, PhyRegisterPort,
     run_phy_calibration_tracking, run_phy_param_tracking, run_phy_register,

@@ -111,7 +111,7 @@ const fn operation_rx_abort_enable_observation(
     }
 }
 
-#[cfg(feature = "validation-probes")]
+#[cfg(oer_probe)]
 const fn validation_event_enable_state(
     readback: crate::ieee802154::ownership::ValidationEventEnableReadback,
 ) -> Ieee802154ValidationEventEnableState {
@@ -467,25 +467,25 @@ impl Ieee802154FoundationSnapshot {
 /// lease and cannot be called through this task-only capability:
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac::IRegisterLease;
+/// use oer_esp32c5_pac::Ieee802154RegisterLease;
 ///
-/// fn sample_irq_status(task: &IRegisterLease<'_>) {
+/// fn sample_irq_status(task: &Ieee802154RegisterLease<'_>) {
 ///     let _ = task.event_status_observation();
 /// }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac::IRegisterLease;
+/// use oer_esp32c5_pac::Ieee802154RegisterLease;
 ///
-/// fn acknowledge_irq_status(task: &mut IRegisterLease<'_>) {
+/// fn acknowledge_irq_status(task: &mut Ieee802154RegisterLease<'_>) {
 ///     let _ = task.acknowledge_pending_events();
 /// }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac::IRegisterLease;
+/// use oer_esp32c5_pac::Ieee802154RegisterLease;
 ///
-/// fn literal_status_write(task: &mut IRegisterLease<'_>) {
+/// fn literal_status_write(task: &mut Ieee802154RegisterLease<'_>) {
 ///     task.validation_write_event_timer0();
 /// }
 /// ```
@@ -503,9 +503,9 @@ pub struct Ieee802154RegisterLease<'registers> {
 /// images only. It cannot sample or acknowledge interrupt status:
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac::ITimerLease;
+/// use oer_esp32c5_pac::Ieee802154TimerLease;
 ///
-/// fn sample_irq(timer: &ITimerLease<'_>) {
+/// fn sample_irq(timer: &Ieee802154TimerLease<'_>) {
 ///     let _ = timer.event_status_observation();
 /// }
 /// ```
@@ -514,9 +514,9 @@ pub struct Ieee802154RegisterLease<'registers> {
 /// is alive:
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac::IRegisterLease;
+/// use oer_esp32c5_pac::Ieee802154RegisterLease;
 ///
-/// fn overlap(task: &mut IRegisterLease<'_>) {
+/// fn overlap(task: &mut Ieee802154RegisterLease<'_>) {
 ///     let first = task.timer_lease();
 ///     let second = task.timer_lease();
 ///     let _ = (first, second);
@@ -757,7 +757,7 @@ impl Ieee802154RegisterLease<'_> {
 
     /// Disable transmit security without claiming key/address zeroization.
     ///
-    /// Pinned ESP-IDF `i_sec_clear()` clears only `TX_ENABLE`; no
+    /// Pinned ESP-IDF `ieee802154_sec_clear()` clears only `TX_ENABLE`; no
     /// source proves that writing zero to the write-only address/key registers
     /// is a safe hardware zeroization transaction. This method therefore
     /// preserves those registers and makes no erasure claim.
@@ -765,9 +765,9 @@ impl Ieee802154RegisterLease<'_> {
     /// No misleading clear/zeroize operation exists:
     ///
     /// ```compile_fail
-    /// use oer_esp32c5_pac::IRegisterLease;
+    /// use oer_esp32c5_pac::Ieee802154RegisterLease;
     ///
-    /// fn unsupported_zeroization(lease: &mut IRegisterLease<'_>) {
+    /// fn unsupported_zeroization(lease: &mut Ieee802154RegisterLease<'_>) {
     ///     lease.clear_transmit_security();
     /// }
     /// ```
@@ -867,11 +867,11 @@ impl Ieee802154RegisterLease<'_> {
 
 /// Cold/polled MAC lease that borrows both disjoint ownership halves.
 ///
-/// Construction requires the inactive [`IInterruptSetup`]. Because
+/// Construction requires the inactive [`Ieee802154InterruptSetup`]. Because
 /// activation consumes that setup, `EVENT_STATUS`, affine W1C acknowledge and
 /// RX/TX interrupt sidebands are statically unavailable while a hard-IRQ owner
 /// exists. Task-only command, DMA and policy operations remain reachable via
-/// the embedded [`IRegisterLease`].
+/// the embedded [`Ieee802154RegisterLease`].
 #[must_use = "dropping the polled lease releases both inactive ownership borrows"]
 #[doc(hidden)]
 pub struct Ieee802154PolledRegisterLease<'registers> {
@@ -915,7 +915,7 @@ impl Ieee802154PolledRegisterLease<'_> {
     }
 
     /// Apply the vendor MAC-initialization delays of
-    /// `i_txon_delay_set`.
+    /// `ieee802154_txon_delay_set`.
     pub fn apply_txon_delay(&mut self) {
         self.task.registers.set_txon_delay();
     }
@@ -1040,43 +1040,43 @@ impl Ieee802154PolledRegisterLease<'_> {
         )
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_enable_state(&self) -> Ieee802154ValidationEventEnableState {
         validation_event_enable_state(self.task.registers.validation_event_enable_readback())
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_timer_events(&mut self) {
         self.task.registers.validation_enable_timer_events();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_all_events(&mut self) {
         self.task.registers.validation_disable_all_events();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_status_state(&self) -> Ieee802154ObservedEventState {
         event_observation(self.interrupt.validation_event_status_events()).state()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_timer0_value(&self) -> u32 {
         self.task.registers.validation_timer0_value()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_timer1_value(&self) -> u32 {
         self.task.registers.validation_timer1_value()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_event_timer_thresholds(&mut self, threshold: u32) {
         self.task
@@ -1084,49 +1084,49 @@ impl Ieee802154PolledRegisterLease<'_> {
             .validation_set_timer_thresholds(threshold);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_event_timer0(&mut self) {
         self.task.registers.validation_start_timer0();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_event_timer0(&mut self) {
         self.task.registers.validation_stop_timer0();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_event_timer1(&mut self) {
         self.task.registers.validation_start_timer1();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_event_timer1(&mut self) {
         self.task.registers.validation_stop_timer1();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_event_timer0(&mut self) {
         self.interrupt.validation_write_timer0_event();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_event_timer1(&mut self) {
         self.interrupt.validation_write_timer1_event();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_event_enable_state(&self) -> Ieee802154ValidationEventEnableState {
         validation_event_enable_state(self.task.registers.validation_event_enable_readback())
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_ed_timer_abort_events(&mut self) {
         self.task
@@ -1134,13 +1134,13 @@ impl Ieee802154PolledRegisterLease<'_> {
             .validation_enable_ed_timer_abort_events();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_ed_events(&mut self) {
         self.task.registers.validation_disable_ed_events();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_rx_abort_enable_state(
         &self,
@@ -1150,31 +1150,31 @@ impl Ieee802154PolledRegisterLease<'_> {
         )
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_ed_abort_reasons(&mut self) {
         self.task.registers.validation_enable_ed_abort_reasons();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_ed_abort_reasons(&mut self) {
         self.task.registers.validation_disable_ed_abort_reasons();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_event_status_state(&self) -> Ieee802154ObservedEventState {
         event_observation(self.interrupt.validation_ed_event_status_events()).state()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
         self.rx_abort_reason_observation()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_duration_state(&self) -> Ieee802154ValidationEdDurationState {
         Ieee802154ValidationEdDurationState::from_field(
@@ -1182,19 +1182,19 @@ impl Ieee802154PolledRegisterLease<'_> {
         )
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_ed_duration_eight(&mut self) {
         self.task.registers.validation_set_ed_duration_eight();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_timer0_value(&self) -> u32 {
         self.task.registers.validation_ed_timer0_value()
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_ed_timer0_threshold(&mut self, threshold: u32) {
         self.task
@@ -1202,37 +1202,37 @@ impl Ieee802154PolledRegisterLease<'_> {
             .validation_set_ed_timer0_threshold(threshold);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_ed_timer0(&mut self) {
         self.task.registers.validation_start_ed_timer0();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_ed_timer0(&mut self) {
         self.task.registers.validation_stop_ed_timer0();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_ed(&mut self) {
         self.task.registers.validation_start_ed();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_ed_operation(&mut self) {
         self.task.registers.validation_stop_ed_operation();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_ed_done_event(&mut self) {
         self.interrupt.validation_write_ed_done_event();
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_ed_timer0_event(&mut self) {
         self.interrupt.validation_write_ed_timer0_event();
@@ -1352,37 +1352,37 @@ impl Ieee802154InterruptSetup {
 }
 
 impl Ieee802154InterruptRegisters {
-    /// `i_ll_get_events`: one read of the event field, without
+    /// `ieee802154_ll_get_events`: one read of the event field, without
     /// acknowledging it.
     pub fn events(&self) -> Ieee802154EventObservation {
         event_observation(self.registers.event_readback())
     }
 
-    /// `i_ll_clear_events`: clear the asserted events of `mask` and
+    /// `ieee802154_ll_clear_events`: clear the asserted events of `mask` and
     /// leave every other event latched.
     pub fn clear_events(&mut self, mask: Ieee802154EventMask) {
         self.registers
             .clear_events(|event| mask.contains(event_of(event)));
     }
 
-    /// `i_ll_get_rx_abort_reason`.
+    /// `ieee802154_ll_get_rx_abort_reason`.
     pub fn rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
         Ieee802154RxAbortReasonObservation::from_field(
             self.registers.rx_status_readback().abort_reason_code(),
         )
     }
 
-    /// `i_ll_get_ed_rss`.
+    /// `ieee802154_ll_get_ed_rss`.
     pub fn ed_rss(&self) -> i8 {
         self.registers.ed_rss_code()
     }
 
-    /// `i_ll_is_cca_busy`.
+    /// `ieee802154_ll_is_cca_busy`.
     pub fn cca_busy(&self) -> bool {
         self.registers.cca_busy()
     }
 
-    /// `i_ll_get_tx_abort_reason`.
+    /// `ieee802154_ll_get_tx_abort_reason`.
     pub fn tx_abort_reason(&self) -> Ieee802154TxAbortReasonObservation {
         Ieee802154TxAbortReasonObservation::from_field(
             self.registers.tx_status_readback().abort_reason_code(),

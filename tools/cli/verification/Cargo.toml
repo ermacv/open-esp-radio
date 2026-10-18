@@ -22,7 +22,6 @@ oer-tool-analysis-riscv-lift = { path = "../../lib/analysis/riscv-lift" }
 oer-tool-analysis-riscv-model = { path = "../../lib/analysis/riscv-model" }
 oer-tool-base-command-tree = { path = "../../lib/base/command-tree", features = ["clap"] }
 oer-tool-base-process = { path = "../../lib/base/process" }
-oer-repo = { path = "../../tools/repo" }
 oer-tool-base-toolchain = { path = "../../lib/base/toolchain" }
 oer-tool-data-vendor-artifacts = { path = "../../lib/data/vendor-artifacts" }
 oer-tool-service-vendor-evidence = { path = "../../lib/service/vendor-evidence", features = ["producers"] }

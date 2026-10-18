@@ -45,7 +45,14 @@ pub use generated::layouts;
 pub use baseband::{RxDcoControlField, TxDcPwdetFields, TxIqToneControlFields};
 
 pub use bluetooth::{
-    controller::time::BluetoothControllerLatchedTime,
+    controller::{
+        init::{
+            BluetoothControllerHalInitConfig, BluetoothControllerTimeScale, BluetoothHalInitPeriod,
+            BluetoothHalInitScale, BluetoothMicrosecondDeltaProjection,
+            BluetoothRawTickDeltaProjection,
+        },
+        time::BluetoothControllerLatchedTime,
+    },
     device_table::BluetoothDeviceTablePublished,
     direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared,
     interrupt::{
@@ -64,7 +71,10 @@ pub use bluetooth::{
         BluetoothModemLpTimerHandlerRegisterObservation, BluetoothModemLpTimerInstant,
         BluetoothModemLpTimerInterruptObservation, BluetoothModemLpTimerRegisters,
     },
-    phy::BlePhyEtmRouteDisabled,
+    phy::{
+        BlePhyEtmRouteDisabled, BluetoothPhyEnvironmentAddress,
+        BluetoothPhyEnvironmentAddressError, BluetoothPhyRegisterInitInputs,
+    },
     scan::BluetoothScanStartPublished,
     scheduler::{
         BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListHeadEmptyObserved,
@@ -258,4 +268,8 @@ pub(crate) use ownership::device_fence;
 pub(crate) mod bluetooth;
 pub(crate) mod ieee802154;
 pub(crate) mod modem;
+/// Owner acquisition and register transactions of isolated probe images.
+#[cfg(oer_probe)]
+#[doc(hidden)]
+pub mod validation;
 pub(crate) mod wifi;

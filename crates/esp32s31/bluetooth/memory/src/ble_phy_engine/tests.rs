@@ -47,7 +47,7 @@ fn a_controller_reset_restores_the_allocation_image() {
     assert_ne!(owner.image(), initial);
 
     owner.reset_after_controller_reset(
-        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_validation(),
+        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_host_test(),
     );
 
     assert_eq!(owner.image(), initial);

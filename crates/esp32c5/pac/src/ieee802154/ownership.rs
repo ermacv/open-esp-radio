@@ -194,7 +194,7 @@ impl MultipanIdentityProgrammingPort for crate::svd::Ieee802154Mac {
 /// The complete block cannot be recovered through a shared borrow:
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac_raw::i_mac_ownership::TaskRegisters;
+/// use oer_esp32c5_pac_raw::ieee802154_mac_ownership::TaskRegisters;
 ///
 /// fn raw_block_escape(task: &TaskRegisters) {
 ///     let _ = task.registers();
@@ -204,7 +204,7 @@ impl MultipanIdentityProgrammingPort for crate::svd::Ieee802154Mac {
 /// Nor through a mutable borrow:
 ///
 /// ```compile_fail
-/// use oer_esp32c5_pac_raw::i_mac_ownership::TaskRegisters;
+/// use oer_esp32c5_pac_raw::ieee802154_mac_ownership::TaskRegisters;
 ///
 /// fn mutable_raw_block_escape(task: &mut TaskRegisters) {
 ///     let _ = task.task_mac_mut();
@@ -459,7 +459,7 @@ pub enum OperationRxAbortEnableReadback {
 }
 
 /// Closed validation-only classification of `EVENT_ENABLE`.
-#[cfg(feature = "validation-probes")]
+#[cfg(oer_probe)]
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationEventEnableReadback {
@@ -633,7 +633,7 @@ impl Ieee802154EventReadback {
             && !self.rx_sfd_done
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     const fn is_timer_pair(self) -> bool {
         self.timer0_overflow
             && self.timer1_overflow
@@ -650,7 +650,7 @@ impl Ieee802154EventReadback {
             && !self.rx_sfd_done
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     const fn is_ed_timer_abort(self) -> bool {
         self.rx_abort
             && self.ed_done
@@ -828,7 +828,7 @@ impl TaskRegisters {
     }
 
     /// Classify the two reset-isolated validation event selections.
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_enable_readback(&self) -> ValidationEventEnableReadback {
         let events = self.event_enable_readback();
@@ -1288,7 +1288,7 @@ impl TaskRegisters {
         }
     }
 
-    /// `i_txon_delay_set` of the ESP32-C5 libbtbb: the MAC
+    /// `ieee802154_txon_delay_set` of the ESP32-C5 libbtbb: the MAC
     /// transmit-on, turnaround, receive-on and transmit-off delays, in the
     /// vendor order.
     #[doc(hidden)]
@@ -1311,31 +1311,31 @@ impl TaskRegisters {
         );
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_timer_events(&mut self) {
         crate::ieee802154::validation::event_status::enable_timer_events(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_all_events(&mut self) {
         crate::ieee802154::validation::event_status::disable_all_events(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_timer0_value(&self) -> u32 {
         crate::ieee802154::validation::event_status::timer0_value(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_timer1_value(&self) -> u32 {
         crate::ieee802154::validation::event_status::timer1_value(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_timer_thresholds(&mut self, threshold: u32) {
         crate::ieee802154::validation::event_status::set_timer_thresholds(
@@ -1344,73 +1344,73 @@ impl TaskRegisters {
         );
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_timer0(&mut self) {
         crate::ieee802154::validation::event_status::start_timer0(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_timer0(&mut self) {
         crate::ieee802154::validation::event_status::stop_timer0(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_timer1(&mut self) {
         crate::ieee802154::validation::event_status::start_timer1(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_timer1(&mut self) {
         crate::ieee802154::validation::event_status::stop_timer1(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_ed_timer_abort_events(&mut self) {
         crate::ieee802154::validation::ed_event::enable_ed_timer_abort_events(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_ed_events(&mut self) {
         crate::ieee802154::validation::ed_event::disable_all_events(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_enable_ed_abort_reasons(&mut self) {
         crate::ieee802154::validation::ed_event::enable_ed_abort_reasons(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_disable_ed_abort_reasons(&mut self) {
         crate::ieee802154::validation::ed_event::disable_all_rx_abort_reasons(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_duration(&self) -> u32 {
         crate::ieee802154::validation::ed_event::ed_duration(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_ed_duration_eight(&mut self) {
         crate::ieee802154::validation::ed_event::set_ed_duration_eight(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_timer0_value(&self) -> u32 {
         crate::ieee802154::validation::ed_event::timer0_value(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_set_ed_timer0_threshold(&mut self, threshold: u32) {
         crate::ieee802154::validation::ed_event::set_timer0_threshold(
@@ -1419,25 +1419,25 @@ impl TaskRegisters {
         );
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_ed_timer0(&mut self) {
         crate::ieee802154::validation::ed_event::start_timer0(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_ed_timer0(&mut self) {
         crate::ieee802154::validation::ed_event::stop_timer0(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_start_ed(&mut self) {
         crate::ieee802154::validation::ed_event::start_ed(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_stop_ed_operation(&mut self) {
         crate::ieee802154::validation::ed_event::stop_operation(&mut self.registers);
@@ -1495,14 +1495,14 @@ impl InterruptRegisters {
         );
     }
 
-    /// `i_ll_get_events`: one read of the event field without
+    /// `ieee802154_ll_get_events`: one read of the event field without
     /// acknowledging it.
     #[inline]
     pub fn event_readback(&self) -> Ieee802154EventReadback {
         Ieee802154EventReadback::from_event_status(&self.registers.event_status().read())
     }
 
-    /// `i_ll_clear_events`: `EVENT_STATUS &= mask`. The write-one-to-
+    /// `ieee802154_ll_clear_events`: `EVENT_STATUS &= mask`. The write-one-to-
     /// clear word is read and written back with only the asserted events that
     /// `in_mask` selects, so events outside the mask stay latched.
     #[inline]
@@ -1588,37 +1588,37 @@ impl InterruptRegisters {
         )
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_event_status_events(&self) -> Ieee802154EventReadback {
         crate::ieee802154::validation::event_status::event_status_events(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_timer0_event(&mut self) {
         crate::ieee802154::validation::event_status::write_timer0_event(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_timer1_event(&mut self) {
         crate::ieee802154::validation::event_status::write_timer1_event(&self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_ed_event_status_events(&self) -> Ieee802154EventReadback {
         crate::ieee802154::validation::ed_event::event_status_events(&self.registers)
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_ed_done_event(&mut self) {
         crate::ieee802154::validation::ed_event::write_ed_done_event(&mut self.registers);
     }
 
-    #[cfg(feature = "validation-probes")]
+    #[cfg(oer_probe)]
     #[doc(hidden)]
     pub fn validation_write_ed_timer0_event(&mut self) {
         crate::ieee802154::validation::ed_event::write_timer0_event(&mut self.registers);

@@ -103,7 +103,7 @@ contexts = [
 ]
 
 # The mask ROM the stack analyses read: the pinned ROM ELF of the revision
-# the profile describes (verification/esp32c5/artifacts.toml) and the
+# the profile describes (knowledge/esp32c5/vendor/artifacts.toml) and the
 # reviewed function summaries of the ROM the images link
 # (firmware/platform/esp32c5/linker/rom/esp32c5-eco2.x).
 [rom]
@@ -180,7 +180,7 @@ release-builds = ["verification/esp32c5/hardware/register-probe"]
 target-builds = ["oer-esp32c5-pac", "oer-esp32c5-hal"]
 agent-clippy = true
 
-# The Rust probe images of the vendor comparison (verification/esp32c5/probes).
+# The Rust probe images of the vendor comparison (firmware/verification/esp32c5).
 [[probe]]
 role = "rust-artifact"
 package = "oer-firmware-verification-esp32c5-probe-radio-elf"

@@ -1,7 +1,7 @@
 /*
  * IEEE 802.15.4 reference peer for the open-esp-radio HIL.
  *
- * The vendor driver (`esp_i_*`) owns the radio; this application
+ * The vendor driver (`esp_ieee802154_*`) owns the radio; this application
  * only drives it through a line protocol on the console. Every protocol line
  * starts with '@'; the host ignores any other output. See README.md.
  */
@@ -16,7 +16,7 @@
 
 #include "esp_attr.h"
 #include "esp_err.h"
-#include "esp_i.h"
+#include "esp_ieee802154.h"
 #include "esp_private/regi2c_ctrl.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -337,7 +337,7 @@ static void command_tx(char **argv, int argc)
 /* TXAT <delay_us> <MAC bytes as hex, without FCS>
  *
  * Transmit without CCA once `delay_us` microseconds have passed, through
- * esp_i_transmit_at on the esp_timer clock, as ESP-IDF's
+ * esp_ieee802154_transmit_at on the esp_timer clock, as ESP-IDF's
  * OpenThread port schedules a delayed transmission. */
 static void command_txat(char **argv, int argc)
 {

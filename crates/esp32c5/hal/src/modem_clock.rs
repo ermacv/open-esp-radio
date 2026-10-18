@@ -284,7 +284,7 @@ impl<'identity> ModemClocks<'identity> {
     }
 
     /// Pulse the IEEE 802.15.4 MAC and APB resets, as the vendor
-    /// `i_mac_init` does through `modem_clock_module_mac_reset`.
+    /// `ieee802154_mac_init` does through `modem_clock_module_mac_reset`.
     /// The IEEE 802.15.4 grant proves the MAC clocks are on.
     ///
     /// # Errors
@@ -417,7 +417,7 @@ impl<'identity, Port: ModemClockPort> Core<'identity, Port> {
     }
 
     /// Pulse the IEEE 802.15.4 MAC and APB resets, as the vendor
-    /// `i_mac_init` does through `modem_clock_module_mac_reset`.
+    /// `ieee802154_mac_init` does through `modem_clock_module_mac_reset`.
     /// The IEEE 802.15.4 grant proves the MAC clocks are on.
     ///
     /// # Errors

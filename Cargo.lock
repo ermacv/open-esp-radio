@@ -2311,6 +2311,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-bluetooth-driver"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "oer-base-time",
+ "oer-bluetooth-hci",
+ "oer-bluetooth-le-radio",
+ "oer-esp32s31-bluetooth-memory",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-phy",
+]
+
+[[package]]
+name = "oer-esp32s31-bluetooth-memory"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-hal",
+ "pin-project",
+ "vcell",
+]
+
+[[package]]
 name = "oer-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
@@ -2782,6 +2804,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-verification-esp32s31-probe-radio"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "embassy-futures",
+ "esp-hal",
+ "oer-adapters-esp-hal-radio",
+ "oer-base-memory",
+ "oer-base-time",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211-driver",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-pac",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-radio-coex",
+ "oer-ieee80211-lower-mac",
+ "oer-ieee80211-mac",
+ "oer-ieee80211-softmac",
+ "oer-tool-analysis-phy-relation-esp32s31",
+ "oer-tool-service-probe-macros",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32s31-probe-radio-elf"
+version = "0.1.0"
+dependencies = [
+ "oer-firmware-verification-esp32s31-probe-radio",
+ "oer-tool-service-probe-codegen",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32s31-probe-register"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-hal",
+ "oer-tool-service-probe-macros",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32s31-probe-register-elf"
+version = "0.1.0"
+dependencies = [
+ "oer-firmware-verification-esp32s31-probe-register",
+ "oer-tool-service-probe-codegen",
+]
+
+[[package]]
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
@@ -3041,6 +3110,9 @@ dependencies = [
 [[package]]
 name = "oer-tool-analysis-phy-relation-esp32s31"
 version = "0.1.0"
+dependencies = [
+ "oer-esp32s31-phy",
+]
 
 [[package]]
 name = "oer-tool-analysis-riscv-analysis"
@@ -3254,6 +3326,45 @@ dependencies = [
  "rustix",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "oer-tool-cli-vendor-scenarios-esp32c5"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-service-vendor-scenario-command",
+ "oer-tool-service-vendor-scenarios-esp32c5",
+]
+
+[[package]]
+name = "oer-tool-cli-vendor-scenarios-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-service-vendor-scenario-command",
+ "oer-tool-service-vendor-scenarios-esp32s31",
+]
+
+[[package]]
+name = "oer-tool-cli-verification"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "object 0.39.1",
+ "oer-tool-analysis-blobray-application",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-base-command-tree",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-register-model",
+ "oer-tool-data-vendor-artifacts",
+ "oer-tool-service-vendor-evidence",
+ "oer-tool-service-vendor-provenance",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3513,6 +3624,22 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-esp32s31-ieee802154-vendor-host"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "oer-esp32s31-hal",
+ "oer-espressif-ieee802154-engine",
+ "oer-ieee802154-mac",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-vendor-artifacts",
+ "oer-tool-data-vendor-evidence-shard",
+ "oer-tool-data-vendor-pins",
+ "oer-tool-service-vendor-evidence",
 ]
 
 [[package]]
@@ -4238,6 +4365,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-service-vendor-evidence"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-vendor-artifacts",
+ "oer-tool-data-vendor-evidence-shard",
+ "oer-tool-service-firmware",
+ "oer-tool-service-image",
+ "oer-tool-service-probe-codegen",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-service-vendor-provenance"
 version = "0.1.0"
 dependencies = [
@@ -4248,6 +4393,87 @@ dependencies = [
  "oer-tool-data-vendor-artifacts",
  "sha2 0.10.9",
  "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-scenario-command"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-service-vendor-scenario-report",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-scenario-engine"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-blobray-application",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-blobray-linker",
+ "oer-tool-analysis-blobray-riscv",
+ "oer-tool-analysis-blobray-verification",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-register-bindings",
+ "oer-tool-data-vendor-evidence-shard",
+ "oer-tool-data-vendor-pins",
+ "oer-tool-service-image",
+ "oer-tool-service-probe-codegen",
+ "oer-tool-service-vendor-evidence",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-scenario-report"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-base-process",
+ "oer-tool-data-vendor-evidence-shard",
+ "oer-tool-service-vendor-scenario-engine",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-scenarios-esp32c5"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-base-process",
+ "oer-tool-service-vendor-scenario-engine",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-scenarios-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-blobray-application",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-phy-relation-esp32s31",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-vendor-evidence-shard",
+ "oer-tool-data-vendor-pins",
+ "oer-tool-service-esp-idf",
+ "oer-tool-service-image",
+ "oer-tool-service-vendor-scenario-engine",
+ "serde",
  "toml",
 ]
 

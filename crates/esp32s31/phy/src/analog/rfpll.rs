@@ -814,17 +814,17 @@ impl RfpllFrequencyI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,
@@ -835,7 +835,7 @@ impl RfpllFrequencyI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), crate::analog::i2c::PhyI2cError>,
@@ -1015,3 +1015,16 @@ impl RfpllFrequencyExternalBinding {
 
 #[cfg(test)]
 mod tests;
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf; the ESP32-S31 body is one
+/// `ret` and does not touch shared RFPLL state.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_bbpll_en_usb() {}
+
+#[cfg(oer_probe)]
+impl RfpllFrequencyTransition {
+    pub const fn request(self) -> RfpllFrequencyRequest {
+        self.request
+    }
+}

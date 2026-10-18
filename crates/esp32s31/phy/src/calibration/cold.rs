@@ -4,6 +4,24 @@
 //! module contains only the hardware-operation graph and its bound external
 //! completions.
 
+/// Return the exact pinned ESP32-S31 RF-data record size in bytes.
+///
+/// The compiled vendor archive's `phy_get_rfdata_num` returns this value
+/// verbatim: a 12-byte header, the 492-byte parameter object and a 4-byte
+/// trailer.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_get_rfdata_num() -> u32 {
+    0x1fc
+}
+
+/// Required pinned `libphy.a::phy_internal_delay` vendor-ABI no-op leaf.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_internal_delay() -> u32 {
+    0
+}
+
 use crate::{
     analog::{
         crystal_duty::{
@@ -299,7 +317,7 @@ impl PhyColdI2cBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn outer_action(&self) -> PhyRfInitPrefixAction {
         self.outer_action
     }
@@ -308,17 +326,17 @@ impl PhyColdI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn read_started(&mut self) -> Result<(), PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn write_started(&mut self) -> Result<(), PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, PhyI2cError>,
@@ -326,7 +344,7 @@ impl PhyColdI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), PhyI2cError>,
@@ -1375,7 +1393,7 @@ impl PhyColdTimerBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn outer_action(&self) -> PhyRfInitPrefixAction {
         self.outer_action
     }
@@ -1927,7 +1945,7 @@ const fn phy_sdm_deadline_expired(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(test)]
+#[cfg(any(test, oer_probe))]
 pub enum PhyColdPbusAction {
     Start(PhyPbusForceTest),
     AwaitCompletionEdge(PhyPbusForceTest),
@@ -1997,12 +2015,12 @@ impl PhyColdPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn outer_action(&self) -> PhyRfInitPrefixAction {
         self.outer_action
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyColdPbusAction {
         match self.phase {
             PhyColdPbusPhase::Start => PhyColdPbusAction::Start(self.transaction),
@@ -2214,6 +2232,11 @@ impl PhyRfColdInit {
 
     pub const fn state(&self) -> &PhyState {
         &self.state
+    }
+
+    #[cfg(oer_probe)]
+    pub const fn action(&self) -> PhyRfInitPrefixAction {
+        self.transition.action()
     }
 
     pub fn step_local(&mut self) -> Result<PhyColdLocalStep, PhyColdTransitionError> {

@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-cli-vendor-scenario"
+name = "oer-tool-service-vendor-scenario-command"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ publish = false
 description = "The command line of a chip's typed vendor-comparison scenarios and the reviewer commands"
 
 [dependencies]
-oer-tool-service-vendor-scenario-report = { path = "../../lib/service/vendor-scenario-report" }
+oer-tool-service-vendor-scenario-report = { path = "../vendor-scenario-report" }
 clap = { version = "=4.5.48", features = ["derive"] }
 
 [lints]

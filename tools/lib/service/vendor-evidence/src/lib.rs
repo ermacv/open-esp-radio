@@ -17,7 +17,7 @@
 //! - `run` (feature `producers`): building the probes and the Blobray
 //!   scenarios, regenerating and checking a chip's shards.
 //!
-//! Its dependencies stay light (the repository model, serde, SHA-256), so
+//! Its dependencies stay light (`cargo metadata`, serde, SHA-256), so
 //! the Blobray workspace, the host stands, xtask and the qualification
 //! evaluator all read and write shards through it.
 #![forbid(unsafe_code)]
@@ -29,5 +29,6 @@ pub mod policy;
 pub mod producer;
 #[cfg(feature = "producers")]
 pub mod run;
+pub mod workspace;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

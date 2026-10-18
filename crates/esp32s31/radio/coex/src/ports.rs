@@ -52,12 +52,17 @@ pub struct CoexDomainClock<'ports, 'radio, T> {
 impl<'radio, T> CoexDomainPorts<'radio, T> {
     /// Lend the domain's coexistence resources for one transaction.
     pub fn new(radio: &'radio mut RadioDomain<T>) -> Self {
-        Self::with_real_chip(radio, true)
+        Self {
+            radio: RefCell::new(radio),
+            real_chip: true,
+        }
     }
 
     /// As [`Self::new`], with the vendor's FPGA clock constant selectable for
-    /// compiled comparison.
-    pub(crate) fn with_real_chip(radio: &'radio mut RadioDomain<T>, real_chip: bool) -> Self {
+    /// a probe image's compiled comparison (`cfg(oer_probe)`).
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn with_real_chip(radio: &'radio mut RadioDomain<T>, real_chip: bool) -> Self {
         Self {
             radio: RefCell::new(radio),
             real_chip,

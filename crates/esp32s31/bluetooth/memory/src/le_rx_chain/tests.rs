@@ -77,7 +77,7 @@ fn a_controller_reset_returns_the_chain_to_its_bound_image() {
     assert_ne!(chain.with_view(|view| view.chain()), initial);
 
     chain.reset_after_controller_reset(
-        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_validation(),
+        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_host_test(),
     );
 
     assert_eq!(chain.with_view(|view| view.chain()), initial);

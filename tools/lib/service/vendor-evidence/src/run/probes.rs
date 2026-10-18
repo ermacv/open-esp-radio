@@ -1,22 +1,18 @@
 //! Build each chip's caller-owned vendor comparison artifacts.
 //!
-//! The probes build into the host's shared firmware compile cache with
-//! exactly the image compiler of their chip (`oer_tool_base_toolchain::image`: the
-//! image linker, the stack-size section, the move limit of the chip's stack
-//! policy, shared generics, and the zeroed inputs the image linker checks),
-//! so the dependency units they share with the chip's images (esp-hal, the
-//! PACs, production crates) are compiled once for both.
+//! The probes are the packages of `firmware/verification/<chip>/`, built by
+//! `cargo fw`'s probe build (`oer_tool_service_firmware::probe`): the chip's
+//! image compiler, with `cfg(oer_probe)`, in the probe target directory.
 
 use crate::Result;
-use oer_tool_base_process as process;
 use oer_tool_base_process::Checkout;
-use std::{ffi::OsStr, num::NonZeroUsize, process::Command};
+use std::{ffi::OsStr, num::NonZeroUsize};
 
 const JOBS: &str = "OPEN_RADIO_ANALYSIS_BUILD_JOBS";
 
 /// One probe image: its chip and the profile's `[[probe]]` entry.
 struct Probe {
-    /// The chip whose `verification/<chip>/probes` workspace owns the image.
+    /// The chip whose `firmware/verification/<chip>/` holds the image.
     chip: String,
     probe: oer_tool_data_chip_profile::Probe,
 }
@@ -63,14 +59,6 @@ fn output(context: &Checkout, probe: &Probe) -> std::path::PathBuf {
         .join(&probe.probe.package)
 }
 
-/// The host's one firmware compile cache, which the probes share with the
-/// images.
-fn compile_cache() -> Result<std::path::PathBuf> {
-    Ok(oer_tool_base_toolchain::image::compile_cache(
-        &oer_tool_base_toolchain::image::host_build_root()?,
-    ))
-}
-
 pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
     let declared = probes(&context.root, chip)?;
     if declared.is_empty() {
@@ -83,57 +71,26 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
         }
         return Ok(());
     }
-    let cache = compile_cache()?;
-    let profile = oer_tool_data_chip_profile::Profile::load(&context.root, chip)?;
-    let target = profile.rust_target.clone();
-    let policy =
-        oer_tool_data_image_policy::StackPolicy::load(&context.root.join(profile.stack_policy()))?;
-    let linker = oer_tool_base_toolchain::image::linker_target(
-        &oer_tool_base_toolchain::image::host_build_root()?,
-    );
     build(
         context,
         chip,
-        &cache,
         std::env::var_os(JOBS).as_deref(),
-        |command| {
-            let arguments: Vec<_> = command.get_args().collect();
-            let package = arguments
-                .windows(2)
-                .find(|pair| pair[0] == "--package")
-                .and_then(|pair| pair[1].to_str())
-                .ok_or("missing probe package")?
-                .to_owned();
-            let probe = declared
-                .iter()
-                .find(|probe| probe.probe.package == package)
-                .ok_or("unknown probe package")?;
-            let elf = output(context, probe);
-            // The image compiler of the chip, as every image build of it
-            // applies it.
-            command.env(
-                oer_tool_base_toolchain::image::ZEROED_INPUTS_ENV,
-                profile.zeroed_inputs(),
-            );
-            oer_tool_base_toolchain::image::configure(
-                command,
-                &policy.image_compiler(&context.root, &linker, &target),
+        |probe, jobs| {
+            let package = probe.probe.package.as_str();
+            let built = oer_tool_service_firmware::probe::build(
+                &context.root,
+                package,
+                jobs.map(NonZeroUsize::get),
             )?;
-            {
-                // Every build uplifts into the same `<target>/release`: hold
-                // the cache until this probe's ELF is copied out.
-                let _cache = oer_tool_base_toolchain::image::lock_compile_cache(&cache)?;
-                process::run(command)?;
-                std::fs::create_dir_all(elf.parent().ok_or("probe output has no parent")?)?;
-                let built = cache.join(&target).join("release").join(&package);
-                std::fs::copy(&built, &elf)?;
-                // A shard's sources start from the image's dep-info beside it.
-                let mut dep_info = elf.clone().into_os_string();
-                dep_info.push(".d");
-                std::fs::copy(built.with_extension("d"), dep_info)?;
-            }
+            let elf = output(context, probe);
+            std::fs::create_dir_all(elf.parent().ok_or("probe output has no parent")?)?;
+            std::fs::copy(&built, &elf)?;
+            // A shard's sources start from the image's dep-info beside it.
+            let mut dep_info = elf.clone().into_os_string();
+            dep_info.push(".d");
+            std::fs::copy(built.with_extension("d"), dep_info)?;
             let catalog =
-                oer_tool_service_probe_codegen::validate_elf(&std::fs::read(&elf)?, &package)?;
+                oer_tool_service_probe_codegen::validate_elf(&std::fs::read(&elf)?, package)?;
             eprintln!(
                 "Validated {} executable probe entries in {}",
                 catalog.entries.len(),
@@ -148,20 +105,19 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
     Ok(())
 }
 
+/// Build every probe of `chip` in order through `execute`, with the job
+/// override `jobs` validated before any build; stop at the first failure.
 fn build(
     context: &Checkout,
     chip: &str,
-    cache: &std::path::Path,
     jobs: Option<&OsStr>,
-    mut execute: impl FnMut(&mut Command) -> Result<()>,
+    mut execute: impl FnMut(&Probe, Option<NonZeroUsize>) -> Result<()>,
 ) -> Result<()> {
-    // Validate before any invocation; stop at the first failed artifact.
     let jobs = parse_jobs(jobs)?;
-    let target = oer_tool_data_chip_profile::rust_target(&context.root, chip)?;
     for probe in probes(&context.root, chip)? {
         eprintln!("Building {chip} {} comparison probe", probe.probe.role);
         super::phase::timed(&format!("build {chip} {} probe", probe.probe.role), || {
-            execute(&mut command(context, &probe, &target, cache, jobs))
+            execute(&probe, jobs)
         })?;
     }
     Ok(())
@@ -181,38 +137,6 @@ fn parse_jobs(value: Option<&OsStr>) -> Result<Option<NonZeroUsize>> {
     Ok(Some(value.parse::<NonZeroUsize>().map_err(|_| {
         format!("{JOBS} must be a positive integer within the host size range")
     })?))
-}
-
-fn command(
-    context: &Checkout,
-    probe: &Probe,
-    target: &str,
-    cache: &std::path::Path,
-    jobs: Option<NonZeroUsize>,
-) -> Command {
-    let mut command = oer_tool_base_toolchain::cargo_in(&context.root);
-    command
-        .args(["build", "--manifest-path"])
-        .arg(
-            context
-                .root
-                .join("verification")
-                .join(&probe.chip)
-                .join("probes/Cargo.toml"),
-        )
-        .args([
-            "--package",
-            probe.probe.package.as_str(),
-            "--target",
-            target,
-            "--release",
-            "--locked",
-        ])
-        .env("CARGO_TARGET_DIR", cache);
-    if let Some(jobs) = jobs {
-        command.arg("--jobs").arg(jobs.to_string());
-    }
-    command
 }
 
 #[cfg(test)]

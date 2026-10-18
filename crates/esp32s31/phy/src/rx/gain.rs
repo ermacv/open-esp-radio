@@ -576,17 +576,17 @@ impl PhyRxGainPublishPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1147,7 +1147,7 @@ impl PhyRxGainInitMmioBinding {
         Ok(Self { operation })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyRxGainInitAction {
         match self.operation {
             InitMmio::PrepareDcControlRestore => PhyRxGainInitAction::PrepareDcControlRestore,

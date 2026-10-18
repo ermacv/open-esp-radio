@@ -4,7 +4,7 @@ This workspace runs the public ESP-IDF IEEE 802.15.4 driver on the host so the
 production port can be compared with the real vendor behavior. Unlike the PHY,
 Wi-Fi and Bluetooth libraries, this driver is published as source, so the stand
 compiles it directly instead of executing a captured binary. The
-[driver port map](../../../../docs/vendor/esp32s31/i-driver-port.md) identifies the pinned
+[driver port map](../../../../docs/vendor/esp32s31/ieee802154-driver-port.md) identifies the pinned
 sources and their production owners.
 
 ## What is compiled and what is recorded
@@ -19,13 +19,13 @@ The stand replaces only the boundaries the driver does not own:
 
 | Boundary | Replacement |
 | --- | --- |
-| Every `i_ll_*` register accessor | Generated from the real `i_common_ll.h`: the vendor types and constants stay, each accessor records its name and arguments |
+| Every `ieee802154_ll_*` register accessor | Generated from the real `ieee802154_common_ll.h`: the vendor types and constants stay, each accessor records its name and arguments |
 | Direct `REG_READ`/`REG_WRITE` (the ETM helpers) | Recorded register reads and writes |
-| PHY, BTBB, coexistence, modem clocks, `i_txon_delay_set`, `bt_bb_get_cur_rx_info` | Recorded calls ([`shim/src/host.c`](shim/src/host.c)) |
+| PHY, BTBB, coexistence, modem clocks, `ieee802154_txon_delay_set`, `bt_bb_get_cur_rx_info` | Recorded calls ([`shim/src/host.c`](shim/src/host.c)) |
 | `bt_bb_get_tx_pwr_table` | The recovered ESP32-S31 level set ([`src/record.rs`](src/record.rs)) |
 | `esp_intr_alloc` | Records the allocation and captures the handler that scenarios invoke |
 | `esp_timer_get_time`, the driver spinlock, `assert` | Recorded; a failed assertion becomes a trace record |
-| Application callbacks (`esp_i_receive_done`, ...) | Recorded with their frame bytes and frame information |
+| Application callbacks (`esp_ieee802154_receive_done`, ...) | Recorded with their frame bytes and frame information |
 
 Register-layer getters answer from scenario inputs, or with the last value
 the matching setter wrote. The model supplies nothing else: event images,
@@ -46,17 +46,17 @@ file must match its pinned SHA-256. The stand needs a host C compiler.
 ## Running
 
 ```console
-cargo test --manifest-path verification/esp32s31/host/i/Cargo.toml
-cargo run --manifest-path verification/esp32s31/host/i/Cargo.toml -- list
-cargo run --manifest-path verification/esp32s31/host/i/Cargo.toml -- run transmit-with-ack
-cargo run --manifest-path verification/esp32s31/host/i/Cargo.toml -- compare transmit-with-ack
-cargo run --manifest-path verification/esp32s31/host/i/Cargo.toml -- shard --index <directory>
+cargo test -p oer-tool-service-esp32s31-ieee802154-vendor-host
+cargo run -p oer-tool-service-esp32s31-ieee802154-vendor-host -- list
+cargo run -p oer-tool-service-esp32s31-ieee802154-vendor-host -- run transmit-with-ack
+cargo run -p oer-tool-service-esp32s31-ieee802154-vendor-host -- compare transmit-with-ack
+cargo run -p oer-tool-service-esp32s31-ieee802154-vendor-host -- shard --index <directory>
 ```
 
 `shard` compares every catalog scenario, each in its own process, and writes
-the stand's evidence shard `i-host` through `oer-tool-service-vendor-evidence`
+the stand's evidence shard `ieee802154-host` through `oer-tool-service-vendor-evidence`
 when all of them compare MATCH; `compare` exits 0 for MATCH, 1 for DIFF and 2
-for INCOMPLETE. `cargo verification evidence --chip esp32s31 i-host` runs
+for INCOMPLETE. `cargo verification evidence --chip esp32s31 ieee802154-host` runs
 it as the stand's producer.
 
 The compiled driver keeps its state in C globals, so each process runs one
@@ -68,9 +68,9 @@ catalog against expectations read from the pinned source.
 ## Comparing the production engine
 
 `compare` runs the same scenario through the production engine
-(`oer_espressif_i_engine::engine`) and prints `MATCH`, `DIFF` with the first
+(`oer_espressif_ieee802154_engine::engine`) and prints `MATCH`, `DIFF` with the first
 differing record, or `INCOMPLETE` with the reason. [`src/port.rs`](src/port.rs)
-renders each HAL low-level call as the vendor `i_ll_*` accessor and
+renders each HAL low-level call as the vendor `ieee802154_ll_*` accessor and
 argument, and each modem ETM access as the vendor's direct register access;
 getters on both sides answer from one shared value model. Calls that leave
 the driver (clocks, PHY, BTBB, interrupt allocation, time, critical sections)
@@ -82,7 +82,7 @@ provides it as the driver's `bt_bb_get_tx_pwr_table`, and the engine uses the
 HAL's `ESP32S31_TX_POWER_LEVELS`. The tests require `MATCH` for every catalog
 scenario.
 
-The `recent-rssi` scenario reads `esp_i_get_recent_rssi` disabled,
+The `recent-rssi` scenario reads `esp_ieee802154_get_recent_rssi` disabled,
 idle, receiving, awaiting an ACK and asleep, over receive-information images
 with nonzero upper bits. The production read is the runtime's over the PAC's
 baseband capability and passes no engine or MAC accessor, so the port
@@ -91,10 +91,10 @@ register-layer access in any state either. The value is not compared; a test
 pins it to the signed low byte of one `bt_bb_get_cur_rx_info` call, the
 geometry the register model publishes for the PAC read.
 
-`cargo verification evidence --chip esp32s31 i-host` runs `compare` for every catalog
-scenario and, only when all of them MATCH, writes the stand's evidence shard `i-host.json` into the
+`cargo verification evidence --chip esp32s31 ieee802154-host` runs `compare` for every catalog
+scenario and, only when all of them MATCH, writes the stand's evidence shard `ieee802154-host.json` into the
 chip's derived evidence index `target/verification/esp32s31/evidence`: one entry per
-scenario (source `esp-idf`, production `oer_espressif_i_engine::engine`), the
+scenario (source `esp-idf`, production `oer_espressif_ieee802154_engine::engine`), the
 digests of the pinned ESP-IDF files and of the stand's path-dependency
 closure. The stand measures no vendor coverage, production observation or
 vendor state, so its entries leave those out.
@@ -103,13 +103,13 @@ vendor state, so its entries leave those out.
 
 `--features multipan` builds the vendor driver with
 `CONFIG_IEEE802154_MULTI_PAN_ENABLE` and the Kconfig default of two
-interfaces, compiles `esp_i_multipan.c`, constructs the port with the
+interfaces, compiles `esp_ieee802154_multipan.c`, constructs the port with the
 same interfaces and adds the multi-PAN scenarios. Every scenario is compared
 in both builds; the two expectation tests that pin the default build's trace
 run only without the feature.
 
 ```console
-cargo test --manifest-path verification/esp32s31/host/i/Cargo.toml --features multipan
+cargo test -p oer-tool-service-esp32s31-ieee802154-vendor-host --features multipan
 ```
 
 ## Software coexistence
@@ -117,8 +117,8 @@ cargo test --manifest-path verification/esp32s31/host/i/Cargo.toml --features mu
 `--features sw-coex` builds the vendor driver with
 `CONFIG_ESP_COEX_SW_COEXIST_ENABLE`, the default of a build that also enables
 Wi-Fi or Bluetooth, and gives the engine the driver's default scene levels.
-The driver's `esp_coex_i_txrx_pti_set` and
-`esp_coex_i_ack_pti_set` calls are compared as `coex` records with
+The driver's `esp_coex_ieee802154_txrx_pti_set` and
+`esp_coex_ieee802154_ack_pti_set` calls are compared as `coex` records with
 their level. The port resolves the levels against a table in which level `n`
 has priority `n`, so each published priority names the level the engine
 chose; the level-to-priority resolution belongs to libcoexist and is tested
@@ -126,7 +126,7 @@ with the HAL. The test that pins the build without coexistence runs only
 without the feature.
 
 ```console
-cargo test --manifest-path verification/esp32s31/host/i/Cargo.toml --features sw-coex
+cargo test -p oer-tool-service-esp32s31-ieee802154-vendor-host --features sw-coex
 ```
 
 ## Limits

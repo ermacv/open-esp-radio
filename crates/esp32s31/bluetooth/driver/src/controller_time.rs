@@ -46,7 +46,7 @@ impl ControllerTimeSample {
     }
 
     #[cfg(test)]
-    pub const fn for_validation(raw_ticks: u32) -> Self {
+    pub const fn for_host_test(raw_ticks: u32) -> Self {
         Self::from_live_latch(BluetoothControllerLatchedTime::from_bits(raw_ticks))
     }
 
@@ -119,7 +119,7 @@ mod worker {
 
     impl ControllerTimeRequest {
         #[cfg(test)]
-        pub const fn for_validation(generation: u64) -> Self {
+        pub const fn for_host_test(generation: u64) -> Self {
             Self(generation)
         }
     }

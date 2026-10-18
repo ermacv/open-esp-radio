@@ -138,29 +138,6 @@ impl BluetoothPhyRegisterInitInputs {
             configuration_word_40: NORMAL_PROFILE_CONFIGURATION_WORD_40,
         }
     }
-
-    /// Capture arbitrary positional inputs for an isolated vendor-comparison
-    /// image.
-    ///
-    /// Shipping callers cannot select these register-facing values. The sole
-    /// crate-local consumer is the validation bridge that compares the bounded
-    /// PAC transaction against externally seeded vendor state.
-    #[cfg(feature = "validation-probes")]
-    pub(crate) const fn validation_profile(
-        private_timing_source_byte: u8,
-        environment: BluetoothPhyEnvironmentAddress,
-        resolving_list: BluetoothControllerSramAddress,
-        set_branch_control_0470_bit_18: bool,
-        configuration_word_40: u32,
-    ) -> Self {
-        Self {
-            private_timing_source_byte,
-            environment,
-            resolving_list,
-            set_branch_control_0470_bit_18,
-            configuration_word_40,
-        }
-    }
 }
 
 /// Owner of a disabled BLE PHY ETM route. Only

@@ -3,7 +3,7 @@
 //! Every vendor file is read from the sources `cargo verification fetch`
 //! fetched, or from the checkout `OER_ESP_IDF_DIR` names, and must match the
 //! SHA-256 pinned in the repository's `artifacts.toml`. The build generates a recording
-//! replacement for every `i_ll_*` accessor declared by the real
+//! replacement for every `ieee802154_ll_*` accessor declared by the real
 //! common LL header, so the compiled driver keeps its own control flow while
 //! each register-layer call reaches the Rust recorder.
 
@@ -31,7 +31,7 @@ const INCLUDE_DIRS: &[&str] = &[
 
 /// The repository's pinned-artifact manifest and the source whose artifacts
 /// this stand compiles.
-const ARTIFACTS: &str = "../../artifacts.toml";
+const ARTIFACTS: &str = "../../../../knowledge/esp32s31/vendor/artifacts.toml";
 const IDF_SOURCE: &str = "esp-idf";
 /// The repository root, relative to this package.
 const REPOSITORY: &str = "../../../..";
@@ -101,7 +101,7 @@ fn accessors(header: &str) -> Vec<Accessor> {
             continue;
         };
         // The accessor name is the last token before the parameter list; the
-        // return type may itself be an `i_ll_*` typedef.
+        // return type may itself be an `ieee802154_ll_*` typedef.
         let head = signature[..paren].trim_end();
         let split = head.rfind([' ', '*']).expect("accessor return type");
         let name = head[split + 1..].to_owned();
@@ -144,7 +144,7 @@ fn generate(accessors: &[Accessor], out: &Path) -> PathBuf {
     );
     let mut bodies = String::from(
         "/* Generated: forward every LL accessor to the Rust recorder. */\n\
-         #include <stdint.h>\n#include \"hal/i_common_ll.h\"\n\
+         #include <stdint.h>\n#include \"hal/ieee802154_common_ll.h\"\n\
          uint64_t oer_host_record(const char *name, const uint64_t *arguments, uint32_t count,\n                        uint32_t pointers);\n",
     );
     for accessor in accessors {
