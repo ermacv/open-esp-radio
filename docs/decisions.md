@@ -230,6 +230,14 @@ defaults, queue bounds) live in the code that applies them, not here.
   repository keeps from an unlicensed source is still facts only
   (owner, 2026-10-18).
 
+## 2026-10-18: the Bluetooth LE code
+
+- **Carried as it is.** The predecessor's Bluetooth LE driver, its controller
+  memory, the S31 radio role, the controller's scheduling core and the HAL's
+  scheduler locks are carried as they are, including what they took from
+  `esp32s31-bt-lib`; this replaces the earlier rule that only facts from that
+  library enter the repository (owner, 2026-10-18).
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
