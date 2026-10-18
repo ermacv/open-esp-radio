@@ -51,6 +51,8 @@ later said about it.
 | Cached PSRAM (0x50xx_xxxx) addresses as Wi-Fi DMA buffers delivered no UDP; same image with SRAM delivered 122.35–122.40 Mbit/s | older egress experiments | 2026-09 (older snapshots) | same issue | claimed; the DMA contract stays SRAM |
 | One peer ~124 Mbit/s with early SRAM admission; two peers ~97 Mbit/s at 67 slots, ~121 at 98 slots (+52 576 bytes) | older AP queue-geometry experiments | 2026-09 (older snapshots) | same issue | claimed |
 | GDMA PSRAM→SRAM copy of 32 frames: fewer instructions but 2.27× wall time | older copy experiments | 2026-09 (older snapshots) | same issue | claimed |
+| Monitor mode received over 1000 frames | standalone monitor example, staged PSRAM boot, PSRAM at 250 MHz | 2026-09-05 | predecessor commit sharing the staged boot between HIL and examples | measured |
+| Monitor capture scenario passed (with ICMP latency, station reconnect and AP ICMP) | Wi-Fi interrupt sources enabled through the image's interrupt table | 2026-10-04 | predecessor commit routing Wi-Fi interrupts through the image table | measured (pass, no numbers) |
 
 ### Power save and time
 
