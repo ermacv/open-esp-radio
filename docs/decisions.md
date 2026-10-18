@@ -203,6 +203,22 @@ defaults, queue bounds) live in the code that applies them, not here.
   contracts stabilize. The stand tooling (boards, fixtures, power, runner,
   arbiter and a local status page in the browser) is built now, for manual
   use (owner, 2026-10-18).
+## 2026-10-18: analysis and verification
+
+- **Analysis platform.** Binary analysis returns as a set of building blocks
+  (ELF view, RV32 decoding, lifting, control-flow and value analysis, the
+  program model, concrete execution), not as one MMIO tool. Applications are
+  built on them for vendor libraries and for our own images and runs: MMIO
+  research, the stack analyzer, vendor comparison, provenance and copy
+  checks, image checks, and more as needed.
+- **Vendor comparison** (pins, facts, behaviour compared against the pinned
+  vendor code) returns as a tool used by hand; its evidence index, shards,
+  merge-base gate and qualification binding do not.
+- **Probes stay non-invasive.** Production crates may carry macros that are
+  active only in analysis builds and expand to nothing otherwise; product
+  firmware contains no extra logic. Probes use stable public functions and
+  methods. Every firmware image, probe images included, lives in the
+  firmware directory (owner, 2026-10-18).
 
 ## Earlier decisions still in force
 
