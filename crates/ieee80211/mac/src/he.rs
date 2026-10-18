@@ -3,6 +3,10 @@
 //! This module does not enable HE transmission. It owns the stateless peer
 //! representation recovered from reviewed vendor behavior. Register
 //! programming belongs to the chip MAC/PAC boundary.
+//!
+//! Received bytes reach the HE Capabilities and HE Operation element parsers
+//! (stored scan elements, parsed at association); nothing in them panics on
+//! those bytes, and they deny the panic lints item by item.
 
 pub const HE_CAPABILITIES_EXTENSION_ID: u8 = 35;
 pub const HE_OPERATION_EXTENSION_ID: u8 = 36;
@@ -726,9 +730,17 @@ pub enum HeMcsNssSupport {
 }
 
 impl HeMcsNssSupport {
-    const fn from_map(map: u16, spatial_stream: u8) -> Self {
-        let shift = spatial_stream.saturating_sub(1) as u32 * 2;
-        match (map >> shift) & 0x03 {
+    /// The support the MCS/NSS `map` advertises for one spatial stream.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
+    const fn one_stream_from_map(map: u16) -> Self {
+        match map & 0x03 {
             0 => Self::Mcs0To7,
             1 => Self::Mcs0To9,
             2 => Self::Mcs0To11,
@@ -757,6 +769,14 @@ pub enum HeDcmConstellation {
 }
 
 impl HeDcmConstellation {
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     const fn from_encoding(encoding: u8) -> Self {
         match encoding & 0x03 {
             0 => Self::NotSupported,
@@ -925,11 +945,20 @@ pub enum HeElementError {
     WrongExtension,
 }
 
-fn validate_extension(
+/// The extension element `element`, split into its fixed `MINIMUM_LEN`-byte
+/// prefix (header included) and the optional bytes after it.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
+fn validate_extension<const MINIMUM_LEN: usize>(
     element: &[u8],
     extension: u8,
-    minimum_len: usize,
-) -> Result<&[u8], HeElementError> {
+) -> Result<(&[u8; MINIMUM_LEN], &[u8]), HeElementError> {
     if element.first().copied() != Some(255) {
         return Err(HeElementError::WrongElement);
     }
@@ -939,28 +968,33 @@ fn validate_extension(
     if usize::from(declared_len).checked_add(2) != Some(element.len()) {
         return Err(HeElementError::LengthMismatch);
     }
-    if element.len() < minimum_len {
+    let Some((prefix, tail)) = element.split_first_chunk::<MINIMUM_LEN>() else {
         return Err(HeElementError::TooShort);
-    }
-    if element.get(2).copied() != Some(extension) {
+    };
+    if prefix.get(2).copied() != Some(extension) {
         return Err(HeElementError::WrongExtension);
     }
-    Ok(element)
+    Ok((prefix, tail))
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeElementError> {
-    let element = validate_extension(
-        element,
-        HE_CAPABILITIES_EXTENSION_ID,
-        HE_CAPABILITIES_IE_MIN_LEN,
-    )?;
+    let (element, _) =
+        validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
     let receive_mcs_map = u16::from_le_bytes([element[20], element[21]]);
     let transmit_mcs_map = u16::from_le_bytes([element[22], element[23]]);
     Ok(He20Capabilities {
         receive_mcs_map,
         transmit_mcs_map,
-        receive_nss1: HeMcsNssSupport::from_map(receive_mcs_map, 1),
-        transmit_nss1: HeMcsNssSupport::from_map(transmit_mcs_map, 1),
+        receive_nss1: HeMcsNssSupport::one_stream_from_map(receive_mcs_map),
+        transmit_nss1: HeMcsNssSupport::one_stream_from_map(transmit_mcs_map),
         one_ltf_800ns_gi: element[10] & 0x40 != 0,
         ldpc_coding_in_payload: element[10] & 0x20 != 0,
         stbc_transmit_under_80_mhz: element[11] & 0x04 != 0,
@@ -974,8 +1008,17 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
     })
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementError> {
-    let element = validate_extension(element, HE_OPERATION_EXTENSION_ID, HE_OPERATION_IE_MIN_LEN)?;
+    let (element, _) =
+        validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
     let bss_color_information = element[6];
     Ok(He20Operation {
         bss_color: bss_color_information & 0x3f,
@@ -993,28 +1036,31 @@ pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementEr
 /// libnet80211[ieee80211_he.o]::ieee80211_parse_heopr` bodies and their format strings. This function is
 /// deliberately pure; corresponding MMIO transforms are tracked separately
 /// by the hardware backend.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_he20_peer_state(
     capability: &[u8],
     operation: &[u8],
 ) -> Result<He20PeerState, HeElementError> {
-    let capability = validate_extension(
-        capability,
-        HE_CAPABILITIES_EXTENSION_ID,
-        HE_CAPABILITIES_IE_MIN_LEN,
-    )?;
-    let operation = validate_extension(
-        operation,
-        HE_OPERATION_EXTENSION_ID,
-        HE_OPERATION_IE_MIN_LEN,
-    )?;
+    let (capability, thresholds) =
+        validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(capability, HE_CAPABILITIES_EXTENSION_ID)?;
+    let (operation, _) =
+        validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, HE_OPERATION_EXTENSION_ID)?;
 
-    let mut capability_prefix = [0_u8; HE_CAPABILITIES_IE_MIN_LEN];
-    capability_prefix.copy_from_slice(&capability[..HE_CAPABILITIES_IE_MIN_LEN]);
+    let capability_prefix = *capability;
     let packet_padding_eight_us = if capability[15] & 0x80 == 0 {
         capability[18] >> 6
     } else {
-        let ppe0 = *capability.get(24).ok_or(HeElementError::TooShort)?;
-        let ppe1 = *capability.get(25).ok_or(HeElementError::TooShort)?;
+        // The PPE Thresholds field follows the fixed prefix.
+        let [ppe0, ppe1, ..] = *thresholds else {
+            return Err(HeElementError::TooShort);
+        };
         let ppet8 = ((ppe1 & 0x03) << 1) | (ppe0 >> 7);
         if ppe0 & 0x08 != 0 && ppe1 & 0x1c == 0x1c && ppet8 == 0 {
             2

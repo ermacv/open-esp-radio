@@ -439,3 +439,104 @@ fn recovers_vendor_ap_he20_peer_state() {
         HeDcmConstellation::NotSupported
     );
 }
+
+/// The HE Capabilities and HE Operation elements of the vendor AP the peer
+/// state test recovers, plus a capability that carries no PPE thresholds.
+const SEED_CAPABILITY: [u8; 28] = [
+    0xff, 0x1a, 0x23, 0x05, 0x00, 0x18, 0x12, 0x00, 0x10, 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x41, 0x95,
+    0x08, 0x00, 0xcc, 0x00, 0xfa, 0xff, 0xfa, 0xff, 0x19, 0x1c, 0xc7, 0x71,
+];
+const SEED_OPERATION: [u8; 9] = [0xff, 0x07, 0x24, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
+
+fn minimal_capability() -> [u8; 24] {
+    let mut element = [0_u8; 24];
+    element[..3].copy_from_slice(&[255, 22, 35]);
+    element[20..24].copy_from_slice(&[0xfd, 0xff, 0xfd, 0xff]);
+    element
+}
+
+#[test]
+fn a_capability_announcing_ppe_thresholds_without_them_is_too_short() {
+    let mut capability = minimal_capability();
+    capability[15] |= 0x80;
+    assert_eq!(
+        parse_he20_peer_state(&capability, &SEED_OPERATION),
+        Err(HeElementError::TooShort)
+    );
+    let mut one_byte = [0_u8; 25];
+    one_byte[..24].copy_from_slice(&capability);
+    one_byte[1] = 23;
+    assert_eq!(
+        parse_he20_peer_state(&one_byte, &SEED_OPERATION),
+        Err(HeElementError::TooShort)
+    );
+    assert!(parse_he20_peer_state(&SEED_CAPABILITY, &SEED_OPERATION).is_ok());
+}
+
+#[test]
+fn element_checks_keep_their_order() {
+    assert_eq!(parse_he20_operation(&[]), Err(HeElementError::WrongElement));
+    assert_eq!(parse_he20_operation(&[255]), Err(HeElementError::TooShort));
+    assert_eq!(
+        parse_he20_operation(&[255, 7, 36]),
+        Err(HeElementError::LengthMismatch)
+    );
+    assert_eq!(
+        parse_he20_operation(&[255, 1, 36]),
+        Err(HeElementError::TooShort)
+    );
+    let mut wrong = SEED_OPERATION;
+    wrong[2] = 35;
+    assert_eq!(
+        parse_he20_operation(&wrong),
+        Err(HeElementError::WrongExtension)
+    );
+}
+
+fn parse_every_element(bytes: &[u8]) {
+    if let Ok(capability) = parse_he20_capabilities(bytes) {
+        let _ = (
+            capability.supports_bidirectional_mcs9(),
+            capability.supports_one_ltf_800ns_gi(),
+            capability.dcm_receive_constellation(),
+        );
+    }
+    if let Ok(operation) = parse_he20_operation(bytes) {
+        let _ = operation.effective_bss_color();
+    }
+    // The input as either element of the pair, with the other one valid,
+    // and split at its middle into a capability and an operation.
+    let _ = parse_he20_peer_state(bytes, &SEED_OPERATION);
+    let _ = parse_he20_peer_state(&SEED_CAPABILITY, bytes);
+    let (capability, operation) = bytes.split_at(bytes.len() / 2);
+    if let Ok(state) = parse_he20_peer_state(capability, operation) {
+        let _ = state.extended_range_single_user_permitted();
+    }
+}
+
+fn run_element_parsers(count: usize) {
+    assert!(parse_he20_capabilities(&SEED_CAPABILITY).is_ok());
+    let minimal = minimal_capability();
+    assert!(parse_he20_capabilities(&minimal).is_ok());
+    assert!(parse_he20_operation(&SEED_OPERATION).is_ok());
+    // The pair back to back, which the middle split of a mutated input meets.
+    let pair = [SEED_CAPABILITY.as_slice(), SEED_OPERATION.as_slice()].concat();
+    let seeds = [
+        SEED_CAPABILITY.as_slice(),
+        SEED_OPERATION.as_slice(),
+        minimal.as_slice(),
+        pair.as_slice(),
+    ];
+    crate::fuzz::inputs(&seeds, count, 64, parse_every_element);
+}
+
+#[test]
+fn he_element_parsers_never_panic_on_received_bytes() {
+    run_element_parsers(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn he_element_parsers_never_panic_on_received_bytes_full() {
+    run_element_parsers(crate::fuzz::FULL);
+}
