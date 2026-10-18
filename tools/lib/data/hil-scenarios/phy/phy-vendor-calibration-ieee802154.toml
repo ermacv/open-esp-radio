@@ -1,0 +1,10 @@
+schema = 5
+id = "phy-vendor-calibration-ieee802154"
+description = "PHY register and analog state with the IEEE 802.15.4 radio receiving on channel 15: the vendor reference firmware against the diagnostic IEEE 802.15.4 image's session"
+role = "investigation"
+tags = ["phy", "calibration", "vendor-comparison", "ieee802154"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "ieee802154"
+boots = 5

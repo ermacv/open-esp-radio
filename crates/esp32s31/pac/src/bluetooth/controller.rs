@@ -2,4 +2,6 @@
 
 pub(crate) mod address;
 
+pub(crate) mod init;
+
 pub(crate) mod time;

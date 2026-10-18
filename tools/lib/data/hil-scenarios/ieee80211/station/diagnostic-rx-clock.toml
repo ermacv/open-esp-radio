@@ -1,0 +1,16 @@
+schema = 5
+id = "diagnostic-rx-clock"
+description = "Connected-station ICMP on the receive-clock probe image: frame receive timestamps beside their handoff time, and paired MAC local-time and monotonic readings, to establish the MAC counter's unit, drift and frame age"
+role = "investigation"
+tags = ["icmp", "station", "diagnostic", "clock"]
+
+[wifi]
+image = "diagnostic-rx-clock"
+
+[wifi.workload]
+kind = "station-icmp"
+link = { phy = "he20" }
+count = 1000
+interval_ms = 20
+timeout_ms = 1000
+payload_bytes = 56

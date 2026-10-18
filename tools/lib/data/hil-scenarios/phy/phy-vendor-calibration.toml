@@ -1,0 +1,10 @@
+schema = 5
+id = "phy-vendor-calibration"
+description = "Cold PHY calibration, radio-PHY register image and analog image of the pinned vendor firmware and the correctness image, alternating on one board, compared under the reviewed phy_param relation"
+role = "investigation"
+tags = ["phy", "calibration", "vendor-comparison"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "cold"
+boots = 10

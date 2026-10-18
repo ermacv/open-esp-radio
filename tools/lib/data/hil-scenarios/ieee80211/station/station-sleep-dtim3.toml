@@ -1,0 +1,18 @@
+schema = 5
+id = "station-sleep-dtim3"
+description = "Station modem sleep at DTIM 3: RF sleep edges and the MAC counter across sleep"
+role = "investigation"
+tags = ["icmp", "station", "sleep"]
+
+[wifi]
+image = "correctness"
+
+[wifi.workload]
+kind = "station-sleep"
+link = { phy = "he20" }
+power_save = "min-modem"
+access_point_beacon = { interval_tu = 100, dtim_period = 3 }
+count = 60
+interval_ms = 500
+timeout_ms = 2000
+payload_bytes = 56

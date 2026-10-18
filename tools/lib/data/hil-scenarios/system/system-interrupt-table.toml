@@ -1,0 +1,10 @@
+schema = 5
+id = "system-interrupt-table"
+description = "A source of the image's interrupt table stays silent until its owner enables it with its token, runs its table handler once enabled, and is silent again once disabled"
+role = "investigation"
+repetitions = 1
+tags = ["soc", "interrupts"]
+
+[system]
+kind = "interrupt-table"
+probes = 10

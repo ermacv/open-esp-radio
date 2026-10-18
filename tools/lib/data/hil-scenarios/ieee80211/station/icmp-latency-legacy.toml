@@ -1,0 +1,20 @@
+schema = 5
+id = "icmp-latency-legacy"
+description = "Connected-station ICMP latency and loss with a non-HT access point"
+role = "investigation"
+tags = ["icmp", "station", "legacy", "air-strict"]
+
+[wifi]
+image = "correctness"
+
+[wifi.workload]
+kind = "station-icmp"
+link = { phy = "legacy" }
+count = 100
+interval_ms = 20
+timeout_ms = 1000
+payload_bytes = 56
+
+[wifi.workload.criteria]
+maximum_p95_ms = 20
+require_no_beacon_loss = true
