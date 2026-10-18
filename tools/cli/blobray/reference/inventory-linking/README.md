@@ -156,8 +156,8 @@ at most 512 bytes, map/observation records 64 KiB and the stderr tail 8192
 bytes. Capacity exhaustion fails explicitly. The workspace is a private
 temporary directory below the caller's directory, removed when the link ends.
 
-Real-link tests require LLD (reference 22.1.8) on the host; the LLD the
-pinned Rust toolchain ships (`gcc-ld/ld.lld`) passes them, Ubuntu's LLD 18
-fails them. Set `BLOBRAY_TEST_LLD` to override `/usr/bin/ld.lld`. The adapter
+Real-link tests use the LLD the pinned Rust toolchain ships
+(`gcc-ld/ld.lld`), so they need no host linker; `BLOBRAY_TEST_LLD` selects
+another (Ubuntu's LLD 18 fails them). The adapter
 always selects `elf32lriscv` and passes archive inputs with
-`--start-lib`/`--end-lib`. A missing LLD fails the tests. Tests use synthetic RV32 inputs, not hardware qualification.
+`--start-lib`/`--end-lib`. Tests use synthetic RV32 inputs, not hardware qualification.

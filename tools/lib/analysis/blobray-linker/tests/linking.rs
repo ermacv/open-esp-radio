@@ -19,10 +19,29 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// The LLD of the pinned Rust toolchain, so the tests need no host linker;
+/// `BLOBRAY_TEST_LLD` selects another.
 fn linker() -> PathBuf {
-    std::env::var_os("BLOBRAY_TEST_LLD")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| "/usr/bin/ld.lld".into())
+    if let Some(path) = std::env::var_os("BLOBRAY_TEST_LLD") {
+        return path.into();
+    }
+    let rustc = |argument: &str| {
+        let output = std::process::Command::new("rustc")
+            .arg(argument)
+            .output()
+            .expect("rustc of the pinned toolchain runs");
+        String::from_utf8(output.stdout).expect("rustc prints UTF-8")
+    };
+    let sysroot = rustc("--print=sysroot");
+    let verbose = rustc("-vV");
+    let host = verbose
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .expect("rustc -vV names the host");
+    Path::new(sysroot.trim())
+        .join("lib/rustlib")
+        .join(host)
+        .join("bin/gcc-ld/ld.lld")
 }
 
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {
