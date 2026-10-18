@@ -1,6 +1,7 @@
 //! The dependency rules of `tools/README.md`, read from the path dependencies
-//! of every `Cargo.toml` below `tools/` and `crates/`. A package's layer is
-//! its folder; manifests carry no layer metadata.
+//! of every `Cargo.toml` below `tools/` and `crates/`, and the rule that a
+//! package is named after its directory. A package's layer is its folder;
+//! manifests carry no layer metadata.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -279,4 +280,60 @@ fn every_host_package_is_a_default_member_and_no_chip_only_one_is() {
         .filter(|package| !members.contains(package))
         .collect::<Vec<_>>();
     assert!(unlisted.is_empty(), "not workspace members: {unlisted:?}");
+}
+
+/// The package name the directory `path` must carry: `crates/a/b` is
+/// `oer-a-b`, `firmware/a/b` is `oer-firmware-a-b`, and `tools/x/y` is
+/// `oer-tool-x-y` with the `lib/` level left out.
+fn expected_name(path: &str) -> String {
+    let parts = path.split('/').collect::<Vec<_>>();
+    let parts = match parts.as_slice() {
+        ["crates", rest @ ..] => [&["oer"][..], rest].concat(),
+        ["firmware", rest @ ..] => [&["oer", "firmware"][..], rest].concat(),
+        ["tools", "lib", rest @ ..] | ["tools", rest @ ..] => [&["oer", "tool"][..], rest].concat(),
+        _ => parts,
+    };
+    parts.join("-")
+}
+
+#[test]
+fn every_package_is_named_after_its_directory() {
+    let root = root();
+    let mut found = Vec::new();
+    for directory in ["tools", "crates", "firmware"] {
+        packages(&root, directory, &mut found);
+    }
+    let misnamed = found
+        .iter()
+        .filter_map(|package| {
+            let text = std::fs::read_to_string(root.join(package).join("Cargo.toml")).unwrap();
+            let manifest: toml::Table = toml::from_str(&text).unwrap();
+            let expected = expected_name(package);
+            let name = manifest.get("package")?.get("name")?.as_str()?;
+            let renamed = manifest
+                .get("lib")
+                .and_then(|lib| lib.get("name"))
+                .is_some();
+            (name != expected || renamed).then(|| {
+                format!("{package} is `{name}`, must be `{expected}` without a `[lib] name`")
+            })
+        })
+        .collect::<Vec<_>>();
+    assert!(misnamed.is_empty(), "{}", misnamed.join("\n"));
+}
+
+#[test]
+fn the_name_follows_the_path() {
+    for (path, name) in [
+        ("crates/base/time", "oer-base-time"),
+        (
+            "crates/esp32s31/ieee80211/driver",
+            "oer-esp32s31-ieee80211-driver",
+        ),
+        ("firmware/apps/w1", "oer-firmware-apps-w1"),
+        ("tools/lib/service/firmware", "oer-tool-service-firmware"),
+        ("tools/cli/fw", "oer-tool-cli-fw"),
+    ] {
+        assert_eq!(expected_name(path), name);
+    }
 }

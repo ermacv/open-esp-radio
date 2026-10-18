@@ -13,7 +13,8 @@ use crate::{
 /// acquisition is due at once and its tracking completes there.
 fn clients(active: &[RadioClient]) -> PhyClientSnapshot {
     let mut owner = PhyClientState::without_registration(1000);
-    let at_zero = oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    let at_zero =
+        oer_base_time_virtual::VirtualClock::<8>::starting_at(oer_base_time::Instant::EPOCH);
     for client in active {
         owner = match owner
             .acquire(*client, &at_zero)
@@ -160,7 +161,9 @@ fn inspection_rejects_reversed_clock_and_uses_updated_state_on_reinspection() {
     let later = PhyClientState::without_registration(1000)
         .acquire(
             RadioClient::Wifi,
-            &oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(2000)),
+            &oer_base_time_virtual::VirtualClock::<8>::starting_at(
+                oer_base_time::Instant::from_micros(2000),
+            ),
         )
         .unwrap_or_else(|_| panic!("acquire"))
         .into_owner()

@@ -168,13 +168,13 @@ pub mod coordinator;
 
 use core::{fmt::Debug, marker::PhantomData};
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_lower_mac::{
     AirReservationPhase, GateClosed, GateOpen, Ieee80211Capabilities, Ieee80211Instant,
     LowerMacPhase, PhaseTypes, SupportedChannel,
 };
 use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
 use oer_radio_port::{PoolPath, Root};
-use oer_time::{Duration, Instant};
 
 use coordinator::{
     ApFollowPolicy, ApSchedule, ApSearchPolicy, BeaconInterval, ChannelCoordinator,

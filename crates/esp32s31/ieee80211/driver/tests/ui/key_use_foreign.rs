@@ -1,7 +1,7 @@
 #![no_std]
-use oer_esp32s31_ieee80211::lower_mac::{CorePools, KeyUse, TxAdmission};
+use oer_esp32s31_ieee80211_driver::lower_mac::{CorePools, KeyUse, TxAdmission};
 use oer_radio_port::branded;
-fn accept<'id>(_: &oer_esp32s31_ieee80211::lower_mac::CoreAuthority<'id>, _: TxAdmission<'id>) {}
+fn accept<'id>(_: &oer_esp32s31_ieee80211_driver::lower_mac::CoreAuthority<'id>, _: TxAdmission<'id>) {}
 pub async fn installations() {
     branded::<CorePools, _>(async |outer| {
         let outer = outer.into_pools();

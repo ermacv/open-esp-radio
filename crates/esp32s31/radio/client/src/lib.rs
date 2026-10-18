@@ -50,7 +50,7 @@ pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
 
 /// The owner's provisional bound of one poll of the actor future
 /// (docs/decisions.md, "Radio system").
-pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros(50);
+pub const ACTOR_STEP_BOUND: oer_base_time::Duration = oer_base_time::Duration::from_micros(50);
 
 mod sealed {
     pub trait Sealed {}

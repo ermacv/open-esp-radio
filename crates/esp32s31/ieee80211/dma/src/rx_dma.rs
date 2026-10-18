@@ -13,7 +13,7 @@ use crate::{
     rx_ring::{RxArenaWords, RxDescriptorTable},
 };
 
-use oer_memory::StableDmaRange;
+use oer_base_memory::StableDmaRange;
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,

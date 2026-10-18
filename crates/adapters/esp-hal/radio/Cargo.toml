@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-radio-esp-hal"
+name = "oer-adapters-esp-hal-radio"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-controller"
+name = "oer-bluetooth-le-controller"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ description = "Pure Bluetooth LE Controller pieces: event geometry, authenticate
 
 [dependencies]
 bt-hci = "=0.10.1"
-oer-bluetooth-ll = { path = "../ll" }
-oer-bluetooth-radio = { path = "../radio" }
+oer-bluetooth-le-ll = { path = "../ll" }
+oer-bluetooth-le-radio = { path = "../radio" }
 
 [lints]
 workspace = true

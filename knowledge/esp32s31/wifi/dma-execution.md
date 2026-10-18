@@ -4,7 +4,7 @@ Source: the Wi-Fi execution form of the predecessor repository
 (`crates/runtime/esp32s31/ieee80211-form` there). The form itself was not
 carried: its interrupt model (a critical section shared by ISR and task) is
 replaced by the P3/P2 contexts. The buffer-level custody rules it relied on live in the carried
-code (`oer-memory` `indexed_custody`, the `dma` and `mac` crates); the rules
+code (`oer-base-memory` `indexed_custody`, the `dma` and `mac` crates); the rules
 below are the execution-level ones the rebuild must keep. They are the W1
 checklist: W1 is the first step where receive DMA runs.
 

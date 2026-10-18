@@ -1,5 +1,5 @@
 [package]
-name = "oer-embassy-net-owned"
+name = "oer-adapters-embassy-net"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xa
 
 [dependencies]
 embassy-sync = "0.8.0"
-oer-memory = { path = "../../../base/memory" }
-oer-network-interface = { path = "../../../base/network" }
+oer-base-memory = { path = "../../../base/memory" }
+oer-base-network = { path = "../../../base/network" }
 oer-ieee80211-datapath = { path = "../../../ieee80211/datapath" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "9e0e3293724c30c5892e6af56150c849f5231eb2", features = ["async"] }
 

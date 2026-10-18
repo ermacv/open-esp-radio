@@ -33,10 +33,10 @@
 
 use core::num::{NonZeroU8, NonZeroU64};
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_lower_mac::{Ieee80211Capabilities, SupportedChannel};
 use oer_ieee80211_mac::channel::{Band, Channel};
 use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
-use oer_time::{Duration, Instant};
 
 use crate::channel::requires_radar_detection;
 
@@ -144,7 +144,7 @@ impl ApFollowPolicy {
 /// ```
 /// use oer_ieee80211_arbiter::coordinator::ApSearchPolicy;
 /// let policy = ApSearchPolicy::DEFAULT;
-/// assert!(policy.sparse_interval > oer_time::Duration::ZERO);
+/// assert!(policy.sparse_interval > oer_base_time::Duration::ZERO);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApSearchPolicy {
@@ -274,7 +274,7 @@ pub enum JoinAway {
 ///
 /// ```
 /// use oer_ieee80211_arbiter::coordinator::BeaconInterval;
-/// use oer_time::Duration;
+/// use oer_base_time::Duration;
 /// assert!(BeaconInterval::new(Duration::ZERO).is_none());
 /// assert_eq!(BeaconInterval::new(Duration::from_millis(100)).unwrap().as_micros(), 100_000);
 /// ```
@@ -302,8 +302,8 @@ impl BeaconInterval {
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
 /// use oer_ieee80211_lower_mac::SupportedChannel;
 /// fn raw_interval<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
-///     ApSchedule { channel, next_tbtt: oer_time::Instant::from_micros(0),
-///         beacon_interval: oer_time::Duration::ZERO }
+///     ApSchedule { channel, next_tbtt: oer_base_time::Instant::from_micros(0),
+///         beacon_interval: oer_base_time::Duration::ZERO }
 /// }
 /// ```
 ///
@@ -311,7 +311,7 @@ impl BeaconInterval {
 /// ```compile_fail,E0308
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
 /// use oer_ieee80211_mac::channel::Channel;
-/// use oer_time::{Duration, Instant};
+/// use oer_base_time::{Duration, Instant};
 /// fn raw_schedule<K>(channel: Channel) -> ApSchedule<K> {
 ///     ApSchedule {
 ///         channel,
@@ -324,7 +324,7 @@ impl BeaconInterval {
 /// ```
 /// use oer_ieee80211_arbiter::coordinator::ApSchedule;
 /// use oer_ieee80211_lower_mac::SupportedChannel;
-/// use oer_time::{Duration, Instant};
+/// use oer_base_time::{Duration, Instant};
 /// fn checked_schedule<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
 ///     ApSchedule {
 ///         channel,
@@ -420,7 +420,7 @@ enum AccessPoint<K> {
 /// The arbiter owns search timing; the coordinator has no independent poll loop:
 /// ```compile_fail,E0599
 /// use oer_ieee80211_arbiter::coordinator::ChannelCoordinator;
-/// use oer_time::Instant;
+/// use oer_base_time::Instant;
 /// fn separate_loop<K: oer_ieee80211_lower_mac::Ieee80211Capabilities>(
 ///     coordinator: &mut ChannelCoordinator<K>, now: Instant,
 /// ) {

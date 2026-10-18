@@ -9,11 +9,11 @@
 //! Selection precedes scarce SRAM admission without exposing a network stack,
 //! executor or adapter queue to STA/AP policy.
 
-use oer_memory::{
+use oer_base_memory::{
     DmaIndexReturn, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
     TaggedStableDmaBacking,
 };
-use oer_network_interface::NetworkInterfaceId;
+use oer_base_network::NetworkInterfaceId;
 
 pub mod airtime;
 #[cfg(any(test, feature = "model"))]

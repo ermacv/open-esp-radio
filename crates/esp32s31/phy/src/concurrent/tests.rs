@@ -1,9 +1,9 @@
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::{
     domain::{RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::RadioHardware,
 };
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
@@ -107,8 +107,8 @@ fn due_tracking_blocks_clients_until_maintenance_is_admitted() {
         Err(ConcurrentPhyError::NoTrackingPending)
     );
     // One period later the periodic callback requests tracking.
-    let later = oer_time_virtual::START
-        .checked_add(oer_time::Duration::from_micros(
+    let later = oer_base_time_virtual::START
+        .checked_add(oer_base_time::Duration::from_micros(
             DEFAULT_PLL_TRACK_PERIOD_MICROS,
         ))
         .unwrap();
@@ -206,7 +206,7 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
 fn enter_client(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     client: oer_esp32s31_hal::domain::RadioClient,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }

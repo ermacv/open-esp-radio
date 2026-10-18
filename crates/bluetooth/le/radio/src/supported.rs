@@ -42,27 +42,27 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 ///
 /// ```compile_fail,E0451
 /// # use core::marker::PhantomData;
-/// # use oer_bluetooth_radio::{NoCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_radio::{NoCapabilities, Supported, TxPower};
 /// let forged: Supported<NoCapabilities, TxPower> =
 ///     Supported { value: TxPower::from_dbm(0), caps: PhantomData };
 /// ```
 ///
 /// ```compile_fail,E0599
-/// # use oer_bluetooth_radio::{Supported, TxPower, LeCapabilities};
+/// # use oer_bluetooth_le_radio::{Supported, TxPower, LeCapabilities};
 /// fn copy<K: LeCapabilities>(power: &Supported<K, TxPower>) -> Supported<K, TxPower> {
 ///     power.clone()
 /// }
 /// ```
 ///
 /// ```compile_fail,E0277
-/// # use oer_bluetooth_radio::{NoCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_radio::{NoCapabilities, Supported, TxPower};
 /// let _: Supported<NoCapabilities, TxPower> = Default::default();
 /// ```
 ///
 /// Nor is a value that occupies the air built without its placement:
 ///
 /// ```compile_fail,E0599
-/// # use oer_bluetooth_radio::{LeCapabilities, ScanWindow, Supported};
+/// # use oer_bluetooth_le_radio::{LeCapabilities, ScanWindow, Supported};
 /// fn unplaced<K: LeCapabilities>(window: ScanWindow) -> Supported<K, ScanWindow> {
 ///     Supported::new(window).unwrap()
 /// }
@@ -72,11 +72,11 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 /// placed:
 ///
 /// ```
-/// # use oer_bluetooth_radio::{LeCapabilities, Supported, TxPower};
+/// # use oer_bluetooth_le_radio::{LeCapabilities, Supported, TxPower};
 /// fn build<K: LeCapabilities>(dbm: i8) -> Option<Supported<K, TxPower>> {
 ///     Supported::new(TxPower::from_dbm(dbm)).ok()
 /// }
-/// # use oer_bluetooth_radio::{LeInstant, ScanWindow};
+/// # use oer_bluetooth_le_radio::{LeInstant, ScanWindow};
 /// fn place<K: LeCapabilities>(window: ScanWindow, now: LeInstant) -> Option<Supported<K, ScanWindow>> {
 ///     Supported::placed(window, now).ok()
 /// }

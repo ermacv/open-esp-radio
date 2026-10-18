@@ -345,7 +345,7 @@ impl Work for ConfigureBarrier {
             "the published head and queued successor precede Configured"
         );
         if matches!(self.release, Release::Watchdog) {
-            air.set_time(oer_time::Instant::from_micros(
+            air.set_time(oer_base_time::Instant::from_micros(
                 MODEL_PUBLICATION_BOUND.as_micros(),
             ));
         } else {

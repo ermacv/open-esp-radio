@@ -9,9 +9,9 @@
 //! the Espressif one (`oer-espressif-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{RetryPlan, RxMetadata, SingleOutcome};
 use oer_ieee80211_mac::phy::PhyRate;
-use oer_time::Instant;
 
 use crate::rate_control::RatePeer;
 

@@ -30,12 +30,12 @@ use core::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+use oer_base_memory::{HandlerCell, Installed};
 use oer_esp32s31_ieee80211_mac::irq::{
     IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
     consumer::{IrqPublisher, PowerIrqPublisher},
     epoch::{ActiveEpoch, Moderated},
 };
-use oer_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 

@@ -3,7 +3,7 @@
 The radio system's first run on the ESP32-S31 (W0.4). The radio system's
 actor (`oer-esp32s31-radio-system`) runs on the radio executor (P2), polled
 in the handler of `FROM_CPU` line 2; the Wi-Fi client
-(`oer-esp32s31-ieee80211::startup`) runs on the thread-mode application
+(`oer-esp32s31-ieee80211-driver::startup`) runs on the thread-mode application
 executor of software interrupt 0. Each executor has its SYSTIMER comparator
 (the radio executor's alarm latches at P3); the radio executor writes the
 system timer, and `LEVELS` checks the level order when the image compiles.

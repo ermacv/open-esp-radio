@@ -11,9 +11,9 @@
 
 use core::num::{NonZeroU32, NonZeroU64};
 
-use oer_bluetooth_ll::connection::LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS;
-use oer_bluetooth_radio::LeRadio;
-use oer_bluetooth_radio::{
+use oer_bluetooth_le_ll::connection::LEGACY_CONNECT_IND_LE_1M_AIRTIME_MICROS;
+use oer_bluetooth_le_radio::LeRadio;
+use oer_bluetooth_le_radio::{
     ConnectionAllowances, ConnectionEventTiming, LeInstant, LeWindow, NonZeroRadioDuration,
     RadioDuration, RadioTiming,
 };
@@ -357,7 +357,7 @@ fn advertising_error(calculation: C) -> EpochExhausted {
 
 #[cfg(test)]
 mod tests {
-    use oer_bluetooth_radio::{
+    use oer_bluetooth_le_radio::{
         ConnectionAllowances, ConnectionEventTiming, LeInstant, RadioDuration,
     };
 
@@ -368,7 +368,7 @@ mod tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_bluetooth_radio::NonZeroRadioDuration::from_micros(
+        boundary_guard: oer_bluetooth_le_radio::NonZeroRadioDuration::from_micros(
             core::num::NonZeroU64::MIN,
         ),
         first_event_guard: RadioDuration::from_micros(16),
@@ -438,7 +438,7 @@ mod boundary_tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_bluetooth_radio::NonZeroRadioDuration::from_micros(
+        boundary_guard: oer_bluetooth_le_radio::NonZeroRadioDuration::from_micros(
             core::num::NonZeroU64::MIN,
         ),
         first_event_guard: RadioDuration::from_micros(16),

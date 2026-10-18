@@ -1,10 +1,10 @@
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::{
     domain::RadioDomain,
     ieee80211::client::{WifiClocked, WifiCold},
     owner::PhyInitializationAccess,
     root::RadioHardware,
 };
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::concurrent::ConcurrentAcquire;
@@ -131,7 +131,7 @@ fn a_rejected_resume_returns_the_suspended_client() {
 fn join_wifi_prepared(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     clocked: &WifiClocked,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
     let ready = PhyReady::for_test(radio);
     join_wifi(ready, clocked, clock)
@@ -144,7 +144,7 @@ fn resume_wifi_prepared(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     clocks: &oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), WifiPhySuspendedFailure> {
     let ready = PhyReady::for_test(radio);
     resume_wifi(ready, clocks, suspended, clock)

@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_process::lock::{FileLock, Mode};
+use oer_tool_base_process::lock::{FileLock, Mode};
 use sha2::{Digest as _, Sha256};
 
 use crate::Result;
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn the_file_name_does_not_show_the_target() {
-        let path = router_path(Path::new("/run/oer-fw"), TARGET);
+        let path = router_path(Path::new("/run/oer-tool-cli-fw"), TARGET);
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         assert!(
             name.starts_with("router-") && name.ends_with(".lock"),
@@ -89,7 +89,10 @@ mod tests {
         );
         assert_eq!(name.len(), "router-".len() + 16 + ".lock".len());
         assert!(!name.contains("made-up"));
-        assert_eq!(path, router_path(Path::new("/run/oer-fw"), TARGET));
-        assert_ne!(path, router_path(Path::new("/run/oer-fw"), "made-up-other"));
+        assert_eq!(path, router_path(Path::new("/run/oer-tool-cli-fw"), TARGET));
+        assert_ne!(
+            path,
+            router_path(Path::new("/run/oer-tool-cli-fw"), "made-up-other")
+        );
     }
 }

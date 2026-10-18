@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee802154::owner::{Has, Ieee802154Caps, Promiscuous};
-use oer_ieee802154::{Ieee802154Capabilities, RadioCapabilities};
+use oer_ieee802154_mac::owner::{Has, Ieee802154Caps, Promiscuous};
+use oer_ieee802154_mac::{Ieee802154Capabilities, RadioCapabilities};
 pub struct Capabilities;
 impl Ieee802154Caps for Capabilities {
     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {

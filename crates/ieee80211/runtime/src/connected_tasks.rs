@@ -20,7 +20,7 @@ use embassy_futures::{
     select::{Either, select},
 };
 use embassy_sync::{blocking_mutex::raw::RawMutex, signal::Signal};
-use oer_time::{Duration, Timer};
+use oer_base_time::{Duration, Timer};
 
 const IDLE: u8 = 0;
 const ACTIVE: u8 = 1;

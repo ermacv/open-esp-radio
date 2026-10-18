@@ -4,7 +4,7 @@ use oer_ieee80211_runtime::station_service::{
     PortAck, PortRxMeta, ServiceIo, StationPort, StationService,
 };
 use oer_ieee80211_upper_mac::rate_selection::RateSelection;
-use oer_time::Timer;
+use oer_base_time::Timer;
 
 pub fn run_once<'p, 'id, B: StationPort<'id>, S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>>(
     service: StationService<'id, B, S>,

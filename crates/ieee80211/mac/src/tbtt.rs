@@ -1,4 +1,4 @@
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 /// Advance the beacon schedule `send_tick + k * interval` (`k >= 1`) to the
 /// first target beacon transmission time not before `now`.

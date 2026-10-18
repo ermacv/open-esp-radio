@@ -72,7 +72,7 @@ pub enum LinkAcknowledgement {
     /// only new, non-empty receptions.
     Hardware,
     /// Backend software in its time-critical context, for example with
-    /// `oer-bluetooth-ll`'s `connection::acknowledgement` state machine. The
+    /// `oer-bluetooth-le-ll`'s `connection::acknowledgement` state machine. The
     /// port contract is the same as for [`Self::Hardware`].
     Software,
 }

@@ -18,7 +18,7 @@ cargo fw power-cycle --board <id|MAC>
 `build` compiles the image's package as the stage-two runtime
 (`riscv32imafc-unknown-none-elf`, release), flattens its load image from
 `__runtime_image_start` to `__runtime_payload_end` and stores the payload CRC
-in its stage-two header (`oer-espressif-staged-layout`'s `stage_two`). The
+in its stage-two header (`oer-firmware-platform-espressif-staged-layout`'s `stage_two`). The
 packed runtime goes to the bootstrap through `PSRAM_RUNTIME_BIN`; an unchanged
 runtime keeps its file, so the bootstrap is not rebuilt. The `espflash`
 library then encodes the bootstrap ELF for the `[flash]` map of
@@ -43,7 +43,7 @@ outside internal SRAM (`placement.txt`).
 
 Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
-which `oer-lab` reads ([tools/lib/service/lab/README.md](../lab/README.md): its
+which `oer-tool-service-lab` reads ([tools/lib/service/lab/README.md](../lab/README.md): its
 schema, what each command reads of it, which values are secret). Attached
 boards are found in sysfs as
 Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
@@ -51,7 +51,7 @@ chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
 listed.
 
 A board is used by one process at a time: an exclusive lock on
-`$XDG_RUNTIME_DIR/oer-fw/<MAC>.lock`, shared by every checkout, which names
+`$XDG_RUNTIME_DIR/oer-tool-cli-fw/<MAC>.lock`, shared by every checkout, which names
 its holder when it refuses.
 
 - `flash` writes the segments through one espflash connection, skipping each
@@ -138,9 +138,9 @@ its holder when it refuses.
 
 Before every `run w1`, and on `cargo fw router` (without a board), the
 stand's OpenWrt lab router is brought to W1's profile and verified by
-`oer-lab` ([tools/lib/service/lab/README.md](../lab/README.md) lists every script it
+`oer-tool-service-lab` ([tools/lib/service/lab/README.md](../lab/README.md) lists every script it
 runs there); the profile stays, the earlier settings are not restored. Both
-hold the router's lock, `$XDG_RUNTIME_DIR/oer-fw/router-<hash>.lock`, for
+hold the router's lock, `$XDG_RUNTIME_DIR/oer-tool-cli-fw/router-<hash>.lock`, for
 the whole run. Only the masked BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers
 and UCI section names are printed; the SSID, the SSH target and the
 interface never are, in no message, lock file or `log.txt`.

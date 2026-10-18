@@ -13,7 +13,7 @@ test-support = ["oer-esp32s31-pac/test-support"]
 
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
-oer-memory = { path = "../../base/memory" }
+oer-base-memory = { path = "../../base/memory" }
 oer-esp32s31-pac = { path = "../pac" }
 oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
@@ -23,7 +23,7 @@ oer-radio-coex = { path = "../../radio/coex" }
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
-oer-ui-cases = { path = "../../base/ui-cases" }
+oer-base-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

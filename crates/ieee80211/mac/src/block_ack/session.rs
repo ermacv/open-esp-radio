@@ -5,7 +5,7 @@ use super::frame::{
     parse_block_ack_action,
 };
 use crate::sequence::SequenceNumber;
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 const BLOCK_ACK_WINDOW_FIELD_MAX: u16 = 0x03ff;
 

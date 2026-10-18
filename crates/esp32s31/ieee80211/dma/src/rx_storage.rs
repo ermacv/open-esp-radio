@@ -11,8 +11,8 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
+use oer_base_memory::ExternalRxBuffer;
 use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
-use oer_memory::ExternalRxBuffer;
 
 use crate::{
     descriptor::RxDescriptor,

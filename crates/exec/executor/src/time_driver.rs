@@ -33,7 +33,7 @@ use esp_hal::{
     time::Instant,
     timer::systimer::SystemTimer,
 };
-use oer_interrupt_table::Entry;
+use oer_exec_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 use crate::{
@@ -220,7 +220,7 @@ where
     regs.int_clr()
         .write(|w| w.target(comparator).clear_bit_by_one());
     regs.int_ena().modify(|_, w| w.target(comparator).set_bit());
-    if let Err(error) = oer_espressif_interrupt_table_esp_hal::enable(&alarm) {
+    if let Err(error) = oer_exec_esp_hal_irq::enable(&alarm) {
         panic!("time driver alarm {comparator}: {error:?}");
     }
 }

@@ -1,7 +1,7 @@
 #![no_std]
 use oer_ieee80211_arbiter::{Arbiter, ArbiterAuthority, ArbiterPolicy};
 use oer_ieee80211_lower_mac::{GateOpen, Ieee80211Capabilities, SupportedChannel};
-use oer_time::Duration;
+use oer_base_time::Duration;
 
 pub fn construct<'id, K: Ieee80211Capabilities>(
     authority: ArbiterAuthority<'id>,

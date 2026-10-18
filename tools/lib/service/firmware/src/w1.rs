@@ -1,8 +1,8 @@
 //! Image `w1`: its stand identity (the BSSID and channel of the stand
-//! router's AP after the profile, `oer_lab::router`, and the stand's SSID)
+//! router's AP after the profile, `oer_tool_service_lab::router`, and the stand's SSID)
 //! and the check of the report block it prints after its exit.
 //!
-//! The BSSID is never printed whole: it is an `oer_lab::mac::Mac`, and every
+//! The BSSID is never printed whole: it is an `oer_tool_service_lab::mac::Mac`, and every
 //! message shows only its last two octets (`xx:xx:xx:xx:F6:D0`); the SSID is
 //! never shown at all. Both go only into the environment of the image's
 //! runtime build.
@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-use oer_lab::mac::Mac;
+use oer_tool_service_lab::mac::Mac;
 
 /// The image these parameters belong to.
 pub const IMAGE: &str = "w1";

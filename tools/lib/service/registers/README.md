@@ -1,6 +1,6 @@
 # Reviewed register publication
 
-`oer-registers` validates source-owned hardware descriptions and generates
+`oer-tool-service-registers` validates source-owned hardware descriptions and generates
 SVD, raw PAC, restricted PAC API and the binding index. It does not load a binary
 analysis project, vendor binary, device model or global provider registry.
 
@@ -147,7 +147,7 @@ and required recovered tables remain with `registers/`.
 
 ## Register checks
 
-`oer_registers::checks` holds the register rules, so no caller keeps its
+`oer_tool_service_registers::checks` holds the register rules, so no caller keeps its
 own copy:
 
 - `pac_transactions::check`: a handwritten PAC module
@@ -163,7 +163,7 @@ own copy:
 
 `ChipSources` resolves the files a chip's publication manifest names
 without validating them. The binding index format is
-`oer_register_bindings::BindingIndex` ([`bindings/`](../../data/register-bindings/README.md)), a
+`oer_tool_data_register_bindings::BindingIndex` ([`bindings/`](../../data/register-bindings/README.md)), a
 foundation data format the generator writes and every reader parses.
 
 A chip publication's `[outputs]` name the SVD and the binding index; its

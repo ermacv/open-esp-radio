@@ -10,7 +10,7 @@ use oer_ieee80211_mac::{
     },
 };
 
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 use super::STA_RESPONSE_TIMEOUT;
 

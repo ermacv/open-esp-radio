@@ -2,17 +2,17 @@
 #![no_std]
 
 //! The ESP32-S31 bootstrap: the staged boot's chip-neutral steps
-//! (`oer-espressif-staged-bootstrap`) around this board's PSRAM and its
+//! (`oer-firmware-platform-espressif-staged-bootstrap`) around this board's PSRAM and its
 //! 120-MHz Flash tuning, which needs the stage-two copy made first and a
 //! cold XIP span.
 
 esp_bootloader_esp_idf::esp_app_desc!(
     "0.1.0",
-    "oer-esp32s31-platform-bootstrap",
+    "oer-firmware-platform-esp32s31-bootstrap",
     "00:00:00",
     "2026-07-31",
     "6.1",
-    oer_esp32s31_platform_board::FLASH_MMU_PAGE_SIZE_BYTES,
+    oer_firmware_platform_esp32s31_board::FLASH_MMU_PAGE_SIZE_BYTES,
     0,
     u16::MAX,
     0
@@ -20,10 +20,10 @@ esp_bootloader_esp_idf::esp_app_desc!(
 
 use core::mem::size_of;
 
-use oer_esp32s31_platform_board as board;
-use oer_esp32s31_platform_layout::LAYOUT;
-use oer_esp32s31_soc_esp_hal::FlashMmu;
-use oer_espressif_staged_bootstrap::{self as staged, fail, print};
+use oer_adapters_esp_hal_soc::FlashMmu;
+use oer_firmware_platform_esp32s31_board as board;
+use oer_firmware_platform_esp32s31_layout::LAYOUT;
+use oer_firmware_platform_espressif_staged_bootstrap::{self as staged, fail, print};
 use static_cell::ConstStaticCell;
 
 const FLASH_TUNING_REFERENCE_WORDS: usize =

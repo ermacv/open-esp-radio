@@ -1,3 +1,3 @@
 fn main() {
-    oer_esp32s31_platform_layout::build::configure_runtime("oer-esp32s31-radio-root");
+    oer_firmware_platform_esp32s31_layout::build::configure_runtime("oer-firmware-apps-radio-root");
 }

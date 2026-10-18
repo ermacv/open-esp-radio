@@ -120,7 +120,7 @@ impl<F: SoftwareTxFrame, const N: usize> DestinationTxQueues for MemoryTxQueues<
 mod tests {
     use core::task::Waker;
 
-    use oer_network_interface::NetworkInterfaceId;
+    use oer_base_network::NetworkInterfaceId;
 
     use super::*;
 

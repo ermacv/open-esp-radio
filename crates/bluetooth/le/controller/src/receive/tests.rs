@@ -1,6 +1,6 @@
 use std::{vec, vec::Vec};
 
-use oer_bluetooth_ll::security::{
+use oer_bluetooth_le_ll::security::{
     LeLongTermKey, LePeripheralEncryptionProcedure as Procedure, LePeripheralEncryptionRandom,
     LePeripheralEncryptionReceiveMode as Mode, LePeripheralEncryptionTermination as Termination,
 };

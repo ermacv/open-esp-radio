@@ -42,6 +42,8 @@ use core::{
     task::Poll,
 };
 
+use oer_base_memory::HandlerCell;
+use oer_base_time::{Duration, Instant, Timer};
 use oer_esp32s31_ieee80211_dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
@@ -57,8 +59,6 @@ use oer_esp32s31_ieee80211_mac::{
     },
     rx::{RxDma, RxRingLive, pool::RxStagePool},
 };
-use oer_memory::HandlerCell;
-use oer_time::{Duration, Instant, Timer};
 
 use super::{
     arena::WifiRxParts,
@@ -520,7 +520,7 @@ where
                 Ok(deadline) => self.timer.wait_until(deadline).await,
                 // As the walker settle: a wait past the timer's range never
                 // ends, so the pass is never rerun early.
-                Err(oer_time::TimeOverflow) => pending().await,
+                Err(oer_base_time::TimeOverflow) => pending().await,
             }
         }
     }
@@ -631,7 +631,7 @@ where
                     *polls = polls.saturating_add(1);
                     self.timer.wait_until(next).await;
                 }
-                Err(oer_time::TimeOverflow) => return false,
+                Err(oer_base_time::TimeOverflow) => return false,
             }
         }
     }

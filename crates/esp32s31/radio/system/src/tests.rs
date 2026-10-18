@@ -8,6 +8,8 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
+use oer_base_time::{Clock as _, Duration, Instant};
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::RadioHardware,
@@ -24,8 +26,6 @@ use oer_esp32s31_radio_client::{
     },
 };
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
-use oer_time::{Clock as _, Duration, Instant};
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 
@@ -216,7 +216,7 @@ fn run<F: Future<Output = ()>>(
 
 /// The instant `micros` past a default clock's start.
 fn at(micros: u64) -> Instant {
-    oer_time_virtual::START
+    oer_base_time_virtual::START
         .checked_add(Duration::from_micros(micros))
         .unwrap()
 }

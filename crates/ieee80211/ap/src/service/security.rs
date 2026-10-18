@@ -163,7 +163,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         context: ApEapolTxContext,
         acknowledged: bool,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<ApEapolTxCompletion, ApWpa2Error> {
         let inactive_timeout = self.inactive_timeout.duration();
         let ApEapolTxContext {
@@ -214,7 +214,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         })
     }
 
-    pub fn next_wpa2_retry_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_wpa2_retry_deadline(&self) -> Option<oer_base_time::Instant> {
         self.storage()
             .peers
             .iter()
@@ -226,7 +226,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Consume at most one due authenticator retry edge.
     pub fn take_due_wpa2_retry<const N: usize>(
         &mut self,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<ApWpa2RetryProgress<N>, ApWpa2Error> {
         let Some(index) = self.storage().peers.iter().position(|peer| {
             peer.as_ref()
@@ -531,7 +531,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn authorize(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<(), ApServiceError> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch);

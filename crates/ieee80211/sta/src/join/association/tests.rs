@@ -1,7 +1,7 @@
 use super::super::test_support::{BSSID, LOCAL, association_response, deauthentication};
 use super::*;
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::station::StaDisconnectKind;
-use oer_time::{Duration, Instant};
 
 fn at(millis: u64) -> Instant {
     Instant::from_micros(millis * 1_000)

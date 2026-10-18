@@ -1,5 +1,5 @@
 [package]
-name = "oer-tools-layers"
+name = "oer-tool-test-layers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

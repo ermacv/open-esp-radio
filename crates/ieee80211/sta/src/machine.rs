@@ -114,9 +114,9 @@ use oer_ieee80211_upper_mac::HePacketPadding;
 use crate::association::StaAssociatedPeer;
 use crate::receive::{Management, Received, observe_scan};
 // The machine's tests build receive metadata through `use super::*`.
+use oer_base_time::{Duration, Instant};
 #[cfg(test)]
 use oer_ieee80211_lower_mac::RxEvidence;
-use oer_time::{Duration, Instant};
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
 use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeTransmission};
@@ -3490,7 +3490,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// use oer_ieee80211_sta::machine::{Station, StaTokens};
     /// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
     /// fn receive<T: StaTokens, K: Ieee80211Capabilities>(
-    ///     station: &mut Station<'_, T, K>, now: oer_time::Instant,
+    ///     station: &mut Station<'_, T, K>, now: oer_base_time::Instant,
     ///     frame: &[u8], meta: T::RxMeta,
     /// ) {
     ///     let _ = station.receive(now, frame, meta, |_| {});

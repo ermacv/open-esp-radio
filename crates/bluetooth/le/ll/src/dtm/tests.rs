@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_bluetooth_radio::{
+use oer_bluetooth_le_radio::{
     ConnectionAllowances, EventResult, LeInstant, RadioDuration, RadioTiming, TestChannel, TestPhy,
     TestReport, TxPower,
 };
@@ -17,7 +17,7 @@ const TIMING: RadioTiming = RadioTiming {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_bluetooth_radio::NonZeroRadioDuration::from_micros(
+        boundary_guard: oer_bluetooth_le_radio::NonZeroRadioDuration::from_micros(
             core::num::NonZeroU64::MIN,
         ),
         first_event_guard: RadioDuration::from_micros(16),
@@ -236,7 +236,7 @@ fn planning_failure_retains_the_test_history_and_payload() {
     use super::{DtmCalculation, DtmEpochExhausted};
     let mut session = DtmSession::new(TxPower::from_dbm(0));
     session.start(transmit()).unwrap();
-    let last = oer_bluetooth_radio::LeWindow::new(
+    let last = oer_bluetooth_le_radio::LeWindow::new(
         LeInstant::from_micros(u64::MAX - 400),
         RadioDuration::from_micros(376),
     )
@@ -267,7 +267,7 @@ fn a_recurring_packet_near_epoch_end_needs_only_recurring_slack() {
     let mut session = DtmSession::new(TxPower::from_dbm(0));
     session.start(transmit()).unwrap();
     session.last = Some(
-        oer_bluetooth_radio::LeWindow::new(
+        oer_bluetooth_le_radio::LeWindow::new(
             LeInstant::from_micros(u64::MAX - 1_001),
             RadioDuration::from_micros(376),
         )

@@ -6,7 +6,7 @@
 //! DMA, timer, key-slot and frame-transmit bindings remain in chip/runtime
 //! adapters.
 
-use oer_time::{Duration, Instant, Timer};
+use oer_base_time::{Duration, Instant, Timer};
 
 use oer_ieee80211_rsn::{
     EapolKeyMessage, RsnInterface,

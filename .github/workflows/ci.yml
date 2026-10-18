@@ -57,8 +57,8 @@ jobs:
           cargo test --locked -p oer-ieee80211-runtime --features test-support
           cargo test --locked -p oer-ieee80211-sta
           cargo test --locked -p oer-esp32s31-ieee80211-mac
-          cargo test --locked -p oer-time --features serde
-          cargo test --locked -p oer-time --features schema
+          cargo test --locked -p oer-base-time --features serde
+          cargo test --locked -p oer-base-time --features schema
 
   chip:
     runs-on: ubuntu-latest
@@ -72,14 +72,14 @@ jobs:
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | contains("/crates/"))
-              | select(.name != "oer-ui-cases") | "-p " + .name')
+              | select(.name != "oer-base-ui-cases") | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
         # host clippy never sees them, nor the firmware images.
         run: |
           cargo clippy --locked --target riscv32imafc-unknown-none-elf \
-            -p oer-esp32s31-radio-esp-hal --features esp32s31
+            -p oer-adapters-esp-hal-radio --features esp32s31
           : > "$RUNNER_TEMP/empty-runtime.bin"
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
             cargo clippy --locked --target riscv32imafc-unknown-none-elf $(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.manifest_path | test("/firmware/(apps|platform)/")) | "-p " + .name')

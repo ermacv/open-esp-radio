@@ -9,13 +9,13 @@
 
 use core::fmt::{self, Write};
 
-use oer_esp32s31_ieee80211::rx::{
+use oer_esp32s31_ieee80211_dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
+use oer_esp32s31_ieee80211_driver::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
     counters::{WifiRxExhaustion, WifiRxReport},
 };
-use oer_esp32s31_ieee80211_dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
 use oer_esp32s31_ieee80211_mac::init::MAC_COLD_RX_INTERRUPT_MASK;
-use oer_espressif_executor_embassy::poll_timing::CycleHistogram;
+use oer_exec_executor::poll_timing::CycleHistogram;
 use oer_ieee80211_mac::address::Bssid;
 use oer_ieee80211_runtime::survey::{BssTally, Survey};
 
@@ -82,7 +82,7 @@ impl LagLog {
 
     /// Log a unit stamped `stamp` and handed off at `handoff`, while there
     /// is room.
-    pub fn take(&mut self, stamp: u32, handoff: oer_time::Instant) {
+    pub fn take(&mut self, stamp: u32, handoff: oer_base_time::Instant) {
         let lag_us = (handoff.as_micros() as u32).wrapping_sub(stamp);
         let _full = self.0.push(Lag { stamp, lag_us });
     }
@@ -177,7 +177,7 @@ impl TsfLog {
         survey: &Survey<BSS>,
         stand: Bssid,
         before: Option<(u32, u32)>,
-        handoff: oer_time::Instant,
+        handoff: oer_base_time::Instant,
     ) {
         if self.stand.is_none() {
             self.stand = survey

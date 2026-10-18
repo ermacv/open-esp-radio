@@ -1,4 +1,4 @@
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 use super::*;
 use crate::block_ack::{BlockAckAction, OperationalTxBlockAck, TxBlockAckResponse};

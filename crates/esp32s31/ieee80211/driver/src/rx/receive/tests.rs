@@ -16,6 +16,7 @@ use core::{
 };
 use std::{boxed::Box, vec::Vec};
 
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_dma::{
     descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
@@ -34,7 +35,6 @@ use oer_esp32s31_ieee80211_mac::{
     },
     rx::{RxDmaBinding, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
 };
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
@@ -682,7 +682,7 @@ fn probe_pending_keeps_rx_masked() {
         (report.continuations.immediate, report.continuations.timed),
         (IMMEDIATE_CONTINUATIONS, 1)
     );
-    let now = oer_time::Clock::now(harness.clock);
+    let now = oer_base_time::Clock::now(harness.clock);
     assert_eq!(
         harness.clock.next_deadline(),
         now.checked_add(CONTINUATION_WAIT)
@@ -1410,8 +1410,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     };
 
     // A second of hold, then one lease comes back.
-    let release_at =
-        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(1_000));
+    let release_at = oer_base_time::Clock::now(harness.clock)
+        .saturating_add(oer_base_time::Duration::from_millis(1_000));
     harness.clock.advance_to(release_at);
     harness.host.walker.borrow_mut().clear_operations();
     held.borrow_mut().pop();
@@ -1466,8 +1466,8 @@ fn hold_full_pool(harness: &mut Harness, held: &Returned, hold_ms: u32) {
     harness.rx_event();
     harness.settle();
     assert_eq!(held.borrow().len(), STAGE);
-    let release_at = oer_time::Clock::now(harness.clock)
-        .saturating_add(oer_time::Duration::from_millis(hold_ms));
+    let release_at = oer_base_time::Clock::now(harness.clock)
+        .saturating_add(oer_base_time::Duration::from_millis(hold_ms));
     harness.clock.advance_to(release_at);
 }
 
@@ -1621,8 +1621,8 @@ fn the_latest_snapshot_follows_every_return_and_the_longest_keeps_the_longest() 
     harness.frame(80);
     harness.settle();
     assert_eq!(held.borrow().len(), STAGE);
-    let release_at =
-        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(500));
+    let release_at = oer_base_time::Clock::now(harness.clock)
+        .saturating_add(oer_base_time::Duration::from_millis(500));
     harness.clock.advance_to(release_at);
     held.borrow_mut().pop();
     harness.settle();
@@ -1915,7 +1915,7 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
     // Masked at once; the first drain check finds the queued frames and
     // waits one poll.
     harness.poll_once();
-    let start = oer_time::Clock::now(harness.clock);
+    let start = oer_base_time::Clock::now(harness.clock);
     for _ in 0..5 {
         harness.clock.advance_to_next_deadline();
         harness.poll_once();
@@ -1931,7 +1931,7 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
         harness.stop.try_exit().map(|exit| exit.end),
         Some(WifiRxEnd::Halted)
     );
-    let waited = oer_time::Clock::now(harness.clock).saturating_duration_since(start);
+    let waited = oer_base_time::Clock::now(harness.clock).saturating_duration_since(start);
     assert_eq!(waited, Duration::from_micros(6 * DRAIN_POLL.as_micros()));
     assert_eq!(
         harness.report().teardown,

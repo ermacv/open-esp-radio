@@ -108,7 +108,7 @@ macro_rules! port {
                 async fn now(
                     &self,
                     _: Call,
-                ) -> PortResult<oer_time::RadioInstant<()>, ClockError, u32> {
+                ) -> PortResult<oer_base_time::RadioInstant<()>, ClockError, u32> {
                     Ok(Err(ClockError::Unavailable))
                 }
                 fn resources<'id>(&mut self, mint: Mint<'id, ()>) -> InstallParts<'id, Self> {

@@ -195,7 +195,7 @@ pub struct MacTxPlan<Rate = PhyRate> {
     /// Executor watchdog applied independently to each publication.
     ///
     /// This is not the on-air MPDU lifetime and not a blocking delay.
-    pub publication_timeout: oer_time::Duration,
+    pub publication_timeout: oer_base_time::Duration,
 }
 
 /// Observable state of a MAC transmit queue at the SoftMAC/backend boundary.

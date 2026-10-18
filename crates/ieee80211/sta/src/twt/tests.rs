@@ -3,8 +3,8 @@ use oer_ieee80211_mac::tsf::TsfInstant;
 use oer_ieee80211_mac::twt::IndividualTwtFlowType;
 
 const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig::new(
-    oer_time::Duration::from_micros(1_000),
-    oer_time::Duration::from_micros(100),
+    oer_base_time::Duration::from_micros(1_000),
+    oer_base_time::Duration::from_micros(100),
     2,
     2,
 ) {
@@ -41,11 +41,11 @@ fn generation_exhaustion_never_reissues_a_stale_identity() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     requester.generation = u32::MAX;
     requester
-        .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
+        .queue_setup(proposal(true), oer_base_time::Instant::from_micros(0))
         .unwrap();
 
     assert_eq!(
-        requester.service(oer_time::Instant::from_micros(0)),
+        requester.service(oer_base_time::Instant::from_micros(0)),
         Err(IndividualTwtRequesterError::GenerationExhausted)
     );
     assert_eq!(
@@ -78,16 +78,16 @@ fn explicit_proposal_reports_the_exact_information_frontier() {
 fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     requester
-        .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
+        .queue_setup(proposal(true), oer_base_time::Instant::from_micros(0))
         .unwrap();
     let IndividualTwtService::Transmit(transmission) = requester
-        .service(oer_time::Instant::from_micros(0))
+        .service(oer_base_time::Instant::from_micros(0))
         .unwrap()
     else {
         panic!("setup must be ready");
     };
     requester
-        .complete_transmission(transmission, true, oer_time::Instant::from_micros(10))
+        .complete_transmission(transmission, true, oer_base_time::Instant::from_micros(10))
         .unwrap();
 
     let mut response_parameters = parameters(false);
@@ -113,10 +113,10 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     );
     assert_eq!(
         requester.next_deadline(),
-        Some(oer_time::Instant::from_micros(0))
+        Some(oer_base_time::Instant::from_micros(0))
     );
     let IndividualTwtService::Transmit(teardown) = requester
-        .service(oer_time::Instant::from_micros(10))
+        .service(oer_base_time::Instant::from_micros(10))
         .unwrap()
     else {
         panic!("rollback teardown must be ready immediately");

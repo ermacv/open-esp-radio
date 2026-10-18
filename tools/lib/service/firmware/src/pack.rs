@@ -1,9 +1,9 @@
 //! The stage-two runtime as the bootstrap embeds it: the runtime ELF's load
 //! image from its header to `__runtime_payload_end`, with the payload CRC
-//! stored in the header (`oer-espressif-staged-layout`'s `stage_two`).
+//! stored in the header (`oer-firmware-platform-espressif-staged-layout`'s `stage_two`).
 
 use object::{Object as _, ObjectSymbol as _, read::elf::ElfFile32, read::elf::ProgramHeader as _};
-use oer_espressif_staged_layout::stage_two::{CRC_OFFSET, Header, payload_crc32};
+use oer_firmware_platform_espressif_staged_layout::stage_two::{CRC_OFFSET, Header, payload_crc32};
 
 use crate::Result;
 
@@ -117,7 +117,9 @@ pub fn pack(segments: &[LoadSegment<'_>], start: u32, end: u32) -> Result<Packed
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_espressif_staged_layout::stage_two::{ABI_VERSION, HEADER_BYTES, MAGIC};
+    use oer_firmware_platform_espressif_staged_layout::stage_two::{
+        ABI_VERSION, HEADER_BYTES, MAGIC,
+    };
 
     fn header(load_address: u32, payload_end: u32) -> Header {
         Header {

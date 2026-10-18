@@ -17,7 +17,7 @@ use espflash::{
 };
 
 use crate::Result;
-use oer_chip_profile as chip;
+use oer_tool_data_chip_profile as chip;
 
 /// The staged images' MMU page: the bootstrap keeps its text on 64-KiB pages.
 pub const MMU_PAGE_SIZE: u32 = 0x1_0000;

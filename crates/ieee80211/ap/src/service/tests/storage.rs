@@ -10,7 +10,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
                 PEER,
                 Pmk::from_bytes(SAE_PMK),
                 SAE_PMKID,
-                oer_time::Instant::from_micros(1)
+                oer_base_time::Instant::from_micros(1)
             )
             .unwrap(),
         AP_STATUS_SUCCESS,
@@ -30,7 +30,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
             peers,
         );
     assert!(restarted.peer_status(PEER).is_none());
-    restarted.authenticate_open(PEER, oer_time::Instant::from_micros(2));
+    restarted.authenticate_open(PEER, oer_base_time::Instant::from_micros(2));
     let new = restarted.peer_status(PEER).unwrap().association_identity();
     assert_eq!(new.association_id(), old.association_id());
     assert!(new.association_epoch() > old.association_epoch());
@@ -48,7 +48,7 @@ fn dropping_an_active_service_clears_its_caller_placed_secrets() {
                     PEER,
                     Pmk::from_bytes(SAE_PMK),
                     SAE_PMKID,
-                    oer_time::Instant::from_micros(1)
+                    oer_base_time::Instant::from_micros(1)
                 )
                 .unwrap(),
             AP_STATUS_SUCCESS,

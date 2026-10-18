@@ -9,8 +9,8 @@ use embassy_sync::{
     blocking_mutex::{Mutex, raw::RawMutex},
     waitqueue::WakerRegistration,
 };
+use oer_base_network::TransportFlow;
 use oer_ieee80211_datapath::{DestinationTxHead, TxQueues};
-use oer_network_interface::TransportFlow;
 
 use super::{
     QueuedPacket,

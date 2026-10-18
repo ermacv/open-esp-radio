@@ -33,7 +33,7 @@
 //! Chip-independent Wi-Fi execution primitives shared by chip runtimes.
 //!
 //! These async ownership contracts bind no executor. Waiting on time uses
-//! `oer_time::Timer`; bounded channels and task signals use `embassy-sync`.
+//! `oer_base_time::Timer`; bounded channels and task signals use `embassy-sync`.
 //!
 //! [`monitor`] provides bounded capture and injection handoffs. [`connected_tasks`]
 //! coordinates finite task shutdown, and [`station_network`] retains network

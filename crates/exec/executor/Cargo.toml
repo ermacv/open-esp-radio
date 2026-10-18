@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-executor-embassy"
+name = "oer-exec-executor"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.1"
@@ -21,12 +21,12 @@ poll-timing = ["chip"]
 esp32s31 = [
     "chip",
     "esp-hal/esp32s31",
-    "oer-espressif-interrupt-table-esp-hal/esp32s31",
+    "oer-exec-esp-hal-irq/esp32s31",
 ]
 esp32c5 = [
     "chip",
     "esp-hal/esp32c5",
-    "oer-espressif-interrupt-table-esp-hal/esp32c5",
+    "oer-exec-esp-hal-irq/esp32c5",
 ]
 # The executor and time driver, which a chip feature selects.
 chip = [
@@ -36,20 +36,20 @@ chip = [
     "dep:esp-hal",
     "dep:portable-atomic",
     "dep:riscv",
-    "dep:oer-espressif-interrupt-table-esp-hal",
-    "dep:oer-interrupt-table",
+    "dep:oer-exec-esp-hal-irq",
+    "dep:oer-exec-interrupt-table",
 ]
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false }
-oer-memory = { path = "../../base/memory" }
+oer-base-memory = { path = "../../base/memory" }
 embassy-executor = { version = "0.10.0", default-features = false, optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.3", optional = true }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
-oer-interrupt-table = { path = "../interrupt-table", optional = true }
-oer-espressif-interrupt-table-esp-hal = { path = "../esp-hal-irq", optional = true }
+oer-exec-interrupt-table = { path = "../interrupt-table", optional = true }
+oer-exec-esp-hal-irq = { path = "../esp-hal-irq", optional = true }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.15", optional = true }

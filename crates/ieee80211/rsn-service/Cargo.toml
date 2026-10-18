@@ -9,11 +9,11 @@ description = "Executor-independent WPA2 station handshake and key-install runne
 readme = "README.md"
 
 [dependencies]
-oer-time = { path = "../../base/time" }
+oer-base-time = { path = "../../base/time" }
 oer-ieee80211-rsn = { path = "../rsn" }
 
 [dev-dependencies]
-oer-time-virtual = { path = "../../base/time-virtual" }
+oer-base-time-virtual = { path = "../../base/time-virtual" }
 embassy-futures = "0.1.2"
 oer-ieee80211-mac = { path = "../mac" }
 

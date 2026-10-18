@@ -18,8 +18,10 @@ use esp_hal::{
     Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::Rng,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
+use oer_adapters_embassy_time::EmbassyClock;
+use oer_adapters_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
 use oer_esp32s31_hal::root::ProtocolPartitions;
-use oer_esp32s31_ieee80211::startup::{
+use oer_esp32s31_ieee80211_driver::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
     start_esp32s31_radio,
 };
@@ -30,26 +32,24 @@ use oer_esp32s31_phy::{
     HARDWARE_EDGE_LIMIT, NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig,
     PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
-use oer_esp32s31_platform_board as board;
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
-use oer_esp32s31_radio_esp_hal::{EspHalClocks, RadioSingletons, take_radio};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_executor_embassy::{Executor, InterruptExecutor, LevelOrder};
-use oer_espressif_staged_runtime::panic;
+use oer_exec_executor::{Executor, InterruptExecutor, LevelOrder};
+use oer_firmware_platform_esp32s31_board as board;
+use oer_firmware_platform_espressif_staged_runtime::panic;
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
-use oer_time_embassy::EmbassyClock;
 use static_cell::StaticCell;
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor_embassy::wake_handler::<0>, Priority1, ProCpu;
+    wake: WakeToken = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor_embassy::interrupt_handler::<2>, Priority2, ProCpu;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_exec_executor::interrupt_handler::<2>, Priority2, ProCpu;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor_embassy::alarm_interrupt::<0>, Priority3, ProCpu;
+    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority3, ProCpu;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor_embassy::alarm_interrupt::<1>, Priority1, ProCpu;
+    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_exec_executor::alarm_interrupt::<1>, Priority1, ProCpu;
 }
 
 /// The radio executor between the latching interrupts and the application.
@@ -86,7 +86,7 @@ extern "C" fn runtime_main() -> ! {
     // nothing has reset or remapped; interrupts stay disabled until the
     // executor and time driver are bound below.
     let psram = unsafe {
-        oer_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+        oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
             board::adopt_psram_mapping(peripherals.PSRAM)
         })
     };
@@ -157,8 +157,8 @@ extern "C" fn runtime_main() -> ! {
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    oer_espressif_executor_embassy::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_espressif_executor_embassy::bind::<0, _>(interrupts.app_alarm);
+    oer_exec_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
+    oer_exec_executor::bind::<0, _>(interrupts.app_alarm);
     let radio = RADIO_EXECUTOR
         .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
             peripherals.FROM_CPU_INTR2,
@@ -174,7 +174,7 @@ extern "C" fn runtime_main() -> ! {
     // executor and, from `run`, the application executor's wake are bound;
     // the interrupt table routes only their four sources, and interrupts were
     // disabled since the handoff.
-    unsafe { oer_espressif_staged_runtime::enable_interrupts_after_handoff() };
+    unsafe { oer_firmware_platform_espressif_staged_runtime::enable_interrupts_after_handoff() };
     let boot = Boot {
         console,
         cell: cells.wifi,

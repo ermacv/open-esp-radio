@@ -1,5 +1,5 @@
 [package]
-name = "oer-registers"
+name = "oer-tool-service-registers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,11 +9,11 @@ publish = false
 description = "Reviewed register validation and SVD/PAC publication: the service behind `cargo registers`"
 
 [dependencies]
-oer-register-model = { path = "../../data/register-model" }
-oer-register-review = { path = "../../data/register-review" }
-oer-register-contracts = { path = "../../data/register-contracts" }
-oer-process = { path = "../../base/process" }
-oer-durable = { path = "../../base/durable" }
+oer-tool-data-register-model = { path = "../../data/register-model" }
+oer-tool-data-register-review = { path = "../../data/register-review" }
+oer-tool-data-register-contracts = { path = "../../data/register-contracts" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-base-durable = { path = "../../base/durable" }
 roxmltree = "=0.20.0"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

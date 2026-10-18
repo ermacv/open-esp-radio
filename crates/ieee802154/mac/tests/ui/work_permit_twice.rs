@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee802154::{
+use oer_ieee802154_mac::{
     Interface, RequestId,
     owner::{WorkPermit, WorkPermits},
 };

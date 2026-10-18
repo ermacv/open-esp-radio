@@ -1,6 +1,6 @@
 # Register model library
 
-`oer-register-model` owns the portable register publication formats:
+`oer-tool-data-register-model` owns the portable register publication formats:
 
 - safe loading of a multi-file TOML model;
 - native unreviewed initialization from explicit peripheral geometry and import

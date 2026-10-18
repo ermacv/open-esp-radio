@@ -231,7 +231,7 @@ fn sae_parsers(count: usize) {
     let mut tokens = SaeComebackTokens::new();
     let issued = tokens.issue(
         [2, 0, 0, 0, 0, 3],
-        oer_time::Instant::from_micros(0),
+        oer_base_time::Instant::from_micros(0),
         || [9; 32],
     );
     inputs(

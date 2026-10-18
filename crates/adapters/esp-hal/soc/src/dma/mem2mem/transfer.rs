@@ -18,8 +18,8 @@ use core::marker::PhantomData;
 use esp_hal::interrupt::Priority;
 use esp_hal::peripherals::{DMA_AXI_CH0, Interrupt};
 use esp_hal::system::Cpu;
-use oer_espressif_interrupt_table_esp_hal::{self as interrupt_table, Route};
-use oer_interrupt_table::Entry;
+use oer_exec_esp_hal_irq::{self as interrupt_table, Route};
+use oer_exec_interrupt_table::Entry;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AxiGdmaMem2MemError {
@@ -344,7 +344,7 @@ impl<'transfer, 'buffer, 'd> AxiGdmaMem2MemPreparedOwner<'transfer, 'buffer, 'd>
     /// # #![no_main]
     /// # #[panic_handler]
     /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
-    /// use oer_esp32s31_soc_esp_hal::AxiGdmaMem2MemPreparedOwner;
+    /// use oer_adapters_esp_hal_soc::AxiGdmaMem2MemPreparedOwner;
     /// fn publish(prepared: AxiGdmaMem2MemPreparedOwner<'_, '_, '_>) {
     ///     // Borrowed DMA publication requires an explicit lifetime proof.
     ///     core::mem::forget(prepared.start());

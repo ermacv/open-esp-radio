@@ -39,7 +39,7 @@ fn manifest() -> (tempfile::TempDir, PathBuf, String) {
 fn reviewed_inputs_validate_without_vendor_artifacts() {
     let (_dir, path, source) = manifest();
     fs::write(&path, source).unwrap();
-    oer_registers::Publication::load(&path).unwrap();
+    oer_tool_service_registers::Publication::load(&path).unwrap();
 }
 #[test]
 fn every_chip_publication_validates() {
@@ -49,7 +49,7 @@ fn every_chip_publication_validates() {
         for name in ["registers.toml", "platform.toml"] {
             let manifest = base.join(name);
             if manifest.is_file()
-                && let Err(error) = oer_registers::Publication::load(&manifest)
+                && let Err(error) = oer_tool_service_registers::Publication::load(&manifest)
             {
                 panic!("{}: {error}", manifest.display());
             }
@@ -69,7 +69,10 @@ fn missing_evidence_wrong_applicability_and_output_alias_are_rejected() {
             _ => unreachable!(),
         }
         fs::write(&path, document.to_string()).unwrap();
-        assert!(oer_registers::Publication::load(&path).is_err(), "{change}");
+        assert!(
+            oer_tool_service_registers::Publication::load(&path).is_err(),
+            "{change}"
+        );
     }
 }
 #[test]
@@ -80,7 +83,7 @@ fn publication_uses_loaded_policy_after_source_disappears() {
     fs::copy(document["api"].as_str().unwrap(), &api).unwrap();
     document["api"] = toml_edit::value(api.to_str().unwrap());
     fs::write(&path, document.to_string()).unwrap();
-    let publication = oer_registers::Publication::load(&path).unwrap();
+    let publication = oer_tool_service_registers::Publication::load(&path).unwrap();
     fs::remove_file(api).unwrap();
     publication.generate(true).unwrap();
 }
@@ -92,7 +95,7 @@ fn publication_dependency_graph_has_no_binary_execution_authority() {
         .no_deps()
         .exec()
         .unwrap();
-    let mut pending = vec!["oer-registers".to_owned()];
+    let mut pending = vec!["oer-tool-service-registers".to_owned()];
     let mut visited = std::collections::BTreeSet::new();
     while let Some(name) = pending.pop() {
         if !visited.insert(name.clone()) {
@@ -138,7 +141,7 @@ fn memory_policy_rejects_undeclared_overlap_and_inexact_alias() {
         fs::write(&memory_path, memory.to_string()).unwrap();
         publication["memory"] = toml_edit::value(memory_path.to_str().unwrap());
         fs::write(&path, publication.to_string()).unwrap();
-        let error = match oer_registers::Publication::load(&path) {
+        let error = match oer_tool_service_registers::Publication::load(&path) {
             Ok(_) => panic!("invalid memory policy accepted"),
             Err(error) => error,
         };

@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_ieee80211::{lower_mac::*, ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile}};
-use oer_time::Timer;
+use oer_esp32s31_ieee80211_driver::{lower_mac::*, ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile}};
+use oer_base_time::Timer;
 pub fn enable<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware, K: LowerMacSink<'core, 'slot, 512>>(core: DisabledCore<LowerMacCore<'core, 'slot, P, E, T, 512>>, hardware: &mut H, sink: &mut K) {
     let first = core.enable_checked();
     #[cfg(ui_reject)]

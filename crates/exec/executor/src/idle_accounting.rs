@@ -121,7 +121,7 @@ mod chip {
     // zero bytes are a counter that is not waiting, stable and at zero.
     unsafe impl bytemuck::Zeroable for Counters {}
 
-    oer_memory::zeroed_static! {
+    oer_base_memory::zeroed_static! {
         /// Placement: the board linker owns this exported executor-state
         /// section.
         #[used]

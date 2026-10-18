@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-coex"
+name = "oer-esp32s31-radio-coex"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

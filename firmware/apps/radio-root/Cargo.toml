@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-radio-root"
+name = "oer-firmware-apps-radio-root"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,13 +11,13 @@ build = "build.rs"
 
 [dependencies]
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
-oer-esp32s31-platform-board = { path = "../../platform/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
-oer-esp32s31-radio-esp-hal = { path = "../../../crates/adapters/esp-hal/radio", features = ["esp32s31"] }
+oer-firmware-platform-esp32s31-board = { path = "../../platform/esp32s31/board" }
+oer-firmware-platform-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-adapters-esp-hal-radio = { path = "../../../crates/adapters/esp-hal/radio", features = ["esp32s31"] }
 oer-esp32s31-hal = { path = "../../../crates/esp32s31/hal" }
 
 [build-dependencies]
-oer-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+oer-firmware-platform-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

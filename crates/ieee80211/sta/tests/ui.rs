@@ -3,7 +3,7 @@
 
 #[test]
 fn ui() {
-    oer_ui_cases::run(
+    oer_base_ui_cases::run(
         env!("CARGO_MANIFEST_DIR"),
         env!("CARGO_TARGET_TMPDIR"),
         &[("test-support", cfg!(feature = "test-support"))],

@@ -68,7 +68,7 @@
 //! No caller makes an operation permit:
 //!
 //! ```compile_fail,E0451
-//! # use oer_ieee802154::owner::{OperationPermit, WorkPermit};
+//! # use oer_ieee802154_mac::owner::{OperationPermit, WorkPermit};
 //! fn forge<'q, 'id>() -> OperationPermit<'q, 'id> {
 //!     WorkPermit { held: todo!() }
 //! }
@@ -77,7 +77,7 @@
 //! Its compiling twin reads the permit a client gave:
 //!
 //! ```
-//! # use oer_ieee802154::owner::OperationPermit;
+//! # use oer_ieee802154_mac::owner::OperationPermit;
 //! fn held<'q, 'id>(permit: &'q OperationPermit<'q, 'id>) -> &'q OperationPermit<'q, 'id> {
 //!     permit
 //! }
@@ -87,14 +87,14 @@
 //!
 //! ```compile_fail,E0451
 //! # use core::marker::PhantomData;
-//! # use oer_ieee802154::owner::SupportedPower;
+//! # use oer_ieee802154_mac::owner::SupportedPower;
 //! fn forge<K>() -> SupportedPower<K> {
 //!     SupportedPower { dbm: 20, brand: PhantomData }
 //! }
 //! ```
 //!
 //! ```
-//! # use oer_ieee802154::owner::{Ieee802154Caps, SupportedPower};
+//! # use oer_ieee802154_mac::owner::{Ieee802154Caps, SupportedPower};
 //! fn checked<K: Ieee802154Caps>() -> Option<SupportedPower<K>> {
 //!     SupportedPower::new(20).ok()
 //! }
@@ -104,8 +104,8 @@
 //! constant:
 //!
 //! ```compile_fail,E0080
-//! # use oer_ieee802154::owner::{Has, Ieee802154Caps, Promiscuous};
-//! # use oer_ieee802154::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_ieee802154_mac::owner::{Has, Ieee802154Caps, Promiscuous};
+//! # use oer_ieee802154_mac::{Ieee802154Capabilities, RadioCapabilities};
 //! # struct Plain;
 //! # impl Ieee802154Caps for Plain {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -125,8 +125,8 @@
 //! Its compiling twin names a feature the capabilities state:
 //!
 //! ```
-//! # use oer_ieee802154::owner::{Has, Ieee802154Caps, Promiscuous};
-//! # use oer_ieee802154::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_ieee802154_mac::owner::{Has, Ieee802154Caps, Promiscuous};
+//! # use oer_ieee802154_mac::{Ieee802154Capabilities, RadioCapabilities};
 //! # struct Sniffer;
 //! # impl Ieee802154Caps for Sniffer {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -146,8 +146,8 @@
 //! An interface the capabilities do not state has no resources:
 //!
 //! ```compile_fail,E0080
-//! # use oer_ieee802154::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
-//! # use oer_ieee802154::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_ieee802154_mac::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
+//! # use oer_ieee802154_mac::{Ieee802154Capabilities, RadioCapabilities};
 //! # use oer_radio_port::Mint;
 //! # struct One;
 //! # impl Ieee802154Caps for One {
@@ -170,8 +170,8 @@
 //! Its compiling twin mints the resources of the interface it has:
 //!
 //! ```
-//! # use oer_ieee802154::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
-//! # use oer_ieee802154::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_ieee802154_mac::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
+//! # use oer_ieee802154_mac::{Ieee802154Capabilities, RadioCapabilities};
 //! # use oer_radio_port::Mint;
 //! # struct One;
 //! # impl Ieee802154Caps for One {
@@ -194,7 +194,7 @@
 //! A pending-table slot of one interface does not fit another's table:
 //!
 //! ```compile_fail,E0308
-//! # use oer_ieee802154::owner::{ShortPending};
+//! # use oer_ieee802154_mac::owner::{ShortPending};
 //! # use oer_radio_port::Slot;
 //! fn cross<'id>(slot: Slot<'id, ShortPending<0>>) -> Slot<'id, ShortPending<1>> {
 //!     slot
@@ -202,7 +202,7 @@
 //! ```
 //!
 //! ```
-//! # use oer_ieee802154::owner::{ShortPending};
+//! # use oer_ieee802154_mac::owner::{ShortPending};
 //! # use oer_radio_port::Slot;
 //! fn same<'id>(slot: Slot<'id, ShortPending<1>>) -> Slot<'id, ShortPending<1>> {
 //!     slot

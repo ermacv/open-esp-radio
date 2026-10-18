@@ -2,7 +2,7 @@
 use oer_ieee80211_arbiter::{AbsencePlace, Arbiter, ChannelRequest, Lease, NoReservation};
 use oer_ieee80211_lower_mac::Ieee80211Capabilities;
 use oer_radio_port::{Child, Root};
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub fn request<'id, K: Ieee80211Capabilities>(
     arbiter: &mut Arbiter<'id, K, NoReservation, Child<Root, 0>>,

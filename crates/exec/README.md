@@ -12,14 +12,14 @@ A runtime exposes futures and never spawns, names or requires an executor; any
 executor that polls them is valid, and nothing below adapters and the
 integrating firmware depends on an executor. The portable primitives are
 `embassy-sync` (bounded mailboxes and signals over a caller-chosen raw mutex)
-and `embassy-futures` (select/join). Time is the [`oer-time`](../base/time/src/lib.rs)
-contract: a runtime reads and waits on time only through an `oer_time::Clock`
+and `embassy-futures` (select/join). Time is the [`oer-base-time`](../base/time/src/lib.rs)
+contract: a runtime reads and waits on time only through an `oer_base_time::Clock`
 or `Timer` value that it owns or receives from its caller, never through
 `embassy-time`, which only adapters and the integrating firmware use, dev
 dependencies included. The integrating firmware passes
-`oer_time_embassy::EmbassyClock`, which reads the one monotonic timebase the
+`oer_adapters_embassy_time::EmbassyClock`, which reads the one monotonic timebase the
 final image links; runtime tests pass the per-instance `VirtualClock` or
-`SkipClock` of `oer-time-virtual`. A runtime does not assume which executor
+`SkipClock` of `oer-base-time-virtual`. A runtime does not assume which executor
 wakes its timers. The portable drivers below the runtime (the `service`
 packages under [`ieee80211/`](../ieee80211/), such as the station join, scan
 and lifecycle drivers and the WPA2 handshake runners) take the same `Timer` port
@@ -58,7 +58,7 @@ second runtime owner hidden in a task or network handle.
 
 ## Radio interrupt levels
 
-[`executor`](executor/src/lib.rs) (`oer-espressif-executor-embassy`) places
+[`executor`](executor/src/lib.rs) (`oer-exec-executor`) places
 the image's contexts on one core: the radio interrupts at P3 (the MAC and
 PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
 on `FROM_CPU` line 2) at P2, the application below it. `LevelOrder` checks

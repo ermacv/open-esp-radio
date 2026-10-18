@@ -11,13 +11,13 @@
 use core::num::NonZeroU8;
 
 use heapless::Vec;
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::address::IndividualAddress;
 use oer_ieee80211_mac::ftm::{
     FTM_INITIAL_REQUEST_BODY_LEN, FtmBurstDuration, FtmFormatAndBandwidth, FtmMeasurement,
     FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs, FtmToaError,
     FtmTodError, encode_initial_request,
 };
-use oer_time::{Duration, Instant};
 
 const FTM_TIMESTAMP_MASK: u64 = (1_u64 << 48) - 1;
 const FTM_TIMESTAMP_HALF_RANGE: u64 = 1_u64 << 47;

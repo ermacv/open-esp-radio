@@ -29,6 +29,7 @@
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
 
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{
     AckSnr, Band, Ieee80211Capabilities, Protection, RateSample, RetryPlan, RetryStage,
     SignalMetadata, SingleOutcome,
@@ -38,7 +39,6 @@ use oer_ieee80211_upper_mac::{
     rate_control::{MpduOutcome, RateControl, RatePeer},
     rate_selection::{FrameRates, RateSelection},
 };
-use oer_time::Instant;
 
 use crate::{
     rate_code::legacy_rate,

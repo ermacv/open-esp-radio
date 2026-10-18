@@ -11,7 +11,7 @@
 //! [`NetworkInterfaceId`] and [`LinkState`] describe logical publication, not
 //! ownership of an Ethernet buffer. Buffer loans, queue capacity and wakeups
 //! belong to the selected adapter, while DMA-visible storage remains governed
-//! by `oer-memory` and the chip datapath. A successful conversion of these
+//! by `oer-base-memory` and the chip datapath. A successful conversion of these
 //! values therefore does not imply zero-copy transfer or hardware completion.
 
 mod flow;

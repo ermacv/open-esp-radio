@@ -3,7 +3,7 @@
 
 //! The image's monotonic time on the `embassy-time` driver.
 //!
-//! [`EmbassyClock`] implements [`oer_time::Clock`] and [`oer_time::Timer`]
+//! [`EmbassyClock`] implements [`oer_base_time::Clock`] and [`oer_base_time::Timer`]
 //! over the one time driver the final image links, and [`now_micros`] reads
 //! the same time for owners that take a plain function, such as a trace
 //! record stamp. The resolution is the driver's tick; instants
@@ -14,7 +14,7 @@
 //! driver's zero reads as 2^31 µs, so code at the boundary with 32-bit
 //! hardware counters meets the wrap at once.
 
-use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Instant, Timer};
+use oer_base_time::{CLOCK_EPOCH_OFFSET, Clock, Instant, Timer};
 
 /// The image's monotonic time in microseconds: the driver's time plus
 /// [`CLOCK_EPOCH_OFFSET`].

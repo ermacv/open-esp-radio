@@ -9,13 +9,13 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{RxEvidence, RxMetadata};
 use oer_ieee80211_mac::{
     frame::DecodedHeader,
     receive::RxDropReason,
     scan::{ScanObservation, ScanTable},
 };
-use oer_time::Instant;
 
 /// A received management frame: its decoded MAC header.
 ///

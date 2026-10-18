@@ -8,8 +8,8 @@
 use core::{marker::PhantomPinned, pin::Pin};
 use oer_esp32s31_hal::dma_address;
 
+use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use oer_esp32s31_hal::types::MacTxQueueDetached;
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::space::DmaSpace;

@@ -1,5 +1,5 @@
 [package]
-name = "oer-command-tree"
+name = "oer-tool-base-command-tree"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

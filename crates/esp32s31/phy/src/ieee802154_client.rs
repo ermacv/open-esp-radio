@@ -83,7 +83,7 @@ pub enum Ieee802154PhyClientError {
 pub fn join_ieee802154<'l>(
     ready: PhyReady<'l>,
     clocked: &Ieee802154Clocked,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<Joined<'l, Ieee802154PhyMembership>, JoinRefused<'l, Ieee802154PhyClientError>> {
     let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the

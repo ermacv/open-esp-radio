@@ -8,8 +8,8 @@ repository.workspace = true
 description = "Radio-native packet ownership and materialization contracts"
 
 [dependencies]
-oer-memory = { path = "../../base/memory" }
-oer-network-interface = { path = "../../base/network" }
+oer-base-memory = { path = "../../base/memory" }
+oer-base-network = { path = "../../base/network" }
 
 [features]
 default = []

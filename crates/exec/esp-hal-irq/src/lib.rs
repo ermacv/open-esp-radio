@@ -1,7 +1,7 @@
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
-//! The image's interrupt table (`oer-interrupt-table`) on the interrupt
+//! The image's interrupt table (`oer-exec-interrupt-table`) on the interrupt
 //! matrix of an Espressif chip, as esp-hal drives it. A chip feature selects
 //! the chip of esp-hal.
 //!

@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-staged-runtime"
+name = "oer-firmware-platform-espressif-staged-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ description = "Stage-two entry, relocation, per-hart interrupt stacks and panic 
 
 [features]
 # The chip of esp-hal; an image selects exactly one.
-esp32s31 = ["esp-hal/esp32s31", "oer-espressif-interrupt-table-esp-hal/esp32s31"]
-esp32c5 = ["esp-hal/esp32c5", "oer-espressif-interrupt-table-esp-hal/esp32c5"]
+esp32s31 = ["esp-hal/esp32s31", "oer-exec-esp-hal-irq/esp32s31"]
+esp32c5 = ["esp-hal/esp32c5", "oer-exec-esp-hal-irq/esp32c5"]
 # A second hart: its SRAM interrupt stack (the chip layout's `harts` is 2).
 two-harts = []
 ## After the record, call the image's `oer_platform_panic_hook`, which
@@ -18,10 +18,10 @@ two-harts = []
 panic-hook = []
 
 [dependencies]
-oer-espressif-staged-layout.workspace = true
+oer-firmware-platform-espressif-staged-layout.workspace = true
 esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }
-oer-interrupt-table = { path = "../../../../crates/exec/interrupt-table" }
-oer-espressif-interrupt-table-esp-hal.workspace = true
+oer-exec-interrupt-table = { path = "../../../../crates/exec/interrupt-table" }
+oer-exec-esp-hal-irq.workspace = true
 
 [package.metadata.open-radio]
 layer = "platform"

@@ -2,7 +2,7 @@
 
 use crate::PortResult;
 use core::{fmt::Debug, future::Future, ops::RangeInclusive};
-use oer_time::RadioInstant;
+use oer_base_time::RadioInstant;
 
 /// One admitted operation: what a client's submission returns. It holds
 /// the backend's token, which is neither `Clone` nor `Copy` and only the

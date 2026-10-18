@@ -4,7 +4,7 @@ use atomic_waker::AtomicWaker;
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use oer_memory::{
+use oer_base_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender,
     AffineSpscTrySendError,
 };

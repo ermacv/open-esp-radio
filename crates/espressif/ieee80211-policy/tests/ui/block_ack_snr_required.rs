@@ -16,7 +16,7 @@ pub struct Opaque;
 
 pub fn observe<C: RateControl>(
     control: &mut C,
-    now: oer_time::Instant,
+    now: oer_base_time::Instant,
     tally: BlockAckTally,
 ) -> Result<(), AmpduUnavailable> {
     #[cfg(ui_reject)]

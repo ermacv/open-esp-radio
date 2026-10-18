@@ -29,7 +29,9 @@ pub(super) fn run_clocked<F: Future>(future: F, clock: &VirtualClock) -> F::Outp
             return value;
         }
         if wakes.count.load(Ordering::SeqCst) == before {
-            clock.advance(oer_time::Duration::from_micros(10)).unwrap();
+            clock
+                .advance(oer_base_time::Duration::from_micros(10))
+                .unwrap();
         }
     }
     panic!("harness did not honor its independent timer");
@@ -37,7 +39,7 @@ pub(super) fn run_clocked<F: Future>(future: F, clock: &VirtualClock) -> F::Outp
 
 #[derive(Default)]
 pub(super) struct Probe {
-    admitted: Cell<Option<oer_time::Instant>>,
+    admitted: Cell<Option<oer_base_time::Instant>>,
     deadline_woke: Cell<bool>,
 }
 
@@ -53,7 +55,7 @@ pub(super) async fn run_timed<F: Future>(
     poll_fn(|cx| {
         wakes.parent.register(cx.waker());
         let before = wakes.count.load(Ordering::SeqCst);
-        let old = oer_time::Instant::from_micros(air.now_micros.get());
+        let old = oer_base_time::Instant::from_micros(air.now_micros.get());
         let now = clock.now();
         if now != old {
             air.set_time(now);
@@ -186,7 +188,7 @@ impl Exercise<'_> {
             admitted: owners,
             timing: Timing {
                 admitted_at: self.probe.admitted.get().unwrap(),
-                completed_at: oer_time::Instant::from_micros(self.air.now_micros.get()),
+                completed_at: oer_base_time::Instant::from_micros(self.air.now_micros.get()),
             },
             events,
             retained,
@@ -240,9 +242,11 @@ impl PortBody<ModelBackend> for Exercise<'_> {
                 permission.index(),
             );
             self.air.hold_group_commands(true);
-            self.probe.admitted.set(Some(oer_time::Instant::from_micros(
-                self.air.now_micros.get(),
-            )));
+            self.probe
+                .admitted
+                .set(Some(oer_base_time::Instant::from_micros(
+                    self.air.now_micros.get(),
+                )));
             match mutation {
                 Mutation::Install => phase.station().install_group_key(
                     &station_association,
@@ -390,9 +394,11 @@ impl Exercise<'_> {
                 yield_now().await;
             }
             assert_eq!(self.air.sent().len(), 1);
-            self.probe.admitted.set(Some(oer_time::Instant::from_micros(
-                self.air.now_micros.get(),
-            )));
+            self.probe
+                .admitted
+                .set(Some(oer_base_time::Instant::from_micros(
+                    self.air.now_micros.get(),
+                )));
             phase.access_point().remove_group_key(permission, key);
             for _ in 0..3 {
                 yield_now().await;

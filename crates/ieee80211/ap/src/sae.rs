@@ -249,7 +249,7 @@ impl ApSaeResponder {
     pub fn receive<R: ApSaeRandom>(
         &mut self,
         frame: ApSaeFrame<'_>,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
         queued_commits: usize,
         random: &mut R,
     ) -> ApSaeOutput {
@@ -296,7 +296,7 @@ impl ApSaeResponder {
         peer: [u8; 6],
         status: u16,
         body: &[u8],
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
         queued_commits: usize,
         random: &mut R,
     ) -> ApSaeOutput {

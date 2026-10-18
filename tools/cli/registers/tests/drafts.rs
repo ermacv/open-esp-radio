@@ -1,5 +1,5 @@
 //! Synthetic source-authoring lifecycle; no generated hardware constants are asserted.
-use oer_register_model::RegisterModel;
+use oer_tool_data_register_model::RegisterModel;
 use std::{fs, path::Path, process::Command};
 
 const INIT: &str = r#"
@@ -52,7 +52,7 @@ fn initialization_and_svd_import_reopen_without_promoting_review() {
         fs::read_to_string(output.join("initialization.toml")).unwrap(),
         INIT
     );
-    assert!(oer_registers::initialize_model(&request, &output).is_err());
+    assert!(oer_tool_service_registers::initialize_model(&request, &output).is_err());
     let input = dir.path().join("source.svd");
     fs::write(&input, SVD).unwrap();
     let output = dir.path().join("imported");
@@ -95,14 +95,16 @@ fn invalid_geometry_or_svd_never_leaves_a_draft_or_overwrites_sources() {
         let input = dir.path().join(format!("{index}.toml"));
         let output = dir.path().join(format!("draft-{index}"));
         fs::write(&input, source).unwrap();
-        assert!(oer_registers::initialize_model(&input, &output).is_err());
+        assert!(oer_tool_service_registers::initialize_model(&input, &output).is_err());
         assert!(!output.exists());
         assert_eq!(fs::read_to_string(input).unwrap(), *source);
     }
     let input = dir.path().join("broken.svd");
     fs::write(&input, SVD.replace("<bitWidth>1", "<bitWidth>64")).unwrap();
     let output = dir.path().join("invalid-import");
-    assert!(oer_registers::import_svd(&input, &output, "fixture-chip", "cpu").is_err());
+    assert!(
+        oer_tool_service_registers::import_svd(&input, &output, "fixture-chip", "cpu").is_err()
+    );
     assert!(!output.exists());
 }
 
@@ -115,7 +117,8 @@ fn explicit_review_materializes_native_model_and_publishes_all_four_outputs() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(root, "init.toml", INIT);
-    oer_registers::initialize_model(&root.join("init.toml"), &root.join("model")).unwrap();
+    oer_tool_service_registers::initialize_model(&root.join("init.toml"), &root.join("model"))
+        .unwrap();
     write(
         root,
         "reviewed.toml",
@@ -207,7 +210,8 @@ target = "none"
 edition = "2024"
 "#,
     );
-    let publication = oer_registers::Publication::load(&root.join("publication.toml")).unwrap();
+    let publication =
+        oer_tool_service_registers::Publication::load(&root.join("publication.toml")).unwrap();
     assert!(publication.generate(true).is_err());
     publication.generate(false).unwrap();
     publication.generate(true).unwrap();
@@ -228,7 +232,7 @@ edition = "2024"
         "publication.toml",
         &source.replace("chip = \"fixture-chip\"", "chip = \"other-chip\""),
     );
-    assert!(oer_registers::Publication::load(&root.join("publication.toml")).is_err());
+    assert!(oer_tool_service_registers::Publication::load(&root.join("publication.toml")).is_err());
 
     // A publication read only through its SVD and binding index: no PAC, no
     // PAC API policy, and a binding index that names no crate.
@@ -242,16 +246,18 @@ edition = "2024"
         );
     let without_pac = &without_pac[..without_pac.find("[outputs.pac]").unwrap()];
     write(root, "platform.toml", without_pac);
-    let platform = oer_registers::Publication::load(&root.join("platform.toml")).unwrap();
+    let platform =
+        oer_tool_service_registers::Publication::load(&root.join("platform.toml")).unwrap();
     platform.generate(false).unwrap();
     platform.generate(true).unwrap();
     let index =
-        oer_register_bindings::BindingIndex::load(&root.join("platform.bindings.toml")).unwrap();
+        oer_tool_data_register_bindings::BindingIndex::load(&root.join("platform.bindings.toml"))
+            .unwrap();
     assert_eq!(index.crate_name, None);
     assert!(!index.registers.is_empty());
     // A PAC API policy without a PAC, or a PAC without one, is refused.
     write(root, "platform.toml", &format!("{pac}{without_pac}"));
-    assert!(oer_registers::Publication::load(&root.join("platform.toml")).is_err());
+    assert!(oer_tool_service_registers::Publication::load(&root.join("platform.toml")).is_err());
     write(root, "platform.toml", &source.replace(pac, ""));
-    assert!(oer_registers::Publication::load(&root.join("platform.toml")).is_err());
+    assert!(oer_tool_service_registers::Publication::load(&root.join("platform.toml")).is_err());
 }

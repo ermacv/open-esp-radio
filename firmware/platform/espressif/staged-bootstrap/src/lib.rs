@@ -16,7 +16,7 @@
 
 use core::{arch::asm, ffi::CStr, mem::size_of, ptr};
 
-use oer_espressif_staged_layout::{
+use oer_firmware_platform_espressif_staged_layout::{
     Layout,
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };

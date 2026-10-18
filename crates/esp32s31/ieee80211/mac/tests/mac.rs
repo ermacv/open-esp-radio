@@ -1,6 +1,7 @@
 use oer_esp32s31_hal::types::MacDelaySlot;
 use std::{cell::RefCell, rc::Rc};
 
+use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use oer_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHtTxProgram, MacInterface, MacInterruptMask, MacKeyInstallOutcome,
     MacLegacyTxProgram, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
@@ -55,7 +56,6 @@ use oer_ieee80211_mac::trigger::{
     parse_trigger_common_info, parse_trigger_frame, parse_trigger_user_spatial_stream,
 };
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 mod cases;
 mod support;

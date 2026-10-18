@@ -1,21 +1,21 @@
 //! One process at a time per board: an exclusive `flock` on
-//! `$XDG_RUNTIME_DIR/oer-fw/<MAC>.lock`, shared by every checkout of the
+//! `$XDG_RUNTIME_DIR/oer-tool-cli-fw/<MAC>.lock`, shared by every checkout of the
 //! repository. The holder writes its pid and command into the file, so a
 //! refused process can name it. No argument of this tool carries a stand
 //! secret, so the command is written as given.
 
 use std::{io::Write as _, path::PathBuf};
 
-use oer_process::lock::{FileLock, Mode};
+use oer_tool_base_process::lock::{FileLock, Mode};
 
 use crate::Result;
 
-/// The lock directory: `$XDG_RUNTIME_DIR/oer-fw`.
+/// The lock directory: `$XDG_RUNTIME_DIR/oer-tool-cli-fw`.
 pub fn directory() -> Result<PathBuf> {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")
         .filter(|runtime| !runtime.is_empty())
         .ok_or("XDG_RUNTIME_DIR is not set: the board locks live there")?;
-    Ok(PathBuf::from(runtime).join("oer-fw"))
+    Ok(PathBuf::from(runtime).join("oer-tool-cli-fw"))
 }
 
 /// The lock file of the board `mac`.

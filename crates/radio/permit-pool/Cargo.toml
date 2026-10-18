@@ -14,8 +14,8 @@ oer-radio-port = { path = "../port" }
 [dev-dependencies]
 # The crate's own tests run the shared pool rule.
 oer-radio-port = { path = "../port", features = ["test-support"] }
-oer-time = { path = "../../base/time" }
-oer-ui-cases = { path = "../../base/ui-cases" }
+oer-base-time = { path = "../../base/time" }
+oer-base-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 use super::*;
 use crate::lower_mac_owner::conformance::group_keys as contract;
-use oer_time::{Clock, Timer};
-use oer_time_virtual::VirtualClock;
+use oer_base_time::{Clock, Timer};
+use oer_base_time_virtual::VirtualClock;
 
 mod ingress;
 mod progress;
@@ -118,7 +118,7 @@ impl Work for Boundary<'_> {
                 phase.station().select_group_key(permission, a)
             }
         }
-        let admitted_at = oer_time::Instant::from_micros(self.air.now_micros.get());
+        let admitted_at = oer_base_time::Instant::from_micros(self.air.now_micros.get());
         self.finish(
             phase,
             (original, submitted_slot),
@@ -136,7 +136,7 @@ impl Boundary<'_> {
         self,
         phase: &mut ModelPhase<'p, 'id>,
         (original, submitted_slot): (contract::Installation, u8),
-        (writes, admitted_at): (usize, oer_time::Instant),
+        (writes, admitted_at): (usize, oer_base_time::Instant),
         old: [u8; 16],
         new: [u8; 16],
         retained: Option<ModelGroupKey<'id, Station>>,
@@ -169,7 +169,7 @@ impl Boundary<'_> {
         }
         self.air.receive_continuously(&[0], meta());
         self.clock
-            .wait_for(oer_time::Duration::from_micros(100))
+            .wait_for(oer_base_time::Duration::from_micros(100))
             .await
             .unwrap();
         self.air.hold_group_commands(false);
@@ -201,7 +201,7 @@ impl Boundary<'_> {
             }
         };
         events.push(Event::Terminal(snapshot(&key)));
-        let completed_at = oer_time::Instant::from_micros(self.air.now_micros.get());
+        let completed_at = oer_base_time::Instant::from_micros(self.air.now_micros.get());
         let continuous_rx_at_terminal = self.air.rx_stream.borrow().is_some();
         self.air.stop_continuous_receive();
         let inactive = if self.case == contract::Case::SelectCurrent {
@@ -254,9 +254,9 @@ impl Boundary<'_> {
 
 struct Harness<'a>(&'a VirtualClock);
 impl contract::Harness for Harness<'_> {
-    const GROUP_COMMAND_BOUND: oer_time::Duration =
+    const GROUP_COMMAND_BOUND: oer_base_time::Duration =
         <ModelBackend as LowerMacBackend>::GROUP_COMMAND_BOUND;
-    const SCENARIO_BOUND: oer_time::Duration = oer_time::Duration::from_millis(20);
+    const SCENARIO_BOUND: oer_base_time::Duration = oer_base_time::Duration::from_millis(20);
     async fn exercise(&mut self, case: contract::Case) -> contract::Trace {
         let (backend, air) = backend();
         let trace = RefCell::new(None);
@@ -546,7 +546,7 @@ fn a_stalled_group_command_has_a_deadline_wake_and_retains_resources_on_expiry()
         assert!(running.as_mut().poll(&mut cx).is_pending());
     }
     let before = wakes.0.load(Ordering::SeqCst);
-    air.set_time(oer_time::Instant::from_micros(
+    air.set_time(oer_base_time::Instant::from_micros(
         MODEL_GROUP_COMMAND_BOUND.as_micros(),
     ));
     assert!(

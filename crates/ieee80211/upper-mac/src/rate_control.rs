@@ -11,6 +11,7 @@
 
 use core::num::NonZeroU16;
 
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric};
 use oer_ieee80211_mac::{
     he::{He20Capabilities, He20PeerState},
@@ -18,7 +19,6 @@ use oer_ieee80211_mac::{
     phy::PhyRate,
     station::association::PhyMode,
 };
-use oer_time::Instant;
 
 mod legacy;
 pub use legacy::NegotiatedLegacyRates;
@@ -108,7 +108,7 @@ pub struct AmpduUnavailable;
 /// use oer_ieee80211_upper_mac::rate_control::RateControl;
 /// fn empty<C: RateControl, B: oer_ieee80211_lower_mac::BlockAckSnr>(
 ///     control: &mut C,
-///     now: oer_time::Instant,
+///     now: oer_base_time::Instant,
 ///     ack: &B,
 /// ) {
 ///     control.observe_ampdu(now, 0, 0, ack);
@@ -138,7 +138,7 @@ pub struct AmpduUnavailable;
 ///         SnrSample::Measured(self.0)
 ///     }
 /// }
-/// fn observe<C: RateControl>(control: &mut C, now: oer_time::Instant)
+/// fn observe<C: RateControl>(control: &mut C, now: oer_base_time::Instant)
 ///     -> Result<(), AmpduUnavailable>
 /// {
 ///     control.observe_mpdu(NonZeroU16::MIN, MpduOutcome::Acknowledged, Some(30));

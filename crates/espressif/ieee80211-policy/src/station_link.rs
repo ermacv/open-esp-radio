@@ -1,8 +1,8 @@
 //! The Espressif station's link supervision: how long it waits for beacons
 //! and how it probes the access point before it leaves.
 
+use oer_base_time::Duration;
 use oer_ieee80211_sta::link_monitor::StaLinkProbePolicy;
-use oer_time::Duration;
 
 /// How long a connected station goes without a beacon from its access point
 /// before it starts probing it.

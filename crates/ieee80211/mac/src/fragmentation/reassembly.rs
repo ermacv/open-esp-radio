@@ -16,7 +16,7 @@ use super::{
     CcmpPacketNumber, DataFragmentProtection, OpenDataFragment, OpenDataFragmentError,
     OpenDataFragmentIdentity,
 };
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 /// Borrowed Ethernet view of one fully reassembled and LLC-validated MSDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

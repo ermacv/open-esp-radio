@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 fn at(micros: u64) -> Instant {
     Instant::from_micros(micros)

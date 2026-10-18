@@ -51,7 +51,7 @@ impl Ssh {
 
     /// The command; the script is not in it.
     fn command(&self) -> std::process::Command {
-        let mut ssh = oer_process::command("ssh");
+        let mut ssh = oer_tool_base_process::command("ssh");
         ssh.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
             .arg(&self.target)
             .args(["sh", "-s"])
@@ -64,7 +64,7 @@ impl Ssh {
 
 impl Remote for Ssh {
     fn run(&mut self, script: &str) -> Result<String> {
-        let mut child = oer_process::owned::Child::spawn(&mut self.command())
+        let mut child = oer_tool_base_process::owned::Child::spawn(&mut self.command())
             .map_err(|error| format!("cannot run ssh: {error}"))?;
         // A script far below the pipe's capacity: the write never waits for
         // ssh to read.

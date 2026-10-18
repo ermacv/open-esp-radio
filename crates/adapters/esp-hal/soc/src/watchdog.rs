@@ -6,7 +6,7 @@
 //! interrupt-to-reset or reset-to-RF-off bound. Sleep and external clock changes
 //! while armed are unsupported. No other TIMG1/Wdt constructor may be used.
 
-pub use oer_deadline::{DeadlineBudget, DeadlineError};
+pub use oer_base_deadline::{DeadlineBudget, DeadlineError};
 
 #[cfg(feature = "esp32s31")]
 mod target {
@@ -17,7 +17,7 @@ mod target {
         time::{Duration, Instant},
         timer::timg::{MwdtStage, TimerGroup},
     };
-    use oer_deadline::{Backend, Controller, DeadlineBudget, DeadlineError};
+    use oer_base_deadline::{Backend, Controller, DeadlineBudget, DeadlineError};
 
     struct Hardware(ManuallyDrop<TimerGroup<'static, TIMG1<'static>>>);
     impl Backend for Hardware {

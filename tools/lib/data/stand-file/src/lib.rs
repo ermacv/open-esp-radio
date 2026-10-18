@@ -1,6 +1,6 @@
 //! The owner's stand file (README.md): which boards the stand has, its hubs'
 //! policy and known quirks, and the stand router. Which hub port powers a
-//! board is found on the host (`oer_lab::hub`), not written here.
+//! board is found on the host (`oer_tool_service_lab::hub`), not written here.
 //!
 //! This crate owns the whole file; each consumer's slice deserializes only
 //! its fields and ignores the rest: `schema`, `[[hub]]` and `[[board]]` for

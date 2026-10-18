@@ -16,7 +16,7 @@
 //! and queue the next after the interval; the peer's answer, an agreement or
 //! a refusal, ends them.
 
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 use super::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,

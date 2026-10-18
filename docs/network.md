@@ -34,8 +34,8 @@ Git source and revision do.
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-network-interface` (`crates/base/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
-| `oer-embassy-net-owned` (`crates/adapters/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, zero-copy RX adoption | radio scheduling, DMA descriptors |
+| `oer-base-network` (`crates/base/network`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
+| `oer-adapters-embassy-net` (`crates/adapters/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, zero-copy RX adoption | radio scheduling, DMA descriptors |
 | `oer-ieee80211-datapath` | software/physical TX ownership traits, `TxQueues`, the airtime ledger | a concrete allocator, stack or executor |
 | `oer-ieee80211-softmac` | the TX cost model (`tx_cost`) and work receipts (`tx_work`) | hardware |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |

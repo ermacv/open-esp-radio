@@ -7,8 +7,8 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use oer_lab::{router, ssh};
-use oer_stand_file as stand;
+use oer_tool_data_stand_file as stand;
+use oer_tool_service_lab::{router, ssh};
 
 use crate::{Result, boards, flash, image, lock, port, power, w1};
 
@@ -181,10 +181,10 @@ fn w1_stand(
 
 /// The stand router of `stand`, locked and brought to W1's profile; the
 /// lock and image w1's configuration.
-fn w1_router(stand: &stand::Stand) -> Result<(oer_lab::lock::RouterLock, w1::Config)> {
+fn w1_router(stand: &stand::Stand) -> Result<(oer_tool_service_lab::lock::RouterLock, w1::Config)> {
     let router = stand.router()?;
     let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
-    let lock = oer_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
+    let lock = oer_tool_service_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
     let (config, shown) = w1_stand(&router, &mut ssh)?;
     for line in shown {
         eprintln!("fw: {line}");
@@ -301,10 +301,10 @@ pub fn list_boards() -> Result<()> {
     let stand = stand::Stand::load(&path)
         .map_err(|error| eprintln!("warning: {error}"))
         .ok();
-    let report = oer_lab::hub::status()
+    let report = oer_tool_service_lab::hub::status()
         .map_err(|error| eprintln!("warning: {error}"))
         .unwrap_or_default();
-    let devices = std::path::Path::new(oer_lab::hub::SYSFS_USB_DEVICES);
+    let devices = std::path::Path::new(oer_tool_service_lab::hub::SYSFS_USB_DEVICES);
     println!(
         "{:<10} {:<18} {:<14} {:<13} {:<16} POWER-CYCLE",
         "BOARD", "MAC", "USB", "TTY", "HUB PORT"
@@ -314,13 +314,17 @@ pub fn list_boards() -> Result<()> {
             .as_ref()
             .and_then(|stand| stand.board_by_mac(&attached.mac));
         let id = board.map_or("-", |board| board.id.as_str());
-        let detected = oer_lab::hub::parent(&attached.location)
+        let detected = oer_tool_service_lab::hub::parent(&attached.location)
             .map_or_else(|| "-".to_owned(), |(hub, port)| format!("{hub}:{port}"));
-        let power =
-            match oer_lab::hub::power_port(devices, &report, stand.as_ref(), &attached.location) {
-                Ok(_) => "yes".to_owned(),
-                Err(why) => format!("no: {why}"),
-            };
+        let power = match oer_tool_service_lab::hub::power_port(
+            devices,
+            &report,
+            stand.as_ref(),
+            &attached.location,
+        ) {
+            Ok(_) => "yes".to_owned(),
+            Err(why) => format!("no: {why}"),
+        };
         if let Some(warning) = board.and_then(|board| board.ignored_port(&detected)) {
             eprintln!("warning: {warning}");
         }
@@ -340,13 +344,13 @@ pub fn power_cycle(selector: &str) -> Result<()> {
     let (stand, board) = board(selector)?;
     let _lock = lock::acquire(&board.mac)?;
     let attached = boards::find(&board.mac);
-    let report = oer_lab::hub::status()?;
+    let report = oer_tool_service_lab::hub::status()?;
     let port = power::port_of(
         Some(&stand),
         &board.id,
         attached.as_ref(),
         &report,
-        std::path::Path::new(oer_lab::hub::SYSFS_USB_DEVICES),
+        std::path::Path::new(oer_tool_service_lab::hub::SYSFS_USB_DEVICES),
     )?;
     if let Some(warning) = board.ignored_port(&format!("{}:{}", port.hub, port.port)) {
         eprintln!("warning: {warning}");

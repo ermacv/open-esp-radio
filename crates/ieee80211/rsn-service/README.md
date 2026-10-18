@@ -3,7 +3,7 @@
 `oer-ieee80211-rsn-service` drives the sans-IO WPA2 supplicant of
 [`oer-ieee80211-rsn`](../rsn/README.md).
 That crate returns typed requests and never waits; this crate owns the futures
-that wait on its ports and on the `oer-time` `Timer`, for any executor.
+that wait on its ports and on the `oer-base-time` `Timer`, for any executor.
 `process_frame` returns `RsnStaReady` only after completing any requested
 unwrap. Its completed-handshake retry carries group keys only; the initial
 handshake runner returns before that stage and accepts only the first install.
@@ -17,5 +17,5 @@ Chip ports (`RsnHandshakeBackend`, `RsnKeyInstallBackend`,
 `AsyncRsnKeyUnwrap`) are declared by the protocol crate and implemented by
 roles and runtimes; the concrete runtime polls these drivers.
 
-Runner tests use `oer-time-virtual::SkipClock`. Wait observations count
+Runner tests use `oer-base-time-virtual::SkipClock`. Wait observations count
 polled waits; an unpolled losing branch leaves both time and counts alone.

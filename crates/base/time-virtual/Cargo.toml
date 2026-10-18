@@ -1,5 +1,5 @@
 [package]
-name = "oer-time-virtual"
+name = "oer-base-time-virtual"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ description = "Deterministic per-instance virtual time for tests and simulations
 
 [dependencies]
 embassy-sync = "0.8.0"
-oer-time = { path = "../time" }
+oer-base-time = { path = "../time" }
 
 [dev-dependencies]
 embassy-futures = "0.1.2"

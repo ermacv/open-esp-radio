@@ -1,5 +1,6 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
+use oer_base_time::Instant;
 use oer_ieee80211_mac::{
     address::{Bssid, OwnAddress},
     frame::DecodedHeader,
@@ -10,7 +11,6 @@ use oer_ieee80211_rsn::{
     frames::RsnIgtk,
     management_ccmp::ManagementCcmpReceiver,
 };
-use oer_time::Instant;
 
 use crate::sa_query::{SaQueryStep, StationSaQuery};
 

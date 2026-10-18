@@ -31,8 +31,12 @@ use esp_hal::{
     Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::Rng,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
+use oer_adapters_embassy_time::EmbassyClock;
+use oer_adapters_esp_hal_radio::{PlatformClocks, RadioSingletons, take_radio};
+use oer_base_memory::{AffineSpscQueue, AffineSpscReceiver};
+use oer_base_time::{Clock, Duration, Instant};
 use oer_esp32s31_hal::root::ProtocolPartitions;
-use oer_esp32s31_ieee80211::{
+use oer_esp32s31_ieee80211_driver::{
     runtime::{WifiRoleMaterialized, materialize_esp32s31_wifi_role},
     rx::{counters::WifiRxCounters, returns::HeldRxFrame, upper::FrameReceiver},
     startup::{
@@ -51,23 +55,17 @@ use oer_esp32s31_phy::{
     HARDWARE_EDGE_LIMIT, NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig,
     PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
-use oer_esp32s31_platform_board as board;
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
-use oer_esp32s31_radio_esp_hal::{PlatformClocks, RadioSingletons, take_radio};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_executor_embassy::{
-    Executor, InterruptExecutor, LevelOrder, timer_observation::Window,
-};
-use oer_espressif_staged_runtime::{panic, stacks};
+use oer_exec_executor::{Executor, InterruptExecutor, LevelOrder, timer_observation::Window};
+use oer_firmware_platform_esp32s31_board as board;
+use oer_firmware_platform_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_mac::{
     address::{Bssid, IndividualAddress},
     channel::{Channel, WifiChannel, WifiChannelWidth},
 };
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_softmac::WifiMacAddress;
-use oer_memory::{AffineSpscQueue, AffineSpscReceiver};
-use oer_time::{Clock, Duration, Instant};
-use oer_time_embassy::EmbassyClock;
 use static_cell::StaticCell;
 
 use crate::{
@@ -89,9 +87,9 @@ pub struct W1Config {
 
 include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor_embassy::wake_handler::<0>, Priority1, ProCpu;
+    wake: WakeToken = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The radio executor (P2), polled in its handler, which times each run.
     radio: RadioToken = FROM_CPU_INTR2 => crate::irq::radio_executor, Priority2, ProCpu;
     /// The radio doorbell: P2's requests to the interrupt line.
@@ -101,9 +99,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The Wi-Fi WDEVPWR interrupt.
     wifi_pwr: WifiPwrToken = MODEM_WIFI_PWR => crate::irq::wifi_pwr, Priority3, ProCpu;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor_embassy::alarm_interrupt::<0>, Priority3, ProCpu;
+    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority3, ProCpu;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor_embassy::alarm_interrupt::<1>, Priority1, ProCpu;
+    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_exec_executor::alarm_interrupt::<1>, Priority1, ProCpu;
 }
 
 /// The radio executor between the radio interrupts and the application.
@@ -164,7 +162,7 @@ struct Boot {
     routes: ImageRoutes,
     doorbell: ImageDoorbell,
     bound: (
-        oer_memory::AffineSpscSender<'static, Bound, 1>,
+        oer_base_memory::AffineSpscSender<'static, Bound, 1>,
         AffineSpscReceiver<'static, Bound, 1>,
     ),
     timer_lines: AffineSpscReceiver<'static, TimerLine, 2>,
@@ -180,7 +178,7 @@ extern "C" fn runtime_main() -> ! {
     // nothing has reset or remapped; interrupts stay disabled until the
     // executors, the doorbell and the time driver are bound below.
     let psram = unsafe {
-        oer_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+        oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
             board::adopt_psram_mapping(peripherals.PSRAM)
         })
     };
@@ -248,8 +246,8 @@ extern "C" fn runtime_main() -> ! {
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    oer_espressif_executor_embassy::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_espressif_executor_embassy::bind::<0, _>(interrupts.app_alarm);
+    oer_exec_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
+    oer_exec_executor::bind::<0, _>(interrupts.app_alarm);
     let doorbell = match ImageDoorbell::new(
         SoftwareInterrupt::new(peripherals.FROM_CPU_INTR3),
         interrupts.doorbell,
@@ -281,7 +279,7 @@ extern "C" fn runtime_main() -> ! {
     // wake are bound; the MAC and WDEVPWR sources stay silent until the
     // receive runner enables their routes, and interrupts were disabled
     // since the handoff.
-    unsafe { oer_espressif_staged_runtime::enable_interrupts_after_handoff() };
+    unsafe { oer_firmware_platform_espressif_staged_runtime::enable_interrupts_after_handoff() };
     let boot = Boot {
         console,
         cell: cells.wifi,
@@ -349,7 +347,7 @@ struct Parts {
     routes: ImageRoutes,
     doorbell: ImageDoorbell,
     bound: (
-        oer_memory::AffineSpscSender<'static, Bound, 1>,
+        oer_base_memory::AffineSpscSender<'static, Bound, 1>,
         AffineSpscReceiver<'static, Bound, 1>,
     ),
     timer_lines: AffineSpscReceiver<'static, TimerLine, 2>,
@@ -813,8 +811,8 @@ async fn run(
     if !heard {
         let _ = console.write(b"OER w1 no frame within 5 s: the window did not open\r\n");
     }
-    if exit.cause != oer_esp32s31_ieee80211::rx::control::WifiRxCause::StopRequested
-        || exit.end != oer_esp32s31_ieee80211::rx::control::WifiRxEnd::Halted
+    if exit.cause != oer_esp32s31_ieee80211_driver::rx::control::WifiRxCause::StopRequested
+        || exit.end != oer_esp32s31_ieee80211_driver::rx::control::WifiRxEnd::Halted
     {
         let _ = write!(console, "OER w1 exit {exit:?}\r\n");
     }

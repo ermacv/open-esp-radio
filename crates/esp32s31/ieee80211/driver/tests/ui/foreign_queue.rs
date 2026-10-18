@@ -1,9 +1,9 @@
 #![no_std]
-use oer_esp32s31_ieee80211::{
+use oer_esp32s31_ieee80211_driver::{
     lower_mac::{EnabledCore, FreeQueue, LowerMacCore, LowerMacHardware, MpduValues, TxAdmission},
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
-use oer_time::Timer;
+use oer_base_time::Timer;
 
 pub fn submit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
     core: &mut EnabledCore<LowerMacCore<'core, 'slot, P, E, T, 512>>,

@@ -1,6 +1,6 @@
 //! Power-cycling a board's hub port with `uhubctl`.
 //!
-//! The port is found on the host ([`oer_lab::hub`]): the board's USB location
+//! The port is found on the host ([`oer_tool_service_lab::hub`]): the board's USB location
 //! names its hub and port, `uhubctl` confirms the hub switches power per
 //! port, and the port is switched only when the board is the one device
 //! below it. After switching off, the board must have left USB, or the port
@@ -12,8 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_lab::hub;
-use oer_stand_file as stand;
+use oer_tool_data_stand_file as stand;
+use oer_tool_service_lab::hub;
 
 use crate::{Result, boards::Attached};
 

@@ -5,7 +5,7 @@
 //! scheduler or hardware.
 //!
 //! - [`timing`]: connection-event geometry over the backend's
-//!   [`ConnectionAllowances`](oer_bluetooth_radio::ConnectionAllowances)
+//!   [`ConnectionAllowances`](oer_bluetooth_le_radio::ConnectionAllowances)
 //!   (first and recurring peripheral events, sleep-clock window widening) and
 //!   legacy advertising channel geometry after the vendor item geometry, with
 //!   [`EpochExhausted`](timing::EpochExhausted) when a result leaves the radio

@@ -343,7 +343,7 @@ fn ampdu_owner_accepts_checked_counts_without_a_post_mutation_error() {
 
 #[test]
 fn the_vendor_word_wraps_from_the_clock_start() {
-    use oer_time::{CLOCK_EPOCH_OFFSET, Duration};
+    use oer_base_time::{CLOCK_EPOCH_OFFSET, Duration};
     // A clock starts at the epoch offset: the vendor word has bit 31 set
     // from the first read and wraps 2^31 us later.
     let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
@@ -668,7 +668,7 @@ mod seam {
         assert_eq!(control.association().filtered_ack_snr(), None);
         assert_eq!(
             control.observe_ampdu(
-                oer_time::Instant::from_micros(1_000),
+                oer_base_time::Instant::from_micros(1_000),
                 tally(4, 4),
                 &Evidence::Measured(30)
             ),
@@ -680,7 +680,7 @@ mod seam {
     #[test]
     fn a_block_ack_without_a_sample_leaves_the_filter_and_still_counts_its_window() {
         let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
-        let now = oer_time::Instant::from_micros(1_000);
+        let now = oer_base_time::Instant::from_micros(1_000);
         assert_eq!(
             control.observe_ampdu(now, tally(4, 4), &Evidence::Measured(30)),
             Ok(())
@@ -719,7 +719,7 @@ mod seam {
         let before = control.ampdu_rate();
         assert_eq!(
             control.observe_ampdu(
-                oer_time::Instant::from_micros(1_000),
+                oer_base_time::Instant::from_micros(1_000),
                 tally(4, 4),
                 &Evidence::Measured(30)
             ),

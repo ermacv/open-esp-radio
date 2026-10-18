@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee802154"
+name = "oer-ieee802154-mac"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,12 +10,12 @@ description = "Allocation-free hardware-independent IEEE 802.15.4 radio contract
 [dependencies]
 scopeguard = { version = "1.2.0", default-features = false }
 oer-radio-port = { path = "../../radio/port" }
-oer-time = { path = "../../base/time" }
+oer-base-time = { path = "../../base/time" }
 
 [dev-dependencies]
 # The crate's own tests run the shared pool rules on the model.
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
-oer-ui-cases = { path = "../../base/ui-cases" }
+oer-base-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

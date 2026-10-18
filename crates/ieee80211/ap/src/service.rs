@@ -61,15 +61,17 @@ pub const AP_STATUS_INVALID_RSN: u16 = 40;
 /// Status 53: the station named no PMKID of a security association this
 /// access point holds for it.
 pub const AP_STATUS_INVALID_PMKID: u16 = 53;
-pub const AP_ASSOCIATION_DEADLINE: oer_time::Duration = oer_time::Duration::from_secs(15);
+pub const AP_ASSOCIATION_DEADLINE: oer_base_time::Duration = oer_base_time::Duration::from_secs(15);
 /// AP-owned response window for each four-way-handshake publication.
 ///
 /// This follows the generic hostap authenticator policy: a 100-ms first
 /// EAPOL-Key response window, 1-second subsequent windows, and four total
 /// publications. An acknowledged Message 1 uses the subsequent window
 /// immediately. It is protocol policy, not an ESP32 hardware fact.
-pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_time::Duration = oer_time::Duration::from_millis(100);
-pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_time::Duration = oer_time::Duration::from_secs(1);
+pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_base_time::Duration =
+    oer_base_time::Duration::from_millis(100);
+pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_base_time::Duration =
+    oer_base_time::Duration::from_secs(1);
 /// Retransmissions after the original M1 or M3 publication.
 pub const AP_WPA2_RETRY_ATTEMPTS: u8 = 3;
 pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
@@ -78,8 +80,8 @@ pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
 /// duplex fairness must be provided by the common MAC transaction scheduler,
 /// not by weakening the AP's negotiated BlockAck capability.
 pub const AP_TX_BLOCK_ACK_WINDOW: u16 = 32;
-pub const AP_TX_BLOCK_ACK_NEGOTIATION_TIMEOUT: oer_time::Duration =
-    oer_time::Duration::from_millis(100);
+pub const AP_TX_BLOCK_ACK_NEGOTIATION_TIMEOUT: oer_base_time::Duration =
+    oer_base_time::Duration::from_millis(100);
 
 /// Validated inactivity policy for an associated SoftAP peer.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -101,8 +103,8 @@ impl AccessPointInactiveTimeout {
         self.0
     }
 
-    pub const fn duration(self) -> oer_time::Duration {
-        oer_time::Duration::from_secs(self.0 as u32)
+    pub const fn duration(self) -> oer_base_time::Duration {
+        oer_base_time::Duration::from_secs(self.0 as u32)
     }
 }
 
@@ -445,8 +447,8 @@ struct ApPeer {
     power_state: ApPeerPowerState,
     buffered_unicast_frames: u16,
     buffered_release_in_flight: bool,
-    last_activity: oer_time::Instant,
-    deadline: oer_time::Instant,
+    last_activity: oer_base_time::Instant,
+    deadline: oer_base_time::Instant,
 }
 
 /// Caller-owned storage for all per-client AP protocol and key state.
@@ -576,7 +578,7 @@ impl ApPeer {
         address: [u8; 6],
         association_id: u16,
         association_epoch: u32,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Self {
         Self {
             address,
@@ -689,8 +691,8 @@ pub struct ApPeerStatus {
     pub power_state: ApPeerPowerState,
     pub buffered_unicast_frames: u16,
     pub buffered_release_in_flight: bool,
-    pub last_activity: oer_time::Instant,
-    pub deadline: oer_time::Instant,
+    pub last_activity: oer_base_time::Instant,
+    pub deadline: oer_base_time::Instant,
 }
 
 impl ApPeerStatus {

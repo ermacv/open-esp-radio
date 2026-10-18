@@ -108,7 +108,7 @@ impl PhyDomain {
     /// refreshed here.
     pub async fn wait_for_tracking_demand(
         &self,
-        timer: &impl oer_time::Timer,
+        timer: &impl oer_base_time::Timer,
     ) -> Result<Option<crate::tracking::schedule::Demand>, PhyTrackTimeError> {
         use crate::tracking::schedule::Schedule;
         loop {
@@ -120,7 +120,7 @@ impl PhyDomain {
                 Schedule::Due(demand) => return Ok(Some(demand)),
                 Schedule::At(deadline) => {
                     timer
-                        .wait_until(oer_time::Instant::from_micros(deadline))
+                        .wait_until(oer_base_time::Instant::from_micros(deadline))
                         .await;
                 }
             }

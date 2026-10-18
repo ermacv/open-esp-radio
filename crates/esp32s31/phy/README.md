@@ -265,7 +265,7 @@ recovered vendor graph; bounded PBus, I2C, DC/IQ and SAR readiness reads poll
 directly. Interrupts remain enabled and the physical owner remains held until
 terminal restoration. The complete common/Wi-Fi runtime calibration graph
 runs in one caller poll without a timer suspension. Longer registration,
-tracking and lifecycle operations wait on the caller's `oer_time::Timer`
+tracking and lifecycle operations wait on the caller's `oer_base_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
 RX gain PBus completion matches the rev0 ROM command loop while retaining

@@ -10,7 +10,7 @@
 
 pub use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
 pub use embassy_sync::signal::Signal;
-pub use oer_network_interface::{
+pub use oer_base_network::{
     ETHERNET_HEADER_LEN, FrameLengthError, LinkState, NetworkInterfaceId, RxEnqueueError,
 };
 

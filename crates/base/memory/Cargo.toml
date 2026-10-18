@@ -1,5 +1,5 @@
 [package]
-name = "oer-memory"
+name = "oer-base-memory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["min_cons
 default = []
 
 [dev-dependencies]
-oer-ui-cases = { path = "../ui-cases" }
+oer-base-ui-cases = { path = "../ui-cases" }
 
 [lints]
 workspace = true

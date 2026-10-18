@@ -129,7 +129,7 @@ fn a_saturating_deadline_past_the_range_never_comes() {
     );
 }
 
-/// Without its features `oer-time` stays a dependency-free contract
+/// Without its features `oer-base-time` stays a dependency-free contract
 /// crate: every dependency is optional and only a feature enables it.
 #[test]
 fn without_features_the_crate_has_no_dependency() {

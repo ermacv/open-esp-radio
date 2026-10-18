@@ -13,10 +13,10 @@ use std::{
     vec::Vec,
 };
 
+use oer_base_time::Duration;
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word;
 use oer_esp32s31_ieee80211_mac::irq::consumer::{IrqPublisher, IrqStorage};
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
@@ -246,11 +246,11 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 }
 
 mod survey {
+    use oer_base_time::Instant;
     use oer_esp32s31_ieee80211_mac::portable::rx_meta;
     use oer_ieee80211_lower_mac::{Channel, ChannelWidth};
     use oer_ieee80211_mac::address::{Bssid, IndividualAddress};
     use oer_ieee80211_runtime::survey::{Gap, MinMax, Survey, SurveyCounters};
-    use oer_time::Instant;
 
     use super::*;
 
@@ -308,7 +308,7 @@ mod survey {
         let mut survey = Survey::<4>::new(bssid(STAND));
         let channel = Channel::ghz2_4(CHANNEL, ChannelWidth::Mhz20).unwrap();
         // One second past the clock's start.
-        let base = oer_time_virtual::START.as_micros() + 1_000_000;
+        let base = oer_base_time_virtual::START.as_micros() + 1_000_000;
         let stand = |tsf| management(8, STAND, tsf, b"stand", Some(CHANNEL));
         let mut data = std::vec![0_u8; 24];
         data[0] = 0x08;

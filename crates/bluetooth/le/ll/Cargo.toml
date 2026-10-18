@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-ll"
+name = "oer-bluetooth-le-ll"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ description = "Allocation-free Bluetooth LE Link Layer protocol and role state"
 
 [dependencies]
 aes = { version = "0.8.4", default-features = false }
-oer-bluetooth-radio = { path = "../radio" }
+oer-bluetooth-le-radio = { path = "../radio" }
 
 [lints]
 workspace = true

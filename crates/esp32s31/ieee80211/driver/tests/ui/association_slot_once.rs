@@ -1,12 +1,12 @@
 #![no_std]
-use oer_esp32s31_ieee80211::{
+use oer_esp32s31_ieee80211_driver::{
     lower_mac::{
         LowerMacCore, LowerMacHardware,
         association::{StationAssociation, StationPairwiseSlot, TransmitKeyInstallation},
     },
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
-use oer_time::Timer;
+use oer_base_time::Timer;
 
 pub fn install<'id, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(
     core: &mut LowerMacCore<'id, 'slot, P, E, T, 512>,
