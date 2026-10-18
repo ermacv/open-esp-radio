@@ -1,0 +1,108 @@
+{
+  "schema": 8,
+  "scenario": "system-watchdog",
+  "image": "system-watchdog",
+  "outcome": "failed",
+  "required_repetitions": 3,
+  "repetitions": [
+    {
+      "schema": 8,
+      "repetition": 1,
+      "outcome": "failed",
+      "started_unix_millis": 1791582365170,
+      "duration_millis": 25951,
+      "artifact_directory": "scenarios/system-watchdog/repetition-001",
+      "attachments": [
+        {
+          "path": "scenarios/system-watchdog/repetition-001/adapter-before.json",
+          "media_type": "application/json",
+          "size_bytes": 102,
+          "sha256": "e30843fc9f6645a8f1bb385a46aac41321d1885bfdafb63780bf8603a38f8a74"
+        },
+        {
+          "path": "scenarios/system-watchdog/repetition-001/cleanup.json",
+          "media_type": "application/json",
+          "size_bytes": 3,
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "measurements": [
+        {
+          "name": "connection-attempts",
+          "value": 2,
+          "unit": "count",
+          "semantics": 1,
+          "better": "lower",
+          "threshold": {
+            "comparison": "at-most",
+            "value": 5
+          },
+          "verdict": "passed"
+        },
+        {
+          "name": "connections-not-established",
+          "value": 0,
+          "unit": "count",
+          "semantics": 1,
+          "better": "lower",
+          "threshold": null,
+          "verdict": null
+        }
+      ],
+      "failure": {
+        "kind": "unexpected-reset",
+        "message": "panic after cycle 3"
+      }
+    },
+    {
+      "schema": 8,
+      "repetition": 2,
+      "outcome": "failed",
+      "started_unix_millis": 1791582391128,
+      "duration_millis": 17149,
+      "artifact_directory": "scenarios/system-watchdog/repetition-002",
+      "attachments": [
+        {
+          "path": "scenarios/system-watchdog/repetition-002/adapter-before.json",
+          "media_type": "application/json",
+          "size_bytes": 102,
+          "sha256": "e30843fc9f6645a8f1bb385a46aac41321d1885bfdafb63780bf8603a38f8a74"
+        },
+        {
+          "path": "scenarios/system-watchdog/repetition-002/cleanup.json",
+          "media_type": "application/json",
+          "size_bytes": 3,
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        }
+      ],
+      "measurements": [
+        {
+          "name": "connection-attempts",
+          "value": 2,
+          "unit": "count",
+          "semantics": 1,
+          "better": null,
+          "threshold": null,
+          "verdict": null
+        },
+        {
+          "name": "connections-not-established",
+          "value": 0,
+          "unit": "count",
+          "semantics": 1,
+          "better": "lower",
+          "threshold": null,
+          "verdict": null
+        }
+      ],
+      "failure": {
+        "kind": "scenario",
+        "message": "watchdog reset deadline: no boot evidence after the armed watchdog"
+      }
+    }
+  ],
+  "failure": {
+    "kind": "scenario",
+    "message": "one repetition failed"
+  }
+}

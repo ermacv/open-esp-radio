@@ -31,14 +31,22 @@ protected = [3]              # optional: ports never switched off
 switchable = [1, 4]          # optional: when given, the only ports switched
 keeps-power = [2]            # optional: ports that report off but keep power
 
+buttons = { "1" = 1 }        # optional: the hub's touch button of a port
+
+[stand]
+id = "made-up-lab"           # the stand's identity, for HIL runs
+air = "exclusive"            # a run that uses the air holds all of it
+
 [[board]]
 id = "s31-a"
 usb-serial = "02:00:00:00:00:01"   # its MAC: how the board is found on USB
 chip = "esp32s31"
+radios = ["wifi-2g4", "ble"]       # HIL: a subset of the chip's radios
+roles = ["dut"]                    # HIL: dut (our image) or peer (ESP-IDF)
+reset = ["usb-jtag-rts", "jtag", "power"]   # HIL: the reset ladder, in order
 
 [station]
-ssid = "made-up-stand-net"   # the stand AP's SSID
-passphrase = "made-up"       # W4 (planned); never read today
+ipv4 = { mode = "dhcp" }     # HIL: how the stand's station takes its address
 
 [station_fixture]
 kind = "open-wrt"
@@ -48,8 +56,28 @@ radio = "radio0"             # the UCI wifi-device section
 ap_section = "default_radio0" # the UCI wifi-iface section of the stand AP
 channel = 6                  # 1 to 13
 
-[access_point]               # the board's own AP (planned); never read today
+[access_point]               # HIL: the board's own AP the station joins
+channel = 6
+channel_width = "ht20"
+target_address = "192.168.77.1/24"
+client_address = "192.168.77.2/24"
+
+[air_observer]               # HIL: an idle OpenWrt radio observing the air
+ssh_target = "lab-observer"
+phy = "phy1"
+interface = "mon1"
+
+[bluetooth]
+adapter = "hci0"             # HIL: the host's Bluetooth adapter
+
+[legacy_bss]
+country = "DE"               # HIL: the laptop's non-ERP BSS domain
 ```
+
+The file holds no credentials: every access point and station of the stand
+is managed, and a run generates the SSID and passphrase it sets on both
+(`oer_tool_service_lab::credentials`) and never logs or stores them. An SSID
+or passphrase an older file still holds is never deserialized.
 
 A board's hub port is not written in the file: it is found on the host
 (`oer_tool_service_lab::hub`). The board's USB location in sysfs names its hub and port
@@ -66,12 +94,12 @@ nothing else is read:
 | Consumer | Reads |
 | --- | --- |
 | boards, flashing, power | `schema`, `[[hub]]`, `[[board]]` |
-| W1 (`cargo fw run w1`, `cargo fw router`) | `[station].ssid`; `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel` |
+| W1 (`cargo fw run w1`, `cargo fw router`) | `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel`; the SSID is generated per run |
 | W2, W3 (planned) | as W1, and what the probe and the open association need |
-| W4 (planned) | also `[station].passphrase` |
+| the stand services and HIL (`cargo stand`, `cargo hil`) | also `[stand]`, the boards' `radios`, `roles`, `reset`, `startup-artifact`, the hubs' `buttons`, `[station].ipv4`, `[access_point]` without credentials, `[air_observer]`, `[bluetooth]`, `[legacy_bss]` |
 
-**Secret** are the SSIDs, the passphrases, `ssh_target` and
-`wireless_interface`; and every full MAC address the router reports. They
+**Secret** are the generated SSIDs and passphrases, `ssh_target` and the
+interface names; and every full MAC address the router reports. They
 appear in no message, error, `Debug`, lock file or run log: an SSID is shown
 only as its length or as whether it matches, a MAC address only as
 `xx:xx:xx:xx:F6:D0`. Channel numbers and UCI section names are shown. Do not

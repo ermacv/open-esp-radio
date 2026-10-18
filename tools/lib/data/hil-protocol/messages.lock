@@ -1,0 +1,60 @@
+# The HIL wire of this revision. Regenerate with
+# `OER_HIL_PROTOCOL_LOCK=write cargo test -p oer-tool-data-hil-protocol --features registry --test registry`.
+framing 2
+[modules]
+base
+network base system
+system
+telemetry
+[messages]
+base/accepted 1ac686128bebf3dd topic
+base/boot 472a6c8ee83e5591 topic
+base/boot/get 26ffe1f703e77a0f endpoint
+base/hello 8e2dcdd3a6a11774 topic
+base/hello/get c394eef0bb216fb5 endpoint
+base/image-keys c080126d58dbddbb topic
+base/image-keys/get 45176bd69cd3a2e0 endpoint
+base/link-health 61450aa5777ec66c topic
+base/link-health/get 0dd30f36b23d5822 endpoint
+base/post-mortem 8fb903806319fddc topic
+base/post-mortem/get f38ae4a399d00557 endpoint
+base/rejected 00baffc41eab75e2 topic
+network/bidirectional b6817e1d148a8246 property
+network/data-plane-placement 880e961aa58a91dc property
+network/ready d57982baa9a27831 topic
+network/runtime-configuration 80d9410d4730af36 property
+network/rx 4fe48d19d7020c71 property
+network/rx-delivery-evidence 7c45c7e5d5c356ac property
+network/scheduler-evidence 759210e7665d74d4 property
+network/service/ready 8f749642585cb71a topic
+network/session/arm cc0e3f4201755cd8 endpoint
+network/session/cancel 8b66718b41b66b3a endpoint
+network/session/configure 9bb753b11758b09e endpoint
+network/session/evidence fc5835ae720bd56b topic
+network/session/failed d8f73091a4e96394 topic
+network/session/finished 143d79baf65edd89 topic
+network/session/ready 2b5a9e3b088969ad topic
+network/session/recover ea5843933f6840c6 endpoint
+network/session/result/acknowledge e253374962713a76 endpoint
+network/session/result/replay 286d8210c080c3f9 endpoint
+network/session/start aa6a7ac468793596 endpoint
+network/session/state 9a8b61f6c982e0a0 topic
+network/session/status 0265fde1b70e5f46 topic
+network/session/status/get e9b466ccda5dc44b endpoint
+network/session/udp-rx-started a11ae7c56b7473e9 topic
+network/structured-evidence e380cec1338cf48a property
+network/tcp adc6e3d733d9a41e property
+network/tx 3defbb19cca99df7 property
+network/udp ccf606e215dfb376 property
+network/udp-multi-flow 8bb6cec70ec1525d property
+system/panic/inject 4a8069a58696abc1 endpoint
+system/panic/injected 9f469405c60e21be topic
+system/usb/disable 0341ab5f7efd972b endpoint
+system/usb/disabled 8571c744c847ea4b topic
+system/watchdog/armed ba82e77bc5b7470c topic
+system/watchdog/test c9be2bd5a613156d endpoint
+telemetry/pc-profile e65c7b940a974649 property
+telemetry/profile/control ae68ada13f2e14ba endpoint
+telemetry/profile/samples afa02b2ba450762d topic
+telemetry/profile/samples/get 118d9de14439dfd5 endpoint
+telemetry/profile/state d074cf5350d6d74e topic

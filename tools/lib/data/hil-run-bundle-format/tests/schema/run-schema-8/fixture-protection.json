@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "bssid": "02:00:00:00:00:02",
+  "established": false,
+  "non_ht_member": false,
+  "legacy_bss": false,
+  "windows": [
+    {
+      "beacons": 10,
+      "erp_use_protection": false,
+      "ht_protection": 0
+    }
+  ]
+}

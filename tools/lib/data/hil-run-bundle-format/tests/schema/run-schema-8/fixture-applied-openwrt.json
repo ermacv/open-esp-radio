@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "requested": {
+    "ht40_above": false,
+    "phy": "he20",
+    "channel": 13,
+    "management_frame_protection": "disabled",
+    "access_point_security": "wpa2-personal",
+    "beacon": {
+      "interval_tu": 100,
+      "dtim_period": 2
+    }
+  },
+  "read_only": false,
+  "before": {
+    "up": true,
+    "channel": "13",
+    "htmode": "HT40",
+    "beacon_int": null,
+    "dtim_period": null
+  },
+  "applied": {
+    "enabled": true,
+    "channel": 13,
+    "geometry": "\tchannel 13 (2472 MHz), width: 20 MHz, center1: 2472 MHz",
+    "htmode": "HE20",
+    "ht": true,
+    "he": true,
+    "beacon_interval_tu": 100,
+    "dtim_period": 2
+  }
+}

@@ -1,0 +1,61 @@
+[package]
+name = "oer-firmware-hil-esp32s31-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[features]
+# The HIL report of a panic instead of the product's record-and-reset; every
+# image but `system-panic-reset` has it.
+panic-hook = ["oer-firmware-platform-espressif-staged-runtime/panic-hook"]
+boot-smoke = ["panic-hook"]
+system-watchdog = [
+    "panic-hook",
+    "dep:oer-tool-data-hil-protocol",
+    "dep:embassy-sync",
+    "dep:log",
+    "dep:oer-firmware-hil-agent",
+    "dep:oer-tool-data-hil-image-keys",
+    "dep:critical-section",
+]
+# The system image that, on request, switches its USB Serial/JTAG off its
+# pads: the board leaves USB, as a stand recovery must handle.
+usb-jtag-off = ["system-watchdog"]
+# The product panic entry alone: a panic records itself and resets the chip,
+# and the next boot reports the record.
+system-panic-reset = [
+    "dep:oer-tool-data-hil-protocol",
+    "dep:embassy-sync",
+    "dep:log",
+    "dep:oer-firmware-hil-agent",
+    "dep:oer-tool-data-hil-image-keys",
+    "dep:critical-section",
+]
+[dependencies]
+oer-base-memory = { path = "../../../crates/base/memory" }
+embassy-executor.workspace = true
+embassy-sync = { workspace = true, optional = true }
+embassy-time.workspace = true
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+log = { workspace = true, optional = true }
+critical-section = { version = "1.2.0", optional = true }
+oer-adapters-esp-hal-soc.workspace = true
+oer-exec-executor = { workspace = true, features = ["esp32s31"] }
+oer-exec-esp-hal-irq.workspace = true
+oer-tool-data-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
+oer-firmware-hil-agent = { path = "../agent", optional = true, default-features = false }
+oer-tool-data-hil-image-keys = { workspace = true, optional = true }
+oer-firmware-platform-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-firmware-platform-esp32s31-board = { path = "../../platform/esp32s31/board" }
+oer-firmware-platform-esp32s31-layout = { path = "../../platform/esp32s31/layout" }
+static_cell.workspace = true
+
+[lints]
+workspace = true
+
+[build-dependencies]
+oer-firmware-platform-esp32s31-layout = { path = "../../platform/esp32s31/layout", features = ["build"] }
+

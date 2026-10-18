@@ -1,0 +1,6 @@
+# Firmware catalog entry: `cargo hil firmware flash ble-dtm-peer --board esp32c5`.
+# The runner requires this image on the Bluetooth DTM peer board.
+image = "ble-dtm-peer"
+chip = "esp32c5"
+# The ESP32-C5 pins: the same ESP-IDF revision and its esp32c5-bt-lib.
+pins = "esp32c5"

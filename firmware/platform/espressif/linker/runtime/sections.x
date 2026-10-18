@@ -333,22 +333,13 @@ ASSERT(__runtime_dma_data_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
        "runtime initialized DMA state does not fit internal SRAM");
 ASSERT(__runtime_dma_bss_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
        "runtime DMA storage does not fit internal SRAM");
-/* The chip's DMA window and the width of the address its DMA hardware
-   reports (dma-window.x, generated from the register model). All DMA
-   storage, `.dma.data` and `.dma.bss`, lies inside the window, and no
-   address of it has zero low DMA_ADDRESS_LOW_BITS bits: the hardware reads
-   such a link as the end of its list. This is the proof the HAL's placement
-   constructor relies on. */
+/* The chip's check of DMA storage against its DMA window (dma-window.x,
+   generated from the register model): all DMA storage, `.dma.data` and
+   `.dma.bss`, lies inside the window, at no address the DMA hardware reads
+   with zero low bits, which the hardware reads as the end of its list. This
+   is the proof the HAL's placement constructor relies on. A chip whose model
+   names no DMA window holds no DMA storage. */
 INCLUDE dma-window.x
-ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
-       (__runtime_dma_data_start >= DMA_WINDOW_ORIGIN &&
-        __runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH),
-       "runtime DMA storage lies outside the DMA window");
-ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
-       ((__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0 &&
-        (__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) ==
-        ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)),
-       "runtime DMA storage holds an address with zero low DMA address bits");
 /* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep a bounded
    8-KiB transient handoff margin until `_runtime_stack_bootstrap` switches
    CPU0 to PSRAM; unlike the former 64-KiB hole this is not a task stack and

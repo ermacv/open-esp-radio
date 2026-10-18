@@ -1,0 +1,22 @@
+[package]
+name = "oer-tool-service-stand-doctor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Whether the host is set up for the stand: the stand file, the udev rule, uhubctl without sudo, NetworkManager leaving wlan0"
+
+[dependencies]
+oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-data-stand-file = { path = "../../data/stand-file" }
+oer-tool-service-stand-power = { path = "../stand-power" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+

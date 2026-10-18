@@ -1,0 +1,60 @@
+{
+  "schema": 4,
+  "data": [
+    "tools/lib/data/hil-schema/scenario-v5-defaults.json"
+  ],
+  "dependencies": {
+    "common": [
+      "oer-tool-service-hil-workload",
+      "oer-tool-service-devices",
+      "oer-tool-service-device-lock",
+      "oer-tool-service-stand-journal",
+      "oer-tool-service-stand-owners",
+      "oer-tool-service-stand-board",
+      "oer-tool-service-image-bundle",
+      "oer-tool-data-hil-image-class",
+      "oer-tool-base-durable",
+      "oer-tool-service-hil-source-snapshot",
+      "oer-tool-service-hil-scenario",
+      "oer-tool-data-hil-scenario-catalog",
+      "oer-tool-service-hil-run-bundle",
+      "oer-tool-data-hil-run-bundle-format",
+      "oer-tool-data-hil-schema",
+      "oer-tool-service-hil-analysis",
+      "oer-tool-service-hil-image",
+      "oer-tool-service-image",
+      "oer-tool-service-image-check-interrupts",
+      "oer-tool-data-chip-profile",
+      "oer-tool-service-hil-link",
+      "oer-tool-service-hil-lab",
+      "oer-tool-service-hil-flash",
+      "oer-tool-service-stand-arbiter",
+      "rustix",
+      "oer-tool-base-process",
+      "oer-tool-base-toolchain",
+      "oer-tool-base-command-tree",
+      "oer-tool-service-stand-fixture-install",
+      "clap",
+      "tempfile",
+      "oer-tool-data-hil-protocol",
+      "serde",
+      "serde_json",
+      "oer-tool-service-hil-observer",
+      "sha2",
+      "toml_edit",
+      "oer-hil-family-ieee80211-fixture"
+    ],
+    "system": [
+      "oer-tool-service-hil-family-system"
+    ]
+  },
+  "timing": {
+    "system/boot-smoke": false,
+    "system/watchdog": true,
+    "system/panic-reset": true,
+    "system/stand-recovery": true
+  },
+  "build": {
+    "profile": "debug"
+  }
+}

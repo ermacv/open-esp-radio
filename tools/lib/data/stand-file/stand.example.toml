@@ -1,0 +1,96 @@
+# The stand file: copy to ~/.config/open-esp-radio/stand.toml and make it
+# private (chmod 600). It holds only what no tool can discover and no
+# credentials: every access point and station is managed, and a run
+# generates the SSID and passphrase it sets on both. Every checkout of the
+# host reads the same file. `cargo stand discover` prints the [[board]] of
+# each attached board; `cargo stand doctor` checks the host around it.
+schema = 1
+
+[stand]
+id = "example-lab"
+# A run that uses the air holds all of it while it executes.
+air = "exclusive"
+
+# The hubs' port policy, by their USB 2 and USB 3 locations. Which port
+# powers a board is found on the host.
+[[hub]]
+id = "hub-top"
+usb2 = "3-8"
+usb3 = "4-1"
+# A cascaded hub hangs on port 3: never switched.
+protected = [3]
+# The only ports switched.
+switchable = [1, 4]
+# Port 2 reports `off` but keeps its power.
+keeps-power = [2]
+# Port → touch button, counted from the top of the stand.
+buttons = { 1 = 1, 2 = 2, 4 = 3 }
+
+[[hub]]
+id = "hub-mid"
+usb2 = "3-8.3"
+usb3 = "4-1.3"
+protected = [4]
+switchable = [1, 2, 3]
+buttons = { 1 = 4, 2 = 5, 3 = 6 }
+
+# The pool. A board's role in a run comes from what the run flashes on it:
+# our image for a device under test, ESP-IDF firmware for a peer.
+[[board]]
+# The name written on the board.
+id = "s31-a"
+# The MAC its USB Serial/JTAG port reports as USB serial number.
+usb-serial = "02:00:00:00:00:01"
+chip = "esp32s31"
+radios = ["wifi-2g4", "ble", "ieee802154"]
+roles = ["dut", "peer"]
+# Tried in order.
+reset = ["usb-jtag-rts", "jtag", "power"]
+
+[[board]]
+id = "c5-a"
+usb-serial = "06:00:00:00:00:01"
+chip = "esp32c5"
+radios = ["wifi-2g4", "wifi-5g", "ble", "ieee802154"]
+roles = ["dut", "peer"]
+# RTS through USB Serial/JTAG sends a C5 rev 1.0 into the UART0 download
+# mode (docs/hardware-errata.md).
+reset = ["jtag", "power"]
+
+[bluetooth]
+adapter = "hci0"
+
+[station.ipv4]
+mode = "dhcp"
+# Static alternative:
+# mode = "static"
+# address = "192.168.1.182/24"
+# gateway = "192.168.1.1"
+
+# The board's own AP, which the stand's station joins.
+[access_point]
+channel = 13
+# `mhz20`, `mhz40-above` or `mhz40-below`; HT40 keeps the secondary channel
+# inside channels 1..=13.
+channel_width = "mhz40-below"
+client_limit = 4
+target_address = "10.43.0.1/24"
+client_address = "10.43.0.2/24"
+secondary_client_address = "10.43.0.3/24"
+
+[station_fixture]
+# `open-wrt`, `local-linux` (interface, country, channel, address,
+# coexistence, phys) or `external` (phys).
+kind = "open-wrt"
+radio = "radio0"
+ap_section = "default_radio0"
+channel = 13
+ssh_target = "example-router"
+wireless_interface = "phy0-ap0"
+ingress_interface = "br-lan"
+monitor_interface = "example-mon"
+phys = ["legacy", "ht20", "ht40", "he20"]
+independent_laptop_monitor = true
+
+[legacy_bss]
+country = "DE"

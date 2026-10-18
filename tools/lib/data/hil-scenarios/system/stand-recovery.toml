@@ -1,0 +1,9 @@
+schema = 5
+id = "stand-recovery"
+description = "The image switches its USB Serial/JTAG off its pads and the board leaves USB; the stand's reset ladder brings it back by power, and the download entry puts its ROM into download mode; no RF assertion"
+role = "investigation"
+repetitions = 1
+tags = ["stand", "recovery", "fault-injection"]
+
+[system]
+kind = "stand-recovery"

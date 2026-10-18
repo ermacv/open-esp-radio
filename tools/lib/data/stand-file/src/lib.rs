@@ -1,21 +1,31 @@
-//! The owner's stand file (README.md): which boards the stand has, its hubs'
-//! policy and known quirks, and the stand router. Which hub port powers a
-//! board is found on the host (`oer_tool_service_lab::hub`), not written here.
+//! The owner's stand file (README.md): what no tool can discover about the
+//! stand. That is its identity and air policy, its hubs' port policy, its
+//! boards (name, MAC, chip, radios, roles, reset ladder), the stand router
+//! and the air observer, the Bluetooth adapter and the legacy BSS country.
+//! Which hub port powers a board is found on the host
+//! (`oer_tool_service_lab::hub`), not written here.
 //!
-//! This crate owns the whole file; each consumer's slice deserializes only
-//! its fields and ignores the rest: `schema`, `[[hub]]` and `[[board]]` for
-//! the boards, and for W1 `[station].ssid` and of `[station_fixture]`
-//! `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section` and
-//! `channel`. `[station].passphrase` and `[access_point]` are never read. A
-//! file whose mode is not 0600 is refused unread, and a parse error names
-//! its line and never a value. The SSID, the SSH target and the interface
-//! are [`Secret`]s: their `Debug` shows nothing of them.
+//! The file holds no credentials: every access point and station of the
+//! stand is managed, and a run generates the SSID and passphrase it sets on
+//! both. An SSID or passphrase a file still holds is never deserialized.
+//! Each consumer reads only its keys; a missing key fails at the consumer
+//! that needs it and names the key. A file whose mode is not 0600 is
+//! refused unread, and a parse error names its line and never a value. SSH
+//! targets and interface names are [`Secret`]s: their `Debug` shows nothing
+//! of them. [`paths`] places the stand's state.
 
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+pub use oer_tool_data_device_mac::DeviceId;
+
+pub mod paths;
 
 /// The crate's error type.
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -61,14 +71,129 @@ pub struct Hub {
     /// Ports that report `off` but keep their power: never switched.
     #[serde(default, rename = "keeps-power")]
     pub keeps_power: Vec<u32>,
+    /// The hub's touch button of each port, counted from the top of the
+    /// stand: port → button.
+    #[serde(default)]
+    pub buttons: BTreeMap<String, u8>,
+}
+
+impl Hub {
+    pub fn is_protected(&self, port: u32) -> bool {
+        self.protected.contains(&port)
+    }
+
+    /// Whether the owner allows switching `port`: listed as switchable, or,
+    /// without a list, any port neither protected nor keeping its power.
+    pub fn is_switchable(&self, port: u32) -> bool {
+        if self.is_protected(port) || self.keeps_power.contains(&port) {
+            return false;
+        }
+        self.switchable.is_empty() || self.switchable.contains(&port)
+    }
+
+    /// The touch button of `port`, if the hub has one there.
+    pub fn button(&self, port: u32) -> Option<u8> {
+        self.buttons.get(&port.to_string()).copied()
+    }
 }
 
 /// Where an older stand file said a board's USB cable plugs in. Only read
 /// to warn that it is ignored: the port is found on the host.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-pub struct HubPort {
+pub struct PortRef {
     pub hub: String,
     pub port: u32,
+}
+
+/// A radio a board carries.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Radio {
+    #[serde(rename = "wifi-2g4")]
+    Wifi2g4,
+    #[serde(rename = "wifi-5g")]
+    Wifi5g,
+    Ble,
+    Ieee802154,
+}
+
+impl Radio {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Wifi2g4 => "wifi-2g4",
+            Self::Wifi5g => "wifi-5g",
+            Self::Ble => "ble",
+            Self::Ieee802154 => "ieee802154",
+        }
+    }
+
+    /// Whether a chip with `properties` has this radio.
+    fn on(self, properties: &oer_tool_data_chip_profile::Properties) -> bool {
+        use oer_tool_data_chip_profile::{BluetoothMode, WifiBand};
+        match self {
+            Self::Wifi2g4 => properties.wifi_bands.contains(&WifiBand::Band2g4),
+            Self::Wifi5g => properties.wifi_bands.contains(&WifiBand::Band5g),
+            Self::Ble => properties.bluetooth.contains(&BluetoothMode::Le),
+            Self::Ieee802154 => properties.ieee802154,
+        }
+    }
+}
+
+/// A role a run gives a board: what it flashes on it.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BoardRole {
+    /// Our image under test.
+    Dut,
+    /// A vendor (ESP-IDF) firmware the device under test works against.
+    Peer,
+}
+
+impl BoardRole {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Dut => "dut",
+            Self::Peer => "peer",
+        }
+    }
+}
+
+/// One way to reset a board.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResetStep {
+    /// RTS of the USB Serial/JTAG port.
+    UsbJtagRts,
+    /// A reset through the USB Serial/JTAG port's JTAG.
+    Jtag,
+    /// A power cycle of the board's hub port.
+    Power,
+}
+
+impl ResetStep {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UsbJtagRts => "usb-jtag-rts",
+            Self::Jtag => "jtag",
+            Self::Power => "power",
+        }
+    }
+}
+
+/// A board as every stand component names it: its id, its MAC and its chip.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct BoardRef {
+    pub id: String,
+    /// Its USB serial number as a board id.
+    pub mac: DeviceId,
+    pub chip: String,
+}
+
+impl BoardRef {
+    /// `id (chip)`.
+    pub fn label(&self) -> String {
+        format!("{} ({})", self.id, self.chip)
+    }
 }
 
 /// A board of the stand.
@@ -79,12 +204,78 @@ pub struct Board {
     #[serde(rename = "usb-serial")]
     pub mac: String,
     pub chip: String,
-    /// Ignored with a warning: see [`HubPort`].
+    /// The radios the board carries; a subset of its chip's.
     #[serde(default)]
-    pub port: Option<HubPort>,
+    pub radios: Vec<Radio>,
+    /// The roles a run may give it; a board without one takes none.
+    #[serde(default)]
+    pub roles: Vec<BoardRole>,
+    /// How the stand resets it, in the order it tries them.
+    #[serde(default)]
+    pub reset: Vec<ResetStep>,
+    /// An image the board's startup flash holds, when it needs one.
+    #[serde(default, rename = "startup-artifact")]
+    pub startup_artifact: Option<PathBuf>,
+    /// Ignored with a warning: see [`PortRef`].
+    #[serde(default)]
+    pub port: Option<PortRef>,
 }
 
 impl Board {
+    pub fn has_role(&self, role: BoardRole) -> bool {
+        self.roles.contains(&role)
+    }
+
+    /// Whether `serial` is this board's USB serial number, in any of the
+    /// forms [`DeviceId::parse`] reads.
+    pub fn is_serial(&self, serial: &str) -> bool {
+        match (DeviceId::parse(&self.mac), DeviceId::parse(serial)) {
+            (Ok(own), Ok(other)) => own == other,
+            _ => self.mac.eq_ignore_ascii_case(serial),
+        }
+    }
+
+    /// The board's id: its USB serial number as a [`DeviceId`].
+    pub fn device_id(&self) -> Result<DeviceId> {
+        DeviceId::parse(&self.mac).map_err(|cause| format!("board `{}`: {cause}", self.id).into())
+    }
+
+    /// The board as stand components name it.
+    pub fn reference(&self) -> Result<BoardRef> {
+        Ok(BoardRef {
+            id: self.id.clone(),
+            mac: self.device_id()?,
+            chip: self.chip.clone(),
+        })
+    }
+
+    /// Check the board's chip and radios against the chip profiles `chips`.
+    pub fn validate_chip(&self, chips: &[oer_tool_data_chip_profile::Profile]) -> Result<()> {
+        let name = &self.id;
+        let profile = chips
+            .iter()
+            .find(|profile| profile.id == self.chip)
+            .ok_or_else(|| {
+                format!(
+                    "board `{name}`: chip `{}` has no profile (firmware/platform/{}/chip.toml)",
+                    self.chip, self.chip
+                )
+            })?;
+        match self
+            .radios
+            .iter()
+            .find(|radio| !radio.on(&profile.properties))
+        {
+            Some(radio) => Err(format!(
+                "board `{name}`: an {} has no {} radio",
+                self.chip,
+                radio.as_str()
+            )
+            .into()),
+            None => Ok(()),
+        }
+    }
+
     /// The warning for an older stand file's `port`, ignored for the port
     /// `detected` on the host, if the file still has one.
     pub fn ignored_port(&self, detected: &str) -> Option<String> {
@@ -99,7 +290,7 @@ impl Board {
 
 /// A value of the stand file that is never shown: its `Debug` is
 /// `<hidden>`, and it has no `Display`.
-#[derive(Clone, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct Secret(String);
 
@@ -116,39 +307,109 @@ impl std::fmt::Debug for Secret {
     }
 }
 
-/// `[station]`: only its SSID. The passphrase beside it is not read.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-pub struct Station {
-    #[serde(default)]
-    pub ssid: Option<Secret>,
+/// `[stand]`: the stand's identity and how runs share its air.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct Identity {
+    pub id: String,
+    pub air: AirPolicy,
 }
 
-/// `[station_fixture]`: the router that serves the stand's AP.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+/// How runs share the air.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AirPolicy {
+    /// A run that uses the air holds all of it while it executes.
+    Exclusive,
+}
+
+/// `[station]`: how the stand's station takes its IPv4 address. Its SSID
+/// and passphrase are a run's, never the file's.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct Station {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ipv4: Option<toml::Value>,
+}
+
+/// `[access_point]`: the access point a run's station joins, without its
+/// SSID and passphrase, which the run generates.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct AccessPoint {
+    pub channel: u8,
+    pub channel_width: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_limit: Option<u8>,
+    pub target_address: String,
+    pub client_address: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary_client_address: Option<String>,
+}
+
+/// `[station_fixture]`: the router that serves the stand's AP, or the
+/// local or external station; which keys apply depends on `kind`.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct StationFixture {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssh_target: Option<Secret>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wireless_interface: Option<Secret>,
     /// The UCI `wifi-device` section.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radio: Option<String>,
     /// The UCI `wifi-iface` section of the stand's AP.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ap_section: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingress_interface: Option<Secret>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_interface: Option<Secret>,
+    /// The radios the fixture expects, as its owner reads them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phys: Option<toml::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub independent_laptop_monitor: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
+    /// A local station's interface, country, address and coexistence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<Secret>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coexistence: Option<String>,
+}
+
+/// `[air_observer]`: the idle OpenWrt radio that observes the air.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct AirObserver {
+    pub ssh_target: Secret,
+    pub phy: String,
+    pub interface: Secret,
+}
+
+/// `[bluetooth]`: the host's Bluetooth adapter.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Bluetooth {
+    pub adapter: String,
+}
+
+/// `[legacy_bss]`: the regulatory domain of the laptop's non-ERP BSS.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct LegacyBss {
+    pub country: String,
 }
 
 /// The fixture kind image `w1` drives.
 pub const OPEN_WRT: &str = "open-wrt";
 
-/// What image `w1` needs of the stand router.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// What image `w1` needs of the stand router; the SSID is the run's.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Router<'a> {
-    pub ssid: &'a Secret,
     pub ssh_target: &'a Secret,
     pub wireless_interface: &'a Secret,
     pub radio: &'a str,
@@ -156,10 +417,12 @@ pub struct Router<'a> {
     pub channel: u8,
 }
 
-/// The parts of the stand file this tool reads.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+/// The stand file, as its consumers read it.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Stand {
     pub schema: u32,
+    #[serde(default)]
+    pub stand: Option<Identity>,
     #[serde(default, rename = "hub")]
     pub hubs: Vec<Hub>,
     #[serde(default, rename = "board")]
@@ -167,7 +430,15 @@ pub struct Stand {
     #[serde(default)]
     pub station: Station,
     #[serde(default)]
+    pub access_point: Option<AccessPoint>,
+    #[serde(default)]
     pub station_fixture: StationFixture,
+    #[serde(default)]
+    pub air_observer: Option<AirObserver>,
+    #[serde(default)]
+    pub bluetooth: Option<Bluetooth>,
+    #[serde(default)]
+    pub legacy_bss: Option<LegacyBss>,
 }
 
 impl Stand {
@@ -232,11 +503,6 @@ impl Stand {
             None => return Err(missing("[station_fixture].kind")),
         }
         Ok(Router {
-            ssid: self
-                .station
-                .ssid
-                .as_ref()
-                .ok_or_else(|| missing("[station].ssid"))?,
             ssh_target: fixture
                 .ssh_target
                 .as_ref()
@@ -268,14 +534,283 @@ impl Stand {
 
     /// The board whose MAC is `mac`.
     pub fn board_by_mac(&self, mac: &str) -> Option<&Board> {
-        self.boards
-            .iter()
-            .find(|board| board.mac.eq_ignore_ascii_case(mac))
+        self.boards.iter().find(|board| board.is_serial(mac))
     }
 
     pub fn hub(&self, id: &str) -> Option<&Hub> {
         self.hubs.iter().find(|hub| hub.id == id)
     }
+
+    /// `[stand]`, which a HIL run needs.
+    pub fn identity(&self) -> Result<&Identity> {
+        self.stand
+            .as_ref()
+            .ok_or_else(|| "the stand file has no [stand] (id, air), which a HIL run needs".into())
+    }
+
+    /// The fixture sections as tables, for the fixture owner that types
+    /// them: `station`, `access_point`, `station_fixture`, `air_observer`,
+    /// `bluetooth` and `legacy_bss`, each only with the keys this model
+    /// reads, so no credential the file still holds is among them.
+    pub fn fixtures(&self) -> Result<toml::Table> {
+        let mut table = toml::Table::new();
+        let mut put = |name: &str, value: Option<toml::Value>| {
+            if let Some(value) = value {
+                table.insert(name.to_owned(), value);
+            }
+        };
+        put("station", Some(toml::Value::try_from(&self.station)?));
+        put(
+            "access_point",
+            self.access_point
+                .as_ref()
+                .map(toml::Value::try_from)
+                .transpose()?,
+        );
+        put(
+            "station_fixture",
+            Some(toml::Value::try_from(&self.station_fixture)?),
+        );
+        put(
+            "air_observer",
+            self.air_observer
+                .as_ref()
+                .map(toml::Value::try_from)
+                .transpose()?,
+        );
+        put(
+            "bluetooth",
+            self.bluetooth
+                .as_ref()
+                .map(toml::Value::try_from)
+                .transpose()?,
+        );
+        put(
+            "legacy_bss",
+            self.legacy_bss
+                .as_ref()
+                .map(toml::Value::try_from)
+                .transpose()?,
+        );
+        Ok(table)
+    }
+
+    /// Check every board's chip and radios against the chip profiles
+    /// `chips`, as the stand's doctor does.
+    pub fn validate_chips(&self, chips: &[oer_tool_data_chip_profile::Profile]) -> Result<()> {
+        self.boards
+            .iter()
+            .try_for_each(|board| board.validate_chip(chips))
+    }
+
+    /// Check what the file's boards and hubs promise: distinct hub ids and
+    /// locations, ports counted from 1, no port both protected and
+    /// switchable, distinct buttons; distinct board ids and MACs, valid
+    /// identifiers, no repeated radio, role or reset step.
+    pub fn validate(&self) -> Result<()> {
+        if let Some(identity) = &self.stand {
+            identifier("stand.id", &identity.id)?;
+        }
+        let mut ids = BTreeSet::new();
+        let mut locations = BTreeSet::new();
+        let mut buttons = BTreeSet::new();
+        for hub in &self.hubs {
+            identifier("hub.id", &hub.id)?;
+            if !ids.insert(hub.id.as_str()) {
+                return Err(format!("hub `{}` is described twice", hub.id).into());
+            }
+            for location in std::iter::once(&hub.usb2).chain(&hub.usb3) {
+                if location.is_empty() || !locations.insert(location.as_str()) {
+                    return Err(format!(
+                        "hub `{}`: a USB location is empty or another hub's",
+                        hub.id
+                    )
+                    .into());
+                }
+            }
+            if hub
+                .protected
+                .iter()
+                .chain(&hub.switchable)
+                .any(|&port| port == 0)
+            {
+                return Err(format!("hub `{}`: ports count from 1", hub.id).into());
+            }
+            if let Some(port) = hub
+                .protected
+                .iter()
+                .find(|port| hub.switchable.contains(port))
+            {
+                return Err(format!(
+                    "hub `{}`: port {port} is both protected and switchable",
+                    hub.id
+                )
+                .into());
+            }
+            for (port, &button) in &hub.buttons {
+                if !port.parse::<u32>().is_ok_and(|port| port > 0) {
+                    return Err(
+                        format!("hub `{}`: button port `{port}` is not a port", hub.id).into(),
+                    );
+                }
+                if button == 0 || !buttons.insert(button) {
+                    return Err(format!(
+                        "hub `{}`: button {button} is zero or another port's",
+                        hub.id
+                    )
+                    .into());
+                }
+            }
+        }
+        let mut ids = BTreeSet::new();
+        let mut macs = BTreeSet::new();
+        for board in &self.boards {
+            identifier("board.id", &board.id)?;
+            if !ids.insert(board.id.as_str()) {
+                return Err(format!("board `{}` is described twice", board.id).into());
+            }
+            if !macs.insert(board.device_id()?) {
+                return Err(format!("board `{}`: its MAC is another board's", board.id).into());
+            }
+            identifier(&format!("board `{}` chip", board.id), &board.chip)?;
+            distinct(&board.id, "radios", &board.radios)?;
+            distinct(&board.id, "roles", &board.roles)?;
+            distinct(&board.id, "reset", &board.reset)?;
+        }
+        Ok(())
+    }
+
+    /// The board `query` names: its id, its chip when it is the only board
+    /// of that chip, or its MAC. Every stand command and component turns a
+    /// board name into a board this way.
+    pub fn resolve(&self, query: &str) -> Result<&Board> {
+        if let Some(board) = self.boards.iter().find(|board| board.id == query) {
+            return Ok(board);
+        }
+        let of_chip = self
+            .boards
+            .iter()
+            .filter(|board| board.chip == query)
+            .collect::<Vec<_>>();
+        match of_chip.as_slice() {
+            [board] => return Ok(board),
+            [] => {}
+            several => {
+                return Err(format!(
+                    "the stand file has several {query} boards ({}); name one of them",
+                    ids_of(several)
+                )
+                .into());
+            }
+        }
+        match DeviceId::parse(query) {
+            Ok(mac) => self.board_by_mac(&mac.to_string()).ok_or_else(|| {
+                format!("no board of the stand file has the MAC {mac}; add it to the stand file")
+                    .into()
+            }),
+            Err(_) => Err(format!(
+                "board `{query}` is neither a board id, a chip with one board nor a MAC of the \
+                 stand file"
+            )
+            .into()),
+        }
+    }
+
+    /// The board with `mac`'s label, `id (chip)`, or the MAC itself.
+    pub fn label(&self, mac: &str) -> String {
+        self.board_by_mac(mac).map_or_else(
+            || mac.to_owned(),
+            |board| format!("{} ({})", board.id, board.chip),
+        )
+    }
+
+    /// The board of `chip` a run gives `role`: `chosen` when the run names
+    /// one, otherwise the only such board other than `excluding` (the board
+    /// another role of the run already took).
+    pub fn select_board(
+        &self,
+        chip: &str,
+        role: BoardRole,
+        chosen: Option<&str>,
+        excluding: Option<&str>,
+    ) -> Result<&Board> {
+        if let Some(chosen) = chosen {
+            let board = self
+                .boards
+                .iter()
+                .find(|board| board.id == chosen)
+                .ok_or_else(|| format!("board `{chosen}` is not in the stand file"))?;
+            if board.chip != chip || !board.has_role(role) {
+                return Err(format!(
+                    "board `{chosen}` is an {} for {}; this run needs an {chip} for {}",
+                    board.chip,
+                    board
+                        .roles
+                        .iter()
+                        .map(|role| role.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    role.as_str()
+                )
+                .into());
+            }
+            if Some(chosen) == excluding {
+                return Err(
+                    format!("board `{chosen}` already has another role in this run").into(),
+                );
+            }
+            return Ok(board);
+        }
+        let candidates = self
+            .boards
+            .iter()
+            .filter(|board| {
+                board.chip == chip && board.has_role(role) && Some(board.id.as_str()) != excluding
+            })
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [board] => Ok(board),
+            [] => Err(format!(
+                "the stand file has no {chip} board for {}{}",
+                role.as_str(),
+                excluding.map_or(String::new(), |board| format!(" besides `{board}`"))
+            )
+            .into()),
+            several => Err(format!(
+                "several {chip} boards can be the {} ({}); name one",
+                role.as_str(),
+                ids_of(several)
+            )
+            .into()),
+        }
+    }
+}
+
+fn ids_of(boards: &[&Board]) -> String {
+    boards
+        .iter()
+        .map(|board| board.id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn identifier(field: &str, value: &str) -> Result<()> {
+    if oer_tool_data_chip_profile::valid_identifier(value) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{field} `{value}` must start with a lowercase letter and hold only lowercase \
+             letters, digits and hyphens"
+        )
+        .into())
+    }
+}
+
+fn distinct<T: Ord + Copy>(board: &str, field: &str, values: &[T]) -> Result<()> {
+    if values.iter().copied().collect::<BTreeSet<_>>().len() != values.len() {
+        return Err(format!("board `{board}`: {field} repeats a value").into());
+    }
+    Ok(())
 }
 
 /// A deserializer's `message`, without the value it may quote: serde's
@@ -300,6 +835,8 @@ mod tests {
 schema = 1
 
 [stand]
+id = "made-up-lab"
+air = "exclusive"
 secret = "never read"
 
 [[hub]]
@@ -314,14 +851,23 @@ buttons = { "1" = 1 }
 id = "s31-a"
 usb-serial = "02:00:00:00:01:D0"
 chip = "esp32s31"
+radios = ["wifi-2g4", "ble"]
+roles = ["dut"]
 port = { hub = "top", port = 4 }
 reset = ["power"]
 
 [[board]]
 id = "behind-hub"
-usb-serial = "AA:BB:CC:DD:EE:FF"
+usb-serial = "02:00:00:00:EE:FF"
 chip = "esp32s31"
+roles = ["dut"]
 port = { hub = "top", port = 3 }
+
+[[board]]
+id = "c5-a"
+usb-serial = "02:00:00:00:C5:01"
+chip = "esp32c5"
+roles = ["peer"]
 
 [station]
 ssid = "Made Up Lab Net"
@@ -339,6 +885,10 @@ ingress_interface = "made-up-ingress"
 [access_point]
 ssid = "made-up-ap-ssid"
 passphrase = "made-up-ap-passphrase"
+channel = 6
+channel_width = "ht20"
+target_address = "192.168.77.1/24"
+client_address = "192.168.77.2/24"
 "#;
 
     /// Every value the file holds that may never be shown.
@@ -356,26 +906,40 @@ passphrase = "made-up-ap-passphrase"
     fn reads_the_router_and_nothing_secret_is_kept_or_shown() {
         let stand = Stand::parse(STAND).unwrap();
         let router = stand.router().unwrap();
-        assert_eq!(router.ssid.expose(), "Made Up Lab Net");
         assert_eq!(router.ssh_target.expose(), "made-up-router.lab");
         assert_eq!(router.wireless_interface.expose(), "phy7-ap3");
         assert_eq!(
             (router.radio, router.ap_section, router.channel),
             ("radio9", "lab_ap", 6)
         );
+        let fixtures = stand.fixtures().unwrap();
         let shown = format!("{stand:?}\n{router:?}");
         for secret in SECRETS {
             assert!(!shown.contains(secret), "{secret}: {shown}");
         }
-        // The passphrase is not deserialized: the parsed stand is the same
-        // without it.
-        let without = STAND.replace("passphrase = \"made-up-passphrase\"\n", "");
+        // No SSID or passphrase is deserialized: the parsed stand is the same
+        // without them, and the fixture tables hold none.
+        let without = STAND
+            .lines()
+            .filter(|line| !line.starts_with("ssid") && !line.starts_with("passphrase"))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_eq!(Stand::parse(&without).unwrap(), stand);
+        let tables = fixtures.to_string();
+        for credential in [
+            "Made Up Lab Net",
+            "made-up-passphrase",
+            "made-up-ap-ssid",
+            "made-up-ap-passphrase",
+        ] {
+            assert!(!tables.contains(credential), "{credential}");
+        }
+        assert_eq!(fixtures["access_point"]["channel"].as_integer(), Some(6));
     }
 
     #[test]
     fn the_router_names_what_is_missing() {
-        let base = "schema = 1\n[station]\nssid = \"Made Up Lab Net\"\n[station_fixture]\n";
+        let base = "schema = 1\n[station_fixture]\n";
         let full = "kind = \"open-wrt\"\nssh_target = \"made-up-router.lab\"\nwireless_interface = \"phy7-ap3\"\nradio = \"radio9\"\nap_section = \"lab_ap\"\nchannel = 6\n";
         Stand::parse(&format!("{base}{full}"))
             .unwrap()
@@ -403,11 +967,6 @@ passphrase = "made-up-ap-passphrase"
                 "{error}"
             );
         }
-        let error = Stand::parse(&format!("schema = 1\n[station_fixture]\n{full}"))
-            .unwrap()
-            .router()
-            .unwrap_err();
-        assert!(error.contains("[station].ssid"), "{error}");
         let error = Stand::parse(&format!(
             "{base}{}",
             full.replace("open-wrt", "local-linux")
@@ -424,7 +983,7 @@ passphrase = "made-up-ap-passphrase"
     fn a_type_error_does_not_quote_the_value() {
         for text in [
             "schema = 1\n[station_fixture]\nchannel = \"made-up-router\"\n",
-            "schema = 1\n[station]\nssid = [\"Made Up Lab Net\"]\n",
+            "schema = 1\n[air_observer]\nssh_target = [\"made-up-router\"]\nphy = \"p\"\ninterface = \"i\"\n",
             "schema = 1\n[station_fixture]\nssh_target = 7\n",
         ] {
             let error = Stand::parse(text).unwrap_err();
@@ -442,6 +1001,8 @@ passphrase = "made-up-ap-passphrase"
         assert_eq!(stand.hubs[0].usb3.as_deref(), Some("4-1"));
         let board = stand.board("s31-a").unwrap();
         assert_eq!(board.mac, "02:00:00:00:01:D0");
+        assert_eq!(board.roles, [BoardRole::Dut]);
+        assert_eq!(board.reset, [ResetStep::Power]);
         assert_eq!(stand.board("02:00:00:00:01:d0"), Some(board));
         assert_eq!(stand.board_by_mac("02:00:00:00:01:D0"), Some(board));
         assert_eq!(stand.board("nope"), None);
@@ -492,6 +1053,57 @@ passphrase = "made-up-ap-passphrase"
         }
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(Stand::load(&path).unwrap(), Stand::parse(STAND).unwrap());
+    }
+
+    #[test]
+    fn a_board_resolves_by_id_chip_or_mac_and_is_selected_by_role() {
+        let stand = Stand::parse(STAND).unwrap();
+        stand.validate().unwrap();
+        assert_eq!(stand.resolve("c5-a").unwrap().id, "c5-a");
+        assert_eq!(stand.resolve("esp32c5").unwrap().id, "c5-a");
+        assert_eq!(stand.resolve("02:00:00:00:c5:01").unwrap().id, "c5-a");
+        let error = stand.resolve("esp32s31").unwrap_err().to_string();
+        assert!(error.contains("several esp32s31 boards"), "{error}");
+        assert_eq!(
+            stand
+                .select_board("esp32c5", BoardRole::Peer, None, None)
+                .unwrap()
+                .id,
+            "c5-a"
+        );
+        assert!(
+            stand
+                .select_board("esp32c5", BoardRole::Dut, None, None)
+                .is_err()
+        );
+        assert_eq!(
+            stand
+                .select_board("esp32s31", BoardRole::Dut, Some("s31-a"), None)
+                .unwrap()
+                .id,
+            "s31-a"
+        );
+        assert!(
+            stand
+                .select_board("esp32s31", BoardRole::Dut, Some("s31-a"), Some("s31-a"))
+                .is_err()
+        );
+        assert_eq!(stand.label("02:00:00:00:01:d0"), "s31-a (esp32s31)");
+        assert_eq!(stand.identity().unwrap().air, AirPolicy::Exclusive);
+        assert!(Stand::parse("schema = 1\n").unwrap().identity().is_err());
+    }
+
+    #[test]
+    fn validation_refuses_a_twice_described_board_or_hub_policy_conflict() {
+        let twice = format!(
+            "{STAND}\n[[board]]\nid = \"c5-a\"\nusb-serial = \"02:00:00:00:C5:02\"\nchip = \"esp32c5\"\n"
+        );
+        assert!(Stand::parse(&twice).unwrap().validate().is_err());
+        let conflict = STAND.replace("switchable = [1, 4]", "switchable = [3, 4]");
+        assert!(Stand::parse(&conflict).unwrap().validate().is_err());
+        let hub = Stand::parse(STAND).unwrap().hubs[0].clone();
+        assert!(hub.is_switchable(4) && !hub.is_switchable(3) && !hub.is_switchable(2));
+        assert_eq!(hub.button(1), Some(1));
     }
 
     #[test]

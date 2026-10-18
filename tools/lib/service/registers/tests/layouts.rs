@@ -233,25 +233,37 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     let fragment = oer_tool_data_register_model::render_dma_linker_fragment(
         &svd,
         &memory,
-        "RADIO.NEXT.ADDRESS_LOW",
+        Some("RADIO.NEXT.ADDRESS_LOW"),
     )
     .unwrap();
     for line in [
         "DMA_WINDOW_ORIGIN = 0x30000000;",
         "DMA_WINDOW_LENGTH = 0x00080000;",
         "DMA_ADDRESS_LOW_BITS = 20;",
+        "\"runtime DMA storage lies outside the DMA window\");",
     ] {
         assert!(fragment.contains(line), "{line}\n{fragment}");
     }
+    // Without a DMA address field no window is known: the link refuses any
+    // DMA storage.
+    let none =
+        oer_tool_data_register_model::render_dma_linker_fragment(&svd, &memory, None).unwrap();
+    assert!(none.contains("No DMA window known"), "{none}");
+    assert!(
+        none.contains("ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start,"),
+        "{none}"
+    );
+    assert!(!none.contains("DMA_WINDOW_ORIGIN"), "{none}");
     // The field must be a low field of its register, and must exist.
     for (field, reason) in [
         ("RADIO.STATUS.FLAG", "bits N-1:0"),
         ("RADIO.NEXT.MISSING", "unknown field"),
         ("RADIO.NEXT", "PERIPHERAL.REGISTER.FIELD"),
     ] {
-        let error = oer_tool_data_register_model::render_dma_linker_fragment(&svd, &memory, field)
-            .unwrap_err()
-            .to_string();
+        let error =
+            oer_tool_data_register_model::render_dma_linker_fragment(&svd, &memory, Some(field))
+                .unwrap_err()
+                .to_string();
         assert!(error.contains(reason), "{field}: {error}");
     }
     // A memory map without the DMA region has no fragment.
@@ -264,7 +276,7 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     let error = oer_tool_data_register_model::render_dma_linker_fragment(
         &svd,
         &memory,
-        "RADIO.NEXT.ADDRESS_LOW",
+        Some("RADIO.NEXT.ADDRESS_LOW"),
     )
     .unwrap_err()
     .to_string();

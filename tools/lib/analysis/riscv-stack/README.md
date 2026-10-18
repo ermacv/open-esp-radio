@@ -215,7 +215,7 @@ CLIC level and route writers to run inside the functions its contract
 allows (start-up, the IPC line's install, the table's routes).
 
 This is the repository's only stack analyzer. The firmware stack gate
-([`oer-image`](../../image/pipeline/README.md)'s `stack`) runs it on every
+([`oer-tool-service-image`](../../image/pipeline/README.md)'s `stack`) runs it on every
 runtime and bootstrap ELF: the interrupt stacks above, and each task stack's
 root through `Analysis::bound_with` with the same resolutions. An ELF without
 `.stack_sizes` analyses here with observed frames only; the gate refuses it,

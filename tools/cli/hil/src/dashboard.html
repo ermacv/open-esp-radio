@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HIL Stand</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677085;
+  --line: #e2e5eb; --accent: #2f6fdb; --ok: #1f8a4c; --warn: #b7791f;
+  --bad: #c53030; --track: #edf0f4; --chip: #eef1f6;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --panel: #1a1e24; --text: #e4e7ec; --muted: #8b93a3;
+    --line: #2a3039; --accent: #6ea0ff; --ok: #4cc38a; --warn: #e3b341;
+    --bad: #f47067; --track: #252b33; --chip: #232932;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header {
+  position: sticky; top: 0; z-index: 2; background: var(--bg);
+  padding: 12px 20px 10px; border-bottom: 1px solid var(--line);
+}
+.title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+#updated { color: var(--muted); font-size: 12px; margin-left: auto; }
+.summary { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 8px; }
+.summary > span {
+  padding: 2px 10px; border-radius: 12px; background: var(--chip);
+  border: 1px solid var(--line); white-space: nowrap;
+}
+.summary > span.ok { border-color: var(--ok); }
+.summary > span.warn { border-color: var(--warn); }
+.summary > span.bad { border-color: var(--bad); }
+.offline {
+  margin: 12px 20px 0; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--bad); color: var(--bad); background: var(--panel); font-weight: 600;
+}
+body.stale main { opacity: .45; filter: grayscale(.6); }
+main { display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px; }
+.top { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+section {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px 16px; min-width: 0;
+}
+section.banner { border-color: var(--bad); }
+.section-head { display: flex; align-items: baseline; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.section-head h2 { margin: 0; }
+h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 10px;
+}
+.note { color: var(--muted); font-size: 12px; margin: -4px 0 10px; }
+.empty { color: var(--muted); margin: 0; }
+.item { padding: 10px 0; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; padding-top: 0; }
+.item:last-child { padding-bottom: 0; }
+.row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.owner { font-weight: 600; }
+.id { color: var(--muted); font-variant-numeric: tabular-nums; }
+.work {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+.bar { position: relative; height: 6px; background: var(--track); border-radius: 3px; margin-top: 6px; }
+.bar > div { height: 100%; background: var(--accent); border-radius: 3px; }
+.bar.warn > div { background: var(--warn); }
+.bar.bad > div { background: var(--bad); }
+.bar > i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .6; }
+.scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip {
+  display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 12px;
+  background: var(--chip); border: 1px solid var(--line); white-space: nowrap;
+}
+.chip b { font-weight: 600; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; border-top: 0; white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.name { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.pill {
+  display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 12px;
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.pill.pending { border-style: dashed; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+.muted { color: var(--muted); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+[hidden] { display: none !important; }
+.scenarios { display: flex; flex-wrap: wrap; gap: 4px; }
+.balances { max-width: 760px; display: grid; grid-template-columns: max-content minmax(120px, 1fr) max-content; gap: 6px 12px; align-items: center; }
+.diverging { position: relative; height: 8px; background: var(--track); border-radius: 4px; }
+.diverging > div { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.diverging > i { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.toolbar select, .toolbar input[type=search] {
+  font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin-bottom: 8px; }
+button.link, button.copy {
+  font: inherit; font-size: 12px; color: var(--accent); background: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; cursor: pointer; white-space: nowrap;
+}
+button.link { border: 0; padding: 0; }
+button.copy.done { color: var(--ok); border-color: var(--ok); }
+.actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+tr.group td { background: var(--chip); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+@media (max-width: 960px) {
+  .top { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  header, main { padding-left: 16px; padding-right: 16px; }
+  .offline { margin-left: 16px; margin-right: 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>HIL stand</h1>
+    <span id="updated">loading…</span>
+  </div>
+  <div class="summary" id="summary"></div>
+</header>
+<div class="offline" id="offline" hidden></div>
+<main>
+  <section class="banner" id="stand-service" hidden></section>
+  <div class="top">
+    <section><h2>Holding now</h2><div id="holders"></div></section>
+    <section><h2>Preparing</h2><div id="jobs"></div></section>
+    <section><h2>Queue</h2><div id="queue"></div></section>
+  </div>
+  <section>
+    <h2>Balances</h2>
+    <p class="note">Held time is charged (−), time spent waiting while blocked is credited (+);
+      the highest balance is served first. Balances halve every 2h.</p>
+    <div id="balances"></div>
+  </section>
+  <section><h2>Boards</h2><div id="devices"></div></section>
+  <section>
+    <h2>Fixtures</h2>
+    <p class="note">Probed every minute. CCA busy is the radio's busy share of the channel in use, as its survey reports it.</p>
+    <div id="fixtures"></div>
+  </section>
+  <section>
+    <div class="section-head">
+      <h2>Recent runs</h2>
+      <div class="toolbar">
+        <label>owner <select id="filter-owner"><option value="">all</option></select></label>
+        <label>checkout <select id="filter-checkout"><option value="">all</option></select></label>
+        <label>scenario <input type="search" id="filter-scenario" placeholder="any" size="14"></label>
+        <label><input type="checkbox" id="group-runs" checked> group repeats</label>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="ok">✓ passed</span><span class="bad">✗ failed</span><span class="bad">✗ broken</span>
+      <span class="warn">⚠ blocked</span><span class="warn">⚠ interrupted</span><span class="bad">⛔ board quarantined</span>
+      <span class="muted">– skipped</span><span class="warn">▶ running</span><span class="muted">○ planned</span>
+    </div>
+    <div id="runs"></div>
+  </section>
+  <section>
+    <div class="section-head">
+      <h2>Recent leases</h2>
+      <div class="toolbar">
+        <label><input type="checkbox" id="all-leases"> show leases of listed runs</label>
+      </div>
+    </div>
+    <p class="note">A released lease of a run listed above is hidden; preempted, yielded, abandoned and
+      over-limit leases and work other than runs stay.</p>
+    <div id="leases"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const now = () => Date.now() / 1000;
+
+function duration(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  if (seconds < 60) return seconds + "s";
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  if (m < 60) return m + "m" + (s ? String(s).padStart(2, "0") + "s" : "");
+  const h = Math.floor(m / 60);
+  if (h < 48) return h + "h" + String(m % 60).padStart(2, "0") + "m";
+  return Math.floor(h / 24) + "d";
+}
+// Coarse elapsed time for "… ago": minutes are enough there.
+function ago(unix) {
+  const seconds = now() - unix;
+  if (seconds < 60) return "just now";
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return m + " min ago";
+  const h = Math.floor(m / 60);
+  return h < 48 ? h + "h ago" : Math.floor(h / 24) + "d ago";
+}
+function when(unix) {
+  const date = new Date(unix * 1000);
+  const today = new Date().toDateString() === date.toDateString();
+  return today
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+// A time with its age as the tooltip, or the other way round.
+const at = (unix) => `<span title="${esc(ago(unix))} · ${esc(new Date(unix * 1000).toLocaleString())}">${when(unix)}</span>`;
+function tone(outcome) {
+  switch (outcome) {
+    case "passed": case "released": case "Released": return "ok";
+    case "failed": case "broken": case "budget-exceeded": case "hard-limit": case "abandoned": case "board-quarantined": return "bad";
+    case "blocked": case "interrupted": case "preempted": case "preempted-on-request": case "yielded": case "yielded-to-balance": case "running": return "warn";
+    default: return "muted";
+  }
+}
+const ICONS = { passed: "✓", failed: "✗", broken: "✗", blocked: "⚠", interrupted: "⚠", "board-quarantined": "⛔", skipped: "–", running: "▶", planned: "○" };
+// An outcome as text with its icon, so it never rests on colour alone.
+const marked = (outcome) => (ICONS[outcome] ? ICONS[outcome] + " " : "") + outcome;
+const pill = (outcome, text = marked(outcome)) => `<span class="pill ${tone(outcome)}">${esc(text)}</span>`;
+const scenarioPill = (id, outcome) =>
+  `<span class="pill ${outcome === "planned" ? "muted pending" : tone(outcome)}" title="${esc(outcome)}">${esc((ICONS[outcome] ?? "") + " " + id)}</span>`;
+
+// Flags whose value only locates a build input; the summary drops them.
+const HIDDEN_FLAGS = new Set(["--source-snapshot", "--source-include"]);
+const HIDDEN_SWITCHES = new Set(["--include-untracked"]);
+// A command line in short form: build-input paths dropped, other paths cut
+// to their last component. The full line is the element's tooltip.
+function summary(line) {
+  const words = String(line ?? "").split(/\s+/).filter(Boolean);
+  const kept = [];
+  for (let i = 0; i < words.length; i++) {
+    if (HIDDEN_FLAGS.has(words[i])) { i++; continue; }
+    if (HIDDEN_SWITCHES.has(words[i])) continue;
+    const word = words[i];
+    kept.push(word.includes("/") && word.length > 32 ? "…/" + word.split("/").filter(Boolean).pop() : word);
+  }
+  return kept.join(" ");
+}
+const work = (line, prefix = "") =>
+  `<div class="work" title="${esc(prefix + line)}">${esc(prefix + summary(line))}</div>`;
+const copy = (text, label) =>
+  `<button class="copy" data-copy="${esc(text)}" title="copy: ${esc(text)}">${esc(label)}</button>`;
+
+// Names for claim keys: boards by label, host fixtures by name.
+let names = new Map();
+function learnNames(data) {
+  names = new Map([
+    ...(data.devices || []).filter((d) => d.mac).map((d) => ["board:" + d.mac, d.label]),
+    ...(data.fixtures || []).filter((f) => f.key).map((f) => [f.key, f.name]),
+  ]);
+}
+// The arbiter's claim list split at top-level commas: a claim's own
+// parenthesised details contain commas too.
+function splitClaims(text) {
+  const parts = [];
+  let depth = 0, current = "";
+  for (const c of String(text ?? "")) {
+    if (c === "(") depth++;
+    if (c === ")") depth--;
+    if (c === "," && depth === 0) { parts.push(current.trim()); current = ""; continue; }
+    current += c;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+// Claims as chips: boards and fixtures by name, the air by its ranges; the
+// whole-air claim is left out when ranges name it more precisely.
+function claims(text) {
+  const parts = splitClaims(text);
+  const ranges = parts.some((p) => p.startsWith("air "));
+  const seen = new Set();
+  const chips = [];
+  for (const part of parts) {
+    let label;
+    if (part === "air") { if (ranges) continue; label = "<b>air</b> whole band"; }
+    else if (part.startsWith("air ")) {
+      const m = part.match(/^air ([\d.]+-[\d.]+ MHz) \((\w+) need, (\w+) emission\)$/);
+      label = m ? `<b>air</b> ${esc(m[1])} · ${esc(m[2].toLowerCase())}${m[3] === "Noisy" ? " · noisy" : ""}` : esc(part);
+    } else if (names.has(part)) label = `<b>${esc(names.get(part))}</b>`;
+    else {
+      const m = part.match(/^([\w-]+):(.+?)( \(shared\))?$/);
+      label = m && m[1] === "fixture-software" ? `${esc(m[2])} software${m[3] ? " (shared)" : ""}` : esc(part);
+    }
+    if (seen.has(label)) continue;
+    seen.add(label);
+    chips.push(`<span class="chip" title="${esc(part)}">${label}</span>`);
+  }
+  return chips.length ? `<div class="chips">${chips.join("")}</div>` : "";
+}
+
+const signed = (ms) => (ms > 0 ? "+" : ms < 0 ? "−" : "") + duration(Math.abs(ms) / 1000);
+const STEPS = { "scenario-started": "running", "stand-lease-requested": "waiting for the stand",
+  "stand-lease-granted": "leased", "stand-lease-yielded": "yielded the stand" };
+
+// A running run's scenarios: finished ones with their outcome, the current
+// one running and the rest planned.
+function runScenarios(r) {
+  const p = r.progress;
+  if (p && p.scenarios && p.scenarios.length) {
+    return p.scenarios.map((id) => scenarioPill(id,
+      id === p.scenario ? "running" : (p.outcomes && p.outcomes[id]) || "planned")).join("");
+  }
+  return r.scenarios.map((s) => scenarioPill(s.id, s.outcome)).join("");
+}
+function progress(r) {
+  const p = r.progress;
+  if (!p || r.abandoned) return "";
+  const step = STEPS[p.step] ?? p.step.replaceAll("-", " ");
+  return `<div class="small">${p.finished}/${p.planned} finished · ${esc(step)}`
+    + (p.scenario ? ` <b>${esc(p.scenario)}</b>` : "")
+    + ` for ${duration(now() - p.step_since_millis / 1000)}</div>`
+    + `<div class="bar"><div style="width:${p.planned ? Math.min(100, 100 * p.finished / p.planned) : 0}%"></div></div>`;
+}
+
+function holders(list, runs, limit) {
+  if (!list.length) return '<p class="empty">The stand is free.</p>';
+  return list.map((h) => {
+    const run = runs.find((r) => r.holding === h.id);
+    const share = (s) => Math.min(100, (s / limit) * 100);
+    const over = h.elapsed_secs - h.estimate_secs;
+    const state = h.elapsed_secs >= limit ? "bad" : over > 0 ? "warn" : "";
+    const left = over > 0 ? `${duration(over)} over the estimate` : `~${duration(-over)} left`;
+    return `<div class="item">
+      <div class="row"><span class="owner">${esc(h.owner)}</span><span class="id">#${h.id}</span>
+        <span class="meta">balance ${signed(h.balance_ms)}</span></div>
+      ${work(h.work)}
+      ${run ? `<div class="scenarios" style="margin-top:6px">${runScenarios(run)}</div>${progress(run)}` : ""}
+      <div class="small" style="margin-top:6px">held ${duration(h.elapsed_secs)} of est. ${duration(h.estimate_secs)} · <span class="${state}">${left}</span></div>
+      <div class="bar ${state}" title="held time against the ${duration(limit)} hard limit; the mark is the estimate">
+        <div style="width:${share(h.elapsed_secs)}%"></div><i style="left:${share(h.estimate_secs)}%"></i></div>
+      <div class="scale"><span>0</span><span>hard limit ${duration(limit)}</span></div>
+      ${claims(h.claims)}
+    </div>`;
+  }).join("");
+}
+
+function queue(list) {
+  if (!list.length) return '<p class="empty">Nobody is waiting.</p>';
+  return list.map((q, index) => `<div class="item">
+      <div class="row"><span class="id">${index + 1}.</span><span class="owner">${esc(q.owner)}</span>
+        <span class="id">#${q.id}</span>
+        <span class="meta">starts in ~${duration(q.expected_start_secs)}</span></div>
+      ${work(q.work)}
+      <div class="small">waited ${duration(q.waiting_secs)} · balance ${signed(q.balance_ms)}${q.ahead ? ` · ${q.ahead} conflicting ahead` : ""}</div>
+      ${claims(q.claims)}
+    </div>`).join("");
+}
+
+function jobs(list) {
+  const preparing = (list || []).filter((j) => j.phase !== "holding" && j.phase !== "finished");
+  if (!preparing.length) return '<p class="empty">No run is building or waiting.</p>';
+  const text = { "waiting-for-job": "waits for a job", "building": "building images", "waiting-for-stand": "waiting for the stand" };
+  return preparing.map((j) => `<div class="item">
+      <div class="row"><span class="owner">${esc(j.owner)}</span><span class="id">${esc(j.id)}</span>
+        <span class="meta">${j.log ? `<a href="jobs/${encodeURIComponent(j.id)}.log">log</a>` : ""}</span></div>
+      ${work(j.command.join(" "), "cargo hil ")}
+      <div class="small">${esc(text[j.phase] ?? j.phase)}${j.after ? ` after ${esc(j.after)}` : ""} · for ${duration(now() - j.enqueued_unix_millis / 1000)}</div>
+      <div class="actions" style="margin-top:4px">${copy("cargo hil wait " + j.id, "copy wait")}</div>
+    </div>`).join("");
+}
+
+function standService(maintenance) {
+  const stand = (maintenance || []).find((m) => m.mac === "stand");
+  return stand ? `<div class="bad"><b>The stand is out of service</b>: maintenance by ${esc(stand.owner)}: ${esc(stand.reason)}. Runs wait; <code>cargo hil wait --service</code> returns when it is back.</div>` : "";
+}
+
+// Each owner's balance on a scale centred at zero.
+function balances(list) {
+  if (!list || !list.length) return '<p class="empty">No owner has waited or held recently.</p>';
+  const scale = Math.max(...list.map((b) => Math.abs(b.balance_ms)), 1);
+  return `<div class="balances">${list.map((b) => {
+    const half = (Math.abs(b.balance_ms) / scale) * 50;
+    const bar = b.balance_ms >= 0
+      ? `left:50%;width:${half}%;background:var(--ok)` : `left:${50 - half}%;width:${half}%;background:var(--bad)`;
+    const state = [b.holding && "holding", b.waiting && "waiting"].filter(Boolean).join(", ");
+    return `<span><b>${esc(b.owner)}</b>${state ? ` <span class="muted">${state}</span>` : ""}</span>
+      <div class="diverging"><i></i><div style="${bar}"></div></div>
+      <span class="num ${b.balance_ms >= 0 ? "ok" : "bad"}" style="text-align:right">${signed(b.balance_ms)}</span>`;
+  }).join("")}</div>`;
+}
+
+// A flash origin that names a run links to that run's row.
+function origin(text, runIds) {
+  const m = String(text ?? "").match(/^run (\S+)$/);
+  if (m && runIds.has(m[1])) return `<a href="#run-${esc(m[1])}">${esc(text)}</a>`;
+  return esc(text ?? "");
+}
+
+function devices(list, maintenance, runIds) {
+  // A board never identified and not attached is a past registry entry.
+  const forgotten = list.filter((d) => !d.mac && !d.port);
+  list = list.filter((d) => d.mac || d.port);
+  if (!list.length) return '<p class="empty">No boards known.</p>';
+  const rows = list.map((d) => {
+    const held = (maintenance || []).find((m) => m.mac === d.mac);
+    const service = held
+      ? (held.kind === "quarantine"
+        ? `<div class="bad">QUARANTINED (${esc(held.trigger)}): ${esc(held.reason)} — reset or power-cycle it, then <code>cargo hil devices release ${esc(d.label)} --confirm reset</code></div>`
+        : `<div class="bad">maintenance by ${esc(held.owner)}: ${esc(held.reason)}</div>`)
+      : "";
+    const f = d.firmware;
+    const firmware = !f ? '<span class="muted">unknown</span>'
+      : f.kind === "flashed"
+        ? `<span class="work" title="app ${esc(f.application_sha256)}">${esc(f.image)}</span>
+           <div class="small">${origin(f.origin, runIds)}${f.commit ? ` · ${esc(f.checkout ? f.checkout.split("/").pop() : "")} ${esc(f.commit.slice(0, 12))}${f.dirty ? ' <span class="warn">dirty</span>' : ""}` : ""}</div>`
+        : `<span class="muted">${esc(f.kind)}</span>`;
+    const by = f ? `<span class="name">${esc(f.owner)}</span> <div class="small" style="white-space:nowrap">${at(f.unix)} · ${esc(ago(f.unix))}</div>` : "";
+    const h = d.health;
+    const healthClass = !h ? "muted"
+      : { "ok": "ok", "recovered-recently": "warn", "maintenance": "warn", "quarantined": "bad", "not-attached": "muted" }[h.state] ?? "muted";
+    const health = !h ? '<span class="muted">unknown</span>'
+      : `<span class="${healthClass}">${esc(h.state.replaceAll("-", " "))}</span>`
+        + (h.recoveries ? ` <div class="small">${h.recoveries} recoveries (${h.hardware_recoveries} hardware) in 1h</div>` : "");
+    return `<tr><td class="name"><b>${esc(d.label)}</b><div class="small">${esc(d.mac ?? "")}</div>${service}</td>
+      <td class="num">${d.port ? esc(d.port) : '<span class="muted">not attached</span>'}</td>
+      <td>${health}</td><td>${firmware}</td><td>${by}</td></tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table><tr><th>Board</th><th>Port</th><th>Health</th><th>Firmware</th><th>Flashed by</th></tr>${rows}</table></div>`
+    + (forgotten.length ? `<p class="muted">${forgotten.length} unidentified board${forgotten.length > 1 ? "s" : ""} not attached.</p>` : "");
+}
+
+function fixtures(list, holding, waiting) {
+  if (!list || !list.length) return '<p class="empty">Probing the host fixtures…</p>';
+  const rows = list.map((f) => {
+    const holder = f.key ? holding.find((h) => h.claims.includes(f.key)) : null;
+    const queued = f.key ? waiting.filter((q) => q.claims.includes(f.key)).length : 0;
+    const state = !f.reachable ? `<span class="bad">✗ ${esc(f.error ?? "not answering")}</span>`
+      : f.blocked ? `<span class="warn">⚠ ${esc(f.detail ?? "radio blocked")}</span>`
+      : holder ? `held by <b>${esc(holder.owner)}</b> <span class="id">#${holder.id}</span>`
+      : '<span class="ok">free</span>';
+    const busyBlocked = f.reachable && f.blocked && holder
+      ? `<div class="small">held by <b>${esc(holder.owner)}</b> #${holder.id}</div>` : "";
+    const radios = (f.interfaces || []).map((i) => {
+      const busy = i.cca_busy_percent;
+      const cca = busy == null ? "" : ` · CCA busy <span class="${busy >= 80 ? "bad" : busy >= 50 ? "warn" : "ok"}">${busy}%</span>`;
+      return `<div><span class="work">${esc(i.name)}</span> <span class="muted">${esc(i.kind ?? "")}${i.channel ? " · ch " + esc(i.channel) : ""}</span>${cca}</div>`;
+    }).join("") || '<span class="muted">—</span>';
+    return `<tr><td class="name"><b>${esc(f.name)}</b><div class="small">${esc(f.role)}</div></td>
+      <td>${state}${busyBlocked}${queued ? ` <div class="small">${queued} waiting</div>` : ""}</td>
+      <td>${radios}</td><td class="small">${f.blocked ? "" : esc(f.detail ?? "")}</td></tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table><tr><th>Fixture</th><th>State</th><th>Interfaces</th><th>Host</th></tr>${rows}</table></div>`;
+}
+
+// What the run filters and grouping see of a run.
+const runOutcome = (r) => r.abandoned ? "abandoned" : r.outcome ?? (r.state === "running" ? "running" : r.state);
+const scenarioKey = (r) => r.scenarios.map((s) => s.id + "=" + s.outcome).join(" ");
+const expanded = new Set();
+
+function runRow(r, extra = "") {
+  const outcome = runOutcome(r);
+  const ended = outcome !== "running";
+  const actions = [
+    r.report ? `<a href="runs/${encodeURIComponent(r.id)}/report.html">report</a>` : "",
+    ended ? copy(`cargo hil runs ${["failed", "broken", "blocked", "interrupted", "abandoned"].includes(outcome) ? "why" : "show"} ${r.id}`,
+      ["failed", "broken", "blocked", "interrupted", "abandoned"].includes(outcome) ? "copy why" : "copy show") : "",
+    copy(r.id, "copy id"),
+  ].filter(Boolean).join("");
+  return `<tr id="run-${esc(r.id)}"${extra}><td class="num">${at(r.started_millis / 1000)}</td>
+    <td>${r.owner ? esc(r.owner) : '<span class="muted" title="no lease names this run: it ran inside an enclosing lease (cargo hil ab, cargo hil bisect, cargo hil revision, cargo stand lease) or was started by an older build">—</span>'}</td>
+    <td>${pill(outcome)}${r.experiment_arm ? ` <span class="pill muted" title="an arm of a cargo hil ab experiment">A/B arm ${esc(r.experiment_arm.toUpperCase())}</span>` : ""}</td>
+    <td><div class="scenarios">${runScenarios(r) || '<span class="muted">—</span>'}</div>${progress(r)}</td>
+    <td class="num">${esc(r.commit ?? "")}${r.dirty ? ' <span class="warn">dirty</span>' : ""}<div class="small">${esc(r.checkout ?? "")}</div></td>
+    <td><div class="actions">${actions}</div></td></tr>`;
+}
+
+function commits(list) {
+  const count = new Set(list.map((r) => r.commit)).size;
+  return count === 1 ? " on one commit" : ` on ${count} commits`;
+}
+
+// The runs the table lists after its filters, folded ones included: links
+// to a run and the lease list's hiding rest on them.
+let listed = new Set();
+
+function runs(list) {
+  listed = new Set();
+  if (!list.length) return '<p class="empty">No runs in the shared store.</p>';
+  const owner = $("filter-owner").value, checkout = $("filter-checkout").value;
+  const scenario = $("filter-scenario").value.trim().toLowerCase();
+  const shown = list.filter((r) => (!owner || r.owner === owner)
+    && (!checkout || r.checkout === checkout)
+    && (!scenario || r.scenarios.some((s) => s.id.toLowerCase().includes(scenario))
+      || (r.progress?.scenarios ?? []).some((id) => id.toLowerCase().includes(scenario))));
+  if (!shown.length) return '<p class="empty">No run matches the filters.</p>';
+  listed = new Set(shown.map((r) => r.id));
+  // Consecutive finished runs of one owner and checkout with the same
+  // scenario outcomes fold into one row.
+  const groups = [];
+  for (const r of shown) {
+    const last = groups[groups.length - 1];
+    const key = [r.owner, r.checkout, runOutcome(r), scenarioKey(r)].join("|");
+    if ($("group-runs").checked && runOutcome(r) !== "running" && last && last.key === key) last.runs.push(r);
+    else groups.push({ key, runs: [r] });
+  }
+  const rows = groups.map((g) => {
+    if (g.runs.length === 1) return runRow(g.runs[0]);
+    const [first] = g.runs, oldest = g.runs[g.runs.length - 1];
+    const open = expanded.has(oldest.id);
+    // A folded group carries its runs' anchors, so links to them land on it.
+    const anchors = open ? "" : g.runs.map((r) => `<span id="run-${esc(r.id)}"></span>`).join("");
+    const head = `<tr class="group"><td class="num">${anchors}${at(first.started_millis / 1000)}</td>
+      <td>${first.owner ? esc(first.owner) : '<span class="muted">—</span>'}</td>
+      <td>${pill(runOutcome(first), "×" + g.runs.length + " " + marked(runOutcome(first)))}</td>
+      <td><div class="scenarios">${runScenarios(first)}</div>
+        <div class="small">${g.runs.length} runs since ${when(oldest.started_millis / 1000)} ${commits(g.runs)}</div></td>
+      <td class="num"><div class="small">${esc(first.checkout ?? "")}</div></td>
+      <td><div class="actions"><button class="link" data-toggle="${esc(oldest.id)}">${open ? "collapse" : "expand"}</button></div></td></tr>`;
+    return head + (open ? g.runs.map((r) => runRow(r)).join("") : "");
+  }).join("");
+  return `<div class="table-wrap"><table><tr><th>Started</th><th>Owner</th><th>Outcome</th><th>Scenarios</th><th>Commit</th><th></th></tr>${rows}</table></div>`;
+}
+
+// Keep a select's options in step with `values`, leaving it alone when
+// nothing changed so an open drop-down stays open.
+function options(select, values) {
+  const wanted = ["", ...[...new Set(values.filter(Boolean))].sort()];
+  const current = [...select.options].map((o) => o.value);
+  if (wanted.join("\n") === current.join("\n")) return;
+  const chosen = select.value;
+  select.innerHTML = wanted.map((v) => `<option value="${esc(v)}">${v ? esc(v) : "all"}</option>`).join("");
+  select.value = wanted.includes(chosen) ? chosen : "";
+}
+
+function reason(r) {
+  if (!r || !r.over || !r.over.length) return "";
+  return `granted at ${signed(r.balance_ms)} over ${r.over.map((o) => `${esc(o.owner)} (${signed(o.balance_ms)})`).join(", ")}`;
+}
+
+function leases(list, runIds) {
+  if (!list.length) return '<p class="empty">No leases yet.</p>';
+  const all = $("all-leases").checked;
+  const shown = list.filter((l) => all || !(l.outcome === "released" && l.run && runIds.has(l.run)));
+  const hidden = list.length - shown.length;
+  const rows = shown.map((l) => `<tr><td class="num">${at(l.granted_unix)}</td>
+      <td><b>${esc(l.owner)}</b> <span class="id">#${l.id}</span></td>
+      <td>${work(l.work)}${l.run && runIds.has(l.run) ? `<div class="small"><a href="#run-${esc(l.run)}">run ${esc(l.run)}</a></div>` : ""}
+        ${reason(l.reason) ? `<div class="small">${reason(l.reason)}</div>` : ""}</td>
+      <td class="num">${duration(l.released_unix - l.granted_unix)}<div class="small">charged ${duration((l.charged_ms ?? 0) / 1000)} · balance ${signed(l.balance_after_ms ?? 0)}</div></td>
+      <td>${pill(l.outcome)}</td></tr>`).join("");
+  const note = hidden ? `<p class="small">${hidden} released lease${hidden > 1 ? "s" : ""} of listed runs hidden.</p>` : "";
+  if (!shown.length) return note || '<p class="empty">No leases yet.</p>';
+  return `<div class="table-wrap"><table><tr><th>Granted</th><th>Owner</th><th>Work</th><th>Held</th><th>Outcome</th></tr>${rows}</table></div>${note}`;
+}
+
+function headline(data) {
+  const chips = [];
+  const out = (data.maintenance || []).find((m) => m.mac === "stand");
+  if (out) chips.push(`<span class="bad">⛔ out of service</span>`);
+  else if (data.holders.length) {
+    for (const h of data.holders) {
+      const left = h.estimate_secs - h.elapsed_secs;
+      chips.push(`<span class="${h.elapsed_secs >= data.hard_limit_secs ? "bad" : left < 0 ? "warn" : ""}">held by <b>${esc(h.owner)}</b> · ${left >= 0 ? `~${duration(left)} left` : `${duration(-left)} over est.`}</span>`);
+    }
+  } else chips.push(`<span class="ok">✓ free</span>`);
+  const preparing = (data.jobs || []).filter((j) => j.phase !== "holding" && j.phase !== "finished").length;
+  chips.push(`<span>queue ${data.queue.length}</span>`);
+  if (preparing) chips.push(`<span>preparing ${preparing}</span>`);
+  const boards = data.devices.filter((d) => d.mac || d.port);
+  const healthy = boards.filter((d) => d.health && d.health.state === "ok").length;
+  const quarantined = boards.some((d) => d.health && d.health.state === "quarantined");
+  chips.push(`<span class="${quarantined ? "bad" : healthy < boards.length ? "warn" : "ok"}">boards ${healthy}/${boards.length} ok</span>`);
+  const fx = data.fixtures || [];
+  if (fx.length) {
+    const good = fx.filter((f) => f.reachable && !f.blocked).length;
+    chips.push(`<span class="${fx.some((f) => !f.reachable) ? "bad" : good < fx.length ? "warn" : "ok"}">fixtures ${good}/${fx.length} ok</span>`);
+  }
+  const last = data.runs.find((r) => runOutcome(r) !== "running");
+  if (last) chips.push(`<span class="${tone(runOutcome(last))}">last run ${esc(marked(runOutcome(last)))} · ${esc(ago(last.started_millis / 1000))}</span>`);
+  return chips.join("");
+}
+
+// Bring `from`'s children in line with `to`'s, changing only what differs,
+// so selections, tooltips, focus and scroll positions outlive a refresh.
+function morph(from, to) {
+  const next = [...to.childNodes];
+  next.forEach((node, index) => {
+    const current = from.childNodes[index];
+    if (!current) { from.appendChild(node.cloneNode(true)); return; }
+    if (current.nodeType !== node.nodeType || current.nodeName !== node.nodeName) {
+      from.replaceChild(node.cloneNode(true), current); return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      if (current.nodeValue !== node.nodeValue) current.nodeValue = node.nodeValue;
+      return;
+    }
+    for (const { name } of [...current.attributes]) if (!node.hasAttribute(name)) current.removeAttribute(name);
+    for (const { name, value } of [...node.attributes]) if (current.getAttribute(name) !== value) current.setAttribute(name, value);
+    morph(current, node);
+  });
+  while (from.childNodes.length > next.length) from.removeChild(from.lastChild);
+}
+const rendered = new Map();
+function render(id, html) {
+  const element = $(id);
+  if (rendered.get(id) === html) return;
+  // A selection being made or copied holds its section still until it ends.
+  const selection = document.getSelection();
+  if (selection && !selection.isCollapsed && element.contains(selection.anchorNode)) return;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  morph(element, template.content);
+  rendered.set(id, html);
+}
+
+let data = null;
+function draw() {
+  if (!data) return;
+  learnNames(data);
+  const runsTable = runs(data.runs);
+  options($("filter-owner"), data.runs.map((r) => r.owner));
+  options($("filter-checkout"), data.runs.map((r) => r.checkout));
+  render("summary", headline(data));
+  render("holders", holders(data.holders, data.runs, data.hard_limit_secs));
+  render("queue", queue(data.queue));
+  render("jobs", jobs(data.jobs));
+  const service = standService(data.maintenance);
+  render("stand-service", service);
+  $("stand-service").hidden = !service;
+  render("balances", balances(data.balances));
+  render("devices", devices(data.devices, data.maintenance, listed));
+  render("fixtures", fixtures(data.fixtures, data.holders, data.queue));
+  render("runs", runsTable);
+  render("leases", leases(data.leases, listed));
+}
+
+let last = 0;
+async function refresh() {
+  try {
+    const response = await fetch("status.json", { cache: "no-store" });
+    const fresh = await response.json();
+    if (fresh.error) throw new Error(fresh.error);
+    data = fresh;
+    draw();
+    last = Date.now();
+    document.title = `HIL Stand · ${data.holders.length} held, ${data.queue.length} waiting`;
+    document.body.classList.remove("stale");
+    $("offline").hidden = true;
+    $("updated").className = "";
+    $("updated").textContent = "updated " + new Date().toLocaleTimeString();
+  } catch (error) {
+    document.body.classList.add("stale");
+    $("offline").hidden = false;
+    $("offline").textContent = "Not live: cannot reach cargo hil dashboard (" + error.message + ")."
+      + (last ? ` The page shows the stand as of ${new Date(last).toLocaleTimeString()}.` : "");
+    $("updated").className = "bad";
+    $("updated").textContent = last ? "stale since " + new Date(last).toLocaleTimeString() : "not loaded";
+  }
+}
+
+for (const id of ["filter-owner", "filter-checkout", "filter-scenario", "group-runs", "all-leases"]) {
+  $(id).addEventListener("input", draw);
+}
+document.addEventListener("click", async (event) => {
+  const toggle = event.target.closest("[data-toggle]");
+  if (toggle) {
+    const id = toggle.dataset.toggle;
+    expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+    draw();
+    return;
+  }
+  const button = event.target.closest("[data-copy]");
+  if (!button) return;
+  try {
+    await navigator.clipboard.writeText(button.dataset.copy);
+    button.classList.add("done");
+    setTimeout(() => button.classList.remove("done"), 1200);
+  } catch (error) {
+    button.title = "copy failed: " + error.message + " — " + button.dataset.copy;
+  }
+});
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

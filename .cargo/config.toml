@@ -8,6 +8,10 @@ fw = "run --quiet --profile tools -p oer-tool-cli-fw --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
 # (tools/lib/data/vendor-artifacts).
 pins = "run --quiet --profile tools -p oer-tool-cli-pins --"
+# The stand: boards, leases, power, fixtures (tools/cli/stand).
+stand = "run --quiet --profile tools -p oer-tool-cli-stand --"
+# HIL runs (tools/lib/service/hil-runner/HIL.md).
+hil = "run --quiet --profile tools -p oer-tool-cli-hil --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git

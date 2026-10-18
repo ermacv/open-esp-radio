@@ -58,8 +58,10 @@ struct Outputs {
 struct LinkerOutput {
     path: PathBuf,
     /// `PERIPHERAL.REGISTER.FIELD`: the address the hardware reports, from
-    /// bit 0, whose width the link checks DMA storage against.
-    address_low_field: String,
+    /// bit 0, whose width the link checks DMA storage against; without one
+    /// no DMA window is known and the link refuses DMA storage.
+    #[serde(default)]
+    address_low_field: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -313,7 +315,7 @@ impl ChipPublication {
             let fragment = oer_tool_data_register_model::render_dma_linker_fragment(
                 &svd,
                 &self.memory,
-                &linker.address_low_field,
+                linker.address_low_field.as_deref(),
             )?;
             outputs.push((&linker.path, fragment));
         }

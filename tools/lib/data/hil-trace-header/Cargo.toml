@@ -1,0 +1,26 @@
+[package]
+name = "oer-tool-data-hil-trace-header"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The header every HIL conformance trace starts with: the port's typed bounds and the clock domain of its times, for no_std firmware and the host alike"
+
+[features]
+# The `postcard_schema::Schema` derive of the HIL wire protocol.
+wire = ["dep:postcard-schema"]
+
+[dependencies]
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive"], optional = true }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.docs.rs]

@@ -1,0 +1,24 @@
+[package]
+name = "oer-esp32c5-hal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ownership boundaries of the ESP32-C5 radio over its closed PAC"
+
+[dependencies]
+oer-esp32c5-pac = { path = "../pac" }
+oer-espressif-coex = { path = "../../espressif/coex" }
+oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
+oer-espressif-analog = { path = "../../espressif/analog" }
+oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imac-unknown-none-elf"
+targets = []
+

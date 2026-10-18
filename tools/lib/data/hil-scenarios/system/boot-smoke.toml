@@ -1,0 +1,8 @@
+schema = 5
+id = "boot-smoke"
+description = "Bootstrap, PSRAM mapping, PSRAM task stack, SRAM IRQ stack and runtime startup"
+role = "investigation"
+tags = ["smoke", "psram-stack"]
+
+[system]
+kind = "boot-smoke"

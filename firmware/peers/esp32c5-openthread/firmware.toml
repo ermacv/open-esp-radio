@@ -1,0 +1,7 @@
+# Firmware catalog entry: `cargo hil firmware flash openthread-peer --board esp32c5`.
+# ESP-IDF's OpenThread stack over its IEEE 802.15.4 driver, the Thread
+# reference peer for the device under test's OpenThread radio.
+image = "openthread-peer"
+chip = "esp32c5"
+# The ESP32-C5 pins: the same ESP-IDF revision with the ESP32-C5 archives.
+pins = "esp32c5"

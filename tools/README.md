@@ -37,11 +37,9 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 - A CLI depends on its service and on `data` and `base`, never on another
   CLI.
 - A service depends on `analysis`, `data` and `base`, and on another service
-  only along these edges: `firmware → lab`, `firmware → image-check-stack`,
-  `firmware → image-check-interrupts`, `image-check-interrupts →
-  image-check-stack`, `symbol-lineage → vendor-provenance`, `registers → vendor-provenance`. There
-  is no
-  reverse edge.
+  only along an edge `lib/test/layers` lists (`SERVICE_ORDER`): the stand
+  and HIL services build on each other, and each new edge is added there on
+  purpose. There is no cycle.
 - `analysis` depends on other `analysis` libraries, `base` and external
   crates; `data` on other `data` libraries and `base`.
 - `tools/` uses only the portable crates of `crates/` (`base`, `radio` and the

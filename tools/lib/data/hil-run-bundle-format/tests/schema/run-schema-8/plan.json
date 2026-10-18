@@ -1,0 +1,58 @@
+{
+  "schema": 8,
+  "run_id": "1791582140859-002c088b",
+  "selection": "scenarios: system-watchdog, system-panic-reset",
+  "firmware": {
+    "source": "replay",
+    "source_run_id": "1790000000000-00000001",
+    "image": "system-watchdog",
+    "build_id": "2222222222222222222222222222222222222222222222222222222222222222",
+    "application_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "entries": [
+    {
+      "scenario": "access-point-bidirectional",
+      "image": "system-watchdog",
+      "repetitions": 1,
+      "disposition": "filtered",
+      "reason": "excluded by `scenarios: system-watchdog, system-panic-reset`",
+      "requirements": {
+        "station_network": true,
+        "peer": false,
+        "station_control": false,
+        "station_udp_rx_capture": false,
+        "station_udp_tx_capture": false,
+        "laptop_client": true,
+        "openwrt_client": false,
+        "openwrt_tx_monitor": false,
+        "laptop_air_monitor": false,
+        "probe_load": false,
+        "non_ht_member": false,
+        "legacy_bss": false,
+        "air_observer": false
+      }
+    },
+    {
+      "scenario": "access-point-bidirectional-openwrt",
+      "image": "system-watchdog",
+      "repetitions": 1,
+      "disposition": "filtered",
+      "reason": "excluded by `scenarios: system-watchdog, system-panic-reset`",
+      "requirements": {
+        "station_network": true,
+        "peer": false,
+        "station_control": false,
+        "station_udp_rx_capture": false,
+        "station_udp_tx_capture": false,
+        "laptop_client": false,
+        "openwrt_client": true,
+        "openwrt_tx_monitor": false,
+        "laptop_air_monitor": false,
+        "probe_load": false,
+        "non_ht_member": false,
+        "legacy_bss": false,
+        "air_observer": false
+      }
+    }
+  ]
+}

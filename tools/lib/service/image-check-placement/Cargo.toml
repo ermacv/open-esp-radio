@@ -1,0 +1,21 @@
+[package]
+name = "oer-tool-service-image-check-placement"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The placement check of an image against the chip's memory map and placement contract"
+
+[dependencies]
+oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
+oer-tool-analysis-elf = { path = "../../analysis/elf" }
+oer-tool-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }
+
+[lints]
+workspace = true
+

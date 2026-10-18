@@ -10,7 +10,7 @@ pub const PRODUCT: &str = "1001";
 /// One attached board.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Attached {
-    /// Its USB location, such as `3-8.3.4.4` ([`oer_tool_service_lab::hub::parent`]
+    /// Its USB location, such as `3-8.3.4.4` ([`crate::hub::parent`]
     /// names its hub and port).
     pub location: String,
     pub mac: String,

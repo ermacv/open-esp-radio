@@ -1,0 +1,16 @@
+{
+  "schema": 8,
+  "run_id": "1791582140859-002c088b",
+  "files": [
+    {
+      "path": "air.json",
+      "size_bytes": 285,
+      "sha256": "da7d50fcc1ce096583bec39b98039b3f7f3e59970f44cd89caa5d3ff84c0b161"
+    },
+    {
+      "path": "attempts/system-watchdog.json",
+      "size_bytes": 505621,
+      "sha256": "a24ff5589cd4c94a805c8a93f884497dbab5a394d05b1422b7476415c4b6250b"
+    }
+  ]
+}
