@@ -313,7 +313,7 @@ buttons = { "1" = 1 }
 
 [[board]]
 id = "s31-a"
-usb-serial = "30:ED:A0:F3:F6:D0"
+usb-serial = "02:00:00:00:01:D0"
 chip = "esp32s31"
 port = { hub = "top", port = 4 }
 reset = ["power"]
@@ -442,9 +442,9 @@ passphrase = "made-up-ap-passphrase"
         assert_eq!(stand.hubs.len(), 1);
         assert_eq!(stand.hubs[0].usb3.as_deref(), Some("4-1"));
         let board = stand.board("s31-a").unwrap();
-        assert_eq!(board.mac, "30:ED:A0:F3:F6:D0");
-        assert_eq!(stand.board("30:ed:a0:f3:f6:d0"), Some(board));
-        assert_eq!(stand.board_by_mac("30:ED:A0:F3:F6:D0"), Some(board));
+        assert_eq!(board.mac, "02:00:00:00:01:D0");
+        assert_eq!(stand.board("02:00:00:00:01:d0"), Some(board));
+        assert_eq!(stand.board_by_mac("02:00:00:00:01:D0"), Some(board));
         assert_eq!(stand.board("nope"), None);
     }
 

@@ -64,11 +64,11 @@ mod tests {
     #[test]
     fn a_second_holder_is_refused_with_the_first_named() {
         let directory = tempfile::tempdir().unwrap();
-        let first = acquire_in(directory.path(), "30:ed:a0:f3:f6:d0").unwrap();
-        let path = path_in(directory.path(), "30:ED:A0:F3:F6:D0");
-        assert!(path.ends_with("30EDA0F3F6D0.lock"));
+        let first = acquire_in(directory.path(), "02:00:00:00:01:d0").unwrap();
+        let path = path_in(directory.path(), "02:00:00:00:01:D0");
+        assert!(path.ends_with("0200000001D0.lock"));
         // `flock` excludes another open file description, even in this process.
-        let error = acquire_in(directory.path(), "30:ED:A0:F3:F6:D0").unwrap_err();
+        let error = acquire_in(directory.path(), "02:00:00:00:01:D0").unwrap_err();
         assert!(
             error
                 .to_string()
@@ -76,6 +76,6 @@ mod tests {
             "{error}"
         );
         drop(first);
-        acquire_in(directory.path(), "30:ED:A0:F3:F6:D0").unwrap();
+        acquire_in(directory.path(), "02:00:00:00:01:D0").unwrap();
     }
 }
