@@ -6,10 +6,10 @@
 //!
 //! This crate owns only executor wake-up and timer-queue integration. It does
 //! not own radio policy, board electrical parameters, credentials, sockets or
-//! a host protocol. Optional timer observations and idle accounting describe only
-//! its own execution. Applications supply the ESP-HAL software
-//! interrupt capabilities and the system timer explicitly, with the tokens of
-//! their sources in the image's interrupt table.
+//! a host protocol. Optional timer observations, idle accounting and poll
+//! timing describe only its own execution. Applications supply the ESP-HAL
+//! software interrupt capabilities and the system timer explicitly, with the
+//! tokens of their sources in the image's interrupt table.
 //!
 //! - `Executor<SWI>` runs in thread mode, woken by its software interrupt,
 //!   whose entry names `wake_handler::<SWI>`.
@@ -56,3 +56,6 @@ pub mod timer_observation;
 
 #[cfg(any(feature = "idle-accounting", test))]
 pub mod idle_accounting;
+
+#[cfg(any(feature = "poll-timing", test))]
+pub mod poll_timing;

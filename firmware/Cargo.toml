@@ -15,6 +15,7 @@ members = [
     "apps/boot-smoke",
     "apps/radio-root",
     "apps/w0",
+    "apps/w1",
 ]
 
 [workspace.package]

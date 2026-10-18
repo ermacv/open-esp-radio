@@ -25,7 +25,8 @@
 //! [`ClockBackend`]: on the chip, [`EspHalClocks`] maps each platform clock
 //! to esp-hal's reference-counted `clock::ll` request and release. A
 //! reference is given back only through the guard its request returned, so a
-//! release can never run without its request.
+//! release can never run without its request. [`EspHal`] names that backend
+//! itself, for an image that wraps it in its own [`ClockBackend`].
 //!
 //! [`RadioHardware`]: oer_esp32s31_hal::root::RadioHardware
 //! [`Psram`]: esp_hal::psram::Psram
@@ -41,7 +42,7 @@ use oer_esp32s31_hal::power::{
 mod esp_hal_handoff;
 
 #[cfg(feature = "esp32s31")]
-pub use esp_hal_handoff::{EspHalClocks, RadioHandoffError, RadioSingletons, take_radio};
+pub use esp_hal_handoff::{EspHal, EspHalClocks, RadioHandoffError, RadioSingletons, take_radio};
 
 /// One platform's reference counts of the radio's platform clocks.
 ///

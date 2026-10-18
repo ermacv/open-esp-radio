@@ -264,6 +264,15 @@ pub trait RxDma {
         None
     }
 
+    /// Optional read of `RX_DESCRIPTOR_BASE` for diagnostics.
+    ///
+    /// Like [`Self::buffer_full_count`] it never participates in descriptor
+    /// ownership: a reading says what the register holds, not which list
+    /// the walker follows. Models without such a reading keep `None`.
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        None
+    }
+
     fn last_descriptor_low(&mut self) -> u32;
     fn next_descriptor_low(&mut self) -> u32;
 
@@ -323,6 +332,10 @@ pub trait RxDma {
 impl RxDma for WifiMacHal<'_> {
     fn buffer_full_count(&mut self) -> Option<u16> {
         Some(self.rx_buffer_full_count())
+    }
+
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        Some(self.receive_dma_snapshot().descriptor_base)
     }
 
     fn last_descriptor_low(&mut self) -> u32 {
@@ -416,6 +429,10 @@ impl RxDma for WifiMacHal<'_> {
 impl RxDma for RadioRuntimeOwner {
     fn buffer_full_count(&mut self) -> Option<u16> {
         RxDma::buffer_full_count(&mut self.wifi_mac_hal())
+    }
+
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        RxDma::descriptor_base_register(&mut self.wifi_mac_hal())
     }
 
     fn last_descriptor_low(&mut self) -> u32 {

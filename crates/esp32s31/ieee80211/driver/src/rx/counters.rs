@@ -3,14 +3,20 @@
 //! The interrupt line (P3), the radio executor (P2) and the application's
 //! frame receiver (P1, the prefix counts) each update their own counters
 //! with single Relaxed atomic operations; a reader takes a [`WifiRxReport`]
-//! at any time. Counts wrap; the reload maximum is the
-//! ring's own evidence and stops at its attempt limit.
+//! at any time. Counts wrap. The reload evidence is the ring's own
+//! (saturating, its maximum stops at the attempt limit), copied after every
+//! service pass; the teardown durations are written once, by the teardown.
+//! The exhaustion snapshot is the runner's, written when a lease returns to
+//! a full staging pool ([`WifiRxExhaustion`]).
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use oer_esp32s31_ieee80211_dma::rx_ring::RxReloadRepairEvidence;
 use oer_esp32s31_ieee80211_mac::rx::RxError;
+use oer_time::Duration;
 
 use super::transaction::Discard;
+use crate::datapath::DatapathRxProgress;
 
 /// Counters beside the receive arena. Its zero bytes are zero counts.
 #[derive(bytemuck::Zeroable, Default)]
@@ -34,10 +40,251 @@ pub struct WifiRxCounters {
     stage_capacity_blocks: AtomicU32,
     service_passes: AtomicU32,
     service_errors: AtomicU32,
-    immediate_continuations: AtomicU32,
-    timed_continuations: AtomicU32,
-    max_reload_attempts: AtomicU32,
+    capacity_drains: AtomicU32,
+    continuations: ContinuationCounters,
+    reload: ReloadCounters,
+    teardown: TeardownCounters,
     prefix: PrefixCounters,
+    exhaustion: ExhaustionCounters,
+}
+
+/// The runner's continuations: how each was taken and why.
+#[derive(bytemuck::Zeroable, Default)]
+struct ContinuationCounters {
+    immediate: AtomicU32,
+    timed: AtomicU32,
+    longest_streak: AtomicU32,
+    drained: AtomicU32,
+    upper_layer_blocked_but_droppable: AtomicU32,
+    probe_pending: AtomicU32,
+    recycled_append_pending: AtomicU32,
+    budget_exhausted: AtomicU32,
+    network_backpressured: AtomicU32,
+    protocol_blocked_by_tx: AtomicU32,
+}
+
+/// One reading of the runner's continuations.
+///
+/// A drain continues (reruns its service pass with RX still masked) for
+/// the [`DatapathRxProgress`] the pass returned; `drained` and
+/// `upper_layer_blocked_but_droppable` count only the passes that left a
+/// released buffer to rearm.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxContinuationReport {
+    /// Continuations taken by an immediate self-wake.
+    pub immediate: u32,
+    /// Continuations taken after a timer wait.
+    pub timed: u32,
+    /// The most continuations one drain took before it unmasked, blocked on
+    /// staging capacity or stopped (a maximum, not a count).
+    pub longest_streak: u32,
+    pub drained: u32,
+    pub upper_layer_blocked_but_droppable: u32,
+    pub probe_pending: u32,
+    pub recycled_append_pending: u32,
+    pub budget_exhausted: u32,
+    pub network_backpressured: u32,
+    pub protocol_blocked_by_tx: u32,
+}
+
+impl WifiRxContinuationReport {
+    /// The continuations taken for `reason`; a pass blocked on staging
+    /// capacity never continues.
+    pub const fn continued(&self, reason: DatapathRxProgress) -> u32 {
+        match reason {
+            DatapathRxProgress::Drained => self.drained,
+            DatapathRxProgress::UpperLayerBlockedButDroppable => {
+                self.upper_layer_blocked_but_droppable
+            }
+            DatapathRxProgress::ProbePending => self.probe_pending,
+            DatapathRxProgress::RecycledAppendPending => self.recycled_append_pending,
+            DatapathRxProgress::BudgetExhausted => self.budget_exhausted,
+            DatapathRxProgress::NetworkBackpressured => self.network_backpressured,
+            DatapathRxProgress::ProtocolBlockedByTx => self.protocol_blocked_by_tx,
+            DatapathRxProgress::StageCapacityBlocked => 0,
+        }
+    }
+}
+
+impl ContinuationCounters {
+    const fn new() -> Self {
+        Self {
+            immediate: AtomicU32::new(0),
+            timed: AtomicU32::new(0),
+            longest_streak: AtomicU32::new(0),
+            drained: AtomicU32::new(0),
+            upper_layer_blocked_but_droppable: AtomicU32::new(0),
+            probe_pending: AtomicU32::new(0),
+            recycled_append_pending: AtomicU32::new(0),
+            budget_exhausted: AtomicU32::new(0),
+            network_backpressured: AtomicU32::new(0),
+            protocol_blocked_by_tx: AtomicU32::new(0),
+        }
+    }
+
+    const fn reason(&self, reason: DatapathRxProgress) -> Option<&AtomicU32> {
+        match reason {
+            DatapathRxProgress::Drained => Some(&self.drained),
+            DatapathRxProgress::UpperLayerBlockedButDroppable => {
+                Some(&self.upper_layer_blocked_but_droppable)
+            }
+            DatapathRxProgress::ProbePending => Some(&self.probe_pending),
+            DatapathRxProgress::RecycledAppendPending => Some(&self.recycled_append_pending),
+            DatapathRxProgress::BudgetExhausted => Some(&self.budget_exhausted),
+            DatapathRxProgress::NetworkBackpressured => Some(&self.network_backpressured),
+            DatapathRxProgress::ProtocolBlockedByTx => Some(&self.protocol_blocked_by_tx),
+            DatapathRxProgress::StageCapacityBlocked => None,
+        }
+    }
+
+    fn report(&self) -> WifiRxContinuationReport {
+        let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
+        WifiRxContinuationReport {
+            immediate: load(&self.immediate),
+            timed: load(&self.timed),
+            longest_streak: load(&self.longest_streak),
+            drained: load(&self.drained),
+            upper_layer_blocked_but_droppable: load(&self.upper_layer_blocked_but_droppable),
+            probe_pending: load(&self.probe_pending),
+            recycled_append_pending: load(&self.recycled_append_pending),
+            budget_exhausted: load(&self.budget_exhausted),
+            network_backpressured: load(&self.network_backpressured),
+            protocol_blocked_by_tx: load(&self.protocol_blocked_by_tx),
+        }
+    }
+}
+
+/// A copy of the ring's [`RxReloadRepairEvidence`]; optional values are
+/// stored as `value + 1`, so zero means `None`.
+#[derive(bytemuck::Zeroable, Default)]
+struct ReloadCounters {
+    max_reload_attempts: AtomicU32,
+    observations: AtomicU32,
+    unknown_upper_with_zero_address: AtomicU32,
+    base_repairs: AtomicU32,
+    last_next_low: AtomicU32,
+    last_last_low_plus_one: AtomicU32,
+    last_repair_head_plus_one: AtomicU32,
+    exhausted_republications: AtomicU32,
+    republications_accepted: AtomicU32,
+}
+
+const fn encode_optional(value: Option<u32>) -> u32 {
+    match value {
+        Some(value) => value.saturating_add(1),
+        None => 0,
+    }
+}
+
+const fn decode_optional(value: u32) -> Option<u32> {
+    value.checked_sub(1)
+}
+
+impl ReloadCounters {
+    const fn new() -> Self {
+        Self {
+            max_reload_attempts: AtomicU32::new(0),
+            observations: AtomicU32::new(0),
+            unknown_upper_with_zero_address: AtomicU32::new(0),
+            base_repairs: AtomicU32::new(0),
+            last_next_low: AtomicU32::new(0),
+            last_last_low_plus_one: AtomicU32::new(0),
+            last_repair_head_plus_one: AtomicU32::new(0),
+            exhausted_republications: AtomicU32::new(0),
+            republications_accepted: AtomicU32::new(0),
+        }
+    }
+
+    fn record(&self, evidence: RxReloadRepairEvidence) {
+        let RxReloadRepairEvidence {
+            max_reload_attempts,
+            observations,
+            unknown_upper_with_zero_address,
+            base_repairs,
+            last_next_low,
+            last_last_low,
+            last_repair_head,
+            exhausted_republications,
+            republications_accepted,
+        } = evidence;
+        let store = |counter: &AtomicU32, value| counter.store(value, Ordering::Relaxed);
+        store(&self.max_reload_attempts, max_reload_attempts);
+        store(&self.observations, observations);
+        store(
+            &self.unknown_upper_with_zero_address,
+            unknown_upper_with_zero_address,
+        );
+        store(&self.base_repairs, base_repairs);
+        store(&self.last_next_low, last_next_low);
+        store(&self.last_last_low_plus_one, encode_optional(last_last_low));
+        store(
+            &self.last_repair_head_plus_one,
+            encode_optional(last_repair_head),
+        );
+        store(&self.exhausted_republications, exhausted_republications);
+        store(&self.republications_accepted, republications_accepted);
+    }
+
+    fn report(&self) -> RxReloadRepairEvidence {
+        let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
+        RxReloadRepairEvidence {
+            max_reload_attempts: load(&self.max_reload_attempts),
+            observations: load(&self.observations),
+            unknown_upper_with_zero_address: load(&self.unknown_upper_with_zero_address),
+            base_repairs: load(&self.base_repairs),
+            last_next_low: load(&self.last_next_low),
+            last_last_low: decode_optional(load(&self.last_last_low_plus_one)),
+            last_repair_head: decode_optional(load(&self.last_repair_head_plus_one)),
+            exhausted_republications: load(&self.exhausted_republications),
+            republications_accepted: load(&self.republications_accepted),
+        }
+    }
+}
+
+/// The teardown's measured waits.
+#[derive(bytemuck::Zeroable, Default)]
+struct TeardownCounters {
+    mask_confirm_us: AtomicU32,
+    drain_us: AtomicU32,
+    drain_polls: AtomicU32,
+}
+
+/// One reading of the teardown's measured waits; zero until the teardown
+/// wrote them. Microseconds saturate at `u32::MAX`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxTeardownReport {
+    /// From the mask request to the line's masked fact, or to the
+    /// [`MASK_CONFIRM_TIMEOUT`](super::receive::MASK_CONFIRM_TIMEOUT).
+    pub mask_confirm_us: u32,
+    /// From the first drain check to the last one; zero when the mask was
+    /// never confirmed, as the drain then never runs.
+    pub drain_us: u32,
+    /// [`DRAIN_POLL`](super::receive::DRAIN_POLL) waits between the drain
+    /// checks.
+    pub drain_polls: u32,
+}
+
+fn saturating_micros(duration: Duration) -> u32 {
+    u32::try_from(duration.as_micros()).unwrap_or(u32::MAX)
+}
+
+impl TeardownCounters {
+    const fn new() -> Self {
+        Self {
+            mask_confirm_us: AtomicU32::new(0),
+            drain_us: AtomicU32::new(0),
+            drain_polls: AtomicU32::new(0),
+        }
+    }
+
+    fn report(&self) -> WifiRxTeardownReport {
+        let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
+        WifiRxTeardownReport {
+            mask_confirm_us: load(&self.mask_confirm_us),
+            drain_us: load(&self.drain_us),
+            drain_polls: load(&self.drain_polls),
+        }
+    }
 }
 
 /// The application's counts of the RX-control prefix decode.
@@ -150,6 +397,174 @@ impl PrefixCounters {
     }
 }
 
+/// The walker and the ring as the runner read them when a lease returned
+/// after a drain had left every staging slot claimed or every buffer
+/// detached: the registers before the capacity drain's first service pass,
+/// in the state of the full pool (one lease already back). Report-only: no
+/// field takes part in descriptor ownership.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxExhaustion {
+    /// How long the pool stayed full, from the first drain that left it so
+    /// to the return, in µs (saturating).
+    pub blocked_us: u32,
+    /// `RX_NEXT_DESCRIPTOR`: the low address and whether its unassigned
+    /// upper field read nonzero.
+    pub next_low: u32,
+    pub next_upper: bool,
+    /// `RX_LAST_DESCRIPTOR`, low address.
+    pub last_low: u32,
+    /// `RX_DESCRIPTOR_BASE`, where the platform reads it.
+    pub base: Option<u32>,
+    /// `RX_CONTROL`: the walker enable and the reload doorbell.
+    pub walker_enabled: bool,
+    pub reload_doorbell: bool,
+    /// The hardware starvation counter, where the platform has one.
+    pub buffer_full: Option<u16>,
+    /// The ring's view: its descriptor base, the recycle frontier and the
+    /// accepted tail (descriptor indices), descriptors returned to software
+    /// in this generation, newly completed descriptors at the frontier, the
+    /// accepted list left from NEXT (`None` when NEXT lies outside the
+    /// ring) and whether a reload it requested is still pending.
+    pub ring_base: u32,
+    pub recycle_start: u32,
+    pub accepted_tail: u32,
+    pub observed: u32,
+    pub completed: u32,
+    pub remaining: Option<u32>,
+    pub reload_pending: bool,
+    /// Buffers released for rearm, buffers detached as staged leases, and
+    /// claimed staging slots.
+    pub released: u32,
+    pub detached: u32,
+    pub staged: u32,
+}
+
+const NEXT_UPPER: u32 = 1 << 0;
+const BASE_READ: u32 = 1 << 1;
+const WALKER_ENABLED: u32 = 1 << 2;
+const RELOAD_DOORBELL: u32 = 1 << 3;
+const BUFFER_FULL_READ: u32 = 1 << 4;
+const REMAINING_KNOWN: u32 = 1 << 5;
+const RELOAD_PENDING: u32 = 1 << 6;
+
+/// The exhaustion snapshot of the longest full-pool stretch, and how many
+/// such stretches a returned lease ended.
+#[derive(bytemuck::Zeroable, Default)]
+struct ExhaustionCounters {
+    snapshots: AtomicU32,
+    blocked_us: AtomicU32,
+    flags: AtomicU32,
+    next_low: AtomicU32,
+    last_low: AtomicU32,
+    base: AtomicU32,
+    buffer_full: AtomicU32,
+    ring_base: AtomicU32,
+    recycle_start: AtomicU32,
+    accepted_tail: AtomicU32,
+    observed: AtomicU32,
+    completed: AtomicU32,
+    remaining: AtomicU32,
+    released: AtomicU32,
+    detached: AtomicU32,
+    staged: AtomicU32,
+}
+
+/// One reading of the exhaustion snapshot.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxExhaustionReport {
+    /// Full-pool stretches a returned lease ended.
+    pub snapshots: u32,
+    /// The snapshot of the longest of them; `None` before the first.
+    pub longest: Option<WifiRxExhaustion>,
+}
+
+impl ExhaustionCounters {
+    const fn new() -> Self {
+        Self {
+            snapshots: AtomicU32::new(0),
+            blocked_us: AtomicU32::new(0),
+            flags: AtomicU32::new(0),
+            next_low: AtomicU32::new(0),
+            last_low: AtomicU32::new(0),
+            base: AtomicU32::new(0),
+            buffer_full: AtomicU32::new(0),
+            ring_base: AtomicU32::new(0),
+            recycle_start: AtomicU32::new(0),
+            accepted_tail: AtomicU32::new(0),
+            observed: AtomicU32::new(0),
+            completed: AtomicU32::new(0),
+            remaining: AtomicU32::new(0),
+            released: AtomicU32::new(0),
+            detached: AtomicU32::new(0),
+            staged: AtomicU32::new(0),
+        }
+    }
+
+    /// Count `snapshot`; keep it when its block is the longest so far.
+    fn record(&self, snapshot: WifiRxExhaustion) {
+        let previous = self.snapshots.fetch_add(1, Ordering::Relaxed);
+        if previous != 0 && snapshot.blocked_us < self.blocked_us.load(Ordering::Relaxed) {
+            return;
+        }
+        let flag = |set: bool, bit: u32| if set { bit } else { 0 };
+        let flags = flag(snapshot.next_upper, NEXT_UPPER)
+            | flag(snapshot.base.is_some(), BASE_READ)
+            | flag(snapshot.walker_enabled, WALKER_ENABLED)
+            | flag(snapshot.reload_doorbell, RELOAD_DOORBELL)
+            | flag(snapshot.buffer_full.is_some(), BUFFER_FULL_READ)
+            | flag(snapshot.remaining.is_some(), REMAINING_KNOWN)
+            | flag(snapshot.reload_pending, RELOAD_PENDING);
+        let store = |counter: &AtomicU32, value: u32| counter.store(value, Ordering::Relaxed);
+        store(&self.blocked_us, snapshot.blocked_us);
+        store(&self.flags, flags);
+        store(&self.next_low, snapshot.next_low);
+        store(&self.last_low, snapshot.last_low);
+        store(&self.base, snapshot.base.unwrap_or(0));
+        store(
+            &self.buffer_full,
+            u32::from(snapshot.buffer_full.unwrap_or(0)),
+        );
+        store(&self.ring_base, snapshot.ring_base);
+        store(&self.recycle_start, snapshot.recycle_start);
+        store(&self.accepted_tail, snapshot.accepted_tail);
+        store(&self.observed, snapshot.observed);
+        store(&self.completed, snapshot.completed);
+        store(&self.remaining, snapshot.remaining.unwrap_or(0));
+        store(&self.released, snapshot.released);
+        store(&self.detached, snapshot.detached);
+        store(&self.staged, snapshot.staged);
+    }
+
+    fn report(&self) -> WifiRxExhaustionReport {
+        let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
+        let snapshots = load(&self.snapshots);
+        let flags = load(&self.flags);
+        let set = |bit: u32| flags & bit != 0;
+        let longest = (snapshots != 0).then(|| WifiRxExhaustion {
+            blocked_us: load(&self.blocked_us),
+            next_low: load(&self.next_low),
+            next_upper: set(NEXT_UPPER),
+            last_low: load(&self.last_low),
+            base: set(BASE_READ).then(|| load(&self.base)),
+            walker_enabled: set(WALKER_ENABLED),
+            reload_doorbell: set(RELOAD_DOORBELL),
+            buffer_full: set(BUFFER_FULL_READ)
+                .then(|| u16::try_from(load(&self.buffer_full)).unwrap_or(u16::MAX)),
+            ring_base: load(&self.ring_base),
+            recycle_start: load(&self.recycle_start),
+            accepted_tail: load(&self.accepted_tail),
+            observed: load(&self.observed),
+            completed: load(&self.completed),
+            remaining: set(REMAINING_KNOWN).then(|| load(&self.remaining)),
+            reload_pending: set(RELOAD_PENDING),
+            released: load(&self.released),
+            detached: load(&self.detached),
+            staged: load(&self.staged),
+        });
+        WifiRxExhaustionReport { snapshots, longest }
+    }
+}
+
 /// One reading of [`WifiRxCounters`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxReport {
@@ -191,14 +606,20 @@ pub struct WifiRxReport {
     pub service_passes: u32,
     /// RX service transactions which failed.
     pub service_errors: u32,
-    /// Continuations taken by an immediate self-wake.
-    pub immediate_continuations: u32,
-    /// Continuations taken after a timer wait.
-    pub timed_continuations: u32,
-    /// The most reload-doorbell observations one append made (a maximum, not a count).
-    pub max_reload_attempts: u32,
+    /// Drains started by a returned-capacity fact (a lease came back), with
+    /// or without an RX fact beside it.
+    pub capacity_drains: u32,
+    /// The runner's continuations.
+    pub continuations: WifiRxContinuationReport,
+    /// The ring's reload-repair and republication evidence, as of the last
+    /// service pass.
+    pub reload: RxReloadRepairEvidence,
+    /// The teardown's measured waits.
+    pub teardown: WifiRxTeardownReport,
     /// The application's RX-control prefix decode.
     pub prefix: WifiRxPrefixReport,
+    /// The walker and ring when a lease returned to a full staging pool.
+    pub exhaustion: WifiRxExhaustionReport,
 }
 
 fn bump(counter: &AtomicU32) {
@@ -227,10 +648,12 @@ impl WifiRxCounters {
             stage_capacity_blocks: AtomicU32::new(0),
             service_passes: AtomicU32::new(0),
             service_errors: AtomicU32::new(0),
-            immediate_continuations: AtomicU32::new(0),
-            timed_continuations: AtomicU32::new(0),
-            max_reload_attempts: AtomicU32::new(0),
+            capacity_drains: AtomicU32::new(0),
+            continuations: ContinuationCounters::new(),
+            reload: ReloadCounters::new(),
+            teardown: TeardownCounters::new(),
             prefix: PrefixCounters::new(),
+            exhaustion: ExhaustionCounters::new(),
         }
     }
 
@@ -257,10 +680,12 @@ impl WifiRxCounters {
             stage_capacity_blocks: load(&self.stage_capacity_blocks),
             service_passes: load(&self.service_passes),
             service_errors: load(&self.service_errors),
-            immediate_continuations: load(&self.immediate_continuations),
-            timed_continuations: load(&self.timed_continuations),
-            max_reload_attempts: load(&self.max_reload_attempts),
+            capacity_drains: load(&self.capacity_drains),
+            continuations: self.continuations.report(),
+            reload: self.reload.report(),
+            teardown: self.teardown.report(),
             prefix: self.prefix.report(),
+            exhaustion: self.exhaustion.report(),
         }
     }
 
@@ -329,12 +754,39 @@ impl WifiRxCounters {
         bump(&self.service_errors);
     }
 
+    pub(crate) fn capacity_drain(&self) {
+        bump(&self.capacity_drains);
+    }
+
+    /// One continuation for `reason`, the `streak`-th of its drain.
+    pub(crate) fn continuation(&self, reason: DatapathRxProgress, streak: u32) {
+        if let Some(counter) = self.continuations.reason(reason) {
+            bump(counter);
+        }
+        self.continuations
+            .longest_streak
+            .fetch_max(streak, Ordering::Relaxed);
+    }
+
     pub(crate) fn immediate_continuation(&self) {
-        bump(&self.immediate_continuations);
+        bump(&self.continuations.immediate);
     }
 
     pub(crate) fn timed_continuation(&self) {
-        bump(&self.timed_continuations);
+        bump(&self.continuations.timed);
+    }
+
+    pub(crate) fn mask_confirm(&self, waited: Duration) {
+        self.teardown
+            .mask_confirm_us
+            .store(saturating_micros(waited), Ordering::Relaxed);
+    }
+
+    pub(crate) fn drain(&self, waited: Duration, polls: u32) {
+        self.teardown
+            .drain_us
+            .store(saturating_micros(waited), Ordering::Relaxed);
+        self.teardown.drain_polls.store(polls, Ordering::Relaxed);
     }
 
     pub(crate) fn prefix_refused(&self, reason: RxError) {
@@ -350,8 +802,13 @@ impl WifiRxCounters {
         }
     }
 
-    pub(crate) fn reload_attempts(&self, attempts: u32) {
-        self.max_reload_attempts
-            .fetch_max(attempts, Ordering::Relaxed);
+    /// A lease returned to a full pool; `snapshot` is what the runner read
+    /// before its capacity drain.
+    pub(crate) fn exhaustion(&self, snapshot: WifiRxExhaustion) {
+        self.exhaustion.record(snapshot);
+    }
+
+    pub(crate) fn reload_evidence(&self, evidence: RxReloadRepairEvidence) {
+        self.reload.record(evidence);
     }
 }

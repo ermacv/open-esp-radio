@@ -42,7 +42,7 @@ use crate::{
     rx::{
         arena::WifiRxArena,
         control::ReceiveStopHandle,
-        counters::WifiRxReport,
+        counters::{WifiRxContinuationReport, WifiRxReport, WifiRxTeardownReport},
         frontier::RxFrontierError,
         returns::{HeldRxFrame, RxReturnNotifier},
         sink::CountingAdmission,
@@ -157,6 +157,10 @@ struct HostRadio {
 }
 
 impl RxDma for HostRadio {
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        self.host.walker.borrow_mut().descriptor_base_register()
+    }
+
     fn last_descriptor_low(&mut self) -> u32 {
         self.host.walker.borrow_mut().last_descriptor_low()
     }
@@ -667,13 +671,13 @@ fn probe_pending_keeps_rx_masked() {
     // Four immediate self-wakes, then one timer wait.
     for poll in 1..=IMMEDIATE_CONTINUATIONS {
         harness.poll_once();
-        assert_eq!(harness.report().immediate_continuations, poll);
+        assert_eq!(harness.report().continuations.immediate, poll);
         assert_eq!(harness.clock.next_deadline(), None);
     }
     harness.poll_once();
     let report = harness.report();
     assert_eq!(
-        (report.immediate_continuations, report.timed_continuations),
+        (report.continuations.immediate, report.continuations.timed),
         (IMMEDIATE_CONTINUATIONS, 1)
     );
     let now = oer_time::Clock::now(harness.clock);
@@ -953,7 +957,7 @@ fn report_counts_units_bytes_and_drops() {
     assert_eq!((report.service_passes, report.service_errors), (3, 0));
     // The empty unit's discard and the staged units' rearm each settled
     // one reload doorbell, on its first observation.
-    assert_eq!(report.max_reload_attempts, 1);
+    assert_eq!(report.reload.max_reload_attempts, 1);
 }
 
 const STAGE: usize = 8;
@@ -1286,6 +1290,274 @@ fn teardown_quarantines_when_p1_never_drains() {
     );
     assert_eq!(harness.walker_stops(), 0);
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    // The drain waited its whole bound, one poll at a time.
+    let polls = DRAIN_TIMEOUT.as_micros() / DRAIN_POLL.as_micros();
+    assert_eq!(
+        harness.report().teardown,
+        WifiRxTeardownReport {
+            mask_confirm_us: 0,
+            drain_us: DRAIN_TIMEOUT.as_micros() as u32,
+            drain_polls: polls as u32,
+        }
+    );
     // The frames stay queued with their leases.
     assert!(poll_next(&mut frames).is_some());
+}
+
+#[test]
+fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
+    let (mut harness, held, _, _) = returning_harness();
+    // The upper layer takes and keeps every staging slot; nothing completes
+    // after that, so nothing blocks either.
+    for _ in 0..STAGE {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    assert_eq!(held.borrow().len(), STAGE);
+    assert_eq!(harness.report().stage_capacity_blocks, 0);
+    assert_eq!(harness.report().exhaustion.snapshots, 0);
+    let (next_low, last_low) = {
+        let walker = harness.host.walker.borrow();
+        (walker.next_descriptor_low, walker.last_descriptor_low)
+    };
+
+    // A second of hold, then one lease comes back.
+    let release_at =
+        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(1_000));
+    harness.clock.advance_to(release_at);
+    harness.host.walker.borrow_mut().clear_operations();
+    held.borrow_mut().pop();
+    harness.poll_once();
+    let exhaustion = harness.report().exhaustion;
+    assert_eq!(exhaustion.snapshots, 1);
+    let snapshot = exhaustion.longest.expect("the return took a snapshot");
+    assert!(snapshot.blocked_us >= 1_000_000, "{snapshot:?}");
+    assert_eq!(
+        (snapshot.next_low, snapshot.next_upper, snapshot.last_low),
+        (next_low, false, last_low)
+    );
+    assert_eq!(snapshot.base, Some(harness.base));
+    assert!(snapshot.walker_enabled);
+    assert!(!snapshot.reload_doorbell);
+    assert_eq!(snapshot.ring_base, harness.base);
+    // The state of the full pool, one lease already back.
+    assert_eq!(snapshot.staged, STAGE as u32 - 1);
+    assert_eq!(snapshot.detached, STAGE as u32 - 1);
+    // The snapshot read before the drain touched anything.
+    let operations = harness.host.walker.borrow().operations().to_vec();
+    assert_eq!(
+        operations.get(..2),
+        Some(
+            &[
+                RxWalkerOperation::ObserveNext,
+                RxWalkerOperation::ObserveLast
+            ][..]
+        ),
+        "{operations:?}"
+    );
+
+    // A return to a pool that is no longer full takes no snapshot.
+    harness.settle();
+    held.borrow_mut().pop();
+    harness.settle();
+    assert_eq!(harness.report().capacity_drains, 2);
+    assert_eq!(harness.report().exhaustion.snapshots, 1);
+}
+
+#[test]
+fn a_walker_restart_counts_one_republication_one_capacity_drain_and_frames_after() {
+    let (mut harness, held, holding, _) = returning_harness();
+    // Every lease is held while the ring fills behind them and the walker
+    // reaches NEXT = 0.
+    for _ in 0..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    let before = harness.report();
+    assert_eq!(before.units, STAGE as u32);
+    assert_eq!(before.capacity_drains, 0);
+    assert_eq!(before.reload.exhausted_republications, 0);
+    assert_eq!(harness.host.walker.borrow().next_descriptor_low, 0);
+
+    // The release is one capacity drain, which republishes the exhausted
+    // list's head through BASE exactly once.
+    holding.set(false);
+    held.borrow_mut().clear();
+    harness.settle();
+    let released = harness.report();
+    assert_eq!(released.capacity_drains, 1);
+    assert_eq!(
+        (
+            released.reload.exhausted_republications,
+            released.reload.republications_accepted
+        ),
+        (1, 0)
+    );
+
+    // The walker fetches the head: the republication is accepted, and a
+    // frame lands after the release.
+    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
+    harness.settle();
+    harness.frame(150);
+    harness.settle();
+    let after = harness.report();
+    assert_eq!(after.capacity_drains, 1);
+    assert_eq!(
+        (
+            after.reload.exhausted_republications,
+            after.reload.republications_accepted
+        ),
+        (1, 1)
+    );
+    assert_eq!(after.units, COUNT as u32 + 1);
+    assert_eq!(after.service_errors, 0);
+}
+
+#[test]
+fn a_rearm_continuation_counts_as_drained() {
+    let mut harness = harness().started();
+    harness.frame(200);
+    harness.settle();
+    // The first pass staged the unit and released its buffer; the one
+    // continuation reran the pass to rearm it, and the drain unmasked.
+    let continuations = harness.report().continuations;
+    assert_eq!(
+        continuations,
+        WifiRxContinuationReport {
+            immediate: 1,
+            longest_streak: 1,
+            drained: 1,
+            ..WifiRxContinuationReport::default()
+        }
+    );
+    assert_eq!(continuations.continued(DatapathRxProgress::Drained), 1);
+}
+
+#[test]
+fn probe_continuations_count_their_reason_and_the_longest_streak() {
+    let mut harness = harness().started();
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    harness.host.p3();
+    for _ in 0..=IMMEDIATE_CONTINUATIONS {
+        harness.poll_once();
+    }
+    let streak = IMMEDIATE_CONTINUATIONS + 1;
+    assert_eq!(
+        harness.report().continuations,
+        WifiRxContinuationReport {
+            immediate: IMMEDIATE_CONTINUATIONS,
+            timed: 1,
+            longest_streak: streak,
+            probe_pending: streak,
+            ..WifiRxContinuationReport::default()
+        }
+    );
+
+    // The probe keeps one drain running until the walker moves on: every
+    // continuation is that drain's, so its streak is their count.
+    harness.settle();
+    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
+    harness.settle();
+    assert!(harness.host.mac().rx_delivery_enabled());
+    let continuations = harness.report().continuations;
+    let probes = continuations.continued(DatapathRxProgress::ProbePending);
+    assert!(probes > streak);
+    assert_eq!(continuations.longest_streak, probes);
+    assert_eq!(continuations.immediate + continuations.timed, probes);
+    assert_eq!(
+        continuations.continued(DatapathRxProgress::StageCapacityBlocked),
+        0
+    );
+}
+
+#[test]
+fn teardown_measures_no_wait_when_the_mask_confirms_and_nothing_is_staged() {
+    let mut harness = harness().started();
+    harness.frame(200);
+    harness.settle();
+    harness.stop.request_stop();
+    harness.settle();
+    assert_eq!(
+        harness.stop.try_exit().map(|exit| exit.end),
+        Some(WifiRxEnd::Halted)
+    );
+    assert_eq!(harness.report().teardown, WifiRxTeardownReport::default());
+}
+
+#[test]
+fn teardown_measures_the_mask_timeout_of_a_deaf_doorbell() {
+    let mut harness = harness().started();
+    harness.host.deaf.set(true);
+    harness.stop.request_stop();
+    harness.settle();
+    assert_eq!(
+        harness.stop.try_exit().map(|exit| exit.end),
+        Some(WifiRxEnd::Quarantined {
+            reason: WifiRxQuarantine::MaskTimeout,
+            walker_stopped: false,
+        })
+    );
+    // The drain never ran.
+    assert_eq!(
+        harness.report().teardown,
+        WifiRxTeardownReport {
+            mask_confirm_us: MASK_CONFIRM_TIMEOUT.as_micros() as u32,
+            drain_us: 0,
+            drain_polls: 0,
+        }
+    );
+}
+
+#[test]
+fn teardown_measures_the_drain_of_a_late_p1_drop() {
+    let (mut harness, mut frames) = queue_harness();
+    for _ in 0..3 {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    harness.stop.request_stop();
+    // Masked at once; the first drain check finds the queued frames and
+    // waits one poll.
+    harness.poll_once();
+    let start = oer_time::Clock::now(harness.clock);
+    for _ in 0..5 {
+        harness.clock.advance_to_next_deadline();
+        harness.poll_once();
+    }
+    assert!(harness.stop.try_exit().is_none());
+    // The application drops its frames late; the next check passes.
+    while let Some(held) = poll_next(&mut frames) {
+        drop(held);
+    }
+    harness.clock.advance_to_next_deadline();
+    harness.poll_once();
+    assert_eq!(
+        harness.stop.try_exit().map(|exit| exit.end),
+        Some(WifiRxEnd::Halted)
+    );
+    let waited = oer_time::Clock::now(harness.clock).saturating_duration_since(start);
+    assert_eq!(waited, Duration::from_micros(6 * DRAIN_POLL.as_micros()));
+    assert_eq!(
+        harness.report().teardown,
+        WifiRxTeardownReport {
+            mask_confirm_us: 0,
+            drain_us: waited.as_micros() as u32,
+            drain_polls: 6,
+        }
+    );
 }

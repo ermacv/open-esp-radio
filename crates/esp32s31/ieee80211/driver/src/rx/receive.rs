@@ -18,14 +18,18 @@
 //!   [`CONTINUATION_WAIT`] timer wait. A pass blocked on staging capacity
 //!   stays masked and waits for the capacity fact, which the upper layer
 //!   posts when it returns a lease ([`super::returns`]): the walker may be
-//!   exhausted then, with no RX interrupt to come.
+//!   exhausted then, with no RX interrupt to come. When a drain left every
+//!   staging slot claimed or every buffer detached, the next wake that
+//!   carries a returned lease first reads the walker registers and the
+//!   ring's view into the counters' exhaustion snapshot (report-only).
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
 //!   silence the routes; close promiscuous receive and request the MAC
 //!   runtime stop; wait until no lease is staged, no buffer is detached and
 //!   the MAC runtime is idle (bounded); stop the walker exactly once. A fault
 //!   poisons the arena before the stop; a refused stop poisons it after, and
-//!   is never repeated.
+//!   is never repeated. The mask and drain waits are measured into the
+//!   counters' teardown report.
 //! - **Park.** Publish the [`WifiRxExit`] to the application and hold every
 //!   owner forever: nothing is quiesced, released or reset.
 
@@ -55,7 +59,7 @@ use oer_time::{Duration, Instant, Timer};
 use super::{
     arena::WifiRxParts,
     control::{ReceiveRunnerControl, WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
-    counters::WifiRxCounters,
+    counters::{WifiRxCounters, WifiRxExhaustion},
     frontier::{ReceiveFrontier, RxFrontierPhase},
     transaction::{Admission, Counters, Publisher, service},
 };
@@ -168,6 +172,7 @@ where
         publisher,
         admission,
         totals: [0; 3],
+        full_since: None,
     };
 
     let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
@@ -251,6 +256,9 @@ struct Receiver<
     admission: &'r M,
     /// The service's cumulative descriptors, units and bytes.
     totals: [u64; 3],
+    /// Since when the drains ended with every staging slot claimed or every
+    /// buffer detached; until the next wake that carries a returned lease.
+    full_since: Option<Instant>,
 }
 
 impl<
@@ -278,21 +286,42 @@ where
     /// Receive until the stop request or a fault.
     async fn run(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> WifiRxCause {
         loop {
-            let stop = poll_fn(|cx| {
+            // `None` is the stop request; otherwise whether a lease came back.
+            let wake = poll_fn(|cx| {
                 if self.control.poll_stop(cx).is_ready() {
-                    return Poll::Ready(true);
+                    return Poll::Ready(None);
                 }
                 // WDEVPWR facts are counted by the line; drain them here.
                 while self.power.poll(cx).is_ready() {}
                 // Any fact (RX, capacity) starts one drain.
-                self.irq.poll_batch(cx).map(|_facts| false)
+                self.irq
+                    .poll_batch(cx)
+                    .map(|facts| Some(facts.rx_capacity_returned()))
             })
             .await;
-            if stop {
+            let Some(capacity) = wake else {
                 return WifiRxCause::StopRequested;
-            }
+            };
+            let full_since = if capacity {
+                self.counters.capacity_drain();
+                let full_since = self.full_since.take();
+                if let Some(since) = full_since {
+                    self.observe_exhaustion(ring, since);
+                }
+                None
+            } else {
+                self.full_since.take()
+            };
             if let Err(cause) = self.drain(ring).await {
                 return cause;
+            }
+            // Every lease out: the walker has no buffer to fill until one
+            // comes back. The first full drain marks the time.
+            if usize::try_from(self.stage.claimed_slots())
+                .is_ok_and(|claimed| claimed == STAGE_SLOTS)
+                || self.rx.detached_buffer_count() == COUNT
+            {
+                self.full_since = Some(full_since.unwrap_or_else(|| self.timer.now()));
             }
         }
     }
@@ -300,7 +329,8 @@ where
     /// Service until the frontier drained or staging blocked, keeping RX
     /// masked meanwhile; unmask through the doorbell only once drained.
     async fn drain(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> Result<(), WifiRxCause> {
-        let mut streak = 0;
+        // Self-wakes since the last timer wait; continuations of this drain.
+        let (mut streak, mut continuations) = (0, 0);
         loop {
             if self.control.stop_requested() {
                 return Err(WifiRxCause::StopRequested);
@@ -334,9 +364,48 @@ where
                 | DatapathRxProgress::RecycledAppendPending
                 | DatapathRxProgress::BudgetExhausted
                 | DatapathRxProgress::NetworkBackpressured
-                | DatapathRxProgress::ProtocolBlockedByTx => self.continue_after(&mut streak).await,
+                | DatapathRxProgress::ProtocolBlockedByTx => {
+                    continuations += 1;
+                    self.counters.continuation(progress, continuations);
+                    self.continue_after(&mut streak).await;
+                }
             }
         }
+    }
+
+    /// Read the walker registers and the ring's view when a lease returned
+    /// to a pool that was full since `since`, before the capacity drain
+    /// services anything. Only reads: no register is written and no
+    /// descriptor changes hands.
+    fn observe_exhaustion(&mut self, ring: &RxRingLive<'static, COUNT>, since: Instant) {
+        let blocked = self.timer.now().saturating_duration_since(since);
+        let next = self.hardware.next_descriptor();
+        let last_low = self.hardware.last_descriptor_low();
+        let base = self.hardware.descriptor_base_register();
+        let walker_enabled = self.hardware.walker_enabled();
+        let reload_doorbell = RxDma::reload_pending(self.hardware);
+        let buffer_full = self.hardware.buffer_full_count();
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        self.counters.exhaustion(WifiRxExhaustion {
+            blocked_us: u32::try_from(blocked.as_micros()).unwrap_or(u32::MAX),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low,
+            base,
+            walker_enabled,
+            reload_doorbell,
+            buffer_full,
+            ring_base: ring.descriptor_base(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            observed: ring.observed_mask().count_ones(),
+            completed: narrow(ring.completed_frontier_len()),
+            remaining: ring.accepted_list_remaining_from_next(next).map(narrow),
+            reload_pending: ring.reload_pending(),
+            released: narrow(self.rx.released_buffer_count()),
+            detached: narrow(self.rx.detached_buffer_count()),
+            staged: self.stage.claimed_slots(),
+        });
     }
 
     fn service_once(
@@ -359,8 +428,7 @@ where
             self.hardware,
             (),
         );
-        self.counters
-            .reload_attempts(ring.reload_repair_evidence().max_reload_attempts);
+        self.counters.reload_evidence(ring.reload_repair_evidence());
         result.map_err(|error| {
             self.counters.service_error();
             WifiRxCause::Service(error)
@@ -438,8 +506,10 @@ where
         }
     }
 
-    /// Ask the line to mask both banks; whether it confirmed in time.
+    /// Ask the line to mask both banks; whether it confirmed in time. The
+    /// wait is counted.
     async fn mask_all(&mut self) -> bool {
+        let start = self.timer.now();
         self.requests.ring(WifiIrqRequest::MaskAll, self.doorbell);
         let deadline = self.timer.deadline_after(MASK_CONFIRM_TIMEOUT).ok();
         let irq = &mut self.irq;
@@ -453,13 +523,26 @@ where
                 }
             }
         });
-        within(self.timer, deadline, confirmed).await.is_some()
+        let confirmed = within(self.timer, deadline, confirmed).await.is_some();
+        self.counters
+            .mask_confirm(self.timer.now().saturating_duration_since(start));
+        confirmed
     }
 
     /// Wait until no lease is staged, no buffer is detached and the MAC
-    /// runtime is idle; whether that happened in time.
+    /// runtime is idle; whether that happened in time. The wait and its
+    /// polls are counted.
     async fn drained(&mut self) -> bool {
-        let deadline = self.timer.deadline_after(DRAIN_TIMEOUT).ok();
+        let start = self.timer.now();
+        let mut polls = 0;
+        let drained = self.drain_checks(start, &mut polls).await;
+        self.counters
+            .drain(self.timer.now().saturating_duration_since(start), polls);
+        drained
+    }
+
+    async fn drain_checks(&mut self, start: Instant, polls: &mut u32) -> bool {
+        let deadline = start.checked_add(DRAIN_TIMEOUT);
         loop {
             if self.stage.claimed_slots() == 0
                 && self.rx.detached_buffer_count() == 0
@@ -471,7 +554,10 @@ where
                 return false;
             }
             match self.timer.deadline_after(DRAIN_POLL) {
-                Ok(next) => self.timer.wait_until(next).await,
+                Ok(next) => {
+                    *polls = polls.saturating_add(1);
+                    self.timer.wait_until(next).await;
+                }
                 Err(oer_time::TimeOverflow) => return false,
             }
         }
