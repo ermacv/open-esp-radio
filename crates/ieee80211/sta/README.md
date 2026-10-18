@@ -220,6 +220,8 @@ be called from the runtime path; their checked values remain in closed types.
 `StaConfig::listen_interval` uses the checked nonzero `StationListenInterval`
 in beacon intervals. Association advertises that exact value; the composition
 chooses it together with its power-save policy, without a hidden station default.
+`StaConfig::access_point_margin_db`: owner policy 6 dB, supplied by the
+composition.
 
 The interface configuration carries `OwnAddress`; an Open Authentication
 request takes it separately from the peer's `Bssid`. Both wrap the MAC
@@ -396,6 +398,25 @@ is prepared normally; Sent goes through retransmission with the same SN/PN.
 KeyRemoved retires that MSDU and releases admission and resources. A barrier
 waits only the current publication; rate selection ignores every withdrawal.
 
+
+## Design decisions (owner, 2026-10-16; re-check when the station is built on the port at W3)
+
+- **Modem sleep.** Split first: `Connected` keeps only the deciding half, as
+  a typed state. Null-frame retries belong to the driver's attempt plan; the
+  coexistence part belongs to the radio system.
+- **Link loss.** The beacon-loss window pauses during an absence and restarts
+  on `LeaseEnded`. In power save it counts expected beacons (from the listen
+  interval or DTIM). `StaBeaconLossConfig` and `StaLinkProbePolicy` live in
+  `StaConfig` without defaults; the composition supplies the values with
+  their `SOURCE`.
+- **Pattern A, answer slots.** An `AnswerSlot` is taken for each request.
+  Every exit from `AwaitAnswer` carries the slot into an explicit state.
+  Cancelling while a request is in flight is legal. `UncorrelatedAnswer` is
+  an error only when no slot exists.
+- **Pattern B, refusals.** Each command kind has its own refusal.
+- **Pattern E, bounded steps.** A `while … take_due` loop has a step limit;
+  exceeding it is a contract error. An absence ends no later than
+  `listen_end`.
 
 ## Responses to lifecycle actions
 

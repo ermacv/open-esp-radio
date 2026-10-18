@@ -22,6 +22,14 @@ data.
 | [IEEE 802.15.4 driver port](ieee802154-driver-port.md) | Complete open driver ledger, closed dependencies and ownership map |
 | [Hardware measurements](measurements.md) | Predecessor's recorded on-chip values, conditions and status |
 
+Platform notes record measured behaviour and techniques, with their
+conditions and dates:
+
+| Note | Subject |
+| --- | --- |
+| [Bring-up order](bring-up-order.md) | Wi-Fi PHY and coexistence before common power; the failed orders |
+| [Core 1 sampling](core1-sampling.md) | Reading core 1's PC and SP from the debug-assist record |
+
 [Registers](../../../registers/README.md) owns reviewed hardware models
 and publication; vendor artifact pins are in
 [`vendor/artifacts.toml`](../vendor/artifacts.toml). Production behavior belongs
