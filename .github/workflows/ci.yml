@@ -24,6 +24,12 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Pinned ESP-IDF sources
+        # The IEEE 802.15.4 host stand compiles the pinned ESP-IDF driver
+        # sources in its build script; fetch exactly those pins.
+        run: |
+          cargo pins fetch --chip esp32s31 $(sed -n 's/^id = "\(esp-idf\/[^"]*\)"/\1/p' \
+            knowledge/esp32s31/vendor/artifacts.toml)
       - name: Clippy
         run: |
           # One JSON run: its errors fail the step, its warnings are only
