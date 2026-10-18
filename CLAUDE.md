@@ -24,7 +24,7 @@ without vendor radio binaries. Owner decisions are in
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
+  constants; time in tests comes from the virtual clocks of `oer-base-time-virtual`.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
@@ -59,7 +59,8 @@ Espressif IP and vendor algorithms shared by their chips to
 `crates/espressif/`, portable protocol code to its protocol directory, and
 code without chip or protocol to `crates/base/`, `crates/radio/` or
 `crates/exec/`. Bindings to external frameworks live in `crates/adapters/`.
-A crate never sits inside another crate's directory. A new crate needs a
+A crate never sits inside another crate's directory, and its package is named
+after its directory (`tools/README.md`). A new crate needs a
 reason: dependency direction, a license boundary, a different target or
 dependency set, or an independent consumer; otherwise it is a module.
 

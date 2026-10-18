@@ -316,6 +316,14 @@ decision holds and the code is changed in the port's fix pass.
   designed at W3 together with a conformance suite that runs the same cases
   against the host model and the hardware; the port freezes after W4.
 
+## 2026-10-18: package names
+
+- **A package is named after its directory**, not after the predecessor's
+  names: `crates/<path>` is `oer-<path>`, `firmware/<path>` is
+  `oer-firmware-<path>`, a tool is `oer-tool-<path below tools/ without
+  lib/>`, with no `[lib] name`. A clearer name moves the directory; the
+  layers test checks the rule.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
