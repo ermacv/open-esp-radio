@@ -11,9 +11,33 @@ pub const DESCRIPTOR_BYTES: u32 = 12;
 pub const SIZE_MASK: u32 = 0x0000_3fff;
 pub const LENGTH_MASK: u32 = 0x0fff_c000;
 pub const LENGTH_SHIFT: u32 = 14;
-pub const BIT_29: u32 = 0x2000_0000;
-pub const BIT_30: u32 = 0x4000_0000;
-pub const BIT_31: u32 = 0x8000_0000;
+/// RX word0 bit 29. Its meaning is not established: software clears it on
+/// rearm ([`rx_rearm_word`]) and an armed stopped-ring descriptor must carry
+/// it clear; what the hardware does with it is unknown.
+pub const BIT_29_OPAQUE: u32 = 0x2000_0000;
+/// RX word0 bit 30: set by hardware on a receive unit's terminal descriptor
+/// when the unit completes; a walk is delimited by it through the saved
+/// LAST. SOURCE: ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR,
+/// `libpp[wdev.o]::wdevProcessRxSucDataAll`
+/// (`knowledge/esp32s31/wifi/rx-walker.md`, "Vendor behaviour").
+pub const RX_DONE: u32 = 0x4000_0000;
+/// RX word0 bit 31, the owner bit: the walker checks it before writing a
+/// descriptor and stops on a clear one, without writing it; restoring it
+/// and ringing the reload doorbell resumes the walker there. Hardware
+/// leaves it set on completion, so completion is [`RX_DONE`], never a
+/// cleared owner bit. Software arms with it set and clears it on a
+/// detached descriptor ([`rx_detached_word`]).
+/// SOURCE\[HIL_W1_OWNER_BIT_2026_10_18] (`knowledge/esp32s31/wifi/rx-walker.md`,
+/// "Owner bit").
+pub const OWNER: u32 = 0x8000_0000;
+/// TX word0 bit 30 as this crate builds TX chains: set on the last
+/// descriptor of a chain and cleared on the others
+/// ([`crate::tx_ampdu_storage`]). Not the RX [`RX_DONE`]: software sets it.
+pub const TX_LAST: u32 = 0x4000_0000;
+/// TX word0 bit 31: set by software to hand a TX descriptor to the MAC
+/// ([`tx_owned_word`]). Whether the TX engine checks it as the RX walker
+/// checks [`OWNER`] is not verified.
+pub const TX_OWNED: u32 = 0x8000_0000;
 
 /// The exact three-word descriptor consumed by the Wi-Fi MAC.
 ///
@@ -141,33 +165,54 @@ pub const fn length(word0: u32) -> u32 {
 
 #[inline]
 pub const fn rx_done(word0: u32) -> bool {
-    word0 & BIT_30 != 0
+    word0 & RX_DONE != 0
 }
 
-/// Fresh/recycled RX word: bit31 set, bit30/29 clear, length equals capacity.
+/// Whether an RX word carries the [`OWNER`] bit the walker checks.
+#[inline]
+pub const fn rx_owner(word0: u32) -> bool {
+    word0 & OWNER != 0
+}
+
+/// A completed RX word as it stays while its buffer is detached: the same
+/// image with [`OWNER`] clear, so a walker that reached it would stop on it
+/// instead of writing the leased buffer (SOURCE\[HIL_W1_OWNER_BIT_2026_10_18]).
+/// [`RX_DONE`], the length and the size stay.
+#[inline]
+pub const fn rx_detached_word(word0: u32) -> u32 {
+    word0 & !OWNER
+}
+
+/// Fresh/recycled RX word: [`OWNER`] set, [`RX_DONE`] and [`BIT_29_OPAQUE`]
+/// clear, length equals capacity.
 ///
-/// S31 keeps bit31 set when it completes RX and sets bit30 as the completion
-/// marker. Software ownership must therefore be tested with [`rx_done`], not
-/// by waiting for bit31 to clear.
+/// S31 keeps [`OWNER`] set when it completes RX and sets [`RX_DONE`] as the
+/// completion marker (SOURCE\[HIL_W1_OWNER_BIT_2026_10_18]). Software
+/// ownership must therefore be tested with [`rx_done`], not by waiting for
+/// the owner bit to clear.
 pub const fn rx_armed_word(capacity: u32) -> Option<u32> {
     if capacity == 0 || capacity > SIZE_MASK {
         None
     } else {
-        Some(capacity | (capacity << LENGTH_SHIFT) | BIT_31)
+        Some(capacity | (capacity << LENGTH_SHIFT) | OWNER)
     }
 }
 
-/// Rearms a hardware-completed RX word while preserving unrelated bits.
+/// Rearms a hardware-completed or detached RX word while preserving unrelated
+/// bits: [`OWNER`] is set again, [`RX_DONE`] and [`BIT_29_OPAQUE`] cleared.
 pub const fn rx_rearm_word(word0: u32) -> Option<u32> {
     let capacity = size(word0);
     if capacity == 0 {
         None
     } else {
-        Some((word0 & !(LENGTH_MASK | BIT_29 | BIT_30)) | BIT_31 | (capacity << LENGTH_SHIFT))
+        Some(
+            (word0 & !(LENGTH_MASK | BIT_29_OPAQUE | RX_DONE)) | OWNER | (capacity << LENGTH_SHIFT),
+        )
     }
 }
 
-/// Fresh single-node TX storage word: bits31/30 set, bit29 clear.
+/// Fresh single-node TX storage word: [`TX_OWNED`] and [`TX_LAST`] set,
+/// bit 29 clear.
 ///
 /// `capacity` is the complete DMA-visible allocation encoded in the low 14
 /// bits. `transfer_length` is the populated source range encoded in the high
@@ -182,6 +227,6 @@ pub const fn tx_owned_word(capacity: u32, transfer_length: u32) -> Option<u32> {
     {
         None
     } else {
-        Some(capacity | (transfer_length << LENGTH_SHIFT) | BIT_30 | BIT_31)
+        Some(capacity | (transfer_length << LENGTH_SHIFT) | TX_LAST | TX_OWNED)
     }
 }

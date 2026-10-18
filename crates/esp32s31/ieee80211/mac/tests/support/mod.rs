@@ -261,7 +261,7 @@ pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
     let tail_index =
         usize::try_from((last_descriptor_address - descriptor_base) / DESCRIPTOR_BYTES).unwrap();
     let later_index = (tail_index + 1) % COUNT;
-    descriptors[later_index].write_word0(descriptors[later_index].word0() | BIT_30);
+    descriptors[later_index].write_word0(descriptors[later_index].word0() | RX_DONE);
     mmio.set_rx_last_descriptor_address(descriptor_base + later_index as u32 * DESCRIPTOR_BYTES);
     assert!(live.observe_current_completed_unit_link_release(mmio, descriptor_count));
 }

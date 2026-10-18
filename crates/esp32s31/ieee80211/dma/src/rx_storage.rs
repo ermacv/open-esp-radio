@@ -463,10 +463,14 @@ impl<
 
     /// Detach one complete hardware buffer for zero-copy upper ownership.
     ///
-    /// The descriptor remains observed and CPU-owned in the ring. Dropping
-    /// the returned buffer marks it released; only a later ring-owner service
-    /// may rearm the descriptor.
-    pub fn detach_single(mut self) -> Result<RxDmaDetachedUnit, RxRingError>
+    /// The descriptor remains observed and CPU-owned in the ring. Before the
+    /// buffer is returned, the descriptor's owner bit is cleared and `mmio`
+    /// fences, so a walker that ever reached it would stop on it instead of
+    /// writing the leased buffer (the second layer next to the reserved
+    /// descriptor, [`RxRingLive`]). Dropping the returned buffer marks it
+    /// released; only a later ring-owner service may rearm the descriptor,
+    /// which sets the owner bit again.
+    pub fn detach_single<M: RxDma>(mut self, mmio: &mut M) -> Result<RxDmaDetachedUnit, RxRingError>
     where
         'storage: 'static,
     {
@@ -480,9 +484,11 @@ impl<
             .storage
             .descriptor_buffer_id(index)
             .ok_or(RxRingError::Count)?;
+        let detached_word = self.ring.detached_word(index)?;
         let buffer = self
             .storage
             .detach_buffer(self.unit.total_length(), buffer_id)?;
+        self.ring.publish_detached(mmio, index, detached_word);
         self.requires_recycle = false;
         Ok(RxDmaDetachedUnit {
             buffer,
@@ -603,6 +609,19 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     fn reserved_port(&self) -> ReservedBufferPort<'_, BUFFER_SIZE, STORAGE_SIZE> {
         ReservedBufferPort(&self.reserved_buffer)
+    }
+
+    /// The descriptor table a model walker lands frames in and resolves its
+    /// cursors against (test support only); `None` when the arena has no
+    /// DMA address in its space.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn walker_table(&self) -> Option<crate::rx_dma::RxWalkerTable<'_>> {
+        let base = self.descriptor_base_address().ok()?;
+        Some(crate::rx_dma::RxWalkerTable::new(
+            base,
+            self.descriptors.ring(),
+            self.descriptors.reserved(),
+        ))
     }
 
     pub const fn buffers(&self) -> &[RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; COUNT] {

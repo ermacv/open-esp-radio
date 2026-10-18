@@ -110,6 +110,11 @@ tree is a selection of a predecessor repository, without its history.
   arbiter, repository tooling, the Bluetooth driver, the old Wi-Fi execution
   form, ESP32-C5 crates, the facade) stays out.
 
+## 2026-10-18: the RX descriptor walker
+
+- **Owner bit.** Detached RX descriptors carry owner bit 31 clear: the
+  walker stops on one instead of writing it (owner, 2026-10-18).
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.

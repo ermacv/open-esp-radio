@@ -15,12 +15,22 @@
 //! [`RxWalkerModel::lose_reloads`] makes doorbells miss that resumption.
 //! A doorbell rung while NEXT is nonzero changes nothing; that case is not
 //! verified on hardware.
+//!
+//! [`RxWalkerModel::land`] plays the DMA engine writing one frame where NEXT
+//! points, and honours the owner bit as the stand observed it
+//! (HIL_W1_OWNER_BIT_2026_10_18): a descriptor whose owner bit is clear
+//! stops the walker there, unwritten, with NEXT naming it; once that
+//! descriptor carries the owner bit again, one doorbell resumes the walker
+//! in place. The doorbell that follows `LAST.next` on an exhausted walker
+//! does not check LAST's owner bit (H1). The model clears a stop on the
+//! enable edge, which the stand did not exercise.
 
+use super::RxWalkerTable;
 use super::{
     RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
     RxDmaWalkerEnabled, RxDmaWalkerStopped,
 };
-use crate::descriptor::DESCRIPTOR_BYTES;
+use crate::descriptor::{DESCRIPTOR_BYTES, LENGTH_SHIFT, OWNER, RX_DONE, rx_owner, size};
 
 /// The walker's cursor registers report the low 20 address bits.
 const CURSOR_LOW_MASK: u32 = 0x000f_ffff;
@@ -46,6 +56,20 @@ pub enum RxWalkerOperation {
     Fence,
 }
 
+/// Where one modelled frame went ([`RxWalkerModel::land`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxWalkerLanding {
+    /// Written into the descriptor at this low address.
+    Landed(u32),
+    /// The walker is disabled or exhausted (NEXT zero), or NEXT names no
+    /// descriptor of the table: nothing was written.
+    Exhausted,
+    /// The walker stopped on the descriptor at this low address, NEXT, whose
+    /// owner bit was clear (or which it already stopped on, awaiting its
+    /// doorbell): nothing was written.
+    StoppedOnOwner(u32),
+}
+
 /// Register-level model of the RX descriptor walker.
 pub struct RxWalkerModel {
     /// `RX_LAST_DESCRIPTOR` low address bits.
@@ -69,6 +93,10 @@ pub struct RxWalkerModel {
     pub lose_reloads: u32,
     /// The NEXT a rung doorbell applies when it clears.
     reload_resumes_at: Option<u32>,
+    /// The walker stopped on NEXT, a descriptor whose owner bit was clear.
+    pub stopped_on_owner: bool,
+    /// A rung doorbell resumes the stopped walker in place when it clears.
+    reload_resumes_in_place: bool,
     /// A stop request leaves the walker running and reads back as enabled.
     pub refuse_stop: bool,
     /// The starvation counter, when the modelled platform has one.
@@ -98,6 +126,8 @@ impl RxWalkerModel {
             reload_stuck: false,
             lose_reloads: 0,
             reload_resumes_at: None,
+            stopped_on_owner: false,
+            reload_resumes_in_place: false,
             refuse_stop: false,
             buffer_full_count: None,
             log: [RxWalkerOperation::Fence; RX_WALKER_LOG_CAPACITY],
@@ -143,6 +173,41 @@ impl RxWalkerModel {
         self.overflowed = false;
     }
 
+    /// Play the DMA engine: write one frame of `length` bytes where NEXT
+    /// points (`terminal`: its last segment, which sets `RX_DONE` and moves
+    /// LAST there) and follow that descriptor's link.
+    ///
+    /// The walker checks the owner bit first: on a clear one it stops,
+    /// writes nothing and leaves NEXT naming that descriptor, until the
+    /// descriptor carries the owner bit again and a doorbell resumes it.
+    /// The frame bytes are the caller's to write into the landed
+    /// descriptor's buffer.
+    pub fn land(
+        &mut self,
+        table: RxWalkerTable<'_>,
+        length: u32,
+        terminal: bool,
+    ) -> RxWalkerLanding {
+        let next = self.next_descriptor_low;
+        if !self.walker_enabled || next == 0 {
+            return RxWalkerLanding::Exhausted;
+        }
+        let Some(descriptor) = table.descriptor_at_low(next) else {
+            return RxWalkerLanding::Exhausted;
+        };
+        if self.stopped_on_owner || !rx_owner(descriptor.word0()) {
+            self.stopped_on_owner = true;
+            return RxWalkerLanding::StoppedOnOwner(next);
+        }
+        let done = if terminal { RX_DONE } else { 0 };
+        descriptor.write_word0(size(descriptor.word0()) | (length << LENGTH_SHIFT) | done | OWNER);
+        if terminal {
+            self.last_descriptor_low = next;
+        }
+        self.next_descriptor_low = descriptor.next_address() & CURSOR_LOW_MASK;
+        RxWalkerLanding::Landed(next)
+    }
+
     fn record(&mut self, operation: RxWalkerOperation) {
         match self.log.get_mut(self.logged) {
             Some(slot) => {
@@ -164,9 +229,13 @@ impl RxWalkerModel {
                 true
             }
             None => {
-                // The doorbell clears: an exhausted walker resumes now.
+                // The doorbell clears: an exhausted walker resumes now, a
+                // walker stopped on a rearmed descriptor resumes in place.
                 if let Some(next) = self.reload_resumes_at.take() {
                     self.next_descriptor_low = next;
+                }
+                if core::mem::take(&mut self.reload_resumes_in_place) {
+                    self.stopped_on_owner = false;
                 }
                 false
             }
@@ -249,7 +318,18 @@ impl RxDma for RxWalkerModel {
     fn request_reload(&mut self, binding: &RxDmaBinding<'_>) {
         self.record(RxWalkerOperation::RequestReload);
         self.reload_pending_observations = self.reload_latency;
-        if !self.walker_enabled || self.next_descriptor_low != 0 {
+        if !self.walker_enabled {
+            return;
+        }
+        if self.stopped_on_owner {
+            // Resumed in place only once the descriptor it stopped on
+            // carries the owner bit again.
+            self.reload_resumes_in_place = binding
+                .descriptor_at_low(self.next_descriptor_low)
+                .is_some_and(|stopped| rx_owner(stopped.word0()));
+            return;
+        }
+        if self.next_descriptor_low != 0 {
             return;
         }
         if self.lose_reloads != 0 {
@@ -299,6 +379,8 @@ impl RxWalkerModel {
     /// An enabled walker with an exhausted cursor fetches the published head.
     fn start_walker(&mut self) {
         self.walker_enabled = true;
+        self.stopped_on_owner = false;
+        self.reload_resumes_in_place = false;
         if self.next_descriptor_low == 0 {
             self.next_descriptor_low = self.descriptor_base & CURSOR_LOW_MASK;
         }
@@ -458,5 +540,119 @@ mod tests {
         }
         assert_eq!(walker.next_descriptor_low, 0, "every doorbell is lost");
         assert_eq!(walker.lose_reloads, u32::MAX);
+    }
+
+    /// A bound four-descriptor table at [`BASE`] linked 0 → 1 → 2 → 3 → 0,
+    /// every descriptor armed with a 16-byte buffer, and its binding.
+    fn armed_table() -> (RxWalkerTable<'static>, RxDmaBinding<'static>) {
+        let table = std::boxed::Box::leak(std::boxed::Box::new(RxDescriptorTable::<4>::new()));
+        let arena = std::boxed::Box::leak(std::boxed::Box::new(RxArenaWords::new()));
+        let armed = crate::descriptor::rx_armed_word(16).unwrap();
+        for (index, descriptor) in table.ring().iter().enumerate() {
+            let next = BASE + ((index as u32 + 1) % 4) * DESCRIPTOR_BYTES;
+            descriptor.inject_corrupt_words(armed, 0x2f01_0000, next);
+        }
+        let walker_table = RxWalkerTable::new(BASE, table.ring(), table.reserved());
+        (walker_table, RxDmaBinding::new(table, BASE, arena).unwrap())
+    }
+
+    fn walking_at(next: usize) -> RxWalkerModel {
+        let mut walker = RxWalkerModel::new();
+        walker.walker_enabled = true;
+        walker.set_cursor(BASE, 3, Some(next));
+        walker
+    }
+
+    #[test]
+    fn a_frame_lands_where_next_points_and_the_walker_follows_the_link() {
+        let (table, _) = armed_table();
+        let mut walker = walking_at(1);
+        assert_eq!(
+            walker.land(table, 5, false),
+            RxWalkerLanding::Landed(descriptor_low(BASE, 1))
+        );
+        let first = table.ring[1].word0();
+        assert_eq!((rx_owner(first), first & RX_DONE), (true, 0));
+        assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 3));
+        assert_eq!(
+            walker.land(table, 7, true),
+            RxWalkerLanding::Landed(descriptor_low(BASE, 2))
+        );
+        let terminal = table.ring[2].word0();
+        assert_eq!(terminal, 16 | (7 << LENGTH_SHIFT) | RX_DONE | OWNER);
+        assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 2));
+        assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 3));
+
+        let mut walker = walking_at(1);
+        walker.next_descriptor_low = 0;
+        assert_eq!(walker.land(table, 5, true), RxWalkerLanding::Exhausted);
+    }
+
+    #[test]
+    fn the_walker_stops_on_a_clear_owner_bit_without_writing_it() {
+        let (table, _) = armed_table();
+        let detached =
+            crate::descriptor::rx_detached_word(16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER);
+        table.ring[1].write_word0(detached);
+        let mut walker = walking_at(1);
+        for _ in 0..3 {
+            assert_eq!(
+                walker.land(table, 5, true),
+                RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1))
+            );
+        }
+        assert!(walker.stopped_on_owner);
+        assert_eq!(table.ring[1].word0(), detached, "never written");
+        assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 1));
+        assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 3));
+    }
+
+    #[test]
+    fn a_rearmed_descriptor_and_one_doorbell_resume_the_stopped_walker_in_place() {
+        let (table, binding) = armed_table();
+        let completed = 16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER;
+        table.ring[1].write_word0(crate::descriptor::rx_detached_word(completed));
+        let mut walker = walking_at(1);
+        let stopped = RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1));
+        assert_eq!(walker.land(table, 5, true), stopped);
+
+        // A doorbell while the descriptor is still detached resumes nothing.
+        walker.request_reload(&binding);
+        assert!(!walker.reload_pending());
+        assert_eq!(walker.land(table, 5, true), stopped);
+
+        // Rearmed but no doorbell: still stopped.
+        table.ring[1].write_word0(crate::descriptor::rx_rearm_word(completed).unwrap());
+        assert_eq!(walker.land(table, 5, true), stopped);
+
+        // One doorbell resumes it in place, once it clears.
+        walker.reload_latency = 1;
+        walker.request_reload(&binding);
+        assert!(walker.reload_pending());
+        assert_eq!(walker.land(table, 5, true), stopped);
+        assert!(!walker.reload_pending());
+        assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 1));
+        assert_eq!(
+            walker.land(table, 5, true),
+            RxWalkerLanding::Landed(descriptor_low(BASE, 1))
+        );
+        assert!(!walker.stopped_on_owner);
+    }
+
+    #[test]
+    fn a_doorbell_follows_last_next_whatever_last_s_owner_bit() {
+        let (table, binding) = armed_table();
+        // LAST, descriptor 3, is detached: its owner bit is clear.
+        table.ring[3].write_word0(crate::descriptor::rx_detached_word(
+            16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER,
+        ));
+        let mut walker = exhausted_at(3);
+        walker.request_reload(&binding);
+        assert!(!walker.reload_pending());
+        assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 0));
+        assert_eq!(
+            walker.land(table, 5, true),
+            RxWalkerLanding::Landed(descriptor_low(BASE, 0))
+        );
     }
 }

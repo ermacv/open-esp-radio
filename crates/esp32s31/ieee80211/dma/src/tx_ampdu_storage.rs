@@ -12,7 +12,7 @@ use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaR
 use pin_project::pin_project;
 
 use crate::descriptor::{
-    BIT_30, DESCRIPTOR_BYTES, Descriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
+    DESCRIPTOR_BYTES, Descriptor, TX_LAST, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, bytemuck::Zeroable)]
@@ -395,7 +395,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             };
             let mut word0 = words[index];
             if next_address != 0 {
-                word0 &= !BIT_30;
+                word0 &= !TX_LAST;
             }
             self.storage.as_ref().get_ref().descriptors[index].publish_owned(
                 word0,
@@ -1160,7 +1160,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             };
             let mut word0 = words[index];
             if next_address != 0 {
-                word0 &= !BIT_30;
+                word0 &= !TX_LAST;
             }
             self.dma().storage.as_ref().get_ref().descriptors[index].publish_owned(
                 word0,
@@ -1222,7 +1222,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             let word0 = if next_address == 0 {
                 descriptor.word0
             } else {
-                descriptor.word0 & !BIT_30
+                descriptor.word0 & !TX_LAST
             };
             self.dma().storage.as_ref().get_ref().descriptors[logical_index].publish_owned(
                 word0,

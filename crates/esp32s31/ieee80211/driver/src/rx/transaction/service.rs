@@ -99,7 +99,9 @@ where
     // Freeze the completion frontier before any descriptor is rearmed.
     // A saturated producer can therefore only create a later epoch; it
     // cannot make this service call unbounded by refilling the ring.
-    let mut frozen_cursor = ring.freeze_cursor(hardware);
+    let mut frozen_cursor = ring
+        .freeze_cursor(hardware)
+        .map_err(RxStageTransactionError::Ring)?;
     let mut deferred_recycle_pending = false;
     // A discard which followed a detached valid frame could not be
     // appended in the earlier service transaction without recycling
@@ -140,7 +142,9 @@ where
             }
             return Err(RxStageTransactionError::Ring(error));
         }
-        frozen_cursor = ring.freeze_cursor(hardware);
+        frozen_cursor = ring
+            .freeze_cursor(hardware)
+            .map_err(RxStageTransactionError::Ring)?;
     }
     let frontier_snapshot = storage
         .completed_unit_frontier_through_cursor(
@@ -386,7 +390,8 @@ where
                 ));
             }
             hooks.phase(Phase::StagePool);
-            let stage = pool.stage_dma_unit_deferred_bounded(unit, maximum_payload_length);
+            let stage =
+                pool.stage_dma_unit_deferred_bounded(unit, maximum_payload_length, hardware);
             if O::LOG_ERRORS
                 && let Err(error) = &stage
             {
@@ -477,7 +482,9 @@ where
         // Valid packets remain in the original frozen generation
         // until the complete detached prefix is refilled below.
         if descriptor_replenished {
-            frozen_cursor = ring.freeze_cursor(hardware);
+            frozen_cursor = ring
+                .freeze_cursor(hardware)
+                .map_err(RxStageTransactionError::Ring)?;
         }
         hooks.phase(Phase::Frontier);
     }

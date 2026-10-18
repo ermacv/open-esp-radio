@@ -11,9 +11,9 @@ use crate::ring_index::RingIndex;
 
 use crate::{
     descriptor::{
-        BIT_29, BIT_30, BIT_31, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT, SIZE_MASK,
-        descriptor_address_valid, dma_range_valid, length as descriptor_length, rx_armed_word,
-        rx_done, rx_rearm_word, size as descriptor_size,
+        BIT_29_OPAQUE, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT, OWNER, RX_DONE,
+        SIZE_MASK, descriptor_address_valid, dma_range_valid, length as descriptor_length,
+        rx_armed_word, rx_detached_word, rx_done, rx_owner, rx_rearm_word, size as descriptor_size,
     },
     rx_dma::{RxDma, RxDmaBinding},
 };
@@ -225,6 +225,11 @@ pub struct RxReloadEvidence {
     /// Writes into the reserved descriptor after the walker reached the
     /// ring. Each poisons the arena.
     pub reserved_late_landings: u32,
+    /// NEXT reads naming a detached descriptor, whose owner bit is clear:
+    /// the walker stopped on that barrier. Impossible while every
+    /// publication follows the reserved-descriptor rules; each poisons the
+    /// arena.
+    pub walker_on_detached: u32,
 }
 
 /// The words a static RX arena keeps beside its descriptors: the sticky
@@ -248,6 +253,7 @@ pub struct RxArenaWords {
     base_writes: AtomicU32,
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
+    walker_on_detached: AtomicU32,
 }
 
 impl RxArenaWords {
@@ -264,6 +270,7 @@ impl RxArenaWords {
             base_writes: AtomicU32::new(0),
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
+            walker_on_detached: AtomicU32::new(0),
         }
     }
 
@@ -283,6 +290,7 @@ impl RxArenaWords {
             &self.base_writes,
             &self.reserved_landings,
             &self.reserved_late_landings,
+            &self.walker_on_detached,
         ] {
             word.store(0, Ordering::Relaxed);
         }
@@ -301,6 +309,7 @@ impl RxArenaWords {
             base_writes: load(&self.base_writes),
             reserved_landings: load(&self.reserved_landings),
             reserved_late_landings: load(&self.reserved_late_landings),
+            walker_on_detached: load(&self.walker_on_detached),
         }
     }
 }
@@ -1159,6 +1168,64 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         Ok(continued)
     }
 
+    /// The word a completed, observed descriptor `index` carries once its
+    /// buffer is detached: its completed image with the owner bit clear
+    /// ([`rx_detached_word`]). Validated before the buffer leaves the ring,
+    /// so [`Self::publish_detached`] cannot fail after it did.
+    pub(crate) fn detached_word(&self, index: usize) -> Result<u32, RxRingError> {
+        let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
+        if !self.observed_mask.contains(index) {
+            return Err(RxRingError::Corrupt);
+        }
+        let word0 = descriptor.word0();
+        if !rx_done(word0) {
+            return Err(RxRingError::Corrupt);
+        }
+        Ok(rx_detached_word(word0))
+    }
+
+    /// Clear the owner bit of descriptor `index`, whose buffer leaves the
+    /// ring into a lease, and fence, before the lease is handed out.
+    ///
+    /// The second layer next to R: a walker that ever reached this
+    /// descriptor stops on it without writing the leased buffer
+    /// (SOURCE\[HIL_W1_OWNER_BIT_2026_10_18]). The descriptor is observed,
+    /// so the walker is done with it; its link and buffer stay. This holds
+    /// for the accepted tail too: a doorbell with NEXT = 0 follows
+    /// `LAST.next` without checking LAST's owner bit (H1). The rearm sets
+    /// the bit again ([`rx_rearm_word`]).
+    pub(crate) fn publish_detached<M: RxDma>(&mut self, mmio: &mut M, index: usize, word0: u32) {
+        if let Some(descriptor) = self.descriptors.get(index) {
+            descriptor.publish_word0(word0);
+        }
+        mmio.fence();
+    }
+
+    /// Whether the NEXT low address `next_low` names a detached ring
+    /// descriptor: observed, with its owner bit clear.
+    fn names_detached(&self, next_low: u32) -> bool {
+        next_low != 0
+            && descriptor_index::<COUNT>(next_low, self.descriptor_base).is_some_and(|index| {
+                self.observed_mask.contains(index.get())
+                    && self
+                        .descriptors
+                        .get(index.get())
+                        .is_some_and(|descriptor| !rx_owner(descriptor.word0()))
+            })
+    }
+
+    /// Fail closed when NEXT names a detached descriptor: the walker stopped
+    /// on the owner-bit barrier, which the reserved descriptor's rules make
+    /// impossible. Counted in [`RxReloadEvidence::walker_on_detached`].
+    fn check_walker_on_detached(&mut self, next_low: u32) -> Result<(), RxRingError> {
+        if !self.names_detached(next_low) {
+            return Ok(());
+        }
+        increment_saturating(&self.arena.walker_on_detached);
+        self.require_reset();
+        Err(RxRingError::Corrupt)
+    }
+
     /// Irreversibly poison the static arena after an ownership invariant can
     /// no longer be proven. The live token may still be retained for reset
     /// diagnostics, but no later stop observation can make this arena reusable.
@@ -1305,7 +1372,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// software head through LAST has been consumed, even when an unused
     /// intermediate buffer retained its recycle guard. The complete vendor
     /// `wdevProcessRxSucDataAll` likewise walks every node through its saved
-    /// LAST and uses only terminal bit 30 to delimit receive units.
+    /// LAST and uses only the terminal `RX_DONE` (bit 30) to delimit receive units.
     pub fn completed_unit_frontier_through_cursor_with<F>(
         &self,
         last_descriptor_low: u32,
@@ -2088,20 +2155,24 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     }
 
     /// Freeze one ordered LAST/NEXT image for this descriptor generation.
-    pub fn freeze_cursor<M: RxDma>(&self, mmio: &mut M) -> RxFrozenCursor {
+    ///
+    /// A NEXT naming a detached descriptor fails closed
+    /// ([`RxReloadEvidence::walker_on_detached`]).
+    pub fn freeze_cursor<M: RxDma>(&mut self, mmio: &mut M) -> Result<RxFrozenCursor, RxRingError> {
         let (last_descriptor_low, next_descriptor_low) = mmio.with_ordered_cursor(|cursor| {
             (cursor.last_descriptor_low(), cursor.next_descriptor_low())
         });
         // Make both MMIO observations precede descriptor and payload reads by
         // the caller which receives this generation-bound snapshot.
         mmio.fence();
-        RxFrozenCursor {
+        self.check_walker_on_detached(next_descriptor_low)?;
+        Ok(RxFrozenCursor {
             last_descriptor_low,
             next_descriptor_low,
             descriptor_base: self.descriptor_base,
             arena_identity: self.descriptors.as_ptr() as usize,
             generation: self.cursor_generation,
-        }
+        })
     }
 
     /// Return whether an exhausted finite hardware list still owes software
@@ -2331,7 +2402,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// cold publication and rings the doorbell once more instead: with NEXT
     /// zero the doorbell resumes the walker at `LAST->next`
     /// (HIL_W1_RX_WALKER_2026_10_18). Still zero after that second ring
-    /// contradicts that rule and fails closed.
+    /// contradicts that rule and fails closed. A NEXT naming a detached
+    /// descriptor fails closed too ([`RxReloadEvidence::walker_on_detached`]).
     fn settle_reload<M: RxDma>(&mut self, mmio: &mut M) -> Result<(), RxRingError> {
         let Some(pending_tail) = self.pending_tail() else {
             return Ok(());
@@ -2350,6 +2422,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             Ok(last_index != pending_tail)
         });
         self.record_reload_observation(next_descriptor, last_descriptor_low);
+        // The doorbell resumed the walker: it must not hold a detached
+        // descriptor.
+        self.check_walker_on_detached(next_descriptor.address_low())?;
         let exhausted_short = match exhausted_short {
             Ok(exhausted_short) => exhausted_short,
             Err(error) => {
@@ -2390,7 +2465,7 @@ impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
 /// One descriptor word describing a complete unit of `length` bytes, which
 /// fits the length field, with `word0`'s status bits.
 const fn staged_word0(word0: u32, length: u32) -> u32 {
-    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | BIT_30 | BIT_31
+    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | RX_DONE | OWNER
 }
 
 fn validate_live_ring_geometry<const COUNT: usize>() -> Result<(), RxRingError> {
@@ -2489,8 +2564,8 @@ fn ring_topology_snapshot<const COUNT: usize>(
             if capacity == 0
                 || !dma_range_valid(buffer_address, capacity)
                 || descriptor_length(word0) != capacity
-                || word0 & BIT_31 == 0
-                || word0 & (BIT_29 | BIT_30) != 0
+                || word0 & OWNER == 0
+                || word0 & (BIT_29_OPAQUE | RX_DONE) != 0
             {
                 return snapshot;
             }

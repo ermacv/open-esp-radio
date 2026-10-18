@@ -2,7 +2,7 @@ use crate::{support::*, *};
 
 type Arena<const COUNT: usize> = HostRxArena<COUNT, 256, 260>;
 const BUFFER_SIZE: u32 = 256;
-const COMPLETED: u32 = BUFFER_SIZE | (80 << LENGTH_SHIFT) | BIT_30 | BIT_31;
+const COMPLETED: u32 = BUFFER_SIZE | (80 << LENGTH_SHIFT) | RX_DONE | OWNER;
 
 #[test]
 fn cold_rx_ring_publishes_links_and_hardware_in_order() {
@@ -73,8 +73,8 @@ fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
             .is_some()
     );
     assert_eq!(length(descriptors[0].word0()), 256);
-    assert_ne!(descriptors[0].word0() & BIT_31, 0);
-    assert_eq!(descriptors[0].word0() & BIT_30, 0);
+    assert_ne!(descriptors[0].word0() & OWNER, 0);
+    assert_eq!(descriptors[0].word0() & RX_DONE, 0);
 
     // Descriptor one completed while the append settled. A buffer address
     // which is not the arena buffer bound to it must not be rearmed.
@@ -270,7 +270,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     assert!(recycled(&arena, &live).is_empty());
     // Repeated NEXT observations still do not release descriptor three's
     // link. A later completed LAST does.
-    descriptors[0].write_word0(descriptors[0].word0() | BIT_30);
+    descriptors[0].write_word0(descriptors[0].word0() | RX_DONE);
     mmio.set_rx_last_descriptor_address(base);
     let second = storage
         .recycle_completed_half(&mut live, &mut mmio)
@@ -568,9 +568,9 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
     assert_eq!(append.descriptor_count, COUNT - 1);
     assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
     assert_eq!(descriptors[1].next_address(), 0);
-    assert_eq!(descriptors[1].word0() & BIT_30, 0);
+    assert_eq!(descriptors[1].word0() & RX_DONE, 0);
     assert_ne!(
-        descriptors[0].word0() & BIT_30,
+        descriptors[0].word0() & RX_DONE,
         0,
         "the old LAST stays observed"
     );
@@ -716,7 +716,7 @@ fn exercise_single_descriptor_rx_interleavings<const COUNT: usize>() {
             );
             assert_eq!(descriptors[cursor].next_address(), old_next);
             let later = (cursor + 1) % COUNT;
-            descriptors[later].write_word0(descriptors[later].word0() | BIT_30);
+            descriptors[later].write_word0(descriptors[later].word0() | RX_DONE);
             mmio.set_rx_last_descriptor_address(arena.address(later));
             let append = storage
                 .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -725,7 +725,7 @@ fn exercise_single_descriptor_rx_interleavings<const COUNT: usize>() {
             assert_eq!(append.head_index.get(), cursor);
             assert_eq!(append.tail_index.get(), cursor);
             assert_eq!(descriptors[cursor].next_address(), 0);
-            assert_eq!(descriptors[cursor].word0() & BIT_30, 0);
+            assert_eq!(descriptors[cursor].word0() & RX_DONE, 0);
             assert!(live.topology_snapshot().valid);
 
             mmio.set_rx_walker_enabled(true);
@@ -895,7 +895,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     for index in 1..COUNT {
         arena.dma_write(&live, index, &[0xa5; 80]);
     }
-    descriptors[0].write_word0(BUFFER_SIZE | (BUFFER_SIZE << LENGTH_SHIFT) | BIT_31);
+    descriptors[0].write_word0(BUFFER_SIZE | (BUFFER_SIZE << LENGTH_SHIFT) | OWNER);
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
@@ -924,7 +924,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     assert_eq!(unit.metadata().segment_length(1), Some(80));
     assert_eq!(unit.total_length(), 336);
     let staged_word0 = unit.metadata().staged_word0().unwrap();
-    assert_ne!(staged_word0 & BIT_30, 0);
+    assert_ne!(staged_word0 & RX_DONE, 0);
     assert_eq!(length(staged_word0), 336);
 
     let append = unit.recycle(&mut mmio).unwrap().unwrap();
@@ -934,8 +934,8 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     assert_eq!(recycled, [0, 1]);
     assert_eq!(append.descriptor_count, 2);
     assert_eq!(live.recycle_start().get(), 2);
-    assert_eq!(descriptors[0].word0() & BIT_30, 0);
-    assert_eq!(descriptors[1].word0() & BIT_30, 0);
+    assert_eq!(descriptors[0].word0() & RX_DONE, 0);
+    assert_eq!(descriptors[1].word0() & RX_DONE, 0);
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
@@ -1094,7 +1094,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
     }
     arena.dma_write(&live, 0, &unit);
     arena.descriptors()[0]
-        .write_word0(BUFFER_SIZE | ((RECEIVED as u32) << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        .write_word0(BUFFER_SIZE | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER);
     mmio.set_rx_last_descriptor_address(arena.address(1));
     mmio.set_rx_next_descriptor_address(0);
     let detached = arena
@@ -1102,7 +1102,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         .take_completed_unit(&mut live, 1)
         .unwrap()
         .expect("completed unit")
-        .detach_single()
+        .detach_single(&mut mmio)
         .unwrap();
     let pool = oer_esp32s31_ieee80211_mac::rx::pool::RxStagePool::<1, 256>::new();
     let frame = pool.stage_detached_unit(detached, 256).unwrap();

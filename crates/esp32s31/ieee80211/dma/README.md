@@ -54,7 +54,13 @@ dropped uncopied; that take clears `R.next`, and any later write into R
 fails closed. Every live publication links the accepted tail and rings the
 reload doorbell. A settled doorbell that left NEXT zero short of the new
 tail is rung once more; a group that would cover the accepted tail appends
-all but it. R is never observed, taken, leased or recycled. The rules and
+all but it. R is never observed, taken, leased or recycled. A detach
+(`RxDmaCompletedUnit::detach_single`) clears the descriptor's owner bit
+(`OWNER`, bit 31) and fences before the lease is returned, LAST included;
+the rearm sets it again. A walker reaching a detached descriptor would stop
+on it instead of writing the lease; a NEXT naming one (read by the reload
+settle and the frozen cursor) is counted, `walker_on_detached`, and fails
+closed. The rules and
 their hardware basis are in
 [the RX walker notes](../../../../knowledge/esp32s31/wifi/rx-walker.md).
 

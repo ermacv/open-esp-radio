@@ -18,7 +18,7 @@ use std::{boxed::Box, vec::Vec};
 
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{BIT_30, BIT_31, LENGTH_SHIFT},
+    descriptor::{DESCRIPTOR_BYTES, LENGTH_SHIFT, OWNER, RX_DONE},
     rx_dma::{
         RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled, RxDmaWalkerEnabled,
         RxDmaWalkerStopped,
@@ -459,9 +459,13 @@ impl Harness {
     fn complete_unit(&mut self, lengths: &[u32]) {
         for (step, &length) in lengths.iter().enumerate() {
             let index = (self.next + step) % COUNT;
-            let terminal = if step + 1 == lengths.len() { BIT_30 } else { 0 };
+            let terminal = if step + 1 == lengths.len() {
+                RX_DONE
+            } else {
+                0
+            };
             self.rx.descriptors()[index]
-                .write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | terminal | BIT_31);
+                .write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | terminal | OWNER);
         }
         self.next = (self.next + lengths.len()) % COUNT;
         let last = (self.next + COUNT - 1) % COUNT;
@@ -861,7 +865,7 @@ impl Harness {
     /// descriptor and moves to its link.
     fn land_in_reserved(&self, length: u32) {
         let reserved = self.rx.reserved_descriptor();
-        reserved.write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        reserved.write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | RX_DONE | OWNER);
         let mut walker = self.host.walker.borrow_mut();
         walker.last_descriptor_low = self.reserved_low();
         walker.next_descriptor_low = reserved.next_address() & 0x000f_ffff;
@@ -1587,7 +1591,7 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3]
-        .write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        .write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | RX_DONE | OWNER);
     held.borrow_mut().pop();
     harness.settle();
     let snapshot = harness
@@ -1930,4 +1934,31 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
             drain_polls: 6,
         }
     );
+}
+
+#[test]
+fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
+    let held: &'static Held = leak(RefCell::new(Vec::new()));
+    let mut harness =
+        harness_with(|counters| (HoldingSink { held }, CountingAdmission::new(counters))).started();
+    harness.frame(200);
+    harness.settle();
+    assert_eq!(held.borrow().len(), 1);
+    // The held lease's descriptor carries the owner bit clear.
+    let index = harness.next + COUNT - 1;
+    let word0 = harness.rx.descriptors()[index % COUNT].word0();
+    assert_eq!(word0 & OWNER, 0);
+    assert_eq!(word0 & RX_DONE, RX_DONE);
+    // A frame completes and the walker reports NEXT on that barrier:
+    // impossible by construction, so the drain fails closed.
+    harness.complete_unit(&[100]);
+    harness.host.walker.borrow_mut().next_descriptor_low =
+        (harness.base + (index % COUNT) as u32 * DESCRIPTOR_BYTES) & 0x000f_ffff;
+    harness.rx_event();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.reload.walker_on_detached, 1);
+    assert_eq!(report.service_errors, 1);
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    held.borrow_mut().clear();
 }

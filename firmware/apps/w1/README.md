@@ -41,7 +41,11 @@ its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`), one
 publication of the reserved descriptor; `w1.reload base_writes=`), and at
 most one frame landing in the reserved descriptor, the epoch's first,
 with none after the walker reached the ring (`reserved`;
-`reserved_landings=` ≤ 1, `reserved_late_landings=` 0). A
+`reserved_landings=` ≤ 1, `reserved_late_landings=` 0), the owner bit
+clear on every held lease's descriptor (`owner_bit`; `w1.own
+owner_clear=` equal to `held=` in both cycles, `owner-bit-set`), and no
+NEXT read naming a detached descriptor (`walker_on_detached`;
+`w1.reload walker_on_detached=` 0). A
 failure before the runner hands over its ends prints only
 `OER-RESULT: fail w1 <reason>`.
 
@@ -88,7 +92,11 @@ meanwhile stays queued, so no append to an empty list moves BASE), then
 rechecks the rest (`dwell_mismatch=`); every later lease is rechecked just
 before its own drop (`release_mismatch=`, the first drop's recheck
 included), 10 ms apart. `first_mismatch=` is the first changed lease's
-descriptor index (`x` unknown, `-` none). Then, for 2 s, the descriptor
+descriptor index (`x` unknown, `-` none). At the end of the hold the image
+also reads each held lease's descriptor word0 and counts those whose owner
+bit (bit 31) is clear (`owner_clear=`): a detached descriptor carries it
+clear, so a walker that reached it would stop instead of writing the
+lease. Then, for 2 s, the descriptor
 indices of the first 16 frames taken (`first_after_release=`, `x` outside
 the ring, `-` none), the pairs among them not consecutive in the ring
 (`order_breaks=`, recomputed by `cargo fw` from the list and the
@@ -108,7 +116,7 @@ one whose leases did not cover the ring (`ring-order`). The second cycle
 starts after the first one's 2 s of frames, once the ring has recovered.
 
 ```text
-w1.own cycle=<0|1> order=forward|reverse held=<n> first_drop=<idx|-> hold_mismatch=<n> dwell_mismatch=<n> release_mismatch=<n> first_mismatch=<idx|x|-> first_after_release=<i,i,…|-> order_breaks=<n> chained=<n> oversized=<n> discards=<reason>:<n>,…|-
+w1.own cycle=<0|1> order=forward|reverse held=<n> owner_clear=<n> first_drop=<idx|-> hold_mismatch=<n> dwell_mismatch=<n> release_mismatch=<n> first_mismatch=<idx|x|-> first_after_release=<i,i,…|-> order_breaks=<n> chained=<n> oversized=<n> discards=<reason>:<n>,…|-
 ```
 
 Report-only: `w1.config ssid_matches=`, how many BSSIDs carry the stand's
@@ -132,7 +140,9 @@ published and recovered: the most doorbell observations one reload took
 the doorbells rung once more because the walker had exhausted the old list
 (`reload_rerings=`) and those after which it still had not resumed
 (`rering_failures=`, a fault), and the reserved descriptor's gated counts
-(`base_writes=`, `reserved_landings=`, `reserved_late_landings=`); per BSS the stamp and handoff spans of its stamped frames, whose
+(`base_writes=`, `reserved_landings=`, `reserved_late_landings=`) and the
+NEXT reads that named a detached descriptor (`walker_on_detached=`, gated);
+per BSS the stamp and handoff spans of its stamped frames, whose
 ratio is the MAC stamp clock's rate; and `w1.lag`, the receive stamp and
 handoff lag (handoff low 32 bits less stamp) of the first 64 stamped units
 the survey took, with the spacing to the previous and next unit's stamp.
