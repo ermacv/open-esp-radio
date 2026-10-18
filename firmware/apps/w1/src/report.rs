@@ -56,6 +56,86 @@ impl Hold {
     }
 }
 
+/// The window units whose handoff lag the block lists.
+pub const LAG_UNITS: usize = 64;
+/// How far after the next unit's stamp a handoff may lie and still count as
+/// waiting for that arrival.
+pub const NEXT_ARRIVAL_TOLERANCE_US: u32 = 2_000;
+
+/// One window unit: its receive stamp and its handoff lag, the low 32 bits
+/// of the handoff time less the stamp (µs, wrapping, as the survey's).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Lag {
+    pub stamp: u32,
+    pub lag_us: u32,
+}
+
+/// The first [`LAG_UNITS`] stamped units the survey took in the window.
+pub struct LagLog(heapless::Vec<Lag, LAG_UNITS>);
+
+impl LagLog {
+    pub const fn new() -> Self {
+        Self(heapless::Vec::new())
+    }
+
+    /// Log a unit stamped `stamp` and handed off at `handoff`, while there
+    /// is room.
+    pub fn take(&mut self, stamp: u32, handoff: oer_time::Instant) {
+        let lag_us = (handoff.as_micros() as u32).wrapping_sub(stamp);
+        let _full = self.0.push(Lag { stamp, lag_us });
+    }
+
+    pub fn units(&self) -> &[Lag] {
+        &self.0
+    }
+}
+
+/// The handoff delays of a lag log. The stamp clock runs at the handoff
+/// clock's rate, so a unit's lag is its delay plus one constant offset; the
+/// smallest lag stands for that offset: `delay = lag − min lag` (taken
+/// relative to the first unit's lag, so a lag wrap is harmless).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LagFit {
+    /// The lower median delay.
+    pub median_us: u32,
+    pub max_us: u32,
+    /// Units whose offset-corrected handoff lies 0 to
+    /// [`NEXT_ARRIVAL_TOLERANCE_US`] after the next unit's stamp.
+    pub next_arrival_matches: u32,
+}
+
+/// The fit of `units`; `None` without a unit.
+pub fn lag_fit(units: &[Lag]) -> Option<LagFit> {
+    let first = units.first()?;
+    let relative = |lag: &Lag| i64::from(lag.lag_us.wrapping_sub(first.lag_us) as i32);
+    let floor = units.iter().map(relative).min()?;
+    let delay = |lag: &Lag| relative(lag) - floor;
+    let mut delays = heapless::Vec::<i64, LAG_UNITS>::new();
+    for lag in units {
+        let _full = delays.push(delay(lag));
+    }
+    delays.sort_unstable();
+    let narrow = |value: i64| u32::try_from(value).unwrap_or(u32::MAX);
+    let median_us = narrow(*delays.get((delays.len() - 1) / 2)?);
+    let max_us = narrow(*delays.last()?);
+    let next_arrival_matches = units
+        .windows(2)
+        .filter(|pair| match pair {
+            [unit, next] => {
+                let until_next = i64::from(next.stamp.wrapping_sub(unit.stamp));
+                let after = delay(unit) - until_next;
+                (0..=i64::from(NEXT_ARRIVAL_TOLERANCE_US)).contains(&after)
+            }
+            _ => false,
+        })
+        .count();
+    Some(LagFit {
+        median_us,
+        max_us,
+        next_arrival_matches: narrow(next_arrival_matches as i64),
+    })
+}
+
 /// The executors by comparator: 0 is the radio executor's, 1 the
 /// application's.
 const COMPARATORS: [u8; 2] = [measure::P2_COMPARATOR, measure::P1_COMPARATOR];
@@ -85,6 +165,8 @@ pub struct Run<'a> {
     pub frames_after_release: u32,
     /// The hold; all zero when no frame opened the window.
     pub hold: Hold,
+    /// The first window units' handoff lags.
+    pub lags: &'a LagLog,
     /// Frames the application's normalize admitted.
     pub admitted: u32,
     pub exit: WifiRxExit,
@@ -573,6 +655,31 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             ))?;
         }
     }
+    let units = run.lags.units();
+    for (index, unit) in units.iter().enumerate() {
+        let since_prev = index
+            .checked_sub(1)
+            .and_then(|previous| units.get(previous))
+            .map(|previous| unit.stamp.wrapping_sub(previous.stamp));
+        let until_next = units
+            .get(index + 1)
+            .map(|next| next.stamp.wrapping_sub(unit.stamp));
+        block.line(format_args!(
+            "w1.lag i={index} stamp={} lag_us={} since_prev_us={} until_next_us={}",
+            unit.stamp,
+            unit.lag_us,
+            OrDash(since_prev),
+            OrDash(until_next),
+        ))?;
+    }
+    let fit = lag_fit(units);
+    block.line(format_args!(
+        "w1.lagfit n={} median_us={} max_us={} next_arrival_matches={} tolerance_us={NEXT_ARRIVAL_TOLERANCE_US}",
+        units.len(),
+        OrDash(fit.map(|fit| fit.median_us)),
+        OrDash(fit.map(|fit| fit.max_us)),
+        fit.map_or(0, |fit| fit.next_arrival_matches),
+    ))?;
     let survey = run.survey.counters();
     block.line(format_args!(
         "w1.survey frames={} header_refusals={} data={} ignored_management={} table_full={} off_channel={}",

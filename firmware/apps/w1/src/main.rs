@@ -343,7 +343,7 @@ struct Parts {
 fn take(
     receiver: &Receiver,
     held: &Held,
-    survey: Option<&mut Survey<{ report::BSS }>>,
+    survey: Option<(&mut Survey<{ report::BSS }>, &mut report::LagLog)>,
     channel: Channel,
     admitted: &mut u32,
 ) {
@@ -352,7 +352,10 @@ fn take(
     };
     *admitted = admitted.saturating_add(1);
     // The runner's publisher marks every handoff.
-    if let (Some(survey), Some(times)) = (survey, held.times()) {
+    if let (Some((survey, lags)), Some(times)) = (survey, held.times()) {
+        if let Some(stamp) = frame.stamp {
+            lags.take(stamp, times.handoff);
+        }
         let meta = rx_meta(frame.metadata, channel);
         survey.take(
             EmbassyClock.now(),
@@ -457,6 +460,7 @@ async fn run(
     };
 
     let survey = SURVEY.init(Survey::new(stand));
+    let mut lags = report::LagLog::new();
     let mut admitted = 0_u32;
     let mut window_us = 0;
     let mut frames_after_release = 0_u32;
@@ -477,7 +481,7 @@ async fn run(
         take(
             &receiver,
             &held,
-            Some(&mut *survey),
+            Some((&mut *survey, &mut lags)),
             rx_channel,
             &mut admitted,
         );
@@ -492,7 +496,7 @@ async fn run(
             take(
                 &receiver,
                 &held,
-                Some(&mut *survey),
+                Some((&mut *survey, &mut lags)),
                 rx_channel,
                 &mut admitted,
             );
@@ -636,6 +640,7 @@ async fn run(
         unserviced_pwr: irq::UNSERVICED_PWR.load(core::sync::atomic::Ordering::Relaxed),
         frames_after_release,
         hold,
+        lags: &lags,
         admitted,
         exit,
         ticks: &ticks,

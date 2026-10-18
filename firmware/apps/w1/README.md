@@ -41,10 +41,20 @@ upper flag, LAST, BASE, the walker enable, the reload doorbell, the
 starvation counter) and the ring's view (base, recycle frontier, accepted
 tail, observed and completed descriptors, the list left from NEXT, a
 pending reload, released, detached and staged buffers) that the runner read
-when a returned lease ended its longest stage-capacity block, before the
-capacity drain serviced anything; `w1.reload`, how the ring recovered; and
-per BSS the stamp and handoff spans of its stamped frames, whose ratio is
-the MAC stamp clock's rate.
+when a lease returned to a full staging pool (every slot claimed or every
+buffer detached, as during the hold), before the capacity drain serviced
+anything, for the longest such stretch; `w1.reload`, how the ring
+recovered; per BSS the stamp and handoff spans of its stamped frames, whose
+ratio is the MAC stamp clock's rate; and `w1.lag`, the receive stamp and
+handoff lag (handoff low 32 bits less stamp) of the first 64 stamped units
+the survey took, with the spacing to the previous and next unit's stamp.
+`w1.lagfit` summarizes them: the stamp clock runs at the handoff clock's
+rate, so the smallest lag stands for the clocks' offset and a unit's
+handoff delay is its lag less the smallest lag (taken relative to the first
+lag, so a wrap is harmless); it prints the lower median and the maximum
+delay and how many units were handed off 0 to 2000 µs after the next
+unit's stamp, both on the stamp clock: handed off only once the next unit
+arrived.
 
 ```sh
 cargo fw run w1 --board s31-a --expect-bssid 02:00:00:00:F6:D0 --channel 6

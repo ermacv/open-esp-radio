@@ -35,6 +35,8 @@ const MAX_GAPS: usize = 64;
 const MAX_TICKS: usize = 32;
 /// The survey's table size.
 const MAX_BSS: usize = 64;
+/// The longest lag list the image prints.
+const MAX_LAGS: usize = 64;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
@@ -518,6 +520,30 @@ const SPECS: &[Spec] = &[
         count: Count::Any,
     },
     Spec {
+        keyword: "w1.lag",
+        keys: &[
+            key("i", U64),
+            key("stamp", U32),
+            key("lag_us", U32),
+            key("since_prev_us", U32_OR_DASH),
+            key("until_next_us", U32_OR_DASH),
+        ],
+        open: false,
+        count: Count::AtMost(MAX_LAGS),
+    },
+    Spec {
+        keyword: "w1.lagfit",
+        keys: &[
+            key("n", U64),
+            key("median_us", U32_OR_DASH),
+            key("max_us", U32_OR_DASH),
+            key("next_arrival_matches", U64),
+            key("tolerance_us", U32),
+        ],
+        open: false,
+        count: Count::Once,
+    },
+    Spec {
         keyword: "w1.survey",
         keys: numbers!(
             "frames",
@@ -729,6 +755,56 @@ pub struct Gap {
     pub missed: Option<u32>,
 }
 
+/// One window unit of the lag list: its receive stamp and its handoff lag
+/// (the handoff's low 32 bits less the stamp, wrapping).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Lag {
+    pub stamp: u32,
+    pub lag_us: u32,
+}
+
+/// The handoff delays of a lag list, as `w1.lagfit` reports them. The
+/// stamp clock runs at the handoff clock's rate, so a lag is the unit's
+/// delay plus one offset; the smallest lag stands for the offset (`delay =
+/// lag − min lag`, taken relative to the first lag so a wrap is harmless).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LagFit {
+    /// The lower median delay.
+    pub median_us: u32,
+    pub max_us: u32,
+    /// Units whose corrected handoff lies 0 to `tolerance_us` after the
+    /// next unit's stamp: handed off only once the next unit arrived.
+    pub next_arrival_matches: u64,
+}
+
+/// The fit of `lags` at `tolerance_us`; `None` without a unit.
+pub fn lag_fit(lags: &[Lag], tolerance_us: u32) -> Option<LagFit> {
+    let first = lags.first()?;
+    let relative = |lag: &Lag| i64::from(lag.lag_us.wrapping_sub(first.lag_us) as i32);
+    let floor = lags.iter().map(relative).min()?;
+    let delay = |lag: &Lag| relative(lag) - floor;
+    let mut delays = lags.iter().map(delay).collect::<Vec<_>>();
+    delays.sort_unstable();
+    let narrow = |value: i64| u32::try_from(value).unwrap_or(u32::MAX);
+    let median_us = narrow(*delays.get((delays.len() - 1) / 2)?);
+    let max_us = narrow(*delays.last()?);
+    let next_arrival_matches = lags
+        .windows(2)
+        .filter(|pair| match pair {
+            [unit, next] => {
+                let after = delay(unit) - i64::from(next.stamp.wrapping_sub(unit.stamp));
+                (0..=i64::from(tolerance_us)).contains(&after)
+            }
+            _ => false,
+        })
+        .count() as u64;
+    Some(LagFit {
+        median_us,
+        max_us,
+        next_arrival_matches,
+    })
+}
+
 /// One periodic PHY tracking tick, SYSTIMER µs, low 32 bits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Tick {
@@ -828,6 +904,9 @@ pub struct Report {
     pub stack: Fields,
     pub timer: Vec<Fields>,
     pub wake: Vec<Fields>,
+    /// The first window units' lags, in order.
+    pub lags: Vec<Lag>,
+    pub lagfit: Fields,
     pub survey: Fields,
     pub verdict: Fields,
     /// One per gate, in [`GateName::ALL`] order.
@@ -924,6 +1003,45 @@ impl Report {
                 ok: tick.text("ok")? == "1",
             });
         }
+        let lag_lines = all("w1.lag");
+        let mut lags = Vec::new();
+        for (index, line) in lag_lines.iter().enumerate() {
+            if line.number("i")? != index as u64 {
+                return Err(malformed(format!("w1.lag i= is not {index}")));
+            }
+            let lag = Lag {
+                stamp: narrow(line.number("stamp")?)?,
+                lag_us: narrow(line.number("lag_us")?)?,
+            };
+            let since_prev = lags
+                .last()
+                .map(|previous: &Lag| u64::from(lag.stamp.wrapping_sub(previous.stamp)));
+            if line.number_or_dash("since_prev_us")? != since_prev {
+                return Err(malformed(format!(
+                    "w1.lag i={index} since_prev_us= disagrees with the stamps"
+                )));
+            }
+            if let Some(previous) = index
+                .checked_sub(1)
+                .and_then(|previous| lag_lines.get(previous))
+                && previous.number_or_dash("until_next_us")? != since_prev
+            {
+                return Err(malformed(format!(
+                    "w1.lag i={} until_next_us= disagrees with the stamps",
+                    index - 1
+                )));
+            }
+            lags.push(lag);
+        }
+        if let Some(last) = lag_lines.last()
+            && last.number_or_dash("until_next_us")?.is_some()
+        {
+            return Err(malformed("the last w1.lag has an until_next_us="));
+        }
+        let lagfit = one("w1.lagfit");
+        if lagfit.number("n")? != lags.len() as u64 {
+            return Err(malformed("w1.lagfit n= is not the w1.lag count"));
+        }
         let mut gates = Vec::new();
         for name in GateName::ALL {
             let lines = all("w1.gate")
@@ -984,6 +1102,8 @@ impl Report {
             stack: one("w1.stack"),
             timer: all("w1.timer"),
             wake: all("w1.wake"),
+            lags,
+            lagfit,
             survey: one("w1.survey"),
             verdict: one("w1.verdict"),
             gates,
@@ -1319,6 +1439,23 @@ fn disagreements(
     expected: &Config,
 ) -> Result<Vec<String>, ReportError> {
     let mut problems = Vec::new();
+    let tolerance = narrow_u32(report.lagfit.number("tolerance_us")?)?;
+    let fit = lag_fit(&report.lags, tolerance);
+    let image_fit = (
+        report.lagfit.number_or_dash("median_us")?,
+        report.lagfit.number_or_dash("max_us")?,
+        report.lagfit.number("next_arrival_matches")?,
+    );
+    let host_fit = (
+        fit.map(|fit| u64::from(fit.median_us)),
+        fit.map(|fit| u64::from(fit.max_us)),
+        fit.map_or(0, |fit| fit.next_arrival_matches),
+    );
+    if image_fit != host_fit {
+        problems.push(format!(
+            "w1.lagfit median/max/next_arrival_matches {image_fit:?}, the host computes {host_fit:?}"
+        ));
+    }
     let channel = report.config.number("channel")?;
     if channel != u64::from(expected.channel) {
         problems.push(format!(
@@ -1429,6 +1566,10 @@ fn disagreements(
     Ok(problems)
 }
 
+fn narrow_u32(value: u64) -> Result<u32, ReportError> {
+    u32::try_from(value).map_err(|_| malformed("value exceeds u32"))
+}
+
 fn summary(report: &Report, host: &Host, expected: &Config) -> Vec<String> {
     let mut lines = vec![format!(
         "expects {} on channel {}; the image applied channel {}",
@@ -1497,6 +1638,21 @@ fn summary(report: &Report, host: &Host, expected: &Config) -> Vec<String> {
             }
         }
         None => lines.push("no stand handoff lag: gaps not correlated with ticks".to_owned()),
+    }
+    let tolerance = report
+        .lagfit
+        .number("tolerance_us")
+        .ok()
+        .and_then(|tolerance| u32::try_from(tolerance).ok());
+    match tolerance.and_then(|tolerance| lag_fit(&report.lags, tolerance).map(|fit| (tolerance, fit))) {
+        Some((tolerance, fit)) => lines.push(format!(
+            "handoff delay over {} window units: median {} us, max {} us; {} handed off within {tolerance} us after the next unit arrived",
+            report.lags.len(),
+            fit.median_us,
+            fit.max_us,
+            fit.next_arrival_matches
+        )),
+        None => lines.push("no window unit: no handoff delay".to_owned()),
     }
     lines
 }
@@ -1569,6 +1725,10 @@ mod tests {
             "w1.stack irq_bytes=32768 irq_free=20000 min_free=4096",
             "w1.timer cmp=0 phase=stress early=0 late_count=1 late_max_us=4 late_total_us=4 missed=0 unmatched=0 coalesced=0 overlapping=0 armed_at_end=0 waits=135000 woke_early=0",
             "w1.wake cmp=1 phase=hold waits=3 woke_early=0",
+            "w1.lag i=0 stamp=1000000 lag_us=51700 since_prev_us=- until_next_us=1500",
+            "w1.lag i=1 stamp=1001500 lag_us=151200 since_prev_us=1500 until_next_us=100900",
+            "w1.lag i=2 stamp=1102400 lag_us=50000 since_prev_us=100900 until_next_us=-",
+            "w1.lagfit n=3 median_us=1700 max_us=101200 next_arrival_matches=2 tolerance_us=2000",
             "w1.survey frames=540 header_refusals=0 data=0 ignored_management=0 table_full=0 off_channel=0",
             "w1.verdict beacons=97 bi_us=102400 window_us=10000000 required=78",
             "w1.gate name=beacons result=pass",
@@ -2263,6 +2423,122 @@ mod tests {
             *line = line.replace(" woke_early=0", "");
         }
         assert!(Report::parse(&console(&bare)).is_err());
+    }
+
+    fn lags(lines: &[String]) -> Vec<Lag> {
+        Report::parse(&console(lines)).unwrap().lags
+    }
+
+    #[test]
+    fn the_lag_fit_takes_the_smallest_lag_as_the_offset() {
+        let lags = lags(&body());
+        assert_eq!(lags.len(), 3);
+        assert_eq!(
+            lag_fit(&lags, 2_000),
+            Some(LagFit {
+                median_us: 1_700,
+                max_us: 101_200,
+                next_arrival_matches: 2
+            })
+        );
+        // A tighter tolerance drops the handoff 300 us after its successor.
+        assert_eq!(lag_fit(&lags, 250).unwrap().next_arrival_matches, 1);
+        // A handoff before the next unit's arrival is no match.
+        let early = [
+            Lag {
+                stamp: 0,
+                lag_us: 1_000,
+            },
+            Lag {
+                stamp: 5_000,
+                lag_us: 0,
+            },
+        ];
+        assert_eq!(lag_fit(&early, 2_000).unwrap().next_arrival_matches, 0);
+        // Lags across the 32-bit wrap are one offset.
+        let wrapped = [
+            Lag {
+                stamp: 10,
+                lag_us: u32::MAX - 9,
+            },
+            Lag {
+                stamp: 20,
+                lag_us: 20,
+            },
+        ];
+        let fit = lag_fit(&wrapped, 2_000).unwrap();
+        assert_eq!((fit.median_us, fit.max_us), (0, 30));
+        assert_eq!(lag_fit(&[], 2_000), None);
+        // No unit: every value `-`.
+        let mut none = body();
+        none.retain(|line| !line.starts_with("w1.lag "));
+        set(&mut none, "w1.lagfit", "n", "0");
+        set(&mut none, "w1.lagfit", "median_us", "-");
+        set(&mut none, "w1.lagfit", "max_us", "-");
+        set(&mut none, "w1.lagfit", "next_arrival_matches", "0");
+        assert_eq!(
+            check(&console(&none), PASS, &expected()).outcome,
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn the_lag_lines_are_strict_and_the_fit_is_recomputed() {
+        for (prefix, key, value) in [
+            ("w1.lag i=1", "i", "2"),
+            ("w1.lag i=1", "since_prev_us", "1499"),
+            ("w1.lag i=0", "until_next_us", "-"),
+            ("w1.lag i=0", "since_prev_us", "0"),
+            ("w1.lag i=2", "until_next_us", "5"),
+            ("w1.lag i=2", "lag_us", "-"),
+            ("w1.lagfit", "n", "2"),
+            ("w1.lagfit", "tolerance_us", "4294967296"),
+        ] {
+            let mut lines = body();
+            set(&mut lines, prefix, key, value);
+            assert!(
+                matches!(
+                    Report::parse(&console(&lines)),
+                    Err(ReportError::Malformed(_))
+                ),
+                "{prefix} {key}={value}"
+            );
+        }
+        let mut missing = body();
+        missing.retain(|line| !line.starts_with("w1.lagfit"));
+        assert!(Report::parse(&console(&missing)).is_err());
+        let mut many = body();
+        many.retain(|line| !line.starts_with("w1.lag"));
+        for index in 0..=MAX_LAGS {
+            let until = if index == MAX_LAGS { "-" } else { "1" };
+            let since = if index == 0 { "-" } else { "1" };
+            many.push(format!(
+                "w1.lag i={index} stamp={index} lag_us=0 since_prev_us={since} until_next_us={until}"
+            ));
+        }
+        many.push(format!(
+            "w1.lagfit n={} median_us=0 max_us=0 next_arrival_matches=0 tolerance_us=2000",
+            MAX_LAGS + 1
+        ));
+        assert!(Report::parse(&console(&many)).is_err());
+        // An image fit the host does not recompute is a contradiction.
+        for (key, value) in [
+            ("median_us", "1701"),
+            ("max_us", "-"),
+            ("next_arrival_matches", "1"),
+        ] {
+            let mut lines = body();
+            set(&mut lines, "w1.lagfit", key, value);
+            let checked = check(&console(&lines), PASS, &expected());
+            assert_eq!(checked.outcome.exit_code(), 3, "{key}={value}");
+        }
+        let summary = check(&console(&body()), PASS, &expected()).summary;
+        assert!(
+            summary
+                .iter()
+                .any(|line| line.contains("median 1700 us, max 101200 us; 2 handed off")),
+            "{summary:?}"
+        );
     }
 
     #[test]

@@ -88,7 +88,12 @@ its holder when it refuses.
   smallest handoff lag maps the frame stamps onto the ticks' clock). Each
   `w1.bss` line also carries the stamp and handoff spans of its stamped
   frames (`stamp_span_us=`, `handoff_span_us=`): their ratio is the MAC
-  stamp clock's rate.
+  stamp clock's rate. The `w1.lag` lines (at most 64, `i=` in order, the
+  previous and next spacing checked against the stamps) and `w1.lagfit`
+  are report-only: the host recomputes the fit (delay = lag − smallest lag;
+  lower median, maximum, units handed off within `tolerance_us` after the
+  next unit's stamp), prints it in the summary and treats an image fit it
+  does not reproduce as a disagreement.
 - `monitor` opens the console without a reset: RTS is released before DTR.
 - `power-cycle` switches the board's hub port off and on with `uhubctl`, only
   when the stand file lists the port as switchable and not protected and the
