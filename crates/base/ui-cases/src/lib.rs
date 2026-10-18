@@ -22,6 +22,8 @@
 //!
 //! `ui_reject` needs no check-cfg registration: case files are no target of
 //! any ordinary build, and both generated copies have the cfg rewritten.
+
+#![forbid(unsafe_code)]
 #![allow(
     clippy::panic,
     clippy::expect_used,
