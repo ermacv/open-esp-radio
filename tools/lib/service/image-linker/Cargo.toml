@@ -8,8 +8,8 @@ publish = false
 description = "The image linker: checks the link inputs, then runs rust-lld unchanged"
 
 [dependencies]
-oer-process = { path = "../../process" }
-oer-elf = { path = "../../elf" }
+oer-process = { path = "../../base/process" }
+oer-elf = { path = "../../analysis/elf" }
 
 
 [dev-dependencies]

@@ -8,28 +8,28 @@ repository.workspace = true
 description = "ESP32-S31 Bluetooth LE composition: static memory, powered epoch, interrupts, radio runtime and HCI Controller"
 
 [dependencies]
-oer-bluetooth-port = { path = "../../../../protocols/bluetooth/le/port" }
-oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
-oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+oer-bluetooth-port = { path = "../../../bluetooth/le/port" }
+oer-bluetooth-radio = { path = "../../../bluetooth/le/radio" }
+oer-time-embassy = { path = "../../../adapters/embassy/time" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 critical-section = "1.2.0"
 embassy-futures = "0.1.2"
 embassy-sync = "0.8.0"
-oer-bluetooth-controller = { path = "../../../../protocols/bluetooth/le/controller" }
-oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
-oer-bluetooth-hci-transport = { path = "../../../../services/bluetooth/hci/transport" }
-oer-bluetooth-runtime = { path = "../../../../runtime/bluetooth" }
-oer-esp32s31-bluetooth = { path = "../../../../hardware/esp32s31/driver/bluetooth" }
-oer-esp32s31-bluetooth-memory = { path = "../../../../hardware/esp32s31/driver/bluetooth/memory" }
-oer-esp32s31-bluetooth-radio = { path = "../../../../roles/esp32s31/bluetooth/radio" }
-oer-esp32s31-bluetooth-runtime = { path = "../../../../runtime/esp32s31/bluetooth" }
-oer-esp32s31-coex = { path = "../../../../hardware/esp32s31/driver/coex" }
-oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
-oer-esp32s31-phy = { path = "../../../../hardware/esp32s31/phy" }
-oer-esp32s31-soc-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/soc", features = ["esp32s31"] }
-oer-esp32s31-radio-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/radio", features = ["esp32s31"] }
-oer-esp32s31-radio-runtime = { path = "../../../../runtime/esp32s31/radio" }
+oer-bluetooth-controller = { path = "../../../bluetooth/le/controller" }
+oer-bluetooth-hci = { path = "../../../bluetooth/hci" }
+oer-bluetooth-hci-transport = { path = "../../../bluetooth/hci-transport" }
+oer-bluetooth-runtime = { path = "../../../bluetooth/runtime" }
+oer-esp32s31-bluetooth = { path = "../../bluetooth/driver" }
+oer-esp32s31-bluetooth-memory = { path = "../../bluetooth/memory" }
+oer-esp32s31-bluetooth-radio = { path = "../../bluetooth/radio" }
+oer-esp32s31-bluetooth-runtime = { path = "../../bluetooth/runtime" }
+oer-esp32s31-coex = { path = "../../radio/coex" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-esp32s31-soc-esp-hal = { path = "../../../adapters/esp-hal/soc", features = ["esp32s31"] }
+oer-esp32s31-radio-esp-hal = { path = "../../../adapters/esp-hal/radio", features = ["esp32s31"] }
+oer-esp32s31-radio-runtime = { path = "../../radio/runtime" }
 static_cell = "2.1.1"
 
 [features]

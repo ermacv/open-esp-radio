@@ -9,10 +9,10 @@ publish = false
 description = "Linux adapters of Blobray's in-process linking: external ELF linkers"
 
 [dependencies]
-oer-process = { path = "../../../process" }
-blobray-application = { path = "../application" }
-blobray-domain = { path = "../domain" }
-oer-riscv-model = { path = "../../../riscv/model" }
+oer-process = { path = "../../base/process" }
+blobray-application = { path = "../blobray-application" }
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-model = { path = "../riscv-model" }
 sha2 = "=0.10.9"
 libc = "=0.2.189"
 

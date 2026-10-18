@@ -14,8 +14,8 @@ embassy-futures = "0.1.2"
 embassy-net-owned = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "4868fd9acfd4191173cd6531b537d6009d3ae5d0", features = ["dhcpv4", "icmp-ping-reply", "ipv4-fragmentation", "ipv4-reassembly", "medium-ethernet", "udp"], optional = true }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 esp-println = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["auto", "esp32s31", "log-04"] }
-oer = { package = "open-esp-radio", path = "../../../crates/oer", default-features = false, features = ["wifi"] }
-oer-espressif-executor-embassy = { path = "../../../crates/adapters/embassy/espressif/executor", features = ["esp32s31"] }
+oer = { package = "open-esp-radio", path = "../../../../crates/oer", default-features = false, features = ["wifi"] }
+oer-espressif-executor-embassy = { path = "../../../../crates/exec/executor", features = ["esp32s31"] }
 static_cell = "2.1.1"
 
 [features]

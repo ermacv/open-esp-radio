@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Trace points of the Bluetooth LE Controller, the ESP32-S31 radio role and its runtime, decodable on the host"
 
 [dependencies]
-oer-trace = { path = "../../../trace" }
+oer-trace = { path = "../../base/trace" }
 
 [lints]
 workspace = true

@@ -15,12 +15,12 @@ image = ["dep:espflash", "dep:oer-chip-profile", "dep:oer-image-bundle", "dep:se
 
 [dependencies]
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"], optional = true }
-oer-chip-profile = { path = "../../chip-profile", optional = true }
-oer-device-mac = { path = "../mac" }
-oer-device-lock = { path = "../lock" }
-oer-durable = { path = "../../durable" }
-oer-image-bundle = { path = "../../image/bundle", optional = true }
-oer-process = { path = "../../process" }
+oer-chip-profile = { path = "../../data/chip-profile", optional = true }
+oer-device-mac = { path = "../../data/device-mac" }
+oer-device-lock = { path = "../device-lock" }
+oer-durable = { path = "../../base/durable" }
+oer-image-bundle = { path = "../image-bundle", optional = true }
+oer-process = { path = "../../base/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
 serialport = { version = "4.8.1", default-features = false }

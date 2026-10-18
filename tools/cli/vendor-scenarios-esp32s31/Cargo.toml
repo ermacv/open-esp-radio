@@ -9,8 +9,8 @@ publish = false
 description = "The ESP32-S31 vendor-scenario binary: the chip's verdict library behind the shared scenario command line"
 
 [dependencies]
-oer-esp32s31-vendor-scenarios = { path = ".." }
-oer-vendor-scenario-cli = { path = "../../../harness/cli" }
+oer-esp32s31-vendor-scenarios = { path = "../../lib/service/vendor-scenarios-esp32s31" }
+oer-vendor-scenario-cli = { path = "../vendor-scenario" }
 
 [lints]
 workspace = true

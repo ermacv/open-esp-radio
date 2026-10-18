@@ -9,8 +9,8 @@ publish = false
 description = "The pinned vendor artifacts of a chip: the host-wide store, fetching into it and verifying against the pins"
 
 [dependencies]
-oer-process = { path = "../process" }
-oer-durable = { path = "../durable" }
+oer-process = { path = "../../base/process" }
+oer-durable = { path = "../../base/durable" }
 oer-chip-profile = { path = "../chip-profile" }
 oer-vendor-pins = { path = "../vendor-pins" }
 

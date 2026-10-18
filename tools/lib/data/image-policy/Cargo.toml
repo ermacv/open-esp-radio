@@ -9,7 +9,7 @@ publish = false
 description = "The stack policy of an image family: the stacks a check bounds, the compiler move limit and the runtime reserves"
 
 [dependencies]
-oer-toolchain = { path = "../../toolchain" }
+oer-toolchain = { path = "../../service/toolchain" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "1.1"
 

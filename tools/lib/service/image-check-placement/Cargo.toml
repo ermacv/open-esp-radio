@@ -9,9 +9,9 @@ publish = false
 description = "The placement check of an image against the chip's memory map and placement contract"
 
 [dependencies]
-oer-chip-profile = { path = "../../../chip-profile" }
-oer-elf = { path = "../../../elf" }
-oer-riscv-decode = { path = "../../../riscv/decode" }
+oer-chip-profile = { path = "../../data/chip-profile" }
+oer-elf = { path = "../../analysis/elf" }
+oer-riscv-decode = { path = "../../analysis/riscv-decode" }
 
 [dev-dependencies]
 object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }

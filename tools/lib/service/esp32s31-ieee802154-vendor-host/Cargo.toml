@@ -42,12 +42,12 @@ name = "oer-esp32s31-ieee802154-vendor-host"
 path = "src/main.rs"
 
 [dependencies]
-oer-process = { path = "../../../../tools/process" }
-oer-esp32s31-hal = { path = "../../../../crates/hardware/esp32s31/hal" }
-oer-espressif-ieee802154-engine = { path = "../../../../crates/hardware/espressif/ieee802154/engine" }
-oer-ieee802154 = { path = "../../../../crates/protocols/ieee802154" }
-oer-durable = { path = "../../../../tools/durable" }
-oer-vendor-artifacts = { path = "../../../../tools/vendor-artifacts" }
+oer-process = { path = "../../base/process" }
+oer-esp32s31-hal = { path = "../../../../crates/esp32s31/hal" }
+oer-espressif-ieee802154-engine = { path = "../../../../crates/espressif/ieee802154-engine" }
+oer-ieee802154 = { path = "../../../../crates/ieee802154/mac" }
+oer-durable = { path = "../../base/durable" }
+oer-vendor-artifacts = { path = "../../data/vendor-artifacts" }
 oer-vendor-evidence = { path = "../../../evidence" }
 oer-vendor-evidence-shard = { path = "../../../../qualification/evidence-shard" }
 
@@ -60,8 +60,8 @@ sw-coex = []
 
 [build-dependencies]
 cc = "=1.4.3"
-oer-vendor-artifacts = { path = "../../../../tools/vendor-artifacts" }
-oer-vendor-pins = { path = "../../../../tools/vendor-pins" }
+oer-vendor-artifacts = { path = "../../data/vendor-artifacts" }
+oer-vendor-pins = { path = "../../data/vendor-pins" }
 
 [lints]
 workspace = true

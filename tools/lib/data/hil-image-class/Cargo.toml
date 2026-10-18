@@ -9,14 +9,14 @@ publish = false
 description = "HIL image classes: build feature recipes and the keys each class reports"
 
 [dependencies]
-oer-hil-schema = { path = "../../schema" }
-oer-chip-profile = { path = "../../../tools/chip-profile" }
-oer-hil-image-keys = { path = "../../image-keys" }
-oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
+oer-hil-schema = { path = "../hil-schema" }
+oer-chip-profile = { path = "../chip-profile" }
+oer-hil-image-keys = { path = "../hil-image-keys" }
+oer-hil-protocol = { path = "../hil-protocol", features = ["registry"] }
 toml = "1.1"
 
 [build-dependencies]
-oer-chip-profile = { path = "../../../tools/chip-profile" }
+oer-chip-profile = { path = "../chip-profile" }
 
 [lints]
 workspace = true

@@ -9,8 +9,8 @@ publish = false
 description = "Two linked RISC-V images compared function by function modulo placement"
 
 [dependencies]
-oer-elf = { path = "../../elf" }
-oer-riscv-lift = { path = "../../riscv/lift" }
+oer-elf = { path = "../../analysis/elf" }
+oer-riscv-lift = { path = "../../analysis/riscv-lift" }
 
 [dev-dependencies]
 

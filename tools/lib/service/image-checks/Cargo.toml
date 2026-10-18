@@ -9,11 +9,11 @@ publish = false
 description = "The checks an image build runs on request, assembled from the stack, interrupt-stack and placement checks"
 
 [dependencies]
-oer-elf = { path = "../../elf" }
-oer-image = { path = "../pipeline" }
-oer-image-check-interrupts = { path = "../check/interrupts" }
-oer-image-check-placement = { path = "../check/placement" }
-oer-image-check-stack = { path = "../check/stack" }
+oer-elf = { path = "../../analysis/elf" }
+oer-image = { path = "../image" }
+oer-image-check-interrupts = { path = "../image-check-interrupts" }
+oer-image-check-placement = { path = "../image-check-placement" }
+oer-image-check-stack = { path = "../image-check-stack" }
 
 [lints]
 workspace = true

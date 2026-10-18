@@ -9,15 +9,15 @@ publish = false
 description = "The HIL flash operation: a leased board written by the devices layer's one write, receipted, then journaled as history"
 
 [dependencies]
-oer-image-bundle = { path = "../../../tools/image/bundle" }
-oer-chip-profile = { path = "../../../tools/chip-profile" }
-oer-durable = { path = "../../../tools/durable" }
-oer-devices = { path = "../../../tools/device/devices", features = ["image"] }
-oer-device-lock = { path = "../../../tools/device/lock" }
-oer-stand-board = { path = "../../../stand/board" }
-oer-stand-journal = { path = "../../../stand/journal" }
-oer-image = { path = "../../../tools/image/pipeline" }
-oer-process = { path = "../../../tools/process" }
+oer-image-bundle = { path = "../image-bundle" }
+oer-chip-profile = { path = "../../data/chip-profile" }
+oer-durable = { path = "../../base/durable" }
+oer-devices = { path = "../devices", features = ["image"] }
+oer-device-lock = { path = "../device-lock" }
+oer-stand-board = { path = "../../data/stand-board" }
+oer-stand-journal = { path = "../stand-journal" }
+oer-image = { path = "../image" }
+oer-process = { path = "../../base/process" }
 
 [dev-dependencies]
 tempfile = "3"

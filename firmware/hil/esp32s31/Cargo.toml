@@ -30,12 +30,12 @@ esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
 esp-sync = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02" }
 log = { version = "0.4.27", features = ["max_level_trace", "release_max_level_info"] }
-oer-espressif-executor-embassy = { path = "../../../crates/adapters/embassy/espressif/executor", features = ["esp32s31"] }
-oer-espressif-interrupt-table-esp-hal = { path = "../../../crates/adapters/esp-hal/espressif/interrupt-table", features = ["esp32s31"] }
-oer-esp32s31-pac = { path = "../../../crates/hardware/esp32s31/pac", features = ["validation-probes"] }
-oer-esp32s31-soc-esp-hal = { path = "../../../crates/adapters/esp-hal/esp32s31/soc", features = ["esp32s31"] }
-oer-hil-protocol = { path = "../../protocol", default-features = false }
-oer-hil-image-keys = { path = "../../image-keys" }
+oer-espressif-executor-embassy = { path = "../../../crates/exec/executor", features = ["esp32s31"] }
+oer-espressif-interrupt-table-esp-hal = { path = "../../../crates/exec/esp-hal-irq", features = ["esp32s31"] }
+oer-esp32s31-pac = { path = "../../../crates/esp32s31/pac", features = ["validation-probes"] }
+oer-esp32s31-soc-esp-hal = { path = "../../../crates/adapters/esp-hal/soc", features = ["esp32s31"] }
+oer-hil-protocol = { path = "../../../tools/lib/data/hil-protocol", default-features = false }
+oer-hil-image-keys = { path = "../../../tools/lib/data/hil-image-keys" }
 portable-atomic = { version = "1.11", default-features = false }
 postcard = { version = "1.1.3", default-features = false }
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }

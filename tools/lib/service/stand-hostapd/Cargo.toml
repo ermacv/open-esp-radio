@@ -9,8 +9,8 @@ publish = false
 description = "The pinned hostapd build of the Linux fixture software"
 
 [dependencies]
-oer-durable = { path = "../../tools/durable" }
-oer-process = { path = "../../tools/process" }
+oer-durable = { path = "../../base/durable" }
+oer-process = { path = "../../base/process" }
 serde_json = "1.0"
 tempfile = "3"
 

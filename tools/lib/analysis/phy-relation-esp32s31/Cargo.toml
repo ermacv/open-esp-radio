@@ -15,7 +15,7 @@ readme = "README.md"
 projection = ["dep:oer-esp32s31-phy"]
 
 [dependencies]
-oer-esp32s31-phy = { path = "../../../../crates/hardware/esp32s31/phy", features = ["validation-probes"], optional = true }
+oer-esp32s31-phy = { path = "../../../../crates/esp32s31/phy", features = ["validation-probes"], optional = true }
 
 [lints]
 workspace = true

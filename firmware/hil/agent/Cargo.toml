@@ -12,7 +12,7 @@ description = "Chip-independent HIL target logic shared by the firmware runtime 
 crc = "3.3.0"
 embassy-sync = "0.8.0"
 heapless = "0.9.3"
-oer-hil-protocol = { path = "../protocol", default-features = false, features = ["async-io"] }
+oer-hil-protocol = { path = "../../../tools/lib/data/hil-protocol", default-features = false, features = ["async-io"] }
 embedded-io-async = "0.7.0"
 embassy-futures = "0.1.2"
 log = "0.4"

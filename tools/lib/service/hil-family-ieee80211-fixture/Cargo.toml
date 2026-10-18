@@ -10,16 +10,16 @@ description = "Wi-Fi HIL fixtures: laptop hostapd and wpa_supplicant, the OpenWr
 
 [dependencies]
 oer-hil-run-bundle-format = { path = "../../run-bundle/format" }
-oer-hil-scenario-catalog = { path = "../../scenario/catalog" }
-oer-durable = { path = "../../../../tools/durable" }
-oer-hil-fixture = { path = "../../fixture" }
-oer-hil-lab = { path = "../../lab" }
-oer-hil-net-traffic = { path = "../../net-traffic" }
-oer-hil-scenario = { path = "../../scenario" }
-oer-stand-ssh = { path = "../../../../stand/ssh" }
-oer-hil-workload = { path = "../../workload" }
-oer-process = { path = "../../../../tools/process" }
-oer-toolchain = { path = "../../../../tools/toolchain" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-durable = { path = "../../base/durable" }
+oer-hil-fixture = { path = "../hil-fixture" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-hil-net-traffic = { path = "../hil-net-traffic" }
+oer-hil-scenario = { path = "../hil-scenario" }
+oer-stand-ssh = { path = "../stand-ssh" }
+oer-hil-workload = { path = "../hil-workload" }
+oer-process = { path = "../../base/process" }
+oer-toolchain = { path = "../toolchain" }
 mio = { version = "=1.2.2", features = ["os-poll", "os-ext"] }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -28,7 +28,7 @@ tempfile = "3"
 zeroize = "1.8.1"
 
 [dev-dependencies]
-oer-hil-workload = { path = "../../workload", features = ["test-support"] }
+oer-hil-workload = { path = "../hil-workload", features = ["test-support"] }
 
 [lints]
 workspace = true

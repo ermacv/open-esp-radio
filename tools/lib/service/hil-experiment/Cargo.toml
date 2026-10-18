@@ -10,22 +10,22 @@ description = "HIL experiments: the one run launch, A/B comparisons and bisectio
 
 [dependencies]
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
-oer-durable = { path = "../../../tools/durable" }
-oer-hil-analysis = { path = "../analysis" }
-oer-stand-arbiter = { path = "../../../stand/arbiter" }
-oer-hil-image = { path = "../image" }
-oer-hil-observer = { path = "../../observer" }
+oer-durable = { path = "../../base/durable" }
+oer-hil-analysis = { path = "../../analysis/hil-analysis" }
+oer-stand-arbiter = { path = "../stand-arbiter" }
+oer-hil-image = { path = "../hil-image" }
+oer-hil-observer = { path = "../hil-observer" }
 oer-hil-run-bundle = { path = "../run-bundle" }
-oer-hil-schema = { path = "../../schema" }
+oer-hil-schema = { path = "../../data/hil-schema" }
 oer-hil-source-snapshot = { path = "../source-snapshot" }
-oer-stand-file = { path = "../../../stand/file" }
-oer-process = { path = "../../../tools/process" }
-oer-stats = { path = "../../../tools/stats" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-process = { path = "../../base/process" }
+oer-stats = { path = "../stats" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-oer-stand-claims = { path = "../../../stand/claims" }
-oer-stand-owners = { path = "../../../stand/owners" }
+oer-stand-claims = { path = "../stand-claims" }
+oer-stand-owners = { path = "../stand-owners" }
 [dev-dependencies]
 oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
 tempfile = "3"

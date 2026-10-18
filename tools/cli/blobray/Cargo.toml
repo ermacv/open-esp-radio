@@ -16,11 +16,11 @@ path = "src/main.rs"
 name = "blobray_cli"
 
 [dependencies]
-oer-riscv-lift = { path = "../../riscv/lift" }
-blobray-backend-riscv = { path = "../crates/riscv" }
-blobray-application = { path = "../crates/application" }
-blobray-domain = { path = "../crates/domain" }
-oer-riscv-model = { path = "../../riscv/model" }
+oer-riscv-lift = { path = "../../lib/analysis/riscv-lift" }
+blobray-backend-riscv = { path = "../../lib/analysis/blobray-riscv" }
+blobray-application = { path = "../../lib/analysis/blobray-application" }
+blobray-domain = { path = "../../lib/analysis/blobray-domain" }
+oer-riscv-model = { path = "../../lib/analysis/riscv-model" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde_json = "=1.0.151"
 serde = { version = "=1.0.229", features = ["derive"] }

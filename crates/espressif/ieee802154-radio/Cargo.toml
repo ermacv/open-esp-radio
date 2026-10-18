@@ -8,13 +8,13 @@ repository.workspace = true
 description = "Executor-free Espressif IEEE 802.15.4 radio role: the portable radio contract over the ported MAC engine"
 
 [dependencies]
-oer-espressif-ieee802154-engine = { path = "../../../../hardware/espressif/ieee802154/engine" }
-oer-ieee802154 = { path = "../../../../protocols/ieee802154" }
-oer-time = { path = "../../../../time" }
+oer-espressif-ieee802154-engine = { path = "../ieee802154-engine" }
+oer-ieee802154 = { path = "../../ieee802154/mac" }
+oer-time = { path = "../../base/time" }
 
 [dev-dependencies]
-oer-time-virtual = { path = "../../../../adapters/virtual/time" }
-oer-espressif-ieee802154-engine = { path = "../../../../hardware/espressif/ieee802154/engine", features = ["model"] }
+oer-time-virtual = { path = "../../base/time-virtual" }
+oer-espressif-ieee802154-engine = { path = "../ieee802154-engine", features = ["model"] }
 
 [lints]
 workspace = true

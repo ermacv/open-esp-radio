@@ -13,20 +13,20 @@ name = "verification"
 path = "src/main.rs"
 
 [dependencies]
-blobray-application = { path = "../../tools/blobray/crates/application" }
-blobray-domain = { path = "../../tools/blobray/crates/domain" }
-oer-chip-profile = { path = "../../tools/chip-profile" }
-oer-elf = { path = "../../tools/elf" }
-oer-register-model = { path = "../../tools/registers/model" }
-oer-riscv-lift = { path = "../../tools/riscv/lift" }
-oer-riscv-model = { path = "../../tools/riscv/model" }
-oer-command-tree = { path = "../../tools/command-tree", features = ["clap"] }
-oer-process = { path = "../../tools/process" }
+blobray-application = { path = "../../lib/analysis/blobray-application" }
+blobray-domain = { path = "../../lib/analysis/blobray-domain" }
+oer-chip-profile = { path = "../../lib/data/chip-profile" }
+oer-elf = { path = "../../lib/analysis/elf" }
+oer-register-model = { path = "../../lib/data/register-model" }
+oer-riscv-lift = { path = "../../lib/analysis/riscv-lift" }
+oer-riscv-model = { path = "../../lib/analysis/riscv-model" }
+oer-command-tree = { path = "../../lib/base/command-tree", features = ["clap"] }
+oer-process = { path = "../../lib/base/process" }
 oer-repo = { path = "../../tools/repo" }
-oer-toolchain = { path = "../../tools/toolchain" }
-oer-vendor-artifacts = { path = "../../tools/vendor-artifacts" }
+oer-toolchain = { path = "../../lib/service/toolchain" }
+oer-vendor-artifacts = { path = "../../lib/data/vendor-artifacts" }
 oer-vendor-evidence = { path = "../evidence", features = ["producers"] }
-oer-vendor-provenance = { path = "../../tools/vendor-provenance" }
+oer-vendor-provenance = { path = "../../lib/service/vendor-provenance" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

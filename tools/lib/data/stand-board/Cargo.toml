@@ -9,13 +9,13 @@ publish = false
 description = "A board of the stand file and, under its device access, its write, start, reset ladder, console and hub power"
 
 [dependencies]
-oer-devices = { path = "../../tools/device/devices", features = ["image"] }
-oer-device-lock = { path = "../../tools/device/lock" }
-oer-chip-profile = { path = "../../tools/chip-profile" }
-oer-stand-file = { path = "../file" }
-oer-stand-power = { path = "../power" }
-oer-image-bundle = { path = "../../tools/image/bundle" }
-oer-process = { path = "../../tools/process" }
+oer-devices = { path = "../../service/devices", features = ["image"] }
+oer-device-lock = { path = "../../service/device-lock" }
+oer-chip-profile = { path = "../chip-profile" }
+oer-stand-file = { path = "../stand-file" }
+oer-stand-power = { path = "../../service/stand-power" }
+oer-image-bundle = { path = "../../service/image-bundle" }
+oer-process = { path = "../../base/process" }
 
 [dev-dependencies]
 tempfile = "3"

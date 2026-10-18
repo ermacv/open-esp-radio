@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Trace points of the IEEE 802.11 station and its RX slot pool, decodable on the host"
 
 [dependencies]
-oer-trace = { path = "../../../trace" }
+oer-trace = { path = "../../base/trace" }
 
 [lints]
 workspace = true

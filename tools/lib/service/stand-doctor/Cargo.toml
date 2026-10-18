@@ -9,10 +9,10 @@ publish = false
 description = "Whether the host is set up for the stand: the stand file, the udev rule, uhubctl without sudo, NetworkManager leaving wlan0"
 
 [dependencies]
-oer-chip-profile = { path = "../../tools/chip-profile" }
-oer-process = { path = "../../tools/process" }
-oer-stand-file = { path = "../file" }
-oer-stand-power = { path = "../power" }
+oer-chip-profile = { path = "../../data/chip-profile" }
+oer-process = { path = "../../base/process" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-stand-power = { path = "../stand-power" }
 
 [dev-dependencies]
 tempfile = "3"

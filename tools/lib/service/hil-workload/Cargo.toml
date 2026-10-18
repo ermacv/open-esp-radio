@@ -18,25 +18,25 @@ test-support = [
 
 [dependencies]
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
-oer-hil-schema = { path = "../../schema" }
-oer-hil-scenario-catalog = { path = "../scenario/catalog" }
-oer-image-bundle = { path = "../../../tools/image/bundle" }
-oer-hil-lab = { path = "../lab" }
-oer-device-lock = { path = "../../../tools/device/lock" }
-oer-stand-board = { path = "../../../stand/board" }
-oer-hil-link = { path = "../link" }
-oer-hil-scenario = { path = "../scenario" }
-oer-durable = { path = "../../../tools/durable" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-image-bundle = { path = "../image-bundle" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-device-lock = { path = "../device-lock" }
+oer-stand-board = { path = "../../data/stand-board" }
+oer-hil-link = { path = "../hil-link" }
+oer-hil-scenario = { path = "../hil-scenario" }
+oer-durable = { path = "../../base/durable" }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
-oer-process = { path = "../../../tools/process" }
-oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
+oer-process = { path = "../../base/process" }
+oer-hil-protocol = { path = "../../data/hil-protocol", features = ["registry"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dev-dependencies]
-oer-hil-lab = { path = "../lab", features = ["test-support"] }
-oer-hil-link = { path = "../link", features = ["test-support"] }
-oer-hil-scenario = { path = "../scenario", features = ["test-support"] }
+oer-hil-lab = { path = "../hil-lab", features = ["test-support"] }
+oer-hil-link = { path = "../hil-link", features = ["test-support"] }
+oer-hil-scenario = { path = "../hil-scenario", features = ["test-support"] }
 
 [lints]
 workspace = true

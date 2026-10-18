@@ -9,15 +9,15 @@ publish = false
 description = "The stand arbiter: the queue and its job tickets, balances, preemption, maintenance and the device locks of every leased board"
 
 [dependencies]
-oer-devices = { path = "../../tools/device/devices" }
-oer-device-lock = { path = "../../tools/device/lock" }
-oer-durable = { path = "../../tools/durable" }
-oer-process = { path = "../../tools/process" }
-oer-stand-claims = { path = "../claims" }
-oer-stand-file = { path = "../file" }
-oer-stand-journal = { path = "../journal" }
-oer-stand-owners = { path = "../owners" }
-oer-stand-power = { path = "../power" }
+oer-devices = { path = "../devices" }
+oer-device-lock = { path = "../device-lock" }
+oer-durable = { path = "../../base/durable" }
+oer-process = { path = "../../base/process" }
+oer-stand-claims = { path = "../stand-claims" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-stand-journal = { path = "../stand-journal" }
+oer-stand-owners = { path = "../stand-owners" }
+oer-stand-power = { path = "../stand-power" }
 rustix = { version = "1.1.4", features = ["process"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

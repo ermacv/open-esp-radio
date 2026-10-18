@@ -35,7 +35,7 @@ system-panic-reset = [
     "dep:critical-section",
 ]
 [dependencies]
-oer-memory = { path = "../../../../crates/memory" }
+oer-memory = { path = "../../../crates/base/memory" }
 embassy-executor.workspace = true
 embassy-sync = { workspace = true, optional = true }
 embassy-time.workspace = true
@@ -46,16 +46,16 @@ oer-esp32s31-soc-esp-hal.workspace = true
 oer-espressif-executor-embassy.workspace = true
 oer-espressif-interrupt-table-esp-hal.workspace = true
 oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
-oer-hil-agent = { path = "../../../agent", optional = true, default-features = false }
+oer-hil-agent = { path = "../agent", optional = true, default-features = false }
 oer-hil-image-keys = { workspace = true, optional = true }
-oer-espressif-staged-runtime = { path = "../../../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
-oer-esp32s31-platform-board = { path = "../../../../platform/esp32s31/board", features = ["stage-two"] }
-oer-esp32s31-platform-layout = { path = "../../../../platform/esp32s31/layout" }
+oer-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-esp32s31-platform-board = { path = "../../platform/esp32s31/board", features = ["stage-two"] }
+oer-esp32s31-platform-layout = { path = "../../platform/esp32s31/layout" }
 static_cell.workspace = true
 
 [lints]
 workspace = true
 
 [build-dependencies]
-oer-esp32s31-platform-layout = { path = "../../../../platform/esp32s31/layout", features = ["build"] }
+oer-esp32s31-platform-layout = { path = "../../platform/esp32s31/layout", features = ["build"] }
 

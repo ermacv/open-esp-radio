@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Trace points and the post-mortem snapshot of the Espressif PHY, decodable on the host"
 
 [dependencies]
-oer-trace = { path = "../../../trace" }
+oer-trace = { path = "../../base/trace" }
 
 [lints]
 workspace = true

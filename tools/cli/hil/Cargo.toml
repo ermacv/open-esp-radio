@@ -9,29 +9,29 @@ publish = false
 description = "The `cargo hil` command line: argument parsing and calls into the stand, run store, analysis and experiment packages"
 
 [dependencies]
-oer-esp-idf = { path = "../../../tools/esp-idf" }
+oer-esp-idf = { path = "../../lib/service/esp-idf" }
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
 oer-hil-evidence-archive = { path = "../evidence-archive" }
-oer-chip-profile = { path = "../../../tools/chip-profile" }
-oer-command-tree = { path = "../../../tools/command-tree", features = ["clap"] }
-oer-stand-arbiter = { path = "../../../stand/arbiter" }
-oer-stand-board = { path = "../../../stand/board" }
+oer-chip-profile = { path = "../../lib/data/chip-profile" }
+oer-command-tree = { path = "../../lib/base/command-tree", features = ["clap"] }
+oer-stand-arbiter = { path = "../../lib/service/stand-arbiter" }
+oer-stand-board = { path = "../../lib/data/stand-board" }
 oer-hil-run-bundle = { path = "../run-bundle" }
-oer-hil-analysis = { path = "../analysis" }
-oer-hil-experiment = { path = "../experiment" }
-oer-image = { path = "../../../tools/image/pipeline" }
-oer-image-check-interrupts = { path = "../../../tools/image/check/interrupts" }
-oer-image-compare = { path = "../../../tools/image/compare" }
-oer-hil-image = { path = "../image" }
-oer-hil-image-class = { path = "../image-class" }
+oer-hil-analysis = { path = "../../lib/analysis/hil-analysis" }
+oer-hil-experiment = { path = "../../lib/service/hil-experiment" }
+oer-image = { path = "../../lib/service/image" }
+oer-image-check-interrupts = { path = "../../lib/service/image-check-interrupts" }
+oer-image-compare = { path = "../../lib/service/image-compare" }
+oer-hil-image = { path = "../../lib/service/hil-image" }
+oer-hil-image-class = { path = "../../lib/data/hil-image-class" }
 oer-hil-source-snapshot = { path = "../source-snapshot" }
-oer-hil-schema = { path = "../../schema" }
-oer-hil-observer = { path = "../../observer" }
-oer-hil-lab = { path = "../lab" }
-oer-stand-fixtures = { path = "../../../stand/fixtures" }
-oer-durable = { path = "../../../tools/durable" }
-oer-process = { path = "../../../tools/process" }
-oer-toolchain = { path = "../../../tools/toolchain" }
+oer-hil-schema = { path = "../../lib/data/hil-schema" }
+oer-hil-observer = { path = "../../lib/service/hil-observer" }
+oer-hil-lab = { path = "../../lib/service/hil-lab" }
+oer-stand-fixtures = { path = "../../lib/service/stand-fixtures" }
+oer-durable = { path = "../../lib/base/durable" }
+oer-process = { path = "../../lib/base/process" }
+oer-toolchain = { path = "../../lib/service/toolchain" }
 clap = { version = "=4.5.48", features = ["derive"] }
 rustix = { version = "=1.1.4", features = ["process"] }
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -39,9 +39,9 @@ serde_json = "=1.0.151"
 tempfile = "=3.27.0"
 toml = "=1.1.4"
 
-oer-device-peer-line = { path = "../../../tools/device/peer-line" }
-oer-stand-claims = { path = "../../../stand/claims" }
-oer-stand-owners = { path = "../../../stand/owners" }
+oer-device-peer-line = { path = "../../lib/service/device-peer-line" }
+oer-stand-claims = { path = "../../lib/service/stand-claims" }
+oer-stand-owners = { path = "../../lib/service/stand-owners" }
 [dev-dependencies]
 oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
 

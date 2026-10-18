@@ -14,8 +14,8 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
-oer-radio-port = { path = "../../../../radio/port" }
-oer-time = { path = "../../../../time" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-time = { path = "../../../base/time" }
 
 [lints]
 workspace = true

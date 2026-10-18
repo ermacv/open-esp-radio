@@ -10,13 +10,13 @@ description = "Blobray operations over captured executables inside the calling p
 
 [dependencies]
 rustc-demangle = "=0.1.28"
-oer-riscv-program = { path = "../../../riscv/program" }
-oer-riscv-analysis = { path = "../../../riscv/analysis" }
-blobray-verification = { path = "../verification" }
-blobray-analysis = { path = "../analysis" }
-blobray-domain = { path = "../domain" }
-oer-riscv-model = { path = "../../../riscv/model" }
-blobray-artifacts = { path = "../artifacts" }
+oer-riscv-program = { path = "../riscv-program" }
+oer-riscv-analysis = { path = "../riscv-analysis" }
+blobray-verification = { path = "../blobray-verification" }
+blobray-analysis = { path = "../blobray-analysis" }
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-model = { path = "../riscv-model" }
+blobray-artifacts = { path = "../blobray-artifacts" }
 
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

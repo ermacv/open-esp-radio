@@ -22,13 +22,13 @@ esp32s31 = [
 
 [dependencies]
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
-oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal", optional = true }
-oer-esp32s31-phy = { path = "../../../../hardware/esp32s31/phy", optional = true }
-oer-esp32s31-ieee80211 = { path = "../../../../hardware/esp32s31/driver/ieee80211", optional = true }
-oer-esp32s31-ieee80211-mac = { path = "../../../../hardware/esp32s31/driver/ieee80211/mac", optional = true }
-oer-esp32s31-ieee80211-form = { path = "../../../../runtime/esp32s31/ieee80211-form", optional = true }
-oer-interrupt-table = { path = "../../../../runtime/interrupt-table", optional = true }
-oer-espressif-interrupt-table-esp-hal = { path = "../../espressif/interrupt-table", features = ["esp32s31"], optional = true }
+oer-esp32s31-hal = { path = "../../../esp32s31/hal", optional = true }
+oer-esp32s31-phy = { path = "../../../esp32s31/phy", optional = true }
+oer-esp32s31-ieee80211 = { path = "../../../esp32s31/ieee80211/driver", optional = true }
+oer-esp32s31-ieee80211-mac = { path = "../../../esp32s31/ieee80211/mac", optional = true }
+oer-esp32s31-ieee80211-form = { path = "../../../esp32s31/ieee80211/form", optional = true }
+oer-interrupt-table = { path = "../../../exec/interrupt-table", optional = true }
+oer-espressif-interrupt-table-esp-hal = { path = "../../../exec/esp-hal-irq", features = ["esp32s31"], optional = true }
 
 [lints]
 workspace = true

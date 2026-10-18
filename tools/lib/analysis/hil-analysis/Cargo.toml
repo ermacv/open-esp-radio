@@ -9,14 +9,14 @@ publish = false
 description = "Analysis of HIL run bundles: measurement samples, statistics and comparison, run queries, performance baselines and the sealed views"
 
 [dependencies]
-oer-process = { path = "../../../tools/process" }
+oer-process = { path = "../../base/process" }
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
-oer-elf = { path = "../../../tools/elf" }
-oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
-oer-durable = { path = "../../../tools/durable" }
+oer-elf = { path = "../elf" }
+oer-hil-protocol = { path = "../../data/hil-protocol", features = ["registry"] }
+oer-durable = { path = "../../base/durable" }
 oer-hil-run-bundle = { path = "../run-bundle" }
-oer-hil-schema = { path = "../../schema" }
-oer-stats = { path = "../../../tools/stats" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-stats = { path = "../../service/stats" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

@@ -13,9 +13,9 @@ description = "Wi-Fi radio evidence of HIL runs: typed monitor-capture frames, B
 test-support = []
 
 [dependencies]
-oer-hil-lab = { path = "../../lab" }
-oer-hil-protocol = { path = "../../../protocol" }
-oer-process = { path = "../../../../tools/process" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-hil-protocol = { path = "../../data/hil-protocol" }
+oer-process = { path = "../../base/process" }
 serde = { version = "1.0", features = ["derive"] }
 
 [lints]

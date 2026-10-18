@@ -12,7 +12,7 @@ description = "Rust frontend for verification probe declarations"
 proc-macro = true
 
 [dependencies]
-oer-probe-codegen = { path = "../codegen" }
+oer-probe-codegen = { path = "../probe-codegen" }
 syn = { version = "=2.0.119", features = ["full"] }
 
 [lints]

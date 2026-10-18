@@ -13,10 +13,10 @@ esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32c5", "rt", "unstable"] }
 esp-println = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["auto", "esp32c5"] }
 esp32c5 = { git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", default-features = false }
-oer-esp32c5-hal = { path = "../../../../crates/hardware/esp32c5/hal" }
-oer-esp32c5-pac = { path = "../../../../crates/hardware/esp32c5/pac" }
-oer-esp32c5-pac-raw = { path = "../../../../crates/hardware/esp32c5/pac/raw" }
-oer-radio-analog = { path = "../../../../crates/hardware/radio/analog" }
+oer-esp32c5-hal = { path = "../../../../crates/esp32c5/hal" }
+oer-esp32c5-pac = { path = "../../../../crates/esp32c5/pac" }
+oer-esp32c5-pac-raw = { path = "../../../../crates/esp32c5/pac-raw" }
+oer-radio-analog = { path = "../../../../crates/espressif/radio-analog" }
 
 [profile.release]
 codegen-units = 1

@@ -9,8 +9,8 @@ publish = false
 description = "The host tools repository builds run: their lookup, recorded versions and the image compiler setup"
 
 [dependencies]
-oer-durable = { path = "../durable" }
-oer-process = { path = "../process" }
+oer-durable = { path = "../../base/durable" }
+oer-process = { path = "../../base/process" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

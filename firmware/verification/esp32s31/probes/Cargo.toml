@@ -28,18 +28,18 @@ disallowed_methods = "deny"
 [workspace.dependencies]
 embassy-futures = "0.1.2"
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "unstable"] }
-oer-esp32s31-radio-esp-hal = { path = "../../../crates/adapters/esp-hal/esp32s31/radio", features = ["esp32s31"] }
-oer-memory = { path = "../../../crates/memory" }
-oer-esp32s31-hal = { path = "../../../crates/hardware/esp32s31/hal", features = ["validation-probes"] }
-oer-esp32s31-bluetooth = { path = "../../../crates/hardware/esp32s31/driver/bluetooth", features = ["validation-probes"] }
-oer-esp32s31-coex = { path = "../../../crates/hardware/esp32s31/driver/coex", features = ["validation-probes"] }
-oer-esp32s31-pac = { path = "../../../crates/hardware/esp32s31/pac", features = ["validation-probes"] }
-oer-esp32s31-phy = { path = "../../../crates/hardware/esp32s31/phy" }
-oer-esp32s31-ieee80211-mac = { path = "../../../crates/hardware/esp32s31/driver/ieee80211/mac", features = ["validation-probes", "validation-raw-dma"] }
-oer-esp32s31-ieee80211 = { path = "../../../crates/hardware/esp32s31/driver/ieee80211" }
-oer-esp32s31-ieee80211-dma = { path = "../../../crates/hardware/esp32s31/driver/ieee80211/dma" }
-oer-ieee80211-mac = { path = "../../../crates/protocols/ieee80211/mac" }
-oer-ieee80211-softmac = { path = "../../../crates/protocols/ieee80211/softmac" }
+oer-esp32s31-radio-esp-hal = { path = "../../../../crates/adapters/esp-hal/radio", features = ["esp32s31"] }
+oer-memory = { path = "../../../../crates/base/memory" }
+oer-esp32s31-hal = { path = "../../../../crates/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-bluetooth = { path = "../../../../crates/esp32s31/bluetooth/driver", features = ["validation-probes"] }
+oer-esp32s31-coex = { path = "../../../../crates/esp32s31/radio/coex", features = ["validation-probes"] }
+oer-esp32s31-pac = { path = "../../../../crates/esp32s31/pac", features = ["validation-probes"] }
+oer-esp32s31-phy = { path = "../../../../crates/esp32s31/phy" }
+oer-esp32s31-ieee80211-mac = { path = "../../../../crates/esp32s31/ieee80211/mac", features = ["validation-probes", "validation-raw-dma"] }
+oer-esp32s31-ieee80211 = { path = "../../../../crates/esp32s31/ieee80211/driver" }
+oer-esp32s31-ieee80211-dma = { path = "../../../../crates/esp32s31/ieee80211/dma" }
+oer-ieee80211-mac = { path = "../../../../crates/ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../../../crates/ieee80211/softmac" }
 
 [profile.release]
 codegen-units = 1

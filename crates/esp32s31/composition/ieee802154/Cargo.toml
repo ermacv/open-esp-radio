@@ -8,23 +8,23 @@ repository.workspace = true
 description = "Product-level ESP32-S31 IEEE 802.15.4 composition over the shared radio arbiter for Embassy and esp-hal"
 
 [dependencies]
-oer-memory = { path = "../../../../memory" }
+oer-memory = { path = "../../../base/memory" }
 embassy-sync = "0.8.0"
-oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
-oer-espressif-ieee802154-engine = { path = "../../../../hardware/espressif/ieee802154/engine" }
-oer-espressif-ieee802154-runtime = { path = "../../../../runtime/espressif/ieee802154" }
-oer-ieee802154 = { path = "../../../../protocols/ieee802154" }
-oer-ieee802154-port = { path = "../../../../protocols/ieee802154/port" }
-oer-radio-port = { path = "../../../../radio/port" }
-oer-esp32s31-phy = { path = "../../../../hardware/esp32s31/phy" }
-oer-esp32s31-radio-runtime = { path = "../../../../runtime/esp32s31/radio" }
-oer-esp32s31-coex = { path = "../../../../hardware/esp32s31/driver/coex" }
-oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-espressif-ieee802154-engine = { path = "../../../espressif/ieee802154-engine" }
+oer-espressif-ieee802154-runtime = { path = "../../../espressif/ieee802154-runtime" }
+oer-ieee802154 = { path = "../../../ieee802154/mac" }
+oer-ieee802154-port = { path = "../../../ieee802154/port" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-esp32s31-radio-runtime = { path = "../../radio/runtime" }
+oer-esp32s31-coex = { path = "../../radio/coex" }
+oer-time-embassy = { path = "../../../adapters/embassy/time" }
 
 # Hardware composition is target-only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-ieee802154-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/ieee802154", features = ["esp32s31"] }
-oer-esp32s31-radio-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/radio", features = ["esp32s31"] }
+oer-esp32s31-ieee802154-esp-hal = { path = "../../../adapters/esp-hal/ieee802154", features = ["esp32s31"] }
+oer-esp32s31-radio-esp-hal = { path = "../../../adapters/esp-hal/radio", features = ["esp32s31"] }
 
 [lints]
 workspace = true

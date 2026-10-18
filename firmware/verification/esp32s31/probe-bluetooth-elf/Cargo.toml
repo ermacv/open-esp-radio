@@ -10,11 +10,11 @@ description = "Linked ESP32-S31 Bluetooth production comparison probe image"
 
 [dependencies]
 critical-section = "1.2.0"
-oer-esp32s31-probe-bluetooth = { path = "../library" }
+oer-esp32s31-probe-bluetooth = { path = "../probe-bluetooth" }
 
 [lints]
 workspace = true
 
 
 [build-dependencies]
-oer-probe-codegen = { path = "../../../../harness/codegen" }
+oer-probe-codegen = { path = "../../../../tools/lib/service/probe-codegen" }

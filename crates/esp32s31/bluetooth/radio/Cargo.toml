@@ -18,17 +18,17 @@ test-support = [
 ]
 
 [dependencies]
-oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
-oer-bluetooth-trace = { path = "../../../../protocols/bluetooth/trace" }
-oer-esp32s31-bluetooth = { path = "../../../../hardware/esp32s31/driver/bluetooth" }
-oer-esp32s31-bluetooth-memory = { path = "../../../../hardware/esp32s31/driver/bluetooth/memory" }
-oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
-oer-trace = { path = "../../../../trace" }
+oer-bluetooth-radio = { path = "../../../bluetooth/le/radio" }
+oer-bluetooth-trace = { path = "../../../bluetooth/trace" }
+oer-esp32s31-bluetooth = { path = "../driver" }
+oer-esp32s31-bluetooth-memory = { path = "../memory" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-trace = { path = "../../../base/trace" }
 
 [dev-dependencies]
-oer-esp32s31-bluetooth-memory = { path = "../../../../hardware/esp32s31/driver/bluetooth/memory", features = ["validation-probes"] }
-oer-esp32s31-bluetooth = { path = "../../../../hardware/esp32s31/driver/bluetooth", features = ["test-support"] }
-oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-bluetooth-memory = { path = "../memory", features = ["validation-probes"] }
+oer-esp32s31-bluetooth = { path = "../driver", features = ["test-support"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
 
 [lints]
 workspace = true

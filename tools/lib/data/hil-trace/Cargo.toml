@@ -19,11 +19,11 @@ describe = [
 ]
 
 [dependencies]
-oer-trace = { path = "../../crates/trace" }
-oer-bluetooth-trace = { path = "../../crates/protocols/bluetooth/trace", optional = true }
-oer-ieee80211-trace = { path = "../../crates/protocols/ieee80211/trace", optional = true }
-oer-ieee802154-trace = { path = "../../crates/hardware/ieee802154/trace", optional = true }
-oer-phy-trace = { path = "../../crates/hardware/radio/trace", optional = true }
+oer-trace = { path = "../../../../crates/base/trace" }
+oer-bluetooth-trace = { path = "../../../../crates/bluetooth/trace", optional = true }
+oer-ieee80211-trace = { path = "../../../../crates/ieee80211/trace", optional = true }
+oer-ieee802154-trace = { path = "../../../../crates/espressif/ieee802154-trace", optional = true }
+oer-phy-trace = { path = "../../../../crates/espressif/phy-trace", optional = true }
 
 [lints]
 workspace = true

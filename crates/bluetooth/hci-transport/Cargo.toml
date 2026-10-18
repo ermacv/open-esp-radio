@@ -9,7 +9,7 @@ description = "Bounded in-process HCI transport between an LE Host and Controlle
 readme = "README.md"
 
 [dependencies]
-oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
+oer-bluetooth-hci = { path = "../hci" }
 bt-hci = "=0.10.1"
 embassy-sync = "0.8.0"
 embedded-io = "0.7.1"

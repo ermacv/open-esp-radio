@@ -10,7 +10,7 @@ description = "The keys a HIL image serves, as a function of the features it is 
 
 [dependencies]
 heapless = "0.9.3"
-oer-hil-protocol = { path = "../protocol", default-features = false }
+oer-hil-protocol = { path = "../hil-protocol", default-features = false }
 
 [lints]
 workspace = true

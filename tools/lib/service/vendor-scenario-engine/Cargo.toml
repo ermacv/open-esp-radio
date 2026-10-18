@@ -9,23 +9,23 @@ publish = false
 description = "Chip-neutral engine of the typed vendor-comparison scenarios: Blobray sessions, comparison harness, coverage, observation, state and evidence shards"
 
 [dependencies]
-oer-elf = { path = "../../../tools/elf" }
-oer-process = { path = "../../../tools/process" }
+oer-elf = { path = "../../analysis/elf" }
+oer-process = { path = "../../base/process" }
 oer-vendor-evidence = { path = "../../../verification/evidence" }
 oer-vendor-evidence-shard = { path = "../../../qualification/evidence-shard" }
-oer-register-bindings = { path = "../../../tools/registers/bindings" }
-oer-durable = { path = "../../../tools/durable" }
+oer-register-bindings = { path = "../../data/register-bindings" }
+oer-durable = { path = "../../base/durable" }
 oer-repo = { path = "../../../tools/repo" }
-oer-vendor-pins = { path = "../../../tools/vendor-pins" }
-oer-image = { path = "../../../tools/image/pipeline" }
-oer-riscv-model = { path = "../../../tools/riscv/model" }
-oer-riscv-lift = { path = "../../../tools/riscv/lift" }
-blobray-application = { path = "../../../tools/blobray/crates/application" }
-blobray-backend-riscv = { path = "../../../tools/blobray/crates/riscv" }
-blobray-domain = { path = "../../../tools/blobray/crates/domain" }
-blobray-linker = { path = "../../../tools/blobray/crates/linker" }
-blobray-verification = { path = "../../../tools/blobray/crates/verification" }
-oer-probe-codegen = { path = "../codegen" }
+oer-vendor-pins = { path = "../../data/vendor-pins" }
+oer-image = { path = "../image" }
+oer-riscv-model = { path = "../../analysis/riscv-model" }
+oer-riscv-lift = { path = "../../analysis/riscv-lift" }
+blobray-application = { path = "../../analysis/blobray-application" }
+blobray-backend-riscv = { path = "../../analysis/blobray-riscv" }
+blobray-domain = { path = "../../analysis/blobray-domain" }
+blobray-linker = { path = "../../analysis/blobray-linker" }
+blobray-verification = { path = "../../analysis/blobray-verification" }
+oer-probe-codegen = { path = "../probe-codegen" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

@@ -12,8 +12,8 @@ oer-esp32s31-platform-board = { path = "../../../platform/esp32s31/board", featu
 embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 esp-println = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["auto", "esp32s31", "log-04"] }
-oer = { package = "open-esp-radio", path = "../../../crates/oer", default-features = false, features = ["owned-xarxa"] }
-oer-espressif-executor-embassy = { path = "../../../crates/adapters/embassy/espressif/executor", features = ["esp32s31"] }
+oer = { package = "open-esp-radio", path = "../../../../crates/oer", default-features = false, features = ["owned-xarxa"] }
+oer-espressif-executor-embassy = { path = "../../../../crates/exec/executor", features = ["esp32s31"] }
 static_cell = "2.1.1"
 
 [build-dependencies]

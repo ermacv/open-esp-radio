@@ -9,12 +9,12 @@ publish = false
 description = "Reviewer reports of the typed vendor-comparison scenarios: untriaged locations, closure gateways and standalone inspection of pinned vendor code"
 
 [dependencies]
-oer-elf = { path = "../../../tools/elf" }
-oer-process = { path = "../../../tools/process" }
+oer-elf = { path = "../../analysis/elf" }
+oer-process = { path = "../../base/process" }
 oer-vendor-evidence-shard = { path = "../../../qualification/evidence-shard" }
-oer-riscv-model = { path = "../../../tools/riscv/model" }
-oer-riscv-lift = { path = "../../../tools/riscv/lift" }
-oer-vendor-scenario-engine = { path = "../scenarios" }
+oer-riscv-model = { path = "../../analysis/riscv-model" }
+oer-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-vendor-scenario-engine = { path = "../vendor-scenario-engine" }
 clap = { version = "=4.5.48", features = ["derive"] }
 sha2 = "=0.10.9"
 

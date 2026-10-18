@@ -10,44 +10,44 @@ description = "Executor-independent ESP32-S31 Wi-Fi radio execution over oer-tim
 [dependencies]
 embassy-futures = "0.1.2"
 embassy-sync = "0.8.0"
-oer-embassy-net-owned = { path = "../../../adapters/embassy-net/owned", optional = true }
-oer-memory = { path = "../../../memory" }
-oer-network-interface = { path = "../../../network/interface" }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
-oer-esp32s31-phy = { path = "../../../hardware/esp32s31/phy" }
-oer-esp32s31-radio-runtime = { path = "../radio" }
-oer-esp32s31-coex = { path = "../../../hardware/esp32s31/driver/coex" }
-oer-esp32s31-ieee80211 = { path = "../../../hardware/esp32s31/driver/ieee80211" }
-oer-esp32s31-ieee80211-dma = { path = "../../../hardware/esp32s31/driver/ieee80211/dma" }
-oer-esp32s31-ieee80211-mac = { path = "../../../hardware/esp32s31/driver/ieee80211/mac" }
-oer-esp32s31-ieee80211-ap = { path = "../../../roles/esp32s31/ieee80211/ap" }
-oer-esp32s31-ieee80211-sta = { path = "../../../roles/esp32s31/ieee80211/sta" }
-oer-time = { path = "../../../time" }
-oer-time-virtual = { path = "../../../adapters/virtual/time", optional = true }
-oer-trace = { path = "../../../trace" }
-oer-ieee80211-trace = { path = "../../../protocols/ieee80211/trace" }
-oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
-oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
-oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
-oer-ieee80211-datapath = { path = "../../../protocols/ieee80211/datapath" }
-oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
-oer-espressif-ieee80211-policy = { path = "../../../protocols/espressif/ieee80211/policy" }
-oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/security/rsn" }
-oer-ieee80211-sta-service = { path = "../../../services/ieee80211/sta" }
-oer-ieee80211-rsn-service = { path = "../../../services/ieee80211/rsn" }
-oer-ieee80211-runtime = { path = "../../ieee80211" }
-oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-embassy-net-owned = { path = "../../../adapters/embassy/net", optional = true }
+oer-memory = { path = "../../../base/memory" }
+oer-network-interface = { path = "../../../base/network" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-esp32s31-radio-runtime = { path = "../../radio/runtime" }
+oer-esp32s31-coex = { path = "../../radio/coex" }
+oer-esp32s31-ieee80211 = { path = "../driver" }
+oer-esp32s31-ieee80211-dma = { path = "../dma" }
+oer-esp32s31-ieee80211-mac = { path = "../mac" }
+oer-esp32s31-ieee80211-ap = { path = "../ap" }
+oer-esp32s31-ieee80211-sta = { path = "../sta" }
+oer-time = { path = "../../../base/time" }
+oer-time-virtual = { path = "../../../base/time-virtual", optional = true }
+oer-trace = { path = "../../../base/trace" }
+oer-ieee80211-trace = { path = "../../../ieee80211/trace" }
+oer-ieee80211-lower-mac = { path = "../../../ieee80211/lower-mac" }
+oer-ieee80211-mac = { path = "../../../ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../../ieee80211/softmac" }
+oer-ieee80211-datapath = { path = "../../../ieee80211/datapath" }
+oer-ieee80211-sta = { path = "../../../ieee80211/sta" }
+oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
+oer-ieee80211-rsn = { path = "../../../ieee80211/rsn" }
+oer-ieee80211-sta-service = { path = "../../../ieee80211/sta-service" }
+oer-ieee80211-rsn-service = { path = "../../../ieee80211/rsn-service" }
+oer-ieee80211-runtime = { path = "../../../ieee80211/runtime" }
+oer-ieee80211-port = { path = "../../../ieee80211/port" }
 oer-radio-port = { path = "../../../radio/port" }
-oer-radio-permit-pool = { path = "../../radio/permit-pool" }
+oer-radio-permit-pool = { path = "../../../radio/permit-pool" }
 log = { version = "0.4", optional = true }
 
 [dev-dependencies]
-oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac", features = ["test-support"] }
+oer-ieee80211-lower-mac = { path = "../../../ieee80211/lower-mac", features = ["test-support"] }
 oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
-oer-esp32s31-ieee80211-ap = { path = "../../../roles/esp32s31/ieee80211/ap", features = ["diagnostics"] }
-oer-time-virtual = { path = "../../../adapters/virtual/time" }
+oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
+oer-esp32s31-ieee80211-ap = { path = "../ap", features = ["diagnostics"] }
+oer-time-virtual = { path = "../../../base/time-virtual" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "9e0e3293724c30c5892e6af56150c849f5231eb2", features = ["async"] }
 
 [features]

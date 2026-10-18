@@ -9,21 +9,21 @@ publish = false
 description = "Bluetooth LE HIL workloads and the Linux Bluetooth fixture"
 
 [dependencies]
-oer-hil-schema = { path = "../../../schema" }
-oer-hil-lab = { path = "../../lab" }
-oer-hil-link = { path = "../../link" }
-oer-hil-scenario = { path = "../../scenario" }
-oer-hil-scenario-catalog = { path = "../../scenario/catalog" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-hil-link = { path = "../hil-link" }
+oer-hil-scenario = { path = "../hil-scenario" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
 oer-hil-run-bundle-format = { path = "../../run-bundle/format" }
-oer-durable = { path = "../../../../tools/durable" }
-oer-hil-workload = { path = "../../workload" }
+oer-durable = { path = "../../base/durable" }
+oer-hil-workload = { path = "../hil-workload" }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
-oer-process = { path = "../../../../tools/process" }
-oer-hil-fixture = { path = "../../fixture" }
+oer-process = { path = "../../base/process" }
+oer-hil-fixture = { path = "../hil-fixture" }
 tempfile = "3"
-oer-hil-protocol = { path = "../../../protocol" }
-oer-bluetooth-trace = { path = "../../../../crates/protocols/bluetooth/trace" }
-oer-trace = { path = "../../../../crates/trace" }
+oer-hil-protocol = { path = "../../data/hil-protocol" }
+oer-bluetooth-trace = { path = "../../../../crates/bluetooth/trace" }
+oer-trace = { path = "../../../../crates/base/trace" }
 heapless = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -34,7 +34,7 @@ futures-lite = "2.6"
 
 [dev-dependencies]
 toml = "1.1"
-oer-hil-workload = { path = "../../workload", features = ["test-support"] }
+oer-hil-workload = { path = "../hil-workload", features = ["test-support"] }
 
 [lints]
 workspace = true

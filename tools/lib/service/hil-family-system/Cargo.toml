@@ -9,12 +9,12 @@ publish = false
 description = "System HIL workloads: boot smoke, watchdog, panic reset and stand recovery"
 
 [dependencies]
-oer-devices = { path = "../../../../tools/device/devices" }
-oer-hil-schema = { path = "../../../schema" }
-oer-hil-scenario = { path = "../../scenario" }
-oer-hil-workload = { path = "../../workload" }
-oer-process = { path = "../../../../tools/process" }
-oer-hil-protocol = { path = "../../../protocol" }
+oer-devices = { path = "../devices" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-hil-scenario = { path = "../hil-scenario" }
+oer-hil-workload = { path = "../hil-workload" }
+oer-process = { path = "../../base/process" }
+oer-hil-protocol = { path = "../../data/hil-protocol" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

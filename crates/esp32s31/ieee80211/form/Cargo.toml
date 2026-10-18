@@ -10,28 +10,28 @@ description = "ESP32-S31 Wi-Fi backend ownership and scoped execution form"
 [dependencies]
 atomic-waker = "1.1.2"
 critical-section = "1.2.0"
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
-oer-esp32s31-ieee80211 = { path = "../../../hardware/esp32s31/driver/ieee80211" }
-oer-esp32s31-ieee80211-mac = { path = "../../../hardware/esp32s31/driver/ieee80211/mac" }
-oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
-oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-ieee80211 = { path = "../driver" }
+oer-esp32s31-ieee80211-mac = { path = "../mac" }
+oer-ieee80211-lower-mac = { path = "../../../ieee80211/lower-mac" }
+oer-ieee80211-mac = { path = "../../../ieee80211/mac" }
 oer-radio-port = { path = "../../../radio/port" }
-oer-memory = { path = "../../../memory" }
-oer-time = { path = "../../../time" }
+oer-memory = { path = "../../../base/memory" }
+oer-time = { path = "../../../base/time" }
 zeroize = { version = "1.9.0", default-features = false }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-oer-time-virtual = { path = "../../../adapters/virtual/time" }
-oer-chip-profile = { path = "../../../../tools/chip-profile" }
-oer-elf = { path = "../../../../tools/elf" }
-oer-riscv-model = { path = "../../../../tools/riscv/model" }
-oer-riscv-program = { path = "../../../../tools/riscv/program" }
-oer-riscv-stack = { path = "../../../../tools/riscv/stack" }
-oer-toolchain = { path = "../../../../tools/toolchain" }
+oer-time-virtual = { path = "../../../base/time-virtual" }
+oer-chip-profile = { path = "../../../../tools/lib/data/chip-profile" }
+oer-elf = { path = "../../../../tools/lib/analysis/elf" }
+oer-riscv-model = { path = "../../../../tools/lib/analysis/riscv-model" }
+oer-riscv-program = { path = "../../../../tools/lib/analysis/riscv-program" }
+oer-riscv-stack = { path = "../../../../tools/lib/analysis/riscv-stack" }
+oer-toolchain = { path = "../../../../tools/lib/service/toolchain" }
 
 [target.'cfg(target_arch = "riscv32")'.dev-dependencies]
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
 
 [lints]
 workspace = true

@@ -10,28 +10,28 @@ description = "Wi-Fi HIL family: the [wifi] scenario table and its role, traffic
 
 [dependencies]
 oer-hil-run-bundle-format = { path = "../../run-bundle/format" }
-oer-hil-schema = { path = "../../../schema" }
-oer-hil-family-ieee80211-evidence = { path = "../ieee80211-evidence" }
-oer-hil-family-ieee80211-fixture = { path = "../ieee80211-fixture" }
-oer-hil-net-traffic = { path = "../../net-traffic" }
-oer-hil-lab = { path = "../../lab" }
-oer-hil-link = { path = "../../link" }
-oer-hil-scenario = { path = "../../scenario" }
-oer-hil-scenario-catalog = { path = "../../scenario/catalog" }
-oer-hil-workload = { path = "../../workload" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-hil-family-ieee80211-evidence = { path = "../hil-family-ieee80211-evidence" }
+oer-hil-family-ieee80211-fixture = { path = "../hil-family-ieee80211-fixture" }
+oer-hil-net-traffic = { path = "../hil-net-traffic" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-hil-link = { path = "../hil-link" }
+oer-hil-scenario = { path = "../hil-scenario" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-hil-workload = { path = "../hil-workload" }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
 mio = { version = "=1.2.2", features = ["os-poll", "os-ext"] }
-oer-process = { path = "../../../../tools/process" }
+oer-process = { path = "../../base/process" }
 tempfile = "3"
-oer-hil-protocol = { path = "../../../protocol" }
-oer-trace = { path = "../../../../crates/trace" }
-oer-ieee80211-trace = { path = "../../../../crates/protocols/ieee80211/trace" }
+oer-hil-protocol = { path = "../../data/hil-protocol" }
+oer-trace = { path = "../../../../crates/base/trace" }
+oer-ieee80211-trace = { path = "../../../../crates/ieee80211/trace" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dev-dependencies]
 toml = "1.1"
-oer-hil-workload = { path = "../../workload", features = ["test-support"] }
+oer-hil-workload = { path = "../hil-workload", features = ["test-support"] }
 
 [lints]
 workspace = true

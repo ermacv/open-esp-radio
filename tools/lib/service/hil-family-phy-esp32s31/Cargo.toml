@@ -10,9 +10,9 @@ description = "The ESP32-S31 composition of the PHY HIL family: its vendor calib
 readme = "README.md"
 
 [dependencies]
-oer-hil-family-phy = { path = "../phy" }
-oer-phy-calibration-capture = { path = "../../../phy/capture" }
-oer-esp32s31-phy-vendor-calibration = { path = "../../../phy/esp32s31/calibration" }
+oer-hil-family-phy = { path = "../hil-family-phy" }
+oer-phy-calibration-capture = { path = "../phy-calibration-capture" }
+oer-esp32s31-phy-vendor-calibration = { path = "../phy-vendor-calibration-esp32s31" }
 serde_json = "1.0"
 
 [lints]

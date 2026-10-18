@@ -9,13 +9,13 @@ description = "Product-level ESP32-S31 shared radio: the arbiter, the shared PHY
 
 [dependencies]
 embassy-sync = "0.8.0"
-oer-esp32s31-coex = { path = "../../../hardware/esp32s31/driver/coex" }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
-oer-esp32s31-phy = { path = "../../../hardware/esp32s31/phy" }
-oer-time = { path = "../../../time" }
+oer-esp32s31-coex = { path = "../coex" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-time = { path = "../../../base/time" }
 
 [dev-dependencies]
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
 
 [lints]
 workspace = true

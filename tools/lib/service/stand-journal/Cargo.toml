@@ -9,12 +9,12 @@ publish = false
 description = "The board journal: what each board of the stand carries and what happened to it"
 
 [dependencies]
-oer-device-mac = { path = "../../tools/device/mac" }
-oer-devices = { path = "../../tools/device/devices" }
-oer-durable = { path = "../../tools/durable" }
-oer-process = { path = "../../tools/process" }
-oer-stand-file = { path = "../file" }
-oer-stand-owners = { path = "../owners" }
+oer-device-mac = { path = "../../data/device-mac" }
+oer-devices = { path = "../devices" }
+oer-durable = { path = "../../base/durable" }
+oer-process = { path = "../../base/process" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-stand-owners = { path = "../stand-owners" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

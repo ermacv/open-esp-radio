@@ -12,26 +12,26 @@ description = "Executor-independent ESP32-S31 Bluetooth LE radio runtime over th
 trace = ["oer-trace/record"]
 
 [dependencies]
-oer-bluetooth-port = { path = "../../../protocols/bluetooth/le/port" }
+oer-bluetooth-port = { path = "../../../bluetooth/le/port" }
 embassy-futures = "0.1.2"
 embassy-sync = "0.8.0"
-oer-bluetooth-radio = { path = "../../../protocols/bluetooth/le/radio" }
-oer-bluetooth-trace = { path = "../../../protocols/bluetooth/trace" }
+oer-bluetooth-radio = { path = "../../../bluetooth/le/radio" }
+oer-bluetooth-trace = { path = "../../../bluetooth/trace" }
 oer-radio-port = { path = "../../../radio/port" }
-oer-esp32s31-bluetooth = { path = "../../../hardware/esp32s31/driver/bluetooth" }
-oer-esp32s31-bluetooth-memory = { path = "../../../hardware/esp32s31/driver/bluetooth/memory" }
-oer-esp32s31-bluetooth-radio = { path = "../../../roles/esp32s31/bluetooth/radio" }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
-oer-time = { path = "../../../time" }
-oer-trace = { path = "../../../trace" }
+oer-esp32s31-bluetooth = { path = "../driver" }
+oer-esp32s31-bluetooth-memory = { path = "../memory" }
+oer-esp32s31-bluetooth-radio = { path = "../radio" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-time = { path = "../../../base/time" }
+oer-trace = { path = "../../../base/trace" }
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
-oer-time-virtual = { path = "../../../adapters/virtual/time" }
-oer-esp32s31-bluetooth = { path = "../../../hardware/esp32s31/driver/bluetooth", features = ["test-support"] }
-oer-esp32s31-bluetooth-memory = { path = "../../../hardware/esp32s31/driver/bluetooth/memory", features = ["validation-probes"] }
-oer-esp32s31-bluetooth-radio = { path = "../../../roles/esp32s31/bluetooth/radio", features = ["test-support"] }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+oer-time-virtual = { path = "../../../base/time-virtual" }
+oer-esp32s31-bluetooth = { path = "../driver", features = ["test-support"] }
+oer-esp32s31-bluetooth-memory = { path = "../memory", features = ["validation-probes"] }
+oer-esp32s31-bluetooth-radio = { path = "../radio", features = ["test-support"] }
+oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }
 
 [lints]
 workspace = true

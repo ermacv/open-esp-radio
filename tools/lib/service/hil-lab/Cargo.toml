@@ -13,30 +13,30 @@ description = "HIL run-level stand operation: the laboratory configuration, the 
 test-support = []
 
 [dependencies]
-oer-devices = { path = "../../../tools/device/devices" }
+oer-devices = { path = "../devices" }
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
-oer-hil-scenario-catalog = { path = "../scenario/catalog" }
-oer-elf = { path = "../../../tools/elf" }
-oer-chip-profile = { path = "../../../tools/chip-profile" }
-oer-stand-arbiter = { path = "../../../stand/arbiter" }
-oer-stand-file = { path = "../../../stand/file" }
-oer-stand-board = { path = "../../../stand/board" }
-oer-stand-ssh = { path = "../../../stand/ssh" }
-oer-durable = { path = "../../../tools/durable" }
-oer-stand-fixture-install = { path = "../../../stand/fixture-install" }
-oer-hil-link = { path = "../link" }
-oer-hil-protocol = { path = "../../protocol", features = ["registry"] }
-oer-process = { path = "../../../tools/process" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-elf = { path = "../../analysis/elf" }
+oer-chip-profile = { path = "../../data/chip-profile" }
+oer-stand-arbiter = { path = "../stand-arbiter" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-stand-board = { path = "../../data/stand-board" }
+oer-stand-ssh = { path = "../stand-ssh" }
+oer-durable = { path = "../../base/durable" }
+oer-stand-fixture-install = { path = "../stand-fixture-install" }
+oer-hil-link = { path = "../hil-link" }
+oer-hil-protocol = { path = "../../data/hil-protocol", features = ["registry"] }
+oer-process = { path = "../../base/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3"
 toml = "1.1"
 zeroize = "1.8.1"
 
-oer-device-lock = { path = "../../../tools/device/lock" }
-oer-stand-claims = { path = "../../../stand/claims" }
-oer-stand-journal = { path = "../../../stand/journal" }
-oer-stand-resource-lock = { path = "../../../stand/resource-lock" }
+oer-device-lock = { path = "../device-lock" }
+oer-stand-claims = { path = "../stand-claims" }
+oer-stand-journal = { path = "../stand-journal" }
+oer-stand-resource-lock = { path = "../stand-resource-lock" }
 [lints]
 workspace = true
 

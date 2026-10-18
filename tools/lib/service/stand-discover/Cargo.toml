@@ -9,8 +9,8 @@ publish = false
 description = "The stand file against the host: each attached board mapped to its hub port and button and compared with the stand file"
 
 [dependencies]
-oer-stand-file = { path = "../file" }
-oer-stand-power = { path = "../power" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-stand-power = { path = "../stand-power" }
 
 [lints]
 workspace = true

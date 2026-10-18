@@ -14,12 +14,12 @@ validation-probes = [
 ]
 
 [dependencies]
-oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
-oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-hci = { path = "../../../bluetooth/hci" }
+oer-bluetooth-radio = { path = "../../../bluetooth/le/radio" }
 oer-esp32s31-hal = { path = "../../hal" }
-oer-esp32s31-bluetooth-memory = { path = "memory" }
+oer-esp32s31-bluetooth-memory = { path = "../memory" }
 oer-esp32s31-phy = { path = "../../phy" }
-oer-time = { path = "../../../../time" }
+oer-time = { path = "../../../base/time" }
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["validation-probes"] }

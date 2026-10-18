@@ -9,9 +9,9 @@ publish = false
 description = "The lock file of a shared stand fixture resource, held under the arbiter's grant"
 
 [dependencies]
-oer-durable = { path = "../../tools/durable" }
-oer-process = { path = "../../tools/process" }
-oer-stand-file = { path = "../file" }
+oer-durable = { path = "../../base/durable" }
+oer-process = { path = "../../base/process" }
+oer-stand-file = { path = "../../data/stand-file" }
 
 [dev-dependencies]
 libc = "0.2"

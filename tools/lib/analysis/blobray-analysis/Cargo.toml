@@ -9,9 +9,9 @@ publish = false
 description = "Bounded function control-flow analysis"
 
 [dependencies]
-blobray-domain = { path = "../domain" }
-oer-riscv-analysis = { path = "../../../riscv/analysis" }
-oer-riscv-model = { path = "../../../riscv/model" }
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-analysis = { path = "../riscv-analysis" }
+oer-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

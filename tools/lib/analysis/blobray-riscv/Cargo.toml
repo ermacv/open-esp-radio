@@ -9,10 +9,10 @@ publish = false
 description = "Concrete RV32 execution over the shared decoding and lifting"
 
 [dependencies]
-blobray-domain = { path = "../domain" }
-oer-riscv-decode = { path = "../../../riscv/decode" }
-oer-riscv-lift = { path = "../../../riscv/lift" }
-oer-riscv-model = { path = "../../../riscv/model" }
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-decode = { path = "../riscv-decode" }
+oer-riscv-lift = { path = "../riscv-lift" }
+oer-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

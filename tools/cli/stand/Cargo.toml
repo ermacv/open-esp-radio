@@ -14,26 +14,26 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "=4.5.48", features = ["derive"] }
-oer-chip-profile = { path = "../../tools/chip-profile" }
-oer-command-tree = { path = "../../tools/command-tree", features = ["clap"] }
-oer-devices = { path = "../../tools/device/devices", features = ["image"] }
-oer-device-lock = { path = "../../tools/device/lock" }
-oer-device-peer-line = { path = "../../tools/device/peer-line" }
-oer-durable = { path = "../../tools/durable" }
-oer-process = { path = "../../tools/process" }
-oer-stand-arbiter = { path = "../arbiter" }
-oer-stand-board = { path = "../board" }
-oer-stand-claims = { path = "../claims" }
-oer-stand-discover = { path = "../discover" }
-oer-stand-doctor = { path = "../doctor" }
-oer-stand-file = { path = "../file" }
-oer-stand-fixture-install = { path = "../fixture-install" }
-oer-stand-fixtures = { path = "../fixtures" }
-oer-stand-hostapd = { path = "../hostapd" }
-oer-stand-journal = { path = "../journal" }
-oer-stand-owners = { path = "../owners" }
-oer-stand-power = { path = "../power" }
-oer-toolchain = { path = "../../tools/toolchain" }
+oer-chip-profile = { path = "../../lib/data/chip-profile" }
+oer-command-tree = { path = "../../lib/base/command-tree", features = ["clap"] }
+oer-devices = { path = "../../lib/service/devices", features = ["image"] }
+oer-device-lock = { path = "../../lib/service/device-lock" }
+oer-device-peer-line = { path = "../../lib/service/device-peer-line" }
+oer-durable = { path = "../../lib/base/durable" }
+oer-process = { path = "../../lib/base/process" }
+oer-stand-arbiter = { path = "../../lib/service/stand-arbiter" }
+oer-stand-board = { path = "../../lib/data/stand-board" }
+oer-stand-claims = { path = "../../lib/service/stand-claims" }
+oer-stand-discover = { path = "../../lib/service/stand-discover" }
+oer-stand-doctor = { path = "../../lib/service/stand-doctor" }
+oer-stand-file = { path = "../../lib/data/stand-file" }
+oer-stand-fixture-install = { path = "../../lib/service/stand-fixture-install" }
+oer-stand-fixtures = { path = "../../lib/service/stand-fixtures" }
+oer-stand-hostapd = { path = "../../lib/service/stand-hostapd" }
+oer-stand-journal = { path = "../../lib/service/stand-journal" }
+oer-stand-owners = { path = "../../lib/service/stand-owners" }
+oer-stand-power = { path = "../../lib/service/stand-power" }
+oer-toolchain = { path = "../../lib/service/toolchain" }
 rustix = { version = "=1.1.4", features = ["process"] }
 serde_json = "=1.0.151"
 

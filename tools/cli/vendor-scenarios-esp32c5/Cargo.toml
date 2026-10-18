@@ -9,8 +9,8 @@ publish = false
 description = "The ESP32-C5 vendor-scenario binary: the chip's verdict library behind the shared scenario command line"
 
 [dependencies]
-oer-esp32c5-vendor-scenarios = { path = ".." }
-oer-vendor-scenario-cli = { path = "../../../harness/cli" }
+oer-esp32c5-vendor-scenarios = { path = "../../lib/service/vendor-scenarios-esp32c5" }
+oer-vendor-scenario-cli = { path = "../vendor-scenario" }
 
 [lints]
 workspace = true

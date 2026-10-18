@@ -8,7 +8,7 @@ publish.workspace = true
 description = "Isolated ESP32-S31 PAC/HAL register conformance probes"
 
 [dependencies]
-oer-probe-macros = { path = "../../../../harness/macros" }
+oer-probe-macros = { path = "../../../../tools/lib/service/probe-macros" }
 oer-esp32s31-hal = { workspace = true, features = ["validation-probes"] }
 
 [lib]

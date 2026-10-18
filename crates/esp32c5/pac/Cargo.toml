@@ -12,10 +12,10 @@ validation-probes = ["oer-esp32c5-pac-raw/validation-probes", "oer-ieee802154-pa
 
 [dependencies]
 oer-ieee802154-pac = { path = "../../ieee802154/pac" }
-oer-esp32c5-pac-raw = { path = "raw", features = ["critical-section"] }
+oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
 [dev-dependencies]
-oer-esp32c5-pac-raw = { path = "raw", features = ["validation-probes"] }
+oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["validation-probes"] }
 
 [lints]
 workspace = true

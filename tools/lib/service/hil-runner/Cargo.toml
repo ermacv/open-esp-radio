@@ -9,54 +9,54 @@ publish = false
 description = "Host build, placement-audit and HIL runner for open ESP radio"
 
 [dependencies]
-oer-image-check-interrupts = { path = "../../../tools/image/check/interrupts" }
-oer-devices = { path = "../../../tools/device/devices", features = ["image"] }
+oer-image-check-interrupts = { path = "../image-check-interrupts" }
+oer-devices = { path = "../devices", features = ["image"] }
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
-oer-hil-schema = { path = "../../schema" }
-oer-hil-scenario-catalog = { path = "../scenario/catalog" }
-oer-image-bundle = { path = "../../../tools/image/bundle" }
-oer-toolchain = { path = "../../../tools/toolchain" }
-oer-hil-lab = { path = "../lab" }
-oer-hil-link = { path = "../link" }
-oer-hil-image = { path = "../image" }
-oer-image = { path = "../../../tools/image/pipeline" }
-oer-chip-profile = { path = "../../../tools/chip-profile" }
+oer-hil-schema = { path = "../../data/hil-schema" }
+oer-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-image-bundle = { path = "../image-bundle" }
+oer-toolchain = { path = "../toolchain" }
+oer-hil-lab = { path = "../hil-lab" }
+oer-hil-link = { path = "../hil-link" }
+oer-hil-image = { path = "../hil-image" }
+oer-image = { path = "../image" }
+oer-chip-profile = { path = "../../data/chip-profile" }
 oer-hil-run-bundle = { path = "../run-bundle" }
-oer-hil-analysis = { path = "../analysis" }
-oer-hil-scenario = { path = "../scenario" }
+oer-hil-analysis = { path = "../../analysis/hil-analysis" }
+oer-hil-scenario = { path = "../hil-scenario" }
 oer-hil-source-snapshot = { path = "../source-snapshot" }
-oer-durable = { path = "../../../tools/durable" }
-oer-hil-image-class = { path = "../image-class" }
-oer-stand-board = { path = "../../../stand/board" }
-oer-hil-flash = { path = "../flash" }
-oer-hil-workload = { path = "../workload" }
-oer-hil-family-ieee80211-fixture = { path = "../family/ieee80211-fixture" }
-oer-hil-family-system = { path = "../family/system" }
-oer-command-tree = { path = "../../../tools/command-tree", features = ["clap"] }
-oer-process = { path = "../../../tools/process" }
+oer-durable = { path = "../../base/durable" }
+oer-hil-image-class = { path = "../../data/hil-image-class" }
+oer-stand-board = { path = "../../data/stand-board" }
+oer-hil-flash = { path = "../hil-flash" }
+oer-hil-workload = { path = "../hil-workload" }
+oer-hil-family-ieee80211-fixture = { path = "../hil-family-ieee80211-fixture" }
+oer-hil-family-system = { path = "../hil-family-system" }
+oer-command-tree = { path = "../../base/command-tree", features = ["clap"] }
+oer-process = { path = "../../base/process" }
 clap = { version = "4.5", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3"
-oer-hil-protocol = { path = "../../protocol" }
+oer-hil-protocol = { path = "../../data/hil-protocol" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-oer-device-lock = { path = "../../../tools/device/lock" }
-oer-stand-journal = { path = "../../../stand/journal" }
-oer-stand-owners = { path = "../../../stand/owners" }
+oer-device-lock = { path = "../device-lock" }
+oer-stand-journal = { path = "../stand-journal" }
+oer-stand-owners = { path = "../stand-owners" }
 [dev-dependencies]
 oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
 oer-hil-source-snapshot = { path = "../source-snapshot", features = ["test-support"] }
 toml = "1.1"
-oer-hil-workload = { path = "../workload", features = ["test-support"] }
+oer-hil-workload = { path = "../hil-workload", features = ["test-support"] }
 
 [lints]
 workspace = true
 
 
 [build-dependencies]
-oer-process = { path = "../../../tools/process" }
-oer-hil-observer = { path = "../../observer" }
+oer-process = { path = "../../base/process" }
+oer-hil-observer = { path = "../hil-observer" }
 oer-hil-run-bundle-format = { path = "../run-bundle/format" }
 serde_json = "1.0"
 sha2 = "0.10"

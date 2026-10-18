@@ -9,11 +9,11 @@ build = "build.rs"
 description = "Linked ESP32-S31 Rust probe image for compiled vendor verification"
 
 [dependencies]
-oer-esp32s31-probe-radio = { path = "../library" }
+oer-esp32s31-probe-radio = { path = "../probe-radio" }
 
 [lints]
 workspace = true
 
 
 [build-dependencies]
-oer-probe-codegen = { path = "../../../../harness/codegen" }
+oer-probe-codegen = { path = "../../../../tools/lib/service/probe-codegen" }

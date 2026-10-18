@@ -9,8 +9,8 @@ publish = false
 description = "The host fixtures the stand file names: Wi-Fi radios, Bluetooth adapter and OpenWrt hosts, with their keys, interfaces and channel load"
 
 [dependencies]
-oer-process = { path = "../../tools/process" }
-oer-stand-ssh = { path = "../ssh" }
+oer-process = { path = "../../base/process" }
+oer-stand-ssh = { path = "../stand-ssh" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 

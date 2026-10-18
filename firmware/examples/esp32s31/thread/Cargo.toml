@@ -13,8 +13,8 @@ embassy-executor = { version = "0.10.0", default-features = false }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 esp-println = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["auto", "esp32s31", "log-04"] }
 log = "0.4"
-oer = { package = "open-esp-radio", path = "../../../crates/oer", default-features = false, features = ["openthread"] }
-oer-espressif-executor-embassy = { path = "../../../crates/adapters/embassy/espressif/executor", features = ["esp32s31"] }
+oer = { package = "open-esp-radio", path = "../../../../crates/oer", default-features = false, features = ["openthread"] }
+oer-espressif-executor-embassy = { path = "../../../../crates/exec/executor", features = ["esp32s31"] }
 openthread = { git = "https://github.com/ermacv/openthread", rev = "5173f96654a2f317e29fb7d8e69fb8a887607f6d", default-features = false, features = ["isupper", "csl", "link-metrics-subject", "link-metrics-initiator", "time-sync"] }
 static_cell = "2.1.1"
 # The C library functions OpenThread links beyond what the Rust core provides.

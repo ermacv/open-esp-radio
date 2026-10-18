@@ -28,12 +28,12 @@ heapless = { version = "0.9", optional = true }
 trouble-host = { version = "=0.8.0", git = "https://github.com/ermacv/trouble", rev = "a6af435ba1539cead0afce04718ad8a089bcc4b9", default-features = false, features = ["default-packet-pool", "gatt", "peripheral"] }
 
 [dev-dependencies]
-oer-bluetooth-controller = { path = "../../../../protocols/bluetooth/le/controller" }
-oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
-oer-bluetooth-hci-transport = { path = "../../../../services/bluetooth/hci/transport" }
-oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
-oer-bluetooth-runtime = { path = "../../../../runtime/bluetooth" }
-oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+oer-bluetooth-controller = { path = "../../bluetooth/le/controller" }
+oer-bluetooth-hci = { path = "../../bluetooth/hci" }
+oer-bluetooth-hci-transport = { path = "../../bluetooth/hci-transport" }
+oer-bluetooth-radio = { path = "../../bluetooth/le/radio" }
+oer-bluetooth-runtime = { path = "../../bluetooth/runtime" }
+oer-time-embassy = { path = "../embassy/time" }
 embassy-futures = "0.1.2"
 critical-section = { version = "1.2.0", features = ["std"] }
 # Trouble links against the embassy-time driver; host tests use the std one.

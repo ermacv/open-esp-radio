@@ -17,20 +17,20 @@ trace = ["oer-espressif-ieee802154-engine/trace", "oer-trace/record"]
 [dependencies]
 embassy-futures = "0.1.2"
 embassy-sync = "0.8.0"
-oer-espressif-ieee802154-engine = { path = "../../../hardware/espressif/ieee802154/engine" }
-oer-ieee802154-trace = { path = "../../../hardware/ieee802154/trace" }
-oer-trace = { path = "../../../trace" }
-oer-espressif-ieee802154-radio = { path = "../../../roles/espressif/ieee802154/radio" }
-oer-ieee802154 = { path = "../../../protocols/ieee802154" }
-oer-ieee802154-port = { path = "../../../protocols/ieee802154/port" }
+oer-espressif-ieee802154-engine = { path = "../ieee802154-engine" }
+oer-ieee802154-trace = { path = "../ieee802154-trace" }
+oer-trace = { path = "../../base/trace" }
+oer-espressif-ieee802154-radio = { path = "../ieee802154-radio" }
+oer-ieee802154 = { path = "../../ieee802154/mac" }
+oer-ieee802154-port = { path = "../../ieee802154/port" }
 oer-radio-permit-pool = { path = "../../radio/permit-pool" }
-oer-radio-port = { path = "../../../radio/port" }
-oer-time = { path = "../../../time" }
+oer-radio-port = { path = "../../radio/port" }
+oer-time = { path = "../../base/time" }
 
 [dev-dependencies]
-oer-time-virtual = { path = "../../../adapters/virtual/time" }
-oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
-oer-espressif-ieee802154-engine = { path = "../../../hardware/espressif/ieee802154/engine", features = ["model"] }
+oer-time-virtual = { path = "../../base/time-virtual" }
+oer-esp32s31-hal = { path = "../../esp32s31/hal" }
+oer-espressif-ieee802154-engine = { path = "../ieee802154-engine", features = ["model"] }
 
 [lints]
 workspace = true

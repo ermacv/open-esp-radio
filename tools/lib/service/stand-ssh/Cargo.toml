@@ -13,4 +13,4 @@ workspace = true
 
 
 [dependencies]
-oer-process = { path = "../../tools/process" }
+oer-process = { path = "../../base/process" }

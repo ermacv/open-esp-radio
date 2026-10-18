@@ -19,9 +19,9 @@ debug_assert_with_mut_call = "deny"
 disallowed_methods = "deny"
 
 [workspace.dependencies]
-oer-esp32c5-hal = { path = "../../../crates/hardware/esp32c5/hal" }
-oer-esp32c5-pac = { path = "../../../crates/hardware/esp32c5/pac", features = ["validation-probes"] }
-oer-radio-analog = { path = "../../../crates/hardware/radio/analog" }
+oer-esp32c5-hal = { path = "../../../../crates/esp32c5/hal" }
+oer-esp32c5-pac = { path = "../../../../crates/esp32c5/pac", features = ["validation-probes"] }
+oer-radio-analog = { path = "../../../../crates/espressif/radio-analog" }
 
 [profile.release]
 codegen-units = 1

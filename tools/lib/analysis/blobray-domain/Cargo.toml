@@ -9,7 +9,7 @@ publish = false
 description = "Blobray investigation identities and immutable inventory records"
 
 [dependencies]
-oer-riscv-model = { path = "../../../riscv/model" }
+oer-riscv-model = { path = "../riscv-model" }
 serde = { version = "=1.0.229", features = ["derive", "rc"] }
 sha2 = "=0.10.9"
 

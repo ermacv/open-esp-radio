@@ -9,11 +9,11 @@ build = "build.rs"
 description = "Linked ESP32-S31 PAC/HAL register probe image"
 
 [dependencies]
-oer-esp32s31-probe-register = { path = "../library" }
+oer-esp32s31-probe-register = { path = "../probe-register" }
 
 [lints]
 workspace = true
 
 
 [build-dependencies]
-oer-probe-codegen = { path = "../../../../harness/codegen" }
+oer-probe-codegen = { path = "../../../../tools/lib/service/probe-codegen" }

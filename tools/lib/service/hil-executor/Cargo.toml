@@ -14,14 +14,14 @@ description = "Execution of typed HIL scenarios: one scenario run by the host mo
 test-support = []
 
 [dependencies]
-oer-hil-model = { path = "../../model" }
-oer-stand-arbiter = { path = "../../../stand/arbiter" }
+oer-hil-model = { path = "../../data/hil-model" }
+oer-stand-arbiter = { path = "../stand-arbiter" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 embassy-futures = "0.1.2"
-oer-hil-trace-header = { path = "../../trace-header", features = ["wire"] }
-oer-time = { path = "../../../crates/time", features = ["schema"] }
+oer-hil-trace-header = { path = "../../data/hil-trace-header", features = ["wire"] }
+oer-time = { path = "../../../../crates/base/time", features = ["schema"] }
 # The executor's own tests and doctests use `StandSession::for_tests`.
 oer-hil-executor = { path = ".", features = ["test-support"] }
 postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }

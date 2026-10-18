@@ -10,11 +10,11 @@ description = "Vendor function provenance: the SOURCE citation grammar, the one 
 readme = "README.md"
 
 [dependencies]
-oer-elf = { path = "../elf" }
+oer-elf = { path = "../../analysis/elf" }
 oer-markers = { path = "../markers" }
-oer-register-model = { path = "../registers/model" }
+oer-register-model = { path = "../../data/register-model" }
 oer-repo = { path = "../repo" }
-oer-vendor-artifacts = { path = "../vendor-artifacts" }
+oer-vendor-artifacts = { path = "../../data/vendor-artifacts" }
 sha2 = "=0.10.9"
 toml = "=1.1.4"
 
