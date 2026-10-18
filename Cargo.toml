@@ -65,9 +65,87 @@ members = [
     "tools/lib/service/lab",
     "tools/lib/service/registers",
     "tools/lib/test/layers",
+    "firmware/platform/espressif/staged-bootstrap",
+    "firmware/platform/espressif/staged-layout",
+    "firmware/platform/espressif/staged-runtime",
+    "firmware/platform/esp32s31/board",
+    "firmware/platform/esp32s31/bootstrap",
+    "firmware/platform/esp32s31/layout",
+    "firmware/apps/boot-smoke",
+    "firmware/apps/radio-root",
+    "firmware/apps/w0",
+    "firmware/apps/w1",
 ]
-# The firmware workspaces build for the chip target and own their lockfiles.
-exclude = ["firmware"]
+# Host builds and tests: every member but the chip-only firmware packages.
+default-members = [
+    "crates/base/memory",
+    "crates/base/ui-cases",
+    "crates/base/time",
+    "crates/base/network",
+    "crates/radio/coex",
+    "crates/radio/port",
+    "crates/exec/interrupt-table",
+    "crates/radio/permit-pool",
+    "crates/ieee80211/runtime",
+    "crates/adapters/embassy/time",
+    "crates/exec/executor",
+    "crates/adapters/embassy/net",
+    "crates/base/time-virtual",
+    "crates/adapters/esp-hal/radio",
+    "crates/adapters/esp-hal/soc",
+    "crates/exec/esp-hal-irq",
+    "crates/bluetooth/hci",
+    "crates/bluetooth/le/controller",
+    "crates/bluetooth/le/ll",
+    "crates/bluetooth/le/radio",
+    "crates/ieee802154/mac",
+    "crates/ieee80211/ap",
+    "crates/ieee80211/arbiter",
+    "crates/ieee80211/sta",
+    "crates/ieee80211/mac",
+    "crates/ieee80211/lower-mac",
+    "crates/ieee80211/upper-mac",
+    "crates/ieee80211/softmac",
+    "crates/ieee80211/datapath",
+    "crates/ieee80211/rsn",
+    "crates/espressif/ieee80211-policy",
+    "crates/ieee80211/rsn-service",
+    "crates/esp32s31/pac",
+    "crates/esp32s31/pac-raw",
+    "crates/esp32s31/hal",
+    "crates/esp32s31/phy",
+    "crates/esp32s31/radio/coex",
+    "crates/esp32s31/radio/client",
+    "crates/esp32s31/radio/system",
+    "crates/esp32s31/ieee80211/driver",
+    "crates/esp32s31/ieee80211/dma",
+    "crates/esp32s31/ieee80211/mac",
+    "crates/espressif/coex",
+    "crates/espressif/ieee802154-engine",
+    "crates/espressif/ieee80211-pac",
+    "crates/espressif/ieee80211-pac-raw",
+    "crates/espressif/ieee802154-pac",
+    "crates/espressif/analog",
+    "crates/espressif/modem-clock",
+    "crates/base/deadline",
+    "tools/cli/fw",
+    "tools/cli/registers",
+    "tools/lib/base/command-tree",
+    "tools/lib/base/durable",
+    "tools/lib/base/process",
+    "tools/lib/data/chip-profile",
+    "tools/lib/data/register-bindings",
+    "tools/lib/data/register-contracts",
+    "tools/lib/data/register-model",
+    "tools/lib/data/register-review",
+    "tools/lib/data/stand-file",
+    "tools/lib/service/firmware",
+    "tools/lib/service/lab",
+    "tools/lib/service/registers",
+    "tools/lib/test/layers",
+    "firmware/platform/espressif/staged-layout",
+    "firmware/platform/esp32s31/layout",
+]
 resolver = "3"
 
 [workspace.package]
@@ -76,6 +154,17 @@ edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ermacv/open-esp-radio"
+publish = false
+
+[workspace.dependencies]
+# The firmware packages' shared dependencies.
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+static_cell = "2.1.1"
+oer-espressif-staged-layout = { path = "firmware/platform/espressif/staged-layout" }
+oer-espressif-interrupt-table-esp-hal = { path = "crates/exec/esp-hal-irq" }
+oer-esp32s31-platform-layout = { path = "firmware/platform/esp32s31/layout" }
+oer-esp32s31-soc-esp-hal = { path = "crates/adapters/esp-hal/soc", features = ["esp32s31"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -104,6 +193,13 @@ codegen-units = 1
 # Full debug info was most of each checkout's target/debug, tens of GB in
 # millions of files, and a large share of host link time. Line tables keep
 # panics and backtraces readable.
+# The staged images: `cargo build --profile firmware --target
+# riscv32imafc-unknown-none-elf -p <image>` (`cargo fw`).
+[profile.firmware]
+inherits = "release"
+panic = "abort"
+strip = false
+
 [profile.dev]
 debug = "line-tables-only"
 

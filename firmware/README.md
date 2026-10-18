@@ -12,7 +12,7 @@ enough to type-check:
 
 ```console
 PSRAM_RUNTIME_BIN=/path/to/empty.bin \
-  cargo check --target riscv32imafc-unknown-none-elf --workspace
+  cargo check --target riscv32imafc-unknown-none-elf -p <package>
 ```
 
 Images live in `apps/`; `boot-smoke` is the smallest. Building, packing,
