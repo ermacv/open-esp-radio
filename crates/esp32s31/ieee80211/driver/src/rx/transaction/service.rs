@@ -2,7 +2,7 @@ use super::*;
 use crate::datapath::DatapathRxProgress;
 use oer_esp32s31_ieee80211_dma::rx_storage::RxDmaStorage;
 use oer_esp32s31_ieee80211_mac::{
-    rx::pool::{RxDmaDeferredStageUnitOutcome, RxStageError, RxStagePool, RxStageTransactionError},
+    rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
     rx::{PUBLIC_HEADER_SIZE, RxDma, RxRingError, RxRingLive},
 };
 
@@ -326,12 +326,16 @@ where
                     .maximum_payload_length(unit_observation, STAGE_CAPACITY)
                     .min(STAGE_CAPACITY)
             });
-        let recoverable_discard = if unit_descriptor_count != 1 {
-            Some(RxStageError::Chained)
+        // A chain longer than one descriptor's length field has no staged
+        // word: received air input, dropped like any chain but named apart.
+        let recoverable_discard = if unit.metadata().staged_word0().is_none() {
+            Some(Discard::Oversized)
+        } else if unit_descriptor_count != 1 {
+            Some(Discard::Chained)
         } else if unit_observation.payload_length == 0 {
-            Some(RxStageError::Empty)
+            Some(Discard::Empty)
         } else if unit_observation.payload_length > maximum_payload_length {
-            Some(RxStageError::TooLong)
+            Some(Discard::TooLong)
         } else {
             None
         };
@@ -359,31 +363,18 @@ where
                 unavailable_preview.expect("overload discard has a preview"),
             ));
             (None, descriptor_replenished)
-        } else if let Some(error) = recoverable_discard {
+        } else if let Some(discard) = recoverable_discard {
             unit.retain_for_deferred_recycle();
             let descriptor_replenished =
                 unit_observation.head_index == recycle_start_before_take.get();
             deferred_recycle_pending |= !descriptor_replenished;
             discarded_units = discarded_units.saturating_add(1);
             if hooks.observing() {
-                let discard = match error {
-                    RxStageError::Empty => Discard::Empty,
-                    RxStageError::TooLong => Discard::TooLong,
-                    RxStageError::Chained => Discard::Chained,
-                    RxStageError::Exhausted => unreachable!("capacity is not malformed"),
-                };
                 hooks.stage_discarded(discard);
             }
             admission.observe(Observation::DiscardRetained {
                 unit: unit_observation,
-                reason: match error {
-                    RxStageError::Empty => Discard::Empty,
-                    RxStageError::TooLong => Discard::TooLong,
-                    RxStageError::Chained => Discard::Chained,
-                    RxStageError::Exhausted => {
-                        unreachable!("capacity is not malformed")
-                    }
-                },
+                reason: discard,
             });
             (None, descriptor_replenished)
         } else {

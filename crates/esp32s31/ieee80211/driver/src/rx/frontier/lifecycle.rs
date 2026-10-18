@@ -3,13 +3,12 @@ use oer_esp32s31_ieee80211_dma::space::DmaSpace;
 
 use oer_esp32s31_ieee80211_mac::rx::{
     RxDescriptorSnapshot, RxDma, RxDmaBufferAddresses, RxRingError, RxRingHalted, RxRingLive,
-    RxRingStopped, RxSegment,
+    RxRingStopped,
 };
 
 use super::{
-    ReceiveFrontier, RxFrontierContinuation, RxFrontierDirective, RxFrontierError,
-    RxFrontierIntoLiveFailure, RxFrontierPhase, RxFrontierProgress, RxFrontierSchedulerSnapshot,
-    RxFrontierServiceProgress, state::RxFrontierState,
+    ReceiveFrontier, RxFrontierContinuation, RxFrontierError, RxFrontierIntoLiveFailure,
+    RxFrontierPhase, RxFrontierSchedulerSnapshot, state::RxFrontierState,
 };
 
 impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
@@ -161,47 +160,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         }
     }
 
-    /// Visit every descriptor in one finite completed frontier and recycle
-    /// its contiguous observed prefix.
-    pub fn service_completed_frontier<M, F, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
-        &mut self,
-        hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
-        mut observe: F,
-    ) -> Result<RxFrontierServiceProgress, RxFrontierError>
-    where
-        M: RxDma,
-        F: FnMut(RxSegment<'_>),
-    {
-        let ring = self.live_mut()?;
-        ring.complete_pending_reload(hardware)?;
-        ring.observe_exhausted_republication(hardware);
-        let mut progress = RxFrontierServiceProgress {
-            reload_pending: ring.reload_pending(),
-            ..RxFrontierServiceProgress::default()
-        };
-        let frontier = ring.completed_descriptor_frontier();
-        for step in 0..frontier.descriptor_count {
-            let index = frontier.start_index.advance(step).get();
-            let Some(completed) = storage.take_completed(ring, index)? else {
-                return Err(RxFrontierError::Ring(RxRingError::Corrupt));
-            };
-            progress.completed_descriptors = progress.completed_descriptors.saturating_add(1);
-            observe(completed.segment());
-        }
-        if !progress.reload_pending
-            && let Some(append) = storage.recycle_completed_prefix::<COUNT, _>(ring, hardware)?
-        {
-            progress.recycled_descriptors =
-                u32::try_from(append.descriptor_count).unwrap_or(u32::MAX);
-        }
-        // A current-LAST completion is released by a later RX completion and
-        // therefore needs no synthetic wake. Only direct BASE republication
-        // can consume its sole IRQ edge and must keep a finite role runnable.
-        progress.service_probe_pending = ring.exhausted_republication_probe_pending();
-        Ok(progress)
-    }
-
     pub fn stop<M: RxDma>(&mut self, hardware: &mut M) -> Result<(), RxFrontierError> {
         let state = core::mem::replace(&mut self.state, RxFrontierState::Vacant);
         let RxFrontierState::Live(live) = state else {
@@ -314,60 +272,6 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         } else {
             RxFrontierContinuation::AwaitInterrupt
         })
-    }
-
-    /// Observe every currently completed descriptor, then recycle the
-    /// completed half unless the observer reports a terminal frame.
-    ///
-    /// The higher-ranked observer lifetime prevents a DMA-buffer reference
-    /// from escaping across the recycle edge. A terminal descriptor remains
-    /// owned and observed by the live ring for transfer into the next finite
-    /// protocol phase.
-    pub fn service_completed<M, F, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
-        &mut self,
-        hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
-        mut observe: F,
-    ) -> Result<RxFrontierProgress, RxFrontierError>
-    where
-        M: RxDma,
-        F: for<'frame> FnMut(RxSegment<'frame>) -> RxFrontierDirective,
-    {
-        let ring = self.live_mut()?;
-        let mut progress = RxFrontierProgress::default();
-        let frontier = ring.completed_descriptor_frontier();
-        // This finite port publishes one physical half at a time. Do not mark
-        // a later descriptor observed merely because it was needed as the
-        // LAST-advance proof for the preceding half; that descriptor belongs
-        // to the next service/recycle epoch.
-        for step in 0..frontier.descriptor_count.min(COUNT / 2) {
-            let index = frontier.start_index.advance(step).get();
-            let Some(completed) = storage.take_completed(ring, index)? else {
-                return Err(RxFrontierError::Ring(RxRingError::Corrupt));
-            };
-            progress.completed = progress.completed.saturating_add(1);
-            match observe(completed.segment()) {
-                RxFrontierDirective::Continue => {}
-                RxFrontierDirective::Pause => break,
-                RxFrontierDirective::Stop => {
-                    progress.stopped = true;
-                    return Ok(progress);
-                }
-            }
-        }
-
-        // Batch the append transaction over one physical half-ring. Cold
-        // epochs always begin at descriptor zero, so the two halves remain
-        // aligned with rev0's physical walker boundary. The AP runner drives
-        // the explicit pending-reload suffix even if no later RX IRQ arrives.
-        storage.recycle_completed_half(ring, hardware)?;
-        if ring.all_observed()
-            && !ring.completion_release_probe_pending()
-            && !ring.exhausted_republication_probe_pending()
-        {
-            return Err(RxFrontierError::Ring(RxRingError::Corrupt));
-        }
-        Ok(progress)
     }
 
     pub fn take_live(&mut self) -> Result<RxRingLive<'storage, COUNT>, RxFrontierError> {

@@ -1,7 +1,7 @@
 use crate::rx::storage::ReceiveDmaStorage;
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{BIT_30, DESCRIPTOR_BYTES},
+    descriptor::BIT_30,
     rx_dma::model::{RxWalkerModel, RxWalkerOperation},
     space::HostDma,
 };
@@ -29,57 +29,6 @@ fn layout<const N: usize, const S: usize>(
     let addresses = std::boxed::Box::leak(std::boxed::Box::new([0; N]));
     assert_eq!(storage.dma_layout(addresses), Ok(BASE));
     addresses
-}
-
-#[test]
-fn completed_descriptors_are_delivered_in_ring_order_across_wrap() {
-    const WRAP_COUNT: usize = 4;
-    const WRAP_STORAGE_SIZE: usize = WRAP_COUNT * BUFFER_SIZE;
-    let storage = leaked::<WRAP_COUNT, WRAP_STORAGE_SIZE>();
-    let mut hardware = RxWalkerModel::default();
-    let halted = storage
-        .prepare_ring(&mut hardware, BASE, layout(storage))
-        .unwrap()
-        .into_halted();
-    let mut rx = ReceiveFrontier::<WRAP_COUNT, BUFFER_SIZE>::from_halted(halted);
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
-    // First reclaim 0,1 so the next logical receive frontier begins at two.
-    for index in [0, 1, 2] {
-        storage.descriptors()[index].write_word0(storage.descriptors()[index].word0() | BIT_30);
-    }
-    hardware.set_cursor(BASE, 2, Some(3));
-    rx.service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
-        .unwrap();
-
-    // The subsequent finite interval 2,3,0 crosses physical zero.
-    for index in [2, 3, 0] {
-        storage.descriptors()[index].write_word0(storage.descriptors()[index].word0() | BIT_30);
-    }
-    hardware.set_cursor(BASE, 0, Some(1));
-
-    let mut observed = [usize::MAX; 3];
-    let mut count = 0;
-    let first = rx
-        .service_completed(&mut hardware, storage, |segment| {
-            observed[count] =
-                usize::try_from((segment.descriptor_address - BASE) / DESCRIPTOR_BYTES).unwrap();
-            count += 1;
-            RxFrontierDirective::Continue
-        })
-        .unwrap();
-    let second = rx
-        .service_completed(&mut hardware, storage, |segment| {
-            observed[count] =
-                usize::try_from((segment.descriptor_address - BASE) / DESCRIPTOR_BYTES).unwrap();
-            count += 1;
-            RxFrontierDirective::Continue
-        })
-        .unwrap();
-
-    assert_eq!(first.completed, 2);
-    assert_eq!(second.completed, 1);
-    assert_eq!(observed, [2, 3, 0]);
 }
 
 fn halted_ring(
@@ -123,7 +72,7 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
 }
 
 #[test]
-fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
+fn owner_round_trips_a_live_ring_between_phases() {
     let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = RxWalkerModel::default();
     let mut rx =
@@ -132,25 +81,6 @@ fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
         .unwrap();
     assert_eq!(rx.phase(), RxFrontierPhase::Live);
 
-    for descriptor in storage.descriptors() {
-        descriptor.write_word0(descriptor.word0() | BIT_30);
-    }
-    hardware.set_cursor(BASE, 1, None);
-    let progress = rx
-        .service_completed(&mut hardware, storage, |segment| {
-            assert_eq!(segment.descriptor_address, BASE);
-            assert_eq!(segment.buffer.len(), BUFFER_SIZE);
-            RxFrontierDirective::Stop
-        })
-        .unwrap();
-    assert_eq!(
-        progress,
-        RxFrontierProgress {
-            completed: 1,
-            stopped: true,
-        }
-    );
-
     let mut moved = rx.take().unwrap();
     assert_eq!(rx.phase(), RxFrontierPhase::Vacant);
     assert_eq!(moved.phase(), RxFrontierPhase::Live);
@@ -158,79 +88,6 @@ fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
     assert_eq!(moved.phase(), RxFrontierPhase::Halted);
     rx = moved;
     assert_eq!(rx.phase(), RxFrontierPhase::Halted);
-}
-
-#[test]
-fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
-    let mut hardware = RxWalkerModel::default();
-    let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
-    for descriptor in storage.descriptors() {
-        descriptor.write_word0(descriptor.word0() | BIT_30);
-    }
-    hardware.set_cursor(BASE, 0, Some(1));
-
-    let first = rx
-        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Pause)
-        .unwrap();
-    assert_eq!(first.completed, 1);
-    assert!(!first.stopped);
-    // One cursor observation only records a release candidate.  The
-    // descriptor remains DMA-owned until a later service turn confirms it.
-    assert_ne!(storage.descriptors()[0].word0() & BIT_30, 0);
-
-    hardware.set_cursor(BASE, 1, Some(0));
-    let second = rx
-        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
-        .unwrap();
-    assert_eq!(second.completed, 1);
-    assert!(!second.stopped);
-    // Advancing LAST to descriptor one proves that hardware has crossed the
-    // first descriptor, so that older candidate may be recycled immediately.
-    assert_eq!(storage.descriptors()[0].word0() & BIT_30, 0);
-    assert_ne!(storage.descriptors()[1].word0() & BIT_30, 0);
-
-    let retained = rx
-        .service_completed(&mut hardware, storage, |_| {
-            panic!("confirmation must not manufacture another completion")
-        })
-        .unwrap();
-    assert_eq!(retained.completed, 0);
-    assert_ne!(storage.descriptors()[1].word0() & BIT_30, 0);
-    assert_eq!(storage.descriptors()[0].word0() & BIT_30, 0);
-}
-
-#[test]
-fn an_append_is_published_only_after_a_later_service_confirms_link_release() {
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
-    let mut hardware = RxWalkerModel::default();
-    let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
-    storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | BIT_30);
-    hardware.set_cursor(BASE, 0, Some(1));
-
-    let completed = rx
-        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
-        .unwrap();
-    assert_eq!(completed.completed, 1);
-    assert!(!rx.reload_pending());
-    assert_ne!(storage.descriptors()[0].word0() & BIT_30, 0);
-
-    storage.descriptors()[1].write_word0(storage.descriptors()[1].word0() | BIT_30);
-    hardware.set_cursor(BASE, 1, None);
-    let confirmed = rx
-        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
-        .unwrap();
-    assert_eq!(confirmed.completed, 1);
-    assert_eq!(storage.descriptors()[0].word0() & BIT_30, 0);
-    // This synchronous finite-phase service deliberately leaves the append
-    // suffix explicit; the following role turn settles it before reuse.
-    assert!(rx.reload_pending());
 }
 
 #[test]
@@ -259,9 +116,9 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     ))
     .expect("finite protocol phase starts the ring");
     storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | BIT_30);
-    already_live
-        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Stop)
-        .expect("the final protocol frame remains observed before promotion");
+    // The final protocol frame remains observed before promotion.
+    let ring = already_live.live_mut().expect("the frontier is live");
+    assert!(storage.take_completed(ring, 0).unwrap().is_some());
     let enable_count = hardware.operation_count(RxWalkerOperation::Enable);
     let disable_count = hardware.operation_count(RxWalkerOperation::Stop);
     let reload_count = hardware.operation_count(RxWalkerOperation::RequestReload);

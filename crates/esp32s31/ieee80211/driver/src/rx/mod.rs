@@ -8,6 +8,8 @@ pub mod arena;
 pub mod control;
 pub mod counters;
 pub mod frontier;
+pub mod receive;
+pub mod sink;
 pub mod storage;
 
 pub mod transaction;

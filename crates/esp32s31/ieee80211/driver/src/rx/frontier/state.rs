@@ -43,18 +43,6 @@ pub struct RxFrontierIntoLiveFailure<'storage, const COUNT: usize, const DMA_BUF
     pub error: RxFrontierError,
 }
 
-/// Decision made while observing one completed descriptor.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RxFrontierDirective {
-    Continue,
-    /// End this bounded service pass after recycling every descriptor already
-    /// observed by it. The live RX epoch remains owned by this phase.
-    Pause,
-    /// Retain the terminal descriptor for a typed transfer into another
-    /// protocol phase. This is not a scheduling/batching directive.
-    Stop,
-}
-
 /// Scheduler edge required after one finite RX ownership observation.
 ///
 /// The vendor `datapathProcessRxSucDataAll` consumes one PP event and remains in
@@ -75,22 +63,6 @@ pub struct RxFrontierSchedulerSnapshot {
     pub accepted_tail: usize,
     pub observed_mask: RxObservedMask,
     pub topology: RxRingTopologySnapshot,
-}
-
-/// Finite progress returned by one descriptor service transaction.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RxFrontierProgress {
-    pub completed: u32,
-    pub stopped: bool,
-}
-
-/// Progress of one complete descriptor-frontier service transaction.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RxFrontierServiceProgress {
-    pub completed_descriptors: u32,
-    pub recycled_descriptors: u32,
-    pub reload_pending: bool,
-    pub service_probe_pending: bool,
 }
 
 impl From<RxRingError> for RxFrontierError {

@@ -152,7 +152,7 @@ impl<E> WifiIrqLine<E> {
         self.masked
     }
 
-    #[cfg(test)]
+    /// The epoch, for a direct mask when the line never reached its cell.
     pub(crate) fn epoch_mut(&mut self) -> &mut E {
         &mut self.epoch
     }

@@ -61,7 +61,6 @@ pub struct WifiRxArena<
 }
 
 /// Every part of a bound arena, lent once.
-#[allow(dead_code, reason = "the receive runner takes these parts")]
 pub struct WifiRxParts<
     'a,
     const COUNT: usize,

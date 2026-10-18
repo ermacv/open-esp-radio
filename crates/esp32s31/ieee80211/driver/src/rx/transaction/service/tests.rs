@@ -78,7 +78,7 @@ impl Hooks for &Recorder {
 }
 
 #[test]
-fn a_chain_longer_than_the_length_field_is_a_counted_chained_drop() {
+fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     let storage = Box::leak(Box::new(RxDmaStorage::<
         COUNT,
         BUFFER,
@@ -125,7 +125,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_chained_drop() {
 
     let length = 2 * BUFFER + 100;
     assert!(length > SIZE_MASK as usize);
-    assert_eq!(*recorder.discards.borrow(), [Discard::Chained]);
+    assert_eq!(*recorder.discards.borrow(), [Discard::Oversized]);
     assert_eq!(
         *recorder.observations.borrow(),
         [Observation::DiscardRetained {
@@ -134,7 +134,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_chained_drop() {
                 descriptor_count: 3,
                 payload_length: length,
             },
-            reason: Discard::Chained,
+            reason: Discard::Oversized,
         }]
     );
     let services = recorder.services.borrow();
