@@ -162,6 +162,11 @@ defaults, queue bounds) live in the code that applies them, not here.
 - **Priority and power ownership.** Each MAC's PTI registers belong to its own
   driver, and PTI values travel inside typed grants and notices. One transmit
   power policy, by board and country, covers all three radios.
+- **Bluetooth LE port.** The Bluetooth LE port takes the same form as the
+  Wi-Fi lower-MAC port.
+- **Upstream projects are read-only.** No issues, pull requests, comments or
+  reviews in upstream repositories; every change goes to the owner's fork,
+  and how a fork follows upstream is the developer's choice.
 
 ## Earlier decisions still in force
 
