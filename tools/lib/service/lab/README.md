@@ -173,7 +173,7 @@ A second run against a router already in the profile sends the same
 scripts; nothing changes and the checks pass the same.
 
 One process at a time drives the router: `cargo fw` holds an exclusive lock
-`$XDG_RUNTIME_DIR/oer-tool-cli-fw/router-<hash of the target>.lock` for the whole
+`$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash of the target>.lock` for the whole
 `run w1` or `router`, and a second holder is refused, naming the first.
 
 ## Stand notes

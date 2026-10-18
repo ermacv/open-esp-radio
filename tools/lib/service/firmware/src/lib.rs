@@ -6,7 +6,6 @@ mod encode;
 mod flash;
 mod gates;
 mod image;
-mod lock;
 mod pack;
 mod placement;
 mod port;

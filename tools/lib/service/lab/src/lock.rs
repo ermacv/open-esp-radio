@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn the_file_name_does_not_show_the_target() {
-        let path = router_path(Path::new("/run/oer-tool-cli-fw"), TARGET);
+        let path = router_path(Path::new("/run/open-esp-radio/routers"), TARGET);
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         assert!(
             name.starts_with("router-") && name.ends_with(".lock"),
@@ -89,10 +89,13 @@ mod tests {
         );
         assert_eq!(name.len(), "router-".len() + 16 + ".lock".len());
         assert!(!name.contains("made-up"));
-        assert_eq!(path, router_path(Path::new("/run/oer-tool-cli-fw"), TARGET));
+        assert_eq!(
+            path,
+            router_path(Path::new("/run/open-esp-radio/routers"), TARGET)
+        );
         assert_ne!(
             path,
-            router_path(Path::new("/run/oer-tool-cli-fw"), "made-up-other")
+            router_path(Path::new("/run/open-esp-radio/routers"), "made-up-other")
         );
     }
 }

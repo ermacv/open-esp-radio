@@ -60,9 +60,11 @@ Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
 chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
 listed.
 
-A board is used by one process at a time: an exclusive lock on
-`$XDG_RUNTIME_DIR/oer-tool-cli-fw/<MAC>.lock`, shared by every checkout, which names
-its holder when it refuses.
+A board is used by one process at a time: `cargo fw` holds it through the
+device lock (`oer-tool-service-device-lock`,
+`$XDG_RUNTIME_DIR/open-esp-radio/devices/<MAC>.lock`) that HIL leases and the
+stand's flashes take too, shared by every checkout, which names its holder
+when it refuses.
 
 - `flash` writes the segments through one espflash connection, skipping each
   one whose flash contents already match (MD5), the OTA selection last, and
@@ -150,7 +152,7 @@ Before every `run w1`, and on `cargo fw router` (without a board), the
 stand's OpenWrt lab router is brought to W1's profile and verified by
 `oer-tool-service-lab` ([tools/lib/service/lab/README.md](../lab/README.md) lists every script it
 runs there); the profile stays, the earlier settings are not restored. Both
-hold the router's lock, `$XDG_RUNTIME_DIR/oer-tool-cli-fw/router-<hash>.lock`, for
+hold the router's lock, `$XDG_RUNTIME_DIR/open-esp-radio/routers/router-<hash>.lock`, for
 the whole run. Only the masked BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers
 and UCI section names are printed; the SSID, the SSH target and the
 interface never are, in no message, lock file or `log.txt`.

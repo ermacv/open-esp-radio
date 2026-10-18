@@ -10,7 +10,9 @@ use std::{
 use oer_tool_data_stand_file as stand;
 use oer_tool_service_lab::{router, ssh};
 
-use crate::{Result, flash, image, lock, port, power, w1};
+use oer_tool_service_device_lock::{DeviceAccess, DeviceId};
+
+use crate::{Result, flash, image, port, power, w1};
 
 /// The chips whose boards this tool resets and writes. Another chip's board
 /// is only listed: its reset lines may mean something else (an ESP32-C5's
@@ -59,6 +61,25 @@ fn tty(board: &stand::Board) -> Result<PathBuf> {
         )
         .into()
     })
+}
+
+/// Hold board `mac` through the device lock every writer of the board takes
+/// (HIL leases, the stand's flashes), with this command as its holder; a
+/// held board is an error naming its holder.
+fn hold(mac: &str) -> Result<DeviceAccess> {
+    hold_in(&oer_tool_service_device_lock::directory()?, mac)
+}
+
+fn hold_in(directory: &Path, mac: &str) -> Result<DeviceAccess> {
+    let id = DeviceId::parse(mac)?;
+    let command = std::env::args().collect::<Vec<_>>().join(" ");
+    DeviceAccess::try_acquire_in(directory, &id, &command)?
+        .map_err(|busy| format!("board {id} is busy: {busy}").into())
+}
+
+/// The directory of the stand router's lock: `$XDG_RUNTIME_DIR/open-esp-radio/routers`.
+fn router_lock_directory() -> Result<std::path::PathBuf> {
+    oer_tool_base_durable::xdg::path(oer_tool_base_durable::xdg::Base::Runtime, "routers")
 }
 
 fn write_image(root: &Path, image: &str, board: &stand::Board, after: flash::After) -> Result<()> {
@@ -185,7 +206,8 @@ fn w1_stand(
 fn w1_router(stand: &stand::Stand) -> Result<(oer_tool_service_lab::lock::RouterLock, w1::Config)> {
     let router = stand.router()?;
     let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
-    let lock = oer_tool_service_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
+    let lock =
+        oer_tool_service_lab::lock::router(&router_lock_directory()?, router.ssh_target.expose())?;
     // The stand AP's SSID is the run's: no file holds it.
     let ssid = oer_tool_service_lab::credentials::ssid("oer-w1")?;
     let (config, shown) = w1_stand(&router, ssid.expose(), &mut ssh)?;
@@ -207,7 +229,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
         (None, None)
     };
     image::build(root, image, w1.as_ref())?;
-    let _lock = lock::acquire(&board.mac)?;
+    let _board = hold(&board.mac)?;
     write_image(root, image, &board, flash::After::StayInStub)?;
     let run = root
         .join("target/fw/runs")
@@ -286,7 +308,7 @@ fn check_w1(console: &[String], result: &str, config: &w1::Config) -> u8 {
 
 pub fn monitor(selector: &str) -> Result<()> {
     let (_stand, board) = board(selector)?;
-    let _lock = lock::acquire(&board.mac)?;
+    let _board = hold(&board.mac)?;
     let tty = tty(&board)?;
     let lines = port::lines(port::open_without_reset(&tty)?);
     eprintln!("fw: console of {} at {}", board.id, tty.display());
@@ -345,7 +367,7 @@ pub fn list_boards() -> Result<()> {
 
 pub fn power_cycle(selector: &str) -> Result<()> {
     let (stand, board) = board(selector)?;
-    let _lock = lock::acquire(&board.mac)?;
+    let _board = hold(&board.mac)?;
     let attached = oer_tool_service_lab::boards::find(&board.mac);
     let report = oer_tool_service_lab::hub::status()?;
     let port = power::port_of(
@@ -388,7 +410,7 @@ pub fn build(root: &Path, image_name: &str) -> Result<()> {
 /// `cargo fw flash IMAGE --board BOARD`.
 pub fn flash_image(root: &Path, image_name: &str, selector: &str) -> Result<()> {
     let (_stand, board) = board(selector)?;
-    let _lock = lock::acquire(&board.mac)?;
+    let _board = hold(&board.mac)?;
     write_image(root, image_name, &board, flash::After::HardReset)
 }
 
@@ -406,6 +428,62 @@ pub fn router_ready() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Set in the child that holds a board for
+    /// `a_board_another_process_holds_is_refused`: the lock directory.
+    const HOLDER_DIRECTORY: &str = "OER_FW_TEST_HOLDER_DIRECTORY";
+    const BOARD: &str = "02:00:00:00:01:D0";
+
+    /// In the child only: hold the board through the device lock as a HIL
+    /// lease would, say so, and keep it until the parent ends the child.
+    #[test]
+    fn hold_the_board_for_the_parent() {
+        let Some(directory) = std::env::var_os(HOLDER_DIRECTORY) else {
+            return;
+        };
+        let id = DeviceId::parse(BOARD).unwrap();
+        let _held = DeviceAccess::try_acquire_in(Path::new(&directory), &id, "hil lease")
+            .unwrap()
+            .unwrap();
+        println!("held");
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(Duration::from_secs(60));
+    }
+
+    #[test]
+    fn a_board_another_process_holds_is_refused() {
+        use std::io::BufRead as _;
+        let directory = tempfile::tempdir().unwrap();
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "command::tests::hold_the_board_for_the_parent",
+                "--nocapture",
+            ])
+            .env(HOLDER_DIRECTORY, directory.path())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut lines = std::io::BufReader::new(child.stdout.take().unwrap()).lines();
+        assert!(lines.any(|line| line.unwrap() == "held"));
+        let error = hold_in(directory.path(), BOARD).unwrap_err().to_string();
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert!(
+            error.contains("is busy") && error.contains("hil lease"),
+            "{error}"
+        );
+        // The holder gone, the board is free.
+        let mut free = None;
+        for _ in 0..100 {
+            if let Ok(access) = hold_in(directory.path(), BOARD) {
+                free = Some(access);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(free.is_some());
+    }
 
     #[test]
     fn verdicts_are_read_from_the_marker() {
