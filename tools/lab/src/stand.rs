@@ -18,6 +18,9 @@ use crate::Result;
 /// The schema this tool reads.
 pub const SCHEMA: u32 = 1;
 
+/// The only mode a stand file may have.
+pub const MODE: u32 = 0o600;
+
 /// Overrides the stand file's path.
 pub const STAND_FILE_ENV: &str = "OER_STAND_FILE";
 
@@ -145,7 +148,23 @@ pub struct Stand {
 
 impl Stand {
     /// The stand file at `path`.
+    /// The stand file holds the stand's credentials: one that others may
+    /// read, mode other than 0600, is refused unread.
     pub fn load(path: &Path) -> Result<Self> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = std::fs::metadata(path)
+            .map_err(|error| format!("read stand file {}: {error}", path.display()))?
+            .permissions()
+            .mode()
+            & 0o777;
+        if mode != MODE {
+            return Err(format!(
+                "stand file {} has mode {mode:04o}: it holds the stand's credentials and must be                  {MODE:04o} (`chmod 600 {}`)",
+                path.display(),
+                path.display()
+            )
+            .into());
+        }
         let text = std::fs::read_to_string(path)
             .map_err(|error| format!("read stand file {}: {error}", path.display()))?;
         Self::parse(&text).map_err(|error| format!("stand file {}: {error}", path.display()).into())
@@ -446,6 +465,27 @@ passphrase = "made-up-ap-passphrase"
         let error = Stand::parse("schema = 1\n[station]\npassword = hunter2\n").unwrap_err();
         assert!(!error.contains("hunter2"), "{error}");
         assert!(error.starts_with("line 3"), "{error}");
+    }
+
+    #[test]
+    fn only_a_file_of_mode_0600_is_read() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("stand.toml");
+        std::fs::write(&path, STAND).unwrap();
+        for mode in [0o644, 0o640, 0o604, 0o400, 0o700] {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            let error = Stand::load(&path).unwrap_err().to_string();
+            assert!(
+                error.contains(&format!("mode {mode:04o}")) && error.contains("0600"),
+                "{error}"
+            );
+            for secret in SECRETS {
+                assert!(!error.contains(secret), "{error}");
+            }
+        }
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(Stand::load(&path).unwrap(), Stand::parse(STAND).unwrap());
     }
 
     #[test]

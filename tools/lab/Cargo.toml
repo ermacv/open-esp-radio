@@ -11,6 +11,7 @@ description = "The stand: its file, its OpenWrt lab router and the SSH that reac
 [dependencies]
 oer-process = { path = "../lib/process" }
 serde = { version = "=1.0.229", features = ["derive"] }
+sha2 = "=0.10.9"
 toml = "=1.1.4"
 
 [dev-dependencies]

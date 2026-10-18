@@ -1,31 +1,35 @@
 //! The stand router (OpenWrt), brought to W1's profile and verified over
-//! SSH before every `run w1`. The router is a lab router: the profile is
-//! committed and its previous settings are not restored.
+//! SSH. The router is a lab router: the profile is committed and its
+//! previous settings are not restored.
 //!
-//! In order, each one SSH command ([`plan`] lists them):
+//! Each step is one script on the router's `sh -s` ([`plan`] lists them,
+//! the README explains them):
 //!
-//! 1. `uci changes wireless`: staged changes of someone else would be
-//!    committed with the profile, so any refuses the run;
-//! 2. `uci show wireless`: the radio is a 2.4 GHz `wifi-device`, enabled;
-//!    the AP section is an AP `wifi-iface` of that radio, not hidden; no
-//!    other enabled `wifi-iface` of the radio carries the stand's SSID;
-//! 3. the profile: on the radio `channel`, `htmode` [`HTMODE`] and
-//!    `beacon_int` [`BEACON_INTERVAL_TU`], on the AP section `ssid` and
-//!    `disabled=0`; `uci commit wireless`; `wifi reload`;
-//! 4. `uci show wireless` again: the committed profile, and exactly one
+//! 1. the staged wireless changes, as option paths only: any refuses the
+//!    run, since the profile's commit would take them along;
+//! 2. the wireless configuration, filtered on the router to the
+//!    [`ALLOWED_OPTIONS`] of the `wifi-device` and `wifi-iface` sections:
+//!    the radio is a 2.4 GHz `wifi-device`; the AP section an AP
+//!    `wifi-iface` of it; no other enabled `wifi-iface` of the radio
+//!    carries the stand's SSID;
+//! 3. the radio's channels as its PHY lists them: the profile's channel is
+//!    offered and neither disabled nor no-IR in the regulatory domain;
+//! 4. the profile: on the radio `channel`, `htmode` [`HTMODE`],
+//!    `beacon_int` [`BEACON_INTERVAL_TU`] and `disabled=0`, on the AP
+//!    section `ssid`, `disabled=0` and `hidden=0`; `uci commit wireless`;
+//!    `wifi reload`;
+//! 5. the configuration again: the committed profile, and exactly one
 //!    enabled `wifi-iface` of the radio with the stand's SSID;
-//! 5. `iw dev <interface> info`, up to [`SETTLE_ATTEMPTS`] times
-//!    [`SETTLE_PAUSE`] apart: an AP on the profile's channel, 20 MHz wide,
-//!    with the stand's SSID; its `addr` is the stand's BSSID.
+//! 6. the AP interface, up to [`SETTLE_ATTEMPTS`] times [`SETTLE_PAUSE`]
+//!    apart: an AP on the profile's channel, 20 MHz wide, with the stand's
+//!    SSID; its `addr` is the stand's BSSID.
 //!
-//! Encryption and key are never set or read: `uci show` output keeps only the
-//! options named in [`KEPT_OPTIONS`], and an SSID only as whether it is the
-//! stand's. The SSH target, the interface, every SSID and the full BSSID
-//! appear in no message, error or `Debug`; a command's output and stderr are
-//! never shown (ssh's own errors name the host). Values reach the remote
-//! shell single-quoted.
-//!
-//! [`Remote`] runs one command; [`crate::ssh::Ssh`] is the real one.
+//! Encryption and keys are never set, and never leave the router: every
+//! read is filtered there by an allowlist, and the host refuses any line
+//! outside it. An SSID is kept only as whether it is the stand's. The SSH
+//! target, the interface, every SSID and the full BSSID appear in no
+//! message, error or `Debug`; a script's output and stderr are never shown.
+//! Values reach the remote shell single-quoted, inside the script on stdin.
 
 use std::{fmt, time::Duration};
 
@@ -37,13 +41,14 @@ use crate::{mac::Mac, ssh::token};
 pub const HTMODE: &str = "HT20";
 /// The radio's `beacon_int`, in TU.
 pub const BEACON_INTERVAL_TU: u16 = 100;
-/// How many times `iw` is asked after the reload.
+/// How many times the AP interface is read after the reload.
 pub const SETTLE_ATTEMPTS: u32 = 16;
 /// The pause between two of those: 15 pauses, 30 s in all.
 pub const SETTLE_PAUSE: Duration = Duration::from_secs(2);
-/// The `uci show` options read; every other one (`key`, `encryption`, …) is
-/// dropped unread.
-pub const KEPT_OPTIONS: [&str; 10] = [
+/// The options of the wireless configuration that leave the router; every
+/// other one (`key`, `sae_password`, `auth_secret`, `wpa_psk_file`, …) stays
+/// there.
+pub const ALLOWED_OPTIONS: [&str; 11] = [
     "device",
     "mode",
     "disabled",
@@ -54,7 +59,10 @@ pub const KEPT_OPTIONS: [&str; 10] = [
     "channel",
     "htmode",
     "beacon_int",
+    "country",
 ];
+/// The section types whose lines leave the router.
+pub const ALLOWED_TYPES: [&str; 2] = ["wifi-device", "wifi-iface"];
 
 /// A UCI section name: letters, digits and `_`.
 fn section_name(text: &str) -> bool {
@@ -67,6 +75,21 @@ fn section_name(text: &str) -> bool {
 /// `text` as one word of the remote shell.
 pub fn quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
+}
+
+/// Step 1: the staged changes, cut to their option paths on the router.
+pub const CHANGES: &str =
+    "changes=$(uci changes wireless) && printf '%s\\n' \"$changes\" | sed 's/=.*//'";
+
+/// Step 2 and 5: the wireless configuration, filtered on the router to the
+/// allowed section types and options.
+pub fn show_script() -> String {
+    format!(
+        "config=$(uci show wireless) && printf '%s\\n' \"$config\" | grep -E \
+         '^wireless\\.[^.=]+=({})$|^wireless\\.[^.=]+\\.({})='",
+        ALLOWED_TYPES.join("|"),
+        ALLOWED_OPTIONS.join("|")
+    )
 }
 
 /// The profile W1 runs against.
@@ -149,8 +172,19 @@ impl Profile {
         )
     }
 
-    /// Step 3: the profile, committed and reloaded.
-    fn apply_command(&self) -> String {
+    /// Step 3: the channels of the radio's PHY, filtered on the router to
+    /// the frequency lines.
+    fn channels_script(&self) -> String {
+        format!(
+            "phy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname') && test -n \"$phy\" \
+             && info=$(iw phy \"$phy\" info) && printf '%s\\n' \"$info\" | grep -E \
+             '^[[:space:]]*\\* [0-9]+(\\.[0-9]+)? MHz \\['",
+            quote(&format!("{{\"section\":\"{}\"}}", self.radio))
+        )
+    }
+
+    /// Step 4: the profile, committed and reloaded.
+    fn apply_script(&self) -> String {
         let set = |section: &str, option: &str, value: &str| {
             format!(
                 "uci set {}",
@@ -161,21 +195,28 @@ impl Profile {
             set(&self.radio, "channel", &self.channel.to_string()),
             set(&self.radio, "htmode", HTMODE),
             set(&self.radio, "beacon_int", &BEACON_INTERVAL_TU.to_string()),
+            set(&self.radio, "disabled", "0"),
             set(&self.ap_section, "ssid", &self.ssid),
             set(&self.ap_section, "disabled", "0"),
+            set(&self.ap_section, "hidden", "0"),
             "uci commit wireless".to_owned(),
             "wifi reload".to_owned(),
         ]
         .join(" && ")
     }
 
-    fn iw_command(&self) -> String {
-        format!("iw dev {} info", quote(&self.interface))
+    /// Step 6: the AP interface, filtered on the router to the lines read.
+    fn iw_script(&self) -> String {
+        format!(
+            "info=$(iw dev {} info) && printf '%s\\n' \"$info\" | grep -E \
+             '^[[:space:]]*(addr|ssid|type|channel) '",
+            quote(&self.interface)
+        )
     }
 }
 
-/// The remote commands in order, values as `<placeholders>`: what
-/// [`apply`] runs, as the README lists them.
+/// The remote scripts in order, values as `<placeholders>`: what [`apply`]
+/// runs, as the README lists them.
 pub fn plan() -> Vec<String> {
     let profile = Profile {
         radio: "<radio>".to_owned(),
@@ -186,21 +227,15 @@ pub fn plan() -> Vec<String> {
     };
     vec![
         CHANGES.to_owned(),
-        SHOW.to_owned(),
+        show_script(),
+        profile.channels_script(),
         profile
-            .apply_command()
+            .apply_script()
             .replace("channel=0", "channel=<channel>"),
-        SHOW.to_owned(),
-        format!(
-            "{} (up to {SETTLE_ATTEMPTS} times, {} s apart)",
-            profile.iw_command(),
-            SETTLE_PAUSE.as_secs()
-        ),
+        show_script(),
+        profile.iw_script(),
     ]
 }
-
-const CHANGES: &str = "uci changes wireless";
-const SHOW: &str = "uci show wireless";
 
 /// The applied profile: the stand AP's BSSID and channel.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -217,16 +252,34 @@ impl Applied {
 }
 
 /// Bring the router to `profile` and verify it; the stand AP's BSSID and
-/// channel.
+/// channel. Run twice, it changes nothing the second time and verifies the
+/// same.
 pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
-    let changes = remote.run(CHANGES).map_err(step(CHANGES))?;
+    let changes = remote
+        .run(CHANGES)
+        .map_err(step("reading the staged changes"))?;
     refuse_staged_changes(&changes)?;
-    let before = Wireless::parse(&remote.run(SHOW).map_err(step(SHOW))?, &profile.ssid)?;
-    before.check_before(profile)?;
+    let show = show_script();
+    let before = Wireless::parse(
+        &remote
+            .run(&show)
+            .map_err(step("reading the wireless configuration"))?,
+        &profile.ssid,
+    )?;
+    let radio = before.check_before(profile)?;
+    let channels = remote
+        .run(&profile.channels_script())
+        .map_err(step("reading the radio's channels"))?;
+    check_channel(&channels, profile.channel, radio.option("country"))?;
     remote
-        .run(&profile.apply_command())
+        .run(&profile.apply_script())
         .map_err(step("applying the profile"))?;
-    let after = Wireless::parse(&remote.run(SHOW).map_err(step(SHOW))?, &profile.ssid)?;
+    let after = Wireless::parse(
+        &remote
+            .run(&show)
+            .map_err(step("reading the committed configuration"))?,
+        &profile.ssid,
+    )?;
     after.check_after(profile)?;
     settle(remote, profile)
 }
@@ -236,15 +289,15 @@ fn step(what: &str) -> impl FnOnce(String) -> String + '_ {
     move |error| format!("router, {what}: {error}")
 }
 
-/// Step 5: `iw` until the AP runs the profile.
+/// Step 6: the AP interface until it runs the profile.
 fn settle(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
-    let command = profile.iw_command();
+    let script = profile.iw_script();
     let mut last = String::new();
     for attempt in 0..SETTLE_ATTEMPTS {
         if attempt > 0 {
             remote.pause(SETTLE_PAUSE);
         }
-        let info = match remote.run(&command) {
+        let info = match remote.run(&script) {
             Ok(text) => parse_iw_info(&text, &profile.ssid),
             Err(error) => Err(error),
         };
@@ -262,21 +315,20 @@ fn settle(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         }
     }
     Err(format!(
-        "router, iw dev <wireless_interface> info: the AP did not come up with the profile \
-         within {} s: {last}",
+        "router, reading the AP interface: it did not come up with the profile within {} s: \
+         {last}",
         u64::from(SETTLE_ATTEMPTS - 1) * SETTLE_PAUSE.as_secs()
     ))
 }
 
-/// `uci changes wireless` prints nothing when nothing is staged; otherwise
-/// the staged options are named (without their values).
+/// The staged changes as option paths, one per line (the router cut off
+/// their values); none is an empty answer.
 fn refuse_staged_changes(changes: &str) -> Result<()> {
     let staged = changes
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(|line| {
-            let path = line.split('=').next().unwrap_or_default();
+        .map(|path| {
             if path.bytes().all(|byte| {
                 byte.is_ascii_alphanumeric()
                     || matches!(byte, b'.' | b'_' | b'-' | b'+' | b'@' | b'[' | b']')
@@ -297,15 +349,15 @@ fn refuse_staged_changes(changes: &str) -> Result<()> {
     ))
 }
 
-/// One `wireless` section of `uci show`, holding only [`KEPT_OPTIONS`], its
-/// SSID only as whether it is the stand's.
+/// One `wireless` section, holding only its [`ALLOWED_OPTIONS`], its SSID
+/// only as whether it is the stand's.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Section {
     pub name: String,
     pub kind: String,
     pub options: Vec<(String, String)>,
     pub stand_ssid: bool,
-    /// The kept options read so far, `ssid` included.
+    /// The options read so far, `ssid` included.
     seen: Vec<String>,
 }
 
@@ -323,7 +375,8 @@ impl Section {
     }
 }
 
-/// The `wireless` configuration as `uci show wireless` prints it.
+/// The wireless configuration, as the filtered `uci show wireless` prints
+/// it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Wireless {
     pub sections: Vec<Section>,
@@ -365,31 +418,34 @@ fn uci_value(text: &str) -> Option<Vec<String>> {
     (!items.is_empty()).then_some(items)
 }
 
+/// A UCI section name as `uci show` prints it: neither `.` nor `=`.
+fn shown_section(name: &str) -> bool {
+    !name.is_empty() && !name.contains(['.', '='])
+}
+
 impl Wireless {
-    /// `text`, which `uci show wireless` printed; `ssid` is the stand's.
-    /// A malformed line is named by its number, never quoted.
+    /// `text`, the filtered `uci show wireless`; `ssid` is the stand's. A
+    /// line outside the allowlist, which the router should have kept, is
+    /// refused; a line is named by its number, never quoted.
     pub fn parse(text: &str, ssid: &str) -> Result<Self> {
         let mut wireless = Self::default();
         for (number, line) in text.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
             }
-            let bad = || {
+            let outside = || {
                 format!(
-                    "uci show wireless: line {} is not `wireless.<section>[.<option>]=<value>`",
+                    "the wireless configuration's line {} is outside the allowlist (the \
+                     router's filter let it through)",
                     number + 1
                 )
             };
-            let (path, value) = line.split_once('=').ok_or_else(bad)?;
-            let path = path.strip_prefix("wireless.").ok_or_else(bad)?;
+            let (path, value) = line.split_once('=').ok_or_else(outside)?;
+            let path = path.strip_prefix("wireless.").ok_or_else(outside)?;
             match path.split_once('.') {
                 None => {
-                    if path.is_empty()
-                        || !value
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-                    {
-                        return Err(bad());
+                    if !shown_section(path) || !ALLOWED_TYPES.contains(&value) {
+                        return Err(outside());
                     }
                     wireless.sections.push(Section {
                         name: path.to_owned(),
@@ -398,30 +454,40 @@ impl Wireless {
                     });
                 }
                 Some((name, option)) => {
-                    let section = wireless
+                    if !shown_section(name) || !ALLOWED_OPTIONS.contains(&option) {
+                        return Err(outside());
+                    }
+                    let mut items = uci_value(value).ok_or_else(|| {
+                        format!(
+                            "the wireless configuration's line {} holds no quoted value",
+                            number + 1
+                        )
+                    })?;
+                    // An allowed option of a section of another type, which
+                    // the filter dropped.
+                    let Some(section) = wireless
                         .sections
                         .iter_mut()
                         .rev()
                         .find(|section| section.name == name)
-                        .ok_or_else(bad)?;
-                    if !KEPT_OPTIONS.contains(&option) {
+                    else {
                         continue;
-                    }
+                    };
                     if section.seen.iter().any(|seen| seen == option) {
                         return Err(format!(
-                            "uci show wireless: line {} repeats {name}.{option}",
+                            "the wireless configuration's line {} repeats {name}.{option}",
                             number + 1
                         ));
                     }
                     section.seen.push(option.to_owned());
-                    let mut items = uci_value(value).ok_or_else(bad)?;
                     if option == "ssid" {
                         section.stand_ssid = items.as_slice() == [ssid];
                         continue;
                     }
                     if items.len() != 1 {
                         return Err(format!(
-                            "uci show wireless: {name}.{option} is a list, not one value"
+                            "the wireless configuration's {name}.{option} is a list, not one \
+                             value"
                         ));
                     }
                     section.options.push((option.to_owned(), items.remove(0)));
@@ -472,15 +538,6 @@ impl Wireless {
                 profile.radio
             ));
         }
-        if !radio.enabled() {
-            return Err(format!("wifi-device {} is disabled", profile.radio));
-        }
-        if ap.option("hidden") == Some("1") {
-            return Err(format!(
-                "wifi-iface {} hides its SSID (hidden=1): W1 checks the SSID its beacons carry",
-                profile.ap_section
-            ));
-        }
         Ok((radio, ap))
     }
 
@@ -513,13 +570,14 @@ impl Wireless {
         ))
     }
 
-    /// Step 2: the sections fit the profile.
-    fn check_before(&self, profile: &Profile) -> Result<()> {
-        self.sections(profile)?;
-        self.refuse_others(profile)
+    /// Step 2: the sections fit the profile; the radio.
+    fn check_before(&self, profile: &Profile) -> Result<&Section> {
+        let (radio, _) = self.sections(profile)?;
+        self.refuse_others(profile)?;
+        Ok(radio)
     }
 
-    /// Step 4: the committed profile.
+    /// Step 5: the committed profile.
     fn check_after(&self, profile: &Profile) -> Result<()> {
         let (radio, ap) = self.sections(profile)?;
         let channel = profile.channel.to_string();
@@ -528,6 +586,9 @@ impl Wireless {
             (radio, "channel", channel.as_str()),
             (radio, "htmode", HTMODE),
             (radio, "beacon_int", beacon_int.as_str()),
+            (radio, "disabled", "0"),
+            (ap, "disabled", "0"),
+            (ap, "hidden", "0"),
         ] {
             if section.option(option) != Some(wanted) {
                 return Err(format!(
@@ -543,11 +604,61 @@ impl Wireless {
                 ap.name
             ));
         }
-        if !ap.enabled() {
-            return Err(format!("the committed {} is disabled", ap.name));
-        }
         self.refuse_others(profile)
     }
+}
+
+/// `* <MHz>[.0] MHz [<channel>] (…)` of `iw phy <phy> info`: the channel
+/// and the rest of the line, which carries `disabled` or `no IR`.
+fn phy_channel(line: &str) -> Option<(u8, u32, &str)> {
+    let rest = line.trim().strip_prefix("* ")?;
+    let (frequency, rest) = rest.split_once(" MHz [")?;
+    let frequency = frequency
+        .strip_suffix(".0")
+        .unwrap_or(frequency)
+        .parse::<u32>()
+        .ok()?;
+    let (channel, rest) = rest.split_once(']')?;
+    Some((channel.parse().ok()?, frequency, rest))
+}
+
+/// Step 3: `channel` is offered by the radio's PHY (`text`, its frequency
+/// lines) at 2.4 GHz and the regulatory domain allows an AP on it.
+/// `country` is the radio's UCI `country`, for the message only.
+pub fn check_channel(text: &str, channel: u8, country: Option<&str>) -> Result<()> {
+    let domain = || {
+        country.map_or_else(
+            || "the radio's regulatory domain (no country set)".to_owned(),
+            |country| format!("the radio's regulatory domain (country {country})"),
+        )
+    };
+    let frequency = 2407 + 5 * u32::from(channel);
+    let mut found = None;
+    for (number, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parsed = phy_channel(line).ok_or_else(|| {
+            format!(
+                "the radio's channel list's line {} is outside the allowlist",
+                number + 1
+            )
+        })?;
+        if parsed.0 == channel && parsed.1 == frequency {
+            found = Some(parsed.2);
+        }
+    }
+    let flags = found.ok_or_else(|| format!("the radio does not offer channel {channel}"))?;
+    if flags.contains("disabled") {
+        return Err(format!("{} disables channel {channel}", domain()));
+    }
+    if flags.contains("no IR") {
+        return Err(format!(
+            "{} forbids initiating radiation (no IR) on channel {channel}: no AP there",
+            domain()
+        ));
+    }
+    Ok(())
 }
 
 /// What `iw dev <interface> info` says of the AP.
@@ -639,16 +750,19 @@ fn iw_channel(rest: &str) -> Option<(u8, Width)> {
     ))
 }
 
-/// What `iw dev <interface> info` printed; `ssid` is the stand's. Lines
-/// other than `addr`, `type`, `ssid` and `channel` are ignored; nothing of
-/// the text is quoted in an error.
+/// What the filtered `iw dev <interface> info` printed; `ssid` is the
+/// stand's. Only `addr`, `type`, `ssid` and `channel` lines are allowed;
+/// nothing of the text is quoted in an error.
 pub fn parse_iw_info(text: &str, ssid: &str) -> Result<IwInfo> {
     let mut bssid = None;
     let mut channel = None;
     let mut ap = false;
     let mut stand_ssid = false;
-    for line in text.lines() {
+    for (number, line) in text.lines().enumerate() {
         let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
         let (word, rest) = line.split_once(' ').unwrap_or((line, ""));
         match word {
             "addr" => {
@@ -667,7 +781,12 @@ pub fn parse_iw_info(text: &str, ssid: &str) -> Result<IwInfo> {
             }
             "type" => ap = rest == "AP",
             "ssid" => stand_ssid = iw_ssid(rest).is_some_and(|bytes| bytes == ssid.as_bytes()),
-            _ => {}
+            _ => {
+                return Err(format!(
+                    "iw: line {} is outside the allowlist (the router's filter let it through)",
+                    number + 1
+                ));
+            }
         }
     }
     let bssid = bssid.ok_or("iw: no addr line")?;
@@ -682,474 +801,4 @@ pub fn parse_iw_info(text: &str, ssid: &str) -> Result<IwInfo> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SSID: &str = "Made Up 'Lab' Net";
-    const TARGET: &str = "made-up-router.lab";
-    const INTERFACE: &str = "phy7-ap3";
-    const BSSID: &str = "02:5e:c0:de:f6:d0";
-
-    fn profile() -> Profile {
-        Profile::new("radio9", "lab_ap", INTERFACE, 6, SSID).unwrap()
-    }
-
-    /// `uci show wireless` of a router with the stand's section and others.
-    fn show(channel: &str, htmode: &str, ap_ssid: &str, extra: &str) -> String {
-        format!(
-            "wireless.radio9=wifi-device\n\
-             wireless.radio9.type='mac80211'\n\
-             wireless.radio9.path='platform/soc/18000000.wifi'\n\
-             wireless.radio9.band='2g'\n\
-             wireless.radio9.channel='{channel}'\n\
-             wireless.radio9.htmode='{htmode}'\n\
-             wireless.radio9.beacon_int='100'\n\
-             wireless.radio9.cell_density='0'\n\
-             wireless.radio8=wifi-device\n\
-             wireless.radio8.band='5g'\n\
-             wireless.lab_ap=wifi-iface\n\
-             wireless.lab_ap.device='radio9'\n\
-             wireless.lab_ap.network='lan'\n\
-             wireless.lab_ap.mode='ap'\n\
-             wireless.lab_ap.ssid='{ap_ssid}'\n\
-             wireless.lab_ap.encryption='psk2'\n\
-             wireless.lab_ap.key='made-up-passphrase'\n\
-             wireless.five=wifi-iface\n\
-             wireless.five.device='radio8'\n\
-             wireless.five.mode='ap'\n\
-             wireless.five.ssid='Made Up '\\''Lab'\\'' Net'\n\
-             {extra}"
-        )
-    }
-
-    fn iw(channel: u8, width: &str, ssid: &str) -> String {
-        format!(
-            "Interface {INTERFACE}\n\
-             \tifindex 12\n\
-             \twdev 0x2\n\
-             \taddr {BSSID}\n\
-             \tssid {ssid}\n\
-             \ttype AP\n\
-             \twiphy 0\n\
-             \tchannel {channel} ({} MHz), width: {width}, center1: {} MHz\n\
-             \ttxpower 20.00 dBm\n",
-            2407 + 5 * u32::from(channel),
-            2407 + 5 * u32::from(channel)
-        )
-    }
-
-    /// iw escapes the quote-free SSID's inner spaces as they are.
-    const IW_SSID: &str = "Made Up 'Lab' Net";
-
-    /// Canned answers, matched by the command's first words; records every
-    /// command.
-    struct Canned {
-        answers: Vec<(&'static str, Vec<Result<String>>)>,
-        commands: Vec<String>,
-        pauses: u32,
-    }
-
-    impl Canned {
-        fn new(answers: Vec<(&'static str, Vec<Result<String>>)>) -> Self {
-            Self {
-                answers,
-                commands: Vec::new(),
-                pauses: 0,
-            }
-        }
-    }
-
-    impl Remote for Canned {
-        fn run(&mut self, command: &str) -> Result<String> {
-            self.commands.push(command.to_owned());
-            let (_, answers) = self
-                .answers
-                .iter_mut()
-                .find(|(prefix, _)| command.starts_with(prefix))
-                .expect("a canned answer");
-            if answers.len() > 1 {
-                answers.remove(0)
-            } else {
-                answers[0].clone()
-            }
-        }
-        fn pause(&mut self, _: Duration) {
-            self.pauses += 1;
-        }
-    }
-
-    fn good() -> Canned {
-        Canned::new(vec![
-            ("uci changes", vec![Ok(String::new())]),
-            (
-                "uci show",
-                vec![
-                    Ok(show("1", "HE40", "Old Net", "")),
-                    Ok(show("6", "HT20", "Made Up '\\''Lab'\\'' Net", "")),
-                ],
-            ),
-            ("uci set", vec![Ok(String::new())]),
-            (
-                "iw dev",
-                vec![
-                    Err("the remote command exited with 237".to_owned()),
-                    Ok(iw(1, "40 MHz", "Old\\x20Net")),
-                    Ok(iw(6, "20 MHz", IW_SSID)),
-                ],
-            ),
-        ])
-    }
-
-    #[test]
-    fn the_profile_is_applied_verified_and_settles() {
-        let mut remote = good();
-        let applied = apply(&mut remote, &profile()).unwrap();
-        assert_eq!(applied.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
-        assert_eq!(applied.channel, 6);
-        assert_eq!(remote.pauses, 2);
-        assert_eq!(
-            remote.commands,
-            [
-                "uci changes wireless".to_owned(),
-                "uci show wireless".to_owned(),
-                "uci set 'wireless.radio9.channel=6' && uci set 'wireless.radio9.htmode=HT20' \
-                 && uci set 'wireless.radio9.beacon_int=100' \
-                 && uci set 'wireless.lab_ap.ssid=Made Up '\\''Lab'\\'' Net' \
-                 && uci set 'wireless.lab_ap.disabled=0' && uci commit wireless && wifi reload"
-                    .to_owned(),
-                "uci show wireless".to_owned(),
-                "iw dev 'phy7-ap3' info".to_owned(),
-                "iw dev 'phy7-ap3' info".to_owned(),
-                "iw dev 'phy7-ap3' info".to_owned(),
-            ]
-        );
-    }
-
-    #[test]
-    fn quoting_survives_the_remote_shell() {
-        for text in [SSID, "a b", "it's", "'", "$(reboot)", "a\\b", "`x`;rm"] {
-            let output = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(format!("printf %s {}", quote(text)))
-                .output()
-                .unwrap();
-            assert_eq!(String::from_utf8(output.stdout).unwrap(), text);
-        }
-    }
-
-    #[test]
-    fn the_plan_lists_placeholders_only() {
-        let plan = plan();
-        assert_eq!(plan.len(), 5);
-        assert_eq!(
-            plan[2],
-            "uci set 'wireless.<radio>.channel=<channel>' && uci set 'wireless.<radio>.htmode=HT20' \
-             && uci set 'wireless.<radio>.beacon_int=100' && uci set 'wireless.<ap_section>.ssid=<ssid>' \
-             && uci set 'wireless.<ap_section>.disabled=0' && uci commit wireless && wifi reload"
-        );
-        assert_eq!(
-            plan[4],
-            "iw dev '<wireless_interface>' info (up to 16 times, 2 s apart)"
-        );
-        // The README lists the very plan.
-        let readme = include_str!("../../fw/README.md");
-        for command in &plan {
-            assert!(
-                readme.contains(command.as_str()),
-                "README lacks `{command}`"
-            );
-        }
-    }
-
-    #[test]
-    fn staged_changes_refuse_before_anything_is_set() {
-        let mut remote = good();
-        remote.answers[0].1 = vec![Ok(
-            "wireless.radio9.txpower='5'\nwireless.lab_ap.key='made-up-passphrase'\n".to_owned(),
-        )];
-        let error = apply(&mut remote, &profile()).unwrap_err();
-        assert!(
-            error.contains("wireless.radio9.txpower, wireless.lab_ap.key"),
-            "{error}"
-        );
-        assert!(!error.contains("made-up-passphrase"), "{error}");
-        assert_eq!(remote.commands.len(), 1);
-    }
-
-    #[test]
-    fn uci_show_keeps_only_the_named_options() {
-        let escaped = SSID.replace('\'', "'\\''");
-        let wireless = Wireless::parse(&show("6", "HT20", &escaped, ""), SSID).unwrap();
-        let debug = format!("{wireless:?}");
-        for secret in ["made-up-passphrase", "psk2", "Made Up", "Lab", "lan"] {
-            assert!(!debug.contains(secret), "{secret}: {debug}");
-        }
-        let ap = wireless.section("lab_ap").unwrap();
-        assert!(ap.stand_ssid);
-        assert_eq!(ap.option("mode"), Some("ap"));
-        assert_eq!(ap.option("key"), None);
-        // The quote-escaped SSID of the 5 GHz section is the stand's too.
-        assert!(wireless.section("five").unwrap().stand_ssid);
-        assert!(
-            !Wireless::parse(&show("6", "HT20", "Other", ""), SSID)
-                .unwrap()
-                .section("lab_ap")
-                .unwrap()
-                .stand_ssid
-        );
-    }
-
-    #[test]
-    fn malformed_uci_output_is_named_by_line_only() {
-        for (text, line) in [
-            ("garbage made-up-passphrase\n", 1),
-            (
-                "wireless.radio9=wifi-device\nwireless.radio9.channel=6\n",
-                2,
-            ),
-            (
-                "wireless.radio9=wifi-device\nwireless.radio9.channel='6\n",
-                2,
-            ),
-            ("wireless.x.ssid='orphan'\n", 1),
-            ("network.lan=interface\n", 1),
-        ] {
-            let error = Wireless::parse(text, SSID).unwrap_err();
-            assert!(error.contains(&format!("line {line} ")), "{error}");
-            assert!(
-                !error.contains("made-up") && !error.contains("orphan"),
-                "{error}"
-            );
-        }
-        let error = Wireless::parse(
-            "wireless.radio9=wifi-device\nwireless.radio9.channel='1' '6'\n",
-            SSID,
-        )
-        .unwrap_err();
-        assert!(error.contains("is a list"), "{error}");
-    }
-
-    #[test]
-    fn the_sections_must_fit_before_anything_is_set() {
-        let profile = profile();
-        let check = |text: String| Wireless::parse(&text, SSID).unwrap().check_before(&profile);
-        check(show("1", "HE40", "Old", "")).unwrap();
-        for (extra, reason) in [
-            (
-                "wireless.radio9.disabled='1'\n",
-                "wifi-device radio9 is disabled",
-            ),
-            ("wireless.lab_ap.hidden='1'\n", "hides its SSID"),
-            (
-                "wireless.guest=wifi-iface\nwireless.guest.device='radio9'\nwireless.guest.mode='ap'\nwireless.guest.ssid='Made Up '\\''Lab'\\'' Net'\n",
-                "carry the stand's SSID: guest;",
-            ),
-        ] {
-            let error = check(show("1", "HE40", "Old", extra)).unwrap_err();
-            assert!(error.contains(reason), "{reason}: {error}");
-            assert!(!error.contains("Made Up"), "{error}");
-        }
-        let error = check(
-            show("1", "HE40", "Old", "")
-                .replace("lab_ap.device='radio9'", "lab_ap.device='radio8'"),
-        )
-        .unwrap_err();
-        assert!(error.contains("belongs to another radio"), "{error}");
-        let error = Wireless::parse(
-            &show("1", "HE40", "Old", "wireless.lab_ap.mode='sta'\n"),
-            SSID,
-        )
-        .unwrap_err();
-        assert!(error.contains("repeats lab_ap.mode"), "{error}");
-        // A disabled duplicate is no second stand.
-        check(show(
-            "1",
-            "HE40",
-            "Old",
-            "wireless.guest=wifi-iface\nwireless.guest.device='radio9'\nwireless.guest.ssid='Made Up '\\''Lab'\\'' Net'\nwireless.guest.disabled='1'\n",
-        ))
-        .unwrap();
-        let error = Wireless::parse(&show("1", "HE40", "Old", "").replace("'2g'", "'5g'"), SSID)
-            .unwrap()
-            .check_before(&profile)
-            .unwrap_err();
-        assert!(error.contains("not a 2.4 GHz radio"), "{error}");
-        let error = Wireless::parse("wireless.radio9=wifi-device\n", SSID)
-            .unwrap()
-            .check_before(&profile)
-            .unwrap_err();
-        assert!(error.contains("no wifi-iface section lab_ap"), "{error}");
-    }
-
-    #[test]
-    fn the_committed_profile_is_checked() {
-        let profile = profile();
-        let ssid = "Made Up '\\''Lab'\\'' Net";
-        let check = |text: String| Wireless::parse(&text, SSID).unwrap().check_after(&profile);
-        check(show("6", "HT20", ssid, "")).unwrap();
-        for (text, reason) in [
-            (
-                show("11", "HT20", ssid, ""),
-                "radio9.channel is 11, not the profile's 6",
-            ),
-            (show("6", "HE20", ssid, ""), "radio9.htmode is HE20"),
-            (
-                show("6", "HT20", "Other", ""),
-                "lab_ap.ssid is not the stand's SSID",
-            ),
-            (
-                show("6", "HT20", ssid, "wireless.lab_ap.disabled='1'\n"),
-                "lab_ap is disabled",
-            ),
-        ] {
-            let error = check(text).unwrap_err();
-            assert!(error.contains(reason), "{reason}: {error}");
-        }
-    }
-
-    #[test]
-    fn iw_info_parses_and_refuses_garbage() {
-        let info = parse_iw_info(&iw(6, "20 MHz", IW_SSID), SSID).unwrap();
-        assert_eq!(info.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
-        assert_eq!((info.channel, info.width, info.ap), (6, Width::Ht20, true));
-        assert!(info.stand_ssid);
-        assert_eq!(info.mismatch(6), None);
-        assert_eq!(
-            parse_iw_info(&iw(6, "20 MHz (no HT)", IW_SSID), SSID)
-                .unwrap()
-                .width,
-            Width::NoHt
-        );
-        // iw escapes what it does not print.
-        let escaped = parse_iw_info(&iw(6, "20 MHz", "\\x20lead"), " lead").unwrap();
-        assert!(escaped.stand_ssid);
-        let other = parse_iw_info(&iw(11, "20 MHz", "Other"), SSID).unwrap();
-        assert!(!other.stand_ssid);
-        assert!(other.mismatch(6).unwrap().contains("channel 11"));
-        let good = iw(6, "20 MHz", IW_SSID);
-        for (text, reason) in [
-            (
-                good.replace("\taddr 02:5e:c0:de:f6:d0\n", ""),
-                "no addr line",
-            ),
-            (
-                good.replace("02:5e:c0:de:f6:d0", "03:5e:c0:de:f6:d0"),
-                "no unicast MAC",
-            ),
-            (
-                good.replace("02:5e:c0:de:f6:d0", "02:5e:c0:de:f6"),
-                "no unicast MAC",
-            ),
-            (
-                good.lines()
-                    .filter(|line| !line.contains("channel"))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                "no channel line",
-            ),
-            (
-                good.replace("(2437 MHz)", "(2412 MHz)"),
-                "the channel line is not",
-            ),
-            (
-                good.replace("channel 6 ", "channel 36 "),
-                "the channel line is not",
-            ),
-            (format!("{good}\taddr {BSSID}\n"), "two addr lines"),
-            (
-                "command failed: No such device (-19)\n".to_owned(),
-                "no addr line",
-            ),
-            ("\u{0}\u{1}garbage\n".to_owned(), "no addr line"),
-        ] {
-            let error = parse_iw_info(&text, SSID).unwrap_err();
-            assert!(error.contains(reason), "{reason}: {error}");
-            assert!(
-                !error.contains("02:5e") && !error.contains(INTERFACE),
-                "{error}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_ap_that_never_settles_refuses_after_the_bounded_wait() {
-        let mut remote = good();
-        remote.answers[3].1 = vec![Ok(iw(1, "20 MHz", IW_SSID))];
-        let error = apply(&mut remote, &profile()).unwrap_err();
-        assert!(error.contains("within 30 s"), "{error}");
-        assert!(error.contains("channel 1, the profile's is 6"), "{error}");
-        assert_eq!(remote.pauses, SETTLE_ATTEMPTS - 1);
-    }
-
-    #[test]
-    fn a_failing_ssh_is_an_error_without_the_target() {
-        let mut remote = Canned::new(vec![(
-            "uci",
-            vec![Err(
-                "ssh could not reach the router or was refused (exit 255; BatchMode needs a loaded key)"
-                    .to_owned(),
-            )],
-        )]);
-        let error = apply(&mut remote, &profile()).unwrap_err();
-        assert!(
-            error.starts_with("router, uci changes wireless: ssh could not"),
-            "{error}"
-        );
-        assert_eq!(remote.commands.len(), 1);
-    }
-
-    #[test]
-    fn values_are_validated_without_being_repeated() {
-        for (radio, ap, interface, channel, ssid) in [
-            ("radio 9", "lab_ap", INTERFACE, 6, SSID),
-            ("radio9", "@wifi-iface[0]", INTERFACE, 6, SSID),
-            ("radio9", "lab_ap", "phy7 ap3", 6, SSID),
-            ("radio9", "lab_ap", INTERFACE, 14, SSID),
-            ("radio9", "lab_ap", INTERFACE, 6, ""),
-            (
-                "radio9",
-                "lab_ap",
-                INTERFACE,
-                6,
-                "Made Up Lab Net Made Up Lab Net Made Up",
-            ),
-            ("radio9", "lab_ap", INTERFACE, 6, "Made\nUp"),
-        ] {
-            let error = Profile::new(radio, ap, interface, channel, ssid).unwrap_err();
-            assert!(
-                !error.contains("Made") && !error.contains("phy7"),
-                "{error}"
-            );
-        }
-    }
-
-    #[test]
-    fn nothing_secret_is_shown() {
-        let profile = profile();
-        let applied = apply(&mut good(), &profile).unwrap();
-        let ssh = crate::ssh::Ssh::new(TARGET).unwrap();
-        let info = parse_iw_info(&iw(6, "20 MHz", IW_SSID), SSID).unwrap();
-        let shown = [
-            format!("{profile:?}"),
-            profile.describe(),
-            format!("{applied:?}"),
-            applied.describe(),
-            format!("{ssh:?}"),
-            format!("{info:?}"),
-            plan().join("\n"),
-        ]
-        .join("\n");
-        for secret in [
-            SSID,
-            "Made Up",
-            TARGET,
-            INTERFACE,
-            BSSID,
-            "02:5E:C0:DE:F6:D0",
-            "5e:c0",
-        ] {
-            assert!(!shown.contains(secret), "{secret}: {shown}");
-        }
-        assert!(shown.contains("xx:xx:xx:xx:F6:D0"), "{shown}");
-    }
-}
+mod tests;

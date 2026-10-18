@@ -551,22 +551,28 @@ passphrase = "made-up-ap-passphrase"
     }
 
     impl router::Remote for Router {
-        fn run(&mut self, command: &str) -> router::Result<String> {
+        fn run(&mut self, script: &str) -> router::Result<String> {
             if self.fail {
                 return Err("ssh could not reach the router or was refused (exit 255)".to_owned());
             }
             Ok(
-                if command.starts_with("uci changes") || command.starts_with("uci set") {
+                if script.starts_with("changes=") || script.starts_with("uci set") {
                     String::new()
-                } else if command.starts_with("uci show") {
+                } else if script.starts_with("config=") {
+                    // What the router's allowlist filter passes.
                     "wireless.radio9=wifi-device\nwireless.radio9.band='2g'\nwireless.radio9.channel='6'\n\
                  wireless.radio9.htmode='HT20'\nwireless.radio9.beacon_int='100'\n\
-                 wireless.lab_ap=wifi-iface\nwireless.lab_ap.device='radio9'\nwireless.lab_ap.mode='ap'\n\
-                 wireless.lab_ap.ssid='Made Up Lab Net'\nwireless.lab_ap.key='made-up-passphrase'\n"
+                 wireless.radio9.disabled='0'\nwireless.lab_ap=wifi-iface\n\
+                 wireless.lab_ap.device='radio9'\nwireless.lab_ap.mode='ap'\n\
+                 wireless.lab_ap.ssid='Made Up Lab Net'\nwireless.lab_ap.disabled='0'\n\
+                 wireless.lab_ap.hidden='0'\n"
                     .to_owned()
+                } else if script.starts_with("phy=") {
+                    "\t\t\t* 2437.0 MHz [6] (20.0 dBm)\n\t\t\t* 2462.0 MHz [11] (20.0 dBm)\n"
+                        .to_owned()
                 } else {
                     format!(
-                        "Interface phy7-ap3\n\taddr 02:5e:c0:de:f6:d0\n\tssid Made Up Lab Net\n\ttype AP\n\
+                        "\taddr 02:5e:c0:de:f6:d0\n\tssid Made Up Lab Net\n\ttype AP\n\
                      \tchannel {} ({} MHz), width: 20 MHz, center1: {} MHz\n",
                         self.channel,
                         2407 + 5 * u32::from(self.channel),

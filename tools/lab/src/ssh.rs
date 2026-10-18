@@ -1,25 +1,28 @@
-//! The one way to the stand router: non-interactive SSH.
+//! The one way to the stand router: non-interactive SSH running a script
+//! that goes over stdin, so no value of the stand file but the target
+//! itself is ever in an argument list (local or remote `ps`).
 
-use std::{fmt, time::Duration};
+use std::{fmt, io::Write as _, process::Stdio, time::Duration};
 
 pub type Result<T> = std::result::Result<T, String>;
 
-/// The longest one remote command may take.
+/// The longest one script may take, connection included.
 pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Runs one command on the router.
+/// Runs one script on the router.
 pub trait Remote {
-    /// `command`'s standard output when it exits 0; otherwise why not,
-    /// naming neither the router nor the command.
-    fn run(&mut self, command: &str) -> Result<String>;
-    /// Wait `duration` between two `iw` reads.
+    /// `script`'s standard output when it exits 0; otherwise why not,
+    /// naming neither the router nor the script.
+    fn run(&mut self, script: &str) -> Result<String>;
+    /// Wait `duration` between two reads of the router.
     fn pause(&mut self, duration: Duration) {
         std::thread::sleep(duration);
     }
 }
 
-/// `ssh -o BatchMode=yes -o ConnectTimeout=5 <target> <command>`: never
-/// prompts, never waits longer than [`COMMAND_TIMEOUT`].
+/// `ssh -o BatchMode=yes -o ConnectTimeout=5 <target> sh -s`, the script
+/// on its stdin: never prompts, never waits longer than
+/// [`COMMAND_TIMEOUT`].
 pub struct Ssh {
     target: String,
 }
@@ -46,23 +49,38 @@ impl Ssh {
         })
     }
 
-    fn command(&self, command: &str) -> std::process::Command {
+    /// The command; the script is not in it.
+    fn command(&self) -> std::process::Command {
         let mut ssh = oer_process::command("ssh");
         ssh.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
             .arg(&self.target)
-            .arg(command);
+            .args(["sh", "-s"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         ssh
     }
 }
 
 impl Remote for Ssh {
-    fn run(&mut self, command: &str) -> Result<String> {
-        let output = oer_process::output(&mut self.command(command), Some(COMMAND_TIMEOUT))
+    fn run(&mut self, script: &str) -> Result<String> {
+        let mut child = oer_process::owned::Child::spawn(&mut self.command())
+            .map_err(|error| format!("cannot run ssh: {error}"))?;
+        // A script far below the pipe's capacity: the write never waits for
+        // ssh to read.
+        child
+            .stdin
+            .take()
+            .ok_or("ssh has no stdin")?
+            .write_all(script.as_bytes())
+            .map_err(|error| format!("cannot hand ssh the script: {error}"))?;
+        let output = child
+            .wait_with_output_timeout(Some(COMMAND_TIMEOUT))
             .map_err(|error| {
                 if error.to_string().contains("deadline") {
                     format!("no answer within {} s", COMMAND_TIMEOUT.as_secs())
                 } else {
-                    format!("cannot run ssh: {error}")
+                    format!("ssh failed: {error}")
                 }
             })?;
         match output.status.code() {
@@ -73,7 +91,7 @@ impl Remote for Ssh {
                  loaded key)"
                     .to_owned(),
             ),
-            Some(code) => Err(format!("the remote command exited with {code}")),
+            Some(code) => Err(format!("the remote script exited with {code}")),
             None => Err("ssh was killed by a signal".to_owned()),
         }
     }
@@ -95,10 +113,9 @@ mod tests {
     const TARGET: &str = "made-up-router.lab";
 
     #[test]
-    fn the_real_runner_never_prompts() {
+    fn the_argument_list_holds_the_target_and_no_other_value() {
         // Not run: only its command line is checked.
-        let ssh = Ssh::new(TARGET).unwrap();
-        let command = ssh.command("uci show wireless");
+        let command = Ssh::new(TARGET).unwrap().command();
         assert_eq!(command.get_program(), "ssh");
         assert_eq!(
             command
@@ -111,7 +128,8 @@ mod tests {
                 "-o",
                 "ConnectTimeout=5",
                 TARGET,
-                "uci show wireless"
+                "sh",
+                "-s"
             ]
         );
     }
@@ -120,8 +138,11 @@ mod tests {
     fn the_target_is_a_plain_token_and_never_shown() {
         assert!(Ssh::new("-oProxyCommand=x").is_err());
         assert!(Ssh::new("host name").is_err());
+        assert!(Ssh::new("").is_err());
         assert!(Ssh::new("user@lab-router.local").is_ok());
         let ssh = Ssh::new(TARGET).unwrap();
         assert!(!format!("{ssh:?}").contains("made-up"));
+        let error = Ssh::new("made-up router").unwrap_err();
+        assert!(!error.contains("made-up"), "{error}");
     }
 }
