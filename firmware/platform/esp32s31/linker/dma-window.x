@@ -5,3 +5,12 @@
 DMA_WINDOW_ORIGIN = 0x2f000000;
 DMA_WINDOW_LENGTH = 0x00080000;
 DMA_ADDRESS_LOW_BITS = 20;
+ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
+       (__runtime_dma_data_start >= DMA_WINDOW_ORIGIN &&
+        __runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH),
+       "runtime DMA storage lies outside the DMA window");
+ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
+       ((__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0 &&
+        (__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) ==
+        ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)),
+       "runtime DMA storage holds an address with zero low DMA address bits");

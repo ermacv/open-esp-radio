@@ -16,10 +16,7 @@ compile_error!("select the boot-smoke or system-watchdog image");
 #[cfg(all(feature = "boot-smoke", feature = "system-watchdog"))]
 compile_error!("boot-smoke and system-watchdog are separate images");
 
-use esp_hal::{
-    interrupt::software::SoftwareInterrupt,
-    timer::{OneShotTimer, timg::TimerGroup},
-};
+use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_exec_executor::Executor;
 use static_cell::StaticCell;
 
@@ -31,8 +28,8 @@ mod system;
 oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
     /// Wakes the Embassy executor.
     wake: ExecutorWake = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
-    /// The Embassy time driver's alarm (TIMG0 timer 0).
-    alarm: TimeAlarm = TG0_T0_LEVEL => oer_exec_executor::timer_interrupt, Priority1, ProCpu;
+    /// The Embassy time driver's alarm (system timer comparator 0).
+    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority1, ProCpu;
     #[cfg(feature = "system-watchdog")]
     /// The USB Serial/JTAG console, to esp-hal's async driver.
     console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu;
@@ -70,8 +67,7 @@ extern "C" fn runtime_main() -> ! {
     };
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
-    let timers = TimerGroup::new(peripherals.TIMG0);
-    oer_exec_executor::init(OneShotTimer::new(timers.timer0), interrupts.alarm);
+    oer_exec_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
     let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
         peripherals.FROM_CPU_INTR0,
     )));

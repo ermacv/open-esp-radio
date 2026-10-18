@@ -31,13 +31,13 @@ embassy-executor.workspace = true
 embassy-time.workspace = true
 esp-hal.workspace = true
 oer-firmware-platform-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }
-oer-firmware-platform-esp32c5-board.workspace = true
+oer-firmware-platform-esp32c5-board = { workspace = true, features = ["stage-two"] }
 oer-exec-executor = { workspace = true, features = ["esp32c5"] }
 oer-exec-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }
 embassy-futures = { workspace = true, optional = true }
 embassy-sync = { workspace = true, optional = true }
-oer-adapters-esp-hal-soc-esp32c5 = { workspace = true, optional = true }
+oer-adapters-esp-hal-soc-esp32c5 = { workspace = true, optional = true, features = ["esp32c5"] }
 oer-tool-data-hil-protocol = { workspace = true, optional = true }
 oer-firmware-hil-agent = { workspace = true, optional = true }
 oer-tool-data-hil-image-keys = { workspace = true, optional = true }

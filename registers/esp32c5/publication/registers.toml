@@ -30,3 +30,8 @@ api = "../../../crates/esp32c5/pac/src/generated.rs"
 crate-name = "oer_esp32c5_pac_raw"
 target = "none"
 edition = "2024"
+
+# The model names no DMA address field: the generated check refuses DMA
+# storage until it does.
+[outputs.linker]
+path = "../../../firmware/platform/esp32c5/linker/dma-window.x"

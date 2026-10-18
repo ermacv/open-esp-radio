@@ -1,9 +1,0 @@
-schema = 5
-id = "system-hang-watchdog"
-description = "A stalled protocol or network executor, or a console that stops taking commands while both run, leaves a hang post-mortem with both harts' interrupted context, and the chip resets"
-role = "investigation"
-repetitions = 1
-tags = ["watchdog", "soc", "fault-injection", "post-mortem"]
-
-[system]
-kind = "hang-watchdog"
