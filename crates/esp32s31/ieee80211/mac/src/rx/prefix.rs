@@ -14,7 +14,7 @@
 )]
 
 use oer_esp32s31_ieee80211_dma::descriptor::{
-    BIT_31, descriptor_address_valid, length as descriptor_length, rx_done, size as descriptor_size,
+    OWNER, descriptor_address_valid, length as descriptor_length, rx_done, size as descriptor_size,
 };
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
@@ -157,7 +157,7 @@ fn received_bytes<'frame>(segment: &RxSegment<'frame>) -> Option<&'frame [u8]> {
     let capacity = descriptor_size(segment.descriptor_word0) as usize;
     let length = descriptor_length(segment.descriptor_word0) as usize;
     if !descriptor_address_valid(segment.descriptor_address)
-        || segment.descriptor_word0 & BIT_31 == 0
+        || segment.descriptor_word0 & OWNER == 0
         || capacity == 0
         || length == 0
         || length > capacity

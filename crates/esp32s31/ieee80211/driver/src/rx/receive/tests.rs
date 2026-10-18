@@ -18,7 +18,7 @@ use std::{boxed::Box, vec::Vec};
 
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{BIT_30, BIT_31, LENGTH_SHIFT},
+    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE},
     rx_dma::{
         RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled, RxDmaWalkerEnabled,
         RxDmaWalkerStopped,
@@ -459,9 +459,13 @@ impl Harness {
     fn complete_unit(&mut self, lengths: &[u32]) {
         for (step, &length) in lengths.iter().enumerate() {
             let index = (self.next + step) % COUNT;
-            let terminal = if step + 1 == lengths.len() { BIT_30 } else { 0 };
+            let terminal = if step + 1 == lengths.len() {
+                RX_DONE
+            } else {
+                0
+            };
             self.rx.descriptors()[index]
-                .write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | terminal | BIT_31);
+                .write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | terminal | OWNER);
         }
         self.next = (self.next + lengths.len()) % COUNT;
         let last = (self.next + COUNT - 1) % COUNT;
@@ -861,7 +865,7 @@ impl Harness {
     /// descriptor and moves to its link.
     fn land_in_reserved(&self, length: u32) {
         let reserved = self.rx.reserved_descriptor();
-        reserved.write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        reserved.write_word0(BUFFER as u32 | (length << LENGTH_SHIFT) | RX_DONE | OWNER);
         let mut walker = self.host.walker.borrow_mut();
         walker.last_descriptor_low = self.reserved_low();
         walker.next_descriptor_low = reserved.next_address() & 0x000f_ffff;
@@ -1587,7 +1591,7 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3]
-        .write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | BIT_30 | BIT_31);
+        .write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | RX_DONE | OWNER);
     held.borrow_mut().pop();
     harness.settle();
     let snapshot = harness

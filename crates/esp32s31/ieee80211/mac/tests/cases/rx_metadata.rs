@@ -172,7 +172,7 @@ fn normalized_monitor_view_excludes_the_vendor_prefix_and_stripped_fcs() {
     }
     let segment = RxSegment {
         descriptor_address: 0x2f00_1000,
-        descriptor_word0: (RECEIVED as u32) | ((RECEIVED as u32) << LENGTH_SHIFT) | BIT_30 | BIT_31,
+        descriptor_word0: (RECEIVED as u32) | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER,
         buffer: &storage,
         next_descriptor_address: 0,
     };

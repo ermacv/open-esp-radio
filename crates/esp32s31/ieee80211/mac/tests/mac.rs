@@ -7,8 +7,9 @@ use oer_esp32s31_hal::types::{
     MacTxQueueDetached,
 };
 use oer_esp32s31_ieee80211_dma::descriptor::{
-    BIT_30, BIT_31, DESCRIPTOR_BYTES, DMA_LOW, Descriptor, LENGTH_SHIFT, descriptor_address_valid,
-    dma_range_valid, length, rx_armed_word, rx_rearm_word, size, tx_owned_word,
+    DESCRIPTOR_BYTES, DMA_LOW, Descriptor, LENGTH_SHIFT, OWNER, RX_DONE, TX_LAST, TX_OWNED,
+    descriptor_address_valid, dma_range_valid, length, rx_armed_word, rx_rearm_word, size,
+    tx_owned_word,
 };
 use oer_esp32s31_ieee80211_mac::{
     crypto::{

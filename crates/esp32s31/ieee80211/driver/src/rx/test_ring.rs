@@ -6,7 +6,7 @@
 use std::{boxed::Box, vec, vec::Vec};
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{BIT_30, BIT_31, LENGTH_SHIFT},
+    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE},
     rx_dma::model::RxWalkerModel,
     rx_storage::RxDmaStorage,
     space::HostDma,
@@ -64,7 +64,7 @@ impl Ring {
     }
 
     /// Complete one unit of `lengths` segments as the DMA engine would:
-    /// every non-terminal buffer is written, the terminal carries bit 30.
+    /// every non-terminal buffer is written, the terminal carries `RX_DONE`.
     pub(crate) fn complete(&mut self, lengths: &[u32]) {
         for (step, &length) in lengths.iter().enumerate() {
             let index = self.next + step;
@@ -77,8 +77,8 @@ impl Ring {
             self.storage.descriptors()[index].write_word0(
                 BUFFER as u32
                     | (length << LENGTH_SHIFT)
-                    | if terminal { BIT_30 } else { 0 }
-                    | BIT_31,
+                    | if terminal { RX_DONE } else { 0 }
+                    | OWNER,
             );
         }
         self.next += lengths.len();

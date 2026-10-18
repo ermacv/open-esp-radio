@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::{boxed::Box, vec::Vec};
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{BIT_30, BIT_31, LENGTH_SHIFT, SIZE_MASK, rx_armed_word},
+    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE, SIZE_MASK, rx_armed_word},
     rx_dma::model::RxWalkerModel,
     rx_ring::RxDmaArenaState,
     space::HostDma,
@@ -99,9 +99,9 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     // descriptor's 14-bit length field holds.
     for (descriptor, &buffer) in storage.descriptors().iter().zip(buffers.iter()).take(2) {
         storage.dma_write(&ring, buffer, &[0; 4]).unwrap();
-        descriptor.write_word0(BUFFER as u32 | ((BUFFER as u32) << LENGTH_SHIFT) | BIT_31);
+        descriptor.write_word0(BUFFER as u32 | ((BUFFER as u32) << LENGTH_SHIFT) | OWNER);
     }
-    storage.descriptors()[2].write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | BIT_30 | BIT_31);
+    storage.descriptors()[2].write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | RX_DONE | OWNER);
     hardware.set_cursor(base, 2, Some(3));
 
     let pool = RxStagePool::<SLOTS, CAPACITY>::new();

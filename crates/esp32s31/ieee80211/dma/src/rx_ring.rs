@@ -11,9 +11,9 @@ use crate::ring_index::RingIndex;
 
 use crate::{
     descriptor::{
-        BIT_29, BIT_30, BIT_31, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT, SIZE_MASK,
-        descriptor_address_valid, dma_range_valid, length as descriptor_length, rx_armed_word,
-        rx_done, rx_rearm_word, size as descriptor_size,
+        BIT_29_OPAQUE, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT, OWNER, RX_DONE,
+        SIZE_MASK, descriptor_address_valid, dma_range_valid, length as descriptor_length,
+        rx_armed_word, rx_done, rx_rearm_word, size as descriptor_size,
     },
     rx_dma::{RxDma, RxDmaBinding},
 };
@@ -1305,7 +1305,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// software head through LAST has been consumed, even when an unused
     /// intermediate buffer retained its recycle guard. The complete vendor
     /// `wdevProcessRxSucDataAll` likewise walks every node through its saved
-    /// LAST and uses only terminal bit 30 to delimit receive units.
+    /// LAST and uses only the terminal `RX_DONE` (bit 30) to delimit receive units.
     pub fn completed_unit_frontier_through_cursor_with<F>(
         &self,
         last_descriptor_low: u32,
@@ -2390,7 +2390,7 @@ impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
 /// One descriptor word describing a complete unit of `length` bytes, which
 /// fits the length field, with `word0`'s status bits.
 const fn staged_word0(word0: u32, length: u32) -> u32 {
-    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | BIT_30 | BIT_31
+    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | RX_DONE | OWNER
 }
 
 fn validate_live_ring_geometry<const COUNT: usize>() -> Result<(), RxRingError> {
@@ -2489,8 +2489,8 @@ fn ring_topology_snapshot<const COUNT: usize>(
             if capacity == 0
                 || !dma_range_valid(buffer_address, capacity)
                 || descriptor_length(word0) != capacity
-                || word0 & BIT_31 == 0
-                || word0 & (BIT_29 | BIT_30) != 0
+                || word0 & OWNER == 0
+                || word0 & (BIT_29_OPAQUE | RX_DONE) != 0
             {
                 return snapshot;
             }

@@ -5,7 +5,7 @@
 
 use std::vec::Vec;
 
-use oer_esp32s31_ieee80211_dma::descriptor::{BIT_30, BIT_31, LENGTH_SHIFT, SIZE_MASK};
+use oer_esp32s31_ieee80211_dma::descriptor::{LENGTH_SHIFT, OWNER, RX_DONE, SIZE_MASK};
 use oer_ieee80211_mac::{
     channel::{Channel, ChannelWidth},
     fuzz::{FULL, QUICK, XorShift, inputs},
@@ -41,7 +41,7 @@ fn unit(format: u8, siga1: u32, mpdu_length: usize) -> Vec<u8> {
 /// The descriptor word of a completed single-descriptor unit of `length`.
 fn completed_word(length: usize) -> u32 {
     let length = (length as u32).min(SIZE_MASK);
-    length | (length << LENGTH_SHIFT) | BIT_30 | BIT_31
+    length | (length << LENGTH_SHIFT) | RX_DONE | OWNER
 }
 
 fn config(flags: u32, csi_config: u32) -> RxIngressConfig {
@@ -76,7 +76,7 @@ fn exercise(buffer: &[u8], rng: &mut XorShift) -> bool {
     let descriptor_word0 = match rng.below(8) {
         0 => rng.next() as u32,
         1 => completed_word(rng.below(buffer.len().saturating_add(64))),
-        2 => completed_word(buffer.len()) & !BIT_30,
+        2 => completed_word(buffer.len()) & !RX_DONE,
         _ => completed_word(buffer.len()),
     };
     let descriptor_address = if rng.below(16) == 0 {
