@@ -4,6 +4,9 @@
 //! queue. Embassy timer implementations and staged protocol publication stay
 //! in the adapter; their lifetimes never manufacture another ring owner.
 
+pub mod arena;
+pub mod control;
+pub mod counters;
 pub mod frontier;
 pub mod storage;
 
