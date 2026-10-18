@@ -17,6 +17,9 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(test)]
+mod fuzz;
+
 pub mod aes;
 pub mod akm;
 pub mod bip;

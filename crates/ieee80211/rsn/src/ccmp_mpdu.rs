@@ -8,6 +8,16 @@
 //! IEEE 802.11 CCMP AAD masks mutable FC/sequence/QoS fields. With SPP, the
 //! QoS A-MSDU-present bit joins TID in AAD and nonce flags. This follows
 //! [Linux v6.12 `ccmp_gcmp_aad` / `ccmp_special_blocks`](https://github.com/torvalds/linux/blob/v6.12/net/mac80211/wpa.c).
+//!
+//! Received frames reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
 use aes::{
@@ -105,7 +115,10 @@ impl CcmpAssociation {
             aad,
             nonce,
             body_len,
-            body_start: frame.len() - protected.len(),
+            body_start: frame
+                .len()
+                .checked_sub(protected.len())
+                .ok_or(CcmpMpduError::Truncated)?,
         })
     }
 }

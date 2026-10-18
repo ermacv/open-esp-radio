@@ -330,6 +330,14 @@ pub struct SaeCommitValues {
     pub element: [u8; 2 * SAE_PRIME_LEN],
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl SaeCommitValues {
     /// Parse the access point's group-19 commit body. Hunting and pecking
     /// admits nothing after the element. H2E admits a Rejected Groups
@@ -337,25 +345,19 @@ impl SaeCommitValues {
     /// `wpa3_check_sae_rejected_groups` does; a Password Identifier, which
     /// this station never sends, is refused.
     pub fn parse(body: &[u8], h2e: bool) -> Result<Self, SaeError> {
-        let group = u16::from_le_bytes([
-            *body.first().ok_or(SaeError::Malformed)?,
-            *body.get(1).ok_or(SaeError::Malformed)?,
-        ]);
+        let Some((&[group_low, group_high], rest)) = body.split_first_chunk::<2>() else {
+            return Err(SaeError::Malformed);
+        };
+        let group = u16::from_le_bytes([group_low, group_high]);
         if group != SAE_GROUP_P256 {
             return Err(SaeError::UnsupportedGroup(group));
         }
-        if body.len() < SAE_COMMIT_LEN {
+        let Some((&scalar, rest)) = rest.split_first_chunk::<SAE_PRIME_LEN>() else {
             return Err(SaeError::Malformed);
-        }
-        let mut values = Self {
-            scalar: [0; SAE_PRIME_LEN],
-            element: [0; 2 * SAE_PRIME_LEN],
         };
-        values.scalar.copy_from_slice(&body[2..2 + SAE_PRIME_LEN]);
-        values
-            .element
-            .copy_from_slice(&body[2 + SAE_PRIME_LEN..SAE_COMMIT_LEN]);
-        let mut rest = &body[SAE_COMMIT_LEN..];
+        let Some((&element, mut rest)) = rest.split_first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
+            return Err(SaeError::Malformed);
+        };
         while !rest.is_empty() {
             if !h2e {
                 return Err(SaeError::Malformed);
@@ -363,11 +365,12 @@ impl SaeCommitValues {
             let [EXTENSION_ELEMENT_ID, length, extension, ..] = *rest else {
                 return Err(SaeError::Malformed);
             };
-            let end = 2 + usize::from(length);
-            if length == 0 || rest.len() < end {
+            let Some((whole, tail)) = rest.split_at_checked(2 + usize::from(length)) else {
                 return Err(SaeError::Malformed);
-            }
-            let value = &rest[3..end];
+            };
+            let [_, _, _, value @ ..] = whole else {
+                return Err(SaeError::Malformed);
+            };
             match extension {
                 REJECTED_GROUPS_ELEMENT
                     if value.len().is_multiple_of(2)
@@ -376,9 +379,9 @@ impl SaeCommitValues {
                             .any(|group| group == SAE_GROUP_P256.to_le_bytes()) => {}
                 _ => return Err(SaeError::Malformed),
             }
-            rest = &rest[end..];
+            rest = tail;
         }
-        Ok(values)
+        Ok(Self { scalar, element })
     }
 
     /// This station's commit body: group, the anti-clogging token of hunting
@@ -391,32 +394,50 @@ impl SaeCommitValues {
         output: &mut [u8],
     ) -> Result<usize, SaeError> {
         let token = token.unwrap_or(&[]);
-        let container = if h2e && !token.is_empty() {
-            u8::try_from(1 + token.len()).map_err(|_| SaeError::Malformed)?;
-            3
+        let container_length = if h2e && !token.is_empty() {
+            Some(
+                u8::try_from(token.len())
+                    .ok()
+                    .and_then(|length| length.checked_add(1))
+                    .ok_or(SaeError::Malformed)?,
+            )
         } else {
-            0
+            None
         };
-        let length = SAE_COMMIT_LEN + token.len() + container;
-        let output = output.get_mut(..length).ok_or(SaeError::Malformed)?;
-        output[..2].copy_from_slice(&SAE_GROUP_P256.to_le_bytes());
-        let mut offset = 2;
+        let length = SAE_COMMIT_LEN
+            .checked_add(token.len())
+            .and_then(|length| length.checked_add(if container_length.is_some() { 3 } else { 0 }))
+            .ok_or(SaeError::Malformed)?;
+        let mut output = output.get_mut(..length).ok_or(SaeError::Malformed)?;
+        put(&mut output, &SAE_GROUP_P256.to_le_bytes())?;
         if !h2e {
-            output[offset..offset + token.len()].copy_from_slice(token);
-            offset += token.len();
+            put(&mut output, token)?;
         }
-        output[offset..offset + SAE_PRIME_LEN].copy_from_slice(&self.scalar);
-        offset += SAE_PRIME_LEN;
-        output[offset..offset + 2 * SAE_PRIME_LEN].copy_from_slice(&self.element);
-        offset += 2 * SAE_PRIME_LEN;
-        if container != 0 {
-            output[offset] = EXTENSION_ELEMENT_ID;
-            output[offset + 1] = (1 + token.len()) as u8;
-            output[offset + 2] = ANTI_CLOGGING_TOKEN_ELEMENT;
-            output[offset + 3..].copy_from_slice(token);
+        put(&mut output, &self.scalar)?;
+        put(&mut output, &self.element)?;
+        if let Some(container_length) = container_length {
+            put(
+                &mut output,
+                &[
+                    EXTENSION_ELEMENT_ID,
+                    container_length,
+                    ANTI_CLOGGING_TOKEN_ELEMENT,
+                ],
+            )?;
+            put(&mut output, token)?;
         }
         Ok(length)
     }
+}
+
+/// Write `bytes` at the front of `output` and advance past them.
+fn put(output: &mut &mut [u8], bytes: &[u8]) -> Result<(), SaeError> {
+    let (front, rest) = core::mem::take(output)
+        .split_at_mut_checked(bytes.len())
+        .ok_or(SaeError::Malformed)?;
+    front.copy_from_slice(bytes);
+    *output = rest;
+    Ok(())
 }
 
 /// Why an access point refuses a station's commit before any computation.
@@ -441,6 +462,14 @@ pub struct SaeReceivedCommit<'a> {
     pub rejected_groups: Option<&'a [u8]>,
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl<'a> SaeReceivedCommit<'a> {
     /// Parse a station's group-19 commit as the vendor's `sae_parse_commit`
     /// does: under hunting and pecking, octets between the group and the
@@ -458,25 +487,22 @@ impl<'a> SaeReceivedCommit<'a> {
         let values_len = 3 * SAE_PRIME_LEN;
         let mut token = None;
         let mut rest = rest;
-        if !h2e && rest.len() > values_len && rest.len() - values_len >= SAE_ANTI_CLOGGING_TOKEN_LEN
+        if !h2e
+            && let Some(extra) = rest.len().checked_sub(values_len)
+            && extra > 0
+            && extra >= SAE_ANTI_CLOGGING_TOKEN_LEN
+            && let Some((echoed, tail)) = rest.split_at_checked(extra)
         {
-            let (echoed, tail) = rest.split_at(rest.len() - values_len);
             token = Some(echoed);
             rest = tail;
         }
-        let values_bytes = rest
-            .get(..values_len)
-            .ok_or(SaeCommitRefusal::Unspecified)?;
-        let mut values = SaeCommitValues {
-            scalar: [0; SAE_PRIME_LEN],
-            element: [0; 2 * SAE_PRIME_LEN],
+        let Some((&scalar, rest)) = rest.split_first_chunk::<SAE_PRIME_LEN>() else {
+            return Err(SaeCommitRefusal::Unspecified);
         };
-        values
-            .scalar
-            .copy_from_slice(&values_bytes[..SAE_PRIME_LEN]);
-        values
-            .element
-            .copy_from_slice(&values_bytes[SAE_PRIME_LEN..]);
+        let Some((&element, mut rest)) = rest.split_first_chunk::<{ 2 * SAE_PRIME_LEN }>() else {
+            return Err(SaeCommitRefusal::Unspecified);
+        };
+        let values = SaeCommitValues { scalar, element };
         let scalar = scalar_from(&values.scalar).ok_or(SaeCommitRefusal::Unspecified)?;
         if bool::from(scalar.is_zero() | scalar.ct_eq(&Scalar::ONE)) {
             return Err(SaeCommitRefusal::Unspecified);
@@ -490,7 +516,6 @@ impl<'a> SaeReceivedCommit<'a> {
             password_identifier: false,
             rejected_groups: None,
         };
-        let mut rest = &rest[values_len..];
         if let Some((_, tail)) = extension_element(rest, PASSWORD_IDENTIFIER_ELEMENT, 1) {
             commit.password_identifier = true;
             rest = tail;
@@ -543,6 +568,14 @@ pub struct SaeComebackTokens {
     pending: [u16; 256],
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl SaeComebackTokens {
     pub const fn new() -> Self {
         Self {
@@ -568,32 +601,47 @@ impl SaeComebackTokens {
             self.key_drawn = Some(now);
             self.pending = [0; 256];
         }
-        let slot = usize::from(hmac_sha256(&self.key, &[&station])[0]);
-        if self.pending[slot] == 0 {
-            self.pending[slot] = 1;
+        let pending = self.pending_mut(station);
+        if *pending == 0 {
+            *pending = 1;
         }
-        let index = self.pending[slot].to_be_bytes();
+        let index = pending.to_be_bytes();
         let mut token = hmac_sha256(&self.key, &[&station, &index]);
-        token[..2].copy_from_slice(&index);
+        let (head, _) = token.split_at_mut(2);
+        head.copy_from_slice(&index);
         token
+    }
+
+    /// `station`'s pending index, in the slot of the first octet of
+    /// HMAC-SHA256(key, station address).
+    fn pending_mut(&mut self, station: [u8; 6]) -> &mut u16 {
+        let [first, ..] = hmac_sha256(&self.key, &[&station]);
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "a one-octet slot indexes the 256 entries of the table"
+        )]
+        &mut self.pending[usize::from(first)]
     }
 
     /// Whether `token` is the one pending for `station`; a valid token is
     /// consumed.
     pub fn check(&mut self, station: [u8; 6], token: &[u8]) -> bool {
+        let Some((index_bytes, tail)) = token.split_first_chunk::<2>() else {
+            return false;
+        };
         if token.len() != SAE_ANTI_CLOGGING_TOKEN_LEN {
             return false;
         }
-        let slot = usize::from(hmac_sha256(&self.key, &[&station])[0]);
-        let index = self.pending[slot];
-        if index == 0 || index.to_be_bytes() != token[..2] {
+        let mac = hmac_sha256(&self.key, &[&station, index_bytes]);
+        let (_, mac_tail) = mac.split_at(2);
+        let pending = self.pending_mut(station);
+        if *pending == 0 || pending.to_be_bytes() != *index_bytes {
             return false;
         }
-        let mac = hmac_sha256(&self.key, &[&station, &token[..2]]);
-        if !bool::from(mac[2..].ct_eq(&token[2..])) {
+        if !bool::from(mac_tail.ct_eq(tail)) {
             return false;
         }
-        self.pending[slot] = 0;
+        *pending = 0;
         true
     }
 }
@@ -607,24 +655,41 @@ impl Default for SaeComebackTokens {
 /// The extension element `extension` at the start of `bytes`, whose length
 /// field is at least `minimum_length`, and the bytes after it; `None` when
 /// another element or nothing starts there.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<(&[u8], &[u8])> {
-    match *bytes {
-        [EXTENSION_ELEMENT_ID, length, id, ..]
-            if id == extension
-                && length >= minimum_length
-                && usize::from(length) <= bytes.len() - 2 =>
-        {
-            let end = 2 + usize::from(length);
-            Some((&bytes[3..end], &bytes[end..]))
-        }
-        _ => None,
+    let [EXTENSION_ELEMENT_ID, length, id, ..] = *bytes else {
+        return None;
+    };
+    if id != extension || length < minimum_length {
+        return None;
     }
+    let (element, tail) = bytes.split_at_checked(2 + usize::from(length))?;
+    let [_, _, _, value @ ..] = element else {
+        return None;
+    };
+    Some((value, tail))
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 fn peer_element(element: &[u8; 2 * SAE_PRIME_LEN]) -> Option<AffinePoint> {
     let mut encoded = [0_u8; 1 + 2 * SAE_PRIME_LEN];
-    encoded[0] = 4;
-    encoded[1..].copy_from_slice(element);
+    let (tag, coordinates) = encoded.split_at_mut(1);
+    tag.copy_from_slice(&[4]);
+    coordinates.copy_from_slice(element);
     EncodedPoint::from_bytes(encoded)
         .ok()
         .and_then(|point| Option::<AffinePoint>::from(AffinePoint::from_encoded_point(&point)))
@@ -632,22 +697,38 @@ fn peer_element(element: &[u8; 2 * SAE_PRIME_LEN]) -> Option<AffinePoint> {
 
 /// The anti-clogging token of a commit refused with status 76: after the
 /// group under hunting and pecking, inside its container element under H2E.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeError> {
     let rest = body.get(2..).ok_or(SaeError::Malformed)?;
     if !h2e {
         return Ok(rest);
     }
-    match *rest {
-        [
-            EXTENSION_ELEMENT_ID,
-            length,
-            ANTI_CLOGGING_TOKEN_ELEMENT,
-            ..,
-        ] if length != 0 && usize::from(length) + 2 <= rest.len() => {
-            Ok(&rest[3..2 + usize::from(length)])
-        }
-        _ => Err(SaeError::Malformed),
+    let [
+        EXTENSION_ELEMENT_ID,
+        length,
+        ANTI_CLOGGING_TOKEN_ELEMENT,
+        ..,
+    ] = *rest
+    else {
+        return Err(SaeError::Malformed);
+    };
+    if length == 0 {
+        return Err(SaeError::Malformed);
     }
+    let Some((element, _)) = rest.split_at_checked(2 + usize::from(length)) else {
+        return Err(SaeError::Malformed);
+    };
+    let [_, _, _, token @ ..] = element else {
+        return Err(SaeError::Malformed);
+    };
+    Ok(token)
 }
 
 /// This station's commit and the secrets behind it.
@@ -711,6 +792,14 @@ impl SaeCommit {
     /// Process the peer's commit and derive KCK, PMK and PMKID with the
     /// keyseed salt of hunting and pecking or H2E without rejected groups:
     /// zeros.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn process(&self, peer: SaeCommitValues) -> Result<SaeKeys, SaeError> {
         let peer_scalar = scalar_from(&peer.scalar).ok_or(SaeError::InvalidScalar)?;
         if bool::from(peer_scalar.is_zero() | peer_scalar.ct_eq(&Scalar::ONE)) {
@@ -720,7 +809,15 @@ impl SaeCommit {
         if peer == self.own {
             return Err(SaeError::Reflection);
         }
+        #[expect(
+            clippy::expect_used,
+            reason = "`SaeCommit::new` admitted `rand` only as a reduced scalar; a failure is a bug here"
+        )]
         let rand = scalar_from(&self.rand).expect("rand was validated");
+        #[allow(
+            clippy::arithmetic_side_effects,
+            reason = "elliptic-curve group operations are total; they neither overflow nor panic"
+        )]
         let shared = ((self.pwe.0 * peer_scalar) + ProjectivePoint::from(peer_element)) * rand;
         if bool::from(shared.is_identity()) {
             return Err(SaeError::InfiniteSecret);
@@ -728,7 +825,15 @@ impl SaeCommit {
         let mut k: [u8; SAE_PRIME_LEN] = shared.to_affine().x().into();
         let mut keyseed = hmac_sha256(&[0; 32], &[&k]);
         k.zeroize();
+        #[expect(
+            clippy::expect_used,
+            reason = "`SaeCommit::new` produced the scalar from a reduced sum; a failure is a bug here"
+        )]
         let own_scalar = scalar_from(&self.own.scalar).expect("own scalar is reduced");
+        #[allow(
+            clippy::arithmetic_side_effects,
+            reason = "scalar addition is modulo the group order; it neither overflows nor panics"
+        )]
         let context: [u8; SAE_PRIME_LEN] = (own_scalar + peer_scalar).to_bytes().into();
         let mut keys = [0_u8; 2 * SAE_KEY_LEN];
         kdf_sha256(&keyseed, b"SAE KCK and PMK", &context, &mut keys);
@@ -740,9 +845,11 @@ impl SaeCommit {
             own: self.own,
             peer,
         };
-        derived.kck.copy_from_slice(&keys[..SAE_KEY_LEN]);
-        derived.pmk.copy_from_slice(&keys[SAE_KEY_LEN..]);
-        derived.pmkid.copy_from_slice(&context[..SAE_PMKID_LEN]);
+        let (kck, pmk) = keys.split_at(SAE_KEY_LEN);
+        derived.kck.copy_from_slice(kck);
+        derived.pmk.copy_from_slice(pmk);
+        let (pmkid, _) = context.split_at(SAE_PMKID_LEN);
+        derived.pmkid.copy_from_slice(pmkid);
         keys.zeroize();
         Ok(derived)
     }
@@ -776,13 +883,24 @@ impl SaeKeys {
     }
 
     /// Verify the peer's confirm body and return its send-confirm.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn verify_peer_confirm(&self, body: &[u8]) -> Result<u16, SaeError> {
         if body.len() != SAE_CONFIRM_LEN {
             return Err(SaeError::Malformed);
         }
-        let send_confirm = u16::from_le_bytes([body[0], body[1]]);
+        let Some((&[low, high], confirm)) = body.split_first_chunk::<2>() else {
+            return Err(SaeError::Malformed);
+        };
+        let send_confirm = u16::from_le_bytes([low, high]);
         let expected = self.confirm(send_confirm, &self.peer, &self.own);
-        if bool::from(expected.ct_eq(&body[2..])) {
+        if bool::from(expected.ct_eq(confirm)) {
             Ok(send_confirm)
         } else {
             Err(SaeError::ConfirmMismatch)

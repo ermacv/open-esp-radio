@@ -21,6 +21,16 @@
 //! bits (`ccmp[3] & 0x1f`) at `0x98..0xc6`. Either violation returns `-1`
 //! before replay checking or decryption. [`CcmpHeader::parse`] enforces the
 //! same header requirements for protected management reception.
+//!
+//! Received frames reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::ccm::MIC_LEN;
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
