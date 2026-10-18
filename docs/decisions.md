@@ -38,7 +38,12 @@ tree is a selection of a predecessor repository, without its history.
 - **First vertical slice.** Wi-Fi station in steps, each with an observable
   hardware criterion: W0 boot, PHY and MAC up; W1 receive, passive scan; W2
   transmit, probe; W3 open association and ping on a hostapd access point; W4
-  WPA2. IEEE 802.15.4 is the second block.
+  WPA2. IEEE 802.15.4 is the second block. After W4: W5 brings HE
+  (HE-Control, trigger-based PPDUs, MU-EDCA, DCM, BSS colour for the access
+  point, HE40); W6 brings throughput (TXOP holding and bursting, A-MPDU, the
+  throughput gates of the acceptance catalog). External coexistence modes
+  come with the coexistence block, Bluetooth low-power clocks with the
+  Bluetooth LE block (owner, 2026-10-18).
 - **Layout.** Code is placed by protocol and chip, not by layer (see
   `CLAUDE.md`); one firmware workspace; five packages are renamed to their new
   homes in a following change.
