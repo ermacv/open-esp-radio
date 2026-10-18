@@ -2270,3 +2270,127 @@ fn a_settled_doorbell_leaving_next_on_a_detached_descriptor_fails_closed() {
     drop(held);
     assert!(ring.live.try_stop(&mut ring.walker).is_ok());
 }
+
+#[test]
+fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
+    use crate::descriptor::{rx_done, rx_owner};
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    assert!(ring.land(4, true));
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    for _ in 0..3 {
+        assert!(ring.land(4, true));
+    }
+    // Descriptor 2 carries RX_DONE, but the walker has not moved its
+    // cursor past it yet: LAST still names 1 and NEXT holds 2.
+    ring.walker.last_descriptor_low = ring.low(1);
+    ring.walker.next_descriptor_low = ring.low(2);
+    assert!(rx_done(ring.storage.descriptors()[2].word0()));
+
+    let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+    let frontier = ring
+        .storage
+        .completed_unit_frontier_through_cursor(
+            &ring.live,
+            cursor.last_descriptor_low(),
+            cursor.next_descriptor_low(),
+        )
+        .unwrap();
+    // The LAST-bounded frontier stops at LAST: descriptor 2 is not in it.
+    assert_eq!((frontier.unit_count, frontier.descriptor_count), (2, 2));
+    let pool = Box::leak(Box::new(
+        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
+    ));
+    let mut leases = std::vec::Vec::new();
+    let mut remaining = frontier.descriptor_count;
+    while remaining != 0 {
+        let unit = ring
+            .storage
+            .take_completed_unit(&mut ring.live, remaining)
+            .unwrap()
+            .expect("a unit through LAST");
+        remaining -= unit.descriptor_count();
+        let detached = unit.detach_single(&mut ring.walker).unwrap();
+        let radio = pool
+            .try_claim_radio(detached.into_buffer(), leases.len())
+            .map_err(drop)
+            .unwrap();
+        let length = radio.frame().len();
+        leases.push(pool.claim_network(radio.republish(0, length)));
+    }
+    // Descriptor 2 was not handed out: it is neither observed nor detached.
+    let refreshed = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+    assert_eq!(
+        ring.storage
+            .completed_unit_frontier_through_cursor(
+                &ring.live,
+                refreshed.last_descriptor_low(),
+                refreshed.next_descriptor_low(),
+            )
+            .unwrap()
+            .unit_count,
+        0
+    );
+    assert!(!ring.live.observed_mask().contains(2));
+    assert!(rx_owner(ring.storage.descriptors()[2].word0()));
+    assert!(!rx_owner(ring.storage.descriptors()[1].word0()));
+    assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
+
+    // Descriptor 0 returns and appends behind the accepted tail; the settle
+    // after the doorbell still reads NEXT on descriptor 2.
+    drop(leases.remove(0));
+    let append = ring
+        .storage
+        .recycle_released_prefix::<COUNT, _>(&mut ring.live, &mut ring.walker)
+        .unwrap()
+        .expect("LAST past descriptor 0 releases its link");
+    assert_eq!(append.descriptor_count, 1);
+    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    assert_eq!(ring.walker.next_descriptor_low, ring.low(2));
+    assert!(!ring.live.reload_pending());
+    assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
+    assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
+    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
+    drop(leases);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
+    use crate::descriptor::rx_owner;
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    ring.fill();
+    let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+    assert_eq!(cursor.next_descriptor_low(), 0);
+    assert_eq!(cursor.last_descriptor_low(), ring.low(COUNT - 1));
+    let frontier = ring
+        .storage
+        .completed_unit_frontier_through_cursor(
+            &ring.live,
+            cursor.last_descriptor_low(),
+            cursor.next_descriptor_low(),
+        )
+        .unwrap();
+    assert_eq!(frontier.descriptor_count, COUNT);
+    let pool = Box::leak(Box::new(
+        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
+    ));
+    let leases = ring.detach_all(pool);
+    assert_eq!(leases.len(), COUNT);
+    // LAST, the accepted tail, is detached; NEXT = 0 names no descriptor.
+    assert!(!rx_owner(ring.storage.descriptors()[COUNT - 1].word0()));
+    assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
+    drop(leases);
+    ring.storage
+        .recycle_released_prefix::<COUNT, _>(&mut ring.live, &mut ring.walker)
+        .unwrap()
+        .expect("all but LAST append");
+    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
+    assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
+    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
