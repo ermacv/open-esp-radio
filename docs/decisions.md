@@ -41,7 +41,8 @@ tree is a selection of a predecessor repository, without its history.
 - **First vertical slice.** Wi-Fi station in steps, each with an observable
   hardware criterion: W0 boot, PHY and MAC up; W1 receive, passive scan; W2
   transmit, probe; W3 open association and ping on a hostapd access point; W4
-  WPA2. IEEE 802.15.4 is the second block. After W4: W5 brings HE
+  WPA2. Bluetooth LE is the second block (owner, 2026-10-18; it was IEEE
+  802.15.4 before). After W4: W5 brings HE
   (HE-Control, trigger-based PPDUs, MU-EDCA, DCM, BSS colour for the access
   point, HE40); W6 brings throughput (TXOP holding and bursting, A-MPDU, the
   throughput gates of the acceptance catalog). External coexistence modes
@@ -301,6 +302,19 @@ decision holds and the code is changed in the port's fix pass.
 - **Performance A/B** also measures per-core CPU load over the traffic
   window; more CPU for the same throughput blocks the change. The threshold
   is set with the owner at the first A/B.
+
+## 2026-10-18: the predecessor's product code
+
+- **Reference, not product.** The predecessor's Wi-Fi, Bluetooth LE and
+  IEEE 802.15.4 orchestration (runtimes, roles, compositions, radio HIL
+  families) was built on an ownership model the project left; it stays a
+  read-only reference on the `port/archive` branch. The main branch takes
+  its knowledge, slice by slice, and the hardware engines that do not depend
+  on that model (the Bluetooth LE driver and controller memory, the
+  IEEE 802.15.4 engine).
+- **Lower-MAC port backend at W3.** The S31 backend of the lower-MAC port is
+  designed at W3 together with a conformance suite that runs the same cases
+  against the host model and the hardware; the port freezes after W4.
 
 ## Earlier decisions still in force
 
