@@ -448,7 +448,7 @@ fn ownership(cycles: &[Cycle]) -> Outcome {
 }
 
 /// The number of gates.
-pub const GATES: usize = 11;
+pub const GATES: usize = 13;
 
 /// Every gate, in the block's order, and the beacon figures.
 pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
@@ -521,6 +521,21 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; GATES]) {
                 run.rx.reload.reserved_landings <= 1 && run.rx.reload.reserved_late_landings == 0,
                 "reserved-landing",
             ),
+        },
+        // Every held lease's descriptor carried the owner bit clear.
+        Gate {
+            name: "owner_bit",
+            outcome: check(
+                run.cycles.iter().all(|cycle| {
+                    usize::try_from(cycle.owner_clear).is_ok_and(|clear| clear == cycle.held)
+                }),
+                "owner-bit-set",
+            ),
+        },
+        // No NEXT read named a detached descriptor.
+        Gate {
+            name: "walker_on_detached",
+            outcome: check(run.rx.reload.walker_on_detached == 0, "walker-on-detached"),
         },
     ];
     (verdict, gates)
@@ -753,9 +768,10 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
         block.line(format_args!(
-            "w1.own cycle={index} order={} held={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={} discards={}",
+            "w1.own cycle={index} order={} held={} owner_clear={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={} discards={}",
             cycle.order.name(),
             cycle.held,
+            cycle.owner_clear,
             OrDash(cycle.first_drop.and_then(|index| u32::try_from(index).ok())),
             cycle.hold_mismatch,
             cycle.dwell_mismatch,
@@ -790,7 +806,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     ))?;
     let reload = &rx.reload;
     block.line(format_args!(
-        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={}",
+        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={} walker_on_detached={}",
         reload.max_reload_attempts,
         reload.observations,
         reload.reload_rerings,
@@ -798,6 +814,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         reload.base_writes,
         reload.reserved_landings,
         reload.reserved_late_landings,
+        reload.walker_on_detached,
     ))?;
     let continuations = &rx.continuations;
     block.line(format_args!(

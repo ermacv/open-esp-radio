@@ -431,6 +431,7 @@ async fn hold_cycle(
     receiver: &mut Receiver,
     counters: &'static WifiRxCounters,
     ring_base: u32,
+    storage: &'static irq::Storage,
     channel: Channel,
     admitted: &mut u32,
     fill_ms: u32,
@@ -482,6 +483,10 @@ async fn hold_cycle(
     for (held, print) in &leases {
         if print.changed(held.segment().buffer) {
             cycle.mismatch(Check::Hold, print.index);
+        }
+        // A held lease's descriptor carries the owner bit clear.
+        if own::owner_clear(storage.descriptors(), print.index) {
+            cycle.owner_clear = cycle.owner_clear.saturating_add(1);
         }
     }
 
@@ -642,6 +647,7 @@ async fn run(
         mut receiver,
         counters,
         ring_base,
+        storage,
     } = match bound {
         Bound::Ends(ends) => ends,
         Bound::Refused(error) => {
@@ -735,6 +741,7 @@ async fn run(
                 &mut receiver,
                 counters,
                 ring_base,
+                storage,
                 rx_channel,
                 &mut admitted,
                 fill_ms,

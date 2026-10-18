@@ -225,7 +225,7 @@ struct Spec {
     count: Count,
 }
 
-const GATE_NAMES: [&str; 11] = [
+const GATE_NAMES: [&str; 13] = [
     "beacons",
     "channel",
     "exit",
@@ -237,6 +237,8 @@ const GATE_NAMES: [&str; 11] = [
     "timer_wake",
     "base_writes",
     "reserved",
+    "owner_bit",
+    "walker_on_detached",
 ];
 
 /// The hold fill window's bounds, in ms (the image's `hold_fill_ms`).
@@ -403,6 +405,7 @@ const SPECS: &[Spec] = &[
             key("cycle", CYCLE),
             key("order", Kind::OneOf(&["forward", "reverse"])),
             key("held", U64),
+            key("owner_clear", U64),
             key("first_drop", U32_OR_DASH),
             key("hold_mismatch", U32),
             key("dwell_mismatch", U32),
@@ -438,6 +441,7 @@ const SPECS: &[Spec] = &[
             "base_writes",
             "reserved_landings",
             "reserved_late_landings",
+            "walker_on_detached",
         ),
         open: false,
         count: Count::Once,
@@ -965,10 +969,12 @@ pub enum GateName {
     TimerWake,
     BaseWrites,
     Reserved,
+    OwnerBit,
+    WalkerOnDetached,
 }
 
 impl GateName {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::Beacons,
         Self::Channel,
         Self::Exit,
@@ -980,6 +986,8 @@ impl GateName {
         Self::TimerWake,
         Self::BaseWrites,
         Self::Reserved,
+        Self::OwnerBit,
+        Self::WalkerOnDetached,
     ];
 
     /// The name in a `w1.gate` line.
@@ -996,6 +1004,8 @@ impl GateName {
             Self::TimerWake => "timer_wake",
             Self::BaseWrites => "base_writes",
             Self::Reserved => "reserved",
+            Self::OwnerBit => "owner_bit",
+            Self::WalkerOnDetached => "walker_on_detached",
         }
     }
 
@@ -1516,6 +1526,17 @@ fn ownership_gate(report: &Report) -> Result<HostGate, ReportError> {
     })
 }
 
+/// The owner bit, both cycles (`w1.own`): every held lease's descriptor
+/// carried the owner bit clear at the end of the hold (`owner_clear=` equals
+/// `held=`); otherwise `owner-bit-set`.
+fn owner_bit_gate(report: &Report) -> Result<HostGate, ReportError> {
+    let mut clear = true;
+    for own in &report.own {
+        clear &= own.number("owner_clear")? == own.number("held")?;
+    }
+    Ok(gate(GateName::OwnerBit, clear, "owner-bit-set", false))
+}
+
 /// Whether a `w1.hold` line's drain end shows a hold stuck at LAST in a
 /// ring of `count`: `slots − 1` buffers staged and detached, at most one
 /// released, every descriptor observed and NEXT zero. (That LAST is the
@@ -1654,6 +1675,13 @@ pub fn recompute(report: &Report, expected: &Config) -> Result<Host, ReportError
             report.reload.number("reserved_landings")? <= 1
                 && report.reload.number("reserved_late_landings")? == 0,
             "reserved-landing",
+            false,
+        ),
+        owner_bit_gate(report)?,
+        gate(
+            GateName::WalkerOnDetached,
+            report.reload.number("walker_on_detached")? == 0,
+            "walker-on-detached",
             false,
         ),
     ];
@@ -2182,10 +2210,10 @@ mod tests {
             "w1.hold cycle=1 fill_ms=5324 reached=32 slots=32 full=1 reason=all units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0 end_released=- end_detached=- end_staged=- end_observed=- end_recycle_start=- end_accepted_tail=- end_next=- end_last=-",
             "w1.exhaust cycle=0 snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0 last_low=0x16fe0 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=32 reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=0x17030 last_after_doorbell=- desc_hash_changed=0",
             "w1.exhaust cycle=1 snapshots=9 blocked_us=1000200 next_low=0x0 next_upper=0 last_low=0x17024 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=- reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=- last_after_doorbell=- desc_hash_changed=0",
-            "w1.own cycle=0 order=forward held=32 first_drop=4 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,6,7,8 order_breaks=0 chained=0 oversized=0 discards=-",
-            "w1.own cycle=1 order=reverse held=32 first_drop=3 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,7,x,31,0 order_breaks=3 chained=0 oversized=1 discards=oversized:1,rx_failure:2",
+            "w1.own cycle=0 order=forward held=32 owner_clear=32 first_drop=4 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,6,7,8 order_breaks=0 chained=0 oversized=0 discards=-",
+            "w1.own cycle=1 order=reverse held=32 owner_clear=32 first_drop=3 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,7,x,31,0 order_breaks=3 chained=0 oversized=1 discards=oversized:1,rx_failure:2",
             "w1.prefix fcs=0 strict_rxend_refusable=0 strict_dump_refusable=0 admitted=500",
-            "w1.reload max_attempts=3 limit=100001 observations=2 reload_rerings=0 rering_failures=0 base_writes=1 reserved_landings=1 reserved_late_landings=0",
+            "w1.reload max_attempts=3 limit=100001 observations=2 reload_rerings=0 rering_failures=0 base_writes=1 reserved_landings=1 reserved_late_landings=0 walker_on_detached=0",
             "w1.continuation stale_doorbell=2 longest_streak=1",
             "w1.teardown mask_confirm_us=4 drain_us=30 drain_polls=2",
             "w1.exit cause=StopRequested end=Halted",
@@ -2216,6 +2244,8 @@ mod tests {
             "w1.gate name=timer_wake result=pass",
             "w1.gate name=base_writes result=pass",
             "w1.gate name=reserved result=pass",
+            "w1.gate name=owner_bit result=pass",
+            "w1.gate name=walker_on_detached result=pass",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -2888,6 +2918,52 @@ mod tests {
     }
 
     #[test]
+    fn the_walker_on_detached_gate_requires_no_such_read() {
+        for (count, pass) in [("0", true), ("1", false), ("3", false)] {
+            let mut stopped = body();
+            set(&mut stopped, "w1.reload", "walker_on_detached", count);
+            let gate = host_gate(&stopped, GateName::WalkerOnDetached);
+            let expected = if pass {
+                (GateResult::Pass, None)
+            } else {
+                (GateResult::Fail, Some("walker-on-detached"))
+            };
+            assert_eq!(
+                (gate.result, gate.reason),
+                expected,
+                "walker_on_detached={count}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_owner_bit_gate_requires_every_held_descriptor_clear() {
+        for (cycle, clear, pass) in [(0, "32", true), (0, "31", false), (1, "0", false)] {
+            let mut lines = body();
+            set_cycle(&mut lines, "w1.own", cycle, "owner_clear", clear);
+            let gate = host_gate(&lines, GateName::OwnerBit);
+            let expected = if pass {
+                (GateResult::Pass, None)
+            } else {
+                (GateResult::Fail, Some("owner-bit-set"))
+            };
+            assert_eq!(
+                (gate.result, gate.reason),
+                expected,
+                "cycle={cycle} owner_clear={clear}"
+            );
+        }
+        // The key is required.
+        let mut missing = body();
+        let line = missing
+            .iter_mut()
+            .find(|line| line.starts_with("w1.own cycle=0"))
+            .unwrap();
+        *line = line.replace(" owner_clear=32", "");
+        assert!(Report::parse(&console(&missing)).is_err());
+    }
+
+    #[test]
     fn the_reload_line_is_strict() {
         // The keys of the removed BASE writers are refused.
         let mut old = body();
@@ -2904,6 +2980,7 @@ mod tests {
             "base_writes",
             "reserved_landings",
             "reserved_late_landings",
+            "walker_on_detached",
         ] {
             let mut missing = body();
             let line = missing
@@ -3153,6 +3230,7 @@ mod tests {
 
         let mut short = body();
         set_cycle(&mut short, "w1.own", 1, "held", "31");
+        set_cycle(&mut short, "w1.own", 1, "owner_clear", "31");
         set_cycle(&mut short, "w1.hold", 1, "reached", "31");
         set_cycle(&mut short, "w1.hold", 1, "full", "0");
         set_cycle(&mut short, "w1.hold", 1, "reason", "-");
@@ -3217,6 +3295,7 @@ mod tests {
         set_cycle(body, "w1.hold", cycle, "reached", "31");
         set_cycle(body, "w1.hold", cycle, "reason", "stuck-at-last");
         set_cycle(body, "w1.own", cycle, "held", "31");
+        set_cycle(body, "w1.own", cycle, "owner_clear", "31");
         for (key, value) in [
             ("end_released", "0"),
             ("end_detached", "31"),

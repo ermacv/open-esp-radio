@@ -26,7 +26,7 @@
 //! (`w1.exhaust ring_base=`).
 
 use oer_esp32s31_ieee80211::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
-use oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES;
+use oer_esp32s31_ieee80211_dma::descriptor::{DESCRIPTOR_BYTES, Descriptor, rx_owner};
 
 use crate::{
     irq::{COUNT, SLOTS},
@@ -131,6 +131,15 @@ pub fn cursor_index(low: u32, ring_base: u32) -> Option<usize> {
     }
     let index = usize::try_from(offset / DESCRIPTOR_BYTES).ok()?;
     (index < COUNT).then_some(index)
+}
+
+/// Whether descriptor `index` of `descriptors` carries the owner bit clear,
+/// as a detached descriptor must while its lease is held; `false` for an
+/// unknown index.
+pub fn owner_clear(descriptors: &[Descriptor], index: Option<usize>) -> bool {
+    index
+        .and_then(|index| descriptors.get(index))
+        .is_some_and(|descriptor| !rx_owner(descriptor.word0()))
 }
 
 /// Whether a hold is full, and why.
@@ -344,6 +353,9 @@ pub struct Cycle {
     /// once (then the leases
     /// dropped in the order they were taken, or its reverse).
     pub first_drop: Option<usize>,
+    /// Held leases whose descriptor word0 carried the owner bit clear at
+    /// the end of the hold, as every detached descriptor must.
+    pub owner_clear: u32,
     pub hold_mismatch: u32,
     pub dwell_mismatch: u32,
     pub release_mismatch: u32,

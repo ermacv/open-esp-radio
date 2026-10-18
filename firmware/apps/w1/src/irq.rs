@@ -24,7 +24,7 @@ use oer_esp32s31_ieee80211::{
         upper::{FrameReceiver, QueueSink, RxFrameEnds},
     },
 };
-use oer_esp32s31_ieee80211_dma::rx_storage::RxDmaStorageError;
+use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_ieee80211_mac::{
     init::MAC_COLD_RX_INTERRUPT_MASK,
     irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
@@ -52,6 +52,8 @@ pub const SLOTS: usize = 32;
 
 type Epoch = ActiveEpoch<Moderated>;
 type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS>;
+/// The arena's DMA storage.
+pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
 oer_memory::zeroed_static! {
     /// Placement: the receive epoch's arena, descriptors and buffers in the
@@ -168,6 +170,8 @@ pub struct P1Ends {
     pub counters: &'static WifiRxCounters,
     /// The DMA address of descriptor 0, as the bind laid the arena out.
     pub ring_base: u32,
+    /// The arena's DMA storage, whose descriptors the hold reads.
+    pub storage: &'static Storage,
 }
 
 /// What the receive runner sends the application after its bind.
@@ -202,6 +206,7 @@ pub async fn rx_task(
         receiver,
         counters,
         ring_base: parts.descriptor_base(),
+        storage: parts.rx(),
     }));
     let publisher = QueueSink::new(sender, &CLOCK);
     let admission = CountingAdmission::new(counters);

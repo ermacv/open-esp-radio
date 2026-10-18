@@ -94,10 +94,14 @@ its holder when it refuses.
   timer wait of the image returned before its deadline, `woke_early=` of
   every `w1.timer` and `w1.wake` line; `woke-early`), `base_writes` (the
   epoch wrote `RX_DESCRIPTOR_BASE` once, `w1.reload base_writes=1`;
-  `base-writes`) and `reserved` (`w1.reload reserved_landings=` at most 1
-  and `reserved_late_landings=0`; `reserved-landing`). The `w1.reload`
+  `base-writes`), `reserved` (`w1.reload reserved_landings=` at most 1
+  and `reserved_late_landings=0`; `reserved-landing`), `owner_bit` (both
+  `w1.own` lines' `owner_clear=` equal their `held=`; `owner-bit-set`)
+  and `walker_on_detached` (`w1.reload walker_on_detached=0`;
+  `walker-on-detached`). The `w1.reload`
   keys are exactly `max_attempts limit observations reload_rerings
-  rering_failures base_writes reserved_landings reserved_late_landings`,
+  rering_failures base_writes reserved_landings reserved_late_landings
+  walker_on_detached`,
   and `w1.hold fill_ms=` must lie in 3000..=10000. It compares them with the
   image's `w1.gate` lines, `w1.verdict` and the `OER-RESULT:` line, whose
   fail reasons each start with a gate's name (`walker-restart not
