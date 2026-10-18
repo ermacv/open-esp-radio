@@ -1,6 +1,0 @@
-# Cargo reads this file when it runs inside this directory. The image
-# compiler flags have one owner, oer-toolchain's `image` module,
-# which the image pipeline (`cargo fw build`) applies; this file only names the
-# examples' target.
-[build]
-target = "riscv32imafc-unknown-none-elf"
