@@ -13,9 +13,45 @@ pub(crate) fn bounded<E>(mut observe: impl FnMut() -> Result<bool, E>) -> Result
     Ok(false)
 }
 
+/// Read a readiness flag immediately and retry directly, up to the same
+/// bound as [`bounded`]: the number of reads that were not ready before the
+/// first ready one, or `None` when every allowed read was not ready.
+#[inline]
+pub(crate) fn counted(mut ready: impl FnMut() -> bool) -> Option<u16> {
+    (0..crate::HARDWARE_EDGE_LIMIT).find(|_| ready())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counted_reports_the_not_ready_reads_before_the_first_ready_one() {
+        for ready_at in [1, 2, crate::HARDWARE_EDGE_LIMIT] {
+            let mut reads = 0;
+            assert_eq!(
+                counted(|| {
+                    reads += 1;
+                    reads == ready_at
+                }),
+                Some(ready_at - 1)
+            );
+            assert_eq!(reads, ready_at);
+        }
+    }
+
+    #[test]
+    fn counted_gives_up_after_the_last_allowed_read() {
+        let mut reads = 0;
+        assert_eq!(
+            counted(|| {
+                reads += 1;
+                false
+            }),
+            None
+        );
+        assert_eq!(reads, crate::HARDWARE_EDGE_LIMIT);
+    }
 
     #[test]
     fn completion_stops_at_first_or_last_allowed_read() {

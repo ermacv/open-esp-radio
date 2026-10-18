@@ -152,6 +152,9 @@ pub struct PhyRegisterOutcome {
     /// Observed RF calibration results; completion alone does not imply PLL lock.
     #[cfg(feature = "registration-diagnostics")]
     pub rf_calibration: Option<RfCalibrationDiagnostics>,
+    /// The longest not-ready runs of the bounded readiness waits.
+    #[cfg(feature = "registration-diagnostics")]
+    pub ready_waits: ReadyWaitDiagnostics,
     pub full_calibration_performed: bool,
     pub calibration_path: PhyCalibrationPath,
 }
@@ -345,6 +348,8 @@ pub struct PhyRegisterTransition {
     temperature_control: Option<crate::calibration::cold::PhyRegisterTemperatureControl>,
     #[cfg(feature = "registration-diagnostics")]
     rf_calibration: Option<RfCalibrationDiagnostics>,
+    #[cfg(feature = "registration-diagnostics")]
+    ready_waits: ReadyWaitDiagnostics,
     phase: Option<Phase>,
 }
 
@@ -373,6 +378,11 @@ impl PhyRegisterTransition {
             temperature_control: None,
             #[cfg(feature = "registration-diagnostics")]
             rf_calibration: None,
+            #[cfg(feature = "registration-diagnostics")]
+            ready_waits: ReadyWaitDiagnostics {
+                tx_dc_max_not_ready_samples: 0,
+                pwdet_sar_max_not_ready_samples: 0,
+            },
             phase: Some(Phase::Prelude(PreludeStep::Prepare)),
         }
     }
@@ -407,6 +417,11 @@ impl PhyRegisterTransition {
             temperature_control: None,
             #[cfg(feature = "registration-diagnostics")]
             rf_calibration: None,
+            #[cfg(feature = "registration-diagnostics")]
+            ready_waits: ReadyWaitDiagnostics {
+                tx_dc_max_not_ready_samples: 0,
+                pwdet_sar_max_not_ready_samples: 0,
+            },
             phase: Some(Phase::Prelude(PreludeStep::Prepare)),
         }
     }
@@ -861,6 +876,8 @@ impl PhyRegisterTransition {
             .phase
             .take()
             .ok_or(PhyRegisterTransitionError::AlreadyComplete)?;
+        #[cfg(feature = "registration-diagnostics")]
+        self.ready_waits.observe(&completion);
         let next = match (phase, completion) {
             (Phase::Prelude(PreludeStep::Prepare), PhyRegisterCompletion::Mmio(completed))
                 if completed.action == PhyRegisterMmioAction::PrepareColdStart =>
@@ -1113,6 +1130,8 @@ impl PhyRegisterTransition {
                 Phase::Complete(PhyRegisterOutcome {
                     #[cfg(feature = "registration-diagnostics")]
                     rf_calibration: self.rf_calibration,
+                    #[cfg(feature = "registration-diagnostics")]
+                    ready_waits: self.ready_waits,
                     full_calibration_performed: !matches!(
                         self.calibration_path,
                         PhyCalibrationPath::PartialFromCache
@@ -1539,5 +1558,6 @@ mod tests;
 mod diagnostics;
 #[cfg(feature = "registration-diagnostics")]
 pub use diagnostics::{
-    FrequencyCalibrationDiagnostics, RfCalibrationDiagnostics, RfpllCalibrationPoint,
+    FrequencyCalibrationDiagnostics, ReadyWaitDiagnostics, RfCalibrationDiagnostics,
+    RfpllCalibrationPoint,
 };

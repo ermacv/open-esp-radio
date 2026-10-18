@@ -83,14 +83,8 @@ pub enum PhyPbusClearAction {
 pub enum PhyPbusClearCompletion {
     DebugModeConfigured,
     ForceTestCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "only validation bindings construct this variant")
-    )]
     ForceTestTimedOut(PhyPbusForceTest),
-    WorkModeConfigured {
-        settle_required: bool,
-    },
+    WorkModeConfigured { settle_required: bool },
     DelayElapsed,
     WorkModePulseConfigured,
     WorkModePulseCleared,

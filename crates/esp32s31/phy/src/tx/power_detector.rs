@@ -116,13 +116,6 @@ pub enum PhyPwdetAction {
 pub enum PhyPwdetCompletion {
     PbusDebugModeConfigured,
     PbusCompleted(PhyPbusForceTest),
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
     PbusTimedOut(PhyPbusForceTest),
     TxClockConfigured {
         enabled: bool,
@@ -145,18 +138,13 @@ pub enum PhyPwdetCompletion {
         measurement_index: u8,
         sample_index: u8,
     },
-    SarReadySampled {
+    /// The SAR became ready after `not_ready_samples` reads that were not.
+    SarReadyObserved {
         measurement_index: u8,
         sample_index: u8,
-        ready: bool,
+        not_ready_samples: u16,
     },
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
+    /// [`crate::HARDWARE_EDGE_LIMIT`] consecutive reads were not ready.
     SarReadyDeadlineElapsed {
         measurement_index: u8,
         sample_index: u8,
@@ -585,19 +573,13 @@ impl PhyPwdetTransition {
                     sample_index,
                     sample_sum,
                 },
-                PhyPwdetCompletion::SarReadySampled {
+                PhyPwdetCompletion::SarReadyObserved {
                     measurement_index: completed_measurement,
                     sample_index: completed_sample,
-                    ready,
+                    ..
                 },
             ) if completed_measurement == measurement_index && completed_sample == sample_index => {
-                if !ready {
-                    PhyPwdetStep::PollSarReady {
-                        measurement_index,
-                        sample_index,
-                        sample_sum,
-                    }
-                } else if self.parameters.clear_tone_after_ready {
+                if self.parameters.clear_tone_after_ready {
                     PhyPwdetStep::ClearToneArm {
                         measurement_index,
                         sample_index,
@@ -798,10 +780,19 @@ impl PhyPwdetReadyBinding {
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyPwdetCompletion {
-        PhyPwdetCompletion::SarReadySampled {
-            measurement_index: self.measurement_index,
-            sample_index: self.sample_index,
-            ready: oer_esp32s31_hal::phy::power_detector::sample_ready(registers),
+        // The read bound is this crate's, not a recovered value.
+        match crate::executor::wait::poll::counted(|| {
+            oer_esp32s31_hal::phy::power_detector::sample_ready(registers)
+        }) {
+            Some(not_ready_samples) => PhyPwdetCompletion::SarReadyObserved {
+                measurement_index: self.measurement_index,
+                sample_index: self.sample_index,
+                not_ready_samples,
+            },
+            None => PhyPwdetCompletion::SarReadyDeadlineElapsed {
+                measurement_index: self.measurement_index,
+                sample_index: self.sample_index,
+            },
         }
     }
 }
@@ -1043,6 +1034,10 @@ impl PhyPwdetPbusBinding {
             .into_transaction()
             .map(PhyPwdetCompletion::PbusCompleted)
             .map_err(map_pbus_hardware_error)
+    }
+
+    pub const fn into_timeout_completion(self) -> PhyPwdetCompletion {
+        PhyPwdetCompletion::PbusTimedOut(self.transaction)
     }
 }
 

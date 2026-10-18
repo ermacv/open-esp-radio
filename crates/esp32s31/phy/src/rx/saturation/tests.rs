@@ -173,7 +173,7 @@ fn external_lowering_covers_each_saturation_operation_class() {
     ));
     assert!(matches!(
         PhyRxSaturationExternalBinding::lower(PhyRxSaturationAction::Complete(
-            PhyRxSaturationOutcome::CaptureTimedOut
+            PhyRxSaturationOutcome::PbusTimedOut(PhyPbusForceTest::new(3, 2, 0x100))
         )),
         Err(PhyRxSaturationBindingError::UnsupportedAction)
     ));

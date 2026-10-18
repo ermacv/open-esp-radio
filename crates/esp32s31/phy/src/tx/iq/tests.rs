@@ -469,21 +469,25 @@ fn tone_sar_failure_after_prepare_restores_before_terminal_failure() {
                         sample,
                     },
                 )) if injected_failure.is_none() => {
-                    let failure = PhyToneSarFailure::ReadyDeadlineElapsed {
+                    let failure = PhyToneSarFailure::ReadyObservationLimit {
                         measurement,
                         sample,
+                        observations: crate::HARDWARE_EDGE_LIMIT,
                     };
                     injected_failure = Some(PhyTxIqCalibrationFailure::ToneSar(failure));
-                    transition
-                        .advance(PhyTxIqCalibrationCompletion::PowerAttenuation(
-                            PhyPowerAttenuationCompletion::ToneSar(
-                                PhyToneSarCompletion::ReadyDeadlineElapsed {
-                                    measurement,
-                                    sample,
-                                },
-                            ),
-                        ))
-                        .unwrap();
+                    for _ in 0..crate::HARDWARE_EDGE_LIMIT {
+                        transition
+                            .advance(PhyTxIqCalibrationCompletion::PowerAttenuation(
+                                PhyPowerAttenuationCompletion::ToneSar(
+                                    PhyToneSarCompletion::ReadySampled {
+                                        measurement,
+                                        sample,
+                                        ready: false,
+                                    },
+                                ),
+                            ))
+                            .unwrap();
+                    }
                     edges += 1;
                 }
                 PhyTxIqCalibrationAction::Complete(outcome) => {

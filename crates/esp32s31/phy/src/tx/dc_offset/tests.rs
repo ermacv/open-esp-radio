@@ -73,27 +73,33 @@ fn twelve_step_search_averages_only_last_four_adjusted_values() {
 }
 
 #[test]
-fn readiness_false_sample_preserves_exact_poll_action() {
-    let parameters = PhyTxDcParameters {
-        pbus_rx_path_value: 0xbf,
-    };
-    let search = Search::new(2);
-    let mut transition = PhyTxDcTransition {
-        parameters,
-        mode: PhyTxDcMode::Wifi,
-        dco: [[INITIAL_DCO; 4]; 5],
-        step: Step::PollReady(search),
-    };
-    let action = transition.action();
-    assert!(PhyTxDcReadyBinding::new(action).is_ok());
-    transition
-        .advance(PhyTxDcCompletion::ReadySampled {
-            gain_index: 2,
-            iteration: 0,
-            ready: false,
-        })
-        .unwrap();
-    assert_eq!(transition.action(), action);
+fn readiness_after_any_number_of_not_ready_reads_reads_the_comparators() {
+    for not_ready_samples in [0, 1, crate::HARDWARE_EDGE_LIMIT - 1] {
+        let search = Search::new(2);
+        let mut transition = PhyTxDcTransition {
+            parameters: PhyTxDcParameters {
+                pbus_rx_path_value: 0xbf,
+            },
+            mode: PhyTxDcMode::Wifi,
+            dco: [[INITIAL_DCO; 4]; 5],
+            step: Step::PollReady(search),
+        };
+        assert!(PhyTxDcReadyBinding::new(transition.action()).is_ok());
+        transition
+            .advance(PhyTxDcCompletion::ReadyObserved {
+                gain_index: 2,
+                iteration: 0,
+                not_ready_samples,
+            })
+            .unwrap();
+        assert_eq!(
+            transition.action(),
+            PhyTxDcAction::ReadComparators {
+                gain_index: 2,
+                iteration: 0,
+            }
+        );
+    }
 }
 
 #[test]
@@ -223,10 +229,10 @@ fn bluetooth_variant_completes_exactly_three_common_comparator_searches() {
             PhyTxDcAction::PollReady {
                 gain_index,
                 iteration,
-            } => PhyTxDcCompletion::ReadySampled {
+            } => PhyTxDcCompletion::ReadyObserved {
                 gain_index,
                 iteration,
-                ready: true,
+                not_ready_samples: 0,
             },
             PhyTxDcAction::ReadComparators {
                 gain_index,

@@ -41,10 +41,11 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver>(
                 Completion::DebugModeConfigured
             }
             Action::ForceTest(transaction) => {
-                if !crate::target_executor::force_pbus_direct(registers, transaction) {
-                    return Err(PhyTargetPortError::HardwareEdgeTimedOut);
+                if crate::target_executor::force_pbus_direct(registers, transaction) {
+                    Completion::ForceTestCompleted(transaction)
+                } else {
+                    Completion::ForceTestTimedOut(transaction)
                 }
-                Completion::ForceTestCompleted(transaction)
             }
             Action::ConfigureWorkMode => Completion::WorkModeConfigured {
                 settle_required: pbus::configure_work_mode(registers),

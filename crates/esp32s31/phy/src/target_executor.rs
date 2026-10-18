@@ -49,6 +49,7 @@ use crate::{
         calibration::{
             PhyTxCalibrationEnvironmentCompletion, PhyTxCalibrationEnvironmentPbusBinding,
         },
+        dc_offset::{PhyTxDcCompletion, PhyTxDcPbusBinding},
         dc_power_detector::{
             PhyTxDcPwdetCompletion, PhyTxDcPwdetPbusBinding, PhyTxDcPwdetSearchCompletion,
             PhyTxDcPwdetSearchPbusBinding,
@@ -259,8 +260,20 @@ pub async fn complete_final_i2c<D: PhyShortDelay>(
     Ok(binding.into_deadline_completion())
 }
 
+// An I2C binding whose completion names its own timeout ends an exhausted
+// wait with that completion; the others end it with the executor error.
 macro_rules! define_i2c_executor {
     ($function:ident, $binding:ty, $completion:ty) => {
+        define_i2c_executor!(@ $function, $binding, $completion, |_binding: $binding| Err(
+            PhyTargetPortError::HardwareEdgeTimedOut
+        ));
+    };
+    ($function:ident, $binding:ty, $completion:ty, typed_timeout) => {
+        define_i2c_executor!(@ $function, $binding, $completion, |binding: $binding| Ok(
+            binding.into_timeout_completion()
+        ));
+    };
+    (@ $function:ident, $binding:ty, $completion:ty, $exhausted:expr) => {
         pub async fn $function<F: Future<Output = ()>>(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
@@ -295,7 +308,8 @@ macro_rules! define_i2c_executor {
                     }
                 }
             }
-            Err(PhyTargetPortError::HardwareEdgeTimedOut)
+            let exhausted: fn($binding) -> Result<$completion, PhyTargetPortError> = $exhausted;
+            exhausted(binding)
         }
     };
 }
@@ -368,43 +382,6 @@ pub(crate) fn complete_rfpll_i2c_direct(
     binding
         .into_completion()
         .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-}
-
-macro_rules! define_pbus_executor {
-    ($function:ident, $binding:ty, $completion:ty) => {
-        pub async fn $function<D: PhyShortDelay>(
-            timer: &impl Timer,
-            mut binding: $binding,
-            registers: &mut impl SharedPhyAccess,
-        ) -> Result<$completion, PhyTargetPortError> {
-            let mut started = false;
-            for _ in 0..HARDWARE_EDGE_LIMIT {
-                if binding.start_target(registers).is_ok() {
-                    started = true;
-                    break;
-                }
-                delay::<D, _>(timer, Kind::BusBusy, 1).await;
-            }
-            if !started {
-                return Err(PhyTargetPortError::HardwareEdgeTimedOut);
-            }
-            for _ in 0..HARDWARE_EDGE_LIMIT {
-                delay::<D, _>(timer, Kind::Completion, 1).await;
-                match binding
-                    .observe_target_edge(registers)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
-                {
-                    PhyPbusHardwareObservation::EdgeConsumed => {
-                        return binding
-                            .into_completion()
-                            .map_err(|_| PhyTargetPortError::UnexpectedBinding);
-                    }
-                    PhyPbusHardwareObservation::StillPending => {}
-                }
-            }
-            Err(PhyTargetPortError::HardwareEdgeTimedOut)
-        }
-    };
 }
 
 // These bindings model a PBus timeout as an ordinary completion consumed by
@@ -591,13 +568,15 @@ define_i2c_executor!(
 define_i2c_executor!(
     complete_channel_i2c,
     PhyChipChannelI2cBinding,
-    PhyChipChannelCompletion
+    PhyChipChannelCompletion,
+    typed_timeout
 );
-define_pbus_executor!(
+define_timeout_pbus_executor!(
     complete_tx_calibration_environment_pbus,
     PhyTxCalibrationEnvironmentPbusBinding,
     PhyTxCalibrationEnvironmentCompletion
 );
+define_timeout_pbus_executor!(complete_tx_dc_pbus, PhyTxDcPbusBinding, PhyTxDcCompletion);
 define_timeout_pbus_executor!(
     complete_bluetooth_pbus,
     PhyBluetoothPbusBinding,

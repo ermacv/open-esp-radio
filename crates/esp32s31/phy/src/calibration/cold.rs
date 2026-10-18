@@ -2123,7 +2123,6 @@ impl PhyColdPbusBinding {
         }
     }
 
-    #[cfg(test)]
     pub fn into_timeout_completion(
         self,
     ) -> Result<PhyRfInitPrefixCompletion, PhyColdLoweringError> {

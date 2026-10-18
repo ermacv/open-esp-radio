@@ -35,7 +35,6 @@ const fn pbus_transaction(index: u8, parameter_002: u8) -> PhyPbusForceTest {
 pub enum PhyRxSaturationOutcome {
     Measured { saturated_samples: u8, samples: u8 },
     PbusTimedOut(PhyPbusForceTest),
-    CaptureTimedOut,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,21 +52,8 @@ pub enum PhyRxSaturationCompletion {
     DebugModeConfigured,
     PbusCompleted(PhyPbusForceTest),
     PbusTimedOut(PhyPbusForceTest),
-    DelayElapsed {
-        micros: u32,
-    },
-    StatusSampled {
-        sample_index: u8,
-        active: bool,
-    },
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "only the validation binding constructs this timeout"
-        )
-    )]
-    CaptureTimedOut,
+    DelayElapsed { micros: u32 },
+    StatusSampled { sample_index: u8, active: bool },
     WorkModeConfigured,
 }
 
@@ -194,9 +180,6 @@ impl PhyRxSaturationTransition {
                 PhyRxSaturationStep::Sample { .. },
                 PhyRxSaturationCompletion::StatusSampled { .. },
             ) => return Err(PhyRxSaturationTransitionError::InvalidCapture),
-            (PhyRxSaturationStep::Sample { .. }, PhyRxSaturationCompletion::CaptureTimedOut) => {
-                PhyRxSaturationStep::WorkMode(PhyRxSaturationOutcome::CaptureTimedOut)
-            }
             (
                 PhyRxSaturationStep::WorkMode(outcome),
                 PhyRxSaturationCompletion::WorkModeConfigured,

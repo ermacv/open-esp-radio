@@ -243,6 +243,8 @@ fn complete_without_the_registered_marker_rejects_model_extraction() {
     transition.phase = Some(super::Phase::Complete(PhyRegisterOutcome {
         #[cfg(feature = "registration-diagnostics")]
         rf_calibration: None,
+        #[cfg(feature = "registration-diagnostics")]
+        ready_waits: super::ReadyWaitDiagnostics::default(),
         full_calibration_performed: true,
         calibration_path: PhyCalibrationPath::FullUncached,
     }));
@@ -635,6 +637,8 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
         PhyRegisterLocalStep::Complete(PhyRegisterOutcome {
             #[cfg(feature = "registration-diagnostics")]
             rf_calibration: diagnostics,
+            #[cfg(feature = "registration-diagnostics")]
+            ready_waits: super::ReadyWaitDiagnostics::default(),
             full_calibration_performed: true,
             calibration_path: PhyCalibrationPath::FullForCache,
         })

@@ -74,18 +74,10 @@ fn complete_sample(
     let poll = transition.action();
     assert!(PhyPwdetReadyBinding::new(poll).is_ok());
     transition
-        .advance(PhyPwdetCompletion::SarReadySampled {
+        .advance(PhyPwdetCompletion::SarReadyObserved {
             measurement_index,
             sample_index,
-            ready: false,
-        })
-        .unwrap();
-    assert_eq!(transition.action(), poll);
-    transition
-        .advance(PhyPwdetCompletion::SarReadySampled {
-            measurement_index,
-            sample_index,
-            ready: true,
+            not_ready_samples: sample % 3,
         })
         .unwrap();
     transition
