@@ -1,0 +1,45 @@
+error[E0061]: this method takes 2 arguments but 1 argument was supplied
+  --> tests/ui/take_without_frozen_cursor.rs:15:21
+   |
+15 |     let _ = storage.take_completed_unit(ring); // ui-error: E0061
+   |                     ^^^^^^^^^^^^^^^^^^^------ argument #2 of type `RxFrozenCursor` is missing
+   |
+note: method defined here
+  --> src/rx_storage.rs
+   |
+   |     pub fn take_completed_unit<'storage, 'owner, 'ring>(
+   |            ^^^^^^^^^^^^^^^^^^^
+help: provide the argument
+   |
+15 |     let _ = storage.take_completed_unit(ring, /* RxFrozenCursor */); // ui-error: E0061
+   |                                             ++++++++++++++++++++++
+
+error[E0308]: mismatched types
+  --> tests/ui/take_without_frozen_cursor.rs:17:47
+   |
+17 |     let _ = storage.take_completed_unit(ring, 1); // ui-error: E0308
+   |                     -------------------       ^ expected `RxFrozenCursor`, found integer
+   |                     |
+   |                     arguments to this method are incorrect
+   |
+note: method defined here
+  --> src/rx_storage.rs
+   |
+   |     pub fn take_completed_unit<'storage, 'owner, 'ring>(
+   |            ^^^^^^^^^^^^^^^^^^^
+
+error[E0061]: this method takes 3 arguments but 2 arguments were supplied
+  --> tests/ui/take_without_frozen_cursor.rs:20:21
+   |
+20 |     let _ = storage.take_completed(ring, 0); // ui-error: E0061
+   |                     ^^^^^^^^^^^^^^       - argument #2 of type `RxFrozenCursor` is missing
+   |
+note: method defined here
+  --> src/rx_storage.rs
+   |
+   |     pub fn take_completed<'owner, 'ring>(
+   |            ^^^^^^^^^^^^^^
+help: provide the argument
+   |
+20 |     let _ = storage.take_completed(ring, /* RxFrozenCursor */, 0); // ui-error: E0061
+   |                                          +++++++++++++++++++++

@@ -147,11 +147,7 @@ where
             .map_err(RxStageTransactionError::Ring)?;
     }
     let frontier_snapshot = storage
-        .completed_unit_frontier_through_cursor(
-            ring,
-            frozen_cursor.last_descriptor_low(),
-            frozen_cursor.next_descriptor_low(),
-        )
+        .completed_unit_frontier_through_cursor(ring, frozen_cursor)
         .map_err(RxStageTransactionError::Ring)?;
     let frontier = frontier_snapshot.unit_count;
     let pool_credits = pool.available_slots();
@@ -192,10 +188,9 @@ where
         // A free ordinary credit makes ownership transfer
         // unconditional: policy can still reject the detached unit by
         // length, but no classification result can leave it at the
-        // hardware frontier. In that common case the descriptor bound
-        // captured by `frontier_snapshot` is already the complete
-        // frozen-cursor proof, so do not rediscover the first unit and
-        // then make `take_completed_unit` validate it a second time.
+        // hardware frontier. In that common case `take_completed_unit`
+        // bounds the unit by the frozen cursor's LAST itself, so do not
+        // rediscover the first unit before taking it.
         //
         // At the reserve boundary we must classify before transfer
         // because PreserveForCapacity deliberately leaves ownership in
@@ -205,11 +200,7 @@ where
             None
         } else {
             let unit_frontier = storage
-                .first_completed_unit_frontier_through_cursor(
-                    ring,
-                    frozen_cursor.last_descriptor_low(),
-                    frozen_cursor.next_descriptor_low(),
-                )
+                .first_completed_unit_frontier_through_cursor(ring, frozen_cursor)
                 .map_err(RxStageTransactionError::Ring)?;
             if unit_frontier.unit_count != 1
                 || unit_frontier.descriptor_count == 0
@@ -235,17 +226,13 @@ where
             let maximum_payload_length = admission
                 .maximum_payload_length(unit_observation, STAGE_CAPACITY)
                 .min(STAGE_CAPACITY);
-            Some((
-                unit_frontier.descriptor_count,
-                unit_observation,
-                maximum_payload_length,
-            ))
+            Some((unit_observation, maximum_payload_length))
         };
-        let length_discard = preflight.is_some_and(|(_, unit, maximum)| {
+        let length_discard = preflight.is_some_and(|(unit, maximum)| {
             unit.payload_length == 0 || unit.payload_length > maximum
         });
         let (unavailable, unavailable_preview) =
-            if !length_discard && let Some((_, unit_observation, _)) = preflight {
+            if !length_discard && let Some((unit_observation, _)) = preflight {
                 // Classification only affects overload admission. An
                 // ordinary unit with a free bulk credit is staged
                 // regardless of its frame-control or VIF route, so do
@@ -255,8 +242,7 @@ where
                 let preview = if storage
                     .copy_first_completed_unit_bytes_through_cursor(
                         ring,
-                        frozen_cursor.last_descriptor_low(),
-                        frozen_cursor.next_descriptor_low(),
+                        frozen_cursor,
                         PUBLIC_HEADER_SIZE,
                         &mut header,
                     )
@@ -308,12 +294,11 @@ where
         }
 
         hooks.phase(Phase::StageTake);
-        let descriptor_limit = preflight
-            .map(|(descriptor_count, _, _)| descriptor_count)
-            .unwrap_or(remaining_descriptors);
         let recycle_start_before_take = ring.recycle_start();
+        // The take is bounded by the frozen LAST inclusive: the walker no
+        // longer writes any descriptor of the unit it returns.
         let unit = storage
-            .take_completed_unit(ring, descriptor_limit)
+            .take_completed_unit(ring, frozen_cursor)
             .map_err(RxStageTransactionError::Ring)?
             .ok_or(RxStageTransactionError::Ring(RxRingError::Corrupt))?;
         let unit_descriptor_count = unit.descriptor_count();
@@ -323,7 +308,7 @@ where
             payload_length: unit.total_length(),
         };
         let maximum_payload_length = preflight
-            .map(|(_, _, maximum_payload_length)| maximum_payload_length)
+            .map(|(_, maximum_payload_length)| maximum_payload_length)
             .unwrap_or_else(|| {
                 admission
                     .maximum_payload_length(unit_observation, STAGE_CAPACITY)
@@ -505,11 +490,7 @@ where
     // source is unmasked; a completion can consume the republished
     // unit while the current RX-success edge is still owned here.
     let completed_frontier_remaining = storage
-        .completed_unit_frontier_through_cursor(
-            ring,
-            frozen_cursor.last_descriptor_low(),
-            frozen_cursor.next_descriptor_low(),
-        )
+        .completed_unit_frontier_through_cursor(ring, frozen_cursor)
         .map_err(RxStageTransactionError::Ring)?
         .unit_count
         != 0;
