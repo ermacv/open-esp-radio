@@ -43,14 +43,17 @@ fn rf_closed_domain() -> RadioDomain<ConcurrentPhy> {
 fn clients_share_one_domain_and_leave_it_one_by_one() {
     let mut radio = registered_domain();
     let radio = &mut radio;
+    // Each tracking class is due at once on its first acquisition.
     assert_eq!(
         enter_client(radio, RadioClient::Wifi, &VirtualClock::<8>::new()),
-        Ok(ConcurrentAcquire::Settled)
+        Ok(ConcurrentAcquire::TrackingDue)
     );
+    assert!(radio.attachment_mut().complete_tracking_for_test());
     assert_eq!(
         enter_client(radio, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
-        Ok(ConcurrentAcquire::Settled)
+        Ok(ConcurrentAcquire::TrackingDue)
     );
+    assert!(radio.attachment_mut().complete_tracking_for_test());
     let snapshot = radio
         .attachment()
         .client_snapshot()
@@ -92,22 +95,25 @@ fn an_unregistered_domain_rejects_every_client_operation() {
 fn due_tracking_blocks_clients_until_maintenance_is_admitted() {
     let mut radio = registered_domain();
     let domain = &mut radio;
+    // The first acquisition is due at once; its tracking completes.
     assert_eq!(
         enter_client(domain, RadioClient::Wifi, &VirtualClock::<8>::new()),
-        Ok(ConcurrentAcquire::Settled)
+        Ok(ConcurrentAcquire::TrackingDue)
     );
+    assert_eq!(admit_maintenance(domain), Ok(()));
+    assert!(domain.attachment_mut().complete_tracking_for_test());
     assert_eq!(
         admit_maintenance(&domain),
         Err(ConcurrentPhyError::NoTrackingPending)
     );
     // One period later the periodic callback requests tracking.
+    let later = oer_time_virtual::START
+        .checked_add(oer_time::Duration::from_micros(
+            DEFAULT_PLL_TRACK_PERIOD_MICROS,
+        ))
+        .unwrap();
     assert_eq!(
-        evaluate_periodic_tracking(
-            domain,
-            &VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(
-                DEFAULT_PLL_TRACK_PERIOD_MICROS
-            ))
-        ),
+        evaluate_periodic_tracking(domain, &VirtualClock::<8>::starting_at(later)),
         Ok(true)
     );
     assert!(domain.attachment().tracking_pending());
@@ -159,8 +165,9 @@ fn rf_closes_only_after_the_last_client_left() {
     ));
     assert_eq!(
         enter_client(radio, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
-        Ok(ConcurrentAcquire::Settled)
+        Ok(ConcurrentAcquire::TrackingDue)
     );
+    assert!(radio.attachment_mut().complete_tracking_for_test());
     assert!(matches!(
         radio.attachment_mut().idle_domain(),
         Err(ConcurrentPhyError::ClientsActive)

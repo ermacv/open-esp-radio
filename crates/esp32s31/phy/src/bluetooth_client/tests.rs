@@ -83,10 +83,12 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
     let (mut radio, partitions) = radio_domain(false);
     let task = task(partitions);
     let domain = &mut radio;
+    // The first acquisition is due at once; its tracking completes.
     assert_eq!(
         enter_client(domain, RadioClient::Bluetooth, &VirtualClock::<8>::new()),
-        Ok(ConcurrentAcquire::Settled)
+        Ok(ConcurrentAcquire::TrackingDue)
     );
+    assert!(domain.attachment_mut().complete_tracking_for_test());
 
     let failure = match leave_bluetooth(domain, &task, BluetoothPhyMembership::for_test()) {
         Ok(_) => panic!("a membership without its BTBB reference cannot leave"),

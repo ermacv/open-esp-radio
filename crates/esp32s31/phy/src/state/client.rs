@@ -63,8 +63,8 @@ pub struct PhyClientSnapshot {
     bluetooth: bool,
     ieee802154: bool,
     tracker_model_armed: bool,
-    wifi_previous_micros: u64,
-    bluetooth_ieee802154_previous_micros: u64,
+    wifi_previous_micros: Option<u64>,
+    bluetooth_ieee802154_previous_micros: Option<u64>,
     period_micros: u64,
 }
 
@@ -88,7 +88,9 @@ impl PhyClientSnapshot {
         self.tracker_model_armed
     }
 
-    pub const fn previous_micros(self, class: PhyPllTrackClass) -> u64 {
+    /// The class's last tracking time; `None` while the registration epoch
+    /// has not tracked it.
+    pub const fn previous_micros(self, class: PhyPllTrackClass) -> Option<u64> {
         match class {
             PhyPllTrackClass::Wifi => self.wifi_previous_micros,
             PhyPllTrackClass::BluetoothIeee802154 => self.bluetooth_ieee802154_previous_micros,
@@ -102,9 +104,11 @@ impl PhyClientSnapshot {
     /// Earliest absolute deadline for `evaluate_immediate_tracking`.
     ///
     /// The reviewed due predicate is strictly greater than the interval, so
-    /// the first due microsecond is `previous + period + 1`. Inactive classes
-    /// do not arm a timer. An unrepresentable deadline is an error, not an
-    /// immediately due timer or a silently disabled tracker.
+    /// the first due microsecond is `previous + period + 1`. An active class
+    /// never tracked in this registration epoch is due at once: its deadline
+    /// is `0`, [`oer_time::Instant::EPOCH`]. Inactive classes do not arm a
+    /// timer. An unrepresentable deadline is an error, not an immediately due
+    /// timer or a silently disabled tracker.
     pub fn next_tracking_deadline_micros(self) -> Result<Option<u64>, PhyTrackTimeError> {
         let mut earliest = None;
         for (active, class, previous) in [
@@ -118,10 +122,13 @@ impl PhyClientSnapshot {
             if !active {
                 continue;
             }
-            let deadline = previous
-                .checked_add(self.period_micros)
-                .and_then(|value| value.checked_add(1))
-                .ok_or(PhyTrackTimeError::DeadlineOverflow { class })?;
+            let deadline = match previous {
+                None => 0,
+                Some(previous) => previous
+                    .checked_add(self.period_micros)
+                    .and_then(|value| value.checked_add(1))
+                    .ok_or(PhyTrackTimeError::DeadlineOverflow { class })?,
+            };
             earliest = Some(earliest.map_or(deadline, |value: u64| value.min(deadline)));
         }
         Ok(earliest)
@@ -140,8 +147,16 @@ pub struct PhyClientState {
     // Registration that minted this client set. It occupies alignment padding
     // beside the flags, so detached owners carry it without growing.
     epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
-    wifi_previous_micros: u64,
-    bluetooth_ieee802154_previous_micros: u64,
+    // Last tracking time per class; `None`: never tracked in this
+    // registration epoch, so the first acquisition is due at once. SOURCE:
+    // ESP-IDF v6.1 components/esp_phy/src/phy_common.c:41,44 keeps
+    // `s_wifi_prev_timestamp` and `s_bt_154_prev_timestamp` in file statics
+    // zeroed only at boot, written only in `phy_track_pll_internal`
+    // (:89,96), and `esp_phy_enable` calls `phy_track_pll()` at once
+    // (phy_init.c:399), so the vendor's survive disable and enable; here each
+    // registration epoch starts untracked.
+    wifi_previous_micros: Option<u64>,
+    bluetooth_ieee802154_previous_micros: Option<u64>,
     period_micros: u64,
 }
 
@@ -177,8 +192,8 @@ impl PhyClientState {
             epoch,
             bits: 0,
             tracker_model_armed: false,
-            wifi_previous_micros: 0,
-            bluetooth_ieee802154_previous_micros: 0,
+            wifi_previous_micros: None,
+            bluetooth_ieee802154_previous_micros: None,
             period_micros,
         }
     }
@@ -377,7 +392,7 @@ impl PhyClientState {
                 self.wifi_previous_micros,
                 now_micros,
             )?;
-            request_due = now_micros - self.wifi_previous_micros > self.period_micros;
+            request_due = self.due(self.wifi_previous_micros, now_micros);
         }
         // Preserve the two source assignments containing `need_track_pll ||`.
         // Once Wi-Fi is due, C short-circuiting skips the BT/154 due sample.
@@ -388,8 +403,7 @@ impl PhyClientState {
                 self.bluetooth_ieee802154_previous_micros,
                 now_micros,
             )?;
-            request_due =
-                now_micros - self.bluetooth_ieee802154_previous_micros > self.period_micros;
+            request_due = self.due(self.bluetooth_ieee802154_previous_micros, now_micros);
         }
 
         self.build_evaluation(wifi_active, bluetooth_ieee802154_active, request_due, clock)
@@ -442,12 +456,25 @@ impl PhyClientState {
         })
     }
 
+    /// Whether a class last tracked at `previous_micros` is due at
+    /// `now_micros`, which [`Self::validate_timestamp`] accepted: at once
+    /// when never tracked, otherwise once more than the period has passed.
+    const fn due(&self, previous_micros: Option<u64>, now_micros: u64) -> bool {
+        match previous_micros {
+            None => true,
+            Some(previous) => now_micros - previous > self.period_micros,
+        }
+    }
+
     fn validate_timestamp(
         &self,
         class: PhyPllTrackClass,
-        previous_micros: u64,
+        previous_micros: Option<u64>,
         now_micros: u64,
     ) -> Result<(), PhyTrackTimeError> {
+        let Some(previous_micros) = previous_micros else {
+            return Ok(());
+        };
         if now_micros < previous_micros {
             Err(PhyTrackTimeError::TimeReversed {
                 class,
@@ -461,10 +488,10 @@ impl PhyClientState {
 
     fn apply_evaluation(&mut self, evaluation: TrackEvaluation) {
         if let Some(now_micros) = evaluation.wifi_refresh_micros {
-            self.wifi_previous_micros = now_micros;
+            self.wifi_previous_micros = Some(now_micros);
         }
         if let Some(now_micros) = evaluation.bluetooth_ieee802154_refresh_micros {
-            self.bluetooth_ieee802154_previous_micros = now_micros;
+            self.bluetooth_ieee802154_previous_micros = Some(now_micros);
         }
     }
 }
@@ -580,7 +607,7 @@ impl PhyPendingTrack {
     }
 
     #[cfg(test)]
-    fn complete_for_test(self) -> PhyClientState {
+    pub(crate) fn complete_for_test(self) -> PhyClientState {
         self.owner
     }
 }
