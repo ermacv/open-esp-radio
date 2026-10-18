@@ -7,15 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "Closed typed ESP32-C5 radio peripheral access crate"
 
-[features]
-validation-probes = ["oer-esp32c5-pac-raw/validation-probes"]
-
 [dependencies]
 oer-espressif-ieee802154-pac = { path = "../../espressif/ieee802154-pac" }
 oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
-
-[dev-dependencies]
-oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["validation-probes"] }
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 //! Named vendor scenarios.
 //!
 //! Event bits, abort codes and frame layouts are the pinned ESP-IDF values
-//! (`i_common_ll.h`, `esp_i.h`): an RX/TX buffer is
+//! (`ieee802154_common_ll.h`, `esp_ieee802154.h`): an RX/TX buffer is
 //! `[length, psdu...]`, the length counts the two FCS bytes, and a received
 //! buffer carries RSSI and LQI in place of the FCS.
 
@@ -622,7 +622,7 @@ pub const RECENT_RSSI_IMAGES: [(u64, i8); 4] = [
     (0x1234_5600, 0),
 ];
 
-/// `esp_i_get_recent_rssi` disabled, idle, receiving, awaiting an
+/// `esp_ieee802154_get_recent_rssi` disabled, idle, receiving, awaiting an
 /// ACK and asleep, over each receive-information image.
 fn recent_rssi() -> Vec<Step> {
     let reads = |steps: &mut Vec<Step>| {

@@ -180,7 +180,7 @@ const GRANT_CLOCK_READ: &[(u32, &str)] = &[(
 /// Coexistence priorities production admits (`CoexPti`: four bits); the
 /// vendor field is five bits wide, but no production priority exceeds 15.
 const PTIS: &[u32] = &events::<16>(None);
-/// IEEE 802.15.4 coexistence levels (`i_coex_event_t`): the vendor
+/// IEEE 802.15.4 coexistence levels (`ieee802154_coex_event_t`): the vendor
 /// asserts on any other value.
 const IEEE802154_LEVELS: &[u32] = &[1, 2, 3, 4];
 
@@ -470,7 +470,7 @@ pub const LEAVES: &[Leaf] = &[
         GRANT_CLOCK_READ,
     ),
     // IEEE 802.15.4 coexistence priorities.
-    // The level's priority comes from the local `coex_i_pti_get`.
+    // The level's priority comes from the local `coex_ieee802154_pti_get`.
     leaf(
         "esp_coex_ieee802154_txrx_pti_set",
         "open_ieee802154_coex_trace_txrx_level",

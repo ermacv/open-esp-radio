@@ -1,5 +1,5 @@
 /* The real SoC header, with direct register access recorded by the stand.
- * Only `esp_i_util.c` (the ETM channel helpers) uses these macros;
+ * Only `esp_ieee802154_util.c` (the ETM channel helpers) uses these macros;
  * every MAC register access goes through the recorded LL instead. */
 #include_next "soc/soc.h"
 

@@ -30,7 +30,7 @@ const fn classify_work(
                 state_publication_requested,
             }
             .classify(
-                &BluetoothSchedulerWorkObservation::from_fields_for_validation(busy, state_29, 0),
+                &BluetoothSchedulerWorkObservation::from_fields_for_host_test(busy, state_29, 0),
             ),
         ),
         None => None,
@@ -39,7 +39,7 @@ const fn classify_work(
 
 #[test]
 fn baseline_fault_preempts_dynamic_scheduler_work() {
-    let epoch = BluetoothPrimaryInterruptEpoch::for_fault_validation();
+    let epoch = BluetoothPrimaryInterruptEpoch::for_fault_host_test();
     let fault = PrimaryInterruptClassification::from_epoch(epoch)
         .expect_err("a baseline assertion source must preempt scheduler work");
 
@@ -49,7 +49,7 @@ fn baseline_fault_preempts_dynamic_scheduler_work() {
 
 #[test]
 fn fault_free_epoch_reaches_dynamic_scheduler_classifier() {
-    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_validation(false, true, true);
+    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(false, true, true);
     let classification = PrimaryInterruptClassification::from_epoch(epoch)
         .expect("dynamic sources are not fault lanes");
 
@@ -103,11 +103,11 @@ fn reference_gate_requires_post_clear_action_only_when_not_busy() {
     let gate = SchedulerReferenceGate;
 
     assert_eq!(
-        gate.classify(BluetoothSchedulerReferenceGateObservation::from_busy_for_validation(false)),
+        gate.classify(BluetoothSchedulerReferenceGateObservation::from_busy_for_host_test(false)),
         SchedulerReferenceAction::ClearReferenceAndContinue
     );
     assert_eq!(
-        gate.classify(BluetoothSchedulerReferenceGateObservation::from_busy_for_validation(true)),
+        gate.classify(BluetoothSchedulerReferenceGateObservation::from_busy_for_host_test(true)),
         SchedulerReferenceAction::PreserveReference
     );
 }

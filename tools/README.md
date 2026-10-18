@@ -43,7 +43,10 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 - `analysis` depends on other `analysis` libraries, `base` and external
   crates; `data` on other `data` libraries and `base`.
 - `tools/` uses only the portable crates of `crates/` (`base`, `radio` and the
-  protocols), never a chip crate. Only `lib/service/firmware` uses
+  protocols), never a chip crate, except a vendor comparison of one chip: it
+  may use that chip's crates and `crates/espressif/`, built for the host
+  without `test-support`, along an edge `lib/test/layers` lists
+  (`VENDOR_COMPARISON`). Only `lib/service/firmware` uses
   `firmware/`, and only its host-built image layout
   (`platform/espressif/staged-layout`, `platform/esp32s31/layout`); nothing in
   `tools/` depends on `firmware/apps` or on a chip crate of the firmware.

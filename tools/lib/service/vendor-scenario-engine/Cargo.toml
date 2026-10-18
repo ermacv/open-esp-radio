@@ -15,7 +15,6 @@ oer-tool-service-vendor-evidence = { path = "../vendor-evidence" }
 oer-tool-data-vendor-evidence-shard = { path = "../../data/vendor-evidence-shard" }
 oer-tool-data-register-bindings = { path = "../../data/register-bindings" }
 oer-tool-base-durable = { path = "../../base/durable" }
-oer-repo = { path = "../../../tools/repo" }
 oer-tool-data-vendor-pins = { path = "../../data/vendor-pins" }
 oer-tool-service-image = { path = "../image" }
 oer-tool-analysis-riscv-model = { path = "../../analysis/riscv-model" }

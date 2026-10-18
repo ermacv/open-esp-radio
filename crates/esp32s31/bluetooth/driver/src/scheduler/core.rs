@@ -210,7 +210,7 @@ impl ControllerHalInitialized {
         runtime: ControllerRuntimeResources<'cells, MODEM_TIMER_CAPACITY>,
     ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
         self.initialize_scheduler_with(runtime, |_| {
-            BluetoothSchedulerHardwareListsCleared::for_validation()
+            BluetoothSchedulerHardwareListsCleared::for_host_test()
         })
     }
 

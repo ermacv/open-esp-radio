@@ -14,7 +14,7 @@ the image it needs, and the runner restores that image before it runs.
 ## Build and flash
 
 The application builds against the ESP-IDF revision and ESP32-C5 archives pinned in
-[`verification/esp32c5/artifacts.toml`](../../../verification/esp32c5/artifacts.toml),
+[`knowledge/esp32c5/vendor/artifacts.toml`](../../../knowledge/esp32c5/vendor/artifacts.toml),
 without the OpenThread CLI, the ESP-IDF console or the lwIP glue:
 
 ```console

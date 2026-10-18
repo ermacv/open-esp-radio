@@ -5,10 +5,12 @@
 use std::process::Command;
 
 fn trace(scenario: &str) -> Vec<String> {
-    let output = Command::new(env!("CARGO_BIN_EXE_oer-esp32s31-ieee802154-vendor-host"))
-        .args(["run", scenario])
-        .output()
-        .expect("the stand binary runs");
+    let output = Command::new(env!(
+        "CARGO_BIN_EXE_oer-tool-service-esp32s31-ieee802154-vendor-host"
+    ))
+    .args(["run", scenario])
+    .output()
+    .expect("the stand binary runs");
     assert!(output.status.success(), "{scenario} failed: {output:?}");
     String::from_utf8(output.stdout)
         .expect("UTF-8 trace")
@@ -32,10 +34,12 @@ fn assert_subsequence(trace: &[String], expected: &[&str]) {
 
 #[test]
 fn every_scenario_runs_without_a_driver_assertion() {
-    let list = Command::new(env!("CARGO_BIN_EXE_oer-esp32s31-ieee802154-vendor-host"))
-        .arg("list")
-        .output()
-        .expect("the stand binary lists its scenarios");
+    let list = Command::new(env!(
+        "CARGO_BIN_EXE_oer-tool-service-esp32s31-ieee802154-vendor-host"
+    ))
+    .arg("list")
+    .output()
+    .expect("the stand binary lists its scenarios");
     for scenario in String::from_utf8(list.stdout).unwrap().lines() {
         let trace = trace(scenario);
         assert!(
@@ -51,22 +55,26 @@ fn every_scenario_runs_without_a_driver_assertion() {
 /// The production engine reproduces every catalog trace.
 #[test]
 fn every_scenario_matches_the_production_engine() {
-    let list = Command::new(env!("CARGO_BIN_EXE_oer-esp32s31-ieee802154-vendor-host"))
-        .arg("list")
-        .output()
-        .expect("the stand binary lists its scenarios");
+    let list = Command::new(env!(
+        "CARGO_BIN_EXE_oer-tool-service-esp32s31-ieee802154-vendor-host"
+    ))
+    .arg("list")
+    .output()
+    .expect("the stand binary lists its scenarios");
     for scenario in String::from_utf8(list.stdout).unwrap().lines() {
-        let output = Command::new(env!("CARGO_BIN_EXE_oer-esp32s31-ieee802154-vendor-host"))
-            .args(["compare", scenario])
-            .output()
-            .expect("the stand binary compares");
+        let output = Command::new(env!(
+            "CARGO_BIN_EXE_oer-tool-service-esp32s31-ieee802154-vendor-host"
+        ))
+        .args(["compare", scenario])
+        .output()
+        .expect("the stand binary compares");
         let verdict = String::from_utf8_lossy(&output.stdout);
         assert_eq!(verdict.trim(), "MATCH", "{scenario}: {verdict}");
     }
 }
 
-/// `esp_i_enable` then `i_mac_init` (esp_i.c
-/// L35-L41, esp_i_dev.c L897-L956), in the build without software
+/// `esp_ieee802154_enable` then `ieee802154_mac_init` (esp_ieee802154.c
+/// L35-L41, esp_ieee802154_dev.c L897-L956), in the build without software
 /// coexistence.
 #[cfg(not(feature = "sw-coex"))]
 #[test]
@@ -92,10 +100,10 @@ fn enable_follows_the_public_order_and_mac_init() {
     );
 }
 
-/// With software coexistence `i_mac_init` publishes the ACK at
+/// With software coexistence `ieee802154_mac_init` publishes the ACK at
 /// `IEEE802154_MIDDLE` (2) and the idle scene at `IEEE802154_IDLE` (4)
-/// instead of disabling coexistence (esp_i_dev.c L924-L928,
-/// esp_i_util.c L31-L35); receive, energy detection and CCA publish
+/// instead of disabling coexistence (esp_ieee802154_dev.c L924-L928,
+/// esp_ieee802154_util.c L31-L35); receive, energy detection and CCA publish
 /// the `IEEE802154_LOW` (3) scene before their command (L481, L1229,
 /// L1246), a timed transmission `IEEE802154_MIDDLE` (L1054).
 #[cfg(feature = "sw-coex")]
@@ -130,7 +138,7 @@ fn software_coexistence_publishes_the_scene_levels() {
 /// `tx_init` stops the current operation, applies the pending PIB, publishes
 /// the frame and the ACK receive buffer, then issues `TX_START`; `TX_DONE` of
 /// an ACK-requesting frame starts the 200 ms timer-zero watchdog and
-/// `ACK_RX_DONE` stops it before reporting the ACK (esp_i_dev.c
+/// `ACK_RX_DONE` stops it before reporting the ACK (esp_ieee802154_dev.c
 /// L507-L536, L595-L602, L992-L1026).
 // The default build's trace; multi-PAN adds identity reads and interface
 // indices.
@@ -160,7 +168,7 @@ fn transmit_with_ack_arms_and_disarms_the_ack_watchdog() {
 }
 
 /// A CRC abort is not reported; `next_operation` re-arms receive into the
-/// same buffer (esp_i_dev.c L488-L505, L604-L640).
+/// same buffer (esp_ieee802154_dev.c L488-L505, L604-L640).
 #[test]
 fn receive_crc_error_restarts_into_the_same_buffer() {
     let trace = trace("receive-crc-error-restarts");
@@ -181,7 +189,7 @@ fn receive_crc_error_restarts_into_the_same_buffer() {
 /// `RX_DONE` of an ACK-requesting 2006 frame with TX auto-ACK sets the pending
 /// bit before the ACK leaves; `ACK_TX_DONE` delivers the frame and
 /// `next_operation` re-arms receive into the next buffer
-/// (esp_i_dev.c L538-L593).
+/// (esp_ieee802154_dev.c L538-L593).
 // The default build's trace; multi-PAN adds identity reads and interface
 // indices.
 #[cfg(not(feature = "multipan"))]
@@ -206,7 +214,7 @@ fn receive_with_auto_ack_selects_pending_before_the_ack() {
 
 /// ED and standalone CCA share `ED_START`; `ED_DONE` reports the RSS code
 /// plus the S31 compensation 0, or the CCA busy bit
-/// (esp_i_dev.c L761-L770, L985-L990, L1221-L1252).
+/// (esp_ieee802154_dev.c L761-L770, L985-L990, L1221-L1252).
 #[test]
 fn energy_detection_and_cca_report_their_ed_done_sample() {
     assert_subsequence(
@@ -233,7 +241,7 @@ fn energy_detection_and_cca_report_their_ed_done_sample() {
 /// OpenThread port reads the extended address, configures transmit security
 /// over the ACK, then the driver publishes the ACK and notifies the hardware
 /// (esp_openthread_radio.c `enh_ack_set_security_addr_and_key`,
-/// esp_i_sec.c L16-L25, esp_i_dev.c L564-L573); the ACK's
+/// esp_ieee802154_sec.c L16-L25, esp_ieee802154_dev.c L564-L573); the ACK's
 /// `TX_DONE` clears the security.
 #[test]
 fn a_secured_enhanced_ack_is_armed_before_it_is_published() {
@@ -252,12 +260,12 @@ fn a_secured_enhanced_ack_is_armed_before_it_is_published() {
     );
 }
 
-/// `esp_i_disable` runs `i_mac_deinit` first, which frees
+/// `esp_ieee802154_disable` runs `ieee802154_mac_deinit` first, which frees
 /// the source-132 interrupt before BTBB, the PHY client and the modem clock
 /// are released, and writes no MAC register, even with a reception running
-/// (esp_i.c `esp_i_disable`, esp_i_dev.c
-/// `i_mac_deinit`). `esp_i_enable` allocates it last in
-/// `i_mac_init` (see `enable_follows_the_public_order_and_mac_init`).
+/// (esp_ieee802154.c `esp_ieee802154_disable`, esp_ieee802154_dev.c
+/// `ieee802154_mac_deinit`). `esp_ieee802154_enable` allocates it last in
+/// `ieee802154_mac_init` (see `enable_follows_the_public_order_and_mac_init`).
 /// The composition mirrors both: it binds the route after the runtime is
 /// installed and quiesces it first on stop.
 #[test]
@@ -281,8 +289,8 @@ fn disable_frees_the_route_before_the_shared_resources_without_mac_writes() {
     );
 }
 
-/// `esp_i_get_recent_rssi` is `(int8_t)(bt_bb_get_cur_rx_info() &
-/// 0xff)` (esp_i_dev.c L271-L274): in every driver state it makes
+/// `esp_ieee802154_get_recent_rssi` is `(int8_t)(bt_bb_get_cur_rx_info() &
+/// 0xff)` (esp_ieee802154_dev.c L271-L274): in every driver state it makes
 /// exactly one receive-information call and no register-layer access, and
 /// returns the image's low byte as a signed value whatever its upper bits.
 #[test]

@@ -16,7 +16,7 @@
 //! retained wake. The ROM `memcpy` calls and `phy_param` ABI cell remain
 //! unnecessary.
 
-#[cfg(test)]
+#[cfg(any(test, oer_probe))]
 pub const PHY_PBUS_MEMORY_ENTRY_COUNT: u8 = 60;
 
 const GROUP_COUNT: u8 = 12;
@@ -525,3 +525,10 @@ impl PhyPbusMemoryMmioBinding {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(oer_probe)]
+impl PhyPbusMemoryMmioBinding {
+    pub const fn action(&self) -> PhyPbusMemoryAction {
+        self.action
+    }
+}

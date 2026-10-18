@@ -16,6 +16,9 @@ pub(crate) mod role;
 
 pub mod tx_power;
 
+#[cfg(oer_probe)]
+pub(crate) mod validation;
+
 pub use oer_esp32s31_pac::{Ieee802154MultipanIndex, Ieee802154PowerSequence};
 
 /// The memory the ESP32-S31 IEEE 802.15.4 MAC DMA reaches: the register
@@ -26,6 +29,11 @@ pub use oer_esp32s31_pac::{Ieee802154MultipanIndex, Ieee802154PowerSequence};
 /// ([`oer_espressif_ieee802154_engine::engine::Ieee802154Engine::buffers_dma_visible`]).
 pub const IEEE802154_DMA_WINDOW: core::ops::Range<usize> =
     crate::layouts::DMA_WINDOW.start as usize..crate::layouts::DMA_WINDOW.end as usize;
+
+/// Validation entries of the IEEE 802.15.4 coexistence and BTBB writes.
+#[cfg(oer_probe)]
+#[doc(hidden)]
+pub use validation::coex_trace;
 
 pub use lifecycle::{
     IEEE802154_MAX_CHANNEL, IEEE802154_MIN_CHANNEL, Ieee802154Channel, Ieee802154ChannelError,

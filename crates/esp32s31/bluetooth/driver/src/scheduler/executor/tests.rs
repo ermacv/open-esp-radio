@@ -92,11 +92,11 @@ impl SchedulerItemAccess<u8> for Items {
 }
 
 fn idle() -> BluetoothSchedulerBusyObservation {
-    BluetoothSchedulerBusyObservation::from_busy_for_validation(false)
+    BluetoothSchedulerBusyObservation::from_busy_for_host_test(false)
 }
 
 fn busy() -> BluetoothSchedulerBusyObservation {
-    BluetoothSchedulerBusyObservation::from_busy_for_validation(true)
+    BluetoothSchedulerBusyObservation::from_busy_for_host_test(true)
 }
 
 fn window(start: u32) -> SchedulerRawWindow {
@@ -228,7 +228,7 @@ mod live {
 
     fn lock_modify(busy: bool, start: bool) -> Observation {
         Observation::LockModify(
-            BluetoothSchedulerLockModifyObservation::from_fields_for_validation(busy, start, 0),
+            BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(busy, start, 0),
         )
     }
 
@@ -429,7 +429,7 @@ mod cancel {
 
     fn lock_modify(start: bool) -> Observation {
         Observation::LockModify(
-            BluetoothSchedulerLockModifyObservation::from_fields_for_validation(true, start, 0),
+            BluetoothSchedulerLockModifyObservation::from_fields_for_host_test(true, start, 0),
         )
     }
 
@@ -704,11 +704,11 @@ mod cancel {
     fn the_stopped_receipt_blocks_every_start_until_resume() {
         let (mut executor, mut items) = four_events();
         executor
-            .enter_stopped(BluetoothSchedulerStopped::for_validation())
+            .enter_stopped(BluetoothSchedulerStopped::for_host_test())
             .unwrap();
         assert!(executor.stopped().is_some());
         assert!(matches!(
-            executor.enter_stopped(BluetoothSchedulerStopped::for_validation()),
+            executor.enter_stopped(BluetoothSchedulerStopped::for_host_test()),
             Err(SchedulerStopRejected::AlreadyStopped(_))
         ));
         assert_eq!(
@@ -735,7 +735,7 @@ mod cancel {
         let (mut executor, items) = four_events();
         let _ = executor.begin_flush(&items, &busy()).unwrap();
         assert!(matches!(
-            executor.enter_stopped(BluetoothSchedulerStopped::for_validation()),
+            executor.enter_stopped(BluetoothSchedulerStopped::for_host_test()),
             Err(SchedulerStopRejected::TransactionActive(_))
         ));
         assert!(executor.stopped().is_none());

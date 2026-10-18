@@ -70,7 +70,7 @@ mod tests {
         );
 
         assert_eq!(policy.sequence_lead_raw_delta(), 92);
-        assert!(policy.initial_deadline_is_open(&ControllerTimeSample::for_validation(22), 103));
-        assert!(!policy.initial_deadline_is_open(&ControllerTimeSample::for_validation(23), 103));
+        assert!(policy.initial_deadline_is_open(&ControllerTimeSample::for_host_test(22), 103));
+        assert!(!policy.initial_deadline_is_open(&ControllerTimeSample::for_host_test(23), 103));
     }
 }

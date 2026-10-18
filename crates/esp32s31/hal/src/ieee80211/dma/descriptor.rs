@@ -100,7 +100,7 @@ impl RxDescriptor {
     /// mutation belongs exclusively to the ring owner and the DMA actor. It
     /// exists only for native models and the explicit raw-DMA validation
     /// feature used by compiled vendor probes.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     #[inline]
     pub fn write_word0(&self, word0: WifiRxDmaDescriptorControl) {
         self.0.control().write(word0);
@@ -267,8 +267,8 @@ pub const fn rx_rearm_word(
 /// bytes: the armed `word0` with that length, `OWNER` still set and
 /// `RX_DONE` on the unit's terminal descriptor
 /// (SOURCE\[HIL_W1_OWNER_BIT_2026_10_18]). A model of the hardware, for
-/// native models and tests.
-#[cfg(any(test, feature = "test-support"))]
+/// native models, tests and probe images.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub const fn rx_completed_word(
     word0: WifiRxDmaDescriptorControl,
     length: u32,

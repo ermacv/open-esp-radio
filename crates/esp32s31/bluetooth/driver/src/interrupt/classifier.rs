@@ -69,7 +69,7 @@ impl PrimarySchedulerTrigger {
         sources_27_or_28_pending: bool,
         source_3_pending: bool,
     ) -> Self {
-        let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_validation(
+        let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
             source_21_pending,
             sources_27_or_28_pending,
             source_3_pending,

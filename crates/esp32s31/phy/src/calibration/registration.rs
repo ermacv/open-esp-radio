@@ -354,12 +354,12 @@ pub struct PhyRegisterTransition {
 }
 
 impl PhyRegisterTransition {
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn new(config: crate::state::PhyConfig) -> Self {
         Self::new_on_channel(config, 11)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn new_on_channel(
         config: crate::state::PhyConfig,
         channel_or_frequency: u16,
@@ -426,9 +426,14 @@ impl PhyRegisterTransition {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn with_production_config() -> Self {
         Self::new(crate::state::PhyConfig::production())
+    }
+
+    #[cfg(oer_probe)]
+    pub const fn with_production_config_on_channel(channel_or_frequency: u16) -> Self {
+        Self::new_on_channel(crate::state::PhyConfig::production(), channel_or_frequency)
     }
 
     pub const fn with_production_config_and_calibration(
@@ -443,10 +448,24 @@ impl PhyRegisterTransition {
         )
     }
 
+    #[cfg(oer_probe)]
+    pub const fn with_production_config_on_channel_and_calibration(
+        channel_or_frequency: u16,
+        identity: PhyCalibrationIdentity,
+        cache: Option<crate::state::PhyCalibrationCache>,
+    ) -> Self {
+        Self::new_on_channel_with_calibration(
+            crate::state::PhyConfig::production(),
+            channel_or_frequency,
+            identity,
+            cache,
+        )
+    }
+
     /// Return the freshly completed full- or partial-calibration cache.
     ///
     /// Failed and in-progress transitions never expose a cache as persistable.
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn calibration_cache(&self) -> Option<&crate::state::PhyCalibrationCache> {
         (self.calibration_cache_ready && matches!(self.phase.as_ref(), Some(Phase::Complete(_))))
             .then_some(())
@@ -524,7 +543,7 @@ impl PhyRegisterTransition {
         clippy::result_large_err,
         reason = "non-failure paths must return the unique allocation-free registration owner"
     )]
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn into_failed_parts(
         mut self,
     ) -> Result<
@@ -1301,7 +1320,7 @@ impl PhyRegisterMmioBinding {
         Self { action }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyRegisterMmioAction {
         self.action
     }
@@ -1444,12 +1463,12 @@ impl PhyRegisterFinalI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,

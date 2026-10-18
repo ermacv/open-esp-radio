@@ -14,6 +14,10 @@ pub mod dma;
 
 pub mod mac;
 
+#[cfg(oer_probe)]
+#[doc(hidden)]
+pub mod phy_rate;
+
 pub mod station_wake;
 
 /// The Wi-Fi MAC registers borrowed by one HAL capability: from the runtime

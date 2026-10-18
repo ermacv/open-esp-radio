@@ -17,7 +17,7 @@ pub fn snapshot_committed(
     progress: u16,
     output: &mut [u16; 8],
 ) {
-    let snapshot = oer_esp32s31_phy::validation::calibration_snapshot(state);
+    let snapshot = state.retained_calibration_snapshot();
     let dcode = snapshot.common.dcode;
     for (destination, pair) in output[..4].iter_mut().zip(dcode.chunks_exact(2)) {
         *destination = u16::from_le_bytes([pair[0], pair[1]]);
@@ -86,7 +86,7 @@ pub const PARENT_WORDS: usize = 7;
 /// the retained gain adjustment, the Wi-Fi I2C tracking band and the RFPLL
 /// reference temperature.
 pub fn snapshot_parent(state: &oer_esp32s31_phy::PhyState, output: &mut [u16; PARENT_WORDS]) {
-    use oer_esp32s31_phy::tracking::i2c::PhyWifiI2cTrackingBand;
+    use oer_esp32s31_phy::tracking::PhyWifiI2cTrackingBand;
     let power = state.tx_power_tracking_parameters(true);
     output[..4].copy_from_slice(&[
         power.previous_tracking_temperature as u16,
@@ -101,5 +101,5 @@ pub fn snapshot_parent(state: &oer_esp32s31_phy::PhyState, output: &mut [u16; PA
         PhyWifiI2cTrackingBand::Elevated => 2,
         PhyWifiI2cTrackingBand::Hot => 3,
     };
-    output[6] = oer_esp32s31_phy::validation::rfpll_reference_temperature(state) as u16;
+    output[6] = state.rfpll_reference_temperature() as u16;
 }

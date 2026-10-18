@@ -1,30 +1,34 @@
 # ESP32-S31 compiled verification probes
 
-This isolated workspace builds retained Rust entry points for instruction- and
+These packages build retained Rust entry points for instruction- and
 effect-level comparison with caller-owned vendor artifacts. The probes depend
 on production driver crates, but no production crate or HIL firmware depends
 on the probes.
 
-Build and validate the three comparison images from the repository root:
+Build and validate the comparison images from the repository root:
 
 ```console
 cargo verification probes --chip esp32s31
 ```
 
-The images `oer-firmware-verification-esp32s31-probe-radio-elf`, `oer-firmware-verification-esp32s31-probe-register-elf`
-and `oer-firmware-verification-esp32s31-probe-bluetooth-elf` are built for
-`riscv32imafc-unknown-none-elf` into
-`target/verification/esp32s31/`, and each image's
-`.blobray.probes` catalog is validated against its executable symbols. A plain
-`cargo build` of one package produces the same image without that validation.
+The images `oer-firmware-verification-esp32s31-probe-radio-elf` and
+`oer-firmware-verification-esp32s31-probe-register-elf` are built for
+`riscv32imafc-unknown-none-elf` by `cargo fw probe`, copied into
+`target/verification/esp32s31/`, and each image's `.blobray.probes` catalog is
+validated against its executable symbols. `cargo fw probe <package>` alone
+builds one image without that validation.
 
-Each probe set is a `library/` and `elf/` pair: `radio/` covers Wi-Fi, PHY
-and coexistence, `register/` the PAC/HAL register accessors and `bluetooth/`
-the Bluetooth controller. `library/` owns stable retained wrappers and explicit
-C-layout projections; `elf/` owns only the comparison image entry point and
-linker layout. Neither is a board test, runtime adapter or public driver API.
-The separate Bluetooth pair keeps BLE verification independent of the Wi-Fi/PHY
-probe wrappers.
+The probe build is the only build that sets `cfg(oer_probe)`, which compiles
+the probe hooks of the PACs, the HAL, the PHY and the radio crates. It builds
+only `firmware/verification/` packages, with the chip's image compiler, into
+`target/fw-probe`: no production image or host build compiles a hook.
+
+Each probe set is a library and `-elf` pair: `probe-radio` covers Wi-Fi, PHY
+and coexistence and `probe-register` the PAC/HAL register accessors. The
+library owns stable retained wrappers and explicit C-layout projections; the
+`-elf` package owns only the comparison image entry point and linker layout.
+Neither is a board test, runtime adapter or public driver API. The Bluetooth
+pair returns with its hooks (`knowledge/esp32s31/open-questions.md`).
 
 The radio probe uses the MAC's executor-neutral `irq::consumer` directly;
 its graph contains neither the Wi-Fi runtime nor role-sta. The retained

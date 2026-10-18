@@ -22,7 +22,7 @@ use std::{
 pub enum Argument {
     /// A scalar value.
     Value(u64),
-    /// The `n`th frame the scenario passed to `esp_i_transmit`.
+    /// The `n`th frame the scenario passed to `esp_ieee802154_transmit`.
     TransmitFrame(usize),
     /// The `n`th distinct driver-owned buffer, in order of first appearance.
     DriverBuffer(usize),
@@ -45,7 +45,7 @@ impl fmt::Display for Argument {
 /// One observation at the vendor driver boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Record {
-    /// A register-layer (`i_ll_*`) accessor call.
+    /// A register-layer (`ieee802154_ll_*`) accessor call.
     Ll {
         name: String,
         arguments: Vec<Argument>,
@@ -54,7 +54,7 @@ pub enum Record {
     /// allocation, time or the critical section.
     External { name: String, arguments: Vec<u64> },
     /// A coexistence priority the driver publishes through libcoexist
-    /// (`esp_coex_i_txrx_pti_set`, `esp_coex_i_ack_pti_set`)
+    /// (`esp_coex_ieee802154_txrx_pti_set`, `esp_coex_ieee802154_ack_pti_set`)
     /// with its level argument.
     Coex { name: String, level: u64 },
     /// A direct register access outside the LL (the ETM helpers).
@@ -128,7 +128,7 @@ impl fmt::Display for Record {
 pub struct Inputs {
     /// Return value of a named getter or external call.
     pub values: BTreeMap<String, u64>,
-    /// Return value of `esp_i_enh_ack_generator`; `None` refuses.
+    /// Return value of `esp_ieee802154_enh_ack_generator`; `None` refuses.
     pub enhanced_ack: Option<Vec<u8>>,
     /// The key of a secured enhanced ACK, which the generator arms as the
     /// OpenThread port does.

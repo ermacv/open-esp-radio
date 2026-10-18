@@ -894,17 +894,17 @@ impl PhyRxDcoPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,

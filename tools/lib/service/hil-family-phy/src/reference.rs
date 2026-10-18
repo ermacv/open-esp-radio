@@ -1,4 +1,4 @@
-//! The vendor IEEE 802.15.4 reference firmware (`i-reference` of
+//! The vendor IEEE 802.15.4 reference firmware (`ieee802154-reference` of
 //! the chip's vendor calibration projects) on the board under test, driven
 //! through the IEEE 802.15.4 reference peer's line protocol (its README in
 //! `hil/peers`): the radio configured and

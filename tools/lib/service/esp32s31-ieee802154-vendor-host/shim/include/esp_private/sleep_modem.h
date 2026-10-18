@@ -1,4 +1,4 @@
-/* Modem retention hooks called by `i_mac_init`/`deinit`. */
+/* Modem retention hooks called by `ieee802154_mac_init`/`deinit`. */
 #pragma once
 typedef enum {
     SLEEP_MODEM_WIFI = 0,

@@ -111,6 +111,19 @@ const fn operation_rx_abort_enable_observation(
     }
 }
 
+#[cfg(oer_probe)]
+const fn validation_event_enable_state(
+    readback: crate::ieee802154::ownership::ValidationEventEnableReadback,
+) -> Ieee802154ValidationEventEnableState {
+    use crate::ieee802154::ownership::ValidationEventEnableReadback as Readback;
+    match readback {
+        Readback::AllMasked => Ieee802154ValidationEventEnableState::AllMasked,
+        Readback::TimerPair => Ieee802154ValidationEventEnableState::TimerPairOnly,
+        Readback::EdTimerAbort => Ieee802154ValidationEventEnableState::EdDoneTimer0RxAbortOnly,
+        Readback::Unexpected => Ieee802154ValidationEventEnableState::Unexpected,
+    }
+}
+
 /// Opaque eight-bit value accepted by the MAC frequency-code register.
 ///
 /// This is deliberately not an IEEE channel number. The checked 2.4 GHz
@@ -1036,6 +1049,204 @@ impl Ieee802154PolledRegisterLease<'_> {
             core0_map != 0 || core1_map != 0,
             core0_pass_level != 0 || core1_pass_level != 0,
         )
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_event_enable_state(&self) -> Ieee802154ValidationEventEnableState {
+        validation_event_enable_state(self.task.registers.validation_event_enable_readback())
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_enable_timer_events(&mut self) {
+        self.task.registers.validation_enable_timer_events();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_disable_all_events(&mut self) {
+        self.task.registers.validation_disable_all_events();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_event_status_state(&self) -> Ieee802154ObservedEventState {
+        event_observation(self.interrupt.validation_event_status_events()).state()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_event_timer0_value(&self) -> u32 {
+        self.task.registers.validation_timer0_value()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_event_timer1_value(&self) -> u32 {
+        self.task.registers.validation_timer1_value()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_set_event_timer_thresholds(&mut self, threshold: u32) {
+        self.task
+            .registers
+            .validation_set_timer_thresholds(threshold);
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_start_event_timer0(&mut self) {
+        self.task.registers.validation_start_timer0();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_stop_event_timer0(&mut self) {
+        self.task.registers.validation_stop_timer0();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_start_event_timer1(&mut self) {
+        self.task.registers.validation_start_timer1();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_stop_event_timer1(&mut self) {
+        self.task.registers.validation_stop_timer1();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_write_event_timer0(&mut self) {
+        self.interrupt.validation_write_timer0_event();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_write_event_timer1(&mut self) {
+        self.interrupt.validation_write_timer1_event();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_event_enable_state(&self) -> Ieee802154ValidationEventEnableState {
+        validation_event_enable_state(self.task.registers.validation_event_enable_readback())
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_enable_ed_timer_abort_events(&mut self) {
+        self.task
+            .registers
+            .validation_enable_ed_timer_abort_events();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_disable_ed_events(&mut self) {
+        self.task.registers.validation_disable_ed_events();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_rx_abort_enable_state(
+        &self,
+    ) -> Ieee802154OperationRxAbortEnableObservation {
+        operation_rx_abort_enable_observation(
+            self.task.registers.operation_rx_abort_enable_readback(),
+        )
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_enable_ed_abort_reasons(&mut self) {
+        self.task.registers.validation_enable_ed_abort_reasons();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_disable_ed_abort_reasons(&mut self) {
+        self.task.registers.validation_disable_ed_abort_reasons();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_event_status_state(&self) -> Ieee802154ObservedEventState {
+        event_observation(self.interrupt.validation_ed_event_status_events()).state()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_rx_abort_reason(&self) -> Ieee802154RxAbortReasonObservation {
+        self.rx_abort_reason_observation()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_duration_state(&self) -> Ieee802154ValidationEdDurationState {
+        Ieee802154ValidationEdDurationState::from_field(
+            self.task.registers.validation_ed_duration(),
+        )
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_set_ed_duration_eight(&mut self) {
+        self.task.registers.validation_set_ed_duration_eight();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_ed_timer0_value(&self) -> u32 {
+        self.task.registers.validation_ed_timer0_value()
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_set_ed_timer0_threshold(&mut self, threshold: u32) {
+        self.task
+            .registers
+            .validation_set_ed_timer0_threshold(threshold);
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_start_ed_timer0(&mut self) {
+        self.task.registers.validation_start_ed_timer0();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_stop_ed_timer0(&mut self) {
+        self.task.registers.validation_stop_ed_timer0();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_start_ed(&mut self) {
+        self.task.registers.validation_start_ed();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_stop_ed_operation(&mut self) {
+        self.task.registers.validation_stop_ed_operation();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_write_ed_done_event(&mut self) {
+        self.interrupt.validation_write_ed_done_event();
+    }
+
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn validation_write_ed_timer0_event(&mut self) {
+        self.interrupt.validation_write_ed_timer0_event();
     }
 }
 

@@ -743,12 +743,12 @@ fn tracking(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<
 mod evidence {
     use super::*;
 
-    use crate::{BLUETOOTH_PROBES_PACKAGE, PROBES_MANIFEST, PROBES_PACKAGE, PROBES_TARGET};
+    use crate::{BLUETOOTH_PROBES_PACKAGE, PROBES_DIRECTORY, PROBES_PACKAGE, PROBES_TARGET};
     use oer_tool_service_vendor_scenario_engine::shard::ProbeImages;
 
     /// The probe images of the ESP32-S31 scenarios.
     const PROBES: ProbeImages = ProbeImages {
-        manifest: PROBES_MANIFEST,
+        directory: PROBES_DIRECTORY,
         packages: &[PROBES_PACKAGE, BLUETOOTH_PROBES_PACKAGE],
         target: PROBES_TARGET,
     };

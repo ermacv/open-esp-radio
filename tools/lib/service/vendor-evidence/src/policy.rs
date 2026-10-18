@@ -1,13 +1,15 @@
 //! The verdict source policy: which repository sources a shard may record.
 //!
-//! A shard records the sources its verdicts depend on. Packages classified
-//! `open-radio.evidence = "report"` only render findings and decide no
-//! verdict, so no shard may record one of their files: an edit to report
-//! code must never stale evidence. Producers compute what a shard may record
+//! A shard records the sources its verdicts depend on. Report packages
+//! ([`Package::is_report`]: the command-line layer and the report service)
+//! only render findings and decide no verdict, so no shard may record one of
+//! their files: an edit to report code must never stale evidence. Producers compute what a shard may record
 //! through [`closure`] and check it with [`check_verdict_sources`];
 //! [`reject_report_sources`] catches a shard of an index that bypassed them.
-use crate::Result;
-use oer_repo::closure::{Edges, Features, Target};
+use crate::{
+    Result,
+    workspace::{Package, Workspace},
+};
 use oer_tool_data_vendor_evidence_shard::store;
 use std::path::{Path, PathBuf};
 
@@ -23,39 +25,28 @@ pub struct PathClosure {
 }
 
 /// The path packages that building `package` compiles (normal and build
-/// dependencies, every optional one), for the target `platform` when given,
-/// as the repository model resolves them, with the report packages apart.
-pub fn closure(
-    model: &oer_repo::Model,
-    package: &oer_repo::Package,
-    platform: Option<&str>,
-) -> Result<PathClosure> {
-    let target = platform.map(Target::new).transpose()?;
+/// dependencies, every optional one), as `workspace` resolved them for its
+/// target, with the report packages apart.
+pub fn closure(workspace: &Workspace, package: &Package) -> PathClosure {
     let mut closure = PathClosure::default();
-    for package in model.closure(&[package], Edges::Build, target.as_ref(), &Features::All)? {
+    for package in workspace.closure(package) {
         let directory = PathBuf::from(&package.directory);
-        if is_report(model, package)? {
+        if package.is_report() {
             closure.report.push(directory);
         } else {
             closure.directories.push(directory);
         }
     }
-    Ok(closure)
-}
-
-fn is_report(model: &oer_repo::Model, package: &oer_repo::Package) -> Result<bool> {
-    Ok(model.classification(package)?.evidence == Some(oer_repo::Evidence::Report))
+    closure
 }
 
 /// Directories of every report package of the repository.
-pub fn report_packages(model: &oer_repo::Model) -> Result<Vec<PathBuf>> {
-    let mut directories = vec![];
-    for package in model.packages() {
-        if is_report(model, package)? {
-            directories.push(PathBuf::from(&package.directory));
-        }
-    }
-    Ok(directories)
+pub fn report_packages(workspace: &Workspace) -> Vec<PathBuf> {
+    workspace
+        .packages()
+        .filter(|package| package.is_report())
+        .map(|package| PathBuf::from(&package.directory))
+        .collect()
 }
 
 /// Fail when one of `paths` lies in one of the `report` package
@@ -97,10 +88,14 @@ mod tests {
 
     #[test]
     fn a_report_package_file_cannot_be_a_shard_source() {
-        let report = [PathBuf::from("verification/harness/report")];
-        let verdict = [PathBuf::from("verification/harness/scenarios/src/shard.rs")];
+        let report = [PathBuf::from("tools/lib/service/vendor-scenario-report")];
+        let verdict = [PathBuf::from(
+            "tools/lib/service/vendor-scenario-engine/src/shard.rs",
+        )];
         assert!(check_verdict_sources(&verdict, &report).is_ok());
-        let leaked = [PathBuf::from("verification/harness/report/src/triage.rs")];
+        let leaked = [PathBuf::from(
+            "tools/lib/service/vendor-scenario-report/src/triage.rs",
+        )];
         let error = check_verdict_sources(&leaked, &report).unwrap_err();
         assert!(error.to_string().contains("report package"));
     }
@@ -115,7 +110,7 @@ mod tests {
             scenario: "leaf".into(),
             inputs: Default::default(),
             sources: vec![oer_tool_data_vendor_evidence_shard::SourceDigest {
-                path: PathBuf::from("verification/harness/report/src/triage.rs"),
+                path: PathBuf::from("tools/lib/service/vendor-scenario-report/src/triage.rs"),
                 sha256: "0".repeat(64),
             }],
             dependence: oer_tool_data_vendor_evidence_shard::Dependence::whole_closure("test"),
@@ -127,7 +122,7 @@ mod tests {
             unprojected: vec![],
         };
         oer_tool_data_vendor_evidence_shard::store::write(directory.path(), &shard).unwrap();
-        let report = [PathBuf::from("verification/harness/report")];
+        let report = [PathBuf::from("tools/lib/service/vendor-scenario-report")];
         let error = reject_report_sources(directory.path(), &report).unwrap_err();
         assert!(error.to_string().contains("leaf.json"), "{error}");
         assert!(reject_report_sources(directory.path(), &[]).is_ok());
@@ -135,18 +130,20 @@ mod tests {
 
     #[test]
     fn this_checkout_classifies_the_report_package() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let model = oer_repo::Model::load(&oer_repo::Repo::load(&root).unwrap()).unwrap();
-        let report = report_packages(&model).unwrap();
-        assert!(report.contains(&PathBuf::from("verification/harness/report")));
-        let package = model.owner("verification/evidence/Cargo.toml").unwrap();
-        let closure = closure(&model, package, None).unwrap();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+        let workspace = Workspace::load(&root, None).unwrap();
+        let report = report_packages(&workspace);
+        assert!(report.contains(&PathBuf::from("tools/lib/service/vendor-scenario-report")));
+        assert!(report.contains(&PathBuf::from("tools/cli/verification")));
+        let package = workspace
+            .owner("tools/lib/service/vendor-evidence/Cargo.toml")
+            .unwrap();
+        let closure = closure(&workspace, package);
         assert!(
             closure
                 .directories
-                .contains(&PathBuf::from("verification/evidence"))
+                .contains(&PathBuf::from("tools/lib/service/vendor-evidence"))
         );
-        assert!(closure.directories.contains(&PathBuf::from("tools/repo")));
         assert!(closure.report.is_empty());
     }
 }

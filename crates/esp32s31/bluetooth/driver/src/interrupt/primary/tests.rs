@@ -31,16 +31,16 @@ impl Backend {
         work_state_29: bool,
     ) -> Self {
         Self {
-            epoch: Some(BluetoothPrimaryInterruptEpoch::for_dynamic_validation(
+            epoch: Some(BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
                 source_21_pending,
                 sources_27_or_28_pending,
                 source_3_pending,
             )),
             gate: Ok(
-                BluetoothSchedulerReferenceGateObservation::from_busy_for_validation(gate_busy),
+                BluetoothSchedulerReferenceGateObservation::from_busy_for_host_test(gate_busy),
             ),
             work: Some(
-                BluetoothSchedulerWorkObservation::from_fields_for_validation(
+                BluetoothSchedulerWorkObservation::from_fields_for_host_test(
                     work_busy,
                     work_state_29,
                     7,
@@ -52,13 +52,13 @@ impl Backend {
 
     fn fault() -> Self {
         let mut backend = Self::dynamic(false, false, false, false, false, false);
-        backend.epoch = Some(BluetoothPrimaryInterruptEpoch::for_fault_validation());
+        backend.epoch = Some(BluetoothPrimaryInterruptEpoch::for_fault_host_test());
         backend
     }
 
     fn unclassified() -> Self {
         let mut backend = Self::dynamic(false, false, false, false, false, false);
-        backend.epoch = Some(BluetoothPrimaryInterruptEpoch::for_unclassified_validation());
+        backend.epoch = Some(BluetoothPrimaryInterruptEpoch::for_unclassified_host_test());
         backend
     }
 }

@@ -291,7 +291,7 @@ struct LeaseCli {
 /// recorded in the board journal when the command succeeds.
 #[derive(Clone, Debug, Default, clap::Args)]
 struct FlashedArgs {
-    /// Name of the flashed image, e.g. `i-peer`.
+    /// Name of the flashed image, e.g. `ieee802154-peer`.
     #[arg(long = "flashed")]
     image: Option<String>,
     /// The flashed application binary, whose SHA-256 is recorded.

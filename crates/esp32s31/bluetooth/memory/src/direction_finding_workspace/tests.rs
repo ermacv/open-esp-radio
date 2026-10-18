@@ -43,7 +43,7 @@ fn a_controller_reset_restores_the_disabled_cte_workspace() {
     assert!(!owner.is_disabled_baseline_initialized());
 
     owner.reset_after_controller_reset(
-        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_validation(),
+        &oer_esp32s31_hal::bluetooth::BluetoothControllerReset::for_host_test(),
     );
 
     assert!(owner.is_disabled_baseline_initialized());

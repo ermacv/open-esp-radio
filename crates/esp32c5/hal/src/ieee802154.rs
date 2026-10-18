@@ -13,7 +13,7 @@ pub mod tx_power;
 /// `soc/esp32c5/include/soc/soc.h` at
 /// ``. The engine checks its frame
 /// buffers against it
-/// ([`oer_espressif_i_engine::engine::Ieee802154Engine::buffers_dma_visible`]).
+/// ([`oer_espressif_ieee802154_engine::engine::Ieee802154Engine::buffers_dma_visible`]).
 pub const IEEE802154_DMA_WINDOW: core::ops::Range<usize> = 0x4080_0000..0x4086_0000;
 
 pub use tx_power::ESP32C5_TX_POWER_LEVELS;

@@ -87,7 +87,7 @@ impl RadioPartitions {
     }
 
     /// Construct every partition inside one isolated validation image.
-    #[cfg(any(test, feature = "validation-probes"))]
+    #[cfg(any(test, oer_probe))]
     #[doc(hidden)]
     #[allow(
         unsafe_code,

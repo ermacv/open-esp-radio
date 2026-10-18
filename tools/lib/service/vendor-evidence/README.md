@@ -22,7 +22,7 @@ producer orchestration. Qualification reads the format directly.
 
 The producers are the Blobray scenario engine
 ([`harness/scenarios`](../harness/scenarios), `command = "vendor-scenario"`)
-and the host stands ([`esp32s31/host/i`](../esp32s31/host/i/README.md),
+and the host stands ([`esp32s31/host/i`](../esp32s31/host/ieee802154/README.md),
 `command = "vendor-host"`). Which of them reruns which shard is decided by
 `run::regenerate`, which `cargo verification evidence` ([xtask](../../tools/xtask/README.md)) calls.
 
@@ -31,5 +31,5 @@ API. `producers` adds toolchain, chip profiles and the probe orchestration.
 Qualification reads only the shared format.
 
 ```console
-cargo test --manifest-path verification/Cargo.toml -p oer-tool-service-vendor-evidence --features producers
+cargo test -p oer-tool-service-vendor-evidence --features producers
 ```

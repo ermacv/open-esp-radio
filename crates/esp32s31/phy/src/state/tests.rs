@@ -793,3 +793,17 @@ fn wifi_gain_adjustment_is_separate_from_bluetooth_attenuation() {
     expected.config = state.channel_parameters().tx_gain_config;
     assert_eq!(state.wifi_tracking_gain_image(13, 127), Some(expected));
 }
+
+#[test]
+fn the_retained_calibration_snapshot_reads_committed_state() {
+    let mut state = PhyState::default();
+    let codes = [1, 2, 3, 4, 5, 6, 7, 8];
+    state.apply_dcode_outcome(crate::analog::dcode::PhyDcodeOutcome { codes });
+    let snapshot = state.retained_calibration_snapshot();
+    assert_eq!(snapshot.common.dcode, codes);
+    assert_eq!(snapshot.identity.base_mac_address, [0; 6]);
+    assert_eq!(
+        state.rfpll_reference_temperature(),
+        snapshot.common.rfpll_reference_temperature
+    );
+}

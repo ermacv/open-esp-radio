@@ -42,7 +42,7 @@ pub enum PhyScenario<C: Comparison> {
         /// Boots per side.
         boots: u8,
         /// The production image class; the lifecycle point's own by default
-        /// (`correctness`, or `diagnostic-i-radio` at an IEEE
+        /// (`correctness`, or `diagnostic-ieee802154-radio` at an IEEE
         /// 802.15.4 point).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         image: Option<ImageClass>,

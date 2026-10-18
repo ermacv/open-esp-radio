@@ -1894,17 +1894,17 @@ impl PhyTxIqPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -2018,17 +2018,17 @@ impl PhyTxIqInitI2cBinding {
         self.transaction.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn read_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.read_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn write_started(&mut self) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
         self.transaction.write_started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_read_result(
         &mut self,
         result: Result<u8, crate::analog::i2c::PhyI2cError>,
@@ -2039,7 +2039,7 @@ impl PhyTxIqInitI2cBinding {
         self.transaction.observe_read_result(result)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_write_result(
         &mut self,
         result: Result<(), crate::analog::i2c::PhyI2cError>,
@@ -2131,3 +2131,10 @@ impl PhyTxIqInitExternalBinding {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(oer_probe)]
+impl PhyTxIqMmioBinding {
+    pub const fn action(&self) -> PhyTxIqCalibrationAction {
+        self.action
+    }
+}

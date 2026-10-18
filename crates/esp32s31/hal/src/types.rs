@@ -6,9 +6,10 @@
 
 pub use oer_esp32s31_pac::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
-    BluetoothMemoryListSelector, CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne,
-    CoexTimerClockSource, CoexTimerPtiValue, CoexTimerRegister,
-    CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
+    BluetoothMemoryListSelector, BluetoothPhyEnvironmentAddress,
+    BluetoothPhyEnvironmentAddressError, BluetoothPhyRegisterInitInputs, CfrValue,
+    CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource, CoexTimerPtiValue,
+    CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
     ExtraSoftApRxBlockAckEntrySnapshot, ForcedRxGain, Ieee802154ObservedEventState,
     Ieee802154OperationRxAbortEnableObservation, Ieee802154RxAbortReason,
     Ieee802154RxAbortReasonObservation, Ieee802154ValidationEdDurationState,

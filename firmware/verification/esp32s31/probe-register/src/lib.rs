@@ -36,10 +36,7 @@ oer_tool_service_probe_macros::probe! {
         address_high: u32,
         mode: u32,
     ) -> u32 {
-        use oer_esp32s31_hal::{
-            ieee80211::mac::validation_configure_role_receive_policy,
-            types::{MacRoleReceivePolicy, MacStaPolicyMode},
-        };
+        use oer_esp32s31_hal::types::{MacRoleReceivePolicy, MacStaPolicyMode};
 
         let address = mac_address_from_words(address_low, address_high);
         let policy = match policy {
@@ -59,7 +56,9 @@ oer_tool_service_probe_macros::probe! {
             9 => MacRoleReceivePolicy::AccessPointDisabled,
             _ => return 0,
         };
-        validation_configure_role_receive_policy(policy);
+        oer_esp32s31_hal::validation::runtime_owner()
+            .wifi_mac_hal()
+            .configure_role_receive_policy(policy);
         1
     }
 }

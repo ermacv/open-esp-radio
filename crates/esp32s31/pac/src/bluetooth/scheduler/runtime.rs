@@ -19,6 +19,13 @@ impl BluetoothSchedulerReferenceGateObservation {
         Self { busy }
     }
 
+    /// Construct a semantic gate observation for upper-layer host tests.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub const fn from_busy_for_host_test(busy: bool) -> Self {
+        Self::new(busy)
+    }
+
     /// Whether the scheduler was busy at the reference-gate temporal point.
     pub const fn is_busy(self) -> bool {
         self.busy
@@ -60,7 +67,7 @@ impl BluetoothSchedulerWorkObservation {
     }
 
     /// Construct semantic deferred-work fields for upper-layer validation.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn from_fields_for_host_test(
         busy: bool,
@@ -110,7 +117,7 @@ impl BluetoothSchedulerBusyObservation {
     }
 
     /// Construct a semantic BUSY sample for upper-layer validation.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn from_busy_for_host_test(busy: bool) -> Self {
         Self::new(busy)
@@ -276,6 +283,21 @@ impl BluetoothSchedulerFinishedHardwareListObserved {
 }
 
 impl BluetoothSchedulerFinishedListObservation {
+    /// Construct a semantic set of finished hardware lists for host-only
+    /// controller tests, or `None` for a list past the sixteen.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn from_lists_for_host_test(lists: &[u8]) -> Option<Self> {
+        let mut image = 0u16;
+        for &list in lists {
+            if list >= 16 {
+                return None;
+            }
+            image |= 1u16 << list;
+        }
+        Some(Self(image))
+    }
+
     /// Whether no hardware list was reported finished.
     pub const fn is_empty(&self) -> bool {
         self.0 == 0

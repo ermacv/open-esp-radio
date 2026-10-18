@@ -6,7 +6,7 @@
 | Item | Contents |
 | --- | --- |
 | `i::mac` | Task and interrupt owners made from the PAC partition, and the vendor transmit-on delays |
-| `i::ll::IMacOwners` | The ESP32-C5 implementation of the chip-neutral [engine](../../espressif/i/engine/README.md)'s low-level interface |
+| `ieee802154::ll::Ieee802154MacOwners` | The ESP32-C5 implementation of the chip-neutral [engine](../../espressif/ieee802154/engine/README.md)'s low-level interface |
 | `i::{tx_power, coex, IEEE802154_DMA_WINDOW}` | The provider power levels, the coexistence priorities and the memory the MAC DMA reaches |
 | `coex` | The vendor coexistence priority table |
 | `analog::AnalogI2c` | The PHY's analog register bus: the chip-neutral [contract](../../radio/analog/README.md), including its parallel writes, over the PAC's analog I2C master |

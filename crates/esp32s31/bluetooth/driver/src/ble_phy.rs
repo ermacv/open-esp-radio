@@ -225,7 +225,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
 impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY> {
     /// Publish the recovered BLE PHY register transaction while consuming and
     /// retaining the complete address-bound allocation graph. The BLE base
-    /// stack enable also touches the shared radio registers, which `lease`
+    /// stack enable also touches the shared radio registers, which `radio`
     /// lends.
     ///
     /// The transition is fail-stop after its first MMIO write. It has no
@@ -240,7 +240,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODE
     )]
     pub fn initialize_ble_phy_engine<T>(
         mut self,
-        lease: &mut oer_esp32s31_hal::shared_radio::SharedRadioLease<'_, T>,
+        radio: &mut oer_esp32s31_hal::domain::RadioDomain<T>,
         storage: BlePhyEngineCpuOwned,
         direction_finding: DirectionFindingWorkspaceCpuOwned,
         public_address: BluetoothPublicDeviceAddress,
@@ -258,7 +258,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> ControllerPhyJoined<'cells, MODE
                 unsafe {
                     controller
                         .task_mut()
-                        .enable_ble_base_stack_hardware(lease, inputs);
+                        .enable_ble_base_stack_hardware(radio, inputs);
                 }
             },
             |controller, address| {

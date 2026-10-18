@@ -1965,7 +1965,7 @@ impl PhyRxDcCalibrationMmioBinding {
         Ok(Self { operation })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyRxDcCalibrationAction {
         match self.operation {
             CalibrationMmio::PrepareControlRestore => {
@@ -2068,7 +2068,7 @@ impl PhyRxGainDcMmioBinding {
         Ok(Self { operation })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyRxGainDcAction {
         match self.operation {
             DcMmio::ConfigureRegisters { enabled } => {
@@ -2156,17 +2156,17 @@ impl PhyRxDcCalibrationPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -2294,17 +2294,17 @@ impl PhyRxGainDcPbusBinding {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
         self.hardware.action()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.started()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,

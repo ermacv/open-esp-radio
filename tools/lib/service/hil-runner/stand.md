@@ -354,7 +354,7 @@ cargo stand board reset esp32c5 --via power
 cargo stand board console esp32c5 --for 30s --until @READY
 cargo stand board soak esp32c5 --for 8h --via rts,jtag
 cargo hil peer send esp32c5 SYNC
-cargo stand lease --board esp32c5 --flashed i-peer --application build/peer.bin \
+cargo stand lease --board esp32c5 --flashed ieee802154-peer --application build/peer.bin \
     --device esp32c5 -- idf.py -p /dev/ttyACM1 flash
 ```
 
@@ -374,8 +374,8 @@ archives the image builds against: an ESP32-C5 image names `esp32c5`. Builds are
 
 ```console
 cargo hil firmware list
-cargo hil firmware build i-peer
-cargo fw flash i-peer --device <MAC|PORT>
+cargo hil firmware build ieee802154-peer
+cargo fw flash ieee802154-peer --device <MAC|PORT>
 ```
 
 `cargo fw flash IMAGE` builds a catalog image, bundles the build's

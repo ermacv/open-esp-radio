@@ -105,6 +105,16 @@ impl RadioHardware {
         })
     }
 
+    /// The complete root of an isolated probe image (`cfg(oer_probe)`).
+    #[cfg(oer_probe)]
+    #[doc(hidden)]
+    pub fn for_probe() -> Self {
+        Self {
+            partitions: RadioPartitions::for_probe(),
+            phy_registration: PhyRegistration::new(),
+        }
+    }
+
     /// Construct a fictitious complete root for one host test.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]

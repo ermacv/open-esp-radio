@@ -8,7 +8,7 @@ The reviewed ESP32-S31 PHY calibration relation, shared without copies:
   order the vendor comparison reads them, computed from
   `oer_esp32s31_phy`'s validation view.
 
-The comparison probes (`verification/esp32s31/probes`) publish the words, the
+The comparison probes (`firmware/verification/esp32s31`) publish the words, the
 Blobray tracking scenario (`verification/esp32s31/scenarios`) compares them
 with the pinned vendor code, and the hardware calibration cross-check
 (`hil/phy/esp32s31/calibration`) compares a board's capture with

@@ -167,12 +167,12 @@ impl ControllerTimePendingOwner for PendingOwnerModel {
 }
 
 const fn sample(raw_time: u32) -> ControllerTimeSample {
-    ControllerTimeSample::for_validation(raw_time)
+    ControllerTimeSample::for_host_test(raw_time)
 }
 
 #[test]
 fn pending_core_drop_cancels_exact_request_then_uses_orphan_drain() {
-    let request = ControllerTimeRequest::for_validation(41);
+    let request = ControllerTimeRequest::for_host_test(41);
     let mut owner = PendingOwnerModel::new(1);
     owner.orphan_steps.extend([
         Ok(ControllerTimePendingOrphanStep::Waiting),
@@ -198,7 +198,7 @@ fn pending_core_drop_cancels_exact_request_then_uses_orphan_drain() {
 
 #[test]
 fn pending_core_waiting_reconstructs_the_same_owner_and_request() {
-    let request = ControllerTimeRequest::for_validation(42);
+    let request = ControllerTimeRequest::for_host_test(42);
     let mut owner = PendingOwnerModel::new(7);
     owner.recheck_steps.extend([
         Ok(ControllerTimePendingOwnerStep::Waiting),
@@ -229,7 +229,7 @@ fn pending_core_waiting_reconstructs_the_same_owner_and_request() {
 
 #[test]
 fn pending_core_ready_disarms_drop_cancellation() {
-    let request = ControllerTimeRequest::for_validation(43);
+    let request = ControllerTimeRequest::for_host_test(43);
     let mut owner = PendingOwnerModel::new(2);
     owner
         .recheck_steps
@@ -259,7 +259,7 @@ fn pending_core_ready_disarms_drop_cancellation() {
 
 #[test]
 fn pending_core_recheck_failure_returns_exact_owner_without_cancellation() {
-    let request = ControllerTimeRequest::for_validation(44);
+    let request = ControllerTimeRequest::for_host_test(44);
     let mut owner = PendingOwnerModel::new(9);
     owner
         .recheck_steps
@@ -282,7 +282,7 @@ fn pending_core_explicit_cancel_exposes_mismatch_and_fault() {
         (44, ControllerTimeEventError::RequestMismatch),
         (45, ControllerTimeEventError::Faulted),
     ] {
-        let request = ControllerTimeRequest::for_validation(generation);
+        let request = ControllerTimeRequest::for_host_test(generation);
         let mut owner = PendingOwnerModel::new(3);
         owner.cancel_error = Some(expected);
 
@@ -745,7 +745,7 @@ fn physical_duration_admission_enforces_the_retained_scales_half_range() {
             BluetoothControllerHalInitConfig::new(BluetoothHalInitScale::Eight, 11, 33, period)
                 .controller_time_scale();
         let epoch =
-            ControllerSchedulerEpoch::new(ControllerTimeSample::for_validation(123), 456, scale);
+            ControllerSchedulerEpoch::new(ControllerTimeSample::for_host_test(123), 456, scale);
         assert_eq!(
             epoch.raw_duration_ticks(RadioDuration::from_micros(minimum - 1)),
             Err(ControllerDurationError::Empty)

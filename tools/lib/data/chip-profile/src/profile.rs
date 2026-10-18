@@ -431,9 +431,6 @@ pub struct Packages {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Gate {
-    /// Packages linted again with their `validation-probes` feature.
-    #[serde(default)]
-    pub validation_probes: Vec<String>,
     /// Chip-target doctests.
     #[serde(default)]
     pub doctests: Vec<Doctest>,

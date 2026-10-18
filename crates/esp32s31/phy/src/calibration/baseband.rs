@@ -386,7 +386,7 @@ impl PhyTxCfrMmioBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyTxCfrAction {
         self.action
     }
@@ -497,7 +497,7 @@ impl PhyBbMmioBinding {
         Self { action }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyBbMmioAction {
         self.action
     }
@@ -812,7 +812,7 @@ pub struct PhyBbInitTransition {
 }
 
 impl PhyBbInitTransition {
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn new(state: crate::state::PhyState) -> Self {
         Self::new_on_channel(state, 11)
     }
@@ -1388,3 +1388,10 @@ impl PhyBbInitStep {
 
 #[cfg(test)]
 mod tests;
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf.
+///
+/// The ESP32-S31 `set_bb_wdg` body is exactly one `ret` instruction.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn set_bb_wdg() {}

@@ -9,7 +9,7 @@ description = "Isolated ESP32-S31 PAC/HAL register conformance probes"
 
 [dependencies]
 oer-tool-service-probe-macros = { path = "../../../../tools/lib/service/probe-macros" }
-oer-esp32s31-hal = { path = "../../../../crates/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-hal = { path = "../../../../crates/esp32s31/hal" }
 [lib]
 crate-type = ["rlib", "staticlib"]
 

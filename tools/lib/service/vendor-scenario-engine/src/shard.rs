@@ -10,17 +10,18 @@ use std::path::{Path, PathBuf};
 /// The compiled production images a chip's scenarios run, and where their
 /// sources are resolved.
 pub struct ProbeImages {
-    /// Probe workspace manifest, relative to the repository root.
-    pub manifest: &'static str,
+    /// The directory of the chip's probe packages, relative to the
+    /// repository root (`firmware/verification/<chip>`).
+    pub directory: &'static str,
     /// Probe ELF packages whose images the shards may name.
     pub packages: &'static [&'static str],
     /// Target triple the probes are built for.
     pub target: &'static str,
 }
 
-/// Blobray workspace, which also resolves the scenario packages and the
-/// engine behind every verdict.
-const TOOL_MANIFEST: &str = "verification/Cargo.toml";
+/// The one workspace, which resolves the probes, the scenario packages and
+/// the engine behind every verdict.
+const TOOL_MANIFEST: &str = "Cargo.toml";
 /// Production crates, which shards track by executed file.
 const PRODUCTION_CRATES: &str = "crates";
 /// The pinned toolchain, and the lock file and package manifest names.
@@ -33,12 +34,12 @@ const PACKAGE_MANIFEST: &str = "Cargo.toml";
 /// The probe compiler, a host build tool whose sources Cargo's dep-info of
 /// the probe image does not list.
 const PROBE_COMPILER: [&str; 2] = [
-    "verification/harness/codegen",
-    "verification/harness/macros",
+    "tools/lib/service/probe-codegen",
+    "tools/lib/service/probe-macros",
 ];
-/// Directory of a probe workspace's image packages: their placement and
-/// entry code apply to every probe, so they stay global.
-const PROBE_IMAGE_DIRECTORY: &str = "elf";
+/// The suffix of a probe image package's directory: its placement and entry
+/// code apply to every probe, so they stay global.
+const PROBE_IMAGE_SUFFIX: &str = "-elf";
 
 /// Repository-relative sources Cargo's dep-info records for the artifact at
 /// `artifact`, from the `.d` file beside it: every compiled source file,
@@ -86,19 +87,14 @@ pub fn dep_info_file(root: &Path, path: &Path) -> Result<Vec<PathBuf>> {
     Ok(files.into_iter().collect())
 }
 
-/// The path closure of `package` of the workspace `manifest` for the
-/// target `platform` ([`policy::closure`]).
-fn path_closure(
-    model: &oer_repo::Model,
-    manifest: &str,
-    package: &str,
-    platform: Option<&str>,
-) -> Result<policy::PathClosure> {
-    let package = model
-        .members(manifest)
-        .find(|member| member.name == package)
-        .ok_or_else(|| format!("package {package} missing from {manifest}"))?;
-    policy::closure(model, package, platform)
+/// The path closure of the workspace package `package` for the target
+/// `platform` ([`policy::closure`]).
+fn path_closure(root: &Path, package: &str, platform: Option<&str>) -> Result<policy::PathClosure> {
+    let workspace = oer_tool_service_vendor_evidence::workspace::Workspace::load(root, platform)?;
+    let package = workspace
+        .package(package)
+        .ok_or_else(|| format!("package {package} missing from the workspace"))?;
+    Ok(policy::closure(&workspace, package))
 }
 
 /// Why a shard cannot be written without the verdict libraries' dep-info.
@@ -121,17 +117,18 @@ pub struct Closures {
 /// verdict library, so its files come with the verdict libraries' dep-info.
 pub fn source_paths(
     closures: &Closures,
-    probe_manifest: &Path,
+    probe_directory: &Path,
     executed: &std::collections::BTreeSet<PathBuf>,
     fallback: bool,
 ) -> Vec<PathBuf> {
-    let probe_workspace = probe_manifest.parent().unwrap_or(Path::new(""));
     let attributable = |path: &Path| {
         path.starts_with(PRODUCTION_CRATES)
-            || (path.starts_with(probe_workspace)
-                && !path
-                    .components()
-                    .any(|c| c.as_os_str() == PROBE_IMAGE_DIRECTORY))
+            || (path.starts_with(probe_directory)
+                && !path.components().any(|c| {
+                    c.as_os_str()
+                        .to_str()
+                        .is_some_and(|name| name.ends_with(PROBE_IMAGE_SUFFIX))
+                }))
     };
     let (per_file, mut global): (Vec<PathBuf>, Vec<PathBuf>) = closures
         .probe
@@ -142,9 +139,8 @@ pub fn source_paths(
     global.extend(closures.manifests.iter().cloned());
     global.extend(PROBE_COMPILER.map(PathBuf::from));
     global.push(PathBuf::from(TOOLCHAIN));
+    global.push(PathBuf::from(TOOL_MANIFEST));
     global.push(PathBuf::from(TOOL_MANIFEST).with_file_name(LOCK_FILE));
-    global.push(probe_manifest.to_path_buf());
-    global.push(probe_manifest.with_file_name(LOCK_FILE));
     let production: Vec<PathBuf> = if fallback {
         per_file
     } else {
@@ -188,9 +184,8 @@ pub fn shard(
                 production.display()
             )
         })?;
-    let model = oer_repo::Model::load(&oer_repo::Repo::load(&root)?)?;
-    let probe_closure = path_closure(&model, probes.manifest, package, Some(probes.target))?;
-    let tool_closure = path_closure(&model, TOOL_MANIFEST, tool_package, None)?;
+    let probe_closure = path_closure(&root, package, Some(probes.target))?;
+    let tool_closure = path_closure(&root, tool_package, None)?;
     let manifests = probe_closure
         .directories
         .iter()
@@ -212,7 +207,7 @@ pub fn shard(
     let dependencies = &claims.dependencies;
     let paths = source_paths(
         &closures,
-        Path::new(probes.manifest),
+        Path::new(probes.directory),
         &dependencies.files,
         dependencies.fallback.is_some(),
     );
@@ -308,17 +303,17 @@ mod source_tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    const PROBES: &str = "verification/chip/probes/Cargo.toml";
+    const PROBES: &str = "firmware/verification/chip";
 
     fn closures() -> Closures {
         Closures {
             probe: [
                 "crates/hal/src/mac.rs",
                 "crates/hal/src/phy.rs",
-                "verification/chip/probes/radio/library/src/rx.rs",
-                "verification/chip/probes/radio/library/src/i2c.rs",
-                "verification/chip/probes/radio/elf/src/main.rs",
-                "verification/chip/probes/radio/elf/link.x",
+                "firmware/verification/chip/probe-radio/src/rx.rs",
+                "firmware/verification/chip/probe-radio/src/i2c.rs",
+                "firmware/verification/chip/probe-radio-elf/src/main.rs",
+                "firmware/verification/chip/probe-radio-elf/link.x",
             ]
             .map(PathBuf::from)
             .to_vec(),
@@ -344,13 +339,13 @@ mod source_tests {
     fn a_probe_file_is_a_source_only_of_the_shard_that_executes_it() {
         let rx = sources(&[
             "crates/hal/src/mac.rs",
-            "verification/chip/probes/radio/library/src/rx.rs",
+            "firmware/verification/chip/probe-radio/src/rx.rs",
         ]);
         let i2c = sources(&[
             "crates/hal/src/phy.rs",
-            "verification/chip/probes/radio/library/src/i2c.rs",
+            "firmware/verification/chip/probe-radio/src/i2c.rs",
         ]);
-        let edited = Path::new("verification/chip/probes/radio/library/src/rx.rs");
+        let edited = Path::new("firmware/verification/chip/probe-radio/src/rx.rs");
         assert!(rx.contains(edited));
         assert!(!i2c.contains(edited));
         assert!(!rx.contains(Path::new("crates/hal/src/phy.rs")));
@@ -372,8 +367,12 @@ mod source_tests {
             sources(&["crates/hal/src/mac.rs"]),
             sources(&["crates/hal/src/phy.rs"]),
         ] {
-            assert!(shard.contains(Path::new("verification/chip/probes/radio/elf/link.x")));
-            assert!(shard.contains(Path::new("verification/chip/probes/radio/elf/src/main.rs")));
+            assert!(shard.contains(Path::new(
+                "firmware/verification/chip/probe-radio-elf/link.x"
+            )));
+            assert!(shard.contains(Path::new(
+                "firmware/verification/chip/probe-radio-elf/src/main.rs"
+            )));
             // An include_str!-ed data file of the scenario binary.
             assert!(shard.contains(Path::new("verification/chip/artifacts.toml")));
             assert!(shard.contains(Path::new("crates/hal/Cargo.toml")));
@@ -388,7 +387,7 @@ mod source_tests {
                 .collect();
         assert!(shard.contains(Path::new("crates/hal/src/phy.rs")));
         assert!(shard.contains(Path::new(
-            "verification/chip/probes/radio/library/src/i2c.rs"
+            "firmware/verification/chip/probe-radio/src/i2c.rs"
         )));
     }
 

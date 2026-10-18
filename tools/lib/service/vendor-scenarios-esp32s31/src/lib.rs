@@ -29,17 +29,14 @@ pub use wifi::{ampdu_resort, low_power_clock, mac, retry, rx_append};
 pub static CHIP: oer_tool_service_vendor_scenario_engine::Chip =
     oer_tool_service_vendor_scenario_engine::Chip {
         name: "esp32s31",
-        manifest: "verification/esp32s31/artifacts.toml",
-        manifest_text: include_str!("../../artifacts.toml"),
-        hardware_scope: "crates/hardware/esp32s31",
-        shared_scopes: &[
-            "crates/hardware/ieee80211",
-            "crates/hardware/espressif/coex",
-        ],
+        manifest: "knowledge/esp32s31/vendor/artifacts.toml",
+        manifest_text: include_str!("../../../../../knowledge/esp32s31/vendor/artifacts.toml"),
+        hardware_scope: "crates/esp32s31",
+        shared_scopes: &["crates/ieee80211", "crates/espressif/coex"],
         rom_input: layout::ROM_INPUT,
         rom_symbols: &layout::ROM_SYMBOLS,
         stack: (layout::STACK_ADDRESS, layout::STACK_BYTES),
-        coverage: "verification/esp32s31/decisions/coverage.toml",
+        coverage: "knowledge/esp32s31/vendor/coverage.toml",
         observation: decisions::observation::DECISIONS,
         state: decisions::state::DECISIONS,
         phy: Some(&layout::PHY_LAYOUT),
@@ -52,9 +49,10 @@ pub fn install() {
     oer_tool_service_vendor_scenario_engine::install(&CHIP);
 }
 
-/// Probe workspace and the probe ELF package whose path dependencies are
-/// the compiled production sources, relative to the repository root.
-pub const PROBES_MANIFEST: &str = "verification/esp32s31/probes/Cargo.toml";
+/// The directory of the chip's probe packages, relative to the repository
+/// root, and the probe ELF package whose path dependencies are the compiled
+/// production sources.
+pub const PROBES_DIRECTORY: &str = "firmware/verification/esp32s31";
 pub const PROBES_PACKAGE: &str = "oer-firmware-verification-esp32s31-probe-radio-elf";
 /// Package of the compiled Bluetooth probe image.
 pub const BLUETOOTH_PROBES_PACKAGE: &str = "oer-firmware-verification-esp32s31-probe-bluetooth-elf";
@@ -126,7 +124,7 @@ mod tests {
     #[test]
     fn firmware_outputs_lie_in_their_catalog_image_build() {
         super::install();
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let entries = oer_tool_service_image::esp_idf::catalog::entries(&root).unwrap();
         let manifest = manifest();
         for artifact in &manifest.artifact {
@@ -147,9 +145,7 @@ mod tests {
         // The recipes are shard sources: every firmware project.
         assert_eq!(
             crate::artifacts::firmware_projects(&root).unwrap(),
-            [Path::new(
-                "verification/esp32s31/hil-vendor/phy-tracking-reference"
-            )]
+            [Path::new("firmware/vendor/esp32s31/phy-tracking-reference")]
         );
     }
 
@@ -159,7 +155,8 @@ mod tests {
         let root = Path::new("/repo");
         let pins = oer_tool_data_vendor_pins::Manifest::parse(
             &std::fs::read_to_string(
-                Path::new(env!("CARGO_MANIFEST_DIR")).join("../artifacts.toml"),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../../knowledge/esp32s31/vendor/artifacts.toml"),
             )
             .unwrap(),
         )

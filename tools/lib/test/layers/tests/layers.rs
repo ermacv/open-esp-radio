@@ -7,9 +7,10 @@ use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies allowed, each listed: a new edge is
 /// added here on purpose, in the change that needs it.
-const SERVICE_ORDER: [(&str, &str); 112] = [
+const SERVICE_ORDER: [(&str, &str); 125] = [
     ("devices", "device-lock"),
     ("devices", "image-bundle"),
+    ("esp32s31-ieee802154-vendor-host", "vendor-evidence"),
     ("firmware", "image-check-interrupts"),
     ("firmware", "image-check-stack"),
     ("firmware", "lab"),
@@ -120,6 +121,18 @@ const SERVICE_ORDER: [(&str, &str); 112] = [
     ("stand-power", "devices"),
     ("stand-power", "lab"),
     ("symbol-lineage", "vendor-provenance"),
+    ("vendor-evidence", "firmware"),
+    ("vendor-evidence", "image"),
+    ("vendor-evidence", "probe-codegen"),
+    ("vendor-scenario-command", "vendor-scenario-report"),
+    ("vendor-scenario-engine", "image"),
+    ("vendor-scenario-engine", "probe-codegen"),
+    ("vendor-scenario-engine", "vendor-evidence"),
+    ("vendor-scenario-report", "vendor-scenario-engine"),
+    ("vendor-scenarios-esp32c5", "vendor-scenario-engine"),
+    ("vendor-scenarios-esp32s31", "esp-idf"),
+    ("vendor-scenarios-esp32s31", "image"),
+    ("vendor-scenarios-esp32s31", "vendor-scenario-engine"),
 ];
 
 /// The portable parts of `crates/` that `tools/` may use.
@@ -129,6 +142,24 @@ const PORTABLE_CRATES: [&str; 5] = [
     "crates/ieee80211/",
     "crates/bluetooth/",
     "crates/ieee802154/",
+];
+
+/// The chip crates a vendor comparison of that chip uses: its production
+/// code beside the vendor's, built for the host without `test-support`. Each
+/// edge is listed; a new one is added here on purpose.
+const VENDOR_COMPARISON: [(&str, &str); 3] = [
+    (
+        "tools/lib/analysis/phy-relation-esp32s31",
+        "crates/esp32s31/phy",
+    ),
+    (
+        "tools/lib/service/esp32s31-ieee802154-vendor-host",
+        "crates/esp32s31/hal",
+    ),
+    (
+        "tools/lib/service/esp32s31-ieee802154-vendor-host",
+        "crates/espressif/ieee802154-engine",
+    ),
 ];
 
 /// The host-built image layout crates only `lib/service/firmware` may use.
@@ -188,6 +219,7 @@ fn refusal(from: &str, to: &str) -> Option<String> {
         (Other, _) | (_, Other) => refused("a package outside tools/, crates/ and firmware/"),
         (Firmware, _) => None,
         (_, Crates) if PORTABLE_CRATES.iter().any(|prefix| to.starts_with(prefix)) => None,
+        (_, Crates) if VENDOR_COMPARISON.contains(&(from, to)) => None,
         (_, Crates) => refused("tools/ uses only the portable crates (base, radio, the protocols)"),
         (Service(name), Firmware) if name == "firmware" && IMAGE_LAYOUT.contains(&to) => None,
         (_, Firmware) => refused(
@@ -285,9 +317,6 @@ fn every_dependency_goes_down_its_layers() {
     packages(&root, "tools", &mut found);
     packages(&root, "crates", &mut found);
     assert!(found.len() > 20, "{found:?}");
-    // A package that does not build yet answers to the rules when it joins.
-    let excluded = workspace_list(&root, "exclude");
-    found.retain(|package| !excluded.contains(package));
     let refusals = found
         .iter()
         .flat_map(|package| {
@@ -331,6 +360,15 @@ fn the_rules_refuse_what_the_readme_forbids() {
         ("tools/cli/fw", "tools/cli/registers"),
         ("tools/lib/service/lab", "tools/lib/service/firmware"),
         ("tools/lib/service/registers", "crates/esp32s31/pac"),
+        // A vendor comparison uses only its listed chip crates.
+        (
+            "tools/lib/service/esp32s31-ieee802154-vendor-host",
+            "crates/esp32s31/pac",
+        ),
+        (
+            "tools/lib/analysis/phy-relation-esp32s31",
+            "crates/esp32c5/hal",
+        ),
         ("tools/lib/service/lab", "firmware/platform/esp32s31/layout"),
         ("tools/lib/service/firmware", "firmware/apps/w1"),
     ] {
@@ -350,6 +388,10 @@ fn the_rules_refuse_what_the_readme_forbids() {
         ("tools/lib/analysis/stack", "tools/lib/base/process"),
         ("tools/lib/analysis/riscv-lift", "tools/lib/analysis/elf"),
         ("crates/esp32s31/hal", "crates/base/ui-cases"),
+        (
+            "tools/lib/service/esp32s31-ieee802154-vendor-host",
+            "crates/espressif/ieee802154-engine",
+        ),
     ] {
         assert_eq!(refusal(from, to), None, "{from} → {to}");
     }
@@ -394,15 +436,23 @@ fn every_host_package_is_a_default_member_and_no_chip_only_one_is() {
         )
         .collect::<Vec<_>>();
     assert!(missing.is_empty(), "{}", missing.join("\n"));
-    // Every package directory below crates/ and tools/ is a member, or
-    // listed in `exclude` with why it does not build yet.
-    let excluded = workspace_list(&root, "exclude");
+    // Every package directory below crates/ and tools/ is a member: the
+    // workspace excludes nothing, so every package builds.
+    let manifest: toml::Table =
+        toml::from_str(&std::fs::read_to_string(root.join("Cargo.toml")).unwrap()).unwrap();
+    assert!(
+        !manifest["workspace"]
+            .as_table()
+            .unwrap()
+            .contains_key("exclude"),
+        "the workspace excludes no package"
+    );
     let mut found = Vec::new();
     packages(&root, "tools", &mut found);
     packages(&root, "crates", &mut found);
     let unlisted = found
         .iter()
-        .filter(|package| !members.contains(package) && !excluded.contains(package))
+        .filter(|package| !members.contains(package))
         .collect::<Vec<_>>();
     assert!(unlisted.is_empty(), "not workspace members: {unlisted:?}");
 }

@@ -1,9 +1,9 @@
 //! Runs a [`Scenario`] against the production engine
-//! (`oer_espressif_i_engine::engine`) and records the same boundary
+//! (`oer_espressif_ieee802154_engine::engine`) and records the same boundary
 //! vocabulary as the compiled vendor driver.
 //!
 //! The adapter below is the only place that knows the vendor encodings: it
-//! renders each HAL low-level call as the `i_ll_*` accessor and
+//! renders each HAL low-level call as the `ieee802154_ll_*` accessor and
 //! argument the vendor passes, and answers getters from the shared
 //! [`LlModel`], so both sides see the same inputs. Modem ETM accesses are
 //! rendered as the vendor's direct register reads and writes.
@@ -45,7 +45,7 @@ use crate::{
     scenario::{Scenario, Step},
 };
 
-/// `IEEE802154_EVENT_*` bit of each event (`i_common_ll.h`).
+/// `IEEE802154_EVENT_*` bit of each event (`ieee802154_common_ll.h`).
 const EVENT_BITS: [(Ieee802154Event, u16); 12] = [
     (Ieee802154Event::TxDone, 1 << 0),
     (Ieee802154Event::RxDone, 1 << 1),
@@ -102,7 +102,7 @@ const TX_ABORT_CODES: [(Ieee802154TxAbortReason, u64); 15] = [
     (Ieee802154TxAbortReason::CcaBusy, 25),
 ];
 
-/// Modem ETM registers (`i_reg.h`).
+/// Modem ETM registers (`ieee802154_reg.h`).
 const ETM_CHEN: u32 = 0x2010_8800;
 const ETM_CHENSET: u32 = 0x2010_8804;
 const ETM_CHENCLR: u32 = 0x2010_8808;
@@ -743,7 +743,7 @@ fn enable_state(mask: u8) -> Ieee802154MultipanEnableState {
         })
 }
 
-/// `esp_i_set_cca_mode` argument.
+/// `esp_ieee802154_set_cca_mode` argument.
 fn cca_mode_of(mode: u32) -> Option<Ieee802154CcaMode> {
     Some(match mode {
         0 => Ieee802154CcaMode::Carrier,
@@ -754,7 +754,7 @@ fn cca_mode_of(mode: u32) -> Option<Ieee802154CcaMode> {
     })
 }
 
-/// `esp_i_set_pending_mode` argument.
+/// `esp_ieee802154_set_pending_mode` argument.
 fn pending_mode_of(mode: u32) -> Option<AutoPendingMode> {
     Some(match mode {
         0 => AutoPendingMode::Disable,
@@ -770,7 +770,7 @@ fn interface(index: u8) -> Result<Ieee802154MultipanIndex, &'static str> {
     Ieee802154MultipanIndex::new(index).ok_or("interface outside the four contexts")
 }
 
-/// A coexistence table in which level `n` (`i_coex_event_t`) has
+/// A coexistence table in which level `n` (`ieee802154_coex_event_t`) has
 /// priority `n`, so every priority the engine publishes names the level the
 /// vendor driver chose. How libcoexist maps a level to a priority is not
 /// part of the compiled driver; the HAL owns and tests that resolution.
@@ -886,7 +886,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
                 engine.extended_address(&mut ll);
                 engine.ack_timeout(&mut ll);
             }
-            // The production read (`IRecentRssi`) is the runtime's
+            // The production read (`Ieee802154RecentRssi`) is the runtime's
             // over the PAC's baseband capability and passes no engine or MAC
             // accessor; the vendor call must leave none either.
             Step::GetRecentRssi => {}

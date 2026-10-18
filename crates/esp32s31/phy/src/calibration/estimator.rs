@@ -579,7 +579,7 @@ impl PhyDcIqMmioBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyDcIqAction {
         self.action
     }
@@ -661,7 +661,7 @@ impl PhyDcIqReadinessBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn execute_target(
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
@@ -743,3 +743,11 @@ impl PhyDcIqExternalBinding {
 
 #[cfg(test)]
 mod tests;
+
+/// Split one packed DC value exactly as pinned archive `get_dc_value`.
+#[inline]
+#[cfg(oer_probe)]
+pub fn get_dc_value(output: &mut [u16; 2], value: u32) {
+    output[0] = (value >> 16) as u16;
+    output[1] = value as u16;
+}

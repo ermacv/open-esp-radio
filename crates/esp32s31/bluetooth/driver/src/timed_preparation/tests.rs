@@ -23,7 +23,7 @@ impl ModelController {
     fn ready(identity: &'static str) -> Self {
         Self {
             identity,
-            request: Some(Ok(ControllerTimeRequest::for_validation(1))),
+            request: Some(Ok(ControllerTimeRequest::for_host_test(1))),
             rechecks: VecDeque::new(),
             cancel: Ok(()),
             drains: VecDeque::new(),
@@ -86,7 +86,7 @@ fn newly_issued_ready_request_needs_no_executor_wait() {
     controller
         .rechecks
         .push_back(Ok(ControllerTimePendingOwnerStep::Ready(
-            ControllerTimeSample::for_validation(7),
+            ControllerTimeSample::for_host_test(7),
         )));
     let pending = TimedPreparationPending::begin(controller, Phase("sequence"), rollback)
         .expect("a fresh request owns the phase");
@@ -100,7 +100,7 @@ fn newly_issued_ready_request_needs_no_executor_wait() {
     };
     assert_eq!(controller.identity, "immediate");
     assert_eq!(phase, Phase("sequence"));
-    assert_eq!(sample, ControllerTimeSample::for_validation(7));
+    assert_eq!(sample, ControllerTimeSample::for_host_test(7));
     assert!(controller.rechecks.is_empty());
     assert!(controller.restored.is_none());
 }
@@ -114,7 +114,7 @@ fn waiting_then_ready_preserves_controller_and_phase_identity() {
     controller
         .rechecks
         .push_back(Ok(ControllerTimePendingOwnerStep::Ready(
-            ControllerTimeSample::for_validation(7),
+            ControllerTimeSample::for_host_test(7),
         )));
     let pending = TimedPreparationPending::begin(controller, Phase("admission"), rollback)
         .expect("the request begins");
@@ -131,7 +131,7 @@ fn waiting_then_ready_preserves_controller_and_phase_identity() {
     };
     assert_eq!(controller.identity, "controller-a");
     assert_eq!(phase, Phase("admission"));
-    assert_eq!(sample, ControllerTimeSample::for_validation(7));
+    assert_eq!(sample, ControllerTimeSample::for_host_test(7));
     assert_eq!(controller.restored, None);
 }
 

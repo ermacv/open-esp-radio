@@ -16,7 +16,7 @@ pub struct BluetoothSchedulerStopped {
 
 impl BluetoothSchedulerStopped {
     /// Construct a stopped receipt for host validation of its owners.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn for_host_test() -> Self {
         Self { _private: () }

@@ -52,7 +52,7 @@ pub struct PhyFrequencyMemoryRecord {
 }
 
 impl PhyFrequencyMemoryRecord {
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn words(self) -> [u32; 3] {
         self.words
     }
@@ -476,7 +476,7 @@ impl PhyFrequencyCapMemoryExternalBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyFrequencyCapMemoryAction {
         self.action
     }
@@ -1508,3 +1508,13 @@ impl PhyChannelFrequencyInitTransition {
 
 #[cfg(test)]
 mod tests;
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_freq_mem_backup() {}
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf; the body is one `ret`.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_freq_offset_set() {}

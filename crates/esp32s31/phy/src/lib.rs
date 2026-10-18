@@ -54,21 +54,44 @@
 extern crate std;
 
 pub mod executor;
-#[cfg(target_arch = "riscv32")]
+// A probe image (`cfg(oer_probe)`) compares the PHY's internal children with
+// the vendor's, so they are public there and private everywhere else.
+#[cfg(all(target_arch = "riscv32", oer_probe))]
+pub mod target_executor;
+#[cfg(all(target_arch = "riscv32", not(oer_probe)))]
 mod target_executor;
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", oer_probe))]
+pub mod target_port;
+#[cfg(all(target_arch = "riscv32", not(oer_probe)))]
 mod target_port;
 
+#[cfg(oer_probe)]
+pub mod analog;
+#[cfg(not(oer_probe))]
 mod analog;
+#[cfg(oer_probe)]
+pub mod calibration;
+#[cfg(not(oer_probe))]
 mod calibration;
+#[cfg(oer_probe)]
+pub mod channel;
+#[cfg(not(oer_probe))]
 mod channel;
 mod hardware;
 #[cfg(any(target_arch = "riscv32", test))]
 mod lifecycle;
+#[cfg(oer_probe)]
+pub mod rx;
+#[cfg(not(oer_probe))]
 mod rx;
 pub mod state;
 pub mod tracking;
+#[cfg(oer_probe)]
+pub mod tx;
+#[cfg(not(oer_probe))]
 mod tx;
+#[cfg(oer_probe)]
+pub mod validation;
 
 pub mod bluetooth_client;
 pub mod concurrent;
@@ -89,6 +112,16 @@ pub use calibration::registration::{
 pub use calibration::registration::{
     PhyCalibrationIdentity, PhyCalibrationPath, PhyRegisterBindingError, PhyRegisterFailure,
     PhyRegisterOutcome, PhyRegisterStage, RegisteredPhyState,
+};
+#[cfg(oer_probe)]
+pub use calibration::registration::{
+    PhyRegisterAction, PhyRegisterCompletion, PhyRegisterExternalBinding, PhyRegisterLocalStep,
+    PhyRegisterTransition,
+};
+#[cfg(oer_probe)]
+pub use executor::{
+    PhyCalibrationTrackingPort, PhyParamTrackingPort, PhyRegisterPort,
+    run_phy_calibration_tracking, run_phy_param_tracking, run_phy_register,
 };
 pub use executor::{PhyCalibrationTrackingRunError, PhyParamTrackingRunError, PhyRegisterRunError};
 pub use state::{
@@ -129,4 +162,9 @@ pub use target_port::{
     NoopPhyTargetObserver, PhyDomainRegisterFailure, PhyDomainRegistered, PhyGrantProtectPort,
     PhyRegisterConfig, PhyRfBoundary, PhyTargetObserver, PhyTargetPortCounters,
     TargetPhyParamTrackingError, TargetPhyRegisterError,
+};
+#[cfg(all(target_arch = "riscv32", oer_probe))]
+pub use target_port::{
+    TargetPhyCalibrationTrackingPort, TargetPhyParamTrackingPort, TargetPhyRegisterPort,
+    WeakPhyGrantProtect,
 };

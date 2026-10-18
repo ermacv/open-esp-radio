@@ -4,5 +4,5 @@ pub(crate) mod mac;
 
 pub(crate) mod ownership;
 
-#[cfg(feature = "validation-probes")]
+#[cfg(oer_probe)]
 pub(crate) mod validation;

@@ -375,8 +375,8 @@ impl<T> RadioDomain<T> {
     }
 
     /// Record a programmed PHY grant-protect request without register
-    /// access, so a host test can check the release alone.
-    #[cfg(test)]
+    /// access, so a host test or a probe image can check the release alone.
+    #[cfg(any(test, oer_probe))]
     #[doc(hidden)]
     pub fn hold_phy_grant_protect_for_host_test(&mut self) {
         self.state.phy_grant_protected = true;

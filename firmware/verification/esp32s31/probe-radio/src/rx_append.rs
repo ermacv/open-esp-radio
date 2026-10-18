@@ -1,23 +1,19 @@
 //! Production RX-ring recycle compared with `wDev_AppendRxBlocks`.
 //!
 //! One probe entry prepares and starts the production ring over this image's
-//! DMA arena, completes a prefix of it as the DMA walker would, then returns
-//! that completed unit to the walker through the production recycle and the
-//! reload doorbell with its base repair. Only the recycle touches the MAC: the
-//! preparation and start run against [`StartedWalker`], a fixture that stands
-//! for a walker the vendor's own initialization already started. The layout
-//! entry reports the arena's addresses, so the vendor side receives the same
-//! descriptors at the same addresses.
+//! placed DMA storage, completes a prefix of it as the DMA walker would, then
+//! returns that completed unit to the walker through the production recycle
+//! and the reload doorbell with its base repair. Only the recycle touches
+//! the MAC, through the HAL's RX DMA engine: preparation and start run
+//! against the HAL's walker model, which stands for a walker the vendor's
+//! own initialization already started. The layout entry reports the
+//! storage's addresses, so the vendor side receives the same descriptors at
+//! the same addresses.
 
-use oer_esp32s31_hal::owner::RadioRuntimeOwner;
 use oer_esp32s31_hal::ieee80211::dma::{
-    descriptor::{BIT_30, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT},
-    rx_dma::{
-        RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
-        RxDmaWalkerEnabled, RxDmaWalkerStopped,
-    },
-    rx_ring::RxDmaBufferAddresses,
-    rx_storage::RxDmaStorage,
+    descriptor::rx_completed_word,
+    rx_dma::model::RxWalkerModel,
+    rx_storage::{PlacedRxDma, RxDmaStorage},
 };
 
 /// Descriptors of the compared ring.
@@ -39,90 +35,24 @@ const NOT_APPENDED: u32 = 6;
 const RELOAD_FAILED: u32 = 7;
 const INVALID_UNIT: u32 = 8;
 
-struct ProbeCell<T>(core::cell::UnsafeCell<T>);
-
-// SAFETY: Blobray executes this probe image on one thread and invokes its
-// exported entries serially.
-unsafe impl<T> Sync for ProbeCell<T> {}
-
-oer_base_memory::zeroed_static! {
+oer_esp32s31_hal::dma_static! {
     static STORAGE: RxDmaStorage<RX_APPEND_COUNT, RX_APPEND_CAPACITY, RX_APPEND_STORAGE> =
         zeroed in ".dma.bss.rx_append";
 }
-static ADDRESSES: ProbeCell<RxDmaBufferAddresses<RX_APPEND_COUNT>> =
-    ProbeCell(core::cell::UnsafeCell::new([0; RX_APPEND_COUNT]));
 
-/// The walker the vendor initialization already started: every enable,
-/// stop and reload request is accepted without a register access, and its
-/// cursor rests at the ring's end.
-struct StartedWalker;
+type Placed = PlacedRxDma<RX_APPEND_COUNT, RX_APPEND_CAPACITY, RX_APPEND_STORAGE>;
 
-impl RxDma for StartedWalker {
-    fn last_descriptor_low(&mut self) -> u32 {
-        0
+/// The storage, placed on first use; later entries of the session see the
+/// same placement.
+fn placed() -> Option<Placed> {
+    static mut PLACED: Option<Placed> = None;
+    // SAFETY: Blobray executes this probe image on one thread and invokes
+    // its exported entries serially, so no two references are alive.
+    let slot = unsafe { &mut *core::ptr::addr_of_mut!(PLACED) };
+    if slot.is_none() {
+        *slot = RxDmaStorage::place(STORAGE.take()?).ok();
     }
-
-    fn next_descriptor_low(&mut self) -> u32 {
-        0
-    }
-
-    fn next_descriptor(&mut self) -> RxDmaNextDescriptor {
-        RxDmaNextDescriptor::validation(0, false)
-    }
-
-    fn with_ordered_cursor<R>(
-        &mut self,
-        observed: impl for<'confirmation> FnOnce(RxDmaCursorObservation<'confirmation>) -> R,
-    ) -> R {
-        observed(RxDmaCursorObservation::validation(0, 0))
-    }
-
-    fn walker_enabled(&mut self) -> bool {
-        false
-    }
-
-    fn reload_pending(&mut self) -> bool {
-        false
-    }
-
-    fn try_with_reload_settled<R>(
-        &mut self,
-        settled: impl for<'confirmation> FnOnce(RxDmaReloadSettled<'confirmation>) -> R,
-    ) -> Option<R> {
-        Some(settled(RxDmaReloadSettled::validation()))
-    }
-
-    fn configure_descriptor_window(&mut self, _binding: &RxDmaBinding<'_>) {}
-
-    fn write_descriptor_base(&mut self, _binding: &RxDmaBinding<'_>, _address: u32) {}
-
-    fn publish_walker_enable(&mut self, _binding: &RxDmaBinding<'_>) {}
-
-    fn request_reload(&mut self, _binding: &RxDmaBinding<'_>) {}
-
-    fn try_with_walker_enabled<R>(
-        &mut self,
-        _binding: &RxDmaBinding<'_>,
-        enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
-    ) -> Option<R> {
-        Some(enabled(RxDmaWalkerEnabled::validation()))
-    }
-
-    fn try_with_walker_stopped<R>(
-        &mut self,
-        stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
-    ) -> Option<R> {
-        Some(stopped(RxDmaWalkerStopped::validation()))
-    }
-
-    fn fence(&mut self) {}
-}
-
-/// The arena's descriptor base; its buffer addresses in `ADDRESSES`.
-fn layout() -> Option<u32> {
-    // SAFETY: the single-threaded image binds the layout before any ring
-    // exists, and no other reference to the address table is live.
-    STORAGE.dma_layout(unsafe { &mut *ADDRESSES.0.get() }).ok()
+    *slot
 }
 
 oer_tool_service_probe_macros::probe! {
@@ -133,16 +63,15 @@ oer_tool_service_probe_macros::probe! {
     /// `output` must point to `LAYOUT_HEADER_WORDS + RX_APPEND_COUNT`
     /// writable words.
     pub unsafe fn open_libpp_rx_append_trace_layout(output: *mut u32) -> u32 {
-        let Some(base) = layout() else {
+        let Some(placed) = placed() else {
             return PREPARE_FAILED;
         };
-        // SAFETY: the address table is only read here, and the caller
-        // provides the output words.
+        // SAFETY: the caller provides the output words.
         unsafe {
             output.write(RX_APPEND_COUNT as u32);
             output.add(1).write(RX_APPEND_CAPACITY as u32);
-            output.add(2).write(base);
-            for (index, address) in (*ADDRESSES.0.get()).iter().enumerate() {
+            output.add(2).write(placed.descriptor_base());
+            for (index, address) in placed.storage().buffer_addresses().iter().enumerate() {
                 output.add(LAYOUT_HEADER_WORDS + index).write(*address);
             }
         }
@@ -162,38 +91,44 @@ oer_tool_service_probe_macros::probe! {
         if count == 0 || completed > RX_APPEND_COUNT || length as usize > RX_APPEND_CAPACITY {
             return INVALID_UNIT;
         }
-        let Some(base) = layout() else {
+        let Some(placed) = placed() else {
             return PREPARE_FAILED;
         };
-        // SAFETY: the table was bound above and is not mutated again.
-        let addresses: &'static RxDmaBufferAddresses<RX_APPEND_COUNT> =
-            unsafe { &*ADDRESSES.0.get() };
-        let Ok(stopped) = STORAGE.prepare_ring(&mut StartedWalker, base, addresses) else {
+        let (storage, base) = (placed.storage(), placed.descriptor_base());
+        let mut walker = RxWalkerModel::new();
+        let Ok(stopped) = placed.prepare_ring(&mut walker) else {
             return PREPARE_FAILED;
         };
-        let Ok(mut ring) = stopped.try_start(&mut StartedWalker) else {
+        let Ok(mut ring) = stopped.try_start(&mut walker) else {
             return START_FAILED;
         };
         // The walker fills the units: every buffer's leading guard is
         // overwritten by frame bytes, and each unit's last descriptor is
         // marked done with its length.
-        for (index, &address) in addresses.iter().enumerate().take(completed) {
-            let buffer = address as *mut u32;
-            // SAFETY: the walker owns every descriptor of the started ring;
-            // this fixture acts as that walker on the arena it reported.
-            unsafe { buffer.write_volatile(length) };
-            if index + 1 >= count {
-                let done = (base + index as u32 * DESCRIPTOR_BYTES) as *const Descriptor;
-                // SAFETY: as above, the descriptor lies in the reported arena.
-                let done = unsafe { &*done };
-                done.write_word0(
-                    (done.word0() & !LENGTH_MASK) | (length << LENGTH_SHIFT) | BIT_30,
-                );
-            }
+        for (index, &address) in storage.buffer_addresses().iter().enumerate().take(completed) {
+            // SAFETY: the walker owns every buffer of the started ring; this
+            // probe acts as that walker on the storage it reported.
+            unsafe { (address as *mut u32).write_volatile(length) };
+            let descriptor = &storage.descriptors()[index];
+            let Some(word0) = rx_completed_word(descriptor.word0(), length, index + 1 >= count)
+            else {
+                return INVALID_UNIT;
+            };
+            descriptor.write_word0(word0);
         }
-        let mut owner = RadioRuntimeOwner::claim_for_validation();
-        let recycled = match STORAGE.take_completed_unit(&mut ring, count) {
-            Ok(Some(unit)) => match unit.recycle(&mut owner) {
+        // LAST rests on the unit's last descriptor, NEXT after it.
+        walker.set_cursor(
+            base,
+            count - 1,
+            (count < RX_APPEND_COUNT).then_some(count),
+        );
+        let Ok(cursor) = ring.freeze_cursor(&mut walker) else {
+            return UNIT_FAILED;
+        };
+        let mut owner = oer_esp32s31_hal::validation::runtime_owner();
+        let engine = owner.rx_dma();
+        let recycled = match storage.take_completed_unit(&mut ring, cursor) {
+            Ok(Some(unit)) => match unit.recycle(engine) {
                 Ok(Some(_append)) => 0,
                 Ok(None) => NOT_APPENDED,
                 Err(_) => RECYCLE_FAILED,
@@ -203,7 +138,7 @@ oer_tool_service_probe_macros::probe! {
         };
         let result = if recycled != 0 {
             recycled
-        } else if ring.complete_pending_reload(&mut owner).is_ok() {
+        } else if ring.complete_pending_reload(engine).is_ok() {
             0
         } else {
             RELOAD_FAILED

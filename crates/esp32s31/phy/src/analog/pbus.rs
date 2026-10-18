@@ -213,7 +213,7 @@ impl Default for PhyPbusClearTransition {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(test)]
+#[cfg(any(test, oer_probe))]
 pub enum PhyPbusHardwareAction {
     Start(PhyPbusForceTest),
     AwaitCompletionEdge(PhyPbusForceTest),
@@ -260,7 +260,7 @@ impl PhyPbusHardwareBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyPbusHardwareAction {
         match self.phase {
             PhyPbusHardwarePhase::Start => PhyPbusHardwareAction::Start(self.transaction),
@@ -542,7 +542,7 @@ impl PhyForceTxRxMmioBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyForceTxRxAction {
         PhyForceTxRxAction::Configure {
             enabled: self.enabled,
@@ -587,7 +587,7 @@ impl PhyForceTxRxTimerBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyForceTxRxAction {
         PhyForceTxRxAction::DelayMicros {
             enabled: self.enabled,

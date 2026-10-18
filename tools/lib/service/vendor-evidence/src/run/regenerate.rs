@@ -24,16 +24,16 @@ fn directory(root: &Path, chip: &str) -> Result<String> {
 /// The comparison probe packages of `chip` a scenario run needs.
 fn probes(chip: &str) -> (String, String) {
     (
-        format!("oer-{chip}-probe-radio-elf"),
-        format!("oer-{chip}-probe-bluetooth-elf"),
+        format!("oer-firmware-verification-{chip}-probe-radio-elf"),
+        format!("oer-firmware-verification-{chip}-probe-bluetooth-elf"),
     )
 }
 
 /// Fail when a shard of the index `directory` records a file of a report
 /// package.
 fn reject_report_sources(ctx: &Checkout, directory: &Path) -> Result<()> {
-    let model = oer_repo::Model::load(&oer_repo::Repo::from_git(&ctx.root)?)?;
-    let report = crate::policy::report_packages(&model)?;
+    let workspace = crate::workspace::Workspace::load(&ctx.root, None)?;
+    let report = crate::policy::report_packages(&workspace);
     crate::policy::reject_report_sources(directory, &report)
 }
 
@@ -132,8 +132,8 @@ fn producers<'a>(
     linker: &Path,
     output: &'a Path,
 ) -> Result<Vec<Box<dyn Producer + 'a>>> {
-    let model = oer_repo::Model::load(&oer_repo::Repo::from_git(&ctx.root)?)?;
-    let mut producers: Vec<Box<dyn Producer + 'a>> = host_stand::stands(&model, chip)?
+    let workspace = crate::workspace::Workspace::load(&ctx.root, None)?;
+    let mut producers: Vec<Box<dyn Producer + 'a>> = host_stand::stands(&workspace, chip)
         .into_iter()
         .map(|(scenario, manifest)| {
             Box::new(HostStand {
@@ -201,12 +201,10 @@ pub fn run(
             std::fs::remove_dir_all(&directory)?;
         }
         std::fs::create_dir_all(&directory)?;
-        let mut every = host_stand::stands(
-            &oer_repo::Model::load(&oer_repo::Repo::from_git(&ctx.root)?)?,
-            chip,
-        )?
-        .into_keys()
-        .collect::<Vec<_>>();
+        let mut every =
+            host_stand::stands(&crate::workspace::Workspace::load(&ctx.root, None)?, chip)
+                .into_keys()
+                .collect::<Vec<_>>();
         // The Blobray producer runs every one of its scenarios as `all`.
         every.push("all".into());
         println!("computing the evidence index of {chip} into {relative}");

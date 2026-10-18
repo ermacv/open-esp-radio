@@ -40,13 +40,13 @@ table's `boots` rounds the workload takes these steps:
    `PhyRegisterImage` and `PhyAnalogImage` (tag `legacy-wifi-2026-10-16`) carried these reads;
    no current image serves them.
 
-`lifecycle = "i"` and `"i-restart"` read the registers
+`lifecycle = "ieee802154"` and `"ieee802154-restart"` read the registers
 with the IEEE 802.15.4 radio instead of Wi-Fi holding the PHY. The vendor
-side is the [IEEE 802.15.4 reference firmware](../../../../verification/esp32s31/hil-vendor/i-reference)
+side is the [IEEE 802.15.4 reference firmware](../../../../verification/esp32s31/hil-vendor/ieee802154-reference)
 configured on channel 15 at 21 dBm and receiving, after one driver disable
 and enable for the restart point, read through its `PEEK` and `ANALOG`
 commands; a read that resets or hangs the chip is recorded as unreadable
-after a board reset. Production ran the former `diagnostic-i-radio`
+after a board reset. Production ran the former `diagnostic-ieee802154-radio`
 image's IEEE 802.15.4 session on the same channel. These points compare
 register state only.
 

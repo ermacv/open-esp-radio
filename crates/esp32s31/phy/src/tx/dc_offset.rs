@@ -964,6 +964,27 @@ impl PhyTxDcPbusBinding {
         })
     }
 
+    #[cfg(oer_probe)]
+    pub const fn action(&self) -> crate::analog::pbus::PhyPbusHardwareAction {
+        self.hardware.action()
+    }
+
+    #[cfg(oer_probe)]
+    pub fn started(&mut self) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
+        self.hardware.started()
+    }
+
+    #[cfg(oer_probe)]
+    pub fn observe_completed(
+        &mut self,
+        completed: bool,
+    ) -> Result<
+        crate::analog::pbus::PhyPbusHardwareObservation,
+        crate::analog::pbus::PhyPbusHardwareBindingError,
+    > {
+        self.hardware.observe_completed(completed)
+    }
+
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,

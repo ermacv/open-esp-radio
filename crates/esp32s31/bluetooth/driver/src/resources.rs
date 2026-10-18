@@ -7,17 +7,17 @@
 //! `InterruptBankOwner`; `TaskResources::shut_down` resets the stopped
 //! Controller and returns the clocked client.
 
-#[cfg(any(target_arch = "riscv32", feature = "validation-probes"))]
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListsCleared;
 
-#[cfg(any(target_arch = "riscv32", feature = "validation-probes"))]
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
-#[cfg(any(target_arch = "riscv32", feature = "validation-probes"))]
+#[cfg(target_arch = "riscv32")]
 use oer_esp32s31_hal::bluetooth::ControllerHalBorrow;
 #[cfg(test)]
 use oer_esp32s31_hal::bluetooth::TaskOwnerReuniteFailure;
 
-#[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+#[cfg(any(target_arch = "riscv32", test))]
 use oer_esp32s31_hal::bluetooth::{
     ClockedOwner, InterruptSetupOwner as HalBluetoothInterruptSetupOwner,
     TaskOwner as HalBluetoothTaskOwner,
@@ -30,8 +30,7 @@ use {
     oer_esp32s31_hal::bluetooth::DirectionFindingDisabledBaselineOwner,
     oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
-    oer_esp32s31_hal::shared_radio::SharedRadioLease,
-    oer_esp32s31_hal::types::BluetoothControllerSramAddress,
+    oer_esp32s31_hal::domain::RadioDomain, oer_esp32s31_hal::types::BluetoothControllerSramAddress,
     oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs,
 };
 
@@ -50,7 +49,7 @@ use crate::controller_time::{
 ///
 /// This transition performs no MMIO. In particular it does not configure
 /// controller masks or a CPU interrupt route.
-#[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+#[cfg(any(target_arch = "riscv32", test))]
 pub(crate) fn separate_interrupt_owner(
     clocked: ClockedOwner,
 ) -> (TaskResources, InterruptBankOwner) {
@@ -72,11 +71,9 @@ pub(crate) fn separate_interrupt_owner(
 /// No MMIO operation is exposed until its finite lifecycle transaction has
 /// independent vendor evidence.
 #[must_use = "the Bluetooth task owner must return to the clocked client"]
-#[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+#[cfg(any(target_arch = "riscv32", test))]
 pub struct TaskResources {
     registers: HalBluetoothTaskOwner,
-    // Host validation images execute finite register probes without a time runner.
-    #[cfg(any(target_arch = "riscv32", test))]
     controller_time: ControllerTimeWorker,
 }
 
@@ -97,7 +94,7 @@ impl TaskResources {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn shut_down<T>(
         self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
         timer: oer_esp32s31_hal::bluetooth::ModemLpTimerInterruptReadyOwner,
     ) -> Result<
@@ -107,7 +104,7 @@ impl TaskResources {
         ),
         oer_esp32s31_hal::bluetooth::BluetoothShutdownFailure,
     > {
-        self.registers.shut_down(lease, output, timer)
+        self.registers.shut_down(radio, output, timer)
     }
 
     /// Preserve pending or faulted time ownership before any terminal extraction.
@@ -135,7 +132,7 @@ impl TaskResources {
     }
 }
 
-#[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+#[cfg(any(target_arch = "riscv32", test))]
 impl TaskResources {
     /// Publish the selected random Controller identity while every radio role is idle.
     ///
@@ -175,7 +172,7 @@ impl TaskResources {
     }
 
     /// Remove every scheduler hardware-list head through one finite HAL borrow.
-    #[cfg(any(target_arch = "riscv32", feature = "validation-probes"))]
+    #[cfg(target_arch = "riscv32")]
     pub(crate) fn clear_scheduler_hardware_list_heads(
         &mut self,
     ) -> BluetoothSchedulerHardwareListsCleared {
@@ -261,7 +258,7 @@ impl TaskResources {
     ///
     /// The caller must retain every prerequisite documented by the PAC
     /// transaction and must not infer controller or HCI readiness from return.
-    #[cfg(any(target_arch = "riscv32", feature = "validation-probes"))]
+    #[cfg(target_arch = "riscv32")]
     #[allow(
         unsafe_code,
         reason = "the unsafe bridge retains the controller HAL-init clock and IRQ prerequisites"
@@ -297,13 +294,13 @@ impl TaskResources {
     )]
     pub(crate) unsafe fn enable_ble_base_stack_hardware<T>(
         &mut self,
-        lease: &mut SharedRadioLease<'_, T>,
+        radio: &mut RadioDomain<T>,
         inputs: BluetoothPhyRegisterInitInputs,
     ) {
         // SAFETY: forwarded unchanged from this function's `# Safety` contract,
         // which states the lower transaction's prerequisites.
         unsafe {
-            self.registers.enable_ble_base_stack_hardware(lease, inputs);
+            self.registers.enable_ble_base_stack_hardware(radio, inputs);
         }
     }
 
@@ -359,7 +356,7 @@ impl TaskResources {
 
 /// Inactive owner of the Bluetooth controller interrupt bank.
 #[must_use = "the interrupt owner must be installed or reunited"]
-#[cfg(any(target_arch = "riscv32", test, feature = "validation-probes"))]
+#[cfg(any(target_arch = "riscv32", test))]
 pub(crate) struct InterruptBankOwner {
     _registers: HalBluetoothInterruptSetupOwner,
 }

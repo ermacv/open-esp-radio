@@ -378,7 +378,7 @@ impl PhyTxPowerTrackingExternalBinding {
         Ok(Self { operation })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyTxPowerTrackingAction {
         match self.operation {
             PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {

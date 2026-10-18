@@ -647,6 +647,47 @@ impl PhyState {
         }
     }
 
+    /// A probe image's semantic fixture (`cfg(oer_probe)`): it mints no
+    /// registered epoch or RF access.
+    #[cfg(oer_probe)]
+    pub(crate) fn calibration_tracking_fixture(
+        parameters: crate::tracking::calibration::PhyCalibrationTrackingParameters,
+    ) -> Self {
+        let mut state = Self::default();
+        state.common.temperature = parameters.current_temperature;
+        state.common.references.common = parameters.common_reference_temperature;
+        state.common.references.transmit = parameters.transmit_reference_temperature;
+        state.common.crystal_selector = parameters.crystal_selector;
+        state.wifi.current_channel = parameters.current_channel;
+        state.wifi.channel_bandwidth = parameters.channel_bandwidth;
+        if let Some(threshold) = parameters.threshold_override {
+            state.common.temperature_debug = [2, threshold];
+        }
+        state
+    }
+
+    /// [`Self::calibration_tracking_fixture`] with the parameter parent's
+    /// retained inputs (`cfg(oer_probe)`).
+    #[cfg(oer_probe)]
+    pub(crate) fn parameter_tracking_fixture(
+        parameters: crate::tracking::calibration::PhyCalibrationTrackingParameters,
+        gain_adjustment: i8,
+        relaxed_threshold: bool,
+    ) -> Self {
+        let mut state = Self::calibration_tracking_fixture(parameters);
+        state.wifi.tx_gain_adjustment = gain_adjustment;
+        state.wifi.tx_power_tracking_slow = relaxed_threshold.into();
+        state
+    }
+
+    /// Seed the retained RX-gain table last indices as the vendor comparison
+    /// seeds its own state (`cfg(oer_probe)`).
+    #[cfg(oer_probe)]
+    pub(crate) fn seed_rx_table_last_indices(&mut self, shared: u8, wifi: u8) {
+        self.wifi.shared_rx_table_last_index = shared;
+        self.wifi.wifi_rx_table_last_index = wifi;
+    }
+
     pub const fn config(&self) -> &PhyConfig {
         &self.config
     }
@@ -1586,6 +1627,43 @@ impl PhyState {
         restored.common.registered = false;
         *self = restored;
         Ok(())
+    }
+
+    /// The state retaining exactly `cache` (`cfg(oer_probe)`): the replay
+    /// restoration, with the RX-gain table flag the replay deliberately
+    /// clears kept as captured.
+    #[cfg(oer_probe)]
+    pub(crate) fn retained_calibration(
+        config: PhyConfig,
+        cache: &PhyCalibrationCache,
+    ) -> Result<Self, PhyCalibrationCacheError> {
+        let mut state = Self::new(config);
+        state.begin_cached_calibration(config, cache, cache.snapshot.identity)?;
+        state.wifi.calibration.set(
+            WifiCalibrationStatus::RX_GAIN_TABLES,
+            cache.snapshot.wifi.rx_gain_tables_initialized,
+        );
+        // The snapshot is captured after registration, whose temperature
+        // step restarts TX-power tracking from the TX-power reference
+        // (`apply_register_temperature_outcome`, as `phy_get_temp_init`).
+        state.common.references.restart_power_tracking();
+        Ok(state)
+    }
+
+    /// The calibration this state retains, as persistence would capture it,
+    /// under an all-zero identity: what a vendor comparison or a hardware
+    /// cross-check reads the committed fields from.
+    pub const fn retained_calibration_snapshot(&self) -> PhyCalibrationSnapshot {
+        self.calibration_snapshot(crate::calibration::registration::PhyCalibrationIdentity {
+            rf_cal_version: 0,
+            base_mac_address: [0; 6],
+            mac_extension: 0,
+        })
+    }
+
+    /// The reference temperature RFPLL tracking compares against.
+    pub const fn rfpll_reference_temperature(&self) -> i16 {
+        self.rfpll_tracking_request(None).reference_temperature
     }
 
     pub(crate) const fn calibration_snapshot(

@@ -338,6 +338,18 @@ decision holds and the code is changed in the port's fix pass.
   (`protected`, `switchable`, `keeps-power`) and, if wanted, the boards'
   human names. Hub ports, board chips and USB serial numbers are detected.
 
+## 2026-10-18: probe hooks
+
+- **A cfg, not a feature.** The probe hooks of the PACs, the HAL, the PHY and
+  the radio crates compile under `cfg(oer_probe)`, declared through the
+  workspace's `check-cfg`; no crate has a `validation-probes` feature. Only
+  `cargo fw probe` sets the cfg, only for a package of `firmware/verification/`,
+  and in its own target directory (`target/fw-probe`). A hook goes wherever a
+  probe can use the public API instead.
+- **Every package builds.** The workspace `exclude` list is gone.
+- **Production stays clean** by proof, not by a gate: the change that adds or
+  moves hooks shows the ESP32-S31 images byte-identical to `main`.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.

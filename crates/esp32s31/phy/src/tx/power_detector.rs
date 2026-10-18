@@ -15,7 +15,7 @@
 //! copied.
 
 use crate::analog::pbus::PhyPbusForceTest;
-#[cfg(test)]
+#[cfg(any(test, oer_probe))]
 use crate::calibration::estimator::phy_linear_to_db;
 
 // Complete rev0 ROM `phy_pwdet_ref_code+0x24` and `+0x50` load `a0 = 4`
@@ -917,7 +917,7 @@ impl PhyPwdetMmioBinding {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(test)]
+#[cfg(any(test, oer_probe))]
 pub enum PhyPwdetPbusBindingAction {
     Start(PhyPbusForceTest),
     SampleCompletion(PhyPbusForceTest),
@@ -961,7 +961,7 @@ impl PhyPwdetPbusBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub const fn action(&self) -> PhyPwdetPbusBindingAction {
         match self.hardware.action() {
             crate::analog::pbus::PhyPbusHardwareAction::Start(_) => {
@@ -976,12 +976,12 @@ impl PhyPwdetPbusBinding {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn started(&mut self) -> Result<(), PhyPwdetPbusBindingError> {
         self.hardware.started().map_err(map_pbus_hardware_error)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, oer_probe))]
     pub fn observe_completed(
         &mut self,
         completed: bool,
@@ -1118,3 +1118,31 @@ impl PhyPwdetExternalBinding {
 
 #[cfg(test)]
 mod tests;
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf.
+///
+/// The ESP32-S31 archive body is exactly one `ret` instruction; power-detector
+/// ownership is instead expressed by the surrounding Rust state machine.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_pwdet_always_en() {}
+
+/// Required pinned `libphy.a` vendor-ABI no-op leaf.
+///
+/// Like [`phy_pwdet_always_en`], the vendor body has no observable operation.
+#[inline]
+#[cfg(oer_probe)]
+pub const fn phy_pwdet_onetime_en() {}
+
+/// Reproduce the separate ROM `phy_get_power_db` transform.
+///
+/// This transform is consumed by later TX calibration code. Complete rev0
+/// ROM `phy_pwdet_ref_code` does not call it: that root stores the raw
+/// four-sample averages returned by `phy_get_tone_sar_dout_`.
+#[cfg(oer_probe)]
+pub fn calculate_pwdet_reference(sample_average: u16, reference_codes: [i16; 2]) -> i16 {
+    let signal = sar_signal_reference(sample_average, reference_codes);
+    phy_linear_to_db(i32::from(signal[0]), 3)
+        .wrapping_add(4)
+        .wrapping_sub(phy_linear_to_db(i32::from(signal[1]), 3)) as i16
+}

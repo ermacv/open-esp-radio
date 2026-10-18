@@ -5,7 +5,7 @@ fn main() {
         .expect("Cargo supplies the package manifest directory");
     let directory = std::path::PathBuf::from(directory);
     oer_tool_service_probe_codegen::build(
-        &directory.join("../probe-radio/src/lib.rs"),
+        &directory.join("../probe-register/src/lib.rs"),
         &std::env::var("CARGO_PKG_NAME").expect("Cargo package name"),
         &std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo output directory")),
     )
