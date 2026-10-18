@@ -1502,6 +1502,48 @@ fn the_latest_snapshot_follows_every_return_and_the_longest_keeps_the_longest() 
 }
 
 #[test]
+fn a_drain_end_records_the_buffers_and_the_walker_after_the_drain() {
+    let (mut harness, held, _, _) = returning_harness();
+    assert_eq!(harness.report().drain_end, None);
+    harness.frame(100);
+    harness.settle();
+    let live = harness.report().drain_end.expect("a drain ended");
+    assert_eq!((live.detached, live.staged, live.released), (1, 1, 0));
+    let (next_low, last_low) = {
+        let walker = harness.host.walker.borrow();
+        (walker.next_descriptor_low, walker.last_descriptor_low)
+    };
+    assert_ne!(next_low, 0);
+    assert_eq!(
+        (live.next_low, live.next_upper, live.last_low),
+        (next_low, false, last_low)
+    );
+
+    // Every descriptor completes and the walker runs out at the last one.
+    for _ in 1..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    let last_low = harness.host.walker.borrow().last_descriptor_low;
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    assert_eq!(held.borrow().len(), STAGE);
+    let exhausted = harness.report().drain_end.expect("a drain ended");
+    assert_eq!(
+        (exhausted.detached, exhausted.staged),
+        (STAGE as u32, STAGE as u32)
+    );
+    assert_eq!((exhausted.next_low, exhausted.last_low), (0, last_low));
+    assert_eq!(exhausted.recycle_start, 0);
+}
+
+#[test]
 fn a_walker_restart_counts_one_republication_one_capacity_drain_and_frames_after() {
     let (mut harness, held, holding, _) = returning_harness();
     // Every lease is held while the ring fills behind them and the walker

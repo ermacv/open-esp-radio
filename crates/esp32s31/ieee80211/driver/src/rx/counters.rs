@@ -8,8 +8,11 @@
 //! service pass; the teardown durations are written once, by the teardown.
 //! The exhaustion snapshots are the runner's, written when a lease returns
 //! to a full staging pool ([`WifiRxExhaustion`]): the longest and the latest.
+//! The drain-end record is the runner's too, rewritten at the end of every
+//! drain ([`WifiRxDrainEnd`]) under a sequence word, so a reader can tell a
+//! whole record from one it read while the runner wrote it.
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering, fence};
 
 use oer_esp32s31_ieee80211_dma::rx_ring::RxReloadRepairEvidence;
 use oer_esp32s31_ieee80211_mac::rx::RxError;
@@ -46,6 +49,7 @@ pub struct WifiRxCounters {
     teardown: TeardownCounters,
     prefix: PrefixCounters,
     exhaustion: ExhaustionCounters,
+    drain_end: DrainEndCounters,
 }
 
 /// The runner's continuations: how each was taken and why.
@@ -635,6 +639,114 @@ impl ExhaustionCounters {
     }
 }
 
+/// The buffers, the ring and the walker as the runner left them at the end
+/// of its latest drain. Report-only: no field takes part in descriptor
+/// ownership.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WifiRxDrainEnd {
+    /// Buffers released for rearm, buffers detached as staged leases,
+    /// claimed staging slots and descriptors returned to software in this
+    /// generation (the ring's observed mask).
+    pub released: u32,
+    pub detached: u32,
+    pub staged: u32,
+    pub observed: u32,
+    /// The ring's recycle frontier and accepted tail (descriptor indices).
+    pub recycle_start: u32,
+    pub accepted_tail: u32,
+    /// `RX_NEXT_DESCRIPTOR` (low address and whether its unassigned upper
+    /// field read nonzero) and `RX_LAST_DESCRIPTOR` (low), read after the
+    /// drain.
+    pub next_low: u32,
+    pub next_upper: bool,
+    pub last_low: u32,
+}
+
+const DRAIN_END_NEXT_UPPER: u32 = 1 << 0;
+
+/// The latest [`WifiRxDrainEnd`] under a sequence word: odd while the runner
+/// writes it, advanced by two per record (zero: none yet).
+#[derive(bytemuck::Zeroable, Default)]
+struct DrainEndCounters {
+    sequence: AtomicU32,
+    flags: AtomicU32,
+    released: AtomicU32,
+    detached: AtomicU32,
+    staged: AtomicU32,
+    observed: AtomicU32,
+    recycle_start: AtomicU32,
+    accepted_tail: AtomicU32,
+    next_low: AtomicU32,
+    last_low: AtomicU32,
+}
+
+impl DrainEndCounters {
+    const fn new() -> Self {
+        Self {
+            sequence: AtomicU32::new(0),
+            flags: AtomicU32::new(0),
+            released: AtomicU32::new(0),
+            detached: AtomicU32::new(0),
+            staged: AtomicU32::new(0),
+            observed: AtomicU32::new(0),
+            recycle_start: AtomicU32::new(0),
+            accepted_tail: AtomicU32::new(0),
+            next_low: AtomicU32::new(0),
+            last_low: AtomicU32::new(0),
+        }
+    }
+
+    /// The runner, its one writer, stores `record`.
+    fn record(&self, record: &WifiRxDrainEnd) {
+        let sequence = self.sequence.load(Ordering::Relaxed);
+        self.sequence
+            .store(sequence.wrapping_add(1) | 1, Ordering::Relaxed);
+        fence(Ordering::Release);
+        let store = |counter: &AtomicU32, value: u32| counter.store(value, Ordering::Relaxed);
+        store(
+            &self.flags,
+            if record.next_upper {
+                DRAIN_END_NEXT_UPPER
+            } else {
+                0
+            },
+        );
+        store(&self.released, record.released);
+        store(&self.detached, record.detached);
+        store(&self.staged, record.staged);
+        store(&self.observed, record.observed);
+        store(&self.recycle_start, record.recycle_start);
+        store(&self.accepted_tail, record.accepted_tail);
+        store(&self.next_low, record.next_low);
+        store(&self.last_low, record.last_low);
+        self.sequence
+            .store((sequence | 1).wrapping_add(1), Ordering::Release);
+    }
+
+    /// The latest record; `None` before the first or when the read
+    /// overlapped a write.
+    fn report(&self) -> Option<WifiRxDrainEnd> {
+        let before = self.sequence.load(Ordering::Acquire);
+        if before == 0 || before & 1 != 0 {
+            return None;
+        }
+        let load = |counter: &AtomicU32| counter.load(Ordering::Relaxed);
+        let record = WifiRxDrainEnd {
+            released: load(&self.released),
+            detached: load(&self.detached),
+            staged: load(&self.staged),
+            observed: load(&self.observed),
+            recycle_start: load(&self.recycle_start),
+            accepted_tail: load(&self.accepted_tail),
+            next_low: load(&self.next_low),
+            next_upper: load(&self.flags) & DRAIN_END_NEXT_UPPER != 0,
+            last_low: load(&self.last_low),
+        };
+        fence(Ordering::Acquire);
+        (self.sequence.load(Ordering::Relaxed) == before).then_some(record)
+    }
+}
+
 /// One reading of [`WifiRxCounters`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxReport {
@@ -690,6 +802,8 @@ pub struct WifiRxReport {
     pub prefix: WifiRxPrefixReport,
     /// The walker and ring when a lease returned to a full staging pool.
     pub exhaustion: WifiRxExhaustionReport,
+    /// The buffers and the walker at the end of the latest drain.
+    pub drain_end: Option<WifiRxDrainEnd>,
 }
 
 fn bump(counter: &AtomicU32) {
@@ -724,6 +838,7 @@ impl WifiRxCounters {
             teardown: TeardownCounters::new(),
             prefix: PrefixCounters::new(),
             exhaustion: ExhaustionCounters::new(),
+            drain_end: DrainEndCounters::new(),
         }
     }
 
@@ -756,6 +871,7 @@ impl WifiRxCounters {
             teardown: self.teardown.report(),
             prefix: self.prefix.report(),
             exhaustion: self.exhaustion.report(),
+            drain_end: self.drain_end.report(),
         }
     }
 
@@ -878,7 +994,52 @@ impl WifiRxCounters {
         self.exhaustion.record(snapshot);
     }
 
+    /// The runner's drain ended with `record`.
+    pub(crate) fn drain_end(&self, record: &WifiRxDrainEnd) {
+        self.drain_end.record(record);
+    }
+
     pub(crate) fn reload_evidence(&self, evidence: RxReloadRepairEvidence) {
         self.reload.record(evidence);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drain_end_record_reads_whole_or_not_at_all() {
+        let counters = WifiRxCounters::new();
+        assert_eq!(counters.report().drain_end, None);
+        let record = WifiRxDrainEnd {
+            released: 1,
+            detached: 31,
+            staged: 31,
+            observed: 32,
+            recycle_start: 22,
+            accepted_tail: 21,
+            next_low: 0,
+            next_upper: false,
+            last_low: 0x17f40,
+        };
+        counters.drain_end(&record);
+        assert_eq!(counters.report().drain_end, Some(record));
+        // A later record replaces it whole.
+        let live = WifiRxDrainEnd {
+            next_low: 0x17e50,
+            next_upper: true,
+            observed: 3,
+            ..record
+        };
+        counters.drain_end(&live);
+        assert_eq!(counters.report().drain_end, Some(live));
+        // A read while a write is under way (odd sequence) is no record.
+        let sequence = counters.drain_end.sequence.load(Ordering::Relaxed);
+        counters
+            .drain_end
+            .sequence
+            .store(sequence + 1, Ordering::Relaxed);
+        assert_eq!(counters.report().drain_end, None);
     }
 }

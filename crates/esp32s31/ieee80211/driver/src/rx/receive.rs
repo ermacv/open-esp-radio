@@ -63,7 +63,7 @@ use oer_time::{Duration, Instant, Timer};
 use super::{
     arena::WifiRxParts,
     control::{ReceiveRunnerControl, WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
-    counters::{WifiRxCounters, WifiRxExhaustion},
+    counters::{WifiRxCounters, WifiRxDrainEnd, WifiRxExhaustion},
     frontier::{ReceiveFrontier, RxFrontierPhase},
     transaction::{Admission, Counters, Publisher, service},
 };
@@ -320,6 +320,7 @@ where
             if let Err(cause) = self.drain(ring, snapshot).await {
                 return cause;
             }
+            self.record_drain_end(ring);
             // Every lease out: the walker has no buffer to fill until one
             // comes back. The first full drain marks the time and hashes
             // the descriptors.
@@ -439,6 +440,25 @@ where
             last_after_doorbell: None,
             descriptors_changed: descriptor_words_hash(self.rx.descriptors()) != hash,
         }
+    }
+
+    /// Record the buffers, the ring and the walker's NEXT and LAST at the
+    /// end of a drain. Only reads.
+    fn record_drain_end(&mut self, ring: &RxRingLive<'static, COUNT>) {
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        let next = self.hardware.next_descriptor();
+        let last_low = self.hardware.last_descriptor_low();
+        self.counters.drain_end(&WifiRxDrainEnd {
+            released: narrow(self.rx.released_buffer_count()),
+            detached: narrow(self.rx.detached_buffer_count()),
+            staged: self.stage.claimed_slots(),
+            observed: ring.observed_mask().count_ones(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low,
+        });
     }
 
     /// Record `snapshot` after the capacity drain's first pass, with the
