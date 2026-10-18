@@ -1,0 +1,17 @@
+[package]
+name = "oer-tool-cli-vendor-scenarios-esp32s31"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The ESP32-S31 vendor-scenario binary: the chip's verdict library behind the shared scenario command line"
+
+[dependencies]
+oer-tool-service-vendor-scenarios-esp32s31 = { path = "../../lib/service/vendor-scenarios-esp32s31" }
+oer-tool-cli-vendor-scenario = { path = "../vendor-scenario" }
+
+[lints]
+workspace = true
+

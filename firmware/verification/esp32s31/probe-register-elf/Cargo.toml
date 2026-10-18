@@ -1,0 +1,19 @@
+[package]
+name = "oer-firmware-verification-esp32s31-probe-register-elf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+description = "Linked ESP32-S31 PAC/HAL register probe image"
+
+[dependencies]
+oer-firmware-verification-esp32s31-probe-register = { path = "../probe-register" }
+
+[lints]
+workspace = true
+
+
+[build-dependencies]
+oer-tool-service-probe-codegen = { path = "../../../../tools/lib/service/probe-codegen" }

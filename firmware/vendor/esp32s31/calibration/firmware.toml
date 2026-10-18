@@ -1,0 +1,4 @@
+# Firmware catalog entry: `cargo hil firmware flash vendor-calibration --board esp32s31`.
+image = "vendor-calibration"
+chip = "esp32s31"
+pins = "esp32s31"

@@ -183,7 +183,7 @@ agent-clippy = true
 # The Rust probe images of the vendor comparison (verification/esp32c5/probes).
 [[probe]]
 role = "rust-artifact"
-package = "oer-esp32c5-probe-radio-elf"
+package = "oer-firmware-verification-esp32c5-probe-radio-elf"
 
 # Why the core last reset, which the stand reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is

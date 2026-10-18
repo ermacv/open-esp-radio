@@ -1094,7 +1094,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "esp-backtrace"
+version = "0.20.0"
+source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+dependencies = [
+ "document-features",
+ "esp-config",
+ "esp-metadata-generated",
+ "esp-println",
+ "heapless 0.9.3",
+ "riscv",
+ "xtensa-lx",
 ]
 
 [[package]]
@@ -1225,6 +1239,18 @@ version = "0.6.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
 
 [[package]]
+name = "esp-println"
+version = "0.18.0"
+source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+dependencies = [
+ "document-features",
+ "esp-metadata-generated",
+ "esp-sync",
+ "log",
+ "portable-atomic",
+]
+
+[[package]]
 name = "esp-riscv-rt"
 version = "0.15.0"
 source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
@@ -1301,7 +1327,7 @@ dependencies = [
 [[package]]
 name = "esp32c5"
 version = "0.4.0"
-source = "git+https://github.com/ermacv/esp-pacs.git?rev=a1f6cf68e#a1f6cf68e199f4ee469dbc7cff9de5539e81d7da"
+source = "git+https://github.com/ermacv/esp-pacs?rev=a1f6cf68e#a1f6cf68e199f4ee469dbc7cff9de5539e81d7da"
 dependencies = [
  "vcell",
 ]
@@ -1366,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "esp32s31"
 version = "0.3.0"
-source = "git+https://github.com/ermacv/esp-pacs.git?rev=a1f6cf68e#a1f6cf68e199f4ee469dbc7cff9de5539e81d7da"
+source = "git+https://github.com/ermacv/esp-pacs?rev=a1f6cf68e#a1f6cf68e199f4ee469dbc7cff9de5539e81d7da"
 dependencies = [
  "critical-section",
  "vcell",
@@ -2725,6 +2751,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-verification-esp32c5-probe-radio"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32c5-hal",
+ "oer-esp32c5-pac",
+ "oer-espressif-analog",
+ "oer-tool-service-probe-macros",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32c5-probe-radio-elf"
+version = "0.1.0"
+dependencies = [
+ "oer-firmware-verification-esp32c5-probe-radio",
+ "oer-tool-service-probe-codegen",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32c5-register-probe"
+version = "0.1.0"
+dependencies = [
+ "esp-backtrace",
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-println",
+ "esp32c5",
+ "oer-esp32c5-hal",
+ "oer-esp32c5-pac",
+ "oer-esp32c5-pac-raw",
+ "oer-espressif-analog",
+]
+
+[[package]]
+name = "oer-firmware-verification-esp32s31-boot-state-probe"
+version = "0.1.0"
+dependencies = [
+ "esp-backtrace",
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-println",
+]
+
+[[package]]
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
@@ -2980,6 +3049,10 @@ dependencies = [
  "gimli 0.34.0",
  "object 0.39.1",
 ]
+
+[[package]]
+name = "oer-tool-analysis-phy-relation-esp32s31"
+version = "0.1.0"
 
 [[package]]
 name = "oer-tool-analysis-riscv-analysis"
@@ -3389,6 +3462,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-data-vendor-evidence-shard"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-data-vendor-pins"
 version = "0.1.0"
 dependencies = [
@@ -3519,6 +3603,26 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-hil-family-phy"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-service-devices",
+ "oer-tool-service-hil-workload",
+ "oer-tool-service-phy-calibration-capture",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tool-service-hil-family-phy-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-service-hil-family-phy",
+ "oer-tool-service-phy-calibration-capture",
+ "oer-tool-service-phy-vendor-calibration-esp32s31",
+ "serde_json",
 ]
 
 [[package]]
@@ -3893,6 +3997,36 @@ dependencies = [
  "oer-tool-data-stand-file",
  "sha2 0.10.9",
  "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-phy-archive"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-phy-calibration-capture"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "oer-tool-service-phy-vendor-calibration-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-phy-relation-esp32s31",
+ "oer-tool-base-process",
+ "oer-tool-data-register-model",
+ "oer-tool-service-phy-calibration-capture",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]
@@ -4455,7 +4589,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4915,7 +5049,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5228,7 +5362,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

@@ -50,6 +50,6 @@ the network traffic crate, never on another family. A fixture provider implement
 
 ```console
 cargo test -p oer-tool-service-hil-family-system \
-  -p oer-hil-family-ieee80211-fixture -p oer-hil-family-phy \
-  -p oer-hil-family-phy-esp32s31
+  -p oer-hil-family-ieee80211-fixture -p oer-tool-service-hil-family-phy \
+  -p oer-tool-service-hil-family-phy-esp32s31
 ```
