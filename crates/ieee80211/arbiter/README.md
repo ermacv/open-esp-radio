@@ -9,14 +9,6 @@ retained `GateIssuer` turns a completed hardware barrier into closed
 evidence. Arbiter actions transfer that place rather than abstract test
 tokens or independently minted slots.
 
-## Design decisions (owner, 2026-10-16; re-check when the station is built on the port at W3)
-
-- **Planned retunes.** `plan_absence` and `plan_move` take typed permits. A
-  `PlannedRetune` token lives inside the lease and returns through
-  `withdraw_plan`. A refused or late plan does not cancel the lease. The
-  preparation window is at least `CLAIM_LEAD` plus one service step. Scan
-  visits are planned retunes too.
-
 An arbiter-backed installation declares `ArbiterPool` in its complete pool
 set. It yields the open gate, backend issuer and one `ArbiterAuthority` at
 the same component path. `Arbiter::new` consumes that authority, so handing
@@ -180,3 +172,11 @@ Found in the predecessor's review of 2026-10-16 and still present.
 - **This README's search description** (the station chooses search
   channels and requests their leases; `JoinFailed` resumes) describes
   behaviour the station does not emit yet (see the station's known defects).
+
+## Design decisions (owner, 2026-10-16; re-check when the station is built on the port at W3)
+
+- **Planned retunes.** `plan_absence` and `plan_move` take typed permits. A
+  `PlannedRetune` token lives inside the lease and returns through
+  `withdraw_plan`. A refused or late plan does not cancel the lease. The
+  preparation window is at least `CLAIM_LEAD` plus one service step. Scan
+  visits are planned retunes too.
