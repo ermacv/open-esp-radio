@@ -27,14 +27,14 @@ schema = 1
 id = "top"
 usb2 = "3-8"                 # the hub's USB 2 location (`uhubctl -l`)
 usb3 = "4-1"                 # its USB 3 companion
-protected = [3]              # ports that carry further hubs: never switched
-switchable = [1, 4]
+protected = [3]              # optional: ports never switched off
+switchable = [1, 4]          # optional: when given, the only ports switched
+keeps-power = [2]            # optional: ports that report off but keep power
 
 [[board]]
 id = "s31-a"
-usb-serial = "02:00:00:00:00:01"
+usb-serial = "02:00:00:00:00:01"   # its MAC: how the board is found on USB
 chip = "esp32s31"
-port = { hub = "top", port = 4 }
 
 [station]
 ssid = "made-up-stand-net"   # the stand AP's SSID
@@ -50,6 +50,15 @@ channel = 6                  # 1 to 13
 
 [access_point]               # the board's own AP (planned); never read today
 ```
+
+A board's hub port is not written in the file: it is found on the host
+(`oer_lab::hub`). The board's USB location in sysfs names its hub and port
+(`3-8.3.4.4` is port 4 of hub `3-8.3.4`), and `uhubctl` confirms that the hub
+switches power per port and has that port. A port is switched off only when
+the one device below it is the board itself (no hub, nothing behind it, and
+nothing on the port's USB 3 companion) and the hub's `protected`,
+`switchable` and `keeps-power` allow it. An older file's board `port = …` is
+ignored with a warning naming the detected port.
 
 Unknown fields are ignored; each consumer deserializes only its fields, and
 nothing else is read:
@@ -159,8 +168,8 @@ SUBSYSTEM=="usb", DRIVER=="hub", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="542
 - After a port returns, udev took up to 1 s to give it back to the group;
   a board took up to 15 s to re-enumerate after a reset.
 - **Port 2 of the top hub** (USB 2 location `3-8`) reports `off` but keeps
-  its power (checked 2026-10-02). It is not in `switchable`; a power cycle
-  there proves nothing. Not rechecked with a board in it.
+  its power (checked 2026-10-02): mark it `keeps-power`. A power cycle there
+  fails with "did not cut power". Not rechecked with a board in it.
 - A wedged ESP32-C5 USB console (EPIPE on writes and on RTS/DTR, the device
   enumerated as `303a:1001` without string descriptors) recovered only by
   cycling that board's port (2026-10-03).

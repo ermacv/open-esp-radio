@@ -1,5 +1,6 @@
-//! The owner's stand file (README.md): which boards the stand has and
-//! which hub port powers each, and the stand router.
+//! The owner's stand file (README.md): which boards the stand has, its hubs'
+//! policy and known quirks, and the stand router. Which hub port powers a
+//! board is found on the host ([`crate::hub`]), not written here.
 //!
 //! This crate owns the whole file; each consumer's slice deserializes only
 //! its fields and ignores the rest: `schema`, `[[hub]]` and `[[board]]` for
@@ -47,15 +48,19 @@ pub struct Hub {
     /// Its USB 3 companion's location, when it has one.
     #[serde(default)]
     pub usb3: Option<String>,
-    /// Ports that carry further hubs: never switched off.
+    /// Ports never switched off.
     #[serde(default)]
     pub protected: Vec<u32>,
-    /// Ports whose power may be switched.
+    /// When not empty, the only ports whose power may be switched.
     #[serde(default)]
     pub switchable: Vec<u32>,
+    /// Ports that report `off` but keep their power: never switched.
+    #[serde(default, rename = "keeps-power")]
+    pub keeps_power: Vec<u32>,
 }
 
-/// Where a board's USB cable plugs in.
+/// Where an older stand file said a board's USB cable plugs in. Only read
+/// to warn that it is ignored: the port is found on the host.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct HubPort {
     pub hub: String,
@@ -70,8 +75,22 @@ pub struct Board {
     #[serde(rename = "usb-serial")]
     pub mac: String,
     pub chip: String,
+    /// Ignored with a warning: see [`HubPort`].
     #[serde(default)]
     pub port: Option<HubPort>,
+}
+
+impl Board {
+    /// The warning for an older stand file's `port`, ignored for the port
+    /// `detected` on the host, if the file still has one.
+    pub fn ignored_port(&self, detected: &str) -> Option<String> {
+        self.port.as_ref().map(|port| {
+            format!(
+                "stand file: board {} port = {}:{} is ignored, detected {detected}",
+                self.id, port.hub, port.port
+            )
+        })
+    }
 }
 
 /// A value of the stand file that is never shown: its `Debug` is
@@ -253,30 +272,6 @@ impl Stand {
     pub fn hub(&self, id: &str) -> Option<&Hub> {
         self.hubs.iter().find(|hub| hub.id == id)
     }
-
-    /// The hub and port that power `board`, if its port may be switched.
-    pub fn switchable_port(&self, board: &Board) -> std::result::Result<(&Hub, u32), String> {
-        let port = board
-            .port
-            .as_ref()
-            .ok_or_else(|| format!("board {} names no hub port", board.id))?;
-        let hub = self
-            .hub(&port.hub)
-            .ok_or_else(|| format!("board {} names the unknown hub {}", board.id, port.hub))?;
-        if hub.protected.contains(&port.port) {
-            return Err(format!(
-                "port {} of hub {} is protected: it carries further hubs",
-                port.port, hub.id
-            ));
-        }
-        if !hub.switchable.contains(&port.port) {
-            return Err(format!(
-                "port {} of hub {} is not switchable",
-                port.port, hub.id
-            ));
-        }
-        Ok((hub, port.port))
-    }
 }
 
 /// A deserializer's `message`, without the value it may quote: serde's
@@ -449,16 +444,22 @@ passphrase = "made-up-ap-passphrase"
     }
 
     #[test]
-    fn only_a_switchable_unprotected_port_is_switched() {
+    fn an_older_board_port_is_only_a_warning() {
         let stand = Stand::parse(STAND).unwrap();
-        let (hub, port) = stand
-            .switchable_port(stand.board("s31-a").unwrap())
+        let warning = stand
+            .board("s31-a")
+            .unwrap()
+            .ignored_port("3-8.3.4 port 4")
             .unwrap();
-        assert_eq!((hub.id.as_str(), port), ("top", 4));
-        let error = stand
-            .switchable_port(stand.board("behind-hub").unwrap())
-            .unwrap_err();
-        assert!(error.contains("protected"), "{error}");
+        assert_eq!(
+            warning,
+            "stand file: board s31-a port = top:4 is ignored, detected 3-8.3.4 port 4"
+        );
+        let hub = stand.hub("top").unwrap();
+        assert_eq!(
+            (hub.protected.as_slice(), hub.keeps_power.as_slice()),
+            (&[3][..], &[][..])
+        );
     }
 
     #[test]
