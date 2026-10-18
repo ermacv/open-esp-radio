@@ -82,6 +82,52 @@ than 7000 frames. SOURCE: HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
 - The `BUFFER_FULL` starvation counter (`WIFI_MAC_RX_STATISTICS`, bits 15:0)
   is read-only; no vendor reaction to it is known.
 
+## Owner bit (word0 bit 31)
+
+Source: an experiment on ESP32-S31 rev0 (board s31-a), receive-only on
+channel 13 with the stand AP, ring of 32 descriptors × 1664 bytes plus the
+reserved descriptor, 2026-10-18; six runs, every W1 gate passing in the
+last three. SOURCE[HIL_W1_OWNER_BIT_2026_10_18]. The experiment code was
+never merged; the method below is complete without it.
+
+**Method.** All access on P2 between service passes; the probed descriptor
+P is excluded from every take while probed.
+
+1. P = NEXT + 3, 5 or 7, and it must be armed (word0 exactly
+   `0x81a00680`: bit 31 set, bits 30/29 clear, size = length = 1664),
+   short of the accepted tail, not LAST, not NEXT, ring-owned (not leased),
+   and the walker past the reserved descriptor with no reload in flight.
+2. P's whole buffer (1668 bytes, guard included) is filled with a seeded
+   pattern, device fence, read back for a CRC-32.
+3. NEXT is re-read (still short of P), then word0 = `0x01a00680` (armed
+   with bit 31 cleared, nothing else changed), device fence.
+4. Observation every 2 ms for 2 s: LAST, NEXT, P's word0, the descriptors
+   after P, the buffer CRC.
+5. Recovery: word0 = `0x81a00680` again, device fence, one reload doorbell
+   (fence, request, fence, wait until it clears); a second doorbell only if
+   nothing lands within 500 ms.
+
+For LAST: in a full hold (all 32 leases held, NEXT = 0, LAST = the accepted
+tail, its word0 completed), bit 31 of LAST's word0 is cleared, every other
+bit kept (`0xc0430680` → `0x40430680` in these runs), device fence; then
+the normal release rearms the group behind LAST and rings the doorbell.
+
+**Results.**
+
+| Series | Repeats | Result |
+|---|---|---|
+| bit 31 = 0 on an armed descriptor ahead of the walker | 12 (3 in the first three runs, 9 in the last three; positions 3, 5, 7 ahead) | **The walker stops at it**: NEXT = P, LAST = P − 1, for the whole 2 s; P's buffer unchanged (CRC), its word0 untouched (bit 30 = 0, length 1664), no descriptor after P completes; frames on air are lost meanwhile (`buffer_full` +390..1124 over 2 s) |
+| bit 31 restored, one doorbell | 9 | **The walker resumes at P** with no repair: the next frame lands in P (CRC changed, bit 30 set), then P+1, P+2, … in ring order; 0 extra doorbells; 360–405 ms until the next frame on the quiet channel |
+| bit 31 = 0 on LAST at exhaustion, then rearm behind it and doorbell | 6 (both cycles of three runs, full holds, LAST a leased descriptor) | **H1 holds**: NEXT after the doorbell is the rearmed head, frames continue in order; the walker does not check LAST's own owner bit; 0 extra doorbells |
+
+The held leases' CRCs stayed unchanged in every hold cycle of these runs.
+
+**So:** the S31 walker honours the owner bit of the descriptor it is about
+to fill: with bit 31 clear it stops there without writing, and a doorbell
+after restoring the bit resumes it in place. It does not consult the owner
+bit of the descriptor it last completed (LAST) when a doorbell asks it to
+follow LAST's link.
+
 ## Not verified
 
 - A doorbell rung while NEXT is nonzero: whether it re-reads anything.
@@ -91,6 +137,9 @@ than 7000 frames. SOURCE: HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
 - Other geometries (the product's 96 descriptors, other buffer sizes),
   other channels and bands.
 - Which word0 bits the vendor sets or clears on detach or rearm.
+- The owner bit beyond the states above: on a descriptor the walker reaches
+  through BASE, on the reserved descriptor, at other geometries, and
+  whether the stop lasts indefinitely (observed for 2 s).
 
 ## The design that follows
 
