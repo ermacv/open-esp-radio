@@ -1,16 +1,19 @@
-# One plain check of main and pull requests. It gates nothing: the owner
-# reads the result and decides. No review, no planning, no caches beyond
-# Cargo's own.
+# The check of main, run after every merge. Pull requests run nothing:
+# a ready pull request merges at once (merge.yml) and main may be red; the
+# result tells whoever broke it to fix it.
 name: ci
 
 on:
   push:
     branches: [main]
-  pull_request:
+  # merge.yml merges with the workflow token, whose push starts no workflow,
+  # so it dispatches this one.
+  workflow_dispatch:
 
+# Every merge gets its own result: a newer run waits, it never cancels one.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-main
+  cancel-in-progress: false
 
 jobs:
   host:
