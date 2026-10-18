@@ -11,7 +11,10 @@ tree is a selection of a predecessor repository, without its history.
 
 - **Chip.** ESP32-S31 only; ESP32-C5 support is not carried.
 - **What came over.** PAC, HAL, PHY (whole), the Wi-Fi driver's `dma`, `mac`
-  and driver crates (`LowerMacCore` as a draft with known defects, below),
+  and driver crates (`LowerMacCore` as a draft with known defects, listed
+  in the "Known defects" sections of the READMEs of `ieee80211-ap`, `-mac`,
+  `-rsn`, `-sta`, `-arbiter`, `-runtime`, `-upper-mac`,
+  `espressif-ieee80211-policy` and `bluetooth-ll`),
   the radio coexistence binding, base crates, the radio port, all protocols,
   the Wi-Fi runtime and policy, the staged-boot platform, the register model
   and generator, vendor pins and facts as data.
