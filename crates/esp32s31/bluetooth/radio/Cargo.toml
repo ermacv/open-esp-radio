@@ -1,0 +1,40 @@
+[package]
+name = "oer-esp32s31-bluetooth-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The portable Bluetooth LE radio event contract over the ESP32-S31 scheduler executor and role pools"
+
+[features]
+# Record the role's trace points (`oer-bluetooth-trace`) into `oer-trace`.
+trace = ["oer-trace/record"]
+# Host model memory for dependent crates' tests.
+test-support = [
+    "oer-esp32s31-bluetooth/test-support",
+    "oer-esp32s31-bluetooth-memory/validation-probes",
+    "oer-esp32s31-hal/validation-probes",
+]
+
+[dependencies]
+oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-trace = { path = "../../../../protocols/bluetooth/trace" }
+oer-esp32s31-bluetooth = { path = "../../../../hardware/esp32s31/driver/bluetooth" }
+oer-esp32s31-bluetooth-memory = { path = "../../../../hardware/esp32s31/driver/bluetooth/memory" }
+oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
+oer-trace = { path = "../../../../trace" }
+
+[dev-dependencies]
+oer-esp32s31-bluetooth-memory = { path = "../../../../hardware/esp32s31/driver/bluetooth/memory", features = ["validation-probes"] }
+oer-esp32s31-bluetooth = { path = "../../../../hardware/esp32s31/driver/bluetooth", features = ["test-support"] }
+oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
