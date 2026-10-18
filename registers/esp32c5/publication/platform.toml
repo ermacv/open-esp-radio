@@ -1,0 +1,19 @@
+# The platform publication: registers the host reads through the chip's JTAG,
+# published as SVD and a binding index only (no PAC).
+schema = 1
+model = "../model/platform/device.toml"
+reviewed = ["../model/platform/reviewed.toml"]
+memory = "../model/memory.toml"
+ownership = "../policy/platform-ownership.toml"
+lints = "../policy/lints.toml"
+evidence = ["../evidence/platform.toml"]
+
+[applicability]
+ecosystems = ["esp-idf"]
+chip = "esp32c5"
+chip-revisions = ["rev100"]
+artifact-lineages = ["esp32c5-platform"]
+
+[outputs]
+svd = "../published/platform.svd"
+bindings = "../published/platform.bindings.toml"

@@ -1,0 +1,433 @@
+schema = 2
+
+[[peripherals]]
+name = "I2C_ANA_MST"
+description = """
+ESP32-C5 analog register I2C master at MODEM_BASE + 0xF800: the two command
+hosts, the read-mask word and the host-selection field that the libphy
+analog-register leaves drive. Other fields remain absent and are preserved by
+every field transaction."""
+baseAddress = 0x600AF800
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C0_CTRL"
+description = "Host-0 analog-register command word."
+addressOffset = 0x00
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_ADDR"
+description = "Analog block code."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_REG_ADDR"
+description = "Register address inside the analog block."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+description = "Byte written, or the byte read once the command completes."
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_WRITE"
+description = "Set for a write command, clear for a read command."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BUSY"
+description = "Set while the host executes a command."
+bitOffset = 25
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "START_OR_RESET"
+description = "Set by every libphy command publication, above the public 25-bit control field."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C1_CTRL"
+description = "Host-1 analog-register command word."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_ADDR"
+description = "Analog block code."
+bitOffset = 0
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "SLAVE_REG_ADDR"
+description = "Register address inside the analog block."
+bitOffset = 8
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "DATA"
+description = "Byte written, or the byte read once the command completes."
+bitOffset = 16
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_WRITE"
+description = "Set for a write command, clear for a read command."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BUSY"
+description = "Set while the host executes a command."
+bitOffset = 25
+bitWidth = 1
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "START_OR_RESET"
+description = "Set by every libphy command publication, above the public 25-bit control field."
+bitOffset = 26
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF1"
+description = "Analog block read-mask word, published complete before every read."
+addressOffset = 0x1C
+size = 32
+access = "read-write"
+resetValue = 0x0000002D
+
+[[peripherals.registers.register.fields]]
+name = "READ_MASK_COMPLEMENT_LOW"
+description = "Low 24 bits of the complemented one-hot read mask of the block being read."
+bitOffset = 0
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFFFFFF
+
+[[peripherals.registers.register.fields]]
+name = "READ_MASK_COMPLEMENT_HIGH"
+description = "High byte of the complemented read mask; the libphy publication sets it to 0xFF."
+bitOffset = 24
+bitWidth = 8
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xFF
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF2"
+description = "Analog block host-selection word."
+addressOffset = 0x20
+size = 32
+access = "read-write"
+resetValue = 0x00000004
+
+[[peripherals.registers.register.fields]]
+name = "PHY_HOST_MAP"
+description = "Host-selection field that libphy[phy_i2c.o]::phy_get_i2c_hostid_ replaces on every analog-register access while preserving the other bits."
+bitOffset = 4
+bitWidth = 13
+
+[[peripherals.registers.register.fields.enumeratedValues]]
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "REVIEWED_RADIO_MAP"
+value = 0x19C1
+
+[[peripherals.registers.register.fields.enumeratedValues.values]]
+name = "PARALLEL_INITIALIZATION_MAP"
+value = 0x206
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C0_CTRL1"
+description = "Host-0 bus timing."
+addressOffset = 0x24
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+description = "SCL pulse duration."
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+description = "SDA side guard."
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "I2C1_CTRL1"
+description = "Host-1 bus timing."
+addressOffset = 0x28
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+description = "SCL pulse duration."
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+description = "SDA side guard."
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "HW_I2C_CTRL"
+description = "Hardware-host bus timing."
+addressOffset = 0x2C
+size = 32
+access = "read-write"
+resetValue = 0x00000042
+
+[[peripherals.registers.register.fields]]
+name = "SCL_PULSE_DURATION"
+description = "SCL pulse duration."
+bitOffset = 0
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3F
+
+[[peripherals.registers.register.fields]]
+name = "SDA_SIDE_GUARD"
+description = "SDA side guard."
+bitOffset = 6
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1F
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "ANA_CONF0"
+description = "Analog I2C master control used by PHY register mode and BBPLL calibration."
+addressOffset = 0x18
+size = 32
+access = "read-write"
+resetValue = 0xe408
+
+[[peripherals.registers.register.fields]]
+name = "BBPLL_CAL_MODE"
+description = "Two-bit BBPLL calibration mode."
+bitOffset = 2
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "PHY_REGISTER_ENABLE"
+description = "PHY register access enable."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "PHY_REGISTER_MODE"
+description = "Two-bit PHY register mode."
+bitOffset = 9
+bitWidth = 2
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_ADDR"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.SLAVE_REG_ADDR"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.DATA"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.READ_WRITE"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.BUSY"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL.START_OR_RESET"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_ADDR"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.SLAVE_REG_ADDR"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.DATA"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.READ_WRITE"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.BUSY"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL.START_OR_RESET"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_LOW"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF1.READ_MASK_COMPLEMENT_HIGH"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF2.PHY_HOST_MAP"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C0_CTRL1.SDA_SIDE_GUARD"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.I2C1_CTRL1.SDA_SIDE_GUARD"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.SCL_PULSE_DURATION"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.HW_I2C_CTRL.SDA_SIDE_GUARD"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_I2C_ANA_MST"]
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.BBPLL_CAL_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_ENABLE"
+naming = "descriptive"
+
+[[review]]
+entity = "I2C_ANA_MST.ANA_CONF0.PHY_REGISTER_MODE"
+naming = "descriptive"

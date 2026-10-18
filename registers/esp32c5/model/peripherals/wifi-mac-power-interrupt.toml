@@ -1,0 +1,689 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_POWER_INTERRUPT"
+description = "WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR."
+baseAddress = 0x600AD8B0
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "ENABLE"
+description = "WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Complete guarded TSF-timer leaves independently identify bits 7 through 4, and complete TBTT interrupt leaves bits 3 through 0."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_3"
+description = "Enable the TSF-3 TBTT event."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_2"
+description = "Enable the TSF-2 TBTT event."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_1"
+description = "Enable the TSF-1 TBTT event."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_0"
+description = "Enable the TSF-0 TBTT event. TSF 0 is the station TSF."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_3"
+description = "Enable the guarded TSF timer-three event."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_2"
+description = "Enable the guarded TSF timer-two event."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_1"
+description = "Enable the guarded TSF timer-one event."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_0"
+description = "Enable the guarded TSF timer-zero event."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Enable bits whose event identities remain unknown."
+bitOffset = 8
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "RAW"
+description = "WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR."
+addressOffset = 0x4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_3"
+description = "Raw TSF-3 TBTT event."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_2"
+description = "Raw TSF-2 TBTT event."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_1"
+description = "Raw TSF-1 TBTT event."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_0"
+description = "Raw TSF-0 TBTT event. TSF 0 is the station TSF."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_3"
+description = "Raw guarded TSF timer-three event."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_2"
+description = "Raw guarded TSF timer-two event."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_1"
+description = "Raw guarded TSF timer-one event."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_0"
+description = "Raw guarded TSF timer-zero event."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Raw event bits whose identities remain unknown."
+bitOffset = 8
+bitWidth = 24
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "STATUS"
+description = "Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves."
+addressOffset = 0x8
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_3"
+description = "Masked TSF-3 TBTT event."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_2"
+description = "Masked TSF-2 TBTT event."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_1"
+description = "Masked TSF-1 TBTT event."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_0"
+description = "Masked TSF-0 TBTT event. TSF 0 is the station TSF."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_3"
+description = "Masked guarded TSF timer-three event."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_2"
+description = "Masked guarded TSF timer-two event."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_1"
+description = "Masked guarded TSF timer-one event."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_0"
+description = "Masked guarded TSF timer-zero event."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Masked event bits whose identities remain unknown."
+bitOffset = 8
+bitWidth = 24
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CLEAR"
+description = "Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4."
+addressOffset = 0xC
+size = 32
+access = "read-write"
+modifiedWriteValues = "oneToClear"
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_3"
+description = "Acknowledge the TSF-3 TBTT event."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_2"
+description = "Acknowledge the TSF-2 TBTT event."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_1"
+description = "Acknowledge the TSF-1 TBTT event."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TBTT_0"
+description = "Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_3"
+description = "Acknowledge the guarded TSF timer-three event."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_2"
+description = "Acknowledge the guarded TSF timer-two event."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_1"
+description = "Acknowledge the guarded TSF timer-one event."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSF_TIMER_0"
+description = "Acknowledge the guarded TSF timer-zero event."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_8_31_OPAQUE"
+description = "Acknowledge event bits whose identities remain unknown."
+bitOffset = 8
+bitWidth = 24
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0x0
+maximum = 0xFFFFFF
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TBTT_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TSF_TIMER_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TSF_TIMER_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TSF_TIMER_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.TSF_TIMER_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.ENABLE.BITS_8_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TBTT_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.TSF_TIMER_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.RAW.BITS_8_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TBTT_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TSF_TIMER_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TSF_TIMER_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TSF_TIMER_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.TSF_TIMER_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.STATUS.BITS_8_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TBTT_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TBTT_20260927",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_3"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_2"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_1"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.TSF_TIMER_0"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_POWER_INTERRUPT.CLEAR.BITS_8_31_OPAQUE"
+naming = "opaque"
+sources = [
+    "C5_BLOB_LIBPP_HAL_PWR_INTERRUPT",
+    "C5_BLOB_LIBPP_HAL_TSF_TIMER",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"

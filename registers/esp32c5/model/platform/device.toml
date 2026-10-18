@@ -1,0 +1,19 @@
+schema = 3
+chip = "esp32c5"
+address-space = "cpu"
+fragments = ["lp-clkrst-reset-cause.toml"]
+
+[device]
+name = "ESP32C5_PLATFORM"
+version = "1"
+description = """
+ESP32-C5 platform registers the host reads through the chip's JTAG, never
+    firmware: no PAC is generated from this model. ESP-HAL owns these blocks
+    at runtime."""
+vendor = "Espressif"
+vendor-id = "ESP"
+series = "ESP32-C5"
+license-text = "MIT OR Apache-2.0"
+address-unit-bits = 8
+width = 32
+svd-schema = "1.3"

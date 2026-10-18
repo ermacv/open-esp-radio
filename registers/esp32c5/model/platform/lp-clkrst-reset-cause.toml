@@ -1,0 +1,58 @@
+schema = 2
+
+[[peripherals]]
+name = "LP_CLKRST"
+description = "Low-power clock/reset registers: the reset cause of the HP core, which the stand reads after a power cycle."
+baseAddress = 0x600B0400
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "RESET_CAUSE"
+description = "Why the HP core last left reset. It holds until the next reset, so a host reads it through JTAG after the core returned."
+addressOffset = 0x10
+size = 32
+access = "read-only"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "RESET_CAUSE"
+description = "The reset cause code: one is a power-on reset; others are system, watchdog, brown-out, USB Serial/JTAG and JTAG resets."
+bitOffset = 0
+bitWidth = 5
+
+[[peripherals.registers.register.fields]]
+name = "CORE0_RESET_FLAG"
+description = "Set when the HP core left reset."
+bitOffset = 5
+bitWidth = 1
+
+[[review]]
+entity = "LP_CLKRST"
+sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_CLKRST.RESET_CAUSE"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "LP_CLKRST.RESET_CAUSE.RESET_CAUSE"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "LP_CLKRST.RESET_CAUSE.CORE0_RESET_FLAG"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_LP_CLKRST"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"

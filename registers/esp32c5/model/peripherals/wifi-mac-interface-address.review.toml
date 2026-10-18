@@ -1,0 +1,57 @@
+# esp32c5 review of the shared WIFI_MAC_INTERFACE_ADDRESS layout in registers/ieee80211.
+schema = 1
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS"
+sources = [
+    "C5_BLOB_LIBPP_HAL_MAC_SET_ADDR",
+    "C5_BLOB_LIBPP_RX_POLICY",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_LOW%s"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_MAC_SET_ADDR",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_HIGH%s"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_MAC_SET_ADDR",
+    "C5_BLOB_LIBPP_RX_POLICY",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_HIGH%s.RX_POLICY_ENABLE"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_MAC_SET_ADDR",
+    "C5_BLOB_LIBPP_RX_POLICY",
+    "C5_BLOB_LIBNET80211_WIFI_RX_POLICY",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_LOW%s.BYTES_0_3"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_HIGH%s.BYTES_4_5"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_INTERFACE_ADDRESS.ADDRESS_HIGH%s.BITS_17_31_OPAQUE"
+naming = "opaque"

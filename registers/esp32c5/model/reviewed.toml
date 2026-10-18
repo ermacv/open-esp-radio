@@ -1,0 +1,57 @@
+# Project-wide sparse reviewed facts for the ESP32-C5 radio. This file grows
+# only when a reviewer accepts new investigation-specific meaning.
+schema = 2
+id = "esp32c5-radio-project-facts"
+
+[classification]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+
+[applies-to]
+ecosystems = ["esp-idf"]
+chips = ["esp32c5"]
+chip-revisions = ["rev100"]
+artifact-lineages = ["esp32c5-radio"]
+
+[[assertions]]
+id = "ieee802154.event-status.identity"
+subject = "register:esp32c5/cpu/0x600a3064/32"
+kind = "register-identity"
+value = "IEEE802154_MAC.EVENT_STATUS"
+
+[[assertions.evidence]]
+source = "esp-idf-4d59230d-ieee802154-common-ll"
+locator = "ieee802154_ll_get_events"
+
+[[assertions]]
+id = "ieee802154.event-status.access"
+subject = "register:esp32c5/cpu/0x600a3064/32"
+kind = "register-access"
+value = "read-write"
+
+[[assertions.evidence]]
+source = "esp-idf-4d59230d-ieee802154-common-ll"
+locator = "ieee802154_ll_get_events and ieee802154_ll_clear_events"
+
+[[assertions]]
+id = "ieee802154.event-status.write-semantics"
+subject = "register:esp32c5/cpu/0x600a3064/32"
+kind = "hardware-write-semantics"
+value = "w1c"
+note = "The pinned public LL reads the thirteen-bit event image and clears a requested mask by writing back the intersection of current status and that mask; its ISR samples the complete image and immediately clears that same image. This is the source-level W1C contract ported by the generated affine snapshot transaction. No ESP32-C5 hardware observation is recorded yet."
+
+[[assertions.evidence]]
+source = "esp-idf-4d59230d-ieee802154-common-ll"
+locator = "ieee802154_ll_clear_events"
+
+[[assertions]]
+id = "modem-lpcon.clk-conf-power-st.access"
+subject = "register:esp32c5/cpu/0x600af020/32"
+kind = "register-access"
+value = "read-write"
+note = "CLK_I2C_MST_ST_MAP keeps its value through a USB Serial/JTAG HP-system reset; with its MODEM bit set the v1.0 ROM then boots into UART/SDIO download (docs/hardware-errata.md). Firmware must leave the MODEM bit clear."
+
+[[assertions.evidence]]
+source = "hil-open-c5-i2c-mst-st-map-usb-reset-2026-09-27"
+locator = "restoring CLK_I2C_MST_ST_MAP to 0x4 before the USB reset"

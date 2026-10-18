@@ -1,0 +1,4 @@
+# The MMIO the platform publication describes: registers the host reads
+# through JTAG. ESP-HAL owns them at runtime; no firmware PAC reaches them.
+schema = 1
+owned-ranges = ["lp-clkrst-reset-cause"]
