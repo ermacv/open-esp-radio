@@ -1,0 +1,10 @@
+schema = 5
+id = "system-ipc-call"
+description = "esp-hal's inter-processor call runs a posted function on each core, core 0 included, through the platform's stack-switching vector entry"
+role = "investigation"
+repetitions = 1
+tags = ["soc", "multicore", "interrupts"]
+
+[system]
+kind = "ipc-call"
+calls = 20

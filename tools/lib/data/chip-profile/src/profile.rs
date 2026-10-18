@@ -683,7 +683,37 @@ impl Profile {
     /// The bootstrap package the staged boot builds into every image beside
     /// its runtime.
     pub fn bootstrap_package(&self) -> String {
-        format!("oer-{}-platform-bootstrap", self.id)
+        format!("oer-firmware-platform-{}-bootstrap", self.id)
+    }
+
+    /// The package of the chip's HIL agent firmware
+    /// (`firmware/hil/<id>-agent`).
+    pub fn hil_agent_package(&self) -> String {
+        format!("oer-firmware-hil-{}-agent", self.id)
+    }
+
+    /// The directory of the chip's HIL agent, relative to the root; a chip
+    /// has a HIL agent where it exists.
+    pub fn hil_agent_directory(&self) -> PathBuf {
+        Path::new("firmware/hil").join(format!("{}-agent", self.id))
+    }
+
+    /// The workspace the chip's HIL images build in: the repository's one
+    /// workspace at `root`.
+    pub fn hil_agent_workspace(&self, root: &Path) -> PathBuf {
+        root.to_owned()
+    }
+
+    /// The manifest of the chip's HIL agent, which declares the features the
+    /// agent's images select from.
+    pub fn hil_agent_manifest(&self, root: &Path) -> PathBuf {
+        root.join(self.hil_agent_directory()).join("Cargo.toml")
+    }
+
+    /// The stack policy the chip's HIL images build under, relative to the
+    /// repository root (`firmware/hil/<id>/stack.toml`).
+    pub fn hil_stack_policy(&self) -> PathBuf {
+        Path::new("firmware/hil").join(&self.id).join("stack.toml")
     }
 
     /// The chip's own stack policy (`firmware/platform/<id>/stack.toml`), relative

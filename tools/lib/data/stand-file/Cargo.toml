@@ -9,6 +9,9 @@ publish = false
 description = "The owner's stand file: its one reader"
 
 [dependencies]
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-data-chip-profile = { path = "../chip-profile" }
+oer-tool-data-device-mac = { path = "../device-mac" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 

@@ -1,0 +1,3 @@
+{"timestamp_unix_millis": 1791582182145, "kind": "run-started", "scenario": null, "image": null, "outcome": null}
+{"timestamp_unix_millis": 1791582182594, "kind": "source-snapshot-bound", "scenario": null, "image": null, "outcome": null}
+{"timestamp_unix_millis": 1791582182602, "kind": "plan-resolved", "scenario": null, "image": null, "outcome": null}

@@ -1,0 +1,26 @@
+[package]
+name = "oer-tool-service-hil-scenario"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL scenarios: the family-independent envelope, catalog, campaign plan, requirements and target settings"
+
+[features]
+# The campaign constructor of the runner's cross-package tests.
+test-support = []
+
+[dependencies]
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-data-hil-protocol = { path = "../../data/hil-protocol", features = ["registry"] }
+oer-tool-data-hil-schema = { path = "../../data/hil-schema" }
+oer-tool-data-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+
+[lints]
+workspace = true
+

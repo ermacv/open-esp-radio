@@ -15,7 +15,8 @@ use std::{
 use oer_tool_data_stand_file as stand;
 use oer_tool_service_lab::hub;
 
-use crate::{Result, boards::Attached};
+use crate::Result;
+use oer_tool_service_lab::boards::Attached;
 
 /// How long the port stays off.
 const OFF: Duration = Duration::from_secs(2);
@@ -53,7 +54,7 @@ fn wait_until(within: Duration, mut done: impl FnMut() -> bool) -> bool {
 /// return to USB.
 pub fn cycle(port: &hub::PowerPort, mac: &str) -> Result<Attached> {
     hub::switch(&port.hub, port.port, false)?;
-    let left = wait_until(DETACH, || crate::boards::find(mac).is_none());
+    let left = wait_until(DETACH, || oer_tool_service_lab::boards::find(mac).is_none());
     thread::sleep(OFF);
     hub::switch(&port.hub, port.port, true)?;
     if !left {
@@ -64,7 +65,7 @@ pub fn cycle(port: &hub::PowerPort, mac: &str) -> Result<Attached> {
     }
     let mut returned = None;
     wait_until(RETURN, || {
-        returned = crate::boards::find(mac).filter(|board| board.tty.is_some());
+        returned = oer_tool_service_lab::boards::find(mac).filter(|board| board.tty.is_some());
         returned.is_some()
     });
     returned.ok_or_else(|| {

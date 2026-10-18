@@ -467,6 +467,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
+
+[[package]]
 name = "crc32fast"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1629,6 +1644,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
 dependencies = [
  "hash32",
+ "serde_core",
  "stable_deref_trait",
 ]
 
@@ -2007,6 +2023,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mio"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427"
+dependencies = [
+ "libc",
+ "log",
+ "wasi",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2219,6 +2247,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-bluetooth-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-base-trace",
+]
+
+[[package]]
 name = "oer-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
@@ -2409,8 +2444,22 @@ name = "oer-espressif-ieee802154-pac"
 version = "0.1.0"
 
 [[package]]
+name = "oer-espressif-ieee802154-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-base-trace",
+]
+
+[[package]]
 name = "oer-espressif-modem-clock"
 version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-phy-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-base-trace",
+]
 
 [[package]]
 name = "oer-exec-esp-hal-irq"
@@ -2514,6 +2563,44 @@ dependencies = [
  "oer-ieee80211-mac",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-firmware-hil-agent"
+version = "0.1.0"
+dependencies = [
+ "crc",
+ "critical-section",
+ "embassy-futures",
+ "embassy-sync 0.8.0",
+ "embassy-time",
+ "embedded-io-async 0.7.0",
+ "heapless 0.9.3",
+ "log",
+ "oer-tool-data-hil-protocol",
+]
+
+[[package]]
+name = "oer-firmware-hil-esp32s31-agent"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-executor",
+ "embassy-sync 0.8.0",
+ "embassy-time",
+ "esp-hal",
+ "log",
+ "oer-adapters-esp-hal-soc",
+ "oer-base-memory",
+ "oer-exec-esp-hal-irq",
+ "oer-exec-executor",
+ "oer-firmware-hil-agent",
+ "oer-firmware-platform-esp32s31-board",
+ "oer-firmware-platform-esp32s31-layout",
+ "oer-firmware-platform-espressif-staged-runtime",
+ "oer-tool-data-hil-image-keys",
+ "oer-tool-data-hil-protocol",
  "static_cell",
 ]
 
@@ -2695,6 +2782,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-ieee80211-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-base-trace",
+]
+
+[[package]]
 name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
@@ -2825,6 +2919,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-analysis-hil-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-stats",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-analysis-riscv-analysis"
 version = "0.1.0"
 dependencies = [
@@ -2949,6 +3061,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-cli-hil"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-hil-analysis",
+ "oer-tool-base-command-tree",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-image-class",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-device-peer-line",
+ "oer-tool-service-esp-idf",
+ "oer-tool-service-hil-experiment",
+ "oer-tool-service-hil-image",
+ "oer-tool-service-hil-lab",
+ "oer-tool-service-hil-observer",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-hil-source-snapshot",
+ "oer-tool-service-image",
+ "oer-tool-service-image-check-interrupts",
+ "oer-tool-service-image-compare",
+ "oer-tool-service-stand-arbiter",
+ "oer-tool-service-stand-board",
+ "oer-tool-service-stand-claims",
+ "oer-tool-service-stand-fixtures",
+ "oer-tool-service-stand-owners",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-cli-pins"
 version = "0.1.0"
 dependencies = [
@@ -2971,12 +3120,148 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-cli-stand"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "oer-tool-base-command-tree",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-device-peer-line",
+ "oer-tool-service-devices",
+ "oer-tool-service-stand-arbiter",
+ "oer-tool-service-stand-board",
+ "oer-tool-service-stand-claims",
+ "oer-tool-service-stand-discover",
+ "oer-tool-service-stand-doctor",
+ "oer-tool-service-stand-fixture-install",
+ "oer-tool-service-stand-fixtures",
+ "oer-tool-service-stand-hostapd",
+ "oer-tool-service-stand-journal",
+ "oer-tool-service-stand-owners",
+ "oer-tool-service-stand-power",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-data-chip-profile"
 version = "0.1.0"
 dependencies = [
  "serde",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-tool-data-device-mac"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tool-data-hil-image-class"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-image-keys",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-schema",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-data-hil-image-keys"
+version = "0.1.0"
+dependencies = [
+ "heapless 0.9.3",
+ "oer-tool-data-hil-protocol",
+]
+
+[[package]]
+name = "oer-tool-data-hil-model"
+version = "0.1.0"
+dependencies = [
+ "oer-base-time",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oer-tool-data-hil-protocol"
+version = "0.1.0"
+dependencies = [
+ "cobs",
+ "crc",
+ "embedded-io-async 0.7.0",
+ "heapless 0.9.3",
+ "postcard",
+ "postcard-schema",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-tool-data-hil-run-bundle-format"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-hil-schema",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-data-hil-scenario-catalog"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-data-hil-schema"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tool-data-hil-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-base-trace",
+ "oer-bluetooth-trace",
+ "oer-espressif-ieee802154-trace",
+ "oer-espressif-phy-trace",
+ "oer-ieee80211-trace",
+]
+
+[[package]]
+name = "oer-tool-data-hil-trace-header"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "postcard-schema",
+ "serde",
 ]
 
 [[package]]
@@ -3041,6 +3326,9 @@ dependencies = [
 name = "oer-tool-data-stand-file"
 version = "0.1.0"
 dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-device-mac",
  "serde",
  "tempfile",
  "toml",
@@ -3069,6 +3357,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-service-device-lock"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-device-mac",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-device-peer-line"
+version = "0.1.0"
+
+[[package]]
+name = "oer-tool-service-devices"
+version = "0.1.0"
+dependencies = [
+ "espflash",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-device-mac",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-image-bundle",
+ "serde",
+ "serde_json",
+ "serialport",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-esp-idf"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-vendor-pins",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-service-firmware"
 version = "0.1.0"
 dependencies = [
@@ -3091,6 +3425,327 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-service-hil-executor"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-base-time",
+ "oer-tool-data-hil-model",
+ "oer-tool-data-hil-trace-header",
+ "oer-tool-service-hil-executor",
+ "oer-tool-service-stand-arbiter",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-tool-service-hil-experiment"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-hil-analysis",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-schema",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-hil-image",
+ "oer-tool-service-hil-observer",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-hil-source-snapshot",
+ "oer-tool-service-stand-arbiter",
+ "oer-tool-service-stand-claims",
+ "oer-tool-service-stand-owners",
+ "oer-tool-service-stats",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-hil-family-system"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-devices",
+ "oer-tool-service-hil-scenario",
+ "oer-tool-service-hil-workload",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-hil-fixture"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "oer-ieee80211-mac",
+ "oer-tool-base-process",
+ "oer-tool-service-stand-fixture-install",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tool-service-hil-flash"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-devices",
+ "oer-tool-service-image",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-stand-board",
+ "oer-tool-service-stand-journal",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-hil-image"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-image-class",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-hil-scenario",
+ "oer-tool-service-hil-source-snapshot",
+ "oer-tool-service-image",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-image-check-interrupts",
+ "oer-tool-service-image-checks",
+ "oer-tool-service-image-compare",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-hil-lab"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-devices",
+ "oer-tool-service-hil-link",
+ "oer-tool-service-lab",
+ "oer-tool-service-stand-arbiter",
+ "oer-tool-service-stand-board",
+ "oer-tool-service-stand-claims",
+ "oer-tool-service-stand-fixture-install",
+ "oer-tool-service-stand-journal",
+ "oer-tool-service-stand-resource-lock",
+ "oer-tool-service-stand-ssh",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-tool-service-hil-link"
+version = "0.1.0"
+dependencies = [
+ "mio",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-image-class",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-device-peer-line",
+ "postcard",
+ "postcard-schema",
+ "rustix",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-tool-service-hil-net-traffic"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-service-hil-fixture",
+ "oer-tool-service-hil-link",
+ "rustix",
+ "serde",
+]
+
+[[package]]
+name = "oer-tool-service-hil-observer"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-hil-run-bundle-format",
+ "serde_json",
+ "tempfile",
+ "toml_edit",
+]
+
+[[package]]
+name = "oer-tool-service-hil-run-bundle"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-hil-scenario",
+ "oer-tool-service-hil-source-snapshot",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-hil-runner"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-analysis-hil-analysis",
+ "oer-tool-base-command-tree",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-image-class",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-devices",
+ "oer-tool-service-hil-family-system",
+ "oer-tool-service-hil-flash",
+ "oer-tool-service-hil-image",
+ "oer-tool-service-hil-lab",
+ "oer-tool-service-hil-link",
+ "oer-tool-service-hil-observer",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-hil-scenario",
+ "oer-tool-service-hil-source-snapshot",
+ "oer-tool-service-hil-workload",
+ "oer-tool-service-image",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-image-check-interrupts",
+ "oer-tool-service-stand-board",
+ "oer-tool-service-stand-journal",
+ "oer-tool-service-stand-owners",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml",
+ "toml_edit",
+]
+
+[[package]]
+name = "oer-tool-service-hil-scenario"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-hil-schema",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-hil-source-snapshot"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-hil-schema",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-hil-workload"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-scenario-catalog",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-hil-lab",
+ "oer-tool-service-hil-link",
+ "oer-tool-service-hil-scenario",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-stand-board",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tool-service-image"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-base-toolchain",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-image-policy",
+ "oer-tool-service-esp-idf",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-image-encode",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-image-bundle"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-data-chip-profile",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-service-image-check-interrupts"
 version = "0.1.0"
 dependencies = [
@@ -3100,6 +3755,16 @@ dependencies = [
  "oer-tool-analysis-riscv-stack",
  "oer-tool-data-chip-profile",
  "oer-tool-service-image-check-stack",
+]
+
+[[package]]
+name = "oer-tool-service-image-check-placement"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-decode",
+ "oer-tool-data-chip-profile",
 ]
 
 [[package]]
@@ -3120,6 +3785,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-service-image-checks"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-service-image",
+ "oer-tool-service-image-check-interrupts",
+ "oer-tool-service-image-check-placement",
+ "oer-tool-service-image-check-stack",
+]
+
+[[package]]
+name = "oer-tool-service-image-compare"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-lift",
+]
+
+[[package]]
+name = "oer-tool-service-image-encode"
+version = "0.1.0"
+dependencies = [
+ "esp-idf-part",
+ "espflash",
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-data-chip-profile",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-service-image-linker"
 version = "0.1.0"
 dependencies = [
@@ -3137,6 +3834,29 @@ dependencies = [
  "oer-tool-data-stand-file",
  "sha2 0.10.9",
  "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-probe-codegen"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-base-toolchain",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 2.0.119",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-probe-macros"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-service-probe-codegen",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3163,6 +3883,164 @@ dependencies = [
  "toml",
  "toml_edit",
 ]
+
+[[package]]
+name = "oer-tool-service-stand-arbiter"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-devices",
+ "oer-tool-service-stand-claims",
+ "oer-tool-service-stand-journal",
+ "oer-tool-service-stand-owners",
+ "oer-tool-service-stand-power",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-board"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-device-lock",
+ "oer-tool-service-devices",
+ "oer-tool-service-image-bundle",
+ "oer-tool-service-stand-power",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-claims"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "oer-tool-service-stand-discover"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-data-stand-file",
+ "oer-tool-service-stand-power",
+]
+
+[[package]]
+name = "oer-tool-service-stand-doctor"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-stand-power",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-fixture-install"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-fixtures"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-service-stand-ssh",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-stand-hostapd"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-journal"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-device-mac",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-devices",
+ "oer-tool-service-stand-owners",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-owners"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-stand-file",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-power"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-device-mac",
+ "oer-tool-data-register-bindings",
+ "oer-tool-data-stand-file",
+ "oer-tool-service-devices",
+ "oer-tool-service-lab",
+ "serde",
+]
+
+[[package]]
+name = "oer-tool-service-stand-resource-lock"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-stand-file",
+ "rustix",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-service-stand-ssh"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-process",
+]
+
+[[package]]
+name = "oer-tool-service-stats"
+version = "0.1.0"
 
 [[package]]
 name = "oer-tool-service-symbol-lineage"
@@ -3306,11 +4184,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "postcard-derive"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0232bd009a197ceec9cc881ba46f727fcd8060a2d8d6a9dde7a69030a6fe2bb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "postcard-schema"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9475666d89f42231a0a57da32d5f6ca7f9b5cd4c335ea1fe8f3278215b7a21ff"
 dependencies = [
+ "heapless 0.9.3",
+ "postcard-derive",
  "serde",
 ]
 
@@ -4265,6 +5156,12 @@ name = "void"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
+
+[[package]]
+name = "wasi"
+version = "0.11.1+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "winapi-util"

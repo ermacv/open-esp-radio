@@ -50,7 +50,7 @@ fn board(selector: &str) -> Result<(stand::Stand, stand::Board)> {
 
 /// The tty of the attached `board`.
 fn tty(board: &stand::Board) -> Result<PathBuf> {
-    let attached = boards::find(&board.mac)
+    let attached = oer_tool_service_lab::boards::find(&board.mac)
         .ok_or_else(|| format!("board {} ({}) is not attached", board.id, board.mac))?;
     attached.tty.ok_or_else(|| {
         format!(
@@ -156,6 +156,7 @@ fn timestamp(time: SystemTime) -> String {
 /// reads its AP; the configuration and the lines that may be shown.
 fn w1_stand(
     router: &stand::Router<'_>,
+    ssid: &str,
     remote: &mut dyn router::Remote,
 ) -> Result<(w1::Config, Vec<String>)> {
     let profile = router::Profile::new(
@@ -163,7 +164,7 @@ fn w1_stand(
         router.ap_section,
         router.wireless_interface.expose(),
         router.channel,
-        router.ssid.expose(),
+        ssid,
     )?;
     let mut shown = vec![format!(
         "w1 brings the stand router to its profile: {}",
@@ -174,7 +175,7 @@ fn w1_stand(
     let config = w1::Config {
         channel: applied.channel,
         bssid: applied.bssid,
-        ssid: w1::Ssid::new(router.ssid.expose().as_bytes())?,
+        ssid: w1::Ssid::new(ssid.as_bytes())?,
     };
     Ok((config, shown))
 }
@@ -185,7 +186,9 @@ fn w1_router(stand: &stand::Stand) -> Result<(oer_tool_service_lab::lock::Router
     let router = stand.router()?;
     let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
     let lock = oer_tool_service_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
-    let (config, shown) = w1_stand(&router, &mut ssh)?;
+    // The stand AP's SSID is the run's: no file holds it.
+    let ssid = oer_tool_service_lab::credentials::ssid("oer-w1")?;
+    let (config, shown) = w1_stand(&router, ssid.expose(), &mut ssh)?;
     for line in shown {
         eprintln!("fw: {line}");
     }
@@ -309,7 +312,7 @@ pub fn list_boards() -> Result<()> {
         "{:<10} {:<18} {:<14} {:<13} {:<16} POWER-CYCLE",
         "BOARD", "MAC", "USB", "TTY", "HUB PORT"
     );
-    for attached in boards::attached() {
+    for attached in oer_tool_service_lab::boards::attached() {
         let board = stand
             .as_ref()
             .and_then(|stand| stand.board_by_mac(&attached.mac));
@@ -343,7 +346,7 @@ pub fn list_boards() -> Result<()> {
 pub fn power_cycle(selector: &str) -> Result<()> {
     let (stand, board) = board(selector)?;
     let _lock = lock::acquire(&board.mac)?;
-    let attached = boards::find(&board.mac);
+    let attached = oer_tool_service_lab::boards::find(&board.mac);
     let report = oer_tool_service_lab::hub::status()?;
     let port = power::port_of(
         Some(&stand),
@@ -433,6 +436,10 @@ channel = 6
 [access_point]
 ssid = "made-up-ap-ssid"
 passphrase = "made-up-ap-passphrase"
+channel = 6
+channel_width = "ht20"
+target_address = "192.168.77.1/24"
+client_address = "192.168.77.2/24"
 "#;
 
     const SECRETS: [&str; 9] = [
@@ -494,6 +501,7 @@ passphrase = "made-up-ap-passphrase"
         let router = stand.router().unwrap();
         let (config, lines) = w1_stand(
             &router,
+            "Made Up Lab Net",
             &mut Router {
                 channel: 6,
                 fail: false,
@@ -518,6 +526,7 @@ passphrase = "made-up-ap-passphrase"
         // unreachable router, without its name.
         let wrong = w1_stand(
             &router,
+            "Made Up Lab Net",
             &mut Router {
                 channel: 11,
                 fail: false,
@@ -530,6 +539,7 @@ passphrase = "made-up-ap-passphrase"
         );
         let unreachable = w1_stand(
             &router,
+            "Made Up Lab Net",
             &mut Router {
                 channel: 6,
                 fail: true,

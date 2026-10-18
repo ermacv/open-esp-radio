@@ -146,13 +146,10 @@ impl Profile {
             ));
         }
         if ssid.is_empty() || ssid.len() > 32 {
-            return Err(format!(
-                "[station].ssid is {} bytes, not 1 to 32",
-                ssid.len()
-            ));
+            return Err(format!("the SSID is {} bytes, not 1 to 32", ssid.len()));
         }
         if ssid.chars().any(char::is_control) {
-            return Err("[station].ssid holds a control character".to_owned());
+            return Err("the SSID holds a control character".to_owned());
         }
         Ok(Self {
             radio: radio.to_owned(),

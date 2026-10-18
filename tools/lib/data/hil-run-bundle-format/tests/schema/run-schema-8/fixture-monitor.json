@@ -1,0 +1,45 @@
+{
+  "captured_frames": 1000,
+  "kernel_dropped": 2,
+  "logical_data_units": 120,
+  "retry_attempts": 3,
+  "missing_mac_metadata": 0,
+  "block_ack_frames": 40,
+  "full_block_ack_frames": 35,
+  "tail_block_ack_frames": 4,
+  "hole_block_ack_frames": 1,
+  "unique_block_acked_mpdus": 118,
+  "backward_block_ack_starts": 0,
+  "target_egress": {
+    "target_data_frames": 120,
+    "peer_block_ack_frames": 40,
+    "target_data_pairing_available": true,
+    "peer_block_ack_interarrival": {
+      "samples": 4,
+      "total_micros": 400,
+      "minimum_micros": 50,
+      "p50_micros": 100,
+      "p95_micros": 140,
+      "p99_micros": 149,
+      "maximum_micros": 150
+    },
+    "data_to_block_ack": {
+      "samples": 4,
+      "total_micros": 400,
+      "minimum_micros": 50,
+      "p50_micros": 100,
+      "p95_micros": 140,
+      "p99_micros": 149,
+      "maximum_micros": 150
+    },
+    "block_ack_to_next_data": {
+      "samples": 4,
+      "total_micros": 400,
+      "minimum_micros": 50,
+      "p50_micros": 100,
+      "p95_micros": 140,
+      "p99_micros": 149,
+      "maximum_micros": 150
+    }
+  }
+}

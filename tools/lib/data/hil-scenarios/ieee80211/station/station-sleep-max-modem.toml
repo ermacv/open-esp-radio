@@ -1,0 +1,18 @@
+schema = 5
+id = "station-sleep-max-modem"
+description = "Station modem sleep at maximum depth (listen interval 10): RF sleep edges and the MAC counter across second-long sleeps"
+role = "investigation"
+tags = ["icmp", "station", "sleep"]
+
+[wifi]
+image = "correctness"
+
+[wifi.workload]
+kind = "station-sleep"
+link = { phy = "he20" }
+power_save = { max-modem = { listen_interval = 10 } }
+access_point_beacon = { interval_tu = 100, dtim_period = 1 }
+count = 30
+interval_ms = 2000
+timeout_ms = 3000
+payload_bytes = 56

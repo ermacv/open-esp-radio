@@ -7,6 +7,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod boards;
+pub mod credentials;
 pub mod hub;
 pub mod lock;
 pub mod mac;

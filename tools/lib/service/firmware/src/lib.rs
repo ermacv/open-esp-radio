@@ -1,7 +1,6 @@
 //! The service behind `cargo fw`: build, flash and run the staged images
 //! of `firmware/apps` on the stand's boards (README.md).
 
-mod boards;
 mod command;
 mod encode;
 mod flash;

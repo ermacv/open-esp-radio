@@ -17,5 +17,5 @@ scenarios read the pins through it too.
 
 `cargo verification fetch` and the other `cargo verification` commands
 read the pins through it, and so does the HIL
-stand's pinned ESP-IDF build in [`oer-hil-cli`](../../hil/host/cli/README.md),
+stand's pinned ESP-IDF build in [`oer-tool-cli-hil`](../../hil/host/cli/README.md),
 which checks out the pinned IDF and its pinned submodules.

@@ -327,6 +327,17 @@ decision holds and the code is changed in the port's fix pass.
   lib/>`, with no `[lib] name`. A clearer name moves the directory; the
   layers test checks the rule.
 
+## 2026-10-18: the stand file
+
+- **No credentials in the stand file.** Every access point and station of
+  the stand is managed: a run generates the SSID and passphrase it sets on
+  both, and never writes them to a log or the run store.
+- **Only what cannot be found.** The stand file keeps what no tool can
+  discover: the router and the air observer (SSH target, interfaces, radio),
+  the Bluetooth adapter, the legacy BSS country, the hubs' port policy
+  (`protected`, `switchable`, `keeps-power`) and, if wanted, the boards'
+  human names. Hub ports, board chips and USB serial numbers are detected.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.

@@ -1,0 +1,10 @@
+schema = 5
+id = "phy-vendor-calibration-ieee802154-restart"
+description = "PHY register and analog state after one IEEE 802.15.4 disable and enable: the vendor reference firmware's OFF and ON against production's session restart"
+role = "investigation"
+tags = ["phy", "calibration", "vendor-comparison", "ieee802154", "restart"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "ieee802154-restart"
+boots = 5

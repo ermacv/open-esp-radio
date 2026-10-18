@@ -1,0 +1,53 @@
+[package]
+name = "oer-tool-cli-hil"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The `cargo hil` command line: argument parsing and calls into the stand, run store, analysis and experiment packages"
+
+[[bin]]
+name = "hil"
+path = "src/main.rs"
+
+[dependencies]
+oer-tool-service-esp-idf = { path = "../../lib/service/esp-idf" }
+oer-tool-data-hil-run-bundle-format = { path = "../../lib/data/hil-run-bundle-format" }
+oer-tool-data-chip-profile = { path = "../../lib/data/chip-profile" }
+oer-tool-base-command-tree = { path = "../../lib/base/command-tree", features = ["clap"] }
+oer-tool-service-stand-arbiter = { path = "../../lib/service/stand-arbiter" }
+oer-tool-service-stand-board = { path = "../../lib/service/stand-board" }
+oer-tool-service-hil-run-bundle = { path = "../../lib/service/hil-run-bundle" }
+oer-tool-analysis-hil-analysis = { path = "../../lib/analysis/hil-analysis" }
+oer-tool-service-hil-experiment = { path = "../../lib/service/hil-experiment" }
+oer-tool-service-image = { path = "../../lib/service/image" }
+oer-tool-service-image-check-interrupts = { path = "../../lib/service/image-check-interrupts" }
+oer-tool-service-image-compare = { path = "../../lib/service/image-compare" }
+oer-tool-service-hil-image = { path = "../../lib/service/hil-image" }
+oer-tool-data-hil-image-class = { path = "../../lib/data/hil-image-class" }
+oer-tool-service-hil-source-snapshot = { path = "../../lib/service/hil-source-snapshot" }
+oer-tool-data-hil-schema = { path = "../../lib/data/hil-schema" }
+oer-tool-service-hil-observer = { path = "../../lib/service/hil-observer" }
+oer-tool-service-hil-lab = { path = "../../lib/service/hil-lab" }
+oer-tool-service-stand-fixtures = { path = "../../lib/service/stand-fixtures" }
+oer-tool-base-durable = { path = "../../lib/base/durable" }
+oer-tool-base-process = { path = "../../lib/base/process" }
+oer-tool-base-toolchain = { path = "../../lib/base/toolchain" }
+clap = { version = "=4.5.48", features = ["derive"] }
+rustix = { version = "=1.1.4", features = ["process"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+tempfile = "=3.27.0"
+toml = "=1.1.4"
+
+oer-tool-service-device-peer-line = { path = "../../lib/service/device-peer-line" }
+oer-tool-service-stand-claims = { path = "../../lib/service/stand-claims" }
+oer-tool-service-stand-owners = { path = "../../lib/service/stand-owners" }
+[dev-dependencies]
+oer-tool-service-hil-run-bundle = { path = "../../lib/service/hil-run-bundle", features = ["test-support"] }
+
+[lints]
+workspace = true
+

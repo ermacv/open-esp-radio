@@ -1,0 +1,19 @@
+[package]
+name = "oer-tool-service-stand-fixtures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The host fixtures the stand file names: Wi-Fi radios, Bluetooth adapter and OpenWrt hosts, with their keys, interfaces and channel load"
+
+[dependencies]
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-service-stand-ssh = { path = "../stand-ssh" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
+
+[lints]
+workspace = true
+

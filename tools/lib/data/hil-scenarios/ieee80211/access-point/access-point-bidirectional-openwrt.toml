@@ -1,0 +1,26 @@
+schema = 5
+id = "access-point-bidirectional-openwrt"
+description = "Two AP ownership epochs with exact simultaneous UDP delivery to the OpenWrt mt76 client, the A/B of access-point-bidirectional's laptop client"
+role = "investigation"
+tags = ["wifi", "access-point", "network", "bidirectional", "openwrt", "air-strict"]
+
+[wifi]
+image = "correctness"
+
+[wifi.workload]
+kind = "access-point"
+cycles = 2
+boots = 1
+timeout_seconds = 90
+clients = { kind = "openwrt" }
+
+[wifi.workload.traffic]
+kind = "udp"
+duration_seconds = 10
+payload_bytes = 1200
+offer = { rx_bps = 2000000, tx_bps = 2000000 }
+
+[wifi.workload.traffic.criteria]
+exact_delivery = true
+minimum_rx_bps = 1500000
+minimum_tx_bps = 1500000

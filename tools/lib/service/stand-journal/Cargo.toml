@@ -1,0 +1,26 @@
+[package]
+name = "oer-tool-service-stand-journal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The board journal: what each board of the stand carries and what happened to it"
+
+[dependencies]
+oer-tool-data-device-mac = { path = "../../data/device-mac" }
+oer-tool-service-devices = { path = "../devices" }
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-data-stand-file = { path = "../../data/stand-file" }
+oer-tool-service-stand-owners = { path = "../stand-owners" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+tempfile = "3"
+
+[lints]
+workspace = true
+

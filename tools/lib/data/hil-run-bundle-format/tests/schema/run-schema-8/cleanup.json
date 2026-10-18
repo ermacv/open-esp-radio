@@ -1,0 +1,7 @@
+[
+  {
+    "operation": "restore-ap",
+    "duration_millis": 3,
+    "failure": "ssh lost"
+  }
+]

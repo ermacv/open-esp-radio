@@ -1,0 +1,10 @@
+schema = 5
+id = "phy-vendor-calibration-restart"
+description = "PHY register and analog state of the vendor firmware and the correctness image after one further Wi-Fi radio restart (RF closed and woken), compared under the reviewed relation"
+role = "investigation"
+tags = ["phy", "calibration", "vendor-comparison", "restart"]
+
+[phy]
+kind = "vendor-calibration"
+lifecycle = "restart"
+boots = 10

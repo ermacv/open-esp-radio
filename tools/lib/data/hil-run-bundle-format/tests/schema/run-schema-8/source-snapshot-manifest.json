@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "name": "repository",
+      "commit": "4222556456399199d4e9dcecf4c7e527fb4de269",
+      "dirty": false,
+      "files": [
+        {
+          "path": ".cargo/config.toml",
+          "size_bytes": 2243,
+          "sha256": "3f71bd5b28ca9fc46915b1cb600ef74bf93507aa77a44065c462bcdf45b78d71",
+          "mode": 420
+        },
+        {
+          "path": ".claude/agents/block-bluetooth.md",
+          "size_bytes": 376,
+          "sha256": "d9d18f121fd7cf02b66e9584465af2bcebe0dbdb40074e032d55eee294fdb17a",
+          "mode": 420
+        }
+      ]
+    }
+  ]
+}

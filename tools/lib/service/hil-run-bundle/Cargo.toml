@@ -1,0 +1,37 @@
+[package]
+name = "oer-tool-service-hil-run-bundle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL run bundle: format, writer and seal, the one typed reader, integrity, the run store and build provenance"
+
+[features]
+# The run-session fixtures of the image builder's record tests.
+test-support = []
+
+[dependencies]
+oer-tool-data-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" }
+oer-tool-base-toolchain = { path = "../../base/toolchain" }
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-data-hil-protocol = { path = "../../data/hil-protocol", features = ["registry"] }
+oer-tool-data-hil-run-bundle-format = { path = "../../data/hil-run-bundle-format" }
+oer-tool-service-hil-scenario = { path = "../hil-scenario" }
+oer-tool-data-hil-schema = { path = "../../data/hil-schema" }
+oer-tool-service-hil-source-snapshot = { path = "../hil-source-snapshot" }
+oer-tool-base-process = { path = "../../base/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3"
+flate2 = "1.1.9"
+
+[dev-dependencies]
+oer-tool-service-hil-scenario = { path = "../hil-scenario", features = ["test-support"] }
+oer-tool-service-hil-source-snapshot = { path = "../hil-source-snapshot", features = ["test-support"] }
+
+[lints]
+workspace = true
+
