@@ -64,15 +64,15 @@ mod tests {
         .unwrap();
         for file in [
             "tools/lib/service/image/Cargo.toml",
-            "tools/image/pipeline/src/lib.rs",
-            "tools/image/linker/src/main.rs",
-            "tools/elf/src/lib.rs",
-            "tools/riscv/stack/src/lib.rs",
-            "tools/riscv/decode/src/lib.rs",
-            "tools/chip-profile/src/lib.rs",
-            "tools/process/src/lib.rs",
-            "tools/toolchain/src/lib.rs",
-            "tools/vendor-artifacts/src/lib.rs",
+            "tools/lib/service/image/src/lib.rs",
+            "tools/lib/service/image-linker/src/main.rs",
+            "tools/lib/analysis/elf/src/lib.rs",
+            "tools/lib/analysis/riscv-stack/src/lib.rs",
+            "tools/lib/analysis/riscv-decode/src/lib.rs",
+            "tools/lib/data/chip-profile/src/lib.rs",
+            "tools/lib/base/process/src/lib.rs",
+            "tools/lib/base/toolchain/src/lib.rs",
+            "tools/lib/data/vendor-artifacts/src/lib.rs",
         ] {
             assert!(files.contains(Path::new(file)), "{file}");
         }

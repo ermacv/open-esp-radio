@@ -60,11 +60,11 @@ fn test_artifacts(
     });
     bundle.locks = vec![
         Lock {
-            committed: "hil/targets/chip-a/Cargo.lock".into(),
+            committed: "Cargo.lock".into(),
             file: files::RUNTIME_LOCK.into(),
         },
         Lock {
-            committed: "platform/chip-a/Cargo.lock".into(),
+            committed: "Cargo.lock".into(),
             file: files::BOOTSTRAP_LOCK.into(),
         },
     ];
@@ -86,7 +86,7 @@ fn firmware_record_archives_the_exact_application() {
     let runtime_elf = root.join("runtime.elf");
     let runtime_bin = root.join("runtime.bin");
     let bootstrap_elf = root.join("bootstrap.elf");
-    let effective_embedded_lock = root.join("hil/targets/chip-a/Cargo.lock");
+    let effective_embedded_lock = root.join("Cargo.lock");
     fs::write(&application, b"application bytes").unwrap();
     fs::write(&runtime_elf, b"runtime elf").unwrap();
     fs::write(&runtime_bin, b"runtime bin").unwrap();
@@ -180,7 +180,8 @@ fn firmware_record_archives_the_exact_application() {
         provenance.parameters.runtime_features,
         oer_tool_data_hil_image_class::build_features_on(ImageClass::SystemWatchdog, TEST_CHIP)
     );
-    for name in ["embedded-lock", "bootstrap-lock"] {
+    // One workspace lock: the agent and the bootstrap resolve against it.
+    for name in ["embedded-lock"] {
         assert!(provenance.files.iter().any(|file| file.name == name));
     }
     assert!(provenance.source_reconstructable);
@@ -283,7 +284,7 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
     let runtime_elf = repository_root.join("runtime.elf");
     let runtime_bin = repository_root.join("runtime.bin");
     let bootstrap_elf = repository_root.join("bootstrap.elf");
-    let effective_embedded_lock = repository_root.join("hil/targets/chip-a/Cargo.lock");
+    let effective_embedded_lock = repository_root.join("Cargo.lock");
     fs::write(&application, b"application bytes").unwrap();
     fs::write(&runtime_elf, b"runtime elf").unwrap();
     fs::write(&runtime_bin, b"runtime bin").unwrap();

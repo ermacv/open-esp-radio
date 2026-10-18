@@ -58,11 +58,10 @@ pub(super) fn archive(
     let (application_path, application) = archive(&bundle.application(), "application.bin")?;
     let archived_application = context.directory.join(&application_path);
     let (runtime_elf_path, runtime_elf) = archive(&bundle.runtime_elf(), "runtime.elf")?;
-    let embedded_lock = std::path::Path::new("hil/targets")
-        .join(&bundle.chip)
-        .join("Cargo.lock");
+    // The agent resolves against the workspace's one lock.
+    let embedded_lock = std::path::Path::new("Cargo.lock");
     let effective_embedded_lock = bundle
-        .lock(&embedded_lock)
+        .lock(embedded_lock)
         .ok_or("the bundle has no effective lock of its agent workspace")?;
     let subject = |role, (path, archived): &(PathBuf, build::ArchivedFile)| BuildSubject {
         role,
@@ -125,17 +124,8 @@ pub(super) fn archive(
         "effective-Cargo.lock",
         &effective_embedded_lock,
     )?;
-    let bootstrap_lock = std::path::Path::new("platform")
-        .join(&bundle.chip)
-        .join("Cargo.lock");
-    lock(
-        "bootstrap-lock",
-        bootstrap_lock.display().to_string(),
-        "bootstrap-Cargo.lock",
-        &bundle
-            .lock(&bootstrap_lock)
-            .ok_or("the bundle has no effective lock of its bootstrap")?,
-    )?;
+    // The bootstrap resolves against the same workspace lock as the agent,
+    // which `embedded-lock` archives.
     subjects.push(subject(BuildSubjectRole::BootstrapElf, &bootstrap_elf));
     subjects.push(subject(BuildSubjectRole::RuntimeBin, &runtime_bin));
     artifact.runtime_bin_path = Some(runtime_bin.0);
@@ -190,14 +180,17 @@ pub(super) fn create_provenance(
     // extends), the profile itself and the partition table it names.
     let profile = oer_tool_data_chip_profile::Profile::load(root, chip)?;
     let policy = profile.hil_stack_policy();
+    // The workspace lock is the embedded lock the record archives.
     let mut files = vec![
-        ("workspace-lock", String::from("Cargo.lock")),
         (
             "embedded-workspace",
-            format!("hil/targets/{chip}/Cargo.toml"),
+            format!("firmware/hil/{chip}-agent/Cargo.toml"),
         ),
         ("stack-policy", policy.to_string_lossy().into_owned()),
-        ("chip-profile", format!("platform/{chip}/chip.toml")),
+        (
+            "chip-profile",
+            format!("firmware/platform/{chip}/chip.toml"),
+        ),
     ];
     let policy_text: toml::Table = toml::from_str(&std::fs::read_to_string(root.join(&policy))?)?;
     if let Some(base) = policy_text.get("extends").and_then(toml::Value::as_str) {

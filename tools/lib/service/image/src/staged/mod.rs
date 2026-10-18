@@ -9,7 +9,7 @@
 //! the partition tables and the OTA selection of the first slot are encoded
 //! beside it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use oer_tool_data_image_policy::StackPolicy;
 use oer_tool_service_image_bundle::{ImageBundle, Lock, Staged, files};
@@ -194,11 +194,9 @@ pub(crate) fn build(
             &spec.application.workspace,
             files::RUNTIME_LOCK,
         ),
-        (
-            &bootstrap_lock,
-            &platform.strip_prefix(root)?.to_owned(),
-            files::BOOTSTRAP_LOCK,
-        ),
+        // The runtime and the bootstrap resolve against the workspace's one
+        // lock.
+        (&bootstrap_lock, &PathBuf::new(), files::BOOTSTRAP_LOCK),
     ] {
         std::fs::copy(lock.path(), output.join(file))?;
         bundle.locks.push(Lock {
@@ -210,8 +208,12 @@ pub(crate) fn build(
     let map = bundle.flash.clone();
     let mut reads = vec![
         spec.stack_policy.clone(),
-        Path::new("platform").join(&profile.id).join("chip.toml"),
-        Path::new("platform").join(&profile.id).join("stack.toml"),
+        Path::new("firmware/platform")
+            .join(&profile.id)
+            .join("chip.toml"),
+        Path::new("firmware/platform")
+            .join(&profile.id)
+            .join("stack.toml"),
     ];
     if let Some(coverage) = &policy.coverage_policy {
         reads.push(lexical(coverage.strip_prefix(root)?));
