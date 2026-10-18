@@ -205,6 +205,15 @@ impl TryFrom<PhyRate> for TxPhyRate {
     }
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl RxPhyInfo {
     /// The portable rate of the received PPDU, or `None` when the prefix
     /// holds none.

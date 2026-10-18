@@ -51,6 +51,31 @@ fn vacant_scan_slots_never_appear_as_observations() {
 }
 
 #[test]
+fn get_returns_the_record_an_observation_names() {
+    let mut table = ScanTable::<2>::new();
+    let mut frame = [0_u8; 42];
+    frame[0] = 0x80;
+    frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+    frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
+    assert!(table.get(0).is_none());
+    let ScanObservation::Inserted { index } = table.observe_management(&frame, 6, -40, None) else {
+        panic!("the first observation is inserted");
+    };
+    frame[21] = 2;
+    let ScanObservation::Inserted { index: second } =
+        table.observe_management(&frame, 6, -50, None)
+    else {
+        panic!("a second BSSID is inserted");
+    };
+    assert_eq!(table.get(index).unwrap().bssid.get(), [2, 0, 0, 0, 0, 1]);
+    assert_eq!(table.get(second).unwrap().rssi, -50);
+    assert!(table.get(2).is_none());
+    assert!(table.get(usize::MAX).is_none());
+    table.clear();
+    assert!(table.get(index).is_none());
+}
+
+#[test]
 fn a_group_bssid_cannot_enter_the_scan_table() {
     let mut frame = [0_u8; 42];
     frame[0] = 0x80;
@@ -142,6 +167,43 @@ fn parses_beacon_into_owned_bounded_record() {
     assert_eq!(record.beacon_interval_tu, 100);
     assert!(record.privacy);
     assert!(record.rsn);
+}
+
+/// `rich_frame(8)` with the Order bit set and an HT Control field after the
+/// MAC header, as an HT or HE access point may send it.
+fn ht_control_beacon() -> std::vec::Vec<u8> {
+    let mut frame = rich_frame(8);
+    frame[1] |= 0x80;
+    frame.splice(24..24, [0x0d, 0xf0, 0xad, 0x0b]);
+    frame
+}
+
+#[test]
+fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
+    let plain = parse_management(&rich_frame(8), 1, -40).unwrap();
+    let record = parse_management(&ht_control_beacon(), 1, -40).unwrap();
+    assert_eq!(record.ssid_bytes(), b"test");
+    assert_eq!(record.beacon_interval_tu, 100);
+    assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
+    assert_eq!(record.capability_info, 0x0011);
+    assert!(!record.information_elements_truncated);
+    assert_eq!(record, plain);
+}
+
+#[test]
+fn a_beacon_whose_ht_control_leaves_no_fixed_fields_is_ignored() {
+    let mut frame = ht_control_beacon();
+    // The header with its HT Control field and eleven of the twelve fixed
+    // bytes.
+    frame.truncate(24 + 4 + 11);
+    assert!(parse_management(&frame, 1, -40).is_none());
+}
+
+#[test]
+fn a_management_frame_of_another_protocol_version_is_ignored() {
+    let mut frame = rich_frame(8);
+    frame[0] |= 0x01;
+    assert!(parse_management(&frame, 1, -40).is_none());
 }
 
 #[test]
@@ -369,7 +431,13 @@ fn scan_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
     let mut hidden = std::vec![0_u8; 38];
     hidden[0] = 0x80;
     hidden[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
-    std::vec![rich_frame(8), rich_frame(5), beacon, hidden]
+    std::vec![
+        rich_frame(8),
+        rich_frame(5),
+        ht_control_beacon(),
+        beacon,
+        hidden
+    ]
 }
 
 /// Read every accessor of a parsed record.

@@ -57,6 +57,7 @@ pub mod modem_sleep;
 mod pmksa;
 mod pool;
 pub mod power_save;
+pub mod receive;
 pub mod request;
 pub mod sa_query;
 pub mod station;

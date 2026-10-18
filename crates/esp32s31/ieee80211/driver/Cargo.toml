@@ -35,6 +35,9 @@ oer-ui-cases = { path = "../../../../tools/lib/ui-cases" }
 # the production API without introducing an allocator into their binaries.
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
 oer-esp32s31-ieee80211-mac = { path = "../mac", features = ["test-support"] }
+# The W1 survey consumes the frames the host receive tests hand to P1.
+oer-ieee80211-runtime = { path = "../../../ieee80211/runtime" }
+oer-ieee80211-sta = { path = "../../../ieee80211/sta" }
 
 [lints]
 workspace = true

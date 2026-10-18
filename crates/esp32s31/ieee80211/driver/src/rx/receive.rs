@@ -86,7 +86,8 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 /// `InactiveEpoch::activate_rx_moderated` with the image's mask); it runs
 /// while the routes are silent. `cell` is the image's static cell its MAC,
 /// WDEVPWR and doorbell handlers run the line through. `publisher` and
-/// `admission` take the staged units ([`super::sink`] in W1).
+/// `admission` take the staged units ([`QueueSink`](super::upper::QueueSink)
+/// and [`CountingAdmission`](super::sink::CountingAdmission) in W1).
 ///
 /// The returned future never completes: after teardown it publishes the
 /// exit through the stop handle and holds every owner.

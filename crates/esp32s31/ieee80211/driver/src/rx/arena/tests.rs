@@ -7,8 +7,15 @@ use oer_esp32s31_ieee80211_dma::{
 };
 use oer_esp32s31_ieee80211_mac::irq::model::{MacInterruptModel, PowerInterruptModel};
 
+use oer_time_virtual::VirtualClock;
+
 use super::*;
-use crate::rx::{counters::WifiRxReport, frontier::ReceiveFrontier};
+use crate::rx::{
+    counters::WifiRxReport,
+    frontier::ReceiveFrontier,
+    transaction::Publisher,
+    upper::{QueueSink, RxFrameEnds},
+};
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
 type HostArena = WifiRxArena<32, 1_664, 1_668, 32, HostDma, HostEpoch>;
@@ -19,7 +26,7 @@ fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
     let start = core::ptr::from_ref(&*arena).addr();
     let end = start + core::mem::size_of::<HostArena>();
 
-    let (parts, mut stop) = arena.bind().expect("a zeroed arena binds");
+    let (parts, mut stop, frames) = arena.bind().expect("a zeroed arena binds");
 
     let descriptors = parts.rx().descriptors().as_ptr().addr();
     assert!(descriptors > start && descriptors < end);
@@ -28,6 +35,14 @@ fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
     assert_eq!(parts.counters().report(), WifiRxReport::default());
     assert!(!parts.requests().is_pending());
     assert_eq!(parts.stage().claimed_slots(), 0);
+    // The staged-frame queue is empty and as deep as the staging pool.
+    let RxFrameEnds {
+        sender,
+        receiver: _,
+    } = frames;
+    let clock: &'static VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let sink = QueueSink::new(sender, clock);
+    assert_eq!(Publisher::<'_, 1_664, 32>::free_capacity(&sink), 32);
     assert!(stop.try_exit().is_none());
     assert!(!parts.control.stop_requested());
     assert!(!parts.irq.has_pending() && !parts.power.has_pending());

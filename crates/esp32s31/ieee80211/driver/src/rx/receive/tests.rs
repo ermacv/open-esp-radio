@@ -45,8 +45,10 @@ use crate::{
         counters::WifiRxReport,
         frontier::RxFrontierError,
         returns::{HeldRxFrame, RxReturnNotifier},
-        sink::{CountingAdmission, CountingSink},
+        sink::CountingAdmission,
+        test_ring::CountingSink,
         transaction::{CompletedUnit, CreditPolicy, IngressClass, IngressRoute, Preview},
+        upper::{FrameReceiver, QueueSink, RxFrameEnds},
     },
 };
 
@@ -384,13 +386,19 @@ where
     E: Publisher<'static, BUFFER, SLOTS> + 'static,
     M: Admission + 'static,
 {
-    harness_staged::<SLOTS, E, M>(|counters, _| owners(counters))
+    harness_staged::<SLOTS, E, M>(|counters, _, _, _| owners(counters))
 }
 
 /// A harness whose arena has `STAGE` staging slots; `owners` also gets the
-/// upper layer's return notifier.
+/// upper layer's return notifier, the staged-frame queue's ends and the
+/// clock.
 fn harness_staged<const STAGE: usize, E, M>(
-    owners: impl FnOnce(&'static WifiRxCounters, RxReturnNotifier<'static>) -> (E, M),
+    owners: impl FnOnce(
+        &'static WifiRxCounters,
+        RxReturnNotifier<'static>,
+        RxFrameEnds<'static, STAGE, BUFFER>,
+        &'static VirtualClock,
+    ) -> (E, M),
 ) -> Harness
 where
     E: Publisher<'static, BUFFER, STAGE> + 'static,
@@ -399,12 +407,12 @@ where
     let host: &'static Host = leak(Host::new());
     let arena: &'static mut WifiRxArena<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
-    let (parts, stop) = arena.bind().expect("a zeroed arena binds");
+    let (parts, stop, frames) = arena.bind().expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
-    let (publisher, admission) = owners(counters, parts.returns());
-    let (publisher, admission) = (&*leak(publisher), &*leak(admission));
     let clock: &'static VirtualClock = leak(VirtualClock::new());
+    let (publisher, admission) = owners(counters, parts.returns(), frames, clock);
+    let (publisher, admission) = (&*leak(publisher), &*leak(admission));
     let hardware = leak(HostRadio { host });
     let routes = leak(HostRoutes { host, requests });
     let doorbell = &*leak(HostDoorbell { host, rx });
@@ -878,7 +886,7 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     let cell = &first.host.cell;
     let host: &'static Host = leak(Host::new());
     let arena: &'static mut HostArena = leak(bytemuck::Zeroable::zeroed());
-    let (parts, mut stop) = arena.bind().unwrap();
+    let (parts, mut stop, _frames) = arena.bind().unwrap();
     let counters = parts.counters();
     let mut runner = Box::pin(receive(
         leak(HostRadio { host }),
@@ -1002,7 +1010,7 @@ fn returning_harness() -> (
     let held: &'static Returned = leak(RefCell::new(Vec::new()));
     let holding: &'static Cell<bool> = leak(Cell::new(true));
     let mut notifier = None;
-    let harness = harness_staged::<STAGE, _, _>(|counters, returns| {
+    let harness = harness_staged::<STAGE, _, _>(|counters, returns, _, _| {
         notifier = Some(returns);
         (
             ReturningSink {
@@ -1152,4 +1160,132 @@ fn a_return_while_rx_is_live_is_harmless() {
     harness.settle();
     assert!(harness.host.take_log().is_empty());
     assert_eq!(harness.walker_stops(), 1);
+}
+
+/// A harness whose publisher is the product queue; the application's end
+/// of the queue is returned beside it.
+fn queue_harness() -> (Harness, FrameReceiver<'static, STAGE, BUFFER>) {
+    let mut receiver = None;
+    let harness = harness_staged::<STAGE, _, _>(|counters, _, frames, clock| {
+        let RxFrameEnds {
+            sender,
+            receiver: frames,
+        } = frames;
+        receiver = Some(frames);
+        (
+            QueueSink::new(sender, clock),
+            CountingAdmission::new(counters),
+        )
+    })
+    .started();
+    (harness, receiver.expect("the harness lends the receiver"))
+}
+
+/// Poll the application's receive once.
+fn poll_next(
+    receiver: &mut FrameReceiver<'static, STAGE, BUFFER>,
+) -> Option<HeldRxFrame<'static, 'static, STAGE, BUFFER>> {
+    let mut next = core::pin::pin!(receiver.next());
+    match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+        Poll::Ready(frame) => Some(frame),
+        Poll::Pending => None,
+    }
+}
+
+#[test]
+fn a_full_queue_blocks_and_a_p1_drop_wakes_the_runner() {
+    let (mut harness, mut frames) = queue_harness();
+    // One unit more than the queue holds while the application takes none.
+    for _ in 0..=STAGE {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.units, STAGE as u32);
+    assert!(report.stage_capacity_blocks >= 1);
+    assert!(!harness.host.mac().rx_delivery_enabled());
+    harness.host.take_log();
+
+    // The application takes one frame and drops it: the return alone wakes
+    // the runner, which stages the unit that waited and unmasks.
+    let held = poll_next(&mut frames).expect("a queued frame");
+    harness.settle();
+    assert_eq!(
+        harness.report().units,
+        STAGE as u32,
+        "a held frame keeps its slot"
+    );
+    drop(held);
+    harness.settle();
+    assert_eq!(harness.report().units, STAGE as u32 + 1);
+    let log = harness.host.take_log();
+    assert_eq!(mac_lines(&log), 0, "the wake came from the return");
+    assert!(log.contains(&Event::Acknowledge));
+    assert!(harness.host.mac().rx_delivery_enabled());
+    assert_eq!(harness.report().service_errors, 0);
+}
+
+#[test]
+fn teardown_halts_after_p1_drains_queued_frames() {
+    let (mut harness, mut frames) = queue_harness();
+    for _ in 0..3 {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+    assert_eq!(harness.report().units, 3);
+
+    // The queued frames are staged: no stop while they are out.
+    harness.stop.request_stop();
+    harness.settle();
+    assert!(harness.stop.try_exit().is_none());
+    assert_eq!(harness.walker_stops(), 0);
+
+    // The application keeps draining after its stop request.
+    let mut drained = 0;
+    while let Some(held) = poll_next(&mut frames) {
+        drop(held);
+        drained += 1;
+    }
+    assert_eq!(drained, 3);
+    harness.settle();
+    assert_eq!(harness.walker_stops(), 1);
+    assert_eq!(
+        harness.stop.try_exit(),
+        Some(WifiRxExit {
+            cause: WifiRxCause::StopRequested,
+            end: WifiRxEnd::Halted,
+        })
+    );
+}
+
+#[test]
+fn teardown_quarantines_when_p1_never_drains() {
+    let (mut harness, mut frames) = queue_harness();
+    for _ in 0..3 {
+        harness.complete_unit(&[64]);
+    }
+    harness.rx_event();
+    harness.settle();
+
+    harness.stop.request_stop();
+    let exit = (0..64).find_map(|_| {
+        harness.settle();
+        harness.stop.try_exit()
+    });
+    assert_eq!(
+        exit,
+        Some(WifiRxExit {
+            cause: WifiRxCause::StopRequested,
+            end: WifiRxEnd::Quarantined {
+                reason: WifiRxQuarantine::DrainTimeout,
+                walker_stopped: false,
+            },
+        })
+    );
+    assert_eq!(harness.walker_stops(), 0);
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    // The frames stay queued with their leases.
+    assert!(poll_next(&mut frames).is_some());
 }

@@ -56,6 +56,38 @@ layer returns posts the RX-capacity fact (`RxReturnNotifier`), so the runner
 rearms the returned descriptors even when an exhausted walker raises no RX
 interrupt; the notice touches no ring state.
 
+### W1 receive path
+
+One received frame and the owner of its DMA buffer at each step:
+
+1. **P3.** The MAC line handler masks RX delivery, acknowledges and posts
+   the RX fact; the buffer is the DMA engine's.
+2. **P2.** The receive runner (`rx/receive.rs`) wakes on the fact and runs
+   the product service (`rx/transaction`), which takes the completed unit
+   and stages it: the original buffer becomes a `NetworkRxFrame` lease of
+   the staging pool, with no copy. Chained, oversized, empty and too-long
+   units are dropped and counted there and never leave P2.
+3. **P2.** `QueueSink` (`rx/upper.rs`), the runner's publisher, marks the
+   lease's first handoff (the monotonic time and the prefix's raw MAC
+   stamp), counts it and sends it into an affine SPSC queue as deep as the
+   pool; a send after a pool credit therefore never refuses. The queue owns
+   the lease. The runner unmasks RX through the doorbell once drained.
+4. **P1.** `FrameReceiver::next` takes the lease and holds it as a
+   `HeldRxFrame`; `normalize` decodes the prefix under `W1_INGRESS` (no
+   strict RXEND or dump-length refusal; what they would refuse is counted)
+   and counts refusals by reason. The application owns the lease.
+5. **P1.** The MPDU and `portable::rx_meta` on the configured channel go to
+   `sta::receive::classify` and `observe_scan`; in W1 the acceptance
+   instrument `runtime::survey::Survey` calls them and tallies each BSS.
+6. **P1.** Dropping the held frame releases the lease and posts the
+   RX-capacity fact; P2 rearms the buffer.
+
+P2 and P1 share only the queue's cursors and an `AtomicWaker`. Teardown waits,
+bounded, until no lease is staged before it stops the walker, and queued
+frames are staged: P1 keeps receiving and dropping frames after it requests
+the stop, until the exit is published; otherwise the epoch ends quarantined
+with `DrainTimeout`.
+
 ## Ownership
 
 - One owner per resource, neither `Clone` nor `Copy`: `&mut` within a call, a

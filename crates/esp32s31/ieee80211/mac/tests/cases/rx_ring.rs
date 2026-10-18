@@ -1026,3 +1026,57 @@ fn receive_enable_is_a_separate_confirmed_hardware_edge() {
         RxDmaArenaState::ResetRequired
     );
 }
+
+#[test]
+fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
+    const MPDU_LENGTH: usize = 24;
+    const RECEIVED: usize = 0x40 + MPDU_LENGTH;
+    let arena = Arena::<2>::new();
+    let mut mmio = MockMmio::default();
+    let mut live = arena.start(&mut mmio);
+    let mut unit = [0_u8; RECEIVED];
+    unit[0] = (-42_i8) as u8;
+    unit[0x0c..0x10].copy_from_slice(&0x0102_0304_u32.to_le_bytes());
+    unit[0x25] = 1 << 4;
+    unit[0x38..0x3c].copy_from_slice(&((MPDU_LENGTH + 4) as u32).to_le_bytes());
+    for (index, byte) in unit[0x40..].iter_mut().enumerate() {
+        *byte = index as u8;
+    }
+    arena.dma_write(&live, 0, &unit);
+    arena.descriptors()[0]
+        .write_word0(BUFFER_SIZE | ((RECEIVED as u32) << LENGTH_SHIFT) | BIT_30 | BIT_31);
+    mmio.set_rx_last_descriptor_address(arena.address(1));
+    mmio.set_rx_next_descriptor_address(0);
+    let detached = arena
+        .storage
+        .take_completed_unit(&mut live, 1)
+        .unwrap()
+        .expect("completed unit")
+        .detach_single()
+        .unwrap();
+    let pool = oer_esp32s31_ieee80211_mac::rx::pool::RxStagePool::<1, 256>::new();
+    let frame = pool.stage_detached_unit(detached, 256).unwrap();
+    let config = RxIngressConfig {
+        ring_entry_limit: 1,
+        csi_config: 0,
+        flags: 0,
+    };
+
+    let normalized = frame.normalized(config).unwrap();
+    assert_eq!(normalized.mpdu, &unit[0x40..]);
+    assert_eq!(normalized.mpdu_offset, 0x40);
+    assert_eq!(normalized.rssi_dbm, -42);
+    assert_eq!(normalized.stamp, Some(0x0102_0304));
+    // The view is the free function over the staged segment.
+    assert_eq!(
+        normalized.mpdu,
+        view_normalized_rx_frame(&frame.segment(), config)
+            .unwrap()
+            .mpdu
+    );
+    let refused = RxIngressConfig {
+        flags: 0x80,
+        ..config
+    };
+    assert_eq!(frame.normalized(refused).err(), Some(RxError::Invalid));
+}

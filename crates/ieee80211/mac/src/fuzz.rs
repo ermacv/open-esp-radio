@@ -4,23 +4,36 @@
 //! frames: bit flips, byte overwrites, truncations, extensions and spliced
 //! repeats. The same seed always yields the same inputs, so a failure
 //! reproduces.
+//!
+//! Other crates' tests reach it through the `test-support` feature, so it is
+//! no `cfg(test)` module and its test-input indexing is linted.
+#![expect(
+    clippy::indexing_slicing,
+    reason = "a test-input generator: each index is drawn below the buffer's length"
+)]
 
 use std::vec::Vec;
 
 /// The inputs per entry point in an ordinary `cargo test`.
-pub(crate) const QUICK: usize = 100_000;
+pub const QUICK: usize = 100_000;
 /// The inputs per entry point in the `#[ignore]`d full run.
-#[allow(dead_code, reason = "the ignored full runs use it")]
-pub(crate) const FULL: usize = 2_000_000;
+pub const FULL: usize = 2_000_000;
 
-pub(crate) struct XorShift(u64);
+/// A xorshift64 generator; the same seed always yields the same sequence.
+pub struct XorShift(u64);
 
 impl XorShift {
-    pub(crate) const fn new(seed: u64) -> Self {
+    /// A generator from `seed`; a zero seed is made odd.
+    pub const fn new(seed: u64) -> Self {
         Self(seed | 1)
     }
 
-    pub(crate) fn next(&mut self) -> u64 {
+    /// The next value.
+    #[expect(
+        clippy::should_implement_trait,
+        reason = "an endless generator, not an iterator"
+    )]
+    pub fn next(&mut self) -> u64 {
         let mut x = self.0;
         x ^= x << 13;
         x ^= x >> 7;
@@ -29,7 +42,8 @@ impl XorShift {
         x
     }
 
-    pub(crate) fn below(&mut self, bound: usize) -> usize {
+    /// A value below `bound`, or zero when `bound` is zero.
+    pub fn below(&mut self, bound: usize) -> usize {
         if bound == 0 {
             0
         } else {
@@ -44,7 +58,7 @@ impl XorShift {
 
 /// Call `each` with `count` inputs: random strings up to `max_len` bytes and
 /// mutations of `seeds`.
-pub(crate) fn inputs(seeds: &[&[u8]], count: usize, max_len: usize, mut each: impl FnMut(&[u8])) {
+pub fn inputs(seeds: &[&[u8]], count: usize, max_len: usize, mut each: impl FnMut(&[u8])) {
     let mut rng = XorShift::new(0x9e37_79b9_7f4a_7c15 ^ count as u64);
     let mut buffer = Vec::with_capacity(max_len.saturating_mul(2));
     for _ in 0..count {

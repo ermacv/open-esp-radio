@@ -89,6 +89,7 @@ pub mod monitor;
 pub mod stack_boundary;
 pub mod station_network;
 pub mod station_service;
+pub mod survey;
 
 pub use monitor::injection as monitor_injection;
 pub use monitor::{
