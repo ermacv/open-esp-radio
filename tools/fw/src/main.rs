@@ -71,6 +71,9 @@ enum Command {
         #[arg(long)]
         board: String,
     },
+    /// Bring the stand router to W1's profile and verify it, without a
+    /// board; print the stand AP's masked BSSID and channel.
+    Router,
     /// List the attached boards and their stand ids.
     Boards,
     /// Switch a board's hub port off and on again.
@@ -256,20 +259,29 @@ fn w1_stand(
     Ok((config, shown))
 }
 
+/// The stand router of `stand`, locked and brought to W1's profile; the
+/// lock and image w1's configuration.
+fn w1_router(stand: &stand::Stand) -> Result<(oer_lab::lock::RouterLock, w1::Config)> {
+    let router = stand.router()?;
+    let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
+    let lock = oer_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
+    let (config, shown) = w1_stand(&router, &mut ssh)?;
+    for line in shown {
+        eprintln!("fw: {line}");
+    }
+    Ok((lock, config))
+}
+
 fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
     let (stand, board) = board(selector)?;
-    let w1 = if image == w1::IMAGE {
+    // The router lock is held to the end of the run.
+    let (_router, w1) = if image == w1::IMAGE {
         // The router is changed only for a board that is there.
         tty(&board)?;
-        let router = stand.router()?;
-        let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
-        let (config, shown) = w1_stand(&router, &mut ssh)?;
-        for line in shown {
-            eprintln!("fw: {line}");
-        }
-        Some(config)
+        let (lock, config) = w1_router(&stand)?;
+        (Some(lock), Some(config))
     } else {
-        None
+        (None, None)
     };
     image::build(root, image, w1.as_ref())?;
     let _lock = lock::acquire(&board.mac)?;
@@ -461,6 +473,14 @@ fn main() -> ExitCode {
                 timeout,
             } => return run(&root, &image, &board, timeout),
             Command::Monitor { board } => monitor(&board)?,
+            Command::Router => {
+                let stand = stand::Stand::load(&stand::path()?)?;
+                let (_lock, config) = w1_router(&stand)?;
+                println!(
+                    "router ready: the stand AP {} on channel {}",
+                    config.bssid, config.channel
+                );
+            }
             Command::Boards => list_boards()?,
             Command::PowerCycle { board } => power_cycle(&board)?,
         }
@@ -509,6 +529,11 @@ mod tests {
             parse("fw run w1 --board b1 --timeout 90s").unwrap().command,
             Command::Run { .. }
         ));
+        assert!(matches!(
+            parse("fw router").unwrap().command,
+            Command::Router
+        ));
+        assert!(parse("fw router --channel 6").is_err());
     }
 
     const STAND: &str = r#"
