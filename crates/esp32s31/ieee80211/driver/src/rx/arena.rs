@@ -3,10 +3,10 @@
 //! Every value the radio executor, the interrupt line and the application
 //! share for one epoch lives here, in one zeroed static: the interrupt fact
 //! storages, the request word, the counters, the stop handle's words, the
-//! slot of the interrupt line, the buffer address table, the staging pool
-//! and the RX DMA storage. Its zero bytes are a reusable arena; [`bind`]
-//! writes the few values whose zero bytes are not valid and lends every
-//! part once.
+//! slot of the interrupt line, the staged-frame queue, the buffer address
+//! table, the staging pool and the RX DMA storage. Its zero bytes are a
+//! reusable arena; [`bind`] writes the few values whose zero bytes are not
+//! valid and lends every part once.
 //!
 //! The non-descriptor fields come first, so the descriptors never start the
 //! arena (or the section the image places it in).
@@ -31,6 +31,7 @@ use super::{
     control::{ReceiveControl, ReceiveRunnerControl, ReceiveStopHandle},
     counters::WifiRxCounters,
     returns::RxReturnNotifier,
+    upper::{RxFrameEnds, RxFrameQueue},
 };
 use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 
@@ -59,6 +60,8 @@ pub struct WifiRxArena<
     counters: WifiRxCounters,
     control: MaybeUninit<ReceiveControl>,
     line: MaybeUninit<WifiIrqLine<E>>,
+    /// The staged-frame queue from the runner to the application.
+    frames: MaybeUninit<RxFrameQueue<'static, STAGE_SLOTS, BUFFER>>,
     buffer_addresses: RxDmaBufferAddresses<COUNT>,
     stage: RxStagePool<STAGE_SLOTS, BUFFER>,
     rx: RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
@@ -97,8 +100,9 @@ impl<
 > WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>
 {
     /// Lay the DMA storage out, write the values whose zero bytes are not
-    /// valid, and lend every part: the runner's parts and the application's
-    /// stop handle.
+    /// valid, and lend every part: the runner's parts, the application's
+    /// stop handle and the two ends of the staged-frame queue (the runner's
+    /// publisher end and the application's receiver).
     ///
     /// # Errors
     ///
@@ -106,7 +110,7 @@ impl<
     /// is lent.
     #[allow(
         clippy::type_complexity,
-        reason = "the parts and the stop handle are the two owners of one bind"
+        reason = "the parts, the stop handle and the queue ends are the owners of one bind"
     )]
     pub fn bind(
         &'static mut self,
@@ -114,6 +118,7 @@ impl<
         (
             WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>,
             ReceiveStopHandle<'static>,
+            RxFrameEnds<'static, STAGE_SLOTS, BUFFER>,
         ),
         RxDmaStorageError,
     > {
@@ -125,6 +130,7 @@ impl<
             counters,
             control,
             line,
+            frames,
             buffer_addresses,
             stage,
             rx,
@@ -136,6 +142,8 @@ impl<
         let irq_publisher: &'static IrqPublisher<'static> = publisher_slot.write(irq_publisher);
         let (power_publisher, power) = power.write(PowerIrqStorage::new()).split();
         let (control, stop) = control.write(ReceiveControl::new()).split();
+        let returns = RxReturnNotifier::new(irq_publisher);
+        let frames = frames.write(RxFrameQueue::new()).split(counters, returns);
         Ok((
             WifiRxParts {
                 rx,
@@ -147,7 +155,7 @@ impl<
                 requests,
                 counters,
                 control,
-                returns: RxReturnNotifier::new(irq_publisher),
+                returns,
                 line: WifiIrqLineParts {
                     mac: irq_publisher,
                     power: power_publisher,
@@ -157,6 +165,7 @@ impl<
                 },
             },
             stop,
+            frames,
         ))
     }
 }
