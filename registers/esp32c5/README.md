@@ -52,3 +52,5 @@ The generated outputs are this directory's `published/` files. Do not edit
 them directly. No ESP32-C5 PAC crate exists yet: the publication selects
 neither `policy/api.toml` nor PAC outputs, so its binding index names no
 crate. The change that adds the PAC crates selects both again.
+Until then `policy/api.toml` is kept but checked by nothing; the PAC crates
+come in the predecessor port's C5 hardware wave.
