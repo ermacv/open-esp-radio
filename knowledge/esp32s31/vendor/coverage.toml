@@ -20,8 +20,8 @@
 #   - `deferred`: a radio capability the port does not implement yet; a
 #     change that adds it reopens the decision.
 # - `closes_in` (only for `deferred`): the slice or wave that closes it
-#   (W2–W4, the second block, PHY slicing), or `unscheduled` until the owner
-#   places it.
+#   (W2–W6, the second block, the coexistence or Bluetooth LE block, PHY
+#   slicing), or `unscheduled`; "(proposed)" until the owner confirms it.
 # - `port_status`: `present` (every listed item exists in this repository),
 #   `partial` (some of the counterpart exists only in the predecessor; see
 #   `review`), `predecessor-only`, or `none` (nothing to cover).
@@ -228,7 +228,7 @@ end = 0x5a
 id = 8
 area = "Wi-Fi TX: HE PPDU at 40 MHz"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 an HE PPDU at 40 MHz: production transmits HE at 20 MHz only (reviewed \
 with the Wi-Fi owner)"""
@@ -354,7 +354,7 @@ end = 0xaa
 id = 14
 area = "Wi-Fi TX: TXOP holding"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W6: throughput (proposed)"
 reason = """
 TXOP holding: the descriptor's TXOP request raises the queue's PTI TXOP \
 bit, and `mac_tx_set_txop_q` programs a granted TXOP slot; production \
@@ -378,7 +378,7 @@ function = "hal_mac_fill_hwtxop"
 id = 15
 area = "Wi-Fi TX: software HE-Control image"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 a software HE-Control image: the driver never supplies one, so the \
 hardware BSR path stays selected and `mac_tx_set_tb` is reached (reviewed \
@@ -402,7 +402,7 @@ end = 0x20
 id = 16
 area = "Wi-Fi TX: HE trigger-based preparation"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 HE trigger-based preparation: production keeps HE-TB fail-closed and \
 transmits HE SU only, so the MPDU-length links, their bitmap checks and \
@@ -432,7 +432,7 @@ function = "dbg_hal_check_clr_mplen_bitmap"
 id = 17
 area = "Wi-Fi HE: BSS color of a non-station interface"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 the BSS color of an interface other than the station: the access point \
 transmits no HE (reviewed with the Wi-Fi owner)"""
@@ -523,7 +523,7 @@ end = 0xf4
 id = 22
 area = "Wi-Fi EDCA: MU-EDCA minimum exponent after success"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 the MU-EDCA minimum exponent a success restores for a frame whose \
 descriptor selects MU EDCA: production neither negotiates nor applies the \
@@ -544,7 +544,7 @@ end = 0x24
 id = 23
 area = "Wi-Fi TX: TXOP bursting completion"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W6: throughput (proposed)"
 reason = """
 TXOP bursting: `lmacProcessTxSuccess` completes a held TXOP slot through \
 `lmacProcessTxopQComplete`; production holds no TXOP slot and runs every \
@@ -624,7 +624,7 @@ end = 0xf6
 id = 27
 area = "Wi-Fi rate control: HE DCM rate clamp"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "W5: HE (proposed)"
 reason = """
 the HE DCM rate clamp of `rcGetDCMMaxRate`, which acts only when transmit \
 descriptor word 0x30 bit 17 is set: the vendor's ordinary data path never \
@@ -1412,7 +1412,7 @@ note = "The `phy_param[0x26]` guard's enabled path up to the 802.11p guard."
 id = 63
 area = "Coexistence: external work modes 1 and above 2"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "coexistence block (proposed)"
 reason = """
 external coexistence work modes production rejects without a write: mode \
 1, whose vendor path sets bits 31:30 of the external configuration, and \
@@ -1473,7 +1473,7 @@ function = "modem_clock_hal_deselect_all_coex_lpclk_source"
 id = 65
 area = "Modem clock: Bluetooth low-power sources other than the main crystal"
 decision = "deferred"
-closes_in = "unscheduled"
+closes_in = "Bluetooth LE block (proposed)"
 reason = """
 low-power clock sources other than the main crystal: production implements \
 only the default main-crystal source (ESP-IDF \
