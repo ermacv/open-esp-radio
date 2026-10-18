@@ -82,6 +82,20 @@ checks:
   chained unit needs the DMA engine's write into each non-terminal buffer
   (`dma_write`, which borrows the live ring), so chained and oversized drops
   are tested over the service and the counting sink, not the runner;
+- the driver's `rx/test_ring.rs` (test only) is the shared host fixture of
+  the product service: a live ring over a leaked `HostDma` arena, completed
+  by descriptor word (`complete`) or with received bytes (`complete_with`),
+  run until it drains or blocks on staging capacity (`settle`); the
+  `S31Prefix` builder writes an RX-control prefix (RSSI, stamp, RXEND
+  state, tail RX state, `sig_len`, dump length) before an MPDU; and
+  `CountingSink`, the publisher that counts and releases each lease at once;
+- the `rx/upper.rs` tests run that service into `QueueSink` and take frames
+  through `FrameReceiver`: exact free capacity and no refused send after a
+  credit, the receiver's wake, chained and oversized units that never reach
+  P1, prefix refusals counted by reason, and beacons through the survey
+  (`beacons_through_service_reach_the_scan_table`). The runner tests over
+  the queue cover a full queue woken by a P1 drop and both teardown ends:
+  P1 drains (`Halted`) and P1 never drains (`DrainTimeout`);
 - `mac` `tx::ampdu::model`, a reference model of the vendor's A-MPDU assembly
   for cross-checking, not a product path.
 
