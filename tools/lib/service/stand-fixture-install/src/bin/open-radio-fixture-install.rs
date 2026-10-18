@@ -16,12 +16,14 @@ struct Cli {
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum ProviderArg {
     LinuxNet,
+    LinuxBluetooth,
 }
 
 impl From<ProviderArg> for Provider {
     fn from(provider: ProviderArg) -> Self {
         match provider {
             ProviderArg::LinuxNet => Self::LinuxNet,
+            ProviderArg::LinuxBluetooth => Self::LinuxBluetooth,
         }
     }
 }

@@ -7,7 +7,7 @@ use oer_tool_data_hil_protocol::{
     FRAMING_VERSION, Key, Kind, MESSAGES_LOCK, MessageInfo, registry,
 };
 
-const MODULES: [&str; 4] = ["base", "system", "network", "telemetry"];
+const MODULES: [&str; 5] = ["base", "system", "network", "bluetooth", "telemetry"];
 
 #[test]
 fn no_two_messages_share_a_key_or_a_path() {

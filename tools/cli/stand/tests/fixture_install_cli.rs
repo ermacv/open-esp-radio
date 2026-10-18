@@ -34,24 +34,20 @@ fn dry_run(arguments: &[&str]) -> std::process::Output {
 }
 
 #[test]
-fn the_provider_plan_is_valid_json_without_build_sudo_or_lab_access() {
-    let first = dry_run(&["install", "--provider", "linux-net", "--dry-run"]);
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
-    let plan: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
-    assert_eq!(plan["provider"], "linux-net");
-    assert_eq!(plan["automatic_hardware_checks"], false);
-    let second = dry_run(&["install", "--provider", "linux-net", "--dry-run"]);
-    assert_eq!(first.stdout, second.stdout);
-    // The Bluetooth provider went with its family.
-    assert!(
-        !dry_run(&["install", "--provider", "linux-bluetooth", "--dry-run"])
-            .status
-            .success()
-    );
+fn both_provider_plans_are_valid_json_without_build_sudo_or_lab_access() {
+    for provider in ["linux-net", "linux-bluetooth"] {
+        let first = dry_run(&["install", "--provider", provider, "--dry-run"]);
+        assert!(
+            first.status.success(),
+            "{}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        let plan: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+        assert_eq!(plan["provider"], provider);
+        assert_eq!(plan["automatic_hardware_checks"], false);
+        let second = dry_run(&["install", "--provider", provider, "--dry-run"]);
+        assert_eq!(first.stdout, second.stdout);
+    }
 }
 
 #[test]

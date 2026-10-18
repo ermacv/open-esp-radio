@@ -26,8 +26,6 @@ impl Drop for Session {
 #[test]
 fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
     let directory = tempfile::tempdir().unwrap();
-    // The provider's unprivileged build starts with hostapd's compiler probe
-    // (`cc`), then Cargo: either one blocks until cancelled.
     let cargo = directory.path().join("cargo");
     let started = directory.path().join("build-started");
     let sudo_called = directory.path().join("sudo-called");
@@ -40,7 +38,6 @@ fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
     )
     .unwrap();
     fs::set_permissions(&cargo, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::copy(&cargo, directory.path().join("cc")).unwrap();
     let sudo = directory.path().join("sudo");
     fs::write(
         &sudo,
@@ -57,7 +54,7 @@ fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
             "fixture",
             "install",
         ])
-        .args(["--provider", "linux-net"])
+        .args(["--provider", "linux-bluetooth"])
         .env("CARGO", cargo)
         .env(
             "PATH",

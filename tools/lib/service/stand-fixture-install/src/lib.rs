@@ -6,6 +6,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 mod admission;
+pub mod bluetooth_contract;
 pub mod launcher;
 mod model;
 mod prepare;
@@ -20,7 +21,7 @@ pub use prepare::{build_plan, prepare};
 pub use transaction::apply_system;
 
 pub const INSTALLER_BINARY: &str = "open-radio-fixture-install";
-pub const BUNDLE_SCHEMA: u32 = 3;
+pub const BUNDLE_SCHEMA: u32 = 2;
 pub const RECEIPT_SCHEMA: u32 = 1;
 
 /// The stand resource a lease claims `provider`'s installed software by.

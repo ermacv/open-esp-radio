@@ -35,6 +35,8 @@ mod linux {
                 ArtifactRole::ProbeHelper => "open-radio-probe",
                 ArtifactRole::Hostapd => "open-radio-hostapd",
                 ArtifactRole::HostapdProvenance => "open-radio-hostapd.json",
+                ArtifactRole::BluetoothLauncher => "open-radio-bluetooth-launcher",
+                ArtifactRole::BluetoothHelper => "open-radio-bluetooth",
             };
             if artifact.file_name != expected_name {
                 return Err(format!(

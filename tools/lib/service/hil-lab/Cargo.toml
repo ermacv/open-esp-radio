@@ -20,6 +20,7 @@ oer-tool-data-hil-scenario-catalog = { path = "../../data/hil-scenario-catalog" 
 oer-tool-analysis-elf = { path = "../../analysis/elf" }
 oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
 oer-tool-service-stand-arbiter = { path = "../stand-arbiter" }
+oer-tool-service-hil-fixture = { path = "../hil-fixture" }
 oer-tool-data-stand-file = { path = "../../data/stand-file" }
 oer-tool-service-stand-board = { path = "../stand-board" }
 oer-tool-service-stand-ssh = { path = "../stand-ssh" }

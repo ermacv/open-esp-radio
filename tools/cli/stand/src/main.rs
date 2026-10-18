@@ -41,7 +41,7 @@ Stand commands (shared by every checkout of this user):
   cargo stand discover [--blink HUB:PORT | --verify-power BOARD]   attached boards against the stand file
   cargo stand doctor                  the stand file, uhubctl without sudo, NetworkManager leaving wlan0
   cargo stand fixtures                host Wi-Fi radios, Bluetooth adapter and OpenWrt hosts
-  cargo stand fixture install --provider linux-net [--dry-run]
+  cargo stand fixture install --provider linux-net|linux-bluetooth [--dry-run] [--adapter hciN]
   cargo stand fixture build-hostapd   build the pinned hostapd of the linux-net provider
   cargo stand install                 install the oer-tool-cli-stand of origin/main as `cargo stand`, built once
 
@@ -124,6 +124,9 @@ enum FixtureCli {
         /// Print the offline plan without executing any installer step.
         #[arg(long)]
         dry_run: bool,
+        /// Bluetooth adapter admitted by the installed policy; defaults to hci0.
+        #[arg(long, value_name = "hciN")]
+        adapter: Vec<String>,
     },
     /// Build the pinned hostapd with explicit HIL coexistence policy support.
     BuildHostapd,
@@ -215,8 +218,12 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         "fixture" => match FixtureCli::try_parse_from(rest)? {
-            FixtureCli::Install { provider, dry_run } => {
-                fixture_install::run(&ctx.root, provider, dry_run)?;
+            FixtureCli::Install {
+                provider,
+                dry_run,
+                adapter,
+            } => {
+                fixture_install::run(&ctx.root, provider, dry_run, &adapter)?;
                 Ok(ExitCode::SUCCESS)
             }
             FixtureCli::BuildHostapd => {
