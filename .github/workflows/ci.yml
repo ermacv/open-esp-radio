@@ -79,20 +79,37 @@ jobs:
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
-        # host clippy never sees them, nor the firmware images.
+        # host clippy never sees them, nor the firmware images. Each chip's
+        # firmware is checked apart: esp-hal takes one chip feature per build.
         run: |
           cargo clippy --locked --target riscv32imafc-unknown-none-elf \
             -p oer-adapters-esp-hal-radio --features esp32s31
           : > "$RUNNER_TEMP/empty-runtime.bin"
-          PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
-            cargo clippy --locked --target riscv32imafc-unknown-none-elf $(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.manifest_path | test("/firmware/(apps|platform)/")) | "-p " + .name')
+          export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
+          meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          firmware() {
+            jq -r --arg c5 "$1" '.packages[]
+              | select(.manifest_path | test("/firmware/(apps|platform)/"))
+              | select((.manifest_path | test("/esp32c5/")) == ($c5 == "true"))
+              | "-p " + .name' <<<"$meta"
+          }
+          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Firmware packages for the chip target
         run: |
           # The bootstrap embeds a packed stage-two runtime; an empty one
           # suffices to type-check it.
           : > "$RUNNER_TEMP/empty-runtime.bin"
-          PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
-            cargo check --locked --target riscv32imafc-unknown-none-elf $(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.manifest_path | test("/firmware/(apps|platform)/")) | "-p " + .name')
+          export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
+          meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          firmware() {
+            jq -r --arg c5 "$1" '.packages[]
+              | select(.manifest_path | test("/firmware/(apps|platform)/"))
+              | select((.manifest_path | test("/esp32c5/")) == ($c5 == "true"))
+              | "-p " + .name' <<<"$meta"
+          }
+          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)
+          cargo check --locked --target riscv32imac-unknown-none-elf $(firmware true)
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
         # reviewed entry (registers/esp32s31/shared-words.toml). Cargo resolves
