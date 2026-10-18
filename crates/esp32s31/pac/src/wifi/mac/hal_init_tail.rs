@@ -32,6 +32,7 @@ impl WifiRadioRegisters {
     /// The typed calibration fits the complete vendor field before MMIO begins.
     pub fn initialize_mac_hal_tail(
         &mut self,
+        rx_dma: &mut crate::WifiRxDmaRegisters,
         interrupts: &mut MacInterruptSetup,
         event_mask: MacInterruptMask,
         slow_clock_calibration: MacRtcCalibration,
@@ -51,9 +52,7 @@ impl WifiRadioRegisters {
         csi.modify(|_, w| w.bits_0_7_opaque().initialized());
         csi.modify(|_, w| w.bits_8_15_opaque().initialized());
 
-        self.peripherals
-            .wifi_mac
-            .wifi_mac_rx_dma
+        rx_dma
             .rx_control()
             .modify(|_, w| w.bit_27_opaque().set_bit());
 

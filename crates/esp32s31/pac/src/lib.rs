@@ -251,6 +251,7 @@ pub use ownership::{
     MacInterruptObservation, MacInterruptSnapshot, MacLocalTime, MacPowerInterruptObservation,
     MacPowerInterruptSnapshot, RadioPartitions, RadioPhyRegisters, SharedRadioPartition,
     SharedRadioParts, SharedRadioRegisters, WifiMacPartition, WifiRadioRegisters,
+    WifiRxDmaRegisters,
 };
 
 pub(crate) use ownership::device_fence;

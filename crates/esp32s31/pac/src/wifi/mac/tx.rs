@@ -1455,7 +1455,7 @@ impl WifiRadioRegisters {
 
         let bank = physical_bank(queue);
         let completion = &self.peripherals.wifi_mac.wifi_mac_tx_completion;
-        let tx_results = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let tx_results = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let (trigger_based_packet_count, last_tx_was_trigger_based) = match queue {
             0 => {
                 let information = tx_results.tx_queue_information_q0().read();

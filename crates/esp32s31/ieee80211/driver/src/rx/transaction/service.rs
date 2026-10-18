@@ -3,7 +3,7 @@ use crate::datapath::DatapathRxProgress;
 use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
 use oer_esp32s31_ieee80211_mac::{
     rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
-    rx::{PUBLIC_HEADER_SIZE, RxDma, RxRingError, RxRingLive},
+    rx::{PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxDma, RxRingError, RxRingLive},
 };
 
 /// Maximum units in the existing masked RX poll epoch.
@@ -22,6 +22,7 @@ pub fn service<
     'storage,
     'pool,
     H,
+    C,
     E,
     P,
     O,
@@ -39,10 +40,12 @@ pub fn service<
     admission: &P,
     counters: Counters<'_>,
     hardware: &mut H,
+    buffer_full: &mut C,
     mut hooks: O,
 ) -> Result<DatapathRxProgress, RxStageTransactionError>
 where
     H: RxDma,
+    C: RxBufferFullCounter,
     E: Publisher<'pool, STAGE_CAPACITY, STAGE_SLOTS>,
     P: Admission,
     O: Hooks,
@@ -52,7 +55,7 @@ where
     let credits = admission.credit_policy().validate(STAGE_SLOTS, E::DEPTH)?;
     let reserved = credits.critical_reserved_credits();
     let hardware_buffer_full_before = if hooks.observing() {
-        hardware.buffer_full_count()
+        buffer_full.buffer_full_count()
     } else {
         None
     };
@@ -514,7 +517,7 @@ where
     // counter increment was incorrectly paired with the following
     // service context.
     let hardware_buffer_full_after = if hooks.observing() {
-        hardware.buffer_full_count()
+        buffer_full.buffer_full_count()
     } else {
         None
     };

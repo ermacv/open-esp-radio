@@ -32461,95 +32461,10 @@ pub mod wifi_mac_rx_dma {
         rx_descriptor_base: RxDescriptorBase,
         rx_next_descriptor: RxNextDescriptor,
         rx_last_descriptor: RxLastDescriptor,
-        _reserved5: [u8; 0x8c],
-        csi_dump_config: CsiDumpConfig,
-        _reserved6: [u8; 0x58],
-        rx_block_ack_entry_control: (),
-        _reserved7: [u8; 0x04],
-        rx_block_ack_entry_peer_tail_and_policy: (),
-        _reserved8: [u8; 0x04],
-        rx_block_ack_entry_peer_head: (),
-        _reserved9: [u8; 0x04],
-        rx_block_ack_entry_current_sequence: (),
-        _reserved10: [u8; 0x04],
-        rx_block_ack_entry_start_sequence_load: (),
-        _reserved11: [u8; 0x04],
-        rx_block_ack_entry_bitmap_low_status: (),
-        _reserved12: [u8; 0x04],
-        rx_block_ack_entry_bitmap_low_load: (),
-        _reserved13: [u8; 0x04],
-        rx_block_ack_entry_bitmap_high_status: (),
-        _reserved14: [u8; 0x04],
-        rx_block_ack_entry_bitmap_high_load: (),
-        _reserved15: [u8; 0x0100],
-        rx_block_ack_agreement_update: RxBlockAckAgreementUpdate,
-        _reserved16: [u8; 0x09cc],
+        _reserved5: [u8; 0x0bd8],
         word_0c68_opaque: Word0c68Opaque,
         word_0c6c_opaque: Word0c6cOpaque,
         rx_descriptor_high_window: RxDescriptorHighWindow,
-        _reserved19: [u8; 0x0230],
-        extra_softap_rx_block_ack_control: ExtraSoftapRxBlockAckControl,
-        extra_softap_rx_block_ack_peer_tail_and_policy: ExtraSoftapRxBlockAckPeerTailAndPolicy,
-        extra_softap_rx_block_ack_peer_head: ExtraSoftapRxBlockAckPeerHead,
-        extra_softap_rx_block_ack_start_sequence: ExtraSoftapRxBlockAckStartSequence,
-        extra_softap_rx_block_ack_bitmap_low: ExtraSoftapRxBlockAckBitmapLow,
-        extra_softap_rx_block_ack_bitmap_high: ExtraSoftapRxBlockAckBitmapHigh,
-        _reserved25: [u8; 0x0304],
-        tx_queue_information_q7: TxQueueInformationQ7,
-        tx_block_ack_bitmap_high_q7: TxBlockAckBitmapHighQ7,
-        tx_block_ack_bitmap_low_q7: TxBlockAckBitmapLowQ7,
-        tx_block_ack_control_sequence_q7: TxBlockAckControlSequenceQ7,
-        tx_block_ack_transmitter_address_high_q7: TxBlockAckTransmitterAddressHighQ7,
-        tx_block_ack_transmitter_address_low_q7: TxBlockAckTransmitterAddressLowQ7,
-        _reserved31: [u8; 0x64],
-        tx_queue_information_q6: TxQueueInformationQ6,
-        tx_block_ack_bitmap_high_q6: TxBlockAckBitmapHighQ6,
-        tx_block_ack_bitmap_low_q6: TxBlockAckBitmapLowQ6,
-        tx_block_ack_control_sequence_q6: TxBlockAckControlSequenceQ6,
-        tx_block_ack_transmitter_address_high_q6: TxBlockAckTransmitterAddressHighQ6,
-        tx_block_ack_transmitter_address_low_q6: TxBlockAckTransmitterAddressLowQ6,
-        _reserved37: [u8; 0x64],
-        tx_queue_information_q5: TxQueueInformationQ5,
-        tx_block_ack_bitmap_high_q5: TxBlockAckBitmapHighQ5,
-        tx_block_ack_bitmap_low_q5: TxBlockAckBitmapLowQ5,
-        tx_block_ack_control_sequence_q5: TxBlockAckControlSequenceQ5,
-        tx_block_ack_transmitter_address_high_q5: TxBlockAckTransmitterAddressHighQ5,
-        tx_block_ack_transmitter_address_low_q5: TxBlockAckTransmitterAddressLowQ5,
-        _reserved43: [u8; 0x64],
-        tx_queue_information_q4: TxQueueInformationQ4,
-        tx_block_ack_bitmap_high_q4: TxBlockAckBitmapHighQ4,
-        tx_block_ack_bitmap_low_q4: TxBlockAckBitmapLowQ4,
-        tx_block_ack_control_sequence_q4: TxBlockAckControlSequenceQ4,
-        tx_block_ack_transmitter_address_high_q4: TxBlockAckTransmitterAddressHighQ4,
-        tx_block_ack_transmitter_address_low_q4: TxBlockAckTransmitterAddressLowQ4,
-        _reserved49: [u8; 0x64],
-        tx_queue_information_q3: TxQueueInformationQ3,
-        tx_block_ack_bitmap_high_q3: TxBlockAckBitmapHighQ3,
-        tx_block_ack_bitmap_low_q3: TxBlockAckBitmapLowQ3,
-        tx_block_ack_control_sequence_q3: TxBlockAckControlSequenceQ3,
-        tx_block_ack_transmitter_address_high_q3: TxBlockAckTransmitterAddressHighQ3,
-        tx_block_ack_transmitter_address_low_q3: TxBlockAckTransmitterAddressLowQ3,
-        _reserved55: [u8; 0x64],
-        tx_queue_information_q2: TxQueueInformationQ2,
-        tx_block_ack_bitmap_high_q2: TxBlockAckBitmapHighQ2,
-        tx_block_ack_bitmap_low_q2: TxBlockAckBitmapLowQ2,
-        tx_block_ack_control_sequence_q2: TxBlockAckControlSequenceQ2,
-        tx_block_ack_transmitter_address_high_q2: TxBlockAckTransmitterAddressHighQ2,
-        tx_block_ack_transmitter_address_low_q2: TxBlockAckTransmitterAddressLowQ2,
-        _reserved61: [u8; 0x64],
-        tx_queue_information_q1: TxQueueInformationQ1,
-        tx_block_ack_bitmap_high_q1: TxBlockAckBitmapHighQ1,
-        tx_block_ack_bitmap_low_q1: TxBlockAckBitmapLowQ1,
-        tx_block_ack_control_sequence_q1: TxBlockAckControlSequenceQ1,
-        tx_block_ack_transmitter_address_high_q1: TxBlockAckTransmitterAddressHighQ1,
-        tx_block_ack_transmitter_address_low_q1: TxBlockAckTransmitterAddressLowQ1,
-        _reserved67: [u8; 0x64],
-        tx_queue_information_q0: TxQueueInformationQ0,
-        tx_block_ack_bitmap_high_q0: TxBlockAckBitmapHighQ0,
-        tx_block_ack_bitmap_low_q0: TxBlockAckBitmapLowQ0,
-        tx_block_ack_control_sequence_q0: TxBlockAckControlSequenceQ0,
-        tx_block_ack_transmitter_address_high_q0: TxBlockAckTransmitterAddressHighQ0,
-        tx_block_ack_transmitter_address_low_q0: TxBlockAckTransmitterAddressLowQ0,
     }
     impl RegisterBlock {
         #[doc = "0x7c - Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown."]
@@ -32577,11 +32492,440 @@ pub mod wifi_mac_rx_dma {
         pub const fn rx_last_descriptor(&self) -> &RxLastDescriptor {
             &self.rx_last_descriptor
         }
-        #[doc = "0x11c - Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug."]
+        #[doc = "0xc68 - Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication."]
         #[inline(always)]
-        pub const fn csi_dump_config(&self) -> &CsiDumpConfig {
-            &self.csi_dump_config
+        pub const fn word_0c68_opaque(&self) -> &Word0c68Opaque {
+            &self.word_0c68_opaque
         }
+        #[doc = "0xc6c - Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window."]
+        #[inline(always)]
+        pub const fn word_0c6c_opaque(&self) -> &Word0c6cOpaque {
+            &self.word_0c6c_opaque
+        }
+        #[doc = "0xc70 - Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM."]
+        #[inline(always)]
+        pub const fn rx_descriptor_high_window(&self) -> &RxDescriptorHighWindow {
+            &self.rx_descriptor_high_window
+        }
+    }
+    #[doc = "WORD_007C_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_007c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_007c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_007c_opaque`] module"]
+    #[doc(alias = "WORD_007C_OPAQUE")]
+    pub type Word007cOpaque = crate::Reg<word_007c_opaque::Word007cOpaqueSpec>;
+    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown."]
+    pub mod word_007c_opaque {
+        #[doc = "Register `WORD_007C_OPAQUE` reader"]
+        pub type R = crate::R<Word007cOpaqueSpec>;
+        #[doc = "Register `WORD_007C_OPAQUE` writer"]
+        pub type W = crate::W<Word007cOpaqueSpec>;
+        #[doc = "Field `BITS_0_7_OPAQUE` reader - Opaque: meaning not established."]
+        pub type Bits0_7OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_0_7_OPAQUE` writer - Opaque: meaning not established."]
+        pub type Bits0_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8, u8, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:7 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&self) -> Bits0_7OpaqueR {
+                Bits0_7OpaqueR::new((self.bits & 0xff) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:7 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_7_opaque(&mut self) -> Bits0_7OpaqueW<'_, Word007cOpaqueSpec> {
+                Bits0_7OpaqueW::new(self, 0)
+            }
+        }
+        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_007c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_007c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct Word007cOpaqueSpec;
+        impl crate::RegisterSpec for Word007cOpaqueSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`word_007c_opaque::R`](R) reader structure"]
+        impl crate::Readable for Word007cOpaqueSpec {}
+        #[doc = "`write(|w| ..)` method takes [`word_007c_opaque::W`](W) writer structure"]
+        impl crate::Writable for Word007cOpaqueSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "RX_CONTROL (rw) register accessor: Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_control::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_control::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_control`] module"]
+    #[doc(alias = "RX_CONTROL")]
+    pub type RxControl = crate::Reg<rx_control::RxControlSpec>;
+    #[doc = "Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell."]
+    pub mod rx_control {
+        #[doc = "Register `RX_CONTROL` reader"]
+        pub type R = crate::R<RxControlSpec>;
+        #[doc = "Register `RX_CONTROL` writer"]
+        pub type W = crate::W<RxControlSpec>;
+        #[doc = "Field `APPEND_DESCRIPTOR_RELOAD` reader - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
+        pub type AppendDescriptorReloadR = crate::BitReader;
+        #[doc = "Field `APPEND_DESCRIPTOR_RELOAD` writer - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
+        pub type AppendDescriptorReloadW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BIT_27_OPAQUE` reader - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
+        pub type Bit27OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_27_OPAQUE` writer - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
+        pub type Bit27OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `WALKER_ENABLE` reader - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
+        pub type WalkerEnableR = crate::BitReader;
+        #[doc = "Field `WALKER_ENABLE` writer - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
+        pub type WalkerEnableW<'a, REG> = crate::BitWriter<'a, REG>;
+        impl R {
+            #[doc = "Bit 0 - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
+            #[inline(always)]
+            pub fn append_descriptor_reload(&self) -> AppendDescriptorReloadR {
+                AppendDescriptorReloadR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bit 27 - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
+            #[inline(always)]
+            pub fn bit_27_opaque(&self) -> Bit27OpaqueR {
+                Bit27OpaqueR::new(((self.bits >> 27) & 1) != 0)
+            }
+            #[doc = "Bit 31 - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
+            #[inline(always)]
+            pub fn walker_enable(&self) -> WalkerEnableR {
+                WalkerEnableR::new(((self.bits >> 31) & 1) != 0)
+            }
+        }
+        impl W {
+            #[doc = "Bit 0 - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
+            #[inline(always)]
+            pub fn append_descriptor_reload(
+                &mut self,
+            ) -> AppendDescriptorReloadW<'_, RxControlSpec> {
+                AppendDescriptorReloadW::new(self, 0)
+            }
+            #[doc = "Bit 27 - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
+            #[inline(always)]
+            pub fn bit_27_opaque(&mut self) -> Bit27OpaqueW<'_, RxControlSpec> {
+                Bit27OpaqueW::new(self, 27)
+            }
+            #[doc = "Bit 31 - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
+            #[inline(always)]
+            pub fn walker_enable(&mut self) -> WalkerEnableW<'_, RxControlSpec> {
+                WalkerEnableW::new(self, 31)
+            }
+        }
+        #[doc = "Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_control::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_control::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct RxControlSpec;
+        impl crate::RegisterSpec for RxControlSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`rx_control::R`](R) reader structure"]
+        impl crate::Readable for RxControlSpec {}
+        #[doc = "`write(|w| ..)` method takes [`rx_control::W`](W) writer structure"]
+        impl crate::Writable for RxControlSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "RX_DESCRIPTOR_BASE (rw) register accessor: Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_base::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_base::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_descriptor_base`] module"]
+    #[doc(alias = "RX_DESCRIPTOR_BASE")]
+    pub type RxDescriptorBase = crate::Reg<rx_descriptor_base::RxDescriptorBaseSpec>;
+    #[doc = "Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations."]
+    pub mod rx_descriptor_base {
+        #[doc = "Register `RX_DESCRIPTOR_BASE` reader"]
+        pub type R = crate::R<RxDescriptorBaseSpec>;
+        #[doc = "Register `RX_DESCRIPTOR_BASE` writer"]
+        pub type W = crate::W<RxDescriptorBaseSpec>;
+        #[doc = "Field `ADDRESS` reader - Project-assigned name."]
+        pub type AddressR = crate::FieldReader<u32>;
+        #[doc = "Field `ADDRESS` writer - Project-assigned name."]
+        pub type AddressW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address(&self) -> AddressR {
+                AddressR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address(&mut self) -> AddressW<'_, RxDescriptorBaseSpec> {
+                AddressW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_base::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_base::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct RxDescriptorBaseSpec;
+        impl crate::RegisterSpec for RxDescriptorBaseSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`rx_descriptor_base::R`](R) reader structure"]
+        impl crate::Readable for RxDescriptorBaseSpec {}
+        #[doc = "`write(|w| ..)` method takes [`rx_descriptor_base::W`](W) writer structure"]
+        impl crate::Writable for RxDescriptorBaseSpec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "RX_NEXT_DESCRIPTOR (r) register accessor: Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_next_descriptor::R`]. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_next_descriptor`] module"]
+    #[doc(alias = "RX_NEXT_DESCRIPTOR")]
+    pub type RxNextDescriptor = crate::Reg<rx_next_descriptor::RxNextDescriptorSpec>;
+    #[doc = "Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."]
+    pub mod rx_next_descriptor {
+        #[doc = "Register `RX_NEXT_DESCRIPTOR` reader"]
+        pub type R = crate::R<RxNextDescriptorSpec>;
+        #[doc = "Field `ADDRESS_LOW` reader - Project-assigned name."]
+        pub type AddressLowR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_20_31_OPAQUE` reader - Opaque: meaning not established. Unassigned upper state retained by the complete-word zero predicate in rom\\[\\]::wDev_AppendRxBlocks. This is deliberately exposed separately from ADDRESS_LOW so production code never reconstructs or masks a register image."]
+        pub type Bits20_31OpaqueR = crate::FieldReader<u16>;
+        impl R {
+            #[doc = "Bits 0:19 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address_low(&self) -> AddressLowR {
+                AddressLowR::new(self.bits & 0x000f_ffff)
+            }
+            #[doc = "Bits 20:31 - Opaque: meaning not established. Unassigned upper state retained by the complete-word zero predicate in rom\\[\\]::wDev_AppendRxBlocks. This is deliberately exposed separately from ADDRESS_LOW so production code never reconstructs or masks a register image."]
+            #[inline(always)]
+            pub fn bits_20_31_opaque(&self) -> Bits20_31OpaqueR {
+                Bits20_31OpaqueR::new(((self.bits >> 20) & 0x0fff) as u16)
+            }
+        }
+        #[doc = "Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_next_descriptor::R`](R). See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct RxNextDescriptorSpec;
+        impl crate::RegisterSpec for RxNextDescriptorSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`rx_next_descriptor::R`](R) reader structure"]
+        impl crate::Readable for RxNextDescriptorSpec {}
+    }
+    #[doc = "RX_LAST_DESCRIPTOR (r) register accessor: Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_last_descriptor::R`]. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_last_descriptor`] module"]
+    #[doc(alias = "RX_LAST_DESCRIPTOR")]
+    pub type RxLastDescriptor = crate::Reg<rx_last_descriptor::RxLastDescriptorSpec>;
+    #[doc = "Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker."]
+    pub mod rx_last_descriptor {
+        #[doc = "Register `RX_LAST_DESCRIPTOR` reader"]
+        pub type R = crate::R<RxLastDescriptorSpec>;
+        #[doc = "Field `ADDRESS_LOW` reader - Project-assigned name."]
+        pub type AddressLowR = crate::FieldReader<u32>;
+        impl R {
+            #[doc = "Bits 0:19 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address_low(&self) -> AddressLowR {
+                AddressLowR::new(self.bits & 0x000f_ffff)
+            }
+        }
+        #[doc = "Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_last_descriptor::R`](R). See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct RxLastDescriptorSpec;
+        impl crate::RegisterSpec for RxLastDescriptorSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`rx_last_descriptor::R`](R) reader structure"]
+        impl crate::Readable for RxLastDescriptorSpec {}
+    }
+    #[doc = "WORD_0C68_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c68_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c68_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0c68_opaque`] module"]
+    #[doc(alias = "WORD_0C68_OPAQUE")]
+    pub type Word0c68Opaque = crate::Reg<word_0c68_opaque::Word0c68OpaqueSpec>;
+    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication."]
+    pub mod word_0c68_opaque {
+        #[doc = "Register `WORD_0C68_OPAQUE` reader"]
+        pub type R = crate::R<Word0c68OpaqueSpec>;
+        #[doc = "Register `WORD_0C68_OPAQUE` writer"]
+        pub type W = crate::W<Word0c68OpaqueSpec>;
+        #[doc = "Field `BITS_0_19_OPAQUE` reader - Opaque: meaning not established."]
+        pub type Bits0_19OpaqueR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_0_19_OPAQUE` writer - Opaque: meaning not established."]
+        pub type Bits0_19OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 20, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:19 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_19_opaque(&self) -> Bits0_19OpaqueR {
+                Bits0_19OpaqueR::new(self.bits & 0x000f_ffff)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:19 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_19_opaque(&mut self) -> Bits0_19OpaqueW<'_, Word0c68OpaqueSpec> {
+                Bits0_19OpaqueW::new(self, 0)
+            }
+        }
+        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c68_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c68_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct Word0c68OpaqueSpec;
+        impl crate::RegisterSpec for Word0c68OpaqueSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`word_0c68_opaque::R`](R) reader structure"]
+        impl crate::Readable for Word0c68OpaqueSpec {}
+        #[doc = "`write(|w| ..)` method takes [`word_0c68_opaque::W`](W) writer structure"]
+        impl crate::Writable for Word0c68OpaqueSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "WORD_0C6C_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c6c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c6c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0c6c_opaque`] module"]
+    #[doc(alias = "WORD_0C6C_OPAQUE")]
+    pub type Word0c6cOpaque = crate::Reg<word_0c6c_opaque::Word0c6cOpaqueSpec>;
+    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window."]
+    pub mod word_0c6c_opaque {
+        #[doc = "Register `WORD_0C6C_OPAQUE` reader"]
+        pub type R = crate::R<Word0c6cOpaqueSpec>;
+        #[doc = "Register `WORD_0C6C_OPAQUE` writer"]
+        pub type W = crate::W<Word0c6cOpaqueSpec>;
+        #[doc = "Field `BITS_0_19_OPAQUE` reader - Opaque: meaning not established."]
+        pub type Bits0_19OpaqueR = crate::FieldReader<u32>;
+        #[doc = "Field `BITS_0_19_OPAQUE` writer - Opaque: meaning not established."]
+        pub type Bits0_19OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 20, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:19 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_19_opaque(&self) -> Bits0_19OpaqueR {
+                Bits0_19OpaqueR::new(self.bits & 0x000f_ffff)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:19 - Opaque: meaning not established."]
+            #[inline(always)]
+            pub fn bits_0_19_opaque(&mut self) -> Bits0_19OpaqueW<'_, Word0c6cOpaqueSpec> {
+                Bits0_19OpaqueW::new(self, 0)
+            }
+        }
+        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c6c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c6c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct Word0c6cOpaqueSpec;
+        impl crate::RegisterSpec for Word0c6cOpaqueSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`word_0c6c_opaque::R`](R) reader structure"]
+        impl crate::Readable for Word0c6cOpaqueSpec {}
+        #[doc = "`write(|w| ..)` method takes [`word_0c6c_opaque::W`](W) writer structure"]
+        impl crate::Writable for Word0c6cOpaqueSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "RX_DESCRIPTOR_HIGH_WINDOW (rw) register accessor: Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_high_window::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_high_window::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_descriptor_high_window`] module"]
+    #[doc(alias = "RX_DESCRIPTOR_HIGH_WINDOW")]
+    pub type RxDescriptorHighWindow =
+        crate::Reg<rx_descriptor_high_window::RxDescriptorHighWindowSpec>;
+    #[doc = "Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM."]
+    pub mod rx_descriptor_high_window {
+        #[doc = "Register `RX_DESCRIPTOR_HIGH_WINDOW` reader"]
+        pub type R = crate::R<RxDescriptorHighWindowSpec>;
+        #[doc = "Register `RX_DESCRIPTOR_HIGH_WINDOW` writer"]
+        pub type W = crate::W<RxDescriptorHighWindowSpec>;
+        #[doc = "Field `ADDRESS_HIGH` reader - Project-assigned name."]
+        pub type AddressHighR = crate::FieldReader<u16>;
+        #[doc = "Field `ADDRESS_HIGH` writer - Project-assigned name."]
+        pub type AddressHighW<'a, REG> = crate::FieldWriter<'a, REG, 12, u16, crate::Safe>;
+        impl R {
+            #[doc = "Bits 20:31 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address_high(&self) -> AddressHighR {
+                AddressHighR::new(((self.bits >> 20) & 0x0fff) as u16)
+            }
+        }
+        impl W {
+            #[doc = "Bits 20:31 - Project-assigned name."]
+            #[inline(always)]
+            pub fn address_high(&mut self) -> AddressHighW<'_, RxDescriptorHighWindowSpec> {
+                AddressHighW::new(self, 20)
+            }
+        }
+        #[doc = "Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_high_window::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_high_window::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct RxDescriptorHighWindowSpec;
+        impl crate::RegisterSpec for RxDescriptorHighWindowSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`rx_descriptor_high_window::R`](R) reader structure"]
+        impl crate::Readable for RxDescriptorHighWindowSpec {}
+        #[doc = "`write(|w| ..)` method takes [`rx_descriptor_high_window::W`](W) writer structure"]
+        impl crate::Writable for RxDescriptorHighWindowSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+}
+#[doc = "Block-ack registers of the Wi-Fi MAC beside the RX descriptor walker, at the same base: the per-queue TX block-ack state, the RX block-ack agreement update and the extra soft-AP RX block-ack entry."]
+pub type WifiMacBlockAck = crate::Periph<wifi_mac_block_ack::RegisterBlock, 0x2010_4000>;
+impl core::fmt::Debug for WifiMacBlockAck {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.debug_struct("WifiMacBlockAck").finish()
+    }
+}
+#[doc = "Block-ack registers of the Wi-Fi MAC beside the RX descriptor walker, at the same base: the per-queue TX block-ack state, the RX block-ack agreement update and the extra soft-AP RX block-ack entry."]
+pub mod wifi_mac_block_ack {
+    #[repr(C)]
+    #[doc = "Register block"]
+    pub struct RegisterBlock {
+        _reserved0: [u8; 0x0178],
+        rx_block_ack_entry_control: (),
+        _reserved1: [u8; 0x04],
+        rx_block_ack_entry_peer_tail_and_policy: (),
+        _reserved2: [u8; 0x04],
+        rx_block_ack_entry_peer_head: (),
+        _reserved3: [u8; 0x04],
+        rx_block_ack_entry_current_sequence: (),
+        _reserved4: [u8; 0x04],
+        rx_block_ack_entry_start_sequence_load: (),
+        _reserved5: [u8; 0x04],
+        rx_block_ack_entry_bitmap_low_status: (),
+        _reserved6: [u8; 0x04],
+        rx_block_ack_entry_bitmap_low_load: (),
+        _reserved7: [u8; 0x04],
+        rx_block_ack_entry_bitmap_high_status: (),
+        _reserved8: [u8; 0x04],
+        rx_block_ack_entry_bitmap_high_load: (),
+        _reserved9: [u8; 0x0100],
+        rx_block_ack_agreement_update: RxBlockAckAgreementUpdate,
+        _reserved10: [u8; 0x0c08],
+        extra_softap_rx_block_ack_control: ExtraSoftapRxBlockAckControl,
+        extra_softap_rx_block_ack_peer_tail_and_policy: ExtraSoftapRxBlockAckPeerTailAndPolicy,
+        extra_softap_rx_block_ack_peer_head: ExtraSoftapRxBlockAckPeerHead,
+        extra_softap_rx_block_ack_start_sequence: ExtraSoftapRxBlockAckStartSequence,
+        extra_softap_rx_block_ack_bitmap_low: ExtraSoftapRxBlockAckBitmapLow,
+        extra_softap_rx_block_ack_bitmap_high: ExtraSoftapRxBlockAckBitmapHigh,
+        _reserved16: [u8; 0x0304],
+        tx_queue_information_q7: TxQueueInformationQ7,
+        tx_block_ack_bitmap_high_q7: TxBlockAckBitmapHighQ7,
+        tx_block_ack_bitmap_low_q7: TxBlockAckBitmapLowQ7,
+        tx_block_ack_control_sequence_q7: TxBlockAckControlSequenceQ7,
+        tx_block_ack_transmitter_address_high_q7: TxBlockAckTransmitterAddressHighQ7,
+        tx_block_ack_transmitter_address_low_q7: TxBlockAckTransmitterAddressLowQ7,
+        _reserved22: [u8; 0x64],
+        tx_queue_information_q6: TxQueueInformationQ6,
+        tx_block_ack_bitmap_high_q6: TxBlockAckBitmapHighQ6,
+        tx_block_ack_bitmap_low_q6: TxBlockAckBitmapLowQ6,
+        tx_block_ack_control_sequence_q6: TxBlockAckControlSequenceQ6,
+        tx_block_ack_transmitter_address_high_q6: TxBlockAckTransmitterAddressHighQ6,
+        tx_block_ack_transmitter_address_low_q6: TxBlockAckTransmitterAddressLowQ6,
+        _reserved28: [u8; 0x64],
+        tx_queue_information_q5: TxQueueInformationQ5,
+        tx_block_ack_bitmap_high_q5: TxBlockAckBitmapHighQ5,
+        tx_block_ack_bitmap_low_q5: TxBlockAckBitmapLowQ5,
+        tx_block_ack_control_sequence_q5: TxBlockAckControlSequenceQ5,
+        tx_block_ack_transmitter_address_high_q5: TxBlockAckTransmitterAddressHighQ5,
+        tx_block_ack_transmitter_address_low_q5: TxBlockAckTransmitterAddressLowQ5,
+        _reserved34: [u8; 0x64],
+        tx_queue_information_q4: TxQueueInformationQ4,
+        tx_block_ack_bitmap_high_q4: TxBlockAckBitmapHighQ4,
+        tx_block_ack_bitmap_low_q4: TxBlockAckBitmapLowQ4,
+        tx_block_ack_control_sequence_q4: TxBlockAckControlSequenceQ4,
+        tx_block_ack_transmitter_address_high_q4: TxBlockAckTransmitterAddressHighQ4,
+        tx_block_ack_transmitter_address_low_q4: TxBlockAckTransmitterAddressLowQ4,
+        _reserved40: [u8; 0x64],
+        tx_queue_information_q3: TxQueueInformationQ3,
+        tx_block_ack_bitmap_high_q3: TxBlockAckBitmapHighQ3,
+        tx_block_ack_bitmap_low_q3: TxBlockAckBitmapLowQ3,
+        tx_block_ack_control_sequence_q3: TxBlockAckControlSequenceQ3,
+        tx_block_ack_transmitter_address_high_q3: TxBlockAckTransmitterAddressHighQ3,
+        tx_block_ack_transmitter_address_low_q3: TxBlockAckTransmitterAddressLowQ3,
+        _reserved46: [u8; 0x64],
+        tx_queue_information_q2: TxQueueInformationQ2,
+        tx_block_ack_bitmap_high_q2: TxBlockAckBitmapHighQ2,
+        tx_block_ack_bitmap_low_q2: TxBlockAckBitmapLowQ2,
+        tx_block_ack_control_sequence_q2: TxBlockAckControlSequenceQ2,
+        tx_block_ack_transmitter_address_high_q2: TxBlockAckTransmitterAddressHighQ2,
+        tx_block_ack_transmitter_address_low_q2: TxBlockAckTransmitterAddressLowQ2,
+        _reserved52: [u8; 0x64],
+        tx_queue_information_q1: TxQueueInformationQ1,
+        tx_block_ack_bitmap_high_q1: TxBlockAckBitmapHighQ1,
+        tx_block_ack_bitmap_low_q1: TxBlockAckBitmapLowQ1,
+        tx_block_ack_control_sequence_q1: TxBlockAckControlSequenceQ1,
+        tx_block_ack_transmitter_address_high_q1: TxBlockAckTransmitterAddressHighQ1,
+        tx_block_ack_transmitter_address_low_q1: TxBlockAckTransmitterAddressLowQ1,
+        _reserved58: [u8; 0x64],
+        tx_queue_information_q0: TxQueueInformationQ0,
+        tx_block_ack_bitmap_high_q0: TxBlockAckBitmapHighQ0,
+        tx_block_ack_bitmap_low_q0: TxBlockAckBitmapLowQ0,
+        tx_block_ack_control_sequence_q0: TxBlockAckControlSequenceQ0,
+        tx_block_ack_transmitter_address_high_q0: TxBlockAckTransmitterAddressHighQ0,
+        tx_block_ack_transmitter_address_low_q0: TxBlockAckTransmitterAddressLowQ0,
+    }
+    impl RegisterBlock {
         #[doc = "0x178..0x198 - Project-assigned name. Configuration word in one of eight reverse-addressed ordinary receive BlockAck banks. Physical array index zero is logical hardware index seven; complete hal_agreement_add_rx_ba writes logical index zero at 0x20104274 and subtracts 0x24 per index. Delete clears VALID, clears both load bitmaps, sets VALID once, then clears this complete word."]
         #[doc = ""]
         #[doc = "<div class=\"warning\">`n` is the index of register in the array. `n == 0` corresponds to `RX_BLOCK_ACK_ENTRY7_CONTROL` register.</div>"]
@@ -33309,21 +33653,6 @@ pub mod wifi_mac_rx_dma {
         pub const fn rx_block_ack_agreement_update(&self) -> &RxBlockAckAgreementUpdate {
             &self.rx_block_ack_agreement_update
         }
-        #[doc = "0xc68 - Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication."]
-        #[inline(always)]
-        pub const fn word_0c68_opaque(&self) -> &Word0c68Opaque {
-            &self.word_0c68_opaque
-        }
-        #[doc = "0xc6c - Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window."]
-        #[inline(always)]
-        pub const fn word_0c6c_opaque(&self) -> &Word0c6cOpaque {
-            &self.word_0c6c_opaque
-        }
-        #[doc = "0xc70 - Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM."]
-        #[inline(always)]
-        pub const fn rx_descriptor_high_window(&self) -> &RxDescriptorHighWindow {
-            &self.rx_descriptor_high_window
-        }
         #[doc = "0xea4 - Project-assigned name. Shared staging and readback-control word used only by complete hal_agreement_*_extra_softap_rx_ba leaves. Ordinary STA/AP receive BlockAck agreements use the eight direct banks at 0x20104178..0x20104294 instead."]
         #[inline(always)]
         pub const fn extra_softap_rx_block_ack_control(&self) -> &ExtraSoftapRxBlockAckControl {
@@ -33633,505 +33962,6 @@ pub mod wifi_mac_rx_dma {
             &self,
         ) -> &TxBlockAckTransmitterAddressLowQ0 {
             &self.tx_block_ack_transmitter_address_low_q0
-        }
-    }
-    #[doc = "WORD_007C_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_007c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_007c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_007c_opaque`] module"]
-    #[doc(alias = "WORD_007C_OPAQUE")]
-    pub type Word007cOpaque = crate::Reg<word_007c_opaque::Word007cOpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown."]
-    pub mod word_007c_opaque {
-        #[doc = "Register `WORD_007C_OPAQUE` reader"]
-        pub type R = crate::R<Word007cOpaqueSpec>;
-        #[doc = "Register `WORD_007C_OPAQUE` writer"]
-        pub type W = crate::W<Word007cOpaqueSpec>;
-        #[doc = "Field `BITS_0_7_OPAQUE` reader - Opaque: meaning not established."]
-        pub type Bits0_7OpaqueR = crate::FieldReader;
-        #[doc = "Field `BITS_0_7_OPAQUE` writer - Opaque: meaning not established."]
-        pub type Bits0_7OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 8, u8, crate::Safe>;
-        impl R {
-            #[doc = "Bits 0:7 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_7_opaque(&self) -> Bits0_7OpaqueR {
-                Bits0_7OpaqueR::new((self.bits & 0xff) as u8)
-            }
-        }
-        impl W {
-            #[doc = "Bits 0:7 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_7_opaque(&mut self) -> Bits0_7OpaqueW<'_, Word007cOpaqueSpec> {
-                Bits0_7OpaqueW::new(self, 0)
-            }
-        }
-        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init clears the low byte immediately before publishing the descriptor base. Individual bit meanings are unknown.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_007c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_007c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word007cOpaqueSpec;
-        impl crate::RegisterSpec for Word007cOpaqueSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`word_007c_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word007cOpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_007c_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word007cOpaqueSpec {
-            type Safety = crate::Unsafe;
-        }
-    }
-    #[doc = "RX_CONTROL (rw) register accessor: Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_control::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_control::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_control`] module"]
-    #[doc(alias = "RX_CONTROL")]
-    pub type RxControl = crate::Reg<rx_control::RxControlSpec>;
-    #[doc = "Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell."]
-    pub mod rx_control {
-        #[doc = "Register `RX_CONTROL` reader"]
-        pub type R = crate::R<RxControlSpec>;
-        #[doc = "Register `RX_CONTROL` writer"]
-        pub type W = crate::W<RxControlSpec>;
-        #[doc = "Field `APPEND_DESCRIPTOR_RELOAD` reader - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
-        pub type AppendDescriptorReloadR = crate::BitReader;
-        #[doc = "Field `APPEND_DESCRIPTOR_RELOAD` writer - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
-        pub type AppendDescriptorReloadW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `BIT_27_OPAQUE` reader - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
-        pub type Bit27OpaqueR = crate::BitReader;
-        #[doc = "Field `BIT_27_OPAQUE` writer - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
-        pub type Bit27OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `WALKER_ENABLE` reader - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
-        pub type WalkerEnableR = crate::BitReader;
-        #[doc = "Field `WALKER_ENABLE` writer - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
-        pub type WalkerEnableW<'a, REG> = crate::BitWriter<'a, REG>;
-        impl R {
-            #[doc = "Bit 0 - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
-            #[inline(always)]
-            pub fn append_descriptor_reload(&self) -> AppendDescriptorReloadR {
-                AppendDescriptorReloadR::new((self.bits & 1) != 0)
-            }
-            #[doc = "Bit 27 - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
-            #[inline(always)]
-            pub fn bit_27_opaque(&self) -> Bit27OpaqueR {
-                Bit27OpaqueR::new(((self.bits >> 27) & 1) != 0)
-            }
-            #[doc = "Bit 31 - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
-            #[inline(always)]
-            pub fn walker_enable(&self) -> WalkerEnableR {
-                WalkerEnableR::new(((self.bits >> 31) & 1) != 0)
-            }
-        }
-        impl W {
-            #[doc = "Bit 0 - Project-assigned name. Write one after publishing old_tail.next to make a prepared live-list append visible. Hardware clears the bit after accepting the append."]
-            #[inline(always)]
-            pub fn append_descriptor_reload(
-                &mut self,
-            ) -> AppendDescriptorReloadW<'_, RxControlSpec> {
-                AppendDescriptorReloadW::new(self, 0)
-            }
-            #[doc = "Bit 27 - Opaque: meaning not established. Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW."]
-            #[inline(always)]
-            pub fn bit_27_opaque(&mut self) -> Bit27OpaqueW<'_, RxControlSpec> {
-                Bit27OpaqueW::new(self, 27)
-            }
-            #[doc = "Bit 31 - Project-assigned name. Set by libpp\\[hal_mac.o\\]::hal_mac_rx_enable and cleared by libpp\\[hal_mac.o\\]::hal_mac_rx_disable; gates the RX descriptor walker."]
-            #[inline(always)]
-            pub fn walker_enable(&mut self) -> WalkerEnableW<'_, RxControlSpec> {
-                WalkerEnableW::new(self, 31)
-            }
-        }
-        #[doc = "Project-assigned name. RX descriptor-walker gate, hardware-beacon reload selection and live-list append doorbell.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_control::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_control::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct RxControlSpec;
-        impl crate::RegisterSpec for RxControlSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`rx_control::R`](R) reader structure"]
-        impl crate::Readable for RxControlSpec {}
-        #[doc = "`write(|w| ..)` method takes [`rx_control::W`](W) writer structure"]
-        impl crate::Writable for RxControlSpec {
-            type Safety = crate::Unsafe;
-        }
-    }
-    #[doc = "RX_DESCRIPTOR_BASE (rw) register accessor: Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_base::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_base::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_descriptor_base`] module"]
-    #[doc(alias = "RX_DESCRIPTOR_BASE")]
-    pub type RxDescriptorBase = crate::Reg<rx_descriptor_base::RxDescriptorBaseSpec>;
-    #[doc = "Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations."]
-    pub mod rx_descriptor_base {
-        #[doc = "Register `RX_DESCRIPTOR_BASE` reader"]
-        pub type R = crate::R<RxDescriptorBaseSpec>;
-        #[doc = "Register `RX_DESCRIPTOR_BASE` writer"]
-        pub type W = crate::W<RxDescriptorBaseSpec>;
-        #[doc = "Field `ADDRESS` reader - Project-assigned name."]
-        pub type AddressR = crate::FieldReader<u32>;
-        #[doc = "Field `ADDRESS` writer - Project-assigned name."]
-        pub type AddressW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
-        impl R {
-            #[doc = "Bits 0:31 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address(&self) -> AddressR {
-                AddressR::new(self.bits)
-            }
-        }
-        impl W {
-            #[doc = "Bits 0:31 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address(&mut self) -> AddressW<'_, RxDescriptorBaseSpec> {
-                AddressW::new(self, 0)
-            }
-        }
-        #[doc = "Project-assigned name. Complete first-descriptor address. The ROM and blob leaves publish the unmasked 32-bit pointer when installing a cold or repaired frontier; the selected high-address window separately completes the hardware last/next descriptor observations.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_base::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_base::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct RxDescriptorBaseSpec;
-        impl crate::RegisterSpec for RxDescriptorBaseSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`rx_descriptor_base::R`](R) reader structure"]
-        impl crate::Readable for RxDescriptorBaseSpec {}
-        #[doc = "`write(|w| ..)` method takes [`rx_descriptor_base::W`](W) writer structure"]
-        impl crate::Writable for RxDescriptorBaseSpec {
-            type Safety = crate::Safe;
-        }
-    }
-    #[doc = "RX_NEXT_DESCRIPTOR (r) register accessor: Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_next_descriptor::R`]. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_next_descriptor`] module"]
-    #[doc(alias = "RX_NEXT_DESCRIPTOR")]
-    pub type RxNextDescriptor = crate::Reg<rx_next_descriptor::RxNextDescriptorSpec>;
-    #[doc = "Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE."]
-    pub mod rx_next_descriptor {
-        #[doc = "Register `RX_NEXT_DESCRIPTOR` reader"]
-        pub type R = crate::R<RxNextDescriptorSpec>;
-        #[doc = "Field `ADDRESS_LOW` reader - Project-assigned name."]
-        pub type AddressLowR = crate::FieldReader<u32>;
-        #[doc = "Field `BITS_20_31_OPAQUE` reader - Opaque: meaning not established. Unassigned upper state retained by the complete-word zero predicate in rom\\[\\]::wDev_AppendRxBlocks. This is deliberately exposed separately from ADDRESS_LOW so production code never reconstructs or masks a register image."]
-        pub type Bits20_31OpaqueR = crate::FieldReader<u16>;
-        impl R {
-            #[doc = "Bits 0:19 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address_low(&self) -> AddressLowR {
-                AddressLowR::new(self.bits & 0x000f_ffff)
-            }
-            #[doc = "Bits 20:31 - Opaque: meaning not established. Unassigned upper state retained by the complete-word zero predicate in rom\\[\\]::wDev_AppendRxBlocks. This is deliberately exposed separately from ADDRESS_LOW so production code never reconstructs or masks a register image."]
-            #[inline(always)]
-            pub fn bits_20_31_opaque(&self) -> Bits20_31OpaqueR {
-                Bits20_31OpaqueR::new(((self.bits >> 20) & 0x0fff) as u16)
-            }
-        }
-        #[doc = "Project-assigned name. Complete hardware current/next descriptor word. The low 20 bits are the reviewed address projection; meanings of bits 31:20 remain unknown. Complete ROM rom\\[\\]::wDev_AppendRxBlocks compares the entire 32-bit word with zero after reload completion, not only ADDRESS_LOW, before it may read LAST and repair RX_DESCRIPTOR_BASE.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_next_descriptor::R`](R). See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct RxNextDescriptorSpec;
-        impl crate::RegisterSpec for RxNextDescriptorSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`rx_next_descriptor::R`](R) reader structure"]
-        impl crate::Readable for RxNextDescriptorSpec {}
-    }
-    #[doc = "RX_LAST_DESCRIPTOR (r) register accessor: Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_last_descriptor::R`]. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_last_descriptor`] module"]
-    #[doc(alias = "RX_LAST_DESCRIPTOR")]
-    pub type RxLastDescriptor = crate::Reg<rx_last_descriptor::RxLastDescriptorSpec>;
-    #[doc = "Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker."]
-    pub mod rx_last_descriptor {
-        #[doc = "Register `RX_LAST_DESCRIPTOR` reader"]
-        pub type R = crate::R<RxLastDescriptorSpec>;
-        #[doc = "Field `ADDRESS_LOW` reader - Project-assigned name."]
-        pub type AddressLowR = crate::FieldReader<u32>;
-        impl R {
-            #[doc = "Bits 0:19 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address_low(&self) -> AddressLowR {
-                AddressLowR::new(self.bits & 0x000f_ffff)
-            }
-        }
-        #[doc = "Project-assigned name. Low 20 bits of the last descriptor accepted by the RX walker.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_last_descriptor::R`](R). See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct RxLastDescriptorSpec;
-        impl crate::RegisterSpec for RxLastDescriptorSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`rx_last_descriptor::R`](R) reader structure"]
-        impl crate::Readable for RxLastDescriptorSpec {}
-    }
-    #[doc = "CSI_DUMP_CONFIG (rw) register accessor: Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.\n\nYou can [`read`](crate::Reg::read) this register and get [`csi_dump_config::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`csi_dump_config::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@csi_dump_config`] module"]
-    #[doc(alias = "CSI_DUMP_CONFIG")]
-    pub type CsiDumpConfig = crate::Reg<csi_dump_config::CsiDumpConfigSpec>;
-    #[doc = "Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug."]
-    pub mod csi_dump_config {
-        #[doc = "Register `CSI_DUMP_CONFIG` reader"]
-        pub type R = crate::R<CsiDumpConfigSpec>;
-        #[doc = "Register `CSI_DUMP_CONFIG` writer"]
-        pub type W = crate::W<CsiDumpConfigSpec>;
-        #[doc = "Field `FORCE_LLTF` reader - Project-assigned name."]
-        pub type ForceLltfR = crate::BitReader;
-        #[doc = "Field `FORCE_LLTF` writer - Project-assigned name."]
-        pub type ForceLltfW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `MU` reader - Project-assigned name."]
-        pub type MuR = crate::BitReader;
-        #[doc = "Field `MU` writer - Project-assigned name."]
-        pub type MuW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `SU` reader - Project-assigned name."]
-        pub type SuR = crate::BitReader;
-        #[doc = "Field `SU` writer - Project-assigned name."]
-        pub type SuW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `VHT` reader - Project-assigned name."]
-        pub type VhtR = crate::BitReader;
-        #[doc = "Field `VHT` writer - Project-assigned name."]
-        pub type VhtW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `HT40` reader - Project-assigned name."]
-        pub type Ht40R = crate::BitReader;
-        #[doc = "Field `HT40` writer - Project-assigned name."]
-        pub type Ht40W<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `HT20` reader - Project-assigned name."]
-        pub type Ht20R = crate::BitReader;
-        #[doc = "Field `HT20` writer - Project-assigned name."]
-        pub type Ht20W<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `LEGACY` reader - Project-assigned name."]
-        pub type LegacyR = crate::BitReader;
-        #[doc = "Field `LEGACY` writer - Project-assigned name."]
-        pub type LegacyW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `STBC_MODE` reader - Project-assigned name."]
-        pub type StbcModeR = crate::FieldReader;
-        #[doc = "Field `STBC_MODE` writer - Project-assigned name."]
-        pub type StbcModeW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
-        #[doc = "Field `BEAMFORMED` reader - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
-        pub type BeamformedR = crate::BitReader;
-        #[doc = "Field `BEAMFORMED` writer - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
-        pub type BeamformedW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `STANDALONE` reader - Project-assigned name."]
-        pub type StandaloneR = crate::BitReader;
-        #[doc = "Field `STANDALONE` writer - Project-assigned name."]
-        pub type StandaloneW<'a, REG> = crate::BitWriter<'a, REG>;
-        #[doc = "Field `DCM` reader - Project-assigned name."]
-        pub type DcmR = crate::BitReader;
-        #[doc = "Field `DCM` writer - Project-assigned name."]
-        pub type DcmW<'a, REG> = crate::BitWriter<'a, REG>;
-        impl R {
-            #[doc = "Bit 0 - Project-assigned name."]
-            #[inline(always)]
-            pub fn force_lltf(&self) -> ForceLltfR {
-                ForceLltfR::new((self.bits & 1) != 0)
-            }
-            #[doc = "Bit 1 - Project-assigned name."]
-            #[inline(always)]
-            pub fn mu(&self) -> MuR {
-                MuR::new(((self.bits >> 1) & 1) != 0)
-            }
-            #[doc = "Bit 2 - Project-assigned name."]
-            #[inline(always)]
-            pub fn su(&self) -> SuR {
-                SuR::new(((self.bits >> 2) & 1) != 0)
-            }
-            #[doc = "Bit 3 - Project-assigned name."]
-            #[inline(always)]
-            pub fn vht(&self) -> VhtR {
-                VhtR::new(((self.bits >> 3) & 1) != 0)
-            }
-            #[doc = "Bit 4 - Project-assigned name."]
-            #[inline(always)]
-            pub fn ht40(&self) -> Ht40R {
-                Ht40R::new(((self.bits >> 4) & 1) != 0)
-            }
-            #[doc = "Bit 5 - Project-assigned name."]
-            #[inline(always)]
-            pub fn ht20(&self) -> Ht20R {
-                Ht20R::new(((self.bits >> 5) & 1) != 0)
-            }
-            #[doc = "Bit 6 - Project-assigned name."]
-            #[inline(always)]
-            pub fn legacy(&self) -> LegacyR {
-                LegacyR::new(((self.bits >> 6) & 1) != 0)
-            }
-            #[doc = "Bits 9:10 - Project-assigned name."]
-            #[inline(always)]
-            pub fn stbc_mode(&self) -> StbcModeR {
-                StbcModeR::new(((self.bits >> 9) & 3) as u8)
-            }
-            #[doc = "Bit 11 - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
-            #[inline(always)]
-            pub fn beamformed(&self) -> BeamformedR {
-                BeamformedR::new(((self.bits >> 11) & 1) != 0)
-            }
-            #[doc = "Bit 12 - Project-assigned name."]
-            #[inline(always)]
-            pub fn standalone(&self) -> StandaloneR {
-                StandaloneR::new(((self.bits >> 12) & 1) != 0)
-            }
-            #[doc = "Bit 13 - Project-assigned name."]
-            #[inline(always)]
-            pub fn dcm(&self) -> DcmR {
-                DcmR::new(((self.bits >> 13) & 1) != 0)
-            }
-        }
-        impl W {
-            #[doc = "Bit 0 - Project-assigned name."]
-            #[inline(always)]
-            pub fn force_lltf(&mut self) -> ForceLltfW<'_, CsiDumpConfigSpec> {
-                ForceLltfW::new(self, 0)
-            }
-            #[doc = "Bit 1 - Project-assigned name."]
-            #[inline(always)]
-            pub fn mu(&mut self) -> MuW<'_, CsiDumpConfigSpec> {
-                MuW::new(self, 1)
-            }
-            #[doc = "Bit 2 - Project-assigned name."]
-            #[inline(always)]
-            pub fn su(&mut self) -> SuW<'_, CsiDumpConfigSpec> {
-                SuW::new(self, 2)
-            }
-            #[doc = "Bit 3 - Project-assigned name."]
-            #[inline(always)]
-            pub fn vht(&mut self) -> VhtW<'_, CsiDumpConfigSpec> {
-                VhtW::new(self, 3)
-            }
-            #[doc = "Bit 4 - Project-assigned name."]
-            #[inline(always)]
-            pub fn ht40(&mut self) -> Ht40W<'_, CsiDumpConfigSpec> {
-                Ht40W::new(self, 4)
-            }
-            #[doc = "Bit 5 - Project-assigned name."]
-            #[inline(always)]
-            pub fn ht20(&mut self) -> Ht20W<'_, CsiDumpConfigSpec> {
-                Ht20W::new(self, 5)
-            }
-            #[doc = "Bit 6 - Project-assigned name."]
-            #[inline(always)]
-            pub fn legacy(&mut self) -> LegacyW<'_, CsiDumpConfigSpec> {
-                LegacyW::new(self, 6)
-            }
-            #[doc = "Bits 9:10 - Project-assigned name."]
-            #[inline(always)]
-            pub fn stbc_mode(&mut self) -> StbcModeW<'_, CsiDumpConfigSpec> {
-                StbcModeW::new(self, 9)
-            }
-            #[doc = "Bit 11 - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
-            #[inline(always)]
-            pub fn beamformed(&mut self) -> BeamformedW<'_, CsiDumpConfigSpec> {
-                BeamformedW::new(self, 11)
-            }
-            #[doc = "Bit 12 - Project-assigned name."]
-            #[inline(always)]
-            pub fn standalone(&mut self) -> StandaloneW<'_, CsiDumpConfigSpec> {
-                StandaloneW::new(self, 12)
-            }
-            #[doc = "Bit 13 - Project-assigned name."]
-            #[inline(always)]
-            pub fn dcm(&mut self) -> DcmW<'_, CsiDumpConfigSpec> {
-                DcmW::new(self, 13)
-            }
-        }
-        #[doc = "Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.\n\nYou can [`read`](crate::Reg::read) this register and get [`csi_dump_config::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`csi_dump_config::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct CsiDumpConfigSpec;
-        impl crate::RegisterSpec for CsiDumpConfigSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`csi_dump_config::R`](R) reader structure"]
-        impl crate::Readable for CsiDumpConfigSpec {}
-        #[doc = "`write(|w| ..)` method takes [`csi_dump_config::W`](W) writer structure"]
-        impl crate::Writable for CsiDumpConfigSpec {
-            type Safety = crate::Unsafe;
-        }
-    }
-    #[doc = "WORD_0C68_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c68_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c68_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0c68_opaque`] module"]
-    #[doc(alias = "WORD_0C68_OPAQUE")]
-    pub type Word0c68Opaque = crate::Reg<word_0c68_opaque::Word0c68OpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication."]
-    pub mod word_0c68_opaque {
-        #[doc = "Register `WORD_0C68_OPAQUE` reader"]
-        pub type R = crate::R<Word0c68OpaqueSpec>;
-        #[doc = "Register `WORD_0C68_OPAQUE` writer"]
-        pub type W = crate::W<Word0c68OpaqueSpec>;
-        #[doc = "Field `BITS_0_19_OPAQUE` reader - Opaque: meaning not established."]
-        pub type Bits0_19OpaqueR = crate::FieldReader<u32>;
-        #[doc = "Field `BITS_0_19_OPAQUE` writer - Opaque: meaning not established."]
-        pub type Bits0_19OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 20, u32, crate::Safe>;
-        impl R {
-            #[doc = "Bits 0:19 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_19_opaque(&self) -> Bits0_19OpaqueR {
-                Bits0_19OpaqueR::new(self.bits & 0x000f_ffff)
-            }
-        }
-        impl W {
-            #[doc = "Bits 0:19 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_19_opaque(&mut self) -> Bits0_19OpaqueW<'_, Word0c68OpaqueSpec> {
-                Bits0_19OpaqueW::new(self, 0)
-            }
-        }
-        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c68_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c68_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word0c68OpaqueSpec;
-        impl crate::RegisterSpec for Word0c68OpaqueSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`word_0c68_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word0c68OpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_0c68_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word0c68OpaqueSpec {
-            type Safety = crate::Unsafe;
-        }
-    }
-    #[doc = "WORD_0C6C_OPAQUE (rw) register accessor: Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c6c_opaque::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c6c_opaque::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@word_0c6c_opaque`] module"]
-    #[doc(alias = "WORD_0C6C_OPAQUE")]
-    pub type Word0c6cOpaque = crate::Reg<word_0c6c_opaque::Word0c6cOpaqueSpec>;
-    #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window."]
-    pub mod word_0c6c_opaque {
-        #[doc = "Register `WORD_0C6C_OPAQUE` reader"]
-        pub type R = crate::R<Word0c6cOpaqueSpec>;
-        #[doc = "Register `WORD_0C6C_OPAQUE` writer"]
-        pub type W = crate::W<Word0c6cOpaqueSpec>;
-        #[doc = "Field `BITS_0_19_OPAQUE` reader - Opaque: meaning not established."]
-        pub type Bits0_19OpaqueR = crate::FieldReader<u32>;
-        #[doc = "Field `BITS_0_19_OPAQUE` writer - Opaque: meaning not established."]
-        pub type Bits0_19OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 20, u32, crate::Safe>;
-        impl R {
-            #[doc = "Bits 0:19 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_19_opaque(&self) -> Bits0_19OpaqueR {
-                Bits0_19OpaqueR::new(self.bits & 0x000f_ffff)
-            }
-        }
-        impl W {
-            #[doc = "Bits 0:19 - Opaque: meaning not established."]
-            #[inline(always)]
-            pub fn bits_0_19_opaque(&mut self) -> Bits0_19OpaqueW<'_, Word0c6cOpaqueSpec> {
-                Bits0_19OpaqueW::new(self, 0)
-            }
-        }
-        #[doc = "Opaque: meaning not established. Complete mac_rxbuf_init replaces the low twenty bits with four before selecting the descriptor high window.\n\nYou can [`read`](crate::Reg::read) this register and get [`word_0c6c_opaque::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`word_0c6c_opaque::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct Word0c6cOpaqueSpec;
-        impl crate::RegisterSpec for Word0c6cOpaqueSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`word_0c6c_opaque::R`](R) reader structure"]
-        impl crate::Readable for Word0c6cOpaqueSpec {}
-        #[doc = "`write(|w| ..)` method takes [`word_0c6c_opaque::W`](W) writer structure"]
-        impl crate::Writable for Word0c6cOpaqueSpec {
-            type Safety = crate::Unsafe;
-        }
-    }
-    #[doc = "RX_DESCRIPTOR_HIGH_WINDOW (rw) register accessor: Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_high_window::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_high_window::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@rx_descriptor_high_window`] module"]
-    #[doc(alias = "RX_DESCRIPTOR_HIGH_WINDOW")]
-    pub type RxDescriptorHighWindow =
-        crate::Reg<rx_descriptor_high_window::RxDescriptorHighWindowSpec>;
-    #[doc = "Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM."]
-    pub mod rx_descriptor_high_window {
-        #[doc = "Register `RX_DESCRIPTOR_HIGH_WINDOW` reader"]
-        pub type R = crate::R<RxDescriptorHighWindowSpec>;
-        #[doc = "Register `RX_DESCRIPTOR_HIGH_WINDOW` writer"]
-        pub type W = crate::W<RxDescriptorHighWindowSpec>;
-        #[doc = "Field `ADDRESS_HIGH` reader - Project-assigned name."]
-        pub type AddressHighR = crate::FieldReader<u16>;
-        #[doc = "Field `ADDRESS_HIGH` writer - Project-assigned name."]
-        pub type AddressHighW<'a, REG> = crate::FieldWriter<'a, REG, 12, u16, crate::Safe>;
-        impl R {
-            #[doc = "Bits 20:31 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address_high(&self) -> AddressHighR {
-                AddressHighR::new(((self.bits >> 20) & 0x0fff) as u16)
-            }
-        }
-        impl W {
-            #[doc = "Bits 20:31 - Project-assigned name."]
-            #[inline(always)]
-            pub fn address_high(&mut self) -> AddressHighW<'_, RxDescriptorHighWindowSpec> {
-                AddressHighW::new(self, 20)
-            }
-        }
-        #[doc = "Project-assigned name. High 12 descriptor-address bits shared with the low-address RX pointer registers. Complete mac_rxbuf_init and the open driver program 0x2f0 for internal SRAM.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_descriptor_high_window::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_descriptor_high_window::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct RxDescriptorHighWindowSpec;
-        impl crate::RegisterSpec for RxDescriptorHighWindowSpec {
-            type Ux = u32;
-        }
-        #[doc = "`read()` method returns [`rx_descriptor_high_window::R`](R) reader structure"]
-        impl crate::Readable for RxDescriptorHighWindowSpec {}
-        #[doc = "`write(|w| ..)` method takes [`rx_descriptor_high_window::W`](W) writer structure"]
-        impl crate::Writable for RxDescriptorHighWindowSpec {
-            type Safety = crate::Unsafe;
         }
     }
     #[doc = "TX_QUEUE_INFORMATION_Q7 (r) register accessor: Project-assigned name. WDEVTXQ_TXINFO for reverse-addressed hardware queue 7.\n\nYou can [`read`](crate::Reg::read) this register and get [`tx_queue_information_q7::R`]. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@tx_queue_information_q7`] module"]
@@ -36684,6 +36514,208 @@ pub mod wifi_mac_rx_dma {
         impl crate::Readable for ExtraSoftapRxBlockAckBitmapHighSpec {}
         #[doc = "`write(|w| ..)` method takes [`extra_softap_rx_block_ack_bitmap_high::W`](W) writer structure"]
         impl crate::Writable for ExtraSoftapRxBlockAckBitmapHighSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+}
+#[doc = "The CSI dump configuration word beside the RX descriptor walker, at the same base."]
+pub type WifiMacCsiDump = crate::Periph<wifi_mac_csi_dump::RegisterBlock, 0x2010_4000>;
+impl core::fmt::Debug for WifiMacCsiDump {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.debug_struct("WifiMacCsiDump").finish()
+    }
+}
+#[doc = "The CSI dump configuration word beside the RX descriptor walker, at the same base."]
+pub mod wifi_mac_csi_dump {
+    #[repr(C)]
+    #[doc = "Register block"]
+    pub struct RegisterBlock {
+        _reserved0: [u8; 0x011c],
+        csi_dump_config: CsiDumpConfig,
+    }
+    impl RegisterBlock {
+        #[doc = "0x11c - Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug."]
+        #[inline(always)]
+        pub const fn csi_dump_config(&self) -> &CsiDumpConfig {
+            &self.csi_dump_config
+        }
+    }
+    #[doc = "CSI_DUMP_CONFIG (rw) register accessor: Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.\n\nYou can [`read`](crate::Reg::read) this register and get [`csi_dump_config::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`csi_dump_config::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@csi_dump_config`] module"]
+    #[doc(alias = "CSI_DUMP_CONFIG")]
+    pub type CsiDumpConfig = crate::Reg<csi_dump_config::CsiDumpConfigSpec>;
+    #[doc = "Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug."]
+    pub mod csi_dump_config {
+        #[doc = "Register `CSI_DUMP_CONFIG` reader"]
+        pub type R = crate::R<CsiDumpConfigSpec>;
+        #[doc = "Register `CSI_DUMP_CONFIG` writer"]
+        pub type W = crate::W<CsiDumpConfigSpec>;
+        #[doc = "Field `FORCE_LLTF` reader - Project-assigned name."]
+        pub type ForceLltfR = crate::BitReader;
+        #[doc = "Field `FORCE_LLTF` writer - Project-assigned name."]
+        pub type ForceLltfW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `MU` reader - Project-assigned name."]
+        pub type MuR = crate::BitReader;
+        #[doc = "Field `MU` writer - Project-assigned name."]
+        pub type MuW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `SU` reader - Project-assigned name."]
+        pub type SuR = crate::BitReader;
+        #[doc = "Field `SU` writer - Project-assigned name."]
+        pub type SuW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `VHT` reader - Project-assigned name."]
+        pub type VhtR = crate::BitReader;
+        #[doc = "Field `VHT` writer - Project-assigned name."]
+        pub type VhtW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `HT40` reader - Project-assigned name."]
+        pub type Ht40R = crate::BitReader;
+        #[doc = "Field `HT40` writer - Project-assigned name."]
+        pub type Ht40W<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `HT20` reader - Project-assigned name."]
+        pub type Ht20R = crate::BitReader;
+        #[doc = "Field `HT20` writer - Project-assigned name."]
+        pub type Ht20W<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `LEGACY` reader - Project-assigned name."]
+        pub type LegacyR = crate::BitReader;
+        #[doc = "Field `LEGACY` writer - Project-assigned name."]
+        pub type LegacyW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `STBC_MODE` reader - Project-assigned name."]
+        pub type StbcModeR = crate::FieldReader;
+        #[doc = "Field `STBC_MODE` writer - Project-assigned name."]
+        pub type StbcModeW<'a, REG> = crate::FieldWriter<'a, REG, 2>;
+        #[doc = "Field `BEAMFORMED` reader - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
+        pub type BeamformedR = crate::BitReader;
+        #[doc = "Field `BEAMFORMED` writer - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
+        pub type BeamformedW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `STANDALONE` reader - Project-assigned name."]
+        pub type StandaloneR = crate::BitReader;
+        #[doc = "Field `STANDALONE` writer - Project-assigned name."]
+        pub type StandaloneW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `DCM` reader - Project-assigned name."]
+        pub type DcmR = crate::BitReader;
+        #[doc = "Field `DCM` writer - Project-assigned name."]
+        pub type DcmW<'a, REG> = crate::BitWriter<'a, REG>;
+        impl R {
+            #[doc = "Bit 0 - Project-assigned name."]
+            #[inline(always)]
+            pub fn force_lltf(&self) -> ForceLltfR {
+                ForceLltfR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name."]
+            #[inline(always)]
+            pub fn mu(&self) -> MuR {
+                MuR::new(((self.bits >> 1) & 1) != 0)
+            }
+            #[doc = "Bit 2 - Project-assigned name."]
+            #[inline(always)]
+            pub fn su(&self) -> SuR {
+                SuR::new(((self.bits >> 2) & 1) != 0)
+            }
+            #[doc = "Bit 3 - Project-assigned name."]
+            #[inline(always)]
+            pub fn vht(&self) -> VhtR {
+                VhtR::new(((self.bits >> 3) & 1) != 0)
+            }
+            #[doc = "Bit 4 - Project-assigned name."]
+            #[inline(always)]
+            pub fn ht40(&self) -> Ht40R {
+                Ht40R::new(((self.bits >> 4) & 1) != 0)
+            }
+            #[doc = "Bit 5 - Project-assigned name."]
+            #[inline(always)]
+            pub fn ht20(&self) -> Ht20R {
+                Ht20R::new(((self.bits >> 5) & 1) != 0)
+            }
+            #[doc = "Bit 6 - Project-assigned name."]
+            #[inline(always)]
+            pub fn legacy(&self) -> LegacyR {
+                LegacyR::new(((self.bits >> 6) & 1) != 0)
+            }
+            #[doc = "Bits 9:10 - Project-assigned name."]
+            #[inline(always)]
+            pub fn stbc_mode(&self) -> StbcModeR {
+                StbcModeR::new(((self.bits >> 9) & 3) as u8)
+            }
+            #[doc = "Bit 11 - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
+            #[inline(always)]
+            pub fn beamformed(&self) -> BeamformedR {
+                BeamformedR::new(((self.bits >> 11) & 1) != 0)
+            }
+            #[doc = "Bit 12 - Project-assigned name."]
+            #[inline(always)]
+            pub fn standalone(&self) -> StandaloneR {
+                StandaloneR::new(((self.bits >> 12) & 1) != 0)
+            }
+            #[doc = "Bit 13 - Project-assigned name."]
+            #[inline(always)]
+            pub fn dcm(&self) -> DcmR {
+                DcmR::new(((self.bits >> 13) & 1) != 0)
+            }
+        }
+        impl W {
+            #[doc = "Bit 0 - Project-assigned name."]
+            #[inline(always)]
+            pub fn force_lltf(&mut self) -> ForceLltfW<'_, CsiDumpConfigSpec> {
+                ForceLltfW::new(self, 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name."]
+            #[inline(always)]
+            pub fn mu(&mut self) -> MuW<'_, CsiDumpConfigSpec> {
+                MuW::new(self, 1)
+            }
+            #[doc = "Bit 2 - Project-assigned name."]
+            #[inline(always)]
+            pub fn su(&mut self) -> SuW<'_, CsiDumpConfigSpec> {
+                SuW::new(self, 2)
+            }
+            #[doc = "Bit 3 - Project-assigned name."]
+            #[inline(always)]
+            pub fn vht(&mut self) -> VhtW<'_, CsiDumpConfigSpec> {
+                VhtW::new(self, 3)
+            }
+            #[doc = "Bit 4 - Project-assigned name."]
+            #[inline(always)]
+            pub fn ht40(&mut self) -> Ht40W<'_, CsiDumpConfigSpec> {
+                Ht40W::new(self, 4)
+            }
+            #[doc = "Bit 5 - Project-assigned name."]
+            #[inline(always)]
+            pub fn ht20(&mut self) -> Ht20W<'_, CsiDumpConfigSpec> {
+                Ht20W::new(self, 5)
+            }
+            #[doc = "Bit 6 - Project-assigned name."]
+            #[inline(always)]
+            pub fn legacy(&mut self) -> LegacyW<'_, CsiDumpConfigSpec> {
+                LegacyW::new(self, 6)
+            }
+            #[doc = "Bits 9:10 - Project-assigned name."]
+            #[inline(always)]
+            pub fn stbc_mode(&mut self) -> StbcModeW<'_, CsiDumpConfigSpec> {
+                StbcModeW::new(self, 9)
+            }
+            #[doc = "Bit 11 - Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."]
+            #[inline(always)]
+            pub fn beamformed(&mut self) -> BeamformedW<'_, CsiDumpConfigSpec> {
+                BeamformedW::new(self, 11)
+            }
+            #[doc = "Bit 12 - Project-assigned name."]
+            #[inline(always)]
+            pub fn standalone(&mut self) -> StandaloneW<'_, CsiDumpConfigSpec> {
+                StandaloneW::new(self, 12)
+            }
+            #[doc = "Bit 13 - Project-assigned name."]
+            #[inline(always)]
+            pub fn dcm(&mut self) -> DcmW<'_, CsiDumpConfigSpec> {
+                DcmW::new(self, 13)
+            }
+        }
+        #[doc = "Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg\\[8\\] controls whether bit 11 is updated, but cfg\\[1\\] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.\n\nYou can [`read`](crate::Reg::read) this register and get [`csi_dump_config::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`csi_dump_config::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct CsiDumpConfigSpec;
+        impl crate::RegisterSpec for CsiDumpConfigSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`csi_dump_config::R`](R) reader structure"]
+        impl crate::Readable for CsiDumpConfigSpec {}
+        #[doc = "`write(|w| ..)` method takes [`csi_dump_config::W`](W) writer structure"]
+        impl crate::Writable for CsiDumpConfigSpec {
             type Safety = crate::Unsafe;
         }
     }
@@ -58984,6 +59016,10 @@ pub struct Peripherals {
     pub wifi_mac_cold_handshake: WifiMacColdHandshake,
     #[doc = "WIFI_MAC_RX_DMA"]
     pub wifi_mac_rx_dma: WifiMacRxDma,
+    #[doc = "WIFI_MAC_BLOCK_ACK"]
+    pub wifi_mac_block_ack: WifiMacBlockAck,
+    #[doc = "WIFI_MAC_CSI_DUMP"]
+    pub wifi_mac_csi_dump: WifiMacCsiDump,
     #[doc = "PHY_FECOEX_RECOVERED"]
     pub phy_fecoex_recovered: PhyFecoexRecovered,
     #[doc = "PHY_FEDATA_RECOVERED"]
@@ -59154,6 +59190,8 @@ impl Peripherals {
             wifi_mac_power_interrupt: unsafe { WifiMacPowerInterrupt::steal() },
             wifi_mac_cold_handshake: unsafe { WifiMacColdHandshake::steal() },
             wifi_mac_rx_dma: unsafe { WifiMacRxDma::steal() },
+            wifi_mac_block_ack: unsafe { WifiMacBlockAck::steal() },
+            wifi_mac_csi_dump: unsafe { WifiMacCsiDump::steal() },
             phy_fecoex_recovered: unsafe { PhyFecoexRecovered::steal() },
             phy_fedata_recovered: unsafe { PhyFedataRecovered::steal() },
             phy_adc_dump_recovered: unsafe { PhyAdcDumpRecovered::steal() },
@@ -59682,6 +59720,7 @@ pub mod peripheral_ownership {
         pub wifi_mac_beacon_ie_crc: crate::WifiMacBeaconIeCrc,
         pub wifi_mac_beamforming_feedback_test: crate::WifiMacBeamformingFeedbackTest,
         pub wifi_mac_beamforming_report: crate::WifiMacBeamformingReport,
+        pub wifi_mac_block_ack: crate::WifiMacBlockAck,
         pub wifi_mac_bssid_policy: crate::WifiMacBssidPolicy,
         pub wifi_mac_coex_init: crate::WifiMacCoexInit,
         pub wifi_mac_coex_runtime: crate::WifiMacCoexRuntime,
@@ -59689,6 +59728,7 @@ pub mod peripheral_ownership {
         pub wifi_mac_control: crate::WifiMacControl,
         pub wifi_mac_core_enable: crate::WifiMacCoreEnable,
         pub wifi_mac_crypto_control: crate::WifiMacCryptoControl,
+        pub wifi_mac_csi_dump: crate::WifiMacCsiDump,
         pub wifi_mac_diagnostic_statistics: crate::WifiMacDiagnosticStatistics,
         pub wifi_mac_he_buffer_status: crate::WifiMacHeBufferStatus,
         pub wifi_mac_he_color_collision: crate::WifiMacHeColorCollision,
@@ -59708,7 +59748,6 @@ pub mod peripheral_ownership {
         pub wifi_mac_rx_bssid_list: crate::WifiMacRxBssidList,
         pub wifi_mac_rx_csi_control: crate::WifiMacRxCsiControl,
         pub wifi_mac_rx_custom_type: crate::WifiMacRxCustomType,
-        pub wifi_mac_rx_dma: crate::WifiMacRxDma,
         pub wifi_mac_rx_end_state: crate::WifiMacRxEndState,
         pub wifi_mac_rx_filter: crate::WifiMacRxFilter,
         pub wifi_mac_rx_hang_statistics: crate::WifiMacRxHangStatistics,
@@ -59729,6 +59768,11 @@ pub mod peripheral_ownership {
         pub wifi_mac_tx_queue_control: crate::WifiMacTxQueueControl,
         pub wifi_mac_tx_queue_vector: crate::WifiMacTxQueueVector,
         pub wifi_mac_tx_statistics: crate::WifiMacTxStatistics,
+    }
+
+    /// The Wi-Fi MAC RX descriptor walker's registers, owned by the HAL's RX DMA engine alone.
+    pub struct WifiRxDmaPeripherals {
+        pub wifi_mac_rx_dma: crate::WifiMacRxDma,
     }
 
     /// Wi-Fi interrupt banks transferred from cold setup to the hard interrupt handlers.
@@ -59834,6 +59878,8 @@ pub mod peripheral_ownership {
     pub struct PeripheralPartitions {
         /// ESP32-S31 Wi-Fi MAC register views owned by the Wi-Fi hardware lifecycle.
         pub wifi_mac: WifiMacPeripherals,
+        /// The Wi-Fi MAC RX descriptor walker's registers, owned by the HAL's RX DMA engine alone.
+        pub wifi_rx_dma: WifiRxDmaPeripherals,
         /// Wi-Fi interrupt banks transferred from cold setup to the hard interrupt handlers.
         pub wifi_interrupts: WifiInterruptPeripherals,
         /// The free-running Wi-Fi MAC local-time counter. Reading it has no side effect and no partition writes it; the restricted PAC consumes this owner once and issues a copyable read-only capability that the radio PHY and the Wi-Fi MAC both hold.
@@ -59936,6 +59982,8 @@ pub mod peripheral_ownership {
             wifi_mac_power_interrupt,
             wifi_mac_cold_handshake,
             wifi_mac_rx_dma,
+            wifi_mac_block_ack,
+            wifi_mac_csi_dump,
             phy_fecoex_recovered,
             phy_fedata_recovered,
             phy_adc_dump_recovered,
@@ -59981,6 +60029,7 @@ pub mod peripheral_ownership {
                 wifi_mac_beacon_ie_crc,
                 wifi_mac_beamforming_feedback_test,
                 wifi_mac_beamforming_report,
+                wifi_mac_block_ack,
                 wifi_mac_bssid_policy,
                 wifi_mac_coex_init,
                 wifi_mac_coex_runtime,
@@ -59988,6 +60037,7 @@ pub mod peripheral_ownership {
                 wifi_mac_control,
                 wifi_mac_core_enable,
                 wifi_mac_crypto_control,
+                wifi_mac_csi_dump,
                 wifi_mac_diagnostic_statistics,
                 wifi_mac_he_buffer_status,
                 wifi_mac_he_color_collision,
@@ -60007,7 +60057,6 @@ pub mod peripheral_ownership {
                 wifi_mac_rx_bssid_list,
                 wifi_mac_rx_csi_control,
                 wifi_mac_rx_custom_type,
-                wifi_mac_rx_dma,
                 wifi_mac_rx_end_state,
                 wifi_mac_rx_filter,
                 wifi_mac_rx_hang_statistics,
@@ -60029,6 +60078,7 @@ pub mod peripheral_ownership {
                 wifi_mac_tx_queue_vector,
                 wifi_mac_tx_statistics,
             },
+            wifi_rx_dma: WifiRxDmaPeripherals { wifi_mac_rx_dma },
             wifi_interrupts: WifiInterruptPeripherals {
                 wifi_mac_interrupt,
                 wifi_mac_power_interrupt,
@@ -64382,9 +64432,9 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `PEER_ADDRESS_HEAD` in `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_PEER_HEAD` while publishing zero to every other register bit.
+    /// Write `PEER_ADDRESS_HEAD` in `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_PEER_HEAD` while publishing zero to every other register bit.
     #[inline]
-    pub fn rx_block_ack_peer_head(registers: &crate::WifiMacRxDma, index: usize, value: u32) {
+    pub fn rx_block_ack_peer_head(registers: &crate::WifiMacBlockAck, index: usize, value: u32) {
         // SAFETY: the SVD extension explicitly qualifies the zero-based
         // transaction, and generator validation proves every selected field
         // accepts every value representable by its public argument type.
@@ -64395,10 +64445,10 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `PEER_ADDRESS_TAIL`, `INTERFACE`, `WINDOW` in `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY` while publishing zero to every other register bit.
+    /// Write `PEER_ADDRESS_TAIL`, `INTERFACE`, `WINDOW` in `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY` while publishing zero to every other register bit.
     #[inline]
     pub fn rx_block_ack_peer_tail_and_policy(
-        registers: &crate::WifiMacRxDma,
+        registers: &crate::WifiMacBlockAck,
         index: usize,
         peer_address_tail_value: u16,
         interface_value: u8,
@@ -64422,10 +64472,10 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `ENABLE`, `TID`, `WRITE`, `VALID` in `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_CONTROL` while publishing zero to every other register bit.
+    /// Write `ENABLE`, `TID`, `WRITE`, `VALID` in `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_CONTROL` while publishing zero to every other register bit.
     #[inline]
     pub fn rx_block_ack_active_control(
-        registers: &crate::WifiMacRxDma,
+        registers: &crate::WifiMacBlockAck,
         index: usize,
         enable_value: bool,
         tid_value: u8,
@@ -64452,9 +64502,9 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `PEER_ADDRESS_HEAD` in `WIFI_MAC_RX_DMA`.`EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_HEAD` while publishing zero to every other register bit.
+    /// Write `PEER_ADDRESS_HEAD` in `WIFI_MAC_BLOCK_ACK`.`EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_HEAD` while publishing zero to every other register bit.
     #[inline]
-    pub fn extra_softap_rx_block_ack_peer_head(registers: &crate::WifiMacRxDma, value: u32) {
+    pub fn extra_softap_rx_block_ack_peer_head(registers: &crate::WifiMacBlockAck, value: u32) {
         // SAFETY: the SVD extension explicitly qualifies the zero-based
         // transaction, and generator validation proves every selected field
         // accepts every value representable by its public argument type.
@@ -64465,10 +64515,10 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `PEER_ADDRESS_TAIL`, `INTERFACE`, `WINDOW` in `WIFI_MAC_RX_DMA`.`EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY` while publishing zero to every other register bit.
+    /// Write `PEER_ADDRESS_TAIL`, `INTERFACE`, `WINDOW` in `WIFI_MAC_BLOCK_ACK`.`EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY` while publishing zero to every other register bit.
     #[inline]
     pub fn extra_softap_rx_block_ack_peer_tail_and_policy(
-        registers: &crate::WifiMacRxDma,
+        registers: &crate::WifiMacBlockAck,
         peer_address_tail_value: u16,
         interface_value: u8,
         window_value: u8,
@@ -64491,10 +64541,10 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `ENABLE`, `INDEX`, `TID`, `WRITE`, `VALID` in `WIFI_MAC_RX_DMA`.`EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL` while publishing zero to every other register bit.
+    /// Write `ENABLE`, `INDEX`, `TID`, `WRITE`, `VALID` in `WIFI_MAC_BLOCK_ACK`.`EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL` while publishing zero to every other register bit.
     #[inline]
     pub fn extra_softap_rx_block_ack_active_control(
-        registers: &crate::WifiMacRxDma,
+        registers: &crate::WifiMacBlockAck,
         enable_value: bool,
         index_value: u8,
         tid_value: u8,
@@ -65486,9 +65536,9 @@ pub mod zero_register_write {
         }
     }
 
-    /// Publish zero to every bit of `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_BITMAP_LOW_LOAD`.
+    /// Publish zero to every bit of `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_BITMAP_LOW_LOAD`.
     #[inline]
-    pub fn clear_rx_block_ack_bitmap_low_load(registers: &crate::WifiMacRxDma, index: usize) {
+    pub fn clear_rx_block_ack_bitmap_low_load(registers: &crate::WifiMacBlockAck, index: usize) {
         // SAFETY: the SVD extension and its provenance explicitly
         // qualify a complete zero write to this ordinary register.
         unsafe {
@@ -65498,9 +65548,9 @@ pub mod zero_register_write {
         }
     }
 
-    /// Publish zero to every bit of `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_BITMAP_HIGH_LOAD`.
+    /// Publish zero to every bit of `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_BITMAP_HIGH_LOAD`.
     #[inline]
-    pub fn clear_rx_block_ack_bitmap_high_load(registers: &crate::WifiMacRxDma, index: usize) {
+    pub fn clear_rx_block_ack_bitmap_high_load(registers: &crate::WifiMacBlockAck, index: usize) {
         // SAFETY: the SVD extension and its provenance explicitly
         // qualify a complete zero write to this ordinary register.
         unsafe {
@@ -65510,9 +65560,9 @@ pub mod zero_register_write {
         }
     }
 
-    /// Publish zero to every bit of `WIFI_MAC_RX_DMA`.`RX_BLOCK_ACK_ENTRY%s_CONTROL`.
+    /// Publish zero to every bit of `WIFI_MAC_BLOCK_ACK`.`RX_BLOCK_ACK_ENTRY%s_CONTROL`.
     #[inline]
-    pub fn clear_rx_block_ack_entry_control(registers: &crate::WifiMacRxDma, index: usize) {
+    pub fn clear_rx_block_ack_entry_control(registers: &crate::WifiMacBlockAck, index: usize) {
         // SAFETY: the SVD extension and its provenance explicitly
         // qualify a complete zero write to this ordinary register.
         unsafe {
@@ -65522,9 +65572,9 @@ pub mod zero_register_write {
         }
     }
 
-    /// Publish zero to every bit of `WIFI_MAC_RX_DMA`.`EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_LOW`.
+    /// Publish zero to every bit of `WIFI_MAC_BLOCK_ACK`.`EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_LOW`.
     #[inline]
-    pub fn clear_extra_softap_rx_block_ack_bitmap_low(registers: &crate::WifiMacRxDma) {
+    pub fn clear_extra_softap_rx_block_ack_bitmap_low(registers: &crate::WifiMacBlockAck) {
         // SAFETY: the SVD extension and its provenance explicitly
         // qualify a complete zero write to this ordinary register.
         unsafe {
@@ -65534,9 +65584,9 @@ pub mod zero_register_write {
         }
     }
 
-    /// Publish zero to every bit of `WIFI_MAC_RX_DMA`.`EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_HIGH`.
+    /// Publish zero to every bit of `WIFI_MAC_BLOCK_ACK`.`EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_HIGH`.
     #[inline]
-    pub fn clear_extra_softap_rx_block_ack_bitmap_high(registers: &crate::WifiMacRxDma) {
+    pub fn clear_extra_softap_rx_block_ack_bitmap_high(registers: &crate::WifiMacBlockAck) {
         // SAFETY: the SVD extension and its provenance explicitly
         // qualify a complete zero write to this ordinary register.
         unsafe {
@@ -74312,9 +74362,9 @@ pub mod field_argument_modify {
 /// Safe, SVD-declared indexed bit-set read-modify-write transactions.
 pub mod indexed_bit_set_modify {
 
-    /// Set one bit selected by the reviewed `MacRxBlockAckEntryIndex` domain in WIFI_MAC_RX_DMA.RX_BLOCK_ACK_AGREEMENT_UPDATE.
+    /// Set one bit selected by the reviewed `MacRxBlockAckEntryIndex` domain in WIFI_MAC_BLOCK_ACK.RX_BLOCK_ACK_AGREEMENT_UPDATE.
     #[inline]
-    pub fn request_rx_block_ack_entry_update(registers: &crate::WifiMacRxDma, bit_index: u32) {
+    pub fn request_rx_block_ack_entry_update(registers: &crate::WifiMacBlockAck, bit_index: u32) {
         registers
             .rx_block_ack_agreement_update()
             .modify(|reader, writer| {

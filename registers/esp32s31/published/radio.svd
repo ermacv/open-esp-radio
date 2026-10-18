@@ -14896,81 +14896,6 @@
           </fields>
         </register>
         <register>
-          <name>CSI_DUMP_CONFIG</name>
-          <description>Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg[8] controls whether bit 11 is updated, but cfg[1] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.</description>
-          <addressOffset>0x11C</addressOffset>
-          <size>0x20</size>
-          <access>read-write</access>
-          <fields>
-            <field>
-              <name>FORCE_LLTF</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>0</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>MU</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>1</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>SU</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>2</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>VHT</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>3</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>HT40</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>4</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>HT20</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>5</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>LEGACY</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>6</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>STBC_MODE</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>9</bitOffset>
-              <bitWidth>2</bitWidth>
-            </field>
-            <field>
-              <name>BEAMFORMED</name>
-              <description>Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly.</description>
-              <bitOffset>11</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>STANDALONE</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>12</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-            <field>
-              <name>DCM</name>
-              <description>Project-assigned name.</description>
-              <bitOffset>13</bitOffset>
-              <bitWidth>1</bitWidth>
-            </field>
-          </fields>
-        </register>
-        <register>
           <name>WORD_0C68_OPAQUE</name>
           <description>Opaque: meaning not established. Complete mac_rxbuf_init sets the low twenty bits before descriptor publication.</description>
           <addressOffset>0xC68</addressOffset>
@@ -15033,6 +14958,13 @@
             </field>
           </fields>
         </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_BLOCK_ACK</name>
+      <description>Block-ack registers of the Wi-Fi MAC beside the RX descriptor walker, at the same base: the per-queue TX block-ack state, the RX block-ack agreement update and the extra soft-AP RX block-ack entry.</description>
+      <baseAddress>0x20104000</baseAddress>
+      <registers>
         <register>
           <name>TX_QUEUE_INFORMATION_Q7</name>
           <description>Project-assigned name. WDEVTXQ_TXINFO for reverse-addressed hardware queue 7.</description>
@@ -16611,6 +16543,88 @@
               <description>Project-assigned name. High 32 bits of the selected extra-SoftAP receive reorder bitmap.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_CSI_DUMP</name>
+      <description>The CSI dump configuration word beside the RX descriptor walker, at the same base.</description>
+      <baseAddress>0x20104000</baseAddress>
+      <registers>
+        <register>
+          <name>CSI_DUMP_CONFIG</name>
+          <description>Project-assigned name. Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg[8] controls whether bit 11 is updated, but cfg[1] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug.</description>
+          <addressOffset>0x11C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>FORCE_LLTF</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MU</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SU</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>VHT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HT40</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>HT20</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LEGACY</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STBC_MODE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>BEAMFORMED</name>
+              <description>Project-assigned name. Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STANDALONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>DCM</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
             </field>
           </fields>
         </register>

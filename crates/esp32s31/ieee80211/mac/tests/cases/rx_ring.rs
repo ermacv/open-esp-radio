@@ -9,21 +9,21 @@ const COMPLETED: oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl =
 fn cold_rx_ring_publishes_links_and_hardware_in_order() {
     let arena = HostRxArena::<2, 1700, 1704>::new();
     let descriptors = arena.descriptors();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let stopped = arena.prepare(&mut mmio).unwrap();
     assert_eq!(descriptors[0].next_address(), arena.address(1));
     assert_eq!(descriptors[1].next_address(), 0);
     assert_eq!(
         mmio.operations(),
         &[
-            Operation::ObserveRxWalkerEnabled,
-            Operation::Fence,
-            Operation::ObserveRxNextDescriptor,
-            Operation::ObserveRxLastDescriptor,
-            Operation::Fence,
-            Operation::ConfigureRxDescriptorWindow,
-            Operation::PublishRxDescriptorBase(arena.address(2)),
-            Operation::Fence,
+            Walker::ObserveWalkerEnabled,
+            Walker::Fence,
+            Walker::ObserveNext,
+            Walker::ObserveLast,
+            Walker::Fence,
+            Walker::ConfigureDescriptorWindow,
+            Walker::WriteDescriptorBase(arena.address(2)),
+            Walker::Fence,
         ]
     );
     // BASE names the reserved descriptor, which leads to the ring head.
@@ -32,20 +32,12 @@ fn cold_rx_ring_publishes_links_and_hardware_in_order() {
     assert_eq!(reserved.word0(), rx_armed_word(1700).unwrap());
 
     // The walker enable is the later, separate edge of the cold path.
-    mmio.operations.clear();
+    mmio.clear_operations();
     let live = stopped
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .unwrap();
-    assert_eq!(
-        mmio.operations(),
-        &[
-            Operation::ObserveRxWalkerEnabled,
-            Operation::PublishRxWalkerEnable,
-            Operation::Fence,
-            Operation::ObserveRxWalkerEnabled,
-        ]
-    );
+    assert_eq!(mmio.operations(), &[Walker::Enable,]);
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
@@ -53,7 +45,7 @@ fn cold_rx_ring_publishes_links_and_hardware_in_order() {
 fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
     let arena = Arena::<2>::new();
     let (storage, descriptors) = (arena.storage, arena.descriptors());
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(arena.base);
@@ -121,7 +113,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     // A previous last pointer remains diagnostic only. A stopped/rebuilt rev0
     // list must begin at physical zero so it never depends on a cold 31->0
     // wrap link.
@@ -135,19 +127,19 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     assert_eq!(descriptors[3].next_address(), 0);
     assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
-    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert_eq!(mmio.descriptor_base, arena.address(COUNT));
     let disable = mmio
         .operations()
         .iter()
-        .position(|operation| *operation == Operation::StopRxWalker)
+        .position(|operation| *operation == Walker::Stop)
         .unwrap();
     let retained_last = mmio
         .operations()
         .iter()
-        .position(|operation| *operation == Operation::ObserveRxLastDescriptor)
+        .position(|operation| *operation == Walker::ObserveLast)
         .unwrap();
     assert!(disable < retained_last);
-    assert!(mmio.operations()[disable + 1..retained_last].contains(&Operation::Fence));
+    assert!(mmio.operations()[disable + 1..retained_last].contains(&Walker::Fence));
     let topology = stopped.topology_snapshot();
     assert!(topology.valid);
     assert_eq!(topology.start_index, 0);
@@ -222,7 +214,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     assert_eq!(first.head_index.get(), 0);
     assert_eq!(first.tail_index.get(), 1);
     assert_eq!(descriptors[3].next_address(), base);
-    assert!(mmio.rx_reload_pending);
+    assert!(mmio.rx_reload_pending());
     assert!(live.reload_pending());
     assert_eq!(live.accepted_tail().get(), 3);
 
@@ -254,7 +246,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     mmio.set_rx_reload_pending(false);
     mmio.set_rx_next_descriptor_address(0);
     mmio.set_rx_last_descriptor_address(base + 3 * DESCRIPTOR_BYTES);
-    mmio.operations.clear();
+    mmio.clear_operations();
     assert_eq!(
         live.poll_pending_reload(&mut mmio).unwrap(),
         RxReloadObservation::Pending
@@ -262,14 +254,14 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     assert_eq!(
         mmio.operations(),
         &[
-            Operation::ObserveRxReloadPending,
-            Operation::ObserveRxNextDescriptor,
-            Operation::Fence,
-            Operation::ObserveRxLastDescriptor,
-            Operation::Fence,
-            Operation::Fence,
-            Operation::RequestRxReload,
-            Operation::Fence,
+            Walker::ObserveReloadPending,
+            Walker::ObserveNext,
+            Walker::Fence,
+            Walker::ObserveLast,
+            Walker::Fence,
+            Walker::Fence,
+            Walker::RequestReload,
+            Walker::Fence,
         ],
         "the settle keeps the vendor NEXT -> conditional LAST order, then re-rings",
     );
@@ -318,7 +310,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
         !mmio
             .operations()
             .iter()
-            .any(|operation| matches!(operation, Operation::PublishRxDescriptorBase(_))),
+            .any(|operation| matches!(operation, Walker::WriteDescriptorBase(_))),
         "BASE is written once per epoch"
     );
     assert_eq!(live.accepted_tail().get(), 1);
@@ -329,7 +321,7 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
 #[test]
 fn reload_observation_reads_last_only_after_zero_next() {
     const BASE: u32 = 0x2f00_1000;
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     mmio.set_rx_next_descriptor_address(BASE + DESCRIPTOR_BYTES);
     mmio.set_rx_last_descriptor_address(BASE);
 
@@ -340,12 +332,9 @@ fn reload_observation_reads_last_only_after_zero_next() {
         )
     });
     assert_eq!(active, (rx_descriptor_low(BASE + DESCRIPTOR_BYTES), None));
-    assert_eq!(
-        mmio.operations(),
-        &[Operation::ObserveRxNextDescriptor, Operation::Fence],
-    );
+    assert_eq!(mmio.operations(), &[Walker::ObserveNext, Walker::Fence],);
 
-    mmio.operations.clear();
+    mmio.clear_operations();
     mmio.set_rx_next_descriptor_address(0);
     let exhausted = mmio.with_reload_observation(|observation| {
         (
@@ -357,10 +346,10 @@ fn reload_observation_reads_last_only_after_zero_next() {
     assert_eq!(
         mmio.operations(),
         &[
-            Operation::ObserveRxNextDescriptor,
-            Operation::Fence,
-            Operation::ObserveRxLastDescriptor,
-            Operation::Fence,
+            Walker::ObserveNext,
+            Walker::Fence,
+            Walker::ObserveLast,
+            Walker::Fence,
         ],
     );
 }
@@ -371,7 +360,7 @@ fn stopped_rx_ring_ignores_every_retained_last_for_cold_publication() {
 
     for retained_index in 0..COUNT {
         let arena = Arena::<COUNT>::new();
-        let mut mmio = MockMmio::default();
+        let mut mmio = mock_walker();
         mmio.set_rx_last_descriptor_address(arena.address(retained_index));
 
         let stopped = arena.prepare(&mut mmio).unwrap();
@@ -392,7 +381,7 @@ fn stopped_rx_ring_rebuilds_from_the_retained_hardware_next_cursor() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (descriptors, base) = (arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     mmio.set_rx_walker_enabled(true);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_last_descriptor_address(base);
@@ -409,7 +398,7 @@ fn stopped_rx_ring_rebuilds_from_the_retained_hardware_next_cursor() {
     assert_eq!(descriptors[1].next_address(), base + 2 * DESCRIPTOR_BYTES);
     assert_eq!(descriptors[3].next_address(), base);
     assert_eq!(descriptors[0].next_address(), 0);
-    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert_eq!(mmio.descriptor_base, arena.address(COUNT));
     assert_eq!(
         stopped.reserved_snapshot().next_address,
         base + DESCRIPTOR_BYTES
@@ -421,7 +410,7 @@ fn stopped_rx_ring_rebuilds_from_the_retained_hardware_next_cursor() {
 fn stopped_rx_ring_rejects_a_nonzero_cursor_outside_its_owned_arena() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     mmio.set_rx_walker_enabled(true);
     // The descriptor after the reserved one, outside the table.
     mmio.set_rx_next_descriptor_address(arena.address(COUNT + 1));
@@ -437,7 +426,7 @@ fn stopped_rx_ring_avoids_a_cold_head_on_the_final_descriptor() {
     const COUNT: usize = 32;
     let arena = Arena::<COUNT>::new();
     let (descriptors, base) = (arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     mmio.set_rx_last_descriptor_address(arena.address(COUNT - 2));
 
     let stopped = arena.prepare(&mut mmio).unwrap();
@@ -446,7 +435,7 @@ fn stopped_rx_ring_avoids_a_cold_head_on_the_final_descriptor() {
     assert_eq!(stopped.accepted_tail().get(), COUNT - 1);
     assert_eq!(descriptors[0].next_address(), base + DESCRIPTOR_BYTES);
     assert_eq!(descriptors[COUNT - 1].next_address(), 0);
-    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
+    assert_eq!(mmio.descriptor_base, arena.address(COUNT));
     assert_eq!(stopped.reserved_snapshot().next_address, base);
     assert!(stopped.topology_snapshot().valid);
 }
@@ -457,7 +446,7 @@ fn stopped_rx_ring_uses_zero_for_an_invalid_retained_last_pointer() {
 
     for retained_offset in [None, Some(1), Some(COUNT as u32 * DESCRIPTOR_BYTES)] {
         let arena = Arena::<COUNT>::new();
-        let mut mmio = MockMmio::default();
+        let mut mmio = mock_walker();
         mmio.set_rx_last_descriptor_address(
             retained_offset.map_or(0, |offset| arena.base + offset),
         );
@@ -472,7 +461,7 @@ fn stopped_rx_ring_rejects_corrupt_topology_before_walker_enable() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let descriptors = arena.descriptors();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     mmio.set_rx_walker_enabled(false);
     let stopped = arena.prepare(&mut mmio).unwrap();
     assert!(stopped.topology_snapshot().valid);
@@ -493,7 +482,7 @@ fn live_rx_ring_can_replenish_one_descriptor_per_rom_append() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     descriptors[0].write_word0(COMPLETED);
@@ -569,7 +558,7 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
     const COUNT: usize = 2;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     // First append descriptor zero normally, making it the accepted tail of
@@ -621,7 +610,7 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
             .unwrap()
             .is_some()
     );
-    mmio.operations.clear();
+    mmio.clear_operations();
     let append = storage
         .recycle_completed_prefix::<COUNT, _>(&mut live, &mut mmio)
         .unwrap()
@@ -637,13 +626,13 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
         descriptors[0].word0().rx_done(),
         "the old LAST stays observed"
     );
-    assert_eq!(mmio.rx_descriptor_base(), arena.address(COUNT));
-    assert!(mmio.operations().contains(&Operation::RequestRxReload));
+    assert_eq!(mmio.descriptor_base, arena.address(COUNT));
+    assert!(mmio.operations().contains(&Walker::RequestReload));
     assert!(
         !mmio
             .operations()
             .iter()
-            .any(|operation| matches!(operation, Operation::PublishRxDescriptorBase(_)))
+            .any(|operation| matches!(operation, Walker::WriteDescriptorBase(_)))
     );
     assert_eq!(live.recycle_start().get(), 0);
     assert!(live.reload_pending());
@@ -705,7 +694,7 @@ fn live_rx_ring_does_not_rewrite_a_nonterminal_link_before_next_accepts_it() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
     descriptors[0].write_word0(COMPLETED);
 
@@ -742,7 +731,7 @@ fn live_rx_ring_does_not_rewrite_a_nonterminal_link_before_next_accepts_it() {
 fn exercise_single_descriptor_rx_interleavings<const COUNT: usize>() {
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors) = (arena.storage, arena.descriptors());
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     // Two complete rotations cover both the cold physical topology and the
@@ -833,7 +822,7 @@ fn live_rx_frontier_rejects_last_beyond_the_accepted_tail_during_reload() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     descriptors[0].write_word0(COMPLETED);
@@ -887,7 +876,7 @@ fn live_rx_recycle_rejects_a_corrupt_append_tail_before_any_mutation() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     arena.dma_write(&live, 0, &[0xa5; 80]);
@@ -945,7 +934,7 @@ fn live_rx_ring_snapshots_only_the_current_contiguous_frontier() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     assert_eq!(live.completed_frontier_len(), 0);
@@ -987,7 +976,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
     // DMA fills buffer zero completely, ends the frame in buffer one and
     // writes the next frame into buffers two and three.
@@ -995,11 +984,13 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     for index in 1..COUNT {
         arena.dma_write(&live, index, &[0xa5; 80]);
     }
-    descriptors[0].write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
-        BUFFER_SIZE,
-        BUFFER_SIZE,
-        false,
-    ));
+    descriptors[0].write_word0(
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER_SIZE,
+            BUFFER_SIZE,
+            false,
+        ),
+    );
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
@@ -1052,7 +1043,7 @@ fn live_rx_ring_replenishes_the_available_variable_prefix() {
     const COUNT: usize = 4;
     let arena = Arena::<COUNT>::new();
     let (storage, descriptors, base) = (arena.storage, arena.descriptors(), arena.base);
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
 
     descriptors[0].write_word0(COMPLETED);
@@ -1133,34 +1124,25 @@ fn live_rx_ring_replenishes_the_available_variable_prefix() {
 #[test]
 fn receive_disable_confirms_the_ring_ownership_edge() {
     let arena = Arena::<2>::new();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let live = arena.start(&mut mmio);
     assert!(mmio.walker_enabled());
-    mmio.operations.clear();
+    mmio.clear_operations();
     assert!(live.try_stop(&mut mmio).is_ok());
     assert!(!mmio.walker_enabled());
     assert_eq!(
         mmio.operations(),
-        &[
-            Operation::StopRxWalker,
-            Operation::Fence,
-            Operation::ObserveRxWalkerEnabled,
-            Operation::ObserveRxWalkerEnabled,
-        ]
+        &[Walker::Stop, Walker::ObserveWalkerEnabled,]
     );
 }
 
 #[test]
 fn receive_enable_is_a_separate_confirmed_hardware_edge() {
     let arena = Arena::<2>::new();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let stopped = arena.prepare(&mut mmio).unwrap();
-    assert!(
-        !mmio
-            .operations()
-            .contains(&Operation::PublishRxWalkerEnable)
-    );
-    mmio.operations.clear();
+    assert!(!mmio.operations().contains(&Walker::PublishWalkerEnable));
+    mmio.clear_operations();
     let live = stopped
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
@@ -1168,23 +1150,17 @@ fn receive_enable_is_a_separate_confirmed_hardware_edge() {
     assert!(mmio.walker_enabled());
     assert_eq!(
         mmio.operations(),
-        &[
-            Operation::ObserveRxWalkerEnabled,
-            Operation::PublishRxWalkerEnable,
-            Operation::Fence,
-            Operation::ObserveRxWalkerEnabled,
-            Operation::ObserveRxWalkerEnabled,
-        ]
+        &[Walker::Enable, Walker::ObserveWalkerEnabled,]
     );
     assert!(live.try_stop(&mut mmio).is_ok());
 
     // A walker found enabled at the start edge refuses a second enable. The
     // failed start reads the enable once more and quarantines the arena.
     let arena = Arena::<2>::new();
-    let mut already_enabled = MockMmio::default();
+    let mut already_enabled = mock_walker();
     let stopped = arena.prepare(&mut already_enabled).unwrap();
     already_enabled.set_rx_walker_enabled(true);
-    already_enabled.operations.clear();
+    already_enabled.clear_operations();
     let error = match stopped.try_start(&mut already_enabled) {
         Ok(_) => panic!("an enabled walker accepted a second enable"),
         Err((_, error)) => error,
@@ -1192,10 +1168,7 @@ fn receive_enable_is_a_separate_confirmed_hardware_edge() {
     assert_eq!(error, RxRingError::Busy);
     assert_eq!(
         already_enabled.operations(),
-        &[
-            Operation::ObserveRxWalkerEnabled,
-            Operation::ObserveRxWalkerEnabled,
-        ]
+        &[Walker::Enable, Walker::ObserveWalkerEnabled,]
     );
     assert_eq!(
         arena.storage.lifecycle_state(),
@@ -1208,7 +1181,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
     const MPDU_LENGTH: usize = 24;
     const RECEIVED: usize = 0x40 + MPDU_LENGTH;
     let arena = Arena::<2>::new();
-    let mut mmio = MockMmio::default();
+    let mut mmio = mock_walker();
     let mut live = arena.start(&mut mmio);
     let mut unit = [0_u8; RECEIVED];
     unit[0] = (-42_i8) as u8;
@@ -1219,11 +1192,13 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         *byte = index as u8;
     }
     arena.dma_write(&live, 0, &unit);
-    arena.descriptors()[0].write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
-        BUFFER_SIZE,
-        RECEIVED as u32,
-        true,
-    ));
+    arena.descriptors()[0].write_word0(
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER_SIZE,
+            RECEIVED as u32,
+            true,
+        ),
+    );
     mmio.set_rx_last_descriptor_address(arena.address(1));
     mmio.set_rx_next_descriptor_address(0);
     let frozen = live.freeze_cursor(&mut mmio).unwrap();

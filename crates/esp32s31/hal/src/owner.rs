@@ -2,7 +2,9 @@
 
 use crate::{
     domain::RadioDomain,
-    ieee80211::{channel, mac as wifi_mac, station_wake::StationWakeState},
+    ieee80211::{
+        channel, dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
+    },
     types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, PhyAdcRate},
 };
 
@@ -333,6 +335,7 @@ pub(crate) fn phy_parts_mut(
 /// dereference operation, or generic register callback.
 pub struct RadioRuntimeOwner {
     pub(crate) registers: WifiRadioRegisters,
+    rx_dma: WifiRxDmaEngine,
     station_wake: StationWakeState,
     initialized: bool,
 }
@@ -352,22 +355,50 @@ impl RadioRuntimeOwner {
 
     pub(crate) fn from_clocked(
         registers: WifiRadioRegisters,
+        rx_dma: oer_esp32s31_pac::WifiRxDmaRegisters,
         station_wake: StationWakeState,
         initialized: bool,
     ) -> Self {
         Self {
             registers,
+            rx_dma: WifiRxDmaEngine::new(rx_dma),
             station_wake,
             initialized,
         }
     }
 
-    pub(crate) fn into_clocked_parts(self) -> (WifiRadioRegisters, StationWakeState, bool) {
-        (self.registers, self.station_wake, self.initialized)
+    pub(crate) fn into_clocked_parts(
+        self,
+    ) -> (
+        WifiRadioRegisters,
+        oer_esp32s31_pac::WifiRxDmaRegisters,
+        StationWakeState,
+        bool,
+    ) {
+        (
+            self.registers,
+            self.rx_dma.into_registers(),
+            self.station_wake,
+            self.initialized,
+        )
     }
 
     pub fn wifi_mac_hal(&mut self) -> wifi_mac::WifiMacHal<'_> {
         wifi_mac::WifiMacHal::from_mac(&mut self.registers)
+    }
+
+    /// The RX DMA engine, the only owner of the RX descriptor walker.
+    pub fn rx_dma(&mut self) -> &mut WifiRxDmaEngine {
+        &mut self.rx_dma
+    }
+
+    /// The MAC HAL and the RX DMA engine at once, for a receive path that
+    /// drives both.
+    pub fn split_rx_dma(&mut self) -> (wifi_mac::WifiMacHal<'_>, &mut WifiRxDmaEngine) {
+        (
+            wifi_mac::WifiMacHal::from_mac(&mut self.registers),
+            &mut self.rx_dma,
+        )
     }
 
     /// Borrow the channel HAL for one channel transaction, with the shared
@@ -418,7 +449,7 @@ impl RadioRuntimeOwner {
     }
 
     pub fn receive_dma_snapshot(&self) -> wifi_mac::MacRxDmaSnapshot {
-        self.registers.mac_rx_dma_snapshot()
+        self.rx_dma.snapshot()
     }
 
     /// Latch one indirect SoftAP receive-BA bank through the reviewed HAL

@@ -10,7 +10,7 @@ use oer_esp32s31_hal::ieee80211::dma::{
     space::HostDma,
 };
 use oer_esp32s31_ieee80211_mac::rx::{
-    PUBLIC_HEADER_SIZE, RxRingLive,
+    PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
     pool::{NetworkRxFrame, RxStagePool},
 };
 
@@ -20,6 +20,15 @@ use super::{
     transaction::{CompletedUnit, Counters, Preview, Publisher, service},
 };
 use crate::datapath::DatapathRxProgress;
+
+/// A MAC without the receive-buffer starvation counter.
+pub(crate) struct NoBufferFullCounter;
+
+impl RxBufferFullCounter for NoBufferFullCounter {
+    fn buffer_full_count(&mut self) -> Option<u16> {
+        None
+    }
+}
 
 pub(crate) const COUNT: usize = 16;
 pub(crate) const BUFFER: usize = 1_664;
@@ -115,6 +124,7 @@ impl Ring {
                     bytes: &mut bytes,
                 },
                 &mut self.walker,
+                &mut NoBufferFullCounter,
                 (),
             )
             .expect("received input never faults the ring");

@@ -13,7 +13,7 @@ pub use oer_esp32s31_pac::MacLocalTime;
 use oer_esp32s31_pac::{
     BluetoothControllerPartition, BluetoothInterruptSetup, BluetoothModemLpTimerRegisters,
     Ieee802154Partition, MacInterruptSetup, RadioPartitions, SharedRadioParts,
-    SharedRadioRegisters, WifiMacPartition,
+    SharedRadioRegisters, WifiMacPartition, WifiRxDmaRegisters,
 };
 
 use crate::{
@@ -120,6 +120,7 @@ impl RadioHardware {
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct WifiPartition {
     mac: WifiMacPartition,
+    rx_dma: WifiRxDmaRegisters,
     interrupts: MacInterruptSetup,
 }
 
@@ -129,12 +130,20 @@ impl WifiPartition {
         self.mac.mac_local_time()
     }
 
-    pub(crate) fn into_parts(self) -> (WifiMacPartition, MacInterruptSetup) {
-        (self.mac, self.interrupts)
+    pub(crate) fn into_parts(self) -> (WifiMacPartition, WifiRxDmaRegisters, MacInterruptSetup) {
+        (self.mac, self.rx_dma, self.interrupts)
     }
 
-    pub(crate) const fn from_parts(mac: WifiMacPartition, interrupts: MacInterruptSetup) -> Self {
-        Self { mac, interrupts }
+    pub(crate) const fn from_parts(
+        mac: WifiMacPartition,
+        rx_dma: WifiRxDmaRegisters,
+        interrupts: MacInterruptSetup,
+    ) -> Self {
+        Self {
+            mac,
+            rx_dma,
+            interrupts,
+        }
     }
 }
 
@@ -240,6 +249,7 @@ impl RadioHardware {
     pub fn split<T>(self, attachment: T) -> (RadioDomain<T>, ProtocolPartitions) {
         let RadioPartitions {
             wifi_mac,
+            wifi_rx_dma,
             wifi_interrupts,
             radio_phy,
             coexistence,
@@ -262,6 +272,7 @@ impl RadioHardware {
             ProtocolPartitions {
                 wifi: WifiPartition {
                     mac: wifi_mac,
+                    rx_dma: wifi_rx_dma,
                     interrupts: wifi_interrupts,
                 },
                 bluetooth: BluetoothPartition {
@@ -320,6 +331,7 @@ impl RadioHardware {
             Self::returned(
                 RadioPartitions {
                     wifi_mac: wifi.mac,
+                    wifi_rx_dma: wifi.rx_dma,
                     wifi_interrupts: wifi.interrupts,
                     radio_phy,
                     coexistence,

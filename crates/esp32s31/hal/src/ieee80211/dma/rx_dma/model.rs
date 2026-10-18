@@ -56,6 +56,12 @@ pub enum RxWalkerOperation {
     Fence,
 }
 
+/// Where a model walker also reports each operation as it happens, so a
+/// test orders the walker's operations among its other hardware's events.
+pub trait RxWalkerJournal {
+    fn record(&self, operation: RxWalkerOperation);
+}
+
 /// Where one modelled frame went ([`RxWalkerModel::land`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxWalkerLanding {
@@ -99,11 +105,10 @@ pub struct RxWalkerModel {
     reload_resumes_in_place: bool,
     /// A stop request leaves the walker running and reads back as enabled.
     pub refuse_stop: bool,
-    /// The starvation counter, when the modelled platform has one.
-    pub buffer_full_count: Option<u16>,
     log: [RxWalkerOperation; RX_WALKER_LOG_CAPACITY],
     logged: usize,
     overflowed: bool,
+    journal: Option<&'static dyn RxWalkerJournal>,
 }
 
 impl Default for RxWalkerModel {
@@ -129,10 +134,10 @@ impl RxWalkerModel {
             stopped_on_owner: false,
             reload_resumes_in_place: false,
             refuse_stop: false,
-            buffer_full_count: None,
             log: [RxWalkerOperation::Fence; RX_WALKER_LOG_CAPACITY],
             logged: 0,
             overflowed: false,
+            journal: None,
         }
     }
 
@@ -141,6 +146,11 @@ impl RxWalkerModel {
     pub fn set_cursor(&mut self, descriptor_base: u32, last: usize, next: Option<usize>) {
         self.last_descriptor_low = descriptor_low(descriptor_base, last);
         self.next_descriptor_low = next.map_or(0, |next| descriptor_low(descriptor_base, next));
+    }
+
+    /// Report every later operation to `journal` as well as to the log.
+    pub fn set_journal(&mut self, journal: &'static dyn RxWalkerJournal) {
+        self.journal = Some(journal);
     }
 
     /// The logged operations, oldest first.
@@ -211,6 +221,9 @@ impl RxWalkerModel {
     }
 
     fn record(&mut self, operation: RxWalkerOperation) {
+        if let Some(journal) = self.journal {
+            journal.record(operation);
+        }
         match self.log.get_mut(self.logged) {
             Some(slot) => {
                 *slot = operation;
@@ -251,11 +264,9 @@ fn descriptor_low(descriptor_base: u32, index: usize) -> u32 {
     descriptor_base.wrapping_add(offset) & CURSOR_LOW_MASK
 }
 
-impl RxDma for RxWalkerModel {
-    fn buffer_full_count(&mut self) -> Option<u16> {
-        self.buffer_full_count
-    }
+impl super::sealed::Sealed for RxWalkerModel {}
 
+impl RxDma for RxWalkerModel {
     fn descriptor_base_register(&mut self) -> Option<u32> {
         Some(self.descriptor_base)
     }
@@ -374,6 +385,94 @@ impl RxDma for RxWalkerModel {
 
     fn fence(&mut self) {
         self.record(RxWalkerOperation::Fence);
+    }
+}
+
+/// A walker model shared between the code under test and the test that
+/// plays the hardware: each operation borrows the model for its own
+/// duration only, so the test can move the cursors between two of them.
+#[derive(Clone, Copy)]
+pub struct SharedRxWalker<'a>(pub &'a core::cell::RefCell<RxWalkerModel>);
+
+impl super::sealed::Sealed for SharedRxWalker<'_> {}
+
+impl RxDma for SharedRxWalker<'_> {
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        self.0.borrow_mut().descriptor_base_register()
+    }
+
+    fn last_descriptor_low(&mut self) -> u32 {
+        self.0.borrow_mut().last_descriptor_low()
+    }
+
+    fn next_descriptor_low(&mut self) -> u32 {
+        self.0.borrow_mut().next_descriptor_low()
+    }
+
+    fn next_descriptor(&mut self) -> RxDmaNextDescriptor {
+        self.0.borrow_mut().next_descriptor()
+    }
+
+    fn with_ordered_cursor<R>(
+        &mut self,
+        observed: impl for<'confirmation> FnOnce(RxDmaCursorObservation<'confirmation>) -> R,
+    ) -> R {
+        self.0.borrow_mut().with_ordered_cursor(observed)
+    }
+
+    fn walker_enabled(&mut self) -> bool {
+        self.0.borrow_mut().walker_enabled()
+    }
+
+    fn reload_pending(&mut self) -> bool {
+        self.0.borrow_mut().reload_pending()
+    }
+
+    fn try_with_reload_settled<R>(
+        &mut self,
+        settled: impl for<'confirmation> FnOnce(RxDmaReloadSettled<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.0.borrow_mut().try_with_reload_settled(settled)
+    }
+
+    fn configure_descriptor_window(&mut self, binding: &RxDmaBinding<'_>) {
+        self.0.borrow_mut().configure_descriptor_window(binding);
+    }
+
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
+        self.0.borrow_mut().write_descriptor_base(binding);
+    }
+
+    fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
+        self.0.borrow_mut().publish_walker_enable(binding);
+    }
+
+    fn request_reload(&mut self, binding: &RxDmaBinding<'_>) {
+        self.0.borrow_mut().request_reload(binding);
+    }
+
+    fn try_with_walker_enabled<R>(
+        &mut self,
+        binding: &RxDmaBinding<'_>,
+        enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.0
+            .borrow_mut()
+            .try_with_walker_enabled(binding, enabled)
+    }
+
+    fn try_with_walker_stopped<R>(
+        &mut self,
+        binding: &RxDmaBinding<'_>,
+        stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.0
+            .borrow_mut()
+            .try_with_walker_stopped(binding, stopped)
+    }
+
+    fn fence(&mut self) {
+        self.0.borrow_mut().fence();
     }
 }
 
@@ -626,7 +725,9 @@ mod tests {
     fn a_rearmed_descriptor_and_one_doorbell_resume_the_stopped_walker_in_place() {
         let (table, binding) = armed_table();
         let completed = completed(9);
-        table.ring[1].write_word0(crate::ieee80211::dma::descriptor::rx_detached_word(completed));
+        table.ring[1].write_word0(crate::ieee80211::dma::descriptor::rx_detached_word(
+            completed,
+        ));
         let mut walker = walking_at(1);
         let stopped = RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1));
         assert_eq!(walker.land(table, 5, true), stopped);
@@ -637,7 +738,8 @@ mod tests {
         assert_eq!(walker.land(table, 5, true), stopped);
 
         // Rearmed but no doorbell: still stopped.
-        table.ring[1].write_word0(crate::ieee80211::dma::descriptor::rx_rearm_word(completed).unwrap());
+        table.ring[1]
+            .write_word0(crate::ieee80211::dma::descriptor::rx_rearm_word(completed).unwrap());
         assert_eq!(walker.land(table, 5, true), stopped);
 
         // One doorbell resumes it in place, once it clears.
@@ -658,7 +760,9 @@ mod tests {
     fn a_doorbell_follows_last_next_whatever_last_s_owner_bit() {
         let (table, binding) = armed_table();
         // LAST, descriptor 3, is detached: its owner bit is clear.
-        table.ring[3].write_word0(crate::ieee80211::dma::descriptor::rx_detached_word(completed(9)));
+        table.ring[3].write_word0(crate::ieee80211::dma::descriptor::rx_detached_word(
+            completed(9),
+        ));
         let mut walker = exhausted_at(3);
         walker.request_reload(&binding);
         assert!(!walker.reload_pending());
@@ -666,6 +770,58 @@ mod tests {
         assert_eq!(
             walker.land(table, 5, true),
             RxWalkerLanding::Landed(descriptor_low(BASE, 0))
+        );
+    }
+
+    /// A test's event log the walker journals into, beside its own events.
+    struct Events(core::cell::RefCell<std::vec::Vec<&'static str>>);
+
+    impl RxWalkerJournal for Events {
+        fn record(&self, operation: RxWalkerOperation) {
+            self.0.borrow_mut().push(match operation {
+                RxWalkerOperation::Stop => "walker stop",
+                RxWalkerOperation::RequestReload => "doorbell",
+                _ => "walker",
+            });
+        }
+    }
+
+    #[test]
+    fn a_shared_walker_journals_its_operations_among_the_test_s_events() {
+        let binding = linked_binding();
+        let events: &'static Events = std::boxed::Box::leak(std::boxed::Box::new(Events(
+            core::cell::RefCell::new(std::vec::Vec::new()),
+        )));
+        let model = core::cell::RefCell::new(exhausted_at(3));
+        model.borrow_mut().set_journal(events);
+        let mut walker = SharedRxWalker(&model);
+
+        events.0.borrow_mut().push("mac stop");
+        walker.request_reload(&binding);
+        // The test plays the hardware between two operations.
+        model.borrow_mut().set_cursor(BASE, 3, Some(0));
+        assert_eq!(walker.next_descriptor_low(), descriptor_low(BASE, 0));
+        assert!(walker.try_with_walker_stopped(&binding, |_| ()).is_some());
+        events.0.borrow_mut().push("mac resume");
+
+        assert_eq!(
+            *events.0.borrow(),
+            [
+                "mac stop",
+                "doorbell",
+                "walker",
+                "walker stop",
+                "mac resume"
+            ]
+        );
+        // The model's own log holds the same operations.
+        assert_eq!(
+            model.borrow().operations(),
+            [
+                RxWalkerOperation::RequestReload,
+                RxWalkerOperation::ObserveNext,
+                RxWalkerOperation::Stop,
+            ]
         );
     }
 }

@@ -168,6 +168,16 @@ impl WifiMacPartition {
     }
 }
 
+/// The Wi-Fi MAC RX descriptor walker's registers: `RX_CONTROL`,
+/// `RX_DESCRIPTOR_BASE`, `RX_NEXT_DESCRIPTOR`, `RX_LAST_DESCRIPTOR`, the high
+/// address window and the buffer geometry words. No other register owner
+/// reaches them: the HAL's RX DMA engine holds this one, and a MAC
+/// initialization that writes the walker's control borrows it.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct WifiRxDmaRegisters {
+    pub(crate) peripherals: svd::peripheral_ownership::WifiRxDmaPeripherals,
+}
+
 /// Opaque coexistence register partition.
 #[must_use = "dropping a radio partition permanently loses its register authority"]
 pub struct CoexistencePartition(svd::peripheral_ownership::CoexistencePeripherals);
@@ -207,6 +217,7 @@ pub struct Ieee802154Partition {
 #[must_use = "dropping the radio partitions permanently loses the unique hardware capability"]
 pub struct RadioPartitions {
     pub wifi_mac: WifiMacPartition,
+    pub wifi_rx_dma: WifiRxDmaRegisters,
     pub wifi_interrupts: MacInterruptSetup,
     pub radio_phy: RadioPhyRegisters,
     pub coexistence: CoexistencePartition,
@@ -227,6 +238,7 @@ impl RadioPartitions {
     pub(crate) fn from_peripherals(peripherals: svd::Peripherals) -> Self {
         let svd::peripheral_ownership::PeripheralPartitions {
             wifi_mac,
+            wifi_rx_dma,
             wifi_interrupts,
             radio_phy,
             coexistence,
@@ -246,6 +258,9 @@ impl RadioPartitions {
             wifi_mac: WifiMacPartition {
                 peripherals: wifi_mac,
                 mac_local_time,
+            },
+            wifi_rx_dma: WifiRxDmaRegisters {
+                peripherals: wifi_rx_dma,
             },
             wifi_interrupts: MacInterruptSetup::from_peripherals(wifi_interrupts),
             radio_phy: RadioPhyRegisters {

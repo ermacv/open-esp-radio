@@ -36,9 +36,11 @@ use crate::{
     root::WifiPartition,
 };
 
-/// The Wi-Fi MAC register set and its interrupt setup.
+/// The Wi-Fi MAC register set, the RX walker's registers and the interrupt
+/// setup.
 struct WifiClientRegisters {
     mac: WifiRadioRegisters,
+    rx_dma: oer_esp32s31_pac::WifiRxDmaRegisters,
     interrupts: MacInterruptSetup,
 }
 
@@ -114,10 +116,11 @@ impl<Owner, Error: fmt::Debug> fmt::Debug for WifiTransitionFailure<Owner, Error
 impl WifiCold {
     /// Take the partition of a concurrent split. This performs no MMIO.
     pub fn from_partition(partition: WifiPartition) -> Self {
-        let (mac, interrupts) = partition.into_parts();
+        let (mac, rx_dma, interrupts) = partition.into_parts();
         Self {
             registers: WifiClientRegisters {
                 mac: WifiRadioRegisters::new(mac),
+                rx_dma,
                 interrupts,
             },
         }
@@ -125,8 +128,12 @@ impl WifiCold {
 
     /// Return the partition. This performs no MMIO.
     pub fn into_partition(self) -> WifiPartition {
-        let WifiClientRegisters { mac, interrupts } = self.registers;
-        WifiPartition::from_parts(mac.into_partition(), interrupts)
+        let WifiClientRegisters {
+            mac,
+            rx_dma,
+            interrupts,
+        } = self.registers;
+        WifiPartition::from_parts(mac.into_partition(), rx_dma, interrupts)
     }
 
     /// Enter common radio power as the Wi-Fi client. Only the first client
@@ -272,8 +279,12 @@ impl WifiClocked {
         &'hal mut self,
         radio: &'hal mut RadioDomain<T>,
     ) -> WifiMacColdHal<'hal> {
-        let WifiClientRegisters { mac, interrupts } = &mut self.registers;
-        WifiMacColdHal::from_leased(mac, interrupts, radio.registers_mut())
+        let WifiClientRegisters {
+            mac,
+            rx_dma,
+            interrupts,
+        } = &mut self.registers;
+        WifiMacColdHal::from_leased(mac, rx_dma, interrupts, radio.registers_mut())
     }
 
     /// Borrow the runtime MAC HAL over the MAC alone.
@@ -326,9 +337,13 @@ impl WifiClocked {
         crate::owner::MacInterruptSetup,
         WifiClocksOn,
     ) {
-        let WifiClientRegisters { mac, interrupts } = self.registers;
+        let WifiClientRegisters {
+            mac,
+            rx_dma,
+            interrupts,
+        } = self.registers;
         (
-            RadioRuntimeOwner::from_clocked(mac, self.station_wake, self.initialized),
+            RadioRuntimeOwner::from_clocked(mac, rx_dma, self.station_wake, self.initialized),
             crate::owner::MacInterruptSetup { inner: interrupts },
             self.clocks,
         )
@@ -344,10 +359,11 @@ impl WifiClocked {
         interrupts: crate::owner::MacInterruptSetup,
         clocks: WifiClocksOn,
     ) -> Self {
-        let (mac, station_wake, initialized) = runtime.into_clocked_parts();
+        let (mac, rx_dma, station_wake, initialized) = runtime.into_clocked_parts();
         Self {
             registers: WifiClientRegisters {
                 mac,
+                rx_dma,
                 interrupts: interrupts.inner,
             },
             initialized,

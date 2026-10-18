@@ -28,7 +28,7 @@ use crate::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use oer_esp32s31_pac::{
     CoexistenceLowPowerClockObservation, MacInterruptSetup as PacMacInterruptSetup,
@@ -132,6 +132,7 @@ fn begin_cold_mac_handshake(
 /// lease.
 struct ColdRegisters<'registers> {
     mac: &'registers mut WifiRadioRegisters,
+    rx_dma: &'registers mut oer_esp32s31_pac::WifiRxDmaRegisters,
     interrupts: &'registers mut PacMacInterruptSetup,
     shared: &'registers mut SharedRadioRegisters,
 }
@@ -160,12 +161,14 @@ pub struct WifiMacColdHal<'registers> {
 impl<'registers> WifiMacColdHal<'registers> {
     pub(crate) fn from_leased(
         mac: &'registers mut WifiRadioRegisters,
+        rx_dma: &'registers mut oer_esp32s31_pac::WifiRxDmaRegisters,
         interrupts: &'registers mut PacMacInterruptSetup,
         shared: &'registers mut SharedRadioRegisters,
     ) -> Self {
         Self {
             registers: ColdRegisters {
                 mac,
+                rx_dma,
                 interrupts,
                 shared,
             },
@@ -214,8 +217,13 @@ impl<'registers> WifiMacColdHal<'registers> {
         event_mask: crate::types::MacInterruptMask,
         slow_clock_calibration: crate::types::MacRtcCalibration,
     ) {
-        let (mac, _, interrupts) = self.registers.parts();
-        mac.initialize_mac_hal_tail(interrupts, event_mask, slow_clock_calibration)
+        let ColdRegisters {
+            mac,
+            rx_dma,
+            interrupts,
+            ..
+        } = &mut self.registers;
+        mac.initialize_mac_hal_tail(rx_dma, interrupts, event_mask, slow_clock_calibration)
     }
 
     pub fn begin_handshake(
@@ -244,7 +252,7 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_rx_buffer_prefix(&mut self) {
-        self.mac().initialize_mac_rx_buffer_prefix();
+        self.registers.rx_dma.initialize_mac_rx_buffer_prefix();
     }
 
     pub fn initialize_receive_policy(&mut self) {
@@ -260,8 +268,13 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_txrx_suffix(&mut self) {
-        let (mac, shared, _) = self.registers.parts();
-        mac.initialize_mac_txrx_suffix(shared);
+        let ColdRegisters {
+            mac,
+            rx_dma,
+            shared,
+            ..
+        } = &mut self.registers;
+        mac.initialize_mac_txrx_suffix(shared, rx_dma);
     }
 
     pub fn program_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {
@@ -454,12 +467,6 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn coex_priority_snapshot(&self) -> MacCoexPrioritySnapshot {
         self.pac().mac_coex_priority_snapshot()
-    }
-
-    /// Read the bounded hardware-owned RX walker projection without exposing
-    /// the PAC owner to diagnostics or runtime integration code.
-    pub fn receive_dma_snapshot(&self) -> MacRxDmaSnapshot {
-        self.pac().mac_rx_dma_snapshot()
     }
 
     /// Apply the interface's association mode before its first key installation.
@@ -695,54 +702,6 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn rx_buffer_full_count(&mut self) -> u16 {
         self.pac_mut().mac_rx_buffer_full_count()
-    }
-
-    pub fn rx_last_descriptor_low(&mut self) -> u32 {
-        self.pac().mac_rx_last_descriptor_low()
-    }
-
-    pub fn rx_next_descriptor_low(&mut self) -> u32 {
-        self.pac().mac_rx_next_descriptor().address_low()
-    }
-
-    pub fn rx_next_descriptor(&self) -> oer_esp32s31_pac::MacRxNextDescriptorObservation {
-        self.pac().mac_rx_next_descriptor()
-    }
-
-    pub fn rx_walker_enabled(&mut self) -> bool {
-        self.pac_mut().mac_rx_walker_enabled()
-    }
-
-    pub fn rx_reload_pending(&mut self) -> bool {
-        self.pac_mut().mac_rx_reload_pending()
-    }
-
-    pub fn configure_rx_descriptor_window(&mut self, range: &StableDmaRange<'_>) {
-        self.pac_mut().configure_mac_rx_descriptor_window(range);
-    }
-
-    pub fn write_rx_descriptor_base(
-        &mut self,
-        range: &StableDmaRange<'_>,
-        head: crate::layouts::DmaRef<crate::layouts::WifiRxDmaDescriptor>,
-    ) {
-        self.pac_mut().write_mac_rx_descriptor_base(range, head);
-    }
-
-    pub fn publish_rx_walker_enable(&mut self, range: &StableDmaRange<'_>) {
-        self.pac_mut().publish_mac_rx_walker_enable(range);
-    }
-
-    pub fn request_rx_descriptor_reload(&mut self, range: &StableDmaRange<'_>) {
-        self.pac_mut().request_mac_rx_descriptor_reload(range);
-    }
-
-    pub fn try_enable_rx_walker(&mut self, range: &StableDmaRange<'_>) -> bool {
-        self.pac_mut().try_enable_mac_rx_walker(range)
-    }
-
-    pub fn try_disable_rx_walker(&mut self) -> bool {
-        self.pac_mut().try_disable_mac_rx_walker()
     }
 
     pub fn order_device_accesses(&mut self) {
