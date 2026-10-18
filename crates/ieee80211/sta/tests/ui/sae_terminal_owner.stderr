@@ -1,0 +1,32 @@
+warning: unused import: `StaSaeEvent`
+ --> tests/ui/sae_terminal_owner.rs:2:58
+  |
+2 | use oer_ieee80211_sta::join::sae::{StaSaeAuthentication, StaSaeEvent};
+  |                                                          ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0382]: use of moved value: `exchange`
+ --> tests/ui/sae_terminal_owner.rs:8:13
+  |
+5 | pub fn observe(exchange: StaSaeAuthentication, frame: &[u8], now: Instant) {
+  |                -------- move occurs because `exchange` has type `StaSaeAuthentication`, which does not implement the `Copy` trait
+6 |     let event = exchange.observe_management_frame(frame, now);
+  |                          ------------------------------------ `exchange` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _ = exchange.on_deadline(now); // ui-error: E0382
+  |             ^^^^^^^^ value used here after move
+  |
+note: `StaSaeAuthentication::observe_management_frame` takes ownership of the receiver `self`, which moves `exchange`
+ --> src/join/sae.rs
+  |
+  |     pub fn observe_management_frame(self, frame: &[u8], now: Instant) -> StaSaeEvent {
+  |                                     ^^^^
+
+warning: unused variable: `event`
+ --> tests/ui/sae_terminal_owner.rs:6:9
+  |
+6 |     let event = exchange.observe_management_frame(frame, now);
+  |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_event`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

@@ -1981,6 +1981,50 @@ pub struct StationResources<
     pub group_permission: T::GroupPermission,
 }
 
+/// The proof that a personal station's group-key capacity `GROUPS` is
+/// nonzero: a protected station installs the GTK into one of these slots.
+///
+/// A composition creates it in a `const` item, where a zero capacity fails
+/// the build:
+///
+/// ```
+/// use oer_ieee80211_sta::machine::GroupCapacity;
+/// const GROUPS: GroupCapacity<1> = GroupCapacity::new();
+/// # let _ = GROUPS;
+/// ```
+///
+/// ```compile_fail,E0080
+/// use oer_ieee80211_sta::machine::GroupCapacity;
+/// const GROUPS: GroupCapacity<0> = GroupCapacity::new();
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct GroupCapacity<const GROUPS: usize> {
+    _proof: (),
+}
+
+impl<const GROUPS: usize> GroupCapacity<GROUPS> {
+    /// The proof, checked when the constant is evaluated.
+    ///
+    /// The inline constant also rejects a zero capacity during code
+    /// generation when called outside a constant expression.
+    #[expect(
+        clippy::new_without_default,
+        reason = "the proof is made in a const item, not by a default value"
+    )]
+    pub const fn new() -> Self {
+        const {
+            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
+            const fn check(groups: usize) {
+                if groups == 0 {
+                    panic!("a protected station needs at least one group slot");
+                }
+            }
+            check(GROUPS);
+        }
+        Self { _proof: () }
+    }
+}
+
 impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     /// End this machine after the backend's disable/poison terminal. The caller
     /// first returns every backend terminal it received. Unlike ordinary Leave,
@@ -2069,22 +2113,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         Self::from_config(config, StaSecurity::Open, resources)
     }
 
-    /// Build a personal station. Its group capacity is nonzero at compile time.
+    /// Build a personal station. `capacity` proves its group capacity nonzero.
     pub fn new_personal<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K>,
         password: SaePassword,
         pmk: Pmk,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        _capacity: GroupCapacity<GROUPS>,
     ) -> Self {
-        const {
-            #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-            const fn check(groups: usize) {
-                if groups == 0 {
-                    panic!("a protected station needs at least one group slot");
-                }
-            }
-            check(GROUPS);
-        }
         Self::from_config(config, StaSecurity::Personal { password, pmk }, resources)
     }
 

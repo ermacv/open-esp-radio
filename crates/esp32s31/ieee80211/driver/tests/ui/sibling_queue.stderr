@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/sibling_queue.rs:18:49
+   |
+18 |     let _result = core.submit_checked(hardware, sibling, admission, values); // ui-error: E0308
+   |                        --------------           ^^^^^^^ expected `0`, found `1`
+   |                        |
+   |                        arguments to this method are incorrect
+   |
+   = note: expected struct `FreeQueue<'_, oer_radio_port::Child<Root, 0>>`
+              found struct `FreeQueue<'core, oer_radio_port::Child<Root, 1>>`
+note: method defined here
+  --> src/lower_mac/lifecycle.rs
+   |
+   |     pub fn submit_checked<H: LowerMacHardware>(
+   |            ^^^^^^^^^^^^^^

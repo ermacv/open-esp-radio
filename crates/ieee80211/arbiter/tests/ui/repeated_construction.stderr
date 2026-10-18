@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `authority`
+  --> tests/ui/repeated_construction.rs:17:75
+   |
+ 7 |     authority: ArbiterAuthority<'id>,
+   |     --------- move occurs because `authority` has type `ArbiterAuthority<'_>`, which does not implement the `Copy` trait
+...
+13 |         ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(), channel, authority, gate,
+   |                                                                           --------- value moved here
+...
+17 |         ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(), channel, authority, returned_gate, // ui-error: E0382
+   |                                                                           ^^^^^^^^^ value used here after move

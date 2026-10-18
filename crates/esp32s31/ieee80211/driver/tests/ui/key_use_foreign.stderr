@@ -1,0 +1,32 @@
+error: lifetime may not live long enough
+  --> tests/ui/key_use_foreign.rs:10:47
+   |
+ 9 |           let admission = TxAdmission::Open(ticket);
+   |               --------- lifetime `'2` appears in the type of `admission`
+10 |           branded::<CorePools, _>(async |inner| {
+   |  ________________________________________-----__^
+   | |                                        |
+   | |                                        has type `Mint<'1, CorePools>`
+11 | |             let inner = inner.into_pools();
+12 | |             #[cfg(all())]
+13 | |             accept(&inner.authority, admission); // ui-error@-3: lifetime may not live long enough
+14 | |             #[cfg(not(all()))]
+15 | |             accept(&outer.authority, admission);
+16 | |         }).await;
+   | |_________^ returning this value requires that `'1` must outlive `'2`
+
+error: lifetime may not live long enough
+  --> tests/ui/key_use_foreign.rs:10:47
+   |
+ 6 |       branded::<CorePools, _>(async |outer| {
+   |                                      ----- has type `Mint<'1, CorePools>`
+...
+10 |           branded::<CorePools, _>(async |inner| {
+   |  _______________________________________________^
+11 | |             let inner = inner.into_pools();
+12 | |             #[cfg(all())]
+13 | |             accept(&inner.authority, admission); // ui-error@-3: lifetime may not live long enough
+14 | |             #[cfg(not(all()))]
+15 | |             accept(&outer.authority, admission);
+16 | |         }).await;
+   | |_________^ returning this value requires that `'1` must outlive `'static`

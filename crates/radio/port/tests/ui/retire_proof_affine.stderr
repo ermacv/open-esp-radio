@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `RetireProof` in the current scope
+ --> tests/ui/retire_proof_affine.rs:5:19
+  |
+5 |     let _ = proof.clone(); // ui-error: E0599
+  |                   ^^^^^ method not found in `RetireProof`

@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `permit`
+  --> tests/ui/work_permit_twice.rs:15:31
+   |
+ 9 |     permit: WorkPermit<'q, 'id, K>,
+   |     ------ move occurs because `permit` has type `WorkPermit<'_, '_, K>`, which does not implement the `Copy` trait
+...
+13 |     pool.admit(interface, id, permit);
+   |                               ------ value moved here
+14 |     #[cfg(all())]
+15 |     pool.admit(interface, id, permit); // ui-error: E0382
+   |                               ^^^^^^ value used here after move

@@ -1,0 +1,16 @@
+error[E0382]: use of moved value: `operation`
+ --> tests/ui/repeat_terminal.rs:6:18
+  |
+3 | pub fn finish<C, T, M>(operation: InFlight<C, T, M>, outcome: SingleOutcome<(), ()>) {
+  |                        --------- move occurs because `operation` has type `InFlight<C, T, M>`, which does not implement the `Copy` trait
+4 |     let terminal = operation.complete(outcome);
+  |                              ----------------- `operation` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _again = operation.complete(outcome); // ui-error: E0382
+  |                  ^^^^^^^^^ value used here after move
+  |
+note: `InFlight::<C, T, M>::complete` takes ownership of the receiver `self`, which moves `operation`
+ --> src/in_flight.rs
+  |
+  |     pub const fn complete<O>(self, outcome: O) -> Completed<C, T, M, O> {
+  |                              ^^^^

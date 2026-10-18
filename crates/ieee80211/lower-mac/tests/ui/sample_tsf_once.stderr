@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `permission`
+ --> tests/ui/sample_tsf_once.rs:9:22
+  |
+5 |     permission: TsfPermission<'id, P::Role, <P::Role as RoleKeys<'id, P::Types>>::CommandPath>,
+  |     ---------- move occurs because `permission` has type `TsfPermission<'_, <P as InterfacePhase<'_, '_>>::Role, <<P as InterfacePhase<'_, '_>>::Role as RoleKeys<'_, <P as InterfacePhase<'_, '_>>::Types>>::CommandPath>`, which does not implement the `Copy` trait
+6 | ) {
+7 |     phase.sample_tsf(permission);
+  |                      ---------- value moved here
+8 |     #[cfg(all())]
+9 |     phase.sample_tsf(permission); // ui-error: E0382
+  |                      ^^^^^^^^^^ value used here after move

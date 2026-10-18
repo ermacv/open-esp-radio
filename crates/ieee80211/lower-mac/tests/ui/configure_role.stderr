@@ -1,0 +1,17 @@
+error[E0308]: mismatched types
+  --> tests/ui/configure_role.rs:13:29
+   |
+13 |     let _returned = station(foreign); // ui-error: E0308
+   |                     ------- ^^^^^^^ expected `ConfigurePermission<'_, Station>`, found `ConfigurePermission<'_, AccessPoint>`
+   |                     |
+   |                     arguments to this function are incorrect
+   |
+   = note: expected struct `ConfigurePermission<'_, oer_ieee80211_lower_mac::Station>`
+              found struct `ConfigurePermission<'id, oer_ieee80211_lower_mac::AccessPoint>`
+note: function defined here
+  --> tests/ui/configure_role.rs:3:8
+   |
+ 3 | pub fn station<'id>(
+   |        ^^^^^^^
+ 4 |     permission: ConfigurePermission<'id, Station>,
+   |     ---------------------------------------------

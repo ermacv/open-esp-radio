@@ -1,0 +1,7 @@
+error[E0308]: mismatched types
+ --> tests/ui/station_external_body.rs:9:26
+  |
+9 |     let _body: [u8; 8] = body; // ui-error: E0308
+  |                -------   ^^^^ expected `[u8; 8]`, found `Infallible`
+  |                |
+  |                expected due to this

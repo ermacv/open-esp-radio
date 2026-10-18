@@ -49,6 +49,6 @@ impl PortBody<ModelBackend> for Inner<'_> {
             .phase()
             .station()
             .configure(resources.station_commands.configure, StationReceive::Off);
-        Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+        Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
     }
 }

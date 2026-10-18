@@ -8,7 +8,7 @@ pub fn complete<'id, 'foreign, K: Ieee80211Capabilities>(
     foreign: PendingRetune<'foreign, K>,
 ) {
     #[cfg(ui_reject)]
-    arbiter.retuned(foreign); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    arbiter.retuned(foreign); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     arbiter.retuned(own);
 }

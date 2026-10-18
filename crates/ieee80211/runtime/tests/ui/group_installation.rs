@@ -9,7 +9,7 @@ pub fn installation_belongs_to_port<'p, 'a: 'p, 'b: 'p>(
     foreign: <ModelKeys<'b, Station> as KeyTypes<'b>>::GroupKey,
 ) {
     #[cfg(ui_reject)]
-    target.station().select_group_key(permission, foreign); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    target.station().select_group_key(permission, foreign); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     target.station().select_group_key(permission, local);
 }

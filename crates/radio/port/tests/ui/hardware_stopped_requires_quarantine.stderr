@@ -1,0 +1,13 @@
+warning: unused variable: `call`
+ --> tests/ui/hardware_stopped_requires_quarantine.rs:3:16
+  |
+3 | pub fn confirm(call: Quarantine) -> Abandon {
+  |                ^^^^ help: if this is intentional, prefix it with an underscore: `_call`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: field `_private` of struct `HardwareStopped` is private
+ --> tests/ui/hardware_stopped_requires_quarantine.rs:6:60
+  |
+6 |         Abandon::Stopped(oer_radio_port::HardwareStopped { _private: () }) // ui-error: E0451
+  |                                                            ^^^^^^^^ private field

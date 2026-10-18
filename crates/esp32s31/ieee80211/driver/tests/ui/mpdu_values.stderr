@@ -1,0 +1,5 @@
+error[E0616]: field `len` of struct `MpduValues` is private
+ --> tests/ui/mpdu_values.rs:5:14
+  |
+5 |     { values.len = usize::MAX; } // ui-error: E0616
+  |              ^^^ private field

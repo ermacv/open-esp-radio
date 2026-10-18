@@ -1,0 +1,17 @@
+error[E0382]: use of moved value: `service`
+  --> tests/ui/service_run_owner.rs:17:10
+   |
+10 |     service: StationService<'id, B, S>,
+   |     ------- move occurs because `service` has type `StationService<'_, B, S>`, which does not implement the `Copy` trait
+...
+15 |     let run = service.run(owner, io, timer);
+   |                       --------------------- `service` moved due to this method call
+16 |     #[cfg(all())]
+17 |     drop(service); // ui-error: E0382
+   |          ^^^^^^^ value used here after move
+   |
+note: `StationService::<'id, B, S, GROUPS>::run` takes ownership of the receiver `self`, which moves `service`
+  --> src/station_service.rs
+   |
+   |         self,
+   |         ^^^^

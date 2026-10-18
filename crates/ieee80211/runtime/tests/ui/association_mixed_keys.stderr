@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `start`
+  --> tests/ui/association_mixed_keys.rs:20:70
+   |
+13 |     let start = resources.station_association;
+   |         ----- move occurs because `start` has type `AssociationStart<'_, oer_ieee80211_lower_mac::Station, 2, 2, oer_radio_port::pool::path::Child<oer_radio_port::pool::path::Root, 5>>`, which does not implement the `Copy` trait
+14 |     let association = ModelKeys::<Station>::begin_association(start, Spp::Negotiated);
+   |                                                               ----- value moved here
+...
+20 |     let second_association = ModelKeys::<Station>::begin_association(start, Spp::NotNegotiated); // ui-error: E0382
+   |                                                                      ^^^^^ value used here after move

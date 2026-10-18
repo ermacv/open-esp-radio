@@ -1,0 +1,19 @@
+warning: unused variable: `driver`
+ --> tests/ui/faulted_requires_driver_handoff.rs:3:18
+  |
+3 | pub fn finish<D>(driver: DriverLoan<'_, D>, published: PublishedPoison) -> PoisonProof {
+  |                  ^^^^^^ help: if this is intentional, prefix it with an underscore: `_driver`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `published`
+ --> tests/ui/faulted_requires_driver_handoff.rs:3:45
+  |
+3 | pub fn finish<D>(driver: DriverLoan<'_, D>, published: PublishedPoison) -> PoisonProof {
+  |                                             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_published`
+
+error[E0451]: field `private` of struct `PoisonProof` is private
+ --> tests/ui/faulted_requires_driver_handoff.rs:5:31
+  |
+5 |     let proof = PoisonProof { private: () }; // ui-error: E0451
+  |                               ^^^^^^^ private field

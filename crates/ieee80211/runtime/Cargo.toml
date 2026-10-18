@@ -39,6 +39,12 @@ oer-ieee80211-lower-mac = { path = "../lower-mac" }
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
 oer-espressif-ieee80211-policy = { path = "../../espressif/ieee80211-policy" }
 oer-ieee80211-rsn = { path = "../rsn" }
+oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+
+# The cases build against the in-memory backend (`lower_mac_owner::model`).
+[[test]]
+name = "ui"
+required-features = ["test-support"]
 
 [lints]
 workspace = true

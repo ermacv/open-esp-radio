@@ -11,7 +11,7 @@ pub fn request<'id, 'foreign, K: Ieee80211Capabilities>(
     foreign: LeasePlace<'foreign>,
 ) {
     #[cfg(ui_reject)]
-    let _answer = arbiter.request(now, request, foreign); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    let _answer = arbiter.request(now, request, foreign); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     let _answer = arbiter.request(now, request, own);
 }

@@ -1,0 +1,11 @@
+error[E0616]: field `mpdu` of struct `ModelMpduExecution` is private
+  --> tests/ui/accepted_mpdu.rs:11:25
+   |
+11 |         first.execute().mpdu, // ui-error: E0616
+   |                         ^^^^ private field
+
+error[E0616]: field `mpdu` of struct `ModelMpduExecution` is private
+  --> tests/ui/accepted_mpdu.rs:12:26
+   |
+12 |         second.execute().mpdu, // ui-error: E0616
+   |                          ^^^^ private field

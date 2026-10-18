@@ -1,10 +1,13 @@
 #![no_std]
 include!("../resources.rs");
+use oer_ieee80211_sta::machine::GroupCapacity;
 
 #[cfg(ui_reject)]
 const GROUPS: usize = 0;
 #[cfg(not(ui_reject))]
 const GROUPS: usize = 1;
+
+pub const CAPACITY: GroupCapacity<GROUPS> = GroupCapacity::new(); // ui-error@outside: E0080: evaluation panicked: a protected station needs at least one group slot
 
 pub fn build<'id>(
     config: StaConfig<Caps>,
@@ -12,7 +15,7 @@ pub fn build<'id>(
     pmk: oer_ieee80211_rsn::Pmk,
     resources: StationResources<'id, Tokens<GROUPS>, 1, 1, GROUPS>,
 ) -> Station<'id, Tokens<GROUPS>, Caps> {
-    Station::new_personal(config, password, pmk, resources) // ui-error: E0080
+    Station::new_personal(config, password, pmk, resources, CAPACITY)
 }
 
 pub fn open_without_group_slots<'id>(

@@ -1,0 +1,17 @@
+error[E0382]: use of moved value: `stopped`
+  --> tests/ui/stopped_service_owner.rs:12:10
+   |
+ 7 |     stopped: StoppedService<'p, 'id, B, S>,
+   |     ------- move occurs because `stopped` has type `StoppedService<'_, '_, B, S>`, which does not implement the `Copy` trait
+...
+10 |     let restarted = stopped.restart(channel);
+   |                             ---------------- `stopped` moved due to this method call
+11 |     #[cfg(all())]
+12 |     drop(stopped); // ui-error: E0382
+   |          ^^^^^^^ value used here after move
+   |
+note: `StoppedService::<'p, 'id, B, S, GROUPS>::restart` takes ownership of the receiver `self`, which moves `stopped`
+  --> src/station_service.rs
+   |
+   |         self,
+   |         ^^^^

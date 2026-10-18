@@ -6,7 +6,7 @@ pub fn ended<'left, 'right, B: PortBackend>(proof: FailStopped<'left, B>) -> End
 where
     'left: 'right,
 {
-    Ended::fail_stopped(proof, ()) // ui-error: null lifetime may not live long enough
+    Ended::fail_stopped(proof, ()) // ui-error: lifetime may not live long enough
 }
 #[cfg(not(ui_reject))]
 pub fn ended<'id, B: PortBackend>(proof: FailStopped<'id, B>) -> Ended<'id, B, ()> {

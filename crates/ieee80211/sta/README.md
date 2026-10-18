@@ -233,7 +233,8 @@ selection follows the BSS qualification.
 `Station::new_open` and `Station::new_personal` require one to eight tickets
 and small buffers at compile time. Resources must match the backend token
 type's `StaTokens::GROUP_SLOTS`. Open mode accepts zero group slots; the
-personal constructor requires at least one in a `const` check and takes the
+personal constructor requires at least one: it takes a `GroupCapacity`
+proof, which a `const` item evaluates (a zero capacity fails the build), and the
 SAE password and PSK PMK separately from the common configuration. Authentication and Association reserve an owned
 ticket/buffer credit before beginning a request or consuming its sequence
 number. Authentication's retry owner becomes an active exchange only after

@@ -16,6 +16,4 @@ impl Ieee802154Caps for Capabilities {
         enhanced_ack_header_ies: 0,
     };
 }
-pub fn feature() -> Has<Capabilities, Promiscuous> {
-    Has::from_const() // ui-error: E0080
-}
+pub const FEATURE: Has<Capabilities, Promiscuous> = Has::from_const(); // ui-error@outside: E0080: evaluation panicked: the backend does not state this feature

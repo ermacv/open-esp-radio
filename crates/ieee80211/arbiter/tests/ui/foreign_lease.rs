@@ -8,7 +8,7 @@ pub fn release<'id, 'foreign, K: Ieee80211Capabilities>(
     foreign: Lease<'foreign, K>,
 ) {
     #[cfg(ui_reject)]
-    arbiter.release(foreign); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    arbiter.release(foreign); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     arbiter.release(own);
 }

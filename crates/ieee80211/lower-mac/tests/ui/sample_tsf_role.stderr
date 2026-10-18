@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/sample_tsf_role.rs:8:29
+  |
+8 |     let _returned = station(foreign); // ui-error: E0308
+  |                     ------- ^^^^^^^ expected `TsfPermission<'_, Station>`, found `TsfPermission<'_, AccessPoint>`
+  |                     |
+  |                     arguments to this function are incorrect
+  |
+  = note: expected struct `TsfPermission<'_, oer_ieee80211_lower_mac::Station>`
+             found struct `TsfPermission<'id, oer_ieee80211_lower_mac::AccessPoint>`
+note: function defined here
+ --> tests/ui/sample_tsf_role.rs:3:8
+  |
+3 | pub fn station<'id>(permission: TsfPermission<'id, Station>) -> TsfPermission<'id, Station> {
+  |        ^^^^^^^      ---------------------------------------

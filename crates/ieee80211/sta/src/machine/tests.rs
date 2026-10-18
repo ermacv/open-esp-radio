@@ -359,7 +359,7 @@ impl<'id> World<'id> {
             match security {
                 StaSecurity::Open => Station::new_open(config, resources),
                 StaSecurity::Personal { password, pmk } => {
-                    Station::new_personal(config, password, pmk, resources)
+                    Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
             }
         })
@@ -1652,6 +1652,27 @@ fn eapol_frame(eapol: &[u8]) -> std::vec::Vec<u8> {
     frame.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e]);
     frame.extend_from_slice(eapol);
     frame
+}
+
+#[test]
+fn a_const_group_capacity_builds_a_personal_station() {
+    const CAPACITY: GroupCapacity<2> = GroupCapacity::new();
+    installed(|mint| {
+        let world =
+            World::with_builder::<2, 2>(mint, 3, [Slot(1), Slot(2)], |config, resources| {
+                Station::new_personal(
+                    config,
+                    oer_ieee80211_rsn::sae::SaePassword::new(b"password").unwrap(),
+                    Pmk::from_bytes(PMK),
+                    resources,
+                    CAPACITY,
+                )
+            });
+        assert!(matches!(
+            world.station.security,
+            StaSecurity::Personal { .. }
+        ));
+    });
 }
 
 #[test]

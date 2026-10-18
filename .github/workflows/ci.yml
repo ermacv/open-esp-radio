@@ -48,6 +48,16 @@ jobs:
           exit "$status"
       - name: Tests
         run: cargo test --workspace --locked
+      - name: Tests in the feature sets the workspace run does not build
+        run: |
+          # The workspace run unifies features: runtime is built without
+          # test-support, sta and the S31 MAC only with it. This list is the
+          # one record of the other sets.
+          cargo test --locked -p oer-ieee80211-runtime --features test-support
+          cargo test --locked -p oer-ieee80211-sta
+          cargo test --locked -p oer-esp32s31-ieee80211-mac
+          cargo test --locked -p oer-time --features serde
+          cargo test --locked -p oer-time --features schema
 
   chip:
     runs-on: ubuntu-latest

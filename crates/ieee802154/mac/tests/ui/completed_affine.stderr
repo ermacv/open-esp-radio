@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `Completed` in the current scope
+ --> tests/ui/completed_affine.rs:5:29
+  |
+5 |     let _second = completed.clone(); // ui-error: E0599
+  |                             ^^^^^ method not found in `Completed`

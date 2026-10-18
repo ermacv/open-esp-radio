@@ -10,7 +10,7 @@ pub async fn installations() {
         branded::<CorePools, _>(async |inner| {
             let inner = inner.into_pools();
             #[cfg(ui_reject)]
-            accept(&inner.authority, admission); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+            accept(&inner.authority, admission); // ui-error@-3: lifetime may not live long enough
             #[cfg(not(ui_reject))]
             accept(&outer.authority, admission);
         }).await;

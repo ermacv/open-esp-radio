@@ -7,7 +7,7 @@ pub fn unpack<'id, 'foreign, C, K, M, O>(
     foreign: &mut TerminalAccess<'foreign, K>,
 ) -> TerminalParts<C, Slot<'id, K>, M, O> {
     #[cfg(ui_reject)]
-    return terminal.into_parts(foreign); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    return terminal.into_parts(foreign); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     terminal.into_parts(own)
 }

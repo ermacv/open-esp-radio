@@ -1,0 +1,17 @@
+error[E0382]: borrow of moved value: `arbiter`
+  --> tests/ui/failed_arbiter_owner.rs:11:5
+   |
+ 6 |     mut arbiter: Arbiter<'id, K>,
+   |     ----------- move occurs because `arbiter` has type `Arbiter<'_, K>`, which does not implement the `Copy` trait
+...
+ 9 |     let mut failed = arbiter.finish(ArbiterEnd::PortFailed);
+   |                              ------------------------------ `arbiter` moved due to this method call
+10 |     #[cfg(all())]
+11 |     arbiter.retuned(pending); // ui-error: E0382
+   |     ^^^^^^^ value borrowed here after move
+   |
+note: `Arbiter::<'id, K, R, Path>::finish` takes ownership of the receiver `self`, which moves `arbiter`
+  --> src/lib.rs
+   |
+   |     pub fn finish(mut self, end: ArbiterEnd) -> RetiredArbiter<'id, K, R, Path> {
+   |                       ^^^^

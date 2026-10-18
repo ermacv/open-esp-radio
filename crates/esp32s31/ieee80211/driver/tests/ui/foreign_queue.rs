@@ -14,7 +14,7 @@ pub fn submit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T
     values: MpduValues<'slot, 512>,
 ) {
     #[cfg(ui_reject)]
-    let _result = core.submit_checked(hardware, foreign, admission, values); // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+    let _result = core.submit_checked(hardware, foreign, admission, values); // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     let _result = core.submit_checked(hardware, own, admission, values);
 }
