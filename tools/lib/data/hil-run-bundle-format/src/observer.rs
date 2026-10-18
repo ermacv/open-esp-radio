@@ -3,11 +3,9 @@
 //! The runner is the observer of every HIL run. Its identity is computed
 //! from the parts defined here: the projection of the runner's resolved
 //! dependency graph onto the inputs each workload uses ([`inputs`],
-//! [`cargo_inputs`]), Cargo's actual compilation units bound to the executable ([`artifacts`]), the content
-//! store a run's observer record refers to ([`store`]) and the receipt an
-//! invocation of the runner carries ([`receipt`]). Building the runner,
-//! resolving its graph and preparing its receipt is `oer-tool-service-hil-observer`'s;
-//! evaluators read the prepared descriptors here.
+//! [`cargo_inputs`]) and the content store a run's observer record refers to
+//! ([`store`]). Building the runner and resolving its graph is
+//! `oer-tool-service-hil-observer`'s.
 
 /// Version of an observer build (`build.schema`).
 ///
@@ -22,8 +20,6 @@
 /// observer's.
 pub const BUILD_SCHEMA: u64 = 3;
 
-pub mod artifacts;
 pub mod cargo_inputs;
 pub mod inputs;
-pub mod receipt;
 pub mod store;

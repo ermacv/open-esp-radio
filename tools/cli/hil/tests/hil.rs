@@ -166,7 +166,14 @@ fn forwards_runner_exit_and_uses_locked_cargo_with_explicit_offline_only() {
             fs::read_to_string(root.join("offline")).unwrap(),
             if offline { "true" } else { "unset" }
         );
-        assert!(root.join("target/hil/current-observer.json").is_file());
+        // The runner ran from its private copy.
+        assert!(
+            root.join("target/hil/runners")
+                .read_dir()
+                .unwrap()
+                .next()
+                .is_some()
+        );
     }
 }
 #[test]

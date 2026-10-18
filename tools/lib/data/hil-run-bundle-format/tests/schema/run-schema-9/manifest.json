@@ -1,5 +1,5 @@
 {
-  "schema": 8,
+  "schema": 9,
   "run_id": "1791582140859-002c088b",
   "target": "esp32s31",
   "state": "completed",
@@ -62,7 +62,6 @@
       "bootstrap_elf_sha256": "c7e365e3d11886dd394d2ba8bbc88bc23d7286afe8c35525ad5e0f2899f7d1d2",
       "replayed_from": {
         "source_run_id": "1790000000000-00000001",
-        "source_integrity_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
         "firmware_repository": {
           "commit": "4222556456399199d4e9dcecf4c7e527fb4de269",
           "dirty": false,

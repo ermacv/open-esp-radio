@@ -1,8 +1,8 @@
-//! Which runs a runner process created: the run receipt.
+//! Which runs a runner process created: the launch's run list.
 //!
 //! Whoever starts a runner names a fresh file in [`ENV`]; the runner appends
 //! the id of every run it creates, one per line, as it publishes the run.
-//! The receipt is the only way a launcher learns its runs: it never guesses
+//! The list is the only way a launcher learns its runs: it never guesses
 //! them from the store's newest directories.
 
 use std::{
@@ -14,7 +14,7 @@ use std::{
 use crate::Result;
 
 /// Names the file the runner appends the ids of the runs it creates to.
-pub const ENV: &str = "OER_HIL_RUN_RECEIPT";
+pub const ENV: &str = "OER_HIL_LAUNCH_RUNS";
 
 /// The id of one run: its directory's name in the store.
 #[derive(
@@ -45,12 +45,12 @@ impl AsRef<Path> for RunId {
     }
 }
 
-/// A receipt a launcher hands one runner process.
-pub struct Receipt {
+/// The run list a launcher hands one runner process.
+pub struct LaunchRuns {
     file: tempfile::NamedTempFile,
 }
 
-impl Receipt {
+impl LaunchRuns {
     pub fn new() -> Result<Self> {
         Ok(Self {
             file: tempfile::NamedTempFile::new()?,
@@ -68,7 +68,7 @@ impl Receipt {
     }
 }
 
-/// The runs a receipt at `path` names, in creation order.
+/// The runs the list at `path` names, in creation order.
 pub fn read(path: &Path) -> Result<Vec<RunId>> {
     Ok(std::fs::read_to_string(path)?
         .lines()
@@ -77,7 +77,7 @@ pub fn read(path: &Path) -> Result<Vec<RunId>> {
         .collect())
 }
 
-/// Append `runs` to the receipt the invoking process named in [`ENV`], when
+/// Append `runs` to the list the invoking process named in [`ENV`], when
 /// it named one: the runner records each run it creates, and a launcher
 /// that runs on behalf of another forwards the runs of its runner.
 pub fn record(runs: &[RunId]) -> Result<()> {
@@ -88,9 +88,9 @@ pub fn record(runs: &[RunId]) -> Result<()> {
 }
 
 fn append(path: &Path, runs: &[RunId]) -> Result<()> {
-    let mut receipt = OpenOptions::new().create(true).append(true).open(path)?;
+    let mut list = OpenOptions::new().create(true).append(true).open(path)?;
     for run in runs {
-        writeln!(receipt, "{run}")?;
+        writeln!(list, "{run}")?;
     }
     Ok(())
 }
@@ -100,13 +100,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_receipt_names_its_runs_in_creation_order() {
-        let receipt = Receipt::new().unwrap();
-        assert!(receipt.runs().unwrap().is_empty());
-        append(receipt.path(), &[RunId::new("1-a")]).unwrap();
-        append(receipt.path(), &[RunId::new("2-b"), RunId::new("3-c")]).unwrap();
+    fn a_list_names_its_runs_in_creation_order() {
+        let list = LaunchRuns::new().unwrap();
+        assert!(list.runs().unwrap().is_empty());
+        append(list.path(), &[RunId::new("1-a")]).unwrap();
+        append(list.path(), &[RunId::new("2-b"), RunId::new("3-c")]).unwrap();
         assert_eq!(
-            receipt.runs().unwrap(),
+            list.runs().unwrap(),
             [RunId::new("1-a"), RunId::new("2-b"), RunId::new("3-c")]
         );
     }

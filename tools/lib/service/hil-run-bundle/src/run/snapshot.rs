@@ -1,4 +1,4 @@
-//! Bind one complete source snapshot before any experiment can be sealed.
+//! Bind one complete source snapshot before any experiment can finish.
 
 use super::*;
 

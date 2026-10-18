@@ -236,10 +236,8 @@ impl<'a> Revision<'a> {
             run: None,
             claims: vec![oer_tool_service_stand_claims::Claim::stand()],
         })?;
-        // The revision's runner records its runs in the shared store, and
-        // runs without an observer receipt: its receipt format is the
-        // revision's own.
-        let runner = match launch::Runner::revision(&self.worktree)
+        // The revision's runner records its runs in the shared store.
+        let runner = match launch::Runner::prepare(&self.worktree)
             .and_then(|runner| Ok((runner, self.store.link(&self.worktree)?)))
         {
             Ok((runner, _)) => runner,

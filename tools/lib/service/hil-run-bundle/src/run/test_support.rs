@@ -13,7 +13,7 @@ use oer_tool_data_hil_schema::image::ImageClass;
 
 use super::*;
 use crate::Result;
-use crate::verify::FirmwareRecipe;
+use crate::replay::FirmwareRecipe;
 use oer_tool_data_hil_run_bundle_format::build::SourceLimitation;
 use oer_tool_data_hil_run_bundle_format::build::SourceMaterial;
 use oer_tool_data_hil_run_bundle_format::build::SourceRebuildStatus;
@@ -222,7 +222,7 @@ pub fn repetition(
 
 /// A fixture run published in `directory`, whose name is its id: its
 /// manifest, edited by `edit`, and for a completed run the suite of
-/// `scenarios`; nothing is sealed. Returns the manifest.
+/// `scenarios`; nothing is finished. Returns the manifest.
 pub fn write_run(
     directory: &Path,
     started_unix_millis: u64,

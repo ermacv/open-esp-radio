@@ -145,15 +145,12 @@ pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::proce
     Ok(std::process::ExitCode::SUCCESS)
 }
 
-/// `cargo hil observer`: prepare the current observer configuration without
-/// running HIL, and print the receipt's path.
+/// `cargo hil observer`: build the runner without running HIL, and print
+/// its private copy's path.
 pub fn observer(ctx: &Checkout) -> Result<std::process::ExitCode> {
-    oer_tool_service_hil_observer::prepare::prepare(&ctx.root)?;
     println!(
         "{}",
-        ctx.root
-            .join(oer_tool_data_hil_run_bundle_format::observer::receipt::CURRENT)
-            .display()
+        oer_tool_service_hil_observer::prepare::build(&ctx.root)?.display()
     );
     Ok(std::process::ExitCode::SUCCESS)
 }

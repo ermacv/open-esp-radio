@@ -3,8 +3,8 @@
 //! The runner's observer record names the build it was compiled from. Nearly
 //! every run shares one build, so a record refers to it by digest instead of
 //! embedding it: the build lives once in
-//! `observers/<build_sha256>.json` beside the runs of a run store or of an
-//! evidence archive copy, as the exact bytes of `serde_json::to_vec(&build)`. The digest
+//! `observers/<build_sha256>.json` beside the runs of a run store, as the
+//! exact bytes of `serde_json::to_vec(&build)`. The digest
 //! the record names is the SHA-256 of those bytes, so the file's name is its
 //! own integrity check; a missing file or one whose bytes do not hash to its
 //! name is an error, never an absent identity.

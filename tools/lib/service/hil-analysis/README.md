@@ -12,7 +12,7 @@ and never decides qualification.
 | `perf` | Gated measurements per commit and layout, reviewed baselines in the store's `perf-baselines.json`, regressions, cached summaries |
 | `arms` | The comparison of an A/B experiment's arms: one value per run, the mean of its repetitions |
 | `dashboard` | The runs of the stand's live page and a running run's progress |
-| `report` | The JUnit and HTML views a run seals beside its suite |
+| `report` | The JUnit and HTML views a run writes beside its suite |
 
 ```console
 cargo test -p oer-tool-service-hil-analysis

@@ -63,7 +63,7 @@ impl RunSession {
 
     pub fn record_replayed_firmware(
         &mut self,
-        archived: &crate::verify::ArchivedFirmware,
+        archived: &crate::replay::ArchivedFirmware,
     ) -> Result<PathBuf> {
         if self
             .manifest
@@ -97,7 +97,6 @@ impl RunSession {
         let mut artifact = source.clone();
         artifact.replayed_from = Some(FirmwareReplayOrigin {
             source_run_id: archived.run_id.clone(),
-            source_integrity_sha256: archived.integrity_sha256.clone(),
             firmware_repository: source
                 .replayed_from
                 .as_ref()

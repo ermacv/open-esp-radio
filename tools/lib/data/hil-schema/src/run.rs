@@ -1,4 +1,4 @@
-//! The vocabulary of a sealed HIL run: its state, outcomes, failure kinds and
+//! The vocabulary of a HIL run: its state, outcomes, failure kinds and
 //! gated measurements.
 //!
 //! The runner writes these values into run bundles; every reader (repository
@@ -26,8 +26,8 @@ impl RunState {
         }
     }
 
-    /// A completed or interrupted bundle is sealed and can no longer change.
-    pub const fn is_sealed(self) -> bool {
+    /// A completed or interrupted bundle is finished and no longer changes.
+    pub const fn is_finished(self) -> bool {
         !matches!(self, Self::Running)
     }
 }

@@ -1,6 +1,6 @@
 //! The run store every checkout of this user shares, and its sidecars.
 //!
-//! HIL run bundles are self-contained and sealed, and the stand is shared by
+//! HIL run bundles are self-contained and immutable once finished, and the stand is shared by
 //! all checkouts, so their runs, every chip's, live in one store; a run's
 //! manifest names its chip. A checkout's [`CHECKOUT_RUNS`] is a symbolic link
 //! to the store's `runs/`; everything else below `target/hil` (build caches,

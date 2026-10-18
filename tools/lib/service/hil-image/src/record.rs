@@ -1,16 +1,16 @@
 //! The image builder's records for run evidence: build-only records, the
-//! firmware a run flashes and the recipe verification checks them against.
+//! firmware a run flashes and the recipe a replay checks them against.
 //!
 //! Build-only records are immutable build subjects without fabricated
 //! hardware observations.
 use crate::{Artifacts, Result, chip_profile, frozen::build_slots};
-use oer_tool_base_durable::{atomic_json, sha256_file};
+use oer_tool_base_durable::atomic_json;
 use oer_tool_data_hil_run_bundle_format::run::FirmwareArtifact;
 use oer_tool_data_hil_run_bundle_format::run::RepositoryProvenance;
 use oer_tool_data_hil_schema::image::ImageClass;
 use oer_tool_service_hil_run_bundle::build;
+use oer_tool_service_hil_run_bundle::replay::FirmwareRecipe;
 use oer_tool_service_hil_run_bundle::run::FirmwareArchive;
-use oer_tool_service_hil_run_bundle::verify::FirmwareRecipe;
 use serde::Serialize;
 use std::{
     fs,
@@ -75,18 +75,12 @@ pub fn publish(
             firmware: vec![artifact],
         },
     )?;
-    oer_tool_data_hil_run_bundle_format::run::write_integrity_index(directory, "build-only")?;
-    let id = sha256_file(&directory.join("integrity.json"))?;
+    let inventory = oer_tool_data_hil_run_bundle_format::run::inventory(directory)?;
+    let id = oer_tool_base_durable::sha256_bytes(&serde_json::to_vec(&inventory)?);
     let destination = builds.join(id);
     if destination.exists() {
         if !fs::symlink_metadata(&destination)?.file_type().is_dir()
-            || sha256_file(&destination.join("integrity.json"))?
-                != sha256_file(&directory.join("integrity.json"))?
-            || serde_json::to_value(
-                oer_tool_data_hil_run_bundle_format::run::collect_integrity_files(&destination)?,
-            )? != serde_json::to_value(
-                oer_tool_data_hil_run_bundle_format::run::collect_integrity_files(directory)?,
-            )?
+            || oer_tool_data_hil_run_bundle_format::run::inventory(&destination)? != inventory
         {
             return Err("published build record does not match its identity".into());
         }

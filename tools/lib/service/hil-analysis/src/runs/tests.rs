@@ -355,15 +355,15 @@ fn waiting_ends_at_the_run_end_with_its_outcome() {
     let mut lines = Vec::new();
     assert_eq!(wait(&running, |line| lines.push(line)).unwrap(), 2);
     assert_eq!(lines, ["0 run-started", "0 run-finished failed"]);
-    // A sealed run whose events stop short still ends the wait.
-    let sealed = directory.path().join("2-b");
-    write_run(&sealed, 1, RunState::Interrupted, Vec::new(), |_| {});
+    // A finished run whose events stop short still ends the wait.
+    let finished = directory.path().join("2-b");
+    write_run(&finished, 1, RunState::Interrupted, Vec::new(), |_| {});
     fs::write(
-        sealed.join("events.jsonl"),
+        finished.join("events.jsonl"),
         format!("{}\n", event("run-started", None)),
     )
     .unwrap();
-    assert_eq!(wait(&sealed, |_| {}).unwrap(), 2);
+    assert_eq!(wait(&finished, |_| {}).unwrap(), 2);
     assert_eq!(exit_status(Some(Outcome::Passed)), 0);
     assert_eq!(exit_status(Some(Outcome::Broken)), 1);
     assert_eq!(exit_status(Some(Outcome::BoardQuarantined)), 2);

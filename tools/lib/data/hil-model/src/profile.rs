@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
 use crate::{
-    Factor, Provisional, Resolved, Sha256, SpanName, WaitError,
+    Factor, Provisional, Resolved, SpanName, WaitError,
     repetitions::{self, Confidence, Probability},
 };
 
@@ -75,15 +75,6 @@ impl<'de> Deserialize<'de> for RunId {
     }
 }
 
-/// A sealed run that evidence names: its ID and the SHA-256 of its seal
-/// (`integrity.json`), the reference the evidence archive checks ( Q7).
-#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct RunRef {
-    pub run: RunId,
-    pub sha256: Sha256,
-}
-
 /// Whether a span's samples support its quantile.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case", tag = "support", deny_unknown_fields)]
@@ -110,7 +101,7 @@ pub struct MeasuredSpan {
     pub margin_reason: String,
     pub support: Support,
     /// The runs the samples come from.
-    pub evidence: Vec<RunRef>,
+    pub evidence: Vec<RunId>,
 }
 
 /// A profile entry that breaks the rules.
@@ -270,11 +261,8 @@ pub(crate) mod tests {
     use super::*;
     use crate::name;
 
-    pub(crate) fn run_ref() -> RunRef {
-        RunRef {
-            run: RunId::parse("1788729094522-000d170b").unwrap(),
-            sha256: Sha256([0; 32]),
-        }
+    pub(crate) fn run_ref() -> RunId {
+        RunId::parse("1788729094522-000d170b").unwrap()
     }
 
     pub(crate) fn span(maximum_micros: u64, support: Support) -> MeasuredSpan {
@@ -403,12 +391,7 @@ pub(crate) mod tests {
             error.to_string().contains("unknown field"),
             "measured: {error}"
         );
-        for pointer in [
-            "",
-            "/spans/boot-to-hello",
-            "/spans/boot-to-hello/support",
-            "/spans/boot-to-hello/evidence/0",
-        ] {
+        for pointer in ["", "/spans/boot-to-hello", "/spans/boot-to-hello/support"] {
             let mut extended = value.clone();
             extended
                 .pointer_mut(pointer)

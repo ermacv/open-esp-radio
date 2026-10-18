@@ -10,7 +10,7 @@ use oer_tool_data_hil_schema::image::ImageClass;
 /// lies deflate-compressed at `firmware/<image>/runtime.elf.deflate`; what
 /// the manifest and build provenance record of it (path, size, digest) is
 /// the uncompressed file's ([`crate::archived`]).
-pub const RUN_SCHEMA: u16 = 8;
+pub const RUN_SCHEMA: u16 = 9;
 
 pub use oer_tool_data_hil_schema::run::{
     Better, Comparison, FailureKind, MeasurementUnit, MeasurementVerdict, Outcome, RunEventKind,
@@ -392,7 +392,6 @@ pub struct RepositoryProvenance {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FirmwareReplayOrigin {
     pub source_run_id: String,
-    pub source_integrity_sha256: String,
     pub firmware_repository: RepositoryProvenance,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_build_id: Option<String>,
@@ -542,7 +541,7 @@ pub struct RunManifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub experiment: Option<crate::experiment::Experiment>,
     /// Every message path the run's captures record in either direction,
-    /// sorted and unique; written when the run is sealed.
+    /// sorted and unique; written when the run finishes.
     pub messages_used: Vec<String>,
 }
 
@@ -556,18 +555,12 @@ impl RunManifest {
     }
 }
 
+/// One file of a directory's inventory ([`crate::run::inventory`]).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct IntegrityFile {
+pub struct InventoryFile {
     pub path: PathBuf,
     pub size_bytes: u64,
     pub sha256: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct IntegrityIndex {
-    pub schema: u16,
-    pub run_id: String,
-    pub files: Vec<IntegrityFile>,
 }
 
 #[derive(Debug, Serialize)]
@@ -579,7 +572,6 @@ pub struct CompletionReport {
     pub suite_report: PathBuf,
     pub junit_report: PathBuf,
     pub html_report: PathBuf,
-    pub integrity_report: PathBuf,
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 {
-  "schema": 8,
+  "schema": 9,
   "run_id": "1791582140859-002c088b",
   "selection": "scenarios: system-watchdog, system-panic-reset",
   "firmware": {

@@ -131,7 +131,7 @@ fn unique_run_directories_never_replace_a_previous_run() {
 }
 
 #[test]
-fn repository_archive_seals_tracked_patch_and_marks_untracked_content_incomplete() {
+fn repository_archive_keeps_tracked_patch_and_marks_untracked_content_incomplete() {
     let base = temporary_directory("source-archive");
     let repository = base.join("repository");
     fs::create_dir(&repository).unwrap();
@@ -225,7 +225,7 @@ fn attachments_are_sorted_and_content_addressed() {
 }
 
 #[test]
-fn replay_import_rejects_paths_outside_the_sealed_bundle() {
+fn replay_import_rejects_paths_outside_the_source_bundle() {
     assert!(archive::validate_replayed_source_path(Path::new("../application.bin")).is_err());
     assert!(archive::validate_replayed_source_path(Path::new("/tmp/application.bin")).is_err());
     assert!(archive::validate_replayed_source_path(Path::new("firmware/runtime.elf")).is_ok());
@@ -256,7 +256,6 @@ fn finish_writes_all_views_and_completes_manifest() {
     assert!(completion.suite_report.is_file());
     assert!(completion.junit_report.is_file());
     assert!(completion.html_report.is_file());
-    assert!(completion.integrity_report.is_file());
     let final_manifest: RunManifest =
         serde_json::from_slice(&fs::read(completion.run_directory.join("manifest.json")).unwrap())
             .unwrap();
@@ -273,13 +272,13 @@ fn dropped_session_marks_manifest_interrupted() {
         serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
     assert_eq!(final_manifest.state, RunState::Interrupted);
     assert!(final_manifest.finished_unix_millis.is_some());
-    assert!(root.join("integrity.json").is_file());
+    assert!(!root.join("integrity.json").exists());
     fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn failure_before_seal_cannot_leave_a_false_completed_manifest() {
-    let root = temporary_directory("finish-before-seal-failure");
+fn a_failed_finish_cannot_leave_a_false_completed_manifest() {
+    let root = temporary_directory("failed-finish");
     let session = integrated_session(&root);
     let run_directory = session.directory().to_owned();
     fs::create_dir(run_directory.join("junit.xml")).unwrap();
@@ -290,24 +289,6 @@ fn failure_before_seal_cannot_leave_a_false_completed_manifest() {
     assert_eq!(manifest.state, RunState::Interrupted);
     assert!(run_directory.join("suite.json").is_file());
     assert!(!run_directory.join("report.html").exists());
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn seal_failure_rolls_the_manifest_back_to_interrupted() {
-    let root = temporary_directory("seal-failure");
-    let session = integrated_session(&root);
-    let run_directory = session.directory().to_owned();
-    fs::create_dir(run_directory.join("integrity.json")).unwrap();
-
-    assert!(session.finish(Vec::new(), no_views).is_err());
-    let manifest: RunManifest =
-        serde_json::from_slice(&fs::read(run_directory.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest.state, RunState::Interrupted);
-    assert!(run_directory.join("suite.json").is_file());
-    assert!(run_directory.join("junit.xml").is_file());
-    assert!(run_directory.join("report.html").is_file());
-    assert!(run_directory.join("integrity.json").is_dir());
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -151,7 +151,7 @@ impl Run {
     }
 
     /// A completed or interrupted bundle can no longer change.
-    pub fn is_sealed(&self) -> bool {
+    pub fn is_finished(&self) -> bool {
         matches!(self.state(), RunState::Completed | RunState::Interrupted)
     }
 

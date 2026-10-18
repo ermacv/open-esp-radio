@@ -76,13 +76,7 @@ pub fn within_enclosing_lease(test: &str, experiment: impl FnOnce(&Path, Runner)
                 std::env::current_exe().unwrap().display(),
             )).unwrap();
             fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
-            experiment(
-                &directory,
-                Runner {
-                    executable,
-                    receipt: None,
-                },
-            );
+            experiment(&directory, Runner { executable });
         }
         Some("runner") => {
             let context = oer_tool_base_process::Context::current().unwrap();
@@ -121,7 +115,8 @@ pub fn within_enclosing_lease(test: &str, experiment: impl FnOnce(&Path, Runner)
             let access = grant.device(&MAC.parse().unwrap()).unwrap();
             assert!(access.is_delegated());
             let _operation = access.operation().unwrap();
-            let receipt = std::env::var_os(oer_tool_service_hil_run_bundle::receipt::ENV).unwrap();
+            let receipt =
+                std::env::var_os(oer_tool_service_hil_run_bundle::launch_runs::ENV).unwrap();
             writeln!(
                 fs::OpenOptions::new().append(true).open(receipt).unwrap(),
                 "7"

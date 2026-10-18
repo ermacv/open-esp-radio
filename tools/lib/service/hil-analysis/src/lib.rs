@@ -12,7 +12,7 @@
 //!   baselines.
 //! - [`arms`]: the comparison of an A/B experiment's arms.
 //! - [`dashboard`]: the runs of the stand's live page.
-//! - [`report`]: the JUnit and HTML views a run seals beside its suite.
+//! - [`report`]: the JUnit and HTML views a run writes beside its suite.
 //! - [`profile`]: the symbolized report of a repetition's program-counter
 //!   profile.
 //!

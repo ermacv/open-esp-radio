@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_tool_data_hil_run_bundle_format::run::collect_integrity_files;
+use oer_tool_data_hil_run_bundle_format::run::inventory;
 use oer_tool_data_hil_schema::image::ImageClass;
 use oer_tool_service_hil_run_bundle::run::test_support::TEST_CHIP;
 use oer_tool_service_hil_run_bundle::run::test_support::session;
@@ -186,7 +186,7 @@ fn firmware_record_archives_the_exact_application() {
     }
     assert!(provenance.source_reconstructable);
     let object_root = root.join("objects/sha256");
-    let first_objects = collect_integrity_files(&object_root).unwrap();
+    let first_objects = inventory(&object_root).unwrap();
     // The application, both ELFs, the runtime binary, the lock, the build
     // provenance, the source inputs and the snapshot's record and manifest
     // (its files are source objects of their own).
@@ -205,40 +205,7 @@ fn firmware_record_archives_the_exact_application() {
         )
         .is_err()
     );
-    assert_eq!(
-        collect_integrity_files(&object_root).unwrap(),
-        first_objects
-    );
-    // A scenario sealed on this firmware reads back: its seal holds the
-    // compressed runtime ELF the manifest records by its uncompressed bytes.
-    let catalog = oer_tool_service_hil_scenario::test_family::catalog();
-    let scenario = catalog.get("throughput").unwrap();
-    let artifacts = PathBuf::from("scenarios/throughput/repetition-001");
-    fs::create_dir_all(run_directory.join(&artifacts)).unwrap();
-    let result = oer_tool_data_hil_run_bundle_format::run::ScenarioResult::from_repetitions(
-        scenario.id().to_owned(),
-        ImageClass::SystemWatchdog,
-        scenario.repetitions(),
-        vec![oer_tool_data_hil_run_bundle_format::run::RepetitionResult {
-            schema: oer_tool_data_hil_run_bundle_format::run::RUN_SCHEMA,
-            repetition: 1,
-            outcome: oer_tool_data_hil_run_bundle_format::run::Outcome::Passed,
-            started_unix_millis: 1,
-            duration_millis: 2,
-            artifact_directory: artifacts,
-            attachments: Vec::new(),
-            measurements: Vec::new(),
-            failure: None,
-        }],
-    );
-    first_session.seal_scenario(scenario, &result).unwrap();
-    let attempts = oer_tool_data_hil_run_bundle_format::read::RunBundle::open(&run_directory)
-        .unwrap()
-        .unwrap()
-        .attempts()
-        .unwrap()
-        .unwrap();
-    assert_eq!(attempts.len(), 1);
+    assert_eq!(inventory(&object_root).unwrap(), first_objects);
     drop(first_session);
 
     let second_run_directory = root.join("run-2");
@@ -263,10 +230,7 @@ fn firmware_record_archives_the_exact_application() {
         ),
     )
     .unwrap();
-    assert_eq!(
-        collect_integrity_files(&object_root).unwrap(),
-        first_objects
-    );
+    assert_eq!(inventory(&object_root).unwrap(), first_objects);
     drop(second);
     fs::remove_dir_all(root).unwrap();
 }
@@ -321,7 +285,7 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
         .finish(Vec::new(), |_, _| Default::default())
         .unwrap();
 
-    let archived = oer_tool_service_hil_run_bundle::verify::archived_firmware(
+    let archived = oer_tool_service_hil_run_bundle::replay::archived_firmware(
         &root,
         "chip-a",
         "source-run",
@@ -351,13 +315,16 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
         .unwrap();
 
     fs::remove_dir_all(source_directory).unwrap();
-    let verified = oer_tool_service_hil_run_bundle::verify::verify(
+    // The replay run stands on its own: its firmware replays again after
+    // the source run is gone.
+    let again = oer_tool_service_hil_run_bundle::replay::archived_firmware(
         &root,
-        Some("chip-a"),
-        Some("replay-run"),
+        "chip-a",
+        "replay-run",
+        ImageClass::SystemWatchdog,
         &oer_tool_service_hil_run_bundle::run::test_support::TestRecipe,
     )
     .unwrap();
-    assert_eq!(verified.verified_run_ids, ["replay-run"]);
+    assert_eq!(again.run_id, "replay-run");
     fs::remove_dir_all(root).unwrap();
 }

@@ -1,4 +1,4 @@
-//! Offline integrity verification for immutable HIL run bundles.
+//! The archived firmware of an earlier run, checked before a run replays it.
 
 use std::{
     collections::BTreeSet,
@@ -10,7 +10,6 @@ use serde::Serialize;
 
 use crate::Result;
 use crate::build::build_id;
-use crate::run::sha256_file;
 use oer_tool_data_hil_run_bundle_format::build::BUILD_PROVENANCE_SCHEMA;
 use oer_tool_data_hil_run_bundle_format::build::BuildProvenance;
 use oer_tool_data_hil_run_bundle_format::build::BuildReproducibility;
@@ -22,25 +21,11 @@ use oer_tool_data_hil_run_bundle_format::lab::LabProvenance;
 use oer_tool_data_hil_run_bundle_format::run::RUN_SCHEMA;
 use oer_tool_data_hil_run_bundle_format::run::RunManifest;
 use oer_tool_data_hil_run_bundle_format::run::RunState;
-use oer_tool_data_hil_run_bundle_format::run::SuiteResult;
 use oer_tool_data_hil_run_bundle_format::run::validation::read_json;
 use oer_tool_data_hil_run_bundle_format::run::validation::validate_manifest;
-use oer_tool_data_hil_run_bundle_format::run::validation::validate_suite;
-
-#[derive(Debug, Serialize)]
-pub struct VerificationCompletion {
-    pub schema: u16,
-    /// The chips of the verified runs.
-    pub chips: BTreeSet<String>,
-    pub status: &'static str,
-    pub runs: usize,
-    pub attachments: usize,
-    pub firmware_artifacts: usize,
-    pub verified_run_ids: Vec<String>,
-}
 
 /// What the image builder derives from a build's recorded selection.
-/// Verification checks each build record against it, so a record cannot
+/// A replay checks each build record against it, so a record cannot
 /// claim a target or features its image class does not build with.
 pub trait FirmwareRecipe {
     /// The Rust target `chip` images build for.
@@ -66,26 +51,9 @@ pub struct ArchivedFirmware {
     pub application_sha256: String,
     pub build_id: Option<String>,
     pub(super) source_directory: PathBuf,
-    pub(super) integrity_sha256: String,
     pub(super) repository: oer_tool_data_hil_run_bundle_format::run::RepositoryProvenance,
     pub(super) artifact: oer_tool_data_hil_run_bundle_format::run::FirmwareArtifact,
     pub(super) build_provenance: Option<BuildProvenance>,
-}
-
-/// Verify the run `run_id`, or every run, of the checkout at `root`; with
-/// `chip`, only that chip's runs, and `run_id` must be one of them.
-pub fn verify(
-    root: &Path,
-    chip: Option<&str>,
-    run_id: Option<&str>,
-    recipe: &dyn FirmwareRecipe,
-) -> Result<VerificationCompletion> {
-    verify_at(
-        &root.join(crate::store::CHECKOUT_RUNS),
-        chip,
-        run_id,
-        recipe,
-    )
 }
 
 /// The run directory a checkout's `runs` resolves to. A checkout links it to
@@ -105,9 +73,9 @@ pub fn archived_firmware(
     image: oer_tool_data_hil_schema::image::ImageClass,
     recipe: &dyn FirmwareRecipe,
 ) -> Result<ArchivedFirmware> {
-    verify(root, Some(target), Some(run_id), recipe)?;
-    let run_directory = runs_directory(&root.join(crate::store::CHECKOUT_RUNS))?.join(run_id);
-    let manifest: RunManifest = read_json(&run_directory.join("manifest.json"))?;
+    let runs = root.join(crate::store::CHECKOUT_RUNS);
+    let manifest = validate_source(&runs, target, run_id, recipe)?;
+    let run_directory = runs_directory(&runs)?.join(run_id);
     let artifact = manifest
         .firmware
         .iter()
@@ -131,121 +99,32 @@ pub fn archived_firmware(
         application_sha256: artifact.application_sha256.clone(),
         build_id: artifact.build_id.clone(),
         source_directory: run_directory.clone(),
-        integrity_sha256: sha256_file(&run_directory.join("integrity.json"))?,
         repository: manifest.repository,
         artifact: artifact.clone(),
         build_provenance,
     })
 }
 
-pub fn verify_at(
+/// Check the run `run_id` of `chip` below `runs` before its firmware is
+/// replayed: its manifest, laboratory provenance and every firmware
+/// artifact with its build record, against `recipe`.
+fn validate_source(
     runs: &Path,
-    chip: Option<&str>,
-    run_id: Option<&str>,
+    chip: &str,
+    run_id: &str,
     recipe: &dyn FirmwareRecipe,
-) -> Result<VerificationCompletion> {
-    let runs_directory = runs_directory(runs)?;
-    let run_directories = select_run_directories(&runs_directory, run_id)?;
-    let mut attachments = 0;
-    let mut firmware_artifacts = 0;
-    let mut verified_run_ids = Vec::with_capacity(run_directories.len());
-    let mut chips = BTreeSet::new();
-
-    for run_directory in run_directories {
-        let manifest_path = run_directory.join("manifest.json");
-        require_regular_file(&manifest_path)?;
-        let manifest: RunManifest = read_json(&manifest_path)?;
-        // Every chip's runs share the store: a chip filter skips the others,
-        // and refuses a named run of another chip.
-        if let Some(chip) = chip
-            && run_id.is_none()
-            && manifest.target != chip
-        {
-            continue;
-        }
-        let target = chip.unwrap_or(&manifest.target).to_owned();
-        validate_manifest(&manifest, &target, &run_directory)?;
-        if manifest.state == RunState::Running {
-            return Err(format!(
-                "HIL run `{}` is still running and has no immutable integrity seal",
-                manifest.run_id
-            )
-            .into());
-        }
-        validate_lab_provenance(&run_directory, &manifest)?;
-        validate_firmware(&run_directory, &manifest, recipe)?;
-        firmware_artifacts += manifest.firmware.len();
-
-        if manifest.state == RunState::Completed {
-            let suite_path = run_directory.join("suite.json");
-            require_regular_file(&suite_path)?;
-            let suite: SuiteResult = read_json(&suite_path)?;
-            validate_suite(&suite, &manifest)?;
-            attachments += validate_attachments(&run_directory, &suite)?;
-        }
-        validate_integrity_index(&run_directory, &manifest)?;
-        validate_observer(&runs_directory, &manifest)?;
-        chips.insert(target);
-        verified_run_ids.push(manifest.run_id);
+) -> Result<RunManifest> {
+    let run_directory = runs_directory(runs)?.join(run_id);
+    let manifest_path = run_directory.join("manifest.json");
+    require_regular_file(&manifest_path)?;
+    let manifest: RunManifest = read_json(&manifest_path)?;
+    validate_manifest(&manifest, chip, &run_directory)?;
+    if manifest.state == RunState::Running {
+        return Err(format!("HIL run `{}` is still running", manifest.run_id).into());
     }
-    validate_observer_store(&runs_directory)?;
-
-    Ok(VerificationCompletion {
-        schema: RUN_SCHEMA,
-        chips,
-        status: "verified",
-        runs: verified_run_ids.len(),
-        attachments,
-        firmware_artifacts,
-        verified_run_ids,
-    })
-}
-
-/// A run's observer record is a reference whose build is present in the
-/// store and hashes to its name.
-fn validate_observer(runs_directory: &Path, manifest: &RunManifest) -> Result<()> {
-    let Some(record) = manifest.observer() else {
-        return Ok(());
-    };
-    let store = crate::store::RunStore::of_runs(runs_directory)?;
-    oer_tool_data_hil_run_bundle_format::observer::store::attach(record, store.observers())
-        .map_err(|error| {
-            format!(
-                "HIL run `{}` has an invalid observer record: {error}",
-                manifest.run_id
-            )
-        })?;
-    Ok(())
-}
-
-/// Every stored observer build is named by the digest of its bytes.
-fn validate_observer_store(runs_directory: &Path) -> Result<()> {
-    use oer_tool_data_hil_run_bundle_format::observer::store as observer_store;
-    let directory = crate::store::RunStore::of_runs(runs_directory)?
-        .observers()
-        .join(observer_store::DIRECTORY);
-    let entries = match fs::read_dir(&directory) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error.into()),
-    };
-    for entry in entries {
-        let path = entry?.path();
-        let digest = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| name.strip_suffix(".json"))
-            .filter(|name| observer_store::is_digest(name))
-            .ok_or_else(|| format!("unexpected observer store entry {}", path.display()))?;
-        if oer_tool_base_durable::sha256_bytes(&fs::read(&path)?) != digest {
-            return Err(format!(
-                "observer build {} does not hash to its name",
-                path.display()
-            )
-            .into());
-        }
-    }
-    Ok(())
+    validate_lab_provenance(&run_directory, &manifest)?;
+    validate_firmware(&run_directory, &manifest, recipe)?;
+    Ok(manifest)
 }
 
 fn validate_lab_provenance(run_directory: &Path, manifest: &RunManifest) -> Result<()> {
@@ -310,38 +189,6 @@ fn validate_lab_provenance(run_directory: &Path, manifest: &RunManifest) -> Resu
         manifest.started_unix_millis,
         manifest.finished_unix_millis,
     )
-}
-
-fn validate_integrity_index(run_directory: &Path, manifest: &RunManifest) -> Result<()> {
-    oer_tool_data_hil_run_bundle_format::run::integrity::verify(run_directory, &manifest.run_id)
-        .map(drop)
-}
-
-fn select_run_directories(runs_directory: &Path, run_id: Option<&str>) -> Result<Vec<PathBuf>> {
-    require_directory(runs_directory)?;
-    if let Some(run_id) = run_id {
-        if !is_single_normal_component(Path::new(run_id)) {
-            return Err(format!("invalid HIL run ID `{run_id}`").into());
-        }
-        let directory = runs_directory.join(run_id);
-        require_directory(&directory)?;
-        return Ok(vec![directory]);
-    }
-
-    let mut entries = fs::read_dir(runs_directory)?.collect::<std::io::Result<Vec<_>>>()?;
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    let mut directories = Vec::with_capacity(entries.len());
-    for entry in entries {
-        if !entry.file_type()?.is_dir() {
-            return Err(format!(
-                "HIL runs directory contains a non-directory entry: {}",
-                entry.path().display()
-            )
-            .into());
-        }
-        directories.push(entry.path());
-    }
-    Ok(directories)
 }
 
 fn validate_firmware(
@@ -664,11 +511,7 @@ fn validate_replay_origin(
         )
         .into());
     }
-    validate_sha256(
-        &origin.source_integrity_sha256,
-        "source run integrity",
-        &origin.source_run_id,
-    )
+    Ok(())
 }
 
 fn validate_source_material(
@@ -811,38 +654,6 @@ fn validate_snapshot_materials(run: &Path, provenance: &BuildProvenance) -> Resu
     Ok(())
 }
 
-fn validate_attachments(run_directory: &Path, suite: &SuiteResult) -> Result<usize> {
-    let mut paths = BTreeSet::new();
-    let mut count = 0;
-    for scenario in &suite.scenarios {
-        for repetition in &scenario.repetitions {
-            validate_relative_path(&repetition.artifact_directory, "artifact directory")?;
-            for attachment in &repetition.attachments {
-                if attachment.media_type.is_empty()
-                    || !attachment.path.starts_with(&repetition.artifact_directory)
-                    || !paths.insert(&attachment.path)
-                {
-                    return Err(format!(
-                        "HIL run `{}` has an invalid or duplicate attachment `{}`",
-                        suite.run_id,
-                        attachment.path.display()
-                    )
-                    .into());
-                }
-                verify_indexed_file(
-                    run_directory,
-                    &attachment.path,
-                    attachment.size_bytes,
-                    &attachment.sha256,
-                    "attachment",
-                )?;
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
-}
-
 fn verify_indexed_file(
     run_directory: &Path,
     relative_path: &Path,
@@ -939,14 +750,6 @@ fn require_regular_file(path: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() {
         return Err(format!("HIL bundle path is not a regular file: {}", path.display()).into());
-    }
-    Ok(())
-}
-
-fn require_directory(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    if !metadata.file_type().is_dir() {
-        return Err(format!("HIL bundle path is not a directory: {}", path.display()).into());
     }
     Ok(())
 }

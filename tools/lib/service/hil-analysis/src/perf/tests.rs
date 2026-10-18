@@ -65,7 +65,7 @@ fn only_gated_measurements_enter_a_summary() {
 }
 
 #[test]
-fn baselines_come_only_from_clean_sealed_runs_and_flag_regressions() {
+fn baselines_come_only_from_clean_finished_runs_and_flag_regressions() {
     let directory = tempfile::tempdir().unwrap();
     let store = RunStore::at(directory.path());
     let runs = directory.path().join("runs");
@@ -92,7 +92,7 @@ fn baselines_come_only_from_clean_sealed_runs_and_flag_regressions() {
 }
 
 #[test]
-fn sealed_summaries_are_reused_and_older_runs_are_not_read() {
+fn finished_summaries_are_reused_and_older_runs_are_not_read() {
     let directory = tempfile::tempdir().unwrap();
     let store = RunStore::at(directory.path());
     for name in ["1000-old", "3000-new"] {

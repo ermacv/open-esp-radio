@@ -16,7 +16,6 @@ use oer_tool_data_hil_schema::image::ImageClass;
 
 mod archive;
 pub use archive::FirmwareArchive;
-mod attempt;
 mod snapshot;
 
 // The documents this writer writes are the format's.
@@ -37,20 +36,20 @@ pub struct RunSession {
 }
 
 /// The CI and human views a run derives from its suite and manifest. They
-/// are sealed with the run but are never proof inputs.
+/// are kept with the run but are never proof inputs.
 #[derive(Clone, Debug, Default)]
 pub struct Views {
     pub junit: String,
     pub html: String,
 }
 
-/// Renders a sealed run's [`Views`]; the runner passes the analysis crate's.
+/// Renders a finished run's [`Views`]; the runner passes the analysis crate's.
 pub type Render = fn(&SuiteResult, &RunManifest) -> Views;
 
 /// Where an interrupted run hands its report.
 type InterruptionSink = Box<dyn FnOnce(&InterruptionReport) + Send>;
 
-/// What a run that ends without finishing reports once it is sealed as
+/// What a run that ends without finishing reports once it is recorded as
 /// interrupted.
 #[derive(Debug, serde::Serialize)]
 pub struct InterruptionReport {
@@ -58,7 +57,6 @@ pub struct InterruptionReport {
     pub run_id: String,
     pub outcome: &'static str,
     pub run_directory: PathBuf,
-    pub integrity_report: PathBuf,
 }
 
 struct UnpublishedRunDirectory {
@@ -162,7 +160,7 @@ impl RunSession {
             messages_used: Vec::new(),
         };
         atomic_json(&directory.join("manifest.json"), &manifest)?;
-        crate::receipt::record(&[crate::receipt::RunId::new(&manifest.run_id)])?;
+        crate::launch_runs::record(&[crate::launch_runs::RunId::new(&manifest.run_id)])?;
         let mut session = Self {
             target_directory,
             directory,
@@ -231,8 +229,8 @@ impl RunSession {
         Ok(())
     }
 
-    /// Seal the run with its scenarios' results: the suite, the views
-    /// `render` derives from it, the final manifest, then the integrity seal.
+    /// Finish the run with its scenarios' results: the suite, the views
+    /// `render` derives from it, then the final manifest.
     pub fn finish(
         mut self,
         scenarios: Vec<ScenarioResult>,
@@ -267,7 +265,6 @@ impl RunSession {
         self.manifest.finished_unix_millis = Some(finished_unix_millis);
         self.manifest.duration_millis = Some(duration_millis);
         atomic_json(&self.directory.join("manifest.json"), &self.manifest)?;
-        let integrity_report = write_integrity_index(&self.directory, &self.manifest.run_id)?;
         self.finished = true;
         let completion = CompletionReport {
             schema: RUN_SCHEMA,
@@ -277,7 +274,6 @@ impl RunSession {
             suite_report: self.directory.join("suite.json"),
             junit_report: self.directory.join("junit.xml"),
             html_report: self.directory.join("report.html"),
-            integrity_report,
         };
         Ok((suite, completion))
     }
@@ -309,20 +305,18 @@ impl Drop for RunSession {
         self.manifest.state = RunState::Interrupted;
         self.manifest.finished_unix_millis = Some(unix_millis());
         self.manifest.duration_millis = Some(duration_millis(self.started.elapsed()));
-        let _ = atomic_json(&self.directory.join("manifest.json"), &self.manifest);
-        match write_integrity_index(&self.directory, &self.manifest.run_id) {
-            Ok(integrity_report) => {
+        match atomic_json(&self.directory.join("manifest.json"), &self.manifest) {
+            Ok(()) => {
                 if let Some(report) = self.interruption.take() {
                     report(&InterruptionReport {
                         schema: RUN_SCHEMA,
                         run_id: self.manifest.run_id.clone(),
                         outcome: "interrupted",
                         run_directory: self.directory.clone(),
-                        integrity_report,
                     });
                 }
             }
-            Err(error) => eprintln!("cannot seal interrupted HIL run: {error}"),
+            Err(error) => eprintln!("cannot record the interrupted HIL run: {error}"),
         }
     }
 }
@@ -431,11 +425,7 @@ pub fn runner_provenance() -> Result<RunnerProvenance> {
     #[cfg(not(target_os = "linux"))]
     let executable_sha256: Option<String> = None;
     let runner = runner_build()?;
-    let mut build: serde_json::Value = serde_json::from_str(runner.record)?;
-    oer_tool_data_hil_run_bundle_format::observer::receipt::bind(
-        &mut build,
-        executable_sha256.as_deref(),
-    )?;
+    let build: serde_json::Value = serde_json::from_str(runner.record)?;
     let build_sha256 = oer_tool_base_durable::sha256_bytes(&serde_json::to_vec(&build)?);
     Ok(RunnerProvenance {
         observer: Some(

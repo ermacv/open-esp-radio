@@ -1,13 +1,8 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::PathBuf};
 
 use oer_tool_data_hil_schema::image::ImageClass;
 use oer_tool_data_hil_schema::run::RunEventKind;
-use oer_tool_service_hil_scenario::test_family::catalog;
 
-use crate::run::RunSession;
 use crate::run::Views;
 use crate::run::test_support::session;
 use crate::run::test_support::temporary_directory;
@@ -59,7 +54,7 @@ fn passed(scenario: &str, artifacts: &str) -> ScenarioResult {
 }
 
 /// A completed run of one passed scenario with a cleanup and a USB record.
-fn sealed(label: &str) -> RunBundle {
+fn finished(label: &str) -> RunBundle {
     let directory = run_directory(label);
     let session = session(&directory);
     let artifacts = "scenarios/boot-smoke/repetition-001";
@@ -86,8 +81,8 @@ fn sealed(label: &str) -> RunBundle {
 }
 
 #[test]
-fn a_sealed_run_reads_back_typed() {
-    let bundle = sealed("read-typed");
+fn a_finished_run_reads_back_typed() {
+    let bundle = finished("read-typed");
     bundle.validate().unwrap();
     assert_eq!(bundle.id(), "1700000000000-00000abc");
     assert_eq!(bundle.manifest().state, RunState::Completed);
@@ -108,56 +103,10 @@ fn a_sealed_run_reads_back_typed() {
     let events = bundle.events().unwrap();
     assert_eq!(events.last().unwrap().kind, RunEventKind::RunFinished);
     assert!(bundle.plan().unwrap().is_none());
-    assert!(bundle.attempts().unwrap().is_none());
     assert!(bundle.replayed_runs().unwrap().is_empty());
-    let index = bundle.integrity().unwrap();
-    assert!(index.files.iter().any(|file| file.path == Path::new(SUITE)));
-}
-
-#[test]
-fn integrity_fails_for_a_changed_added_or_missing_file() {
-    let bundle = sealed("read-integrity");
-    let suite = bundle.directory().join(SUITE);
-    let original = fs::read(&suite).unwrap();
-    let mut changed = original.clone();
-    *changed.last_mut().unwrap() ^= 1;
-    fs::write(&suite, &changed).unwrap();
-    assert!(bundle.integrity().is_err());
-    fs::write(&suite, &original).unwrap();
-    bundle.integrity().unwrap();
-
-    let added = bundle.directory().join("scenarios/boot-smoke/extra.log");
-    fs::write(&added, b"late").unwrap();
-    assert!(bundle.integrity().is_err());
-    fs::remove_file(&added).unwrap();
-    bundle.integrity().unwrap();
-
-    fs::remove_file(bundle.directory().join(EVENTS)).unwrap();
-    assert!(bundle.integrity().is_err());
-}
-
-#[test]
-fn a_scenario_seal_is_verified_against_its_material() {
-    let directory = run_directory("read-attempt");
-    let mut session: RunSession = session(&directory);
-    let catalog = catalog();
-    let scenario = catalog.get("boot-smoke").unwrap();
-    let artifacts = "scenarios/boot-smoke/repetition-001";
-    fs::create_dir_all(directory.join(artifacts)).unwrap();
-    fs::write(directory.join(artifacts).join("uart.log"), b"boot\n").unwrap();
-    session
-        .seal_scenario(scenario, &passed("boot-smoke", artifacts))
-        .unwrap();
-    let bundle = RunBundle::open(&directory).unwrap().unwrap();
-    let attempts = bundle.attempts().unwrap().unwrap();
-    assert_eq!(attempts.len(), 1);
-    assert_eq!(attempts[0].suite.scenarios[0].scenario, "boot-smoke");
-    assert_eq!(attempts[0].seal, Path::new("attempts/boot-smoke.json"));
-    assert_eq!(attempts[0].manifest.state, RunState::Completed);
-
-    fs::write(directory.join(artifacts).join("uart.log"), b"boot?\n").unwrap();
-    assert!(bundle.attempts().is_err());
-    drop(session);
+    // A finished run carries no seal.
+    assert!(!bundle.directory().join("integrity.json").exists());
+    assert!(!bundle.directory().join("attempts").exists());
 }
 
 #[test]
@@ -166,4 +115,25 @@ fn a_run_without_a_manifest_is_unpublished_and_a_foreign_one_is_an_error() {
     assert!(RunBundle::open(&directory).unwrap().is_none());
     fs::write(directory.join(MANIFEST), br#"{"schema":3}"#).unwrap();
     assert!(RunBundle::open(&directory).is_err());
+}
+
+#[test]
+fn a_run_of_an_older_schema_is_refused_by_name_and_kept() {
+    let bundle = finished("read-older-schema");
+    let path = bundle.directory().join(MANIFEST);
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest["schema"] = serde_json::json!(RUN_SCHEMA - 1);
+    let bytes = serde_json::to_vec(&manifest).unwrap();
+    fs::write(&path, &bytes).unwrap();
+    let error = RunBundle::open(bundle.directory()).unwrap_err().to_string();
+    assert!(
+        error.contains(&format!(
+            "has schema {}, expected {RUN_SCHEMA}",
+            RUN_SCHEMA - 1
+        )),
+        "{error}"
+    );
+    // Reading it changes nothing.
+    assert_eq!(fs::read(&path).unwrap(), bytes);
 }

@@ -72,7 +72,7 @@ fn html_is_derived_from_the_same_suite_record() {
 }
 
 #[test]
-fn the_sealed_views_are_both_projections() {
+fn the_finished_views_are_both_projections() {
     let (suite, manifest) = (failed_suite(), manifest());
     let views = views(&suite, &manifest);
     assert_eq!(views.junit, junit(&suite, &manifest));

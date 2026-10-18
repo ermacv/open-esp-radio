@@ -106,6 +106,7 @@ fn removed_commands_and_flags_are_rejected() {
         &["cargo-hil", "image", "verify-rebuild", "system-watchdog"],
         &["cargo-hil", "device", "status"],
         &["cargo-hil", "report", "rebuild"],
+        &["cargo-hil", "report", "verify", "run-1"],
         &["cargo-hil", "archive", "verify", "a.tar.gz"],
         &["cargo-hil", "fixture", "probe-plan"],
         &["cargo-hil", "plan", "--out", "plan.json"],

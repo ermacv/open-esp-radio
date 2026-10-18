@@ -5,7 +5,7 @@
 //! also fixes which direction is better. This module summarizes them per
 //! commit from the run store, keeps one reviewed baseline per scenario in
 //! the store's [`Sidecar::PerfBaselines`] and reports a run whose figures
-//! moved the wrong way by more than the baseline's noise. It reads sealed
+//! moved the wrong way by more than the baseline's noise. It reads finished
 //! bundles only and never decides qualification.
 
 use std::{collections::BTreeMap, fs};
@@ -23,7 +23,7 @@ use crate::{
     samples::{self, Better, Change, Sample, Spread, change},
 };
 
-/// What performance reporting needs of one run, cached per sealed run.
+/// What performance reporting needs of one run, cached per finished run.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct RunSummary {
     pub version: u32,
@@ -437,7 +437,7 @@ pub fn regressions(run: &RunSummary, baselines: &BTreeMap<String, Baseline>) -> 
 
 /// Summaries of the runs of `store` started at or after `since_millis`,
 /// oldest first. Run directories are named by their start time, so older
-/// runs are skipped without reading their bundles; a sealed run's summary
+/// runs are skipped without reading their bundles; a finished run's summary
 /// is cached in the store's `perf` cache and reused, since its bundle can
 /// no longer change.
 pub fn summaries_since(store: &RunStore, since_millis: u64) -> Result<Vec<RunSummary>> {
@@ -464,7 +464,7 @@ pub fn summaries_since(store: &RunStore, since_millis: u64) -> Result<Vec<RunSum
                     continue;
                 };
                 let computed = summary(&run)?;
-                if run.is_sealed() {
+                if run.is_finished() {
                     oer_tool_base_durable::atomic_json(&cached, &computed)?;
                 }
                 computed

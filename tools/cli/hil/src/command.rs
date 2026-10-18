@@ -94,7 +94,6 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     let runner = match &frozen {
         Some(frozen) => oer_tool_service_hil_experiment::launch::Runner {
             executable: frozen.runner.clone(),
-            receipt: Some(frozen.receipt.clone()),
         },
         None => oer_tool_service_hil_experiment::launch::Runner::prepare(&ctx.root)?,
     };
@@ -121,7 +120,7 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     let launched = oer_tool_service_hil_experiment::launch::launch_run(&launch)?;
     if produces_runs(args) {
         // Name the runs in the receipt of whatever invoked this command.
-        oer_tool_service_hil_run_bundle::receipt::record(&launched.runs)?;
+        oer_tool_service_hil_run_bundle::launch_runs::record(&launched.runs)?;
         let store = oer_tool_service_hil_run_bundle::RunStore::shared()?;
         if let Some(job) = job.as_mut() {
             job.finish_with(&store, &launched.runs)?;
@@ -216,7 +215,7 @@ queue, are `cargo stand`):
   cargo hil runs compare A B [--measurement TEXT]   measurements side by side, judged against their noise
   cargo hil runs history SCENARIO [--measurement TEXT]
   cargo hil runs pin RUN --reason TEXT | unpin RUN
-  cargo hil runs prune [--days 30] [--keep-failed 5] [--apply]
+  cargo hil runs prune [--days 30] [--keep-failed 5] [--unreadable] [--apply]
   cargo hil firmware list             tracked ESP-IDF images (peers, vendor references)
   cargo hil firmware build IMAGE      build against the one pinned ESP-IDF
   cargo hil images check --all|--class C|--reaching PKG [--type-check]   image classes with their audits
@@ -353,7 +352,7 @@ fn command_tree(ctx: &Checkout) -> Result<std::process::ExitCode> {
         flags: flags.iter().map(|word| word.to_string()).collect(),
         forwards: false,
     };
-    let runner = oer_tool_service_hil_observer::prepare::prepare(&ctx.root)?.runner;
+    let runner = oer_tool_service_hil_observer::prepare::build(&ctx.root)?;
     let output = oer_tool_base_process::command(&runner)
         .arg("__command-tree")
         .output()?;
@@ -429,7 +428,6 @@ fn ab(ctx: &Checkout, owner: &str, args: &[OsString]) -> Result<std::process::Ex
     };
     let runner = oer_tool_service_hil_experiment::launch::Runner {
         executable: frozen.runner,
-        receipt: Some(frozen.receipt),
     };
     let runs = crate::experiments::ab(ctx, owner, &runner, &args[1..])?;
     let (ids, outcomes): (Vec<_>, Vec<_>) = runs.into_iter().unzip();
@@ -599,13 +597,10 @@ fn runs(
             crate::pins::pin_existing_by_hand(&store, &run, note(reason)?)?;
         }
         RunsCli::Unpin { run } => {
-            let held =
+            let pinned =
                 store.update_notes(Sidecar::Pins, |pins| crate::pins::unpin_by_hand(pins, &run))?;
-            if !held.is_empty() {
-                eprintln!(
-                    "hil: run {run} stays pinned by an earlier evidence-archive holder: {}",
-                    held.join(", ")
-                );
+            if !pinned {
+                eprintln!("hil: run {run} was not pinned");
             }
         }
         RunsCli::Flaky { since, minimum } => {
@@ -1014,7 +1009,7 @@ enum PerfCli {
         #[arg(long, value_parser = parse_budget, default_value = "14d")]
         since: std::time::Duration,
     },
-    /// Make a clean sealed run the baseline of its scenarios.
+    /// Make a clean finished run the baseline of its scenarios.
     Baseline {
         run: String,
         /// Scenarios to set; all gated scenarios of the run when omitted.
@@ -1047,7 +1042,7 @@ struct ProfileCli {
 
 /// Where `cargo hil profile` keeps the report of the profile at `relative`
 /// (its directory below the scenario) of `run`'s `scenario`: under this
-/// checkout's target directory, never inside the sealed run bundle.
+/// checkout's target directory, never inside the finished run bundle.
 fn profile_report_path(root: &Path, run: &str, scenario: &str, relative: &Path) -> PathBuf {
     root.join("target/hil/profiles")
         .join(run)
@@ -1121,7 +1116,7 @@ fn profile(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
                 .unwrap_or(Path::new(""));
             println!("== {id} {}", relative.display());
             print!("{report}");
-            // The run bundle is sealed: a derived report written into it
+            // The run bundle is finished: a derived report written into it
             // would fail its integrity inventory.
             let destination = profile_report_path(&ctx.root, &cli.run, &id, relative);
             fs::create_dir_all(destination.parent().ok_or("profile report has no parent")?)?;
@@ -1240,8 +1235,9 @@ enum RunsCli {
         keep_failed: usize,
         #[arg(long)]
         apply: bool,
-        /// Also runs of this build's schema that it cannot read; a newer
-        /// branch's runs of the same schema may be among them.
+        /// Also the runs of this build's or an older schema that it cannot
+        /// read; a newer branch's runs of the same schema may be among them.
+        /// Nothing else deletes an older-schema run.
         #[arg(long)]
         unreadable: bool,
     },
@@ -1314,7 +1310,7 @@ mod tests {
     }
 
     #[test]
-    fn a_profile_report_stays_outside_the_sealed_run() {
+    fn a_profile_report_stays_outside_the_finished_run() {
         let root = Path::new("/checkout");
         let report = profile_report_path(root, "run-1", "udp", Path::new("repetition-001"));
         assert_eq!(

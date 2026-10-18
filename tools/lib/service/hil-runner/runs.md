@@ -201,7 +201,7 @@ cargo hil profile <run-id> --scenario S --repetition 1 --top 20
 (the outermost frame of the inline chain), their most frequent inlined frame
 and the callers the return addresses name, and writes the report to this
 checkout's `target/hil/profiles/<run>/<scenario>/<repetition>/profile.txt`;
-it never writes into the sealed run bundle. A return address names the caller only while the sampled
+it never writes into the finished run bundle. A return address names the caller only while the sampled
 function has not called another, so callers are exact for leaf functions.
 
 ## Code layout seeds
@@ -282,7 +282,7 @@ that runner uses a private arbiter directory with a copy of the stand file
 (and of the older `devices.json` registry, for revisions before it).
 
 Every step's run is launched through `oer-tool-service-hil-experiment`'s one
-`launch_run`, which learns the run from the runner's receipt, through the
+`launch_run`, which learns the run from the runner's launch run list, through the
 same revision launch as [a revision's scenario set](#a-revisions-scenario-set):
 a revision's own runner is built with `oer-tool-service-hil-observer`, and its runs reach
 the shared store through the worktree's `target/hil/runs` link, or, when an
@@ -413,7 +413,7 @@ baseline's deviation and 2 % of its mean is `REGRESSED`; the same margin the
 other way is `improved`. `baseline` accepts only a completed run of a clean
 commit and records its network implementation; baselines live in
 `perf-baselines.json` beside the store and are shared by every checkout.
-Summaries of sealed runs are cached in `perf-cache/`, so a report reads each
+Summaries of finished runs are cached in `perf-cache/`, so a report reads each
 bundle once. These views never decide qualification.
 
 After every command that executes scenarios, `cargo hil` applies this rule
@@ -431,16 +431,13 @@ changes no run's outcome or evidence.
 `prune` keeps pinned runs, runs whose
 firmware another run replayed, runs younger than `--days` (30), incomplete
 runs, the latest pass and the `--keep-failed` (5) newest failures of every
-scenario and image class. A run this build cannot read goes when its manifest
-names an older `RUN_SCHEMA` and it is older than `--days`: no checkout reads
-it any more, and after a schema bump the newest history stays that long for
-an older checkout. A run of a newer schema, or of an unknown one, always
-stays: the store is shared, and a newer branch's runs are only unreadable to
-this checkout. A run of this schema that does not read goes only with
-`--unreadable`, which the automatic rule never passes; a newer branch's run
-of the same schema may be among them. The size budget below weighs every run
-that stays, readable or not, and over it also deletes an older-schema run
-only its age keeps. The automatic rule also holds the esp32s31 store to
+scenario and image class. A run this build cannot read, of this or an older
+`RUN_SCHEMA`, is its owner's data: it goes only with `--unreadable`, which
+the automatic rule never passes, never by its age or the size budget; a newer
+branch's run of the same schema may be among them. A run of a newer schema,
+or of an unknown one, always stays: the store is shared, and a newer branch's
+runs are only unreadable to this checkout. The size budget below weighs every
+run that stays, readable or not. The automatic rule also holds the esp32s31 store to
 a size budget, `OER_HIL_RUN_STORE_BUDGET_GIB` (40 GiB by default): over it, it
 deletes the oldest runs that only their age kept until the store fits, and
 every other reason above still keeps its runs. Run by hand without `--apply` it only lists the other runs and
@@ -448,13 +445,11 @@ the bytes only they hold; hard-linked firmware shared with kept runs is not
 counted. Neither the rule nor the size budget touches the store's
 `revision-runs/`: a run that another revision's runner wrote in its own
 format (a [revision run](#a-revisions-scenario-set) or a bisection step on
-an older wire) is a record of that revision, kept for comparison; the
-evidence archive packs only runs of the store's `runs/`. It stays until someone
+an older wire) is a record of that revision, kept for comparison. It stays until someone
 deletes `<store>/revision-runs/<run>` by hand. Pins live in the store's `pins.json`. Pruning with `--apply`, and the
 automatic rule, also delete the observer builds in the store's `observers/`
 that no remaining run names and that were stored more than an hour ago; a
-starting run stores its build before its manifest names it. Run verification
-requires every build there to hash to its name. They delete the captures in
+starting run stores its build before its manifest names it. They delete the captures in
 the host's capture store that no queued or running job holds (was fixed with,
 or names with `--source-snapshot`) and that were
 last written or used (a build or run from `--source-snapshot` uses it) more
@@ -468,18 +463,9 @@ no run and only saves a later identical archive a copy. Collection holds the
 store's lock exclusively, and archiving holds it shared, so no run reuses an
 object while it is deleted.
 
-A pin note keeps a hand reason (`runs pin RUN --reason TEXT`) and the
-evidence archive's holders side by side: `cargo hil archive ref` pins the
-runs it names for its own selection (`selection-<millis>-<process>-<n>`,
-written in the references file; `ref --selection SELECTION` adds runs to an
-existing one), `cargo hil archive pack` hands that
-selection's pins to its version, and publishing the version or `cargo hil
-archive unpin VERSION|SELECTION` drops that holder alone. `runs pin` keeps
-the holders, and `runs unpin` drops only the hand reason: a run an
-unpublished version holds stays pinned, and only `archive unpin` releases it
-(rule 5). `cargo hil archive holders` lists each holder with its runs, so a
-selection never packed is found and dropped. Every change of the pins is one
-read-modify-write under `pins.json.lock`, and pruning holds that lock shared
-from reading the pins until its last run deletion (not while it collects the
-shared observer builds and source objects), so no pin lands in between. A
+A pin is one hand note (`runs pin RUN --reason TEXT`), which `runs unpin
+RUN` drops. Every change of the pins is one read-modify-write under
+`pins.json.lock`, and pruning holds that lock shared from reading the pins
+until its last run deletion (not while it collects the shared observer builds
+and source objects), so no pin lands in between. A
 command that waits for the lock says so once and ends on Ctrl-C (exit 130).

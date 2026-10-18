@@ -39,7 +39,7 @@ pub fn newest_runs(store: &RunStore, count: usize) -> Vec<Value> {
                     .then(|| progress(&run.bundle))
                     .flatten(),
                 // A run still marked running whose runner is gone ended
-                // without sealing its bundle.
+                // without finishing its bundle.
                 "abandoned": run.abandoned,
                 "report": run.directory().join("report.html").is_file(),
                 "experiment_arm": manifest.experiment.as_ref().map(|experiment| experiment.arm),

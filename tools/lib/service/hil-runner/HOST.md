@@ -12,7 +12,7 @@ hil/
 ├── schema/            evidence contract
 ├── model/             the typed scenario model: spec, purpose, verdict, names, derived waits, stand profile
 ├── trace-header/      the no_std header of conformance traces: typed bounds and clock domain
-├── observer/          the observer's build identity, content store and receipts
+├── observer/          the observer's build identity and content store
 ├── scenarios/         versioned, non-secret host workloads and criteria
 ├── host/
 │   ├── cli/           stand CLI: stand commands, jobs, run store, runner launch
@@ -23,8 +23,7 @@ hil/
 │   ├── flash/         the flash operation: lease, write, journal, start
 │   ├── link/          the DUT session, generic exchange, reboots, the peer console
 │   ├── net-traffic/   network sessions, paced UDP/TCP and ICMP host traffic
-│   ├── run-bundle/    the run bundle: format, writer and seal, the one reader, run store, build provenance, verification
-│   ├── evidence-archive/  immutable versions of cited runs, the pin, packing, verified copies, publication
+│   ├── run-bundle/    the run bundle: format, writer, the one reader, run store, build provenance, replay checks
 │   ├── analysis/      run queries, the one measurement aggregation and comparison, performance, views
 │   ├── experiment/    the one run launch, revision runs, A/B comparisons and bisection
 │   ├── image/         image class specs for the image pipeline, firmware records, compare_images
@@ -46,9 +45,7 @@ hil/
 ```
 
 Target firmware lives under `hil/targets/<chip>`. Runs are immutable bundles
-in the run store (`target/hil/runs`). Evidence is only the runs of the pinned
-evidence archive version, checked in a verified copy (`cargo hil archive
-fetch`); Markdown is not proof input.
+in the run store (`target/hil/runs`); Markdown is not proof input.
 
 Vendor-linked oracles remain isolated under `verification`; they are
 not HIL scenarios or runner commands.
@@ -59,30 +56,18 @@ The ownership map and bundle contract are in the
 `cargo hil` is the binary of [`oer-tool-cli-hil`](cli/README.md), apart from
 xtask. It handles the
 stand's commands itself and forwards every other command to the runner: it
-builds the observer using Cargo's actual artifact
-messages, saves its executable receipt, and atomically publishes
-`target/hil/current-observer.json`. Cargo uses `--locked` and, like every Cargo
+builds the observer and runs its private copy. Cargo uses `--locked` and, like every Cargo
 command in this repository, runs offline (`.cargo/config.toml`); `cargo tidy
 fetch` downloads what a changed lock file needs. Cancellation of
 `cargo hil` is forwarded to its owned runner process group, with up to five minutes
-for fixture cleanup and evidence sealing; this does not limit campaign runtime.
+for fixture cleanup and finishing the run; this does not limit campaign runtime.
 The wrapper returns the runner's exit code (or `128 + signal` on Unix).
 
-Prepare the same observer descriptor without running HIL with:
+Build the observer without running HIL, printing its private copy, with:
 
 ```console
 cargo hil observer
 ```
-
-The descriptor selects the required compiler, features and profile;
-prepare it again to select a different build configuration. Current normal/build manifests, lock identities and Cargo configuration are
-checked once before use. Changes in any domain's normal/build declarations
-require explicit preparation because they may alter shared feature unification;
-dev-only declarations do not. Rust source and fixture changes are checked only
-within the observation's workload scope.
-Missing, invalid or stale configuration is reported as
-`current-observer-configuration-unavailable`; historical observations remain
-visible. Source compatibility is still checked per workload.
 
 ## Guides
 
@@ -137,8 +122,7 @@ scenario that needs an image, the runner brings the board to that image's
 current catalog build through the flash operation's catalog flash
 (`oer_tool_service_hil_flash::catalog`, unless the board journal says the board carries
 it), and writes the image, application digest and commit the board journal
-recorded for it into the scenario's `peer-image.json`, which the scenario's
-seal covers. Each
+recorded for it into the scenario's `peer-image.json`. Each
 workload takes the running peer over with its `SYNC` command instead of a
 reset: a USB Serial/JTAG reset of an ESP32-C5 whose radio runs can leave it in
 ROM download. The peer drivers share one console, `oer_tool_service_hil_link::peer::PeerConsole`:
@@ -166,7 +150,7 @@ Scenario digests drop null values, fill schema-5 defaults from
 families by the runner's catalog test) and exclude top-level `description`,
 `role`, `tags` and `unsupported`; all execution fields remain bound, including
 repetitions and the complete family table. A plan neither executes hardware
-nor invalidates sealed observations.
+nor invalidates finished observations.
 
 `cargo hil run <scenario>` builds and flashes the required image before the
 scenario. `cargo hil image build <class>` builds the class's image bundle through the one image pipeline
@@ -201,9 +185,7 @@ packages an image build reads, or inside the HIL host packages and scenarios
 (`hil/host`, `hil/schema` and `hil/scenarios`), which the run reads;
 unresolved files block capture with their names and the `--source-include`
 arguments that add them all, ready to paste, before content is archived. The manifest lists every archived untracked
-file with `by: source-include`, `by: image-package` or `by: hil-host`, and a run with any
-option is still a sealed run, and evidence cites it only once it is in a
-pinned archive version. Directory selections and ignored files are not accepted.
+file with `by: source-include`, `by: image-package` or `by: hil-host`. Directory selections and ignored files are not accepted.
 For the configured local override, qualify each new file with `esp-hal:`. Agent instructions (`AGENTS.md` at any depth and
 every `.agents/` directory) are excluded from tracked and untracked inputs
 in every source checkout: they configure coding agents, not firmware or HIL.
@@ -255,8 +237,8 @@ or `--include-untracked` for nonignored untracked inputs. Replay uses the archiv
 claiming a current build. Standalone image builds use the snapshot only when
 `--source-snapshot` is supplied.
 Such a build also publishes `target/hil/esp32s31/builds/<identity>/build.json`,
-firmware, source snapshot and `integrity.json`. Its identity is the SHA-256 of
-the integrity seal. A review can name this destination without fabricating a
+firmware and source snapshot. Its identity is the SHA-256 of the record's
+file inventory (`run::inventory`). A review can name this destination without fabricating a
 scenario or hardware observation; the record supplies no PASS or repetitions.
 
 
@@ -270,8 +252,9 @@ does not fail fast. Every invocation retains an immutable evidence bundle in
 `target/hil/runs/<run-id>/`, including a canonical JSON suite, JUnit
 XML, a standalone HTML report and the exact application image flashed for each
 firmware class. The flash operation reads that archived copy, binding firmware
-provenance to the bytes sent to the DUT. Completed and interrupted bundles also
-carry a deterministic integrity inventory covering every retained file.
+provenance to the bytes sent to the DUT. A bundle carries no seal: a run of
+another `RUN_SCHEMA` is not read, and stays in the store until it is deleted
+explicitly (`cargo hil runs prune --unreadable --apply`).
 
 The manifest records `runner.observer`, including the SHA-256 of the running
 executable and its embedded build/source identity. Firmware capture does not
@@ -287,27 +270,10 @@ in that projected dependency closure and the listed non-Cargo `data` files;
 source paths are never enumerated.
 Legacy bundles need an explicit provenance review before becoming applicable.
 
-`RunSession` also publishes `attempts/<scenario>.json` immediately after a
-scenario's complete repetition set (including cleanup) has been recorded. This
-schema-1 seal contains a completion snapshot, the result and a size/SHA-256
-inventory of the scenario directory, its bound firmware class, source patches,
-run plan and lab provenance. Firmware bytes are referenced in place, not copied
-per scenario. A bound firmware class cannot be replaced within that invocation.
-The seal is published atomically and cannot be overwritten by the runner.
-
-A closed attempt remains usable even if a later scenario or the
-campaign process is interrupted before the final suite seal. Unpublished
-temporary seals and unfinished repetition sets supply no completion proof.
-Sealing an attempt does not release or recover fixture resources, resume a
-partially executed protocol, or certify an early phase of an unfinished
-lifecycle. Fixture cleanup and recovery remain with their existing owners.
-
 ## Inspect evidence
 
 `cargo hil runs history <scenario>` reads a scenario's outcomes and
 measurements straight from the bundles in the store and starts with its pass
 rate and how many of its newest runs in a row did not pass; there is no
 derived history file to rebuild. Trends are scenario aggregates, not a proof
-of comparable firmware or fixture conditions. Verify the structure and content digests of one bundle with
-`cargo hil report verify <run-id>`, or omit the ID to verify all bundles. This
-also runs without a DUT or private stand file.
+of comparable firmware or fixture conditions.

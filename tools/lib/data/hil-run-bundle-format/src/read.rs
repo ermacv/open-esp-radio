@@ -4,12 +4,10 @@
 //! other document of the bundle is read through it, typed: the plan, the
 //! suite and its scenario and repetition results with their measurements,
 //! the scenario snapshots, the cleanup and USB records of a repetition, the
-//! laboratory and build provenance, the event stream, the integrity seal and
-//! the scenario seals. A document outside this build's vocabulary is an
-//! error, never a silently absent value. Whoever reads a bundle, the `cargo
-//! hil` analyses included, reads it here; a reader's independence comes from
-//! verifying the seals and hashing every file again when it admits a run ([`RunBundle::integrity`],
-//! [`RunBundle::attempts`]), not from a second reader.
+//! laboratory and build provenance and the event stream. A document outside
+//! this build's vocabulary, or a run of another schema, is an error, never a
+//! silently absent value. Whoever reads a bundle, the `cargo hil` analyses
+//! included, reads it here.
 
 use std::{
     fs,
@@ -23,8 +21,8 @@ use crate::{
     build::BuildProvenance,
     lab::LabProvenance,
     run::{
-        Attempt, CLEANUP_FILE, CleanupRecord, FirmwareArtifact, IntegrityIndex, OBSERVATIONS_FILE,
-        Observations, PlannedFirmware, RepetitionResult, RunManifest, RunPlan, RunState,
+        CLEANUP_FILE, CleanupRecord, FirmwareArtifact, OBSERVATIONS_FILE, Observations,
+        PlannedFirmware, RUN_SCHEMA, RepetitionResult, RunManifest, RunPlan, RunState,
         ScenarioResult, SuiteResult, USB_EVENTS_FILE, UsbEvent,
         validation::{read_json, read_optional_json, validate_manifest},
     },
@@ -45,12 +43,22 @@ pub struct RunBundle {
 
 impl RunBundle {
     /// The run in `directory`; `None` while it has no manifest (a run being
-    /// created publishes its manifest first). A manifest outside this
-    /// build's format is an error.
+    /// created publishes its manifest first). A manifest of another schema,
+    /// or outside this build's format, is an error; the run stays as it is.
     pub fn open(directory: &Path) -> Result<Option<Self>> {
-        let Some(manifest) = read_optional_json::<RunManifest>(&directory.join(MANIFEST))? else {
+        let Some(document) = read_optional_json::<serde_json::Value>(&directory.join(MANIFEST))?
+        else {
             return Ok(None);
         };
+        let schema = &document["schema"];
+        if schema.as_u64() != Some(u64::from(RUN_SCHEMA)) {
+            return Err(format!(
+                "HIL run {} has schema {schema}, expected {RUN_SCHEMA}",
+                directory.display()
+            )
+            .into());
+        }
+        let manifest: RunManifest = serde_json::from_value(document)?;
         if !fs::symlink_metadata(directory.join(MANIFEST))?
             .file_type()
             .is_file()
@@ -187,18 +195,6 @@ impl RunBundle {
             .transpose()
     }
 
-    /// The verified integrity seal of a completed or interrupted run: every
-    /// file hashed again ([`crate::run::integrity::verify`]).
-    pub fn integrity(&self) -> Result<IntegrityIndex> {
-        crate::run::integrity::verify(&self.directory, &self.manifest.run_id)
-    }
-
-    /// The run's verified scenario seals; `None` when it sealed no scenario
-    /// on its own.
-    pub fn attempts(&self) -> Result<Option<Vec<Attempt>>> {
-        crate::run::completed(&self.directory, &self.manifest)
-    }
-
     /// The checkout the runner ran from: the directory holding the `target`
     /// directory of the runner executable the run's command line names.
     pub fn checkout(&self) -> Option<String> {
@@ -250,7 +246,7 @@ impl RunBundle {
     }
 
     /// A run recorded as running whose runner is gone: it ended without
-    /// sealing its bundle.
+    /// finishing its bundle.
     pub fn abandoned(&self) -> bool {
         self.manifest.state == RunState::Running && !self.runner_alive()
     }

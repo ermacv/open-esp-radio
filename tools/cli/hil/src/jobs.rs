@@ -15,11 +15,10 @@ use oer_tool_service_stand_arbiter::jobs::{After, Job, JobState};
 use crate::Result;
 use oer_tool_base_process::Checkout;
 
-/// The `cargo hil` binary, runner and runner receipt a job runs with, fixed
+/// The `cargo hil` binary and runner a job runs with, fixed
 /// when it was enqueued (or, for an experiment, when it started).
 pub const FROZEN_CLI_ENV: &str = "OER_HIL_JOB_CLI";
 pub const FROZEN_RUNNER_ENV: &str = "OER_HIL_JOB_RUNNER";
-pub const FROZEN_RECEIPT_ENV: &str = "OER_HIL_JOB_RECEIPT";
 /// The source snapshot an enqueued `run` builds from, captured when it was
 /// enqueued.
 pub const FROZEN_SNAPSHOT_ENV: &str = "OER_HIL_JOB_SNAPSHOT";
@@ -31,22 +30,20 @@ fn jobs() -> Result<oer_tool_service_stand_arbiter::jobs::Jobs> {
 }
 
 /// What a job runs with, fixed before it waits: a copy of this binary, the
-/// checkout's runner with its receipt, and for a `run` the source snapshot.
+/// checkout's runner, and for a `run` the source snapshot.
 /// Edits, pulls and rebuilds of the checkout after that do not reach the job,
 /// which otherwise built them in the middle of an experiment.
 #[derive(Clone, Debug)]
 pub struct Frozen {
     pub cli: PathBuf,
     pub runner: PathBuf,
-    pub receipt: PathBuf,
     pub snapshot: Option<PathBuf>,
 }
 
 impl Frozen {
     /// This binary and the checkout's runner as they are now.
     pub fn capture(ctx: &Checkout) -> Result<Self> {
-        let oer_tool_service_hil_observer::prepare::Prepared { runner, receipt } =
-            oer_tool_service_hil_observer::prepare::prepare(&ctx.root)?;
+        let runner = oer_tool_service_hil_observer::prepare::build(&ctx.root)?;
         let bytes = fs::read(std::env::current_exe()?)?;
         let directory = ctx
             .root
@@ -68,7 +65,6 @@ impl Frozen {
         Ok(Self {
             cli,
             runner,
-            receipt,
             snapshot: None,
         })
     }
@@ -76,14 +72,11 @@ impl Frozen {
     /// The parts this process's job was fixed with, if it is such a job.
     pub fn inherited() -> Result<Option<Self>> {
         let variable = |name| std::env::var_os(name).map(PathBuf::from);
-        let (Some(cli), Some(runner), Some(receipt)) = (
-            variable(FROZEN_CLI_ENV),
-            variable(FROZEN_RUNNER_ENV),
-            variable(FROZEN_RECEIPT_ENV),
-        ) else {
+        let (Some(cli), Some(runner)) = (variable(FROZEN_CLI_ENV), variable(FROZEN_RUNNER_ENV))
+        else {
             return Ok(None);
         };
-        for path in [&cli, &runner, &receipt] {
+        for path in [&cli, &runner] {
             if !path.is_file() {
                 return Err(format!(
                     "{} was fixed for this job when it was enqueued and is gone; enqueue it again",
@@ -95,14 +88,13 @@ impl Frozen {
         Ok(Some(Self {
             cli,
             runner,
-            receipt,
             snapshot: variable(FROZEN_SNAPSHOT_ENV),
         }))
     }
 
     /// Every file or directory the job needs to stay.
     pub fn paths(&self) -> Vec<PathBuf> {
-        [&self.cli, &self.runner, &self.receipt]
+        [&self.cli, &self.runner]
             .into_iter()
             .cloned()
             .chain(self.snapshot.clone())
@@ -117,8 +109,7 @@ impl Frozen {
             .arg("--root")
             .arg(&ctx.root)
             .env(FROZEN_CLI_ENV, &self.cli)
-            .env(FROZEN_RUNNER_ENV, &self.runner)
-            .env(FROZEN_RECEIPT_ENV, &self.receipt);
+            .env(FROZEN_RUNNER_ENV, &self.runner);
         match &self.snapshot {
             Some(snapshot) => command.env(FROZEN_SNAPSHOT_ENV, snapshot),
             None => command.env_remove(FROZEN_SNAPSHOT_ENV),

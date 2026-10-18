@@ -1,5 +1,5 @@
 //! The HIL observer's producer: building the runner ([`compile`]),
-//! resolving its graph ([`resolve`]) and preparing its receipt
+//! resolving its graph ([`resolve`]) and keeping its private copy
 //! ([`prepare`]). The identity they produce is data of the run bundle
 //! format (`oer_tool_data_hil_run_bundle_format::observer`), which evaluators read.
 #![forbid(unsafe_code)]
