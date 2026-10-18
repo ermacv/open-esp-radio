@@ -6,16 +6,26 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Finite Linux probe helper for open ESP radio HIL, with its runner contract"
+description = "Finite Linux Bluetooth and probe helpers for open ESP radio HIL, with their runner contract"
 
 [dependencies]
+bt-hci = "=0.10.1"
+clap = { version = "4.5", features = ["derive"] }
+# bt-hci's `cmd!` expansion names these crates from the caller.
+bt-hci-transport = "=0.1.0"
+embedded-io = "0.7.1"
+embedded-io-async = "0.7.0"
 libc = "0.2"
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process"] }
 oer-ieee80211-mac = { path = "../../../../crates/ieee80211/mac" }
 oer-tool-base-process = { path = "../../base/process" }
 oer-tool-service-stand-fixture-install = { path = "../stand-fixture-install" }
+oer-tool-data-hil-protocol = { path = "../../data/hil-protocol" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[dev-dependencies]
+oer-bluetooth-le-ll = { path = "../../../../crates/bluetooth/le/ll" }
 
 [lints]
 workspace = true

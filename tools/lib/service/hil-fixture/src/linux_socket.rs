@@ -1,5 +1,5 @@
-//! Linux socket facilities that rustix does not model: the link-layer
-//! address and two raw socket options.
+//! Linux socket facilities that rustix does not model: link-layer, HCI and
+//! L2CAP addresses and two raw socket options.
 //!
 //! Each address type is constructed only from validated fields, so its raw
 //! representation is always a complete, fully initialized address of its
@@ -31,6 +31,32 @@ impl LinkAddress {
     }
 }
 
+/// Linux `sockaddr_hci`: one controller index and HCI channel.
+#[repr(C)]
+pub struct HciAddress {
+    family: libc::sa_family_t,
+    index: u16,
+    channel: u16,
+}
+
+// `sockaddr_hci` is `{ sa_family_t, u16, u16 }` without padding.
+const _: () = assert!(size_of::<HciAddress>() == 6);
+
+impl HciAddress {
+    /// The raw user channel, with exclusive access to the controller.
+    pub const USER_CHANNEL: u16 = 1;
+    /// The management control channel.
+    pub const CONTROL_CHANNEL: u16 = 3;
+
+    pub fn new(index: u16, channel: u16) -> Self {
+        Self {
+            family: libc::AF_BLUETOOTH as libc::sa_family_t,
+            index,
+            channel,
+        }
+    }
+}
+
 #[allow(
     unsafe_code,
     reason = "rustix binds foreign address types through SocketAddrArg"
@@ -46,6 +72,100 @@ unsafe impl SocketAddrArg for LinkAddress {
             (&raw const self.0).cast(),
             size_of::<libc::sockaddr_ll>() as SocketAddrLen,
         )
+    }
+}
+
+#[allow(
+    unsafe_code,
+    reason = "rustix binds foreign address types through SocketAddrArg"
+)]
+// SAFETY: `HciAddress` is `repr(C)` with the layout of Linux `sockaddr_hci`;
+// the closure receives a pointer to it and its exact size for the call.
+unsafe impl SocketAddrArg for HciAddress {
+    unsafe fn with_sockaddr<R>(
+        &self,
+        f: impl FnOnce(*const SocketAddrOpaque, SocketAddrLen) -> R,
+    ) -> R {
+        f(
+            (&raw const *self).cast(),
+            size_of::<Self>() as SocketAddrLen,
+        )
+    }
+}
+
+/// Linux `sockaddr_l2` for the LE ATT fixed channel of a public device.
+#[repr(C)]
+pub struct L2capAddress {
+    family: libc::sa_family_t,
+    psm: u16,
+    address: [u8; 6],
+    cid: u16,
+    kind: u8,
+    // Initialized explicitly: the kernel reads the whole structure.
+    padding: u8,
+}
+
+// `sockaddr_l2` is `{ sa_family_t, le16, bdaddr_t, le16, u8 }` padded to 14.
+const _: () = assert!(size_of::<L2capAddress>() == 14);
+
+impl L2capAddress {
+    const ATT_CID: u16 = 4;
+    const LE_PUBLIC: u8 = 1;
+
+    /// ATT on an LE public address, in HCI byte order.
+    pub fn att(address: [u8; 6]) -> Self {
+        Self {
+            family: libc::AF_BLUETOOTH as libc::sa_family_t,
+            psm: 0,
+            address,
+            cid: Self::ATT_CID.to_le(),
+            kind: Self::LE_PUBLIC,
+            padding: 0,
+        }
+    }
+}
+
+#[allow(
+    unsafe_code,
+    reason = "rustix binds foreign address types through SocketAddrArg"
+)]
+// SAFETY: `L2capAddress` is `repr(C)` with the layout of Linux `sockaddr_l2`
+// and no uninitialized bytes; the closure receives it and its exact size.
+unsafe impl SocketAddrArg for L2capAddress {
+    unsafe fn with_sockaddr<R>(
+        &self,
+        f: impl FnOnce(*const SocketAddrOpaque, SocketAddrLen) -> R,
+    ) -> R {
+        f(
+            (&raw const *self).cast(),
+            size_of::<Self>() as SocketAddrLen,
+        )
+    }
+}
+
+/// Require an unauthenticated, unencrypted link (`BT_SECURITY_LOW`) before
+/// an L2CAP socket connects.
+pub fn set_bluetooth_security_low(socket: impl AsFd) -> io::Result<()> {
+    const SOL_BLUETOOTH: libc::c_int = 274;
+    const BT_SECURITY: libc::c_int = 4;
+    // Linux `struct bt_security { u8 level; u8 key_size; }`.
+    let security: [u8; 2] = [1, 0];
+    #[allow(unsafe_code, reason = "rustix has no Bluetooth socket options")]
+    // SAFETY: the option value is an initialized two-byte `bt_security` whose
+    // pointer and length stay valid for the call on a borrowed live socket.
+    let result = unsafe {
+        libc::setsockopt(
+            socket.as_fd().as_raw_fd(),
+            SOL_BLUETOOTH,
+            BT_SECURITY,
+            security.as_ptr().cast(),
+            size_of_val(&security) as libc::socklen_t,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 

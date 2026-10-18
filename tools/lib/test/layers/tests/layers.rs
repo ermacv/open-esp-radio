@@ -7,7 +7,7 @@ use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies allowed, each listed: a new edge is
 /// added here on purpose, in the change that needs it.
-const SERVICE_ORDER: [(&str, &str); 125] = [
+const SERVICE_ORDER: [(&str, &str); 128] = [
     ("devices", "device-lock"),
     ("devices", "image-bundle"),
     ("esp32s31-ieee802154-vendor-host", "vendor-evidence"),
@@ -53,6 +53,7 @@ const SERVICE_ORDER: [(&str, &str); 125] = [
     ("hil-image", "image-compare"),
     ("hil-lab", "device-lock"),
     ("hil-lab", "devices"),
+    ("hil-lab", "hil-fixture"),
     ("hil-lab", "hil-link"),
     ("hil-lab", "lab"),
     ("hil-lab", "stand-arbiter"),
@@ -115,6 +116,8 @@ const SERVICE_ORDER: [(&str, &str); 125] = [
     ("stand-board", "stand-power"),
     ("stand-discover", "stand-power"),
     ("stand-doctor", "stand-power"),
+    ("stand-fixture-bluetooth", "hil-fixture"),
+    ("stand-fixture-bluetooth", "hil-lab"),
     ("stand-fixtures", "stand-ssh"),
     ("stand-journal", "devices"),
     ("stand-journal", "stand-owners"),

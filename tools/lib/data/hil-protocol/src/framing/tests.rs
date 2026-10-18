@@ -1,6 +1,9 @@
 use super::*;
 use crate::network::evidence_crc32c;
 
+#[cfg(feature = "bluetooth")]
+mod secure_gatt;
+
 /// Feeds `bytes` and returns the last complete frame as message `M`.
 fn receive<M: crate::Message>(
     decoder: &mut FrameDecoder,

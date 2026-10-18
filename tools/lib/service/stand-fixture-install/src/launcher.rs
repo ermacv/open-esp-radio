@@ -11,12 +11,14 @@ mod handoff;
 pub enum LaunchTarget {
     Network,
     Probe,
+    Bluetooth,
 }
 
 impl LaunchTarget {
     pub(crate) fn provider(self) -> Provider {
         match self {
             Self::Network | Self::Probe => Provider::LinuxNet,
+            Self::Bluetooth => Provider::LinuxBluetooth,
         }
     }
 
@@ -24,6 +26,7 @@ impl LaunchTarget {
         match self {
             Self::Network => ArtifactRole::NetworkHelper,
             Self::Probe => ArtifactRole::ProbeHelper,
+            Self::Bluetooth => ArtifactRole::BluetoothHelper,
         }
     }
 
@@ -32,6 +35,7 @@ impl LaunchTarget {
         let role = match self {
             Self::Network => ArtifactRole::NetworkLauncher,
             Self::Probe => ArtifactRole::ProbeLauncher,
+            Self::Bluetooth => ArtifactRole::BluetoothLauncher,
         };
         self.provider()
             .artifact_specs()
@@ -45,6 +49,7 @@ impl LaunchTarget {
         match self {
             Self::Network => "linux-net",
             Self::Probe => "linux-net-probe",
+            Self::Bluetooth => "linux-bluetooth",
         }
     }
 }
@@ -165,7 +170,11 @@ mod tests {
 
     #[test]
     fn every_target_enters_through_its_installed_launcher() {
-        for target in [LaunchTarget::Network, LaunchTarget::Probe] {
+        for target in [
+            LaunchTarget::Network,
+            LaunchTarget::Probe,
+            LaunchTarget::Bluetooth,
+        ] {
             let launcher = target.launcher();
             let spec = target
                 .provider()

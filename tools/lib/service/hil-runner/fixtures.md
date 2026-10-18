@@ -1,7 +1,7 @@
 # HIL host fixtures
 
 Network scenarios prepare and restore a controlled access point, clients and
-passive observers; the network helpers are installed once per host.
+passive observers; Bluetooth and network helpers are installed once per host.
 This guide covers their preparation, evidence boundaries and installation; the
 [host guide](README.md) covers the stand file that names them.
 
@@ -117,26 +117,34 @@ more instrumented image is a separate experiment, not interchangeable evidence.
 
 ## Linux fixture software installation
 
-The Linux network fixture has one provisioning workflow (the Bluetooth
-provider went in , tag `legacy-radio-2026-10-16`). Preview
+Linux network and Bluetooth fixtures share one provisioning workflow. Preview
 the exact provider plan first; these commands do not execute any listed build,
 capability, sudo or hardware step and do not load the stand file:
 
 ```console
 cargo stand fixture install --provider linux-net --dry-run
+cargo stand fixture install --provider linux-bluetooth --dry-run
 ```
 
 The helper `capabilities` and sudoers validation subprocesses each have a
 five-second execution deadline; timeout is an installation/preparation failure.
+Bluetooth preparation and execution share the versioned contract in
+[`bluetooth_contract.rs`](../stand-fixture-install/src/bluetooth_contract.rs).
+Synchronous HCI command receive failures report the command identity, elapsed
+time, packet count and last event identity in the helper's existing error
+report. They do not record event payloads or keys, retry commands, or extend
+the two-second deadline when unrelated events arrive. A DTM Test End timeout
+is a peer-check failure, not evidence that the DUT has stopped transmitting.
 
 Like every Cargo alias, `cargo hil` may compile the runner before it can print
 the plan. That Cargo startup is not an installer plan step. Missing helper
 binaries appear as `missing`, while present files remain `present-unverified`.
 
-Install the provider with interactive authorization:
+Install exactly one provider with interactive authorization:
 
 ```console
 cargo stand fixture install --provider linux-net
+cargo stand fixture install --provider linux-bluetooth
 ```
 
 Installation is stand maintenance: it claims only
@@ -152,12 +160,19 @@ software lease only once granted, so a queued run never blocks an
 installation. Preparation happens before queueing; `sudo` prompts only once
 the claim is granted.
 
+Bluetooth policy admits only named adapters. It defaults to the dedicated
+`hci0`; repeat `--adapter hciN` to install a sorted finite allow-list. Reinstall
+with the adapters selected by the private stand file before using
+another controller.
+
 Cargo is the single installation entry point and runs as the unprivileged
 operator. Linux is required; installation is not supported on other hosts.
 
 Preparation runs as the operator. Network preparation retains the pinned
 hostapd build, patch and provenance plus the locked probe and fixed-launcher
-builds. The runner rejects an invocation already running as
+builds. Bluetooth preparation builds only its finite helper, fixed launcher and
+installer with the same locked root `target/debug` output; it does not
+build or download hostapd. The runner rejects an invocation already running as
 root before starting either build. It then transfers the foreground terminal
 to ordinary `sudo`; no password pipe or askpass path exists, and the general
 HIL runner never runs as root.
@@ -214,7 +229,7 @@ original lifetimes.
 
 After activation the installer checks installed bytes, policy and only the
 helper's non-hardware `capabilities` operation. It does not run `doctor`,
-`fixture check`, identity discovery, serial,
+`fixture check`, Bluetooth DTM/connect-reset, identity discovery, serial, HCI,
 SSH, network mutation, flashing or RF checks. The fixed root-owned receipt at
 `/var/lib/open-radio/fixture/<provider>/receipt.json` reports the generation,
 source dirty/content identity, artifact and policy hashes, previous generation,
@@ -228,6 +243,7 @@ remain separate operator checks.
 | `fixture install … --dry-run` | No installer step; Cargo may build the runner | No | No | No | No |
 | `fixture install --provider …` | Builds as user, then interactive privileged system writes | No | No | No | No |
 | installed helper `capabilities` | Read-only software inspection; network helper uses its existing finite sudo grant | No | No | No | No |
+| `fixture bluetooth-check` | Writes a local report and uses the finite helper grant | No | Yes, with restoration | Yes, bounded DTM TX | No |
 | `fixture check <scenario>` | Writes a local report and may use finite helper grants | Depends on scenario | Depends on scenario | Depends on scenario | No |
 | `run` / `run-all` | Builds and writes evidence; uses selected fixture grants | Depends on scenario | Depends on scenario | Yes for radio scenarios | Yes |
 

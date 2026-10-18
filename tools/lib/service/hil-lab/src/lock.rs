@@ -420,3 +420,41 @@ fn local_radio_key(interface: &Path) -> Result<String> {
 
 #[cfg(test)]
 mod tests;
+
+fn bluetooth_key(
+    adapter: oer_tool_service_hil_fixture::bluetooth::model::Adapter,
+) -> Result<String> {
+    Ok(format!(
+        "bluetooth:{}",
+        Path::new("/sys/class/bluetooth")
+            .join(adapter.to_string())
+            .canonicalize()?
+            .display()
+    ))
+}
+
+/// The Bluetooth adapter alone, under the stand's lease.
+pub struct BluetoothLease {
+    _resource: ResourceLock,
+    _grant: oer_tool_service_stand_arbiter::Grant,
+}
+
+pub fn acquire_bluetooth(
+    adapter: oer_tool_service_hil_fixture::bluetooth::model::Adapter,
+) -> Result<BluetoothLease> {
+    let key = bluetooth_key(adapter)?;
+    let grant = acquire_stand(
+        &oer_tool_service_stand_arbiter::Arbiter::open()?,
+        vec![
+            oer_tool_service_stand_claims::Claim::exclusive(&key),
+            oer_tool_service_stand_claims::Claim::shared(oer_tool_service_stand_claims::AIR),
+        ],
+        &[],
+        None,
+        false,
+    )?;
+    Ok(BluetoothLease {
+        _resource: ResourceLock::acquire(&key)?,
+        _grant: grant,
+    })
+}

@@ -8,8 +8,11 @@ use std::{
 use sha2::{Digest as _, Sha256};
 
 use super::*;
-use crate::transaction::test_support::{
-    Effects, LINUX_NET_OPERATIONS, Layout, Stage, apply, policy_bytes,
+use crate::{
+    model::validate_adapters,
+    transaction::test_support::{
+        Effects, LINUX_NET_OPERATIONS, Layout, Stage, apply, policy_bytes,
+    },
 };
 
 const OPERATOR: &str = "fixture_test";
@@ -95,6 +98,10 @@ fn artifact_declarations(provider: Provider, suffix: &str) -> Vec<(Artifact, Vec
         "#!/bin/sh\ntest \"$1\" = capabilities && printf '%s\\n' '{}'\n# {suffix}\n",
         Provider::LinuxNet.runtime_contract()
     );
+    let bluetooth = format!(
+        "#!/bin/sh\ntest \"$1\" = capabilities && printf '%s\\n' '{}'\n# {suffix}\n",
+        Provider::LinuxBluetooth.runtime_contract()
+    );
     let entries: Vec<(ArtifactRole, &str, &str, u32, Vec<u8>)> = match provider {
         Provider::LinuxNet => vec![
             (
@@ -140,6 +147,22 @@ fn artifact_declarations(provider: Provider, suffix: &str) -> Vec<(Artifact, Vec
                 format!("{{\"generation\":\"{suffix}\"}}\n").into_bytes(),
             ),
         ],
+        Provider::LinuxBluetooth => vec![
+            (
+                ArtifactRole::BluetoothLauncher,
+                "open-radio-bluetooth-launcher",
+                "/usr/local/libexec/open-radio-bluetooth-launcher",
+                0o555,
+                format!("bluetooth-launcher-{suffix}").into_bytes(),
+            ),
+            (
+                ArtifactRole::BluetoothHelper,
+                "open-radio-bluetooth",
+                "/usr/local/libexec/open-radio-bluetooth",
+                0o555,
+                bluetooth.into_bytes(),
+            ),
+        ],
     };
     entries
         .into_iter()
@@ -181,6 +204,7 @@ fn make_bundle(directory: &Path, provider: Provider, suffix: &str) -> (PathBuf, 
             workspace_state_sha256: format!("{:x}", Sha256::digest(suffix.as_bytes())),
         },
         runtime_contract: provider.runtime_contract().to_owned(),
+        allowed_bluetooth_adapters: provider.default_adapters(),
         artifacts: declarations
             .into_iter()
             .map(|(artifact, _)| artifact)
@@ -206,6 +230,33 @@ fn make_network_race_bundle(directory: &Path, suffix: &str, effect: &Path) -> (P
         "#!/bin/sh\nif test \"$1\" = capabilities; then printf '%s\\n' '{}'; exit 0; fi\nprintf '{suffix}/' >'{}'\nGENERATION_DIR=$(/usr/bin/dirname -- \"$0\")\n/bin/cat \"$GENERATION_DIR/open-radio-hostapd\" >>'{}'\n# generation {suffix}\n",
         Provider::LinuxNet.runtime_contract(),
         effect.display(),
+        effect.display(),
+    );
+    let helper_path = bundle_path.join("artifacts").join(&helper.file_name);
+    fs::set_permissions(&helper_path, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&helper_path, script.as_bytes()).unwrap();
+    fs::set_permissions(&helper_path, fs::Permissions::from_mode(helper.mode)).unwrap();
+    helper.size_bytes = script.len() as u64;
+    helper.sha256 = format!("{:x}", Sha256::digest(script.as_bytes()));
+    bundle.generation = bundle_hash(&bundle);
+    fs::write(
+        bundle_path.join("bundle.json"),
+        serde_json::to_vec_pretty(&bundle).unwrap(),
+    )
+    .unwrap();
+    (bundle_path, bundle)
+}
+
+fn make_bluetooth_race_bundle(directory: &Path, suffix: &str, effect: &Path) -> (PathBuf, Bundle) {
+    let (bundle_path, mut bundle) = make_bundle(directory, Provider::LinuxBluetooth, suffix);
+    let helper = bundle
+        .artifacts
+        .iter_mut()
+        .find(|artifact| artifact.role == ArtifactRole::BluetoothHelper)
+        .unwrap();
+    let script = format!(
+        "#!/bin/sh\nif test \"$1\" = capabilities; then printf '%s\\n' '{}'; exit 0; fi\nprintf '{suffix}/{suffix}' >'{}'\n# generation {suffix}\n",
+        Provider::LinuxBluetooth.runtime_contract(),
         effect.display(),
     );
     let helper_path = bundle_path.join("artifacts").join(&helper.file_name);
@@ -251,11 +302,14 @@ fn test_apply(
 }
 
 #[test]
-fn plans_are_deterministic_and_offline() {
+fn plans_are_provider_specific_deterministic_and_offline() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let net = build_plan(root.path(), Provider::LinuxNet).unwrap();
-    assert_eq!(net, build_plan(root.path(), Provider::LinuxNet).unwrap());
+    let net = build_plan(root.path(), Provider::LinuxNet, &[]).unwrap();
+    assert_eq!(
+        net,
+        build_plan(root.path(), Provider::LinuxNet, &[]).unwrap()
+    );
     assert_eq!(net.provider, Provider::LinuxNet);
     assert!(net.build_steps.iter().any(|step| step.contains("hostapd")));
     assert!(
@@ -264,6 +318,35 @@ fn plans_are_deterministic_and_offline() {
             .all(|item| item.state == ArtifactState::Missing)
     );
     assert!(!net.automatic_hardware_checks);
+
+    let bluetooth = build_plan(root.path(), Provider::LinuxBluetooth, &[]).unwrap();
+    assert_eq!(bluetooth.allowed_bluetooth_adapters, ["hci0"]);
+    assert!(
+        bluetooth
+            .build_steps
+            .iter()
+            .all(|step| !step.contains("hostapd"))
+    );
+}
+
+#[test]
+fn bluetooth_adapter_policy_is_explicit_and_canonical() {
+    let _serial = serial();
+    assert_eq!(
+        validate_adapters(
+            Provider::LinuxBluetooth,
+            &["hci2".into(), "hci0".into(), "hci2".into()]
+        )
+        .unwrap(),
+        ["hci0", "hci2"]
+    );
+    for invalid in ["hci01", "hci65535", "../hci0", "hci*", "wlan0"] {
+        assert!(
+            validate_adapters(Provider::LinuxBluetooth, &[invalid.into()]).is_err(),
+            "accepted {invalid}"
+        );
+    }
+    assert!(validate_adapters(Provider::LinuxNet, &["hci0".into()]).is_err());
 }
 
 #[test]
@@ -272,10 +355,10 @@ fn fresh_repeat_and_upgrade_use_complete_generations() {
     use std::os::unix::fs::MetadataExt as _;
 
     let root = tempfile::tempdir().unwrap();
-    let (first_path, first) = make_bundle(root.path(), Provider::LinuxNet, "first");
+    let (first_path, first) = make_bundle(root.path(), Provider::LinuxBluetooth, "first");
     let result = test_apply(
         root.path(),
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &first_path,
         &mut TestEffects::passing(),
     );
@@ -288,17 +371,17 @@ fn fresh_repeat_and_upgrade_use_complete_generations() {
     assert!(result.changed);
     let lease_path = root
         .path()
-        .join("var/lib/open-radio/fixture/linux-net/session.lock");
+        .join("var/lib/open-radio/fixture/linux-bluetooth/session.lock");
     let lease_inode = fs::metadata(&lease_path).unwrap().ino();
-    let stable = root.path().join("usr/local/sbin/open-radio-net");
+    let stable = root.path().join("usr/local/libexec/open-radio-bluetooth");
     assert_eq!(
         fs::read(&stable).unwrap(),
-        artifact_declarations(Provider::LinuxNet, "first")[1].1
+        artifact_declarations(Provider::LinuxBluetooth, "first")[1].1
     );
 
     let repeat = test_apply(
         root.path(),
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &first_path,
         &mut TestEffects::passing(),
     );
@@ -306,10 +389,10 @@ fn fresh_repeat_and_upgrade_use_complete_generations() {
     assert!(!repeat.changed);
     assert_eq!(fs::metadata(&lease_path).unwrap().ino(), lease_inode);
 
-    let (second_path, second) = make_bundle(root.path(), Provider::LinuxNet, "second");
+    let (second_path, second) = make_bundle(root.path(), Provider::LinuxBluetooth, "second");
     let upgrade = test_apply(
         root.path(),
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &second_path,
         &mut TestEffects::passing(),
     );
@@ -321,11 +404,11 @@ fn fresh_repeat_and_upgrade_use_complete_generations() {
     assert_eq!(fs::metadata(&lease_path).unwrap().ino(), lease_inode);
     assert_eq!(
         fs::read(&stable).unwrap(),
-        artifact_declarations(Provider::LinuxNet, "second")[1].1
+        artifact_declarations(Provider::LinuxBluetooth, "second")[1].1
     );
     assert!(
         root.path()
-            .join("var/lib/open-radio/fixture/linux-net/generations")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/generations")
             .join(first.generation)
             .exists()
     );
@@ -335,9 +418,9 @@ fn fresh_repeat_and_upgrade_use_complete_generations() {
 fn post_install_dispatch_contains_only_policy_bytes_and_capabilities_checks() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "software-only");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "software-only");
     let mut effects = TestEffects::passing();
-    let result = test_apply(root.path(), Provider::LinuxNet, &bundle, &mut effects);
+    let result = test_apply(root.path(), Provider::LinuxBluetooth, &bundle, &mut effects);
     assert_eq!(result.state, InstallState::SoftwareVerified);
     assert_eq!(
         effects.calls,
@@ -408,12 +491,12 @@ fn effective_policy_failure_rolls_back_and_never_runs_capabilities() {
     }
 
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "policy-conflict");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "policy-conflict");
     let mut effects = EffectiveReject { effective_calls: 0 };
     let result = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -423,7 +506,12 @@ fn effective_policy_failure_rolls_back_and_never_runs_capabilities() {
     assert_eq!(result.state, InstallState::RolledBack);
     assert!(result.primary_error.unwrap().contains("effective policy"));
     assert_eq!(effects.effective_calls, 2);
-    assert!(!root.path().join("etc/sudoers.d/open-radio-net").exists());
+    assert!(
+        !root
+            .path()
+            .join("etc/sudoers.d/open-radio-bluetooth")
+            .exists()
+    );
 }
 
 #[test]
@@ -438,13 +526,16 @@ fn every_control_stage_fails_closed_and_rollback_failure_is_reported() {
         Stage::SoftwareVerified,
     ] {
         let root = tempfile::tempdir().unwrap();
-        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "failure");
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "failure");
         let mut effects = TestEffects::passing();
         effects.fail = Some(stage);
-        let result = test_apply(root.path(), Provider::LinuxNet, &bundle, &mut effects);
+        let result = test_apply(root.path(), Provider::LinuxBluetooth, &bundle, &mut effects);
         assert_eq!(result.state, InstallState::RolledBack, "stage {stage:?}");
         assert!(
-            !root.path().join("usr/local/sbin/open-radio-net").exists(),
+            !root
+                .path()
+                .join("usr/local/libexec/open-radio-bluetooth")
+                .exists(),
             "stage {stage:?} left a stable helper"
         );
     }
@@ -468,11 +559,11 @@ fn every_control_stage_fails_closed_and_rollback_failure_is_reported() {
         }
     }
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "rollback");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "rollback");
     let result = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -484,10 +575,10 @@ fn every_control_stage_fails_closed_and_rollback_failure_is_reported() {
     assert!(result.recovery_error.is_some());
     assert!(
         root.path()
-            .join("var/lib/open-radio/fixture/linux-net/transaction.json")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/transaction.json")
             .exists()
     );
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 }
 
 #[test]
@@ -495,14 +586,14 @@ fn abrupt_process_loss_is_recovered_from_persisted_journal() {
     let _serial = serial();
     for stage in [Stage::PolicyPublished, Stage::Activated] {
         let root = tempfile::tempdir().unwrap();
-        let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-        let (bundle, expected) = make_bundle(root.path(), Provider::LinuxNet, "crash");
+        let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+        let (bundle, expected) = make_bundle(root.path(), Provider::LinuxBluetooth, "crash");
         let mut crashing = TestEffects::passing();
         crashing.panic = Some(stage);
         let crashed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = apply(
                 &layout,
-                Provider::LinuxNet,
+                Provider::LinuxBluetooth,
                 &bundle,
                 OPERATOR,
                 rustix::process::geteuid().as_raw(),
@@ -512,14 +603,16 @@ fn abrupt_process_loss_is_recovered_from_persisted_journal() {
         assert!(crashed.is_err());
         assert!(
             root.path()
-                .join("var/lib/open-radio/fixture/linux-net/transaction.json")
+                .join("var/lib/open-radio/fixture/linux-bluetooth/transaction.json")
                 .exists()
         );
-        assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+        assert!(
+            crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err()
+        );
 
         let recovered = apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -530,7 +623,7 @@ fn abrupt_process_loss_is_recovered_from_persisted_journal() {
         assert_eq!(
             fs::read_link(
                 root.path()
-                    .join("var/lib/open-radio/fixture/linux-net/current")
+                    .join("var/lib/open-radio/fixture/linux-bluetooth/current")
             )
             .unwrap(),
             PathBuf::from("generations").join(expected.generation)
@@ -538,7 +631,7 @@ fn abrupt_process_loss_is_recovered_from_persisted_journal() {
         assert!(
             !root
                 .path()
-                .join("var/lib/open-radio/fixture/linux-net/transaction.json")
+                .join("var/lib/open-radio/fixture/linux-bluetooth/transaction.json")
                 .exists()
         );
     }
@@ -548,16 +641,16 @@ fn abrupt_process_loss_is_recovered_from_persisted_journal() {
 fn receipt_failure_after_commit_preserves_truth_and_next_apply_finishes_recovery() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-    let (bundle, expected) = make_bundle(root.path(), Provider::LinuxNet, "receipt");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let (bundle, expected) = make_bundle(root.path(), Provider::LinuxBluetooth, "receipt");
     let mut effects = TestEffects::passing();
     let receipts = root
         .path()
-        .join("var/lib/open-radio/fixture/linux-net/receipts");
+        .join("var/lib/open-radio/fixture/linux-bluetooth/receipts");
     effects.make_receipt_unwritable = Some(receipts.clone());
     let result = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -568,22 +661,22 @@ fn receipt_failure_after_commit_preserves_truth_and_next_apply_finishes_recovery
     assert_eq!(
         fs::read_link(
             root.path()
-                .join("var/lib/open-radio/fixture/linux-net/current")
+                .join("var/lib/open-radio/fixture/linux-bluetooth/current")
         )
         .unwrap(),
         PathBuf::from("generations").join(&expected.generation)
     );
     assert!(
         root.path()
-            .join("var/lib/open-radio/fixture/linux-net/transaction.json")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/transaction.json")
             .exists()
     );
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 
     fs::set_permissions(&receipts, fs::Permissions::from_mode(0o755)).unwrap();
     let recovered = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -593,25 +686,25 @@ fn receipt_failure_after_commit_preserves_truth_and_next_apply_finishes_recovery
     assert_eq!(recovered.state, InstallState::SoftwareVerified);
     assert!(
         root.path()
-            .join("var/lib/open-radio/fixture/linux-net/receipt.json")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/receipt.json")
             .exists()
     );
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_ok());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_ok());
 }
 
 #[test]
 fn source_replacement_symlink_and_partial_installation_are_rejected() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "source");
-    let replaced = bundle.join("artifacts/open-radio-net");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "source");
+    let replaced = bundle.join("artifacts/open-radio-bluetooth");
     fs::set_permissions(&replaced, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(replaced, b"replaced").unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -621,15 +714,15 @@ fn source_replacement_symlink_and_partial_installation_are_rejected() {
     );
 
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "symlink");
-    let original = bundle.join("artifacts/open-radio-net");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "symlink");
+    let original = bundle.join("artifacts/open-radio-bluetooth");
     fs::remove_file(&original).unwrap();
     std::os::unix::fs::symlink("/bin/true", &original).unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -663,7 +756,7 @@ fn source_replacement_symlink_and_partial_installation_are_rejected() {
 fn manifest_traversal_operator_mismatch_and_writable_bundle_are_rejected() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle_path, mut bundle) = make_bundle(root.path(), Provider::LinuxNet, "manifest");
+    let (bundle_path, mut bundle) = make_bundle(root.path(), Provider::LinuxBluetooth, "manifest");
     bundle.artifacts[0].target = PathBuf::from("/usr/local/libexec/../escape");
     bundle.generation = bundle_hash(&bundle);
     fs::write(
@@ -671,11 +764,11 @@ fn manifest_traversal_operator_mismatch_and_writable_bundle_are_rejected() {
         serde_json::to_vec(&bundle).unwrap(),
     )
     .unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle_path,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -685,12 +778,12 @@ fn manifest_traversal_operator_mismatch_and_writable_bundle_are_rejected() {
     );
 
     let root = tempfile::tempdir().unwrap();
-    let (bundle_path, _) = make_bundle(root.path(), Provider::LinuxNet, "operator");
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let (bundle_path, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "operator");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle_path,
             "another_operator",
             rustix::process::geteuid().as_raw(),
@@ -702,7 +795,7 @@ fn manifest_traversal_operator_mismatch_and_writable_bundle_are_rejected() {
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle_path,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -716,14 +809,14 @@ fn manifest_traversal_operator_mismatch_and_writable_bundle_are_rejected() {
 fn unmanaged_installation_requires_explicit_recovery_without_replacing_files() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-    let stable = root.path().join("usr/local/sbin/open-radio-net");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let stable = root.path().join("usr/local/libexec/open-radio-bluetooth");
     fs::write(&stable, b"unmanaged helper").unwrap();
     fs::set_permissions(&stable, fs::Permissions::from_mode(0o555)).unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "new");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "new");
     let error = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -735,23 +828,35 @@ fn unmanaged_installation_requires_explicit_recovery_without_replacing_files() {
     assert!(
         !root
             .path()
-            .join("var/lib/open-radio/fixture/linux-net/current")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/current")
             .exists()
     );
 }
 
 #[test]
-fn active_session_and_installation_locks_refuse_an_upgrade() {
+fn active_session_lock_refuses_upgrade_and_providers_are_independent() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
     let (net_bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "net");
+    let (bt_bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "bt");
     test_apply(
         root.path(),
         Provider::LinuxNet,
         &net_bundle,
         &mut TestEffects::passing(),
     );
+    test_apply(
+        root.path(),
+        Provider::LinuxBluetooth,
+        &bt_bundle,
+        &mut TestEffects::passing(),
+    );
     assert!(root.path().join("usr/local/sbin/open-radio-net").exists());
+    assert!(
+        root.path()
+            .join("usr/local/libexec/open-radio-bluetooth")
+            .exists()
+    );
 
     let lock_path = root
         .path()
@@ -801,6 +906,18 @@ fn active_session_and_installation_locks_refuse_an_upgrade() {
     .unwrap_err()
     .to_string();
     assert!(error.contains("another fixture installation"));
+    let bluetooth_layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let error = apply(
+        &bluetooth_layout,
+        Provider::LinuxBluetooth,
+        &bt_bundle,
+        OPERATOR,
+        rustix::process::geteuid().as_raw(),
+        &mut TestEffects::passing(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("another fixture installation"));
     drop(install_lock);
 }
 
@@ -808,22 +925,22 @@ fn active_session_and_installation_locks_refuse_an_upgrade() {
 fn missing_launcher_is_incomplete_not_an_implicit_upgrade_path() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (first, _) = make_bundle(root.path(), Provider::LinuxNet, "installed");
+    let (first, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "installed");
     test_apply(
         root.path(),
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &first,
         &mut TestEffects::passing(),
     );
     let launcher = root
         .path()
-        .join("usr/local/libexec/open-radio-net-launcher");
+        .join("usr/local/libexec/open-radio-bluetooth-launcher");
     fs::remove_file(&launcher).unwrap();
-    let (upgrade, _) = make_bundle(root.path(), Provider::LinuxNet, "new");
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let (upgrade, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "new");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     let error = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &upgrade,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -838,14 +955,16 @@ fn missing_launcher_is_incomplete_not_an_implicit_upgrade_path() {
 fn writable_or_symlinked_destination_and_writable_active_generation_are_rejected() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "paths");
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
-    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "paths");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
+    let state = root
+        .path()
+        .join("var/lib/open-radio/fixture/linux-bluetooth");
     fs::set_permissions(&state, fs::Permissions::from_mode(0o777)).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -861,7 +980,7 @@ fn writable_or_symlinked_destination_and_writable_active_generation_are_rejected
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -871,24 +990,24 @@ fn writable_or_symlinked_destination_and_writable_active_generation_are_rejected
     );
 
     let root = tempfile::tempdir().unwrap();
-    let (bundle, expected) = make_bundle(root.path(), Provider::LinuxNet, "active-mode");
+    let (bundle, expected) = make_bundle(root.path(), Provider::LinuxBluetooth, "active-mode");
     let result = test_apply(
         root.path(),
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         &mut TestEffects::passing(),
     );
     assert_eq!(result.state, InstallState::SoftwareVerified);
     let generation = root
         .path()
-        .join("var/lib/open-radio/fixture/linux-net/generations")
+        .join("var/lib/open-radio/fixture/linux-bluetooth/generations")
         .join(expected.generation);
     fs::set_permissions(&generation, fs::Permissions::from_mode(0o777)).unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -899,11 +1018,48 @@ fn writable_or_symlinked_destination_and_writable_active_generation_are_rejected
 }
 
 #[test]
-fn policy_never_grants_installer_or_runner() {
+fn policy_never_grants_installer_runner_or_wildcard_adapter() {
     let _serial = serial();
     let directory = tempfile::tempdir().unwrap();
-    let (_, bundle) = make_bundle(directory.path(), Provider::LinuxNet, "policy");
+    let (_, mut bundle) = make_bundle(directory.path(), Provider::LinuxBluetooth, "policy");
+    bundle.allowed_bluetooth_adapters = vec!["hci0".into(), "hci2".into()];
     let policy = String::from_utf8(policy_bytes(&bundle).unwrap()).unwrap();
+    assert!(policy.contains("--adapter hci0"));
+    assert!(policy.contains("--adapter hci2"));
+    for adapter in ["hci0", "hci2"] {
+        for operation in ["att-parameters", "restore-att-parameters"] {
+            assert!(policy.contains(&format!("{operation} --adapter {adapter}\n")));
+            assert!(!policy.contains(&format!("{operation} --adapter *")));
+        }
+        // The runner always names the DTM profile.
+        assert!(!policy.contains(&format!("check --adapter {adapter}\n")));
+        for version in ["", " --dtm-version v1"] {
+            for profile in ["receive-transmit", "transmit", "receive-silence"] {
+                assert!(policy.contains(&format!(
+                    "check --adapter {adapter}{version} --profile {profile}\n"
+                )));
+            }
+        }
+        assert!(policy.contains(&format!(
+            "security-failure --adapter {adapter} --peer * --failure missing-key --read-version-before-disconnect\n"
+        )));
+        assert!(!policy.contains(&format!(
+            "security-failure --adapter {adapter} --peer * --failure wrong-key --read-version-before-disconnect"
+        )));
+        for failure in [
+            "missing-key",
+            "wrong-key",
+            "missing-refresh-key",
+            "active-data-mic",
+        ] {
+            assert!(policy.contains(&format!(
+                "security-failure --adapter {adapter} --peer * --failure {failure}\n"
+            )));
+        }
+    }
+    assert!(!policy.contains("--failure *"));
+    assert!(!policy.contains("--dtm-version *"));
+    assert!(!policy.contains("hci*"));
     assert!(!policy.contains("fixture-install"));
     assert!(!policy.contains("cargo"));
     assert!(!policy.contains("hil-runner"));
@@ -921,7 +1077,7 @@ fn genuine_visudo_parses_generated_policy_when_available() {
         return;
     };
     let directory = tempfile::tempdir().unwrap();
-    let (_, mut bundle) = make_bundle(directory.path(), Provider::LinuxNet, "visudo");
+    let (_, mut bundle) = make_bundle(directory.path(), Provider::LinuxBluetooth, "visudo");
     bundle.operator = String::from_utf8(
         Command::new("/usr/bin/id")
             .arg("-un")
@@ -1029,30 +1185,54 @@ fn write_network_prepare_input(root: &Path, suffix: &str) -> PathBuf {
     network
 }
 
+fn write_bluetooth_prepare_input(root: &Path, suffix: &str) -> PathBuf {
+    let launcher = root.join("target/debug/open-radio-bluetooth-launcher");
+    fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+    executable(&launcher, "#!/bin/sh\nexit 1\n");
+    let path = root.join("target/debug/open-radio-bluetooth");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    executable(
+        &path,
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n' '{}'\n# {suffix}\n",
+            Provider::LinuxBluetooth.runtime_contract()
+        ),
+    );
+    path
+}
+
 fn executable(path: &Path, contents: &str) {
     fs::write(path, contents).unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
-fn preparation_captures_locked_artifacts_and_dirty_source_identity() {
+fn preparation_captures_locked_bluetooth_artifact_and_dirty_source_identity() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
     initialize_test_repository(root.path());
-    write_network_prepare_input(root.path(), "prepared");
+    write_bluetooth_prepare_input(root.path(), "prepared");
     fs::write(root.path().join("tracked.txt"), "dirty\n").unwrap();
 
-    let directory = prepare(root.path(), Provider::LinuxNet, OPERATOR).unwrap();
+    let directory = prepare(
+        root.path(),
+        Provider::LinuxBluetooth,
+        OPERATOR,
+        &["hci2".into()],
+    )
+    .unwrap();
     let bundle: Bundle =
         serde_json::from_slice(&fs::read(directory.join("bundle.json")).unwrap()).unwrap();
     assert!(bundle.source.dirty);
-    assert_eq!(bundle.artifacts.len(), 6);
+    assert_eq!(bundle.allowed_bluetooth_adapters, ["hci2"]);
+    assert_eq!(bundle.artifacts.len(), 2);
     assert!(
         bundle
             .artifacts
             .iter()
-            .any(|artifact| artifact.role == ArtifactRole::HostapdProvenance)
+            .any(|artifact| artifact.role == ArtifactRole::BluetoothHelper)
     );
+    assert!(!directory.join("artifacts/open-radio-hostapd").exists());
 }
 
 #[test]
@@ -1060,24 +1240,24 @@ fn preparation_rejects_missing_stale_or_modified_artifacts() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
     initialize_test_repository(root.path());
-    assert!(prepare(root.path(), Provider::LinuxNet, OPERATOR).is_err());
+    assert!(prepare(root.path(), Provider::LinuxBluetooth, OPERATOR, &[]).is_err());
 
-    let helper = write_network_prepare_input(root.path(), "stale");
+    let helper = write_bluetooth_prepare_input(root.path(), "stale");
     executable(&helper, "#!/bin/sh\necho schema=1\n");
     assert!(
-        prepare(root.path(), Provider::LinuxNet, OPERATOR)
+        prepare(root.path(), Provider::LinuxBluetooth, OPERATOR, &[])
             .unwrap_err()
             .to_string()
             .contains("incompatible runtime contract")
     );
 
-    write_network_prepare_input(root.path(), "valid");
-    let bundle = prepare(root.path(), Provider::LinuxNet, OPERATOR).unwrap();
-    let installed = bundle.join("artifacts/open-radio-net");
+    write_bluetooth_prepare_input(root.path(), "valid");
+    let bundle = prepare(root.path(), Provider::LinuxBluetooth, OPERATOR, &[]).unwrap();
+    let installed = bundle.join("artifacts/open-radio-bluetooth");
     fs::set_permissions(&installed, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(&installed, b"corrupt cached bundle").unwrap();
     assert!(
-        prepare(root.path(), Provider::LinuxNet, OPERATOR)
+        prepare(root.path(), Provider::LinuxBluetooth, OPERATOR, &[])
             .unwrap_err()
             .to_string()
             .contains("existing bundle artifact mismatch")
@@ -1089,17 +1269,58 @@ fn network_preparation_rejects_hostapd_provenance_mismatch() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
     initialize_test_repository(root.path());
-    write_network_prepare_input(root.path(), "provenance");
+    let network = root
+        .path()
+        .join("tools/lib/service/hil-linux-net/open-radio-net");
+    fs::create_dir_all(network.parent().unwrap()).unwrap();
+    executable(
+        &network,
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n' '{}'\n",
+            Provider::LinuxNet.runtime_contract()
+        ),
+    );
+    fs::create_dir_all(root.path().join("target/debug")).unwrap();
+    for launcher in ["open-radio-net-launcher", "open-radio-probe-launcher"] {
+        executable(
+            &root.path().join("target/debug").join(launcher),
+            "#!/bin/sh\nexit 1\n",
+        );
+    }
+    let probe = root.path().join("target/debug/open-radio-probe");
+    fs::create_dir_all(probe.parent().unwrap()).unwrap();
+    executable(&probe, "#!/bin/sh\nexit 0\n");
+    let hostapd = root.path().join("target/hil/hostapd/hostapd");
+    fs::create_dir_all(hostapd.parent().unwrap()).unwrap();
+    executable(&hostapd, "hostapd bytes");
     fs::write(
         root.path().join("target/hil/hostapd/provenance.json"),
         serde_json::json!({"binary_sha256": "0".repeat(64)}).to_string(),
     )
     .unwrap();
     assert!(
-        prepare(root.path(), Provider::LinuxNet, OPERATOR)
+        prepare(root.path(), Provider::LinuxNet, OPERATOR, &[])
             .unwrap_err()
             .to_string()
-            .contains("provenance")
+            .contains("provenance"),
+        "{:?}",
+        prepare(root.path(), Provider::LinuxNet, OPERATOR, &[])
+    );
+    let hostapd_sha256 = format!("{:x}", Sha256::digest(fs::read(&hostapd).unwrap()));
+    fs::write(
+        root.path().join("target/hil/hostapd/provenance.json"),
+        serde_json::json!({"binary_sha256": hostapd_sha256}).to_string(),
+    )
+    .unwrap();
+    let directory = prepare(root.path(), Provider::LinuxNet, OPERATOR, &[]).unwrap();
+    let bundle: Bundle =
+        serde_json::from_slice(&fs::read(directory.join("bundle.json")).unwrap()).unwrap();
+    assert_eq!(bundle.artifacts.len(), 6);
+    assert!(
+        bundle
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.role == ArtifactRole::HostapdProvenance)
     );
 }
 
@@ -1107,14 +1328,11 @@ fn network_preparation_rejects_hostapd_provenance_mismatch() {
 fn installed_provider_leases_survive_modeled_run_cleanup() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "persistent-lease");
-    let result = test_apply(
-        root.path(),
-        Provider::LinuxNet,
-        &bundle,
-        &mut TestEffects::passing(),
-    );
-    assert_eq!(result.state, InstallState::SoftwareVerified);
+    for provider in [Provider::LinuxNet, Provider::LinuxBluetooth] {
+        let (bundle, _) = make_bundle(root.path(), provider, "persistent-lease");
+        let result = test_apply(root.path(), provider, &bundle, &mut TestEffects::passing());
+        assert_eq!(result.state, InstallState::SoftwareVerified);
+    }
 
     fs::create_dir_all(root.path().join("run/unrelated-volatile-state")).unwrap();
     fs::write(
@@ -1125,14 +1343,17 @@ fn installed_provider_leases_survive_modeled_run_cleanup() {
     .unwrap();
     fs::remove_dir_all(root.path().join("run/unrelated-volatile-state")).unwrap();
 
-    let admission = crate::admission::test_support::admit(root.path(), Provider::LinuxNet).unwrap();
-    assert!(
-        admission
-            .artifact(ArtifactRole::NetworkHelper)
-            .unwrap()
-            .is_file()
-    );
-    drop(admission);
+    let mut admissions = Vec::new();
+    for provider in [Provider::LinuxNet, Provider::LinuxBluetooth] {
+        let admission = crate::admission::test_support::admit(root.path(), provider).unwrap();
+        let helper_role = match provider {
+            Provider::LinuxNet => ArtifactRole::NetworkHelper,
+            Provider::LinuxBluetooth => ArtifactRole::BluetoothHelper,
+        };
+        assert!(admission.artifact(helper_role).unwrap().is_file());
+        admissions.push(admission);
+    }
+    drop(admissions);
 
     let (upgrade, _) = make_bundle(root.path(), Provider::LinuxNet, "after-run-cleanup");
     let result = test_apply(
@@ -1205,28 +1426,28 @@ fn admission_rejects_unsafe_persistent_lease_and_parent_metadata() {
     let _serial = serial();
     fn installed_root() -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
-        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "unsafe");
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "unsafe");
         test_apply(
             root.path(),
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             &mut TestEffects::passing(),
         );
         let lock = root
             .path()
-            .join("var/lib/open-radio/fixture/linux-net/session.lock");
+            .join("var/lib/open-radio/fixture/linux-bluetooth/session.lock");
         (root, lock)
     }
 
     let (root, lock) = installed_root();
     fs::set_permissions(&lock, fs::Permissions::from_mode(0o666)).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
-    let (upgrade, _) = make_bundle(root.path(), Provider::LinuxNet, "unsafe-upgrade");
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
+    let (upgrade, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "unsafe-upgrade");
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     assert!(
         apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &upgrade,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -1242,17 +1463,19 @@ fn admission_rejects_unsafe_persistent_lease_and_parent_metadata() {
     let (root, lock) = installed_root();
     fs::remove_file(&lock).unwrap();
     std::os::unix::fs::symlink("receipt.json", &lock).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 
     let (root, lock) = installed_root();
     fs::remove_file(&lock).unwrap();
     fs::create_dir(&lock).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 
     let (root, _) = installed_root();
-    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let state = root
+        .path()
+        .join("var/lib/open-radio/fixture/linux-bluetooth");
     fs::set_permissions(&state, fs::Permissions::from_mode(0o777)).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 }
 
 #[test]
@@ -1260,10 +1483,10 @@ fn admission_rejects_pending_or_invalid_committed_state_without_fallback() {
     let _serial = serial();
     fn installed_root() -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
-        let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "state");
+        let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "state");
         test_apply(
             root.path(),
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             &mut TestEffects::passing(),
         );
@@ -1271,20 +1494,26 @@ fn admission_rejects_pending_or_invalid_committed_state_without_fallback() {
     }
 
     let root = installed_root();
-    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let state = root
+        .path()
+        .join("var/lib/open-radio/fixture/linux-bluetooth");
     fs::remove_file(state.join("current")).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 
     let root = installed_root();
-    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let state = root
+        .path()
+        .join("var/lib/open-radio/fixture/linux-bluetooth");
     fs::remove_file(state.join("current")).unwrap();
     fs::write(state.join("current"), b"generations/not-a-selector").unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 
     let root = installed_root();
-    let state = root.path().join("var/lib/open-radio/fixture/linux-net");
+    let state = root
+        .path()
+        .join("var/lib/open-radio/fixture/linux-bluetooth");
     std::os::unix::fs::symlink("missing", state.join("transaction.json")).unwrap();
-    let error = crate::admission::test_support::admit(root.path(), Provider::LinuxNet)
+    let error = crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth)
         .err()
         .unwrap()
         .to_string();
@@ -1293,11 +1522,11 @@ fn admission_rejects_pending_or_invalid_committed_state_without_fallback() {
     let root = installed_root();
     let receipt = root
         .path()
-        .join("var/lib/open-radio/fixture/linux-net/receipt.json");
+        .join("var/lib/open-radio/fixture/linux-bluetooth/receipt.json");
     fs::set_permissions(&receipt, fs::Permissions::from_mode(0o644)).unwrap();
     fs::write(&receipt, b"{}\n").unwrap();
     fs::set_permissions(&receipt, fs::Permissions::from_mode(0o444)).unwrap();
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_err());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_err());
 }
 
 #[test]
@@ -1330,11 +1559,11 @@ fn lifecycle_isolated_child_entry() {
                     Ok(())
                 }
             }
-            let layout = Layout::test(&root, Provider::LinuxNet).unwrap();
+            let layout = Layout::test(&root, Provider::LinuxBluetooth).unwrap();
             let bundle = PathBuf::from(std::env::var_os("OPEN_RADIO_TEST_BUNDLE").unwrap());
             let _ = apply(
                 &layout,
-                Provider::LinuxNet,
+                Provider::LinuxBluetooth,
                 &bundle,
                 OPERATOR,
                 rustix::process::geteuid().as_raw(),
@@ -1343,11 +1572,23 @@ fn lifecycle_isolated_child_entry() {
             std::process::exit(87);
         }
         "launch" => {
-            let (stable, target, arguments): (PathBuf, _, &[&str]) = (
-                root.join("usr/local/sbin/open-radio-net"),
-                crate::launcher::LaunchTarget::Network,
-                &["identity"],
-            );
+            let provider = match std::env::var("OPEN_RADIO_TEST_PROVIDER").as_deref() {
+                Ok("linux-net") => Provider::LinuxNet,
+                Ok("linux-bluetooth") => Provider::LinuxBluetooth,
+                _ => panic!("missing test provider"),
+            };
+            let (stable, target, arguments): (PathBuf, _, &[&str]) = match provider {
+                Provider::LinuxNet => (
+                    root.join("usr/local/sbin/open-radio-net"),
+                    crate::launcher::LaunchTarget::Network,
+                    &["identity"],
+                ),
+                Provider::LinuxBluetooth => (
+                    root.join("usr/local/libexec/open-radio-bluetooth"),
+                    crate::launcher::LaunchTarget::Bluetooth,
+                    &["check", "--adapter", "hci0"],
+                ),
+            };
             let mut loaded_helper = File::open(stable).unwrap();
             let mut loaded = String::new();
             loaded_helper.read_to_string(&mut loaded).unwrap();
@@ -1373,7 +1614,7 @@ fn lifecycle_isolated_child_entry() {
 fn process_loss_leaves_admission_closed_until_authorized_recovery() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let (bundle, _) = make_bundle(root.path(), Provider::LinuxNet, "process-loss");
+    let (bundle, _) = make_bundle(root.path(), Provider::LinuxBluetooth, "process-loss");
     let status = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -1387,7 +1628,7 @@ fn process_loss_leaves_admission_closed_until_authorized_recovery() {
         .unwrap();
     assert_eq!(status.code(), Some(86));
     let external_effect = root.path().join("hardware-effect");
-    let admission = crate::admission::test_support::admit(root.path(), Provider::LinuxNet);
+    let admission = crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth);
     if admission.is_ok() {
         fs::write(&external_effect, b"called").unwrap();
     }
@@ -1395,10 +1636,10 @@ fn process_loss_leaves_admission_closed_until_authorized_recovery() {
     assert!(error.contains("recovery-required"));
     assert!(!external_effect.exists());
 
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     let recovered = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -1406,22 +1647,22 @@ fn process_loss_leaves_admission_closed_until_authorized_recovery() {
     )
     .unwrap();
     assert_eq!(recovered.state, InstallState::SoftwareVerified);
-    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxNet,).is_ok());
+    assert!(crate::admission::test_support::admit(root.path(), Provider::LinuxBluetooth,).is_ok());
 }
 
 #[test]
 fn interrupted_installation_rejects_a_new_operational_consumer() {
     let _serial = serial();
     let root = tempfile::tempdir().unwrap();
-    let layout = Layout::test(root.path(), Provider::LinuxNet).unwrap();
+    let layout = Layout::test(root.path(), Provider::LinuxBluetooth).unwrap();
     let external_effect = root.path().join("hardware-effect");
-    let (bundle, _) = make_network_race_bundle(root.path(), "interrupted", &external_effect);
+    let (bundle, _) = make_bluetooth_race_bundle(root.path(), "interrupted", &external_effect);
     let mut crashing = TestEffects::passing();
     crashing.panic = Some(Stage::PolicyPublished);
     let crashed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = apply(
             &layout,
-            Provider::LinuxNet,
+            Provider::LinuxBluetooth,
             &bundle,
             OPERATOR,
             rustix::process::geteuid().as_raw(),
@@ -1431,14 +1672,14 @@ fn interrupted_installation_rejects_a_new_operational_consumer() {
     assert!(crashed.is_err());
     assert!(
         root.path()
-            .join("var/lib/open-radio/fixture/linux-net/transaction.json")
+            .join("var/lib/open-radio/fixture/linux-bluetooth/transaction.json")
             .exists()
     );
 
     let launch = crate::launcher::test_support::run_at(
         root.path(),
-        crate::launcher::LaunchTarget::Network,
-        &["identity"],
+        crate::launcher::LaunchTarget::Bluetooth,
+        &["check", "--adapter", "hci0"],
     );
     assert!(
         !external_effect.exists(),
@@ -1454,7 +1695,7 @@ fn interrupted_installation_rejects_a_new_operational_consumer() {
 
     let recovered = apply(
         &layout,
-        Provider::LinuxNet,
+        Provider::LinuxBluetooth,
         &bundle,
         OPERATOR,
         rustix::process::geteuid().as_raw(),
@@ -1464,14 +1705,14 @@ fn interrupted_installation_rejects_a_new_operational_consumer() {
     assert_eq!(recovered.state, InstallState::SoftwareVerified);
     let launched = crate::launcher::test_support::run_at(
         root.path(),
-        crate::launcher::LaunchTarget::Network,
-        &["identity"],
+        crate::launcher::LaunchTarget::Bluetooth,
+        &["check", "--adapter", "hci0"],
     )
     .unwrap();
     assert!(launched.success());
     assert_eq!(
         fs::read_to_string(external_effect).unwrap(),
-        "interrupted/hostapd-interrupted"
+        "interrupted/interrupted"
     );
 }
 
@@ -1481,8 +1722,7 @@ fn direct_stable_launch_cannot_mix_loaded_and_selected_generations() {
     let _serial = serial();
     use std::io::{Read as _, Write as _};
 
-    {
-        let provider = Provider::LinuxNet;
+    for provider in [Provider::LinuxNet, Provider::LinuxBluetooth] {
         let root = tempfile::tempdir().unwrap();
         let ready = root.path().join("ready.fifo");
         let resume = root.path().join("resume.fifo");
@@ -1498,7 +1738,10 @@ fn direct_stable_launch_cannot_mix_loaded_and_selected_generations() {
         }
         let effect = root.path().join("effect");
 
-        let (first_path, _) = make_network_race_bundle(root.path(), "A", &effect);
+        let (first_path, _) = match provider {
+            Provider::LinuxNet => make_network_race_bundle(root.path(), "A", &effect),
+            Provider::LinuxBluetooth => make_bluetooth_race_bundle(root.path(), "A", &effect),
+        };
         test_apply(
             root.path(),
             provider,
@@ -1514,6 +1757,7 @@ fn direct_stable_launch_cannot_mix_loaded_and_selected_generations() {
             ])
             .env("OPEN_RADIO_LIFECYCLE_CHILD", "launch")
             .env("OPEN_RADIO_TEST_ROOT", root.path())
+            .env("OPEN_RADIO_TEST_PROVIDER", provider.as_str())
             .spawn()
             .unwrap();
         let mut ready_reader = File::open(&ready).unwrap();
@@ -1522,7 +1766,10 @@ fn direct_stable_launch_cannot_mix_loaded_and_selected_generations() {
         assert_eq!(signal, "ready");
         assert_eq!(fs::read_to_string(root.path().join("loaded")).unwrap(), "A");
 
-        let (second_path, _) = make_network_race_bundle(root.path(), "B", &effect);
+        let (second_path, _) = match provider {
+            Provider::LinuxNet => make_network_race_bundle(root.path(), "B", &effect),
+            Provider::LinuxBluetooth => make_bluetooth_race_bundle(root.path(), "B", &effect),
+        };
         let upgraded = test_apply(
             root.path(),
             provider,
@@ -1537,8 +1784,13 @@ fn direct_stable_launch_cannot_mix_loaded_and_selected_generations() {
         assert!(child.wait().unwrap().success());
 
         let launched = fs::read_to_string(&effect).unwrap();
-        assert_eq!(launched, "B/hostapd-B");
+        let expected = match provider {
+            Provider::LinuxNet => "B/hostapd-B",
+            Provider::LinuxBluetooth => "B/B",
+        };
+        assert_eq!(launched, expected);
         assert_ne!(launched, "A/hostapd-B");
+        assert_ne!(launched, "A/B");
     }
 }
 
@@ -1575,4 +1827,36 @@ fn the_network_policy_grants_exactly_the_helper_s_operations() {
             "NOPASSWD: /usr/local/sbin/open-radio-net {operation}\n"
         )));
     }
+}
+
+#[test]
+fn preparation_captures_locked_artifacts_and_dirty_source_identity() {
+    let _serial = serial();
+    let root = tempfile::tempdir().unwrap();
+    initialize_test_repository(root.path());
+    write_network_prepare_input(root.path(), "prepared");
+    fs::write(root.path().join("tracked.txt"), "dirty\n").unwrap();
+
+    let directory = prepare(root.path(), Provider::LinuxNet, OPERATOR, &[]).unwrap();
+    let bundle: Bundle =
+        serde_json::from_slice(&fs::read(directory.join("bundle.json")).unwrap()).unwrap();
+    assert!(bundle.source.dirty);
+    assert_eq!(bundle.artifacts.len(), 6);
+    assert!(
+        bundle
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.role == ArtifactRole::HostapdProvenance)
+    );
+}
+
+#[test]
+fn policy_never_grants_installer_or_runner() {
+    let _serial = serial();
+    let directory = tempfile::tempdir().unwrap();
+    let (_, bundle) = make_bundle(directory.path(), Provider::LinuxNet, "policy");
+    let policy = String::from_utf8(policy_bytes(&bundle).unwrap()).unwrap();
+    assert!(!policy.contains("fixture-install"));
+    assert!(!policy.contains("cargo"));
+    assert!(!policy.contains("hil-runner"));
 }

@@ -8,8 +8,13 @@ use oer_tool_service_stand_fixture_install::{INSTALLER_BINARY, Provider, build_p
 
 use crate::Result;
 
-pub(crate) fn run(root: &Path, provider: Provider, dry_run: bool) -> Result<()> {
-    let plan = build_plan(root, provider)?;
+pub(crate) fn run(
+    root: &Path,
+    provider: Provider,
+    dry_run: bool,
+    adapters: &[String],
+) -> Result<()> {
+    let plan = build_plan(root, provider, adapters)?;
     if dry_run {
         println!("{}", serde_json::to_string_pretty(&plan)?);
         return Ok(());
@@ -29,6 +34,7 @@ pub(crate) fn run(root: &Path, provider: Provider, dry_run: bool) -> Result<()> 
                 "open-radio-probe-launcher",
                 "open-radio-probe",
             ],
+            Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
         let mut build = oer_tool_base_process::command(oer_tool_base_toolchain::cargo_program());
         build.current_dir(root).args([
@@ -49,7 +55,7 @@ pub(crate) fn run(root: &Path, provider: Provider, dry_run: bool) -> Result<()> 
             .env("CARGO_TARGET_DIR", root.join("target"));
         oer_tool_base_process::run(&mut build)?;
         let operator = current_operator()?;
-        let bundle = prepare(root, provider, &operator)?;
+        let bundle = prepare(root, provider, &operator, &plan.allowed_bluetooth_adapters)?;
         // Queue behind the runs using the provider; runs queued later wait
         // for the installation. Nothing supervises this lease: the operator
         // may take a while to answer sudo, and a partial installation is
@@ -76,7 +82,7 @@ pub(crate) fn run(root: &Path, provider: Provider, dry_run: bool) -> Result<()> 
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (root, provider, plan);
+        let _ = (root, provider, adapters, plan);
         Err("fixture installation requires Linux".into())
     }
 }

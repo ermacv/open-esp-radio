@@ -20,7 +20,9 @@ meaning and limits. Host scenario execution belongs to the
 
 A module is a path prefix and a directory: `base` (hello, image keys, boot
 status, post-mortem, link health, acceptance and refusal), `system`,
-`network` and `telemetry` (the program-counter profile). A module declares
+`network`, `bluetooth` ([bluetooth.md](bluetooth.md): DTM, raw HCI and the
+GATT applications; its endpoints have no serving image until the BLE block)
+and `telemetry` (the program-counter profile). A module declares
 its messages with `messages!`:
 
 - an endpoint is a request the device serves and names its one response;
