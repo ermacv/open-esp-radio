@@ -1,8 +1,8 @@
 //! ISA-only function decoder and relocation interpretation; no I/O authority.
-use oer_elf::rv32::{self, Role};
-pub use oer_riscv_decode::register_name;
-use oer_riscv_decode::{Extension, Extensions, Inst, Instruction};
-use oer_riscv_model::*;
+use oer_tool_analysis_elf::rv32::{self, Role};
+pub use oer_tool_analysis_riscv_decode::register_name;
+use oer_tool_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction};
+use oer_tool_analysis_riscv_model::*;
 pub struct RiscvDecoder;
 impl FunctionDecoder for RiscvDecoder {
     fn identity(&self) -> &'static str {
@@ -55,7 +55,7 @@ impl FunctionDecoder for RiscvDecoder {
             (Instruction::Extension(extension), width) => {
                 let flow = match extension {
                     Extension::Pop { ret: Some(_), .. } => InstructionFlow::Return {
-                        base: oer_riscv_decode::RA,
+                        base: oer_tool_analysis_riscv_decode::RA,
                     },
                     _ => InstructionFlow::Next,
                 };
@@ -171,7 +171,7 @@ impl FunctionDecoder for RiscvDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_elf::rv32::{R_RISCV_PCREL_HI20, R_RISCV_PCREL_LO12_I};
+    use oer_tool_analysis_elf::rv32::{R_RISCV_PCREL_HI20, R_RISCV_PCREL_LO12_I};
     fn relocation(offset: u64, kind: u32, target_offset: u64) -> FunctionRelocation {
         FunctionRelocation {
             section: 9,
@@ -298,7 +298,7 @@ pub mod listing;
 /// Every form the decoder knows: `rv32imafc` with the bit-manipulation and
 /// code-size extensions, without Zcmt.
 pub fn decode_instruction(bytes: &[u8]) -> Option<(Instruction, usize)> {
-    oer_riscv_decode::decode(bytes, Extensions::ALL)
+    oer_tool_analysis_riscv_decode::decode(bytes, Extensions::ALL)
 }
 
 mod semantics;

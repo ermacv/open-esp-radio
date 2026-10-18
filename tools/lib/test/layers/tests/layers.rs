@@ -6,7 +6,11 @@
 use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies `tools/README.md` allows, in order.
-const SERVICE_ORDER: [(&str, &str); 1] = [("firmware", "lab")];
+const SERVICE_ORDER: [(&str, &str); 3] = [
+    ("firmware", "lab"),
+    ("image-check-interrupts", "image-check-stack"),
+    ("symbol-lineage", "vendor-provenance"),
+];
 
 /// The portable parts of `crates/` that `tools/` may use.
 const PORTABLE_CRATES: [&str; 5] = [
@@ -86,7 +90,7 @@ fn refusal(from: &str, to: &str) -> Option<String> {
             refused("a service → service edge tools/README.md does not list")
         }
         (Service(_), Analysis | Data | Base) => None,
-        (Analysis, Base) | (Data, Data | Base) | (Base, Base) => None,
+        (Analysis, Analysis | Base) | (Data, Data | Base) | (Base, Base) => None,
         (Test, Service(_) | Analysis | Data | Base | Test) => None,
         _ => refused("dependencies go only down: cli → service → analysis, data → base"),
     }
@@ -206,6 +210,11 @@ fn the_rules_refuse_what_the_readme_forbids() {
         ("crates/base/memory", "tools/lib/base/process"),
         ("tools/lib/data/stand-file", "tools/lib/service/lab"),
         ("tools/lib/analysis/stack", "tools/lib/data/register-model"),
+        ("tools/lib/analysis/elf", "tools/lib/service/image-linker"),
+        (
+            "tools/lib/service/image-check-stack",
+            "tools/lib/service/image-check-interrupts",
+        ),
         ("tools/cli/fw", "tools/cli/registers"),
         ("tools/lib/service/lab", "tools/lib/service/firmware"),
         ("tools/lib/service/registers", "crates/esp32s31/pac"),
@@ -226,6 +235,7 @@ fn the_rules_refuse_what_the_readme_forbids() {
             "tools/lib/data/register-contracts",
         ),
         ("tools/lib/analysis/stack", "tools/lib/base/process"),
+        ("tools/lib/analysis/riscv-lift", "tools/lib/analysis/elf"),
         ("crates/esp32s31/hal", "crates/base/ui-cases"),
     ] {
         assert_eq!(refusal(from, to), None, "{from} → {to}");

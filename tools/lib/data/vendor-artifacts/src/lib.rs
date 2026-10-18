@@ -12,11 +12,10 @@
 //! to it, and a new checkout or worktree finds everything another one fetched.
 //! A checkout's former `target/vendor` directory is merged into the store.
 //!
-//! `cargo verification fetch` and the vendor checks read the pins here, and
-//! so does the HIL stand's pinned ESP-IDF build (`oer-hil-cli`).
+//! `cargo pins fetch` and the vendor checks read the pins here.
 //! [`project::Project`] names the fixed files of a chip's verification
 //! project (its shards, provenance registry and scenarios).
-use oer_vendor_pins::{Artifact, CACHE, Manifest, Source, SourceKind, cache_directory};
+use oer_tool_data_vendor_pins::{Artifact, CACHE, Manifest, Source, SourceKind, cache_directory};
 use std::path::{Path, PathBuf};
 
 pub mod project;
@@ -30,7 +29,11 @@ pub const STORE_ENV: &str = "OER_VENDOR_CACHE";
 /// snapshot and image build shares: `$OER_VENDOR_CACHE`, else
 /// `open-esp-radio/vendor` in the user's cache directory.
 pub fn store() -> Result<PathBuf> {
-    oer_durable::xdg::overridable(STORE_ENV, oer_durable::xdg::Base::Cache, "vendor")
+    oer_tool_base_durable::xdg::overridable(
+        STORE_ENV,
+        oer_tool_base_durable::xdg::Base::Cache,
+        "vendor",
+    )
 }
 
 /// Makes `root`'s `target/vendor` a link to `store`, merging a former
@@ -110,7 +113,7 @@ fn pinned_sha256(artifact: &Artifact) -> Result<&str> {
 
 /// Whether `path` is a file whose SHA-256 is `expected`.
 pub fn verified(path: &Path, expected: &str) -> Result<bool> {
-    Ok(path.is_file() && oer_durable::sha256_file(path)? == expected)
+    Ok(path.is_file() && oer_tool_base_durable::sha256_file(path)? == expected)
 }
 
 /// `https://github.com/<owner>/<repo>` as `<owner>/<repo>`.
@@ -126,7 +129,7 @@ fn download(url: &str, destination: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let partial = destination.with_extension("partial");
-    let status = oer_process::command("curl")
+    let status = oer_tool_base_process::command("curl")
         .args([
             "--fail",
             "--silent",
@@ -181,12 +184,12 @@ fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
                     &format!("{repository}/releases/download/{revision}/{asset}"),
                     &tarball,
                 )?;
-                let actual = oer_durable::sha256_file(&tarball)?;
+                let actual = oer_tool_base_durable::sha256_file(&tarball)?;
                 if actual != expected {
                     return Err(format!("{asset}: sha256 {actual}, pinned {expected}").into());
                 }
             }
-            let status = oer_process::command("tar")
+            let status = oer_tool_base_process::command("tar")
                 .arg("-xzf")
                 .arg(&tarball)
                 .arg("-C")
@@ -199,7 +202,7 @@ fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
         }
         SourceKind::Firmware => unreachable!("firmware outputs are not fetched"),
     }
-    let actual = oer_durable::sha256_file(&destination)?;
+    let actual = oer_tool_base_durable::sha256_file(&destination)?;
     if actual != pin {
         return Err(format!("{}: fetched sha256 {actual}, pinned {pin}", artifact.id).into());
     }
@@ -417,7 +420,7 @@ mod tests {
     #[test]
     fn tracked_manifests_parse_with_complete_sources() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
-        for chip in oer_chip_profile::supported(&root).unwrap() {
+        for chip in oer_tool_data_chip_profile::supported(&root).unwrap() {
             let Ok(manifest) = Manifest::load(&root, &chip) else {
                 continue;
             };
@@ -435,7 +438,7 @@ mod tests {
     fn the_rom_pin_resolves_into_the_vendor_store() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         // Every chip's ROM ELF as its profile's `[rom]` names it.
-        for profile in oer_chip_profile::Profile::all(&root).unwrap() {
+        for profile in oer_tool_data_chip_profile::Profile::all(&root).unwrap() {
             let Some(rom) = profile.rom else {
                 continue;
             };
@@ -452,7 +455,9 @@ mod tests {
                 ),
             }
         }
-        let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
+        let chip = oer_tool_data_chip_profile::supported(&root)
+            .unwrap()
+            .remove(0);
         let error = fetched(&root, &chip, "absent").unwrap_err();
         assert!(error.to_string().contains("pins no `absent` artifact"));
     }
@@ -482,7 +487,7 @@ mod tests {
              [[artifact]]\nid = \"fetched\"\nsource = \"vendor\"\npath = \"lib.a\"\nsha256 = \"{}\"\n\
              [[artifact]]\nid = \"missing\"\nsource = \"vendor\"\npath = \"other.a\"\nsha256 = \"00\"\n\
              [[artifact]]\nid = \"unbuilt\"\nsource = \"build\"\npath = \"out.elf\"\n",
-            oer_durable::sha256_file(&cached).unwrap()
+            oer_tool_base_durable::sha256_file(&cached).unwrap()
         );
         let manifest = Manifest::parse(&manifest).unwrap();
         let unbuilt = manifest.artifact("unbuilt").unwrap();

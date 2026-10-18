@@ -1,12 +1,12 @@
 //! Calls and out-of-function jumps of one function by a linear sweep over its
 //! whole extent, independent of which code its control-flow graph reaches.
 use crate::image::{Function, function_bytes};
-use oer_riscv_decode::{
+use oer_tool_analysis_riscv_decode::{
     CsrOp, Extension, Extensions, Float, Inst, Instruction, Operand, Reg, Register, decode,
 };
-use oer_riscv_model::Ledger;
-use oer_riscv_model::*;
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_model::Ledger;
+use oer_tool_analysis_riscv_model::*;
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

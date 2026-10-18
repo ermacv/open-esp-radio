@@ -1,5 +1,5 @@
 [package]
-name = "blobray-domain"
+name = "oer-tool-analysis-blobray-domain"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ publish = false
 description = "Blobray investigation identities and immutable inventory records"
 
 [dependencies]
-oer-riscv-model = { path = "../riscv-model" }
+oer-tool-analysis-riscv-model = { path = "../riscv-model" }
 serde = { version = "=1.0.229", features = ["derive", "rc"] }
 sha2 = "=0.10.9"
 

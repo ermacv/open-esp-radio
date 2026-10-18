@@ -61,7 +61,7 @@ impl records::Parser for Parser {
         _: LinkOutput,
         line: &[u8],
         mut evidence: LinkEvidenceSpan,
-        members: &[blobray_application::linking::LinkMember],
+        members: &[oer_tool_analysis_blobray_application::linking::LinkMember],
         sink: &mut dyn LinkOutputSink,
         control: &mut dyn RunControl,
     ) -> Result<()> {

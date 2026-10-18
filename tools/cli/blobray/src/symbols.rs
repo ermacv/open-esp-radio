@@ -2,7 +2,7 @@
 //!
 //! These views replace extracting archive members and running `nm` or
 //! `strings` on vendor objects: the bytes stay inside the process.
-use blobray_domain::{ArtifactInventory, ElfInventory, SectionRecord};
+use oer_tool_analysis_blobray_domain::{ArtifactInventory, ElfInventory, SectionRecord};
 use serde::{Deserialize, Serialize};
 
 const STT_OBJECT: u8 = 1;

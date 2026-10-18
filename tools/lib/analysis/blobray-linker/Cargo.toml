@@ -1,5 +1,5 @@
 [package]
-name = "blobray-linker"
+name = "oer-tool-analysis-blobray-linker"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ publish = false
 description = "Linux adapters of Blobray's in-process linking: external ELF linkers"
 
 [dependencies]
-oer-process = { path = "../../base/process" }
-blobray-application = { path = "../blobray-application" }
-blobray-domain = { path = "../blobray-domain" }
-oer-riscv-model = { path = "../riscv-model" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-analysis-blobray-application = { path = "../blobray-application" }
+oer-tool-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tool-analysis-riscv-model = { path = "../riscv-model" }
 sha2 = "=0.10.9"
 libc = "=0.2.189"
 

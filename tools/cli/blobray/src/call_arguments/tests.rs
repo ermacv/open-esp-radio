@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oer_riscv_model::{
+use oer_tool_analysis_riscv_model::{
     AbstractValue, ArtifactId, Expression, FunctionRecord, FunctionRelocation, ObjectId,
     ObjectLocation, ReferenceKind, ReferenceTarget, SymbolDefinition, SymbolId, SymbolTableKind,
     ValueAlternative, ValueAlternatives,

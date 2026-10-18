@@ -1,5 +1,5 @@
 [package]
-name = "blobray-verification"
+name = "oer-tool-analysis-blobray-verification"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "Concrete observation comparison without execution authority"
 
 [dependencies]
-blobray-domain = { path = "../blobray-domain" }
-oer-riscv-model = { path = "../riscv-model" }
+oer-tool-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tool-analysis-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

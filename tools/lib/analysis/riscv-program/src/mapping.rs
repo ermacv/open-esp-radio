@@ -1,5 +1,5 @@
 //! One owner for ELF mapping-symbol interpretation and admitted interval storage.
-use oer_riscv_model::*;
+use oer_tool_analysis_riscv_model::*;
 
 pub struct DataRanges<'a> {
     pub ranges: Vec<CodeRange>,
@@ -32,13 +32,13 @@ fn kind(name: &[u8]) -> Result<Option<bool>> {
 }
 /// The name of a symbol of the section being mapped: one that cannot be read
 /// is an invalid mapping symbol. Other sections' symbols are never read.
-fn name<'d>(symbol: &oer_elf::RawSymbol<'d>) -> Result<&'d [u8]> {
+fn name<'d>(symbol: &oer_tool_analysis_elf::RawSymbol<'d>) -> Result<&'d [u8]> {
     symbol
         .name
         .ok_or_else(|| invalid("invalid mapping symbol name"))
 }
 pub fn data_ranges<'a>(
-    file: &oer_elf::Elf<'_>,
+    file: &oer_tool_analysis_elf::Elf<'_>,
     section_index: usize,
     memory: &'a WorkingMemory,
     control: &mut dyn RunControl,
@@ -82,7 +82,7 @@ pub fn data_ranges<'a>(
             continue;
         };
         if symbol.global
-            || symbol.kind != oer_elf::SymbolKind::Unknown
+            || symbol.kind != oer_tool_analysis_elf::SymbolKind::Unknown
             || symbol.size != 0
             || symbol.address < section.address
             || symbol.address > end
@@ -140,7 +140,7 @@ mod tests {
             flags: SymbolFlags::None,
         });
         let bytes = object.write().unwrap();
-        let index = oer_elf::Elf::parse(&bytes)
+        let index = oer_tool_analysis_elf::Elf::parse(&bytes)
             .unwrap()
             .section_by_name(".text")
             .unwrap()
@@ -153,7 +153,7 @@ mod tests {
         let memory = WorkingMemory::new(1 << 20).unwrap();
         let (mut bytes, text) = object();
         let ranges = data_ranges(
-            &oer_elf::Elf::parse(&bytes).unwrap(),
+            &oer_tool_analysis_elf::Elf::parse(&bytes).unwrap(),
             text,
             &memory,
             &mut || Ok(()),
@@ -168,7 +168,7 @@ mod tests {
             }]
         );
         // Point the `$d` symbol's name outside the string table.
-        let elf = oer_elf::Elf::parse(&bytes).unwrap();
+        let elf = oer_tool_analysis_elf::Elf::parse(&bytes).unwrap();
         let table = elf.section(elf.symbol_table_section().unwrap()).unwrap();
         let entry = elf
             .raw_symbols()
@@ -178,7 +178,7 @@ mod tests {
         let at = (table.file_offset + 16 * entry as u64) as usize;
         bytes[at..at + 4].copy_from_slice(&0x00ff_ffffu32.to_le_bytes());
         let error = data_ranges(
-            &oer_elf::Elf::parse(&bytes).unwrap(),
+            &oer_tool_analysis_elf::Elf::parse(&bytes).unwrap(),
             text,
             &memory,
             &mut || Ok(()),
@@ -207,7 +207,7 @@ mod tests {
             flags: SymbolFlags::None,
         });
         let mut bytes = object.write().unwrap();
-        let elf = oer_elf::Elf::parse(&bytes).unwrap();
+        let elf = oer_tool_analysis_elf::Elf::parse(&bytes).unwrap();
         let text = elf.section_by_name(".text").unwrap().index;
         let table = elf.section(elf.symbol_table_section().unwrap()).unwrap();
         let entry = elf
@@ -218,7 +218,7 @@ mod tests {
         let at = (table.file_offset + 16 * entry as u64) as usize;
         bytes[at..at + 4].copy_from_slice(&0x00ff_ffffu32.to_le_bytes());
         let ranges = data_ranges(
-            &oer_elf::Elf::parse(&bytes).unwrap(),
+            &oer_tool_analysis_elf::Elf::parse(&bytes).unwrap(),
             text,
             &memory,
             &mut || Ok(()),

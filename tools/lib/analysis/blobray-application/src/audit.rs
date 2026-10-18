@@ -29,12 +29,14 @@ pub fn audit_targets(
     control.set_position(position);
     control.checkpoint(0)?;
     let mut total = TargetAuditSummary::default();
-    oer_riscv_program::executable_sections(
+    oer_tool_analysis_riscv_program::executable_sections(
         executable.bytes(),
         memory,
         control,
         &mut |section, c| {
-            let part = blobray_analysis::audit::audit_section(section, decoder, ranges, c, emit)?;
+            let part = oer_tool_analysis_blobray_analysis::audit::audit_section(
+                section, decoder, ranges, c, emit,
+            )?;
             total.sections += part.sections;
             total.executable_bytes += part.executable_bytes;
             total.embedded_data_bytes += part.embedded_data_bytes;

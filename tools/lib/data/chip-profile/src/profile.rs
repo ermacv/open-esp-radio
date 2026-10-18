@@ -264,7 +264,7 @@ pub struct StageTwo {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Rom {
     /// The id of the pinned ROM ELF in `verification/<id>/artifacts.toml`
-    /// (`oer-vendor-pins`) the stack analyses run with.
+    /// (`oer-tool-data-vendor-pins`) the stack analyses run with.
     pub elf: String,
     /// The reviewed ROM function summaries of the stack analyses, relative
     /// to the repository root; `None` for a chip with none reviewed yet.
@@ -686,9 +686,6 @@ impl Profile {
         format!("oer-{}-platform-bootstrap", self.id)
     }
 
-
-
-
     /// The chip's own stack policy (`firmware/platform/<id>/stack.toml`), relative
     /// to the root: the move limit and reserves of every image of the chip,
     /// which the HIL policy extends.
@@ -705,8 +702,6 @@ impl Profile {
             .map(|staged| staged.zeroed_inputs.join(","))
             .unwrap_or_default()
     }
-
-
 }
 
 /// The Rust target of `id`'s firmware, from its `chip.toml`.
@@ -843,6 +838,4 @@ mod tests {
             .to_string();
         assert!(error.contains("invalid family"), "{error}");
     }
-
-
 }

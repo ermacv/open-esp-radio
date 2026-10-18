@@ -241,8 +241,8 @@ impl StackPolicy {
         root: &'a Path,
         linker_target: &'a Path,
         rust_target: &'a str,
-    ) -> oer_toolchain::image::ImageCompiler<'a> {
-        oer_toolchain::image::ImageCompiler {
+    ) -> oer_tool_base_toolchain::image::ImageCompiler<'a> {
+        oer_tool_base_toolchain::image::ImageCompiler {
             root,
             linker_target,
             rust_target,

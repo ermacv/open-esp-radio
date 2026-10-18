@@ -3,13 +3,13 @@
 //! objects, the address words an `--emit-relocs` link kept and the
 //! compiler's jump-table labels. One parse reads them all under the caller's
 //! working memory and run control; lookups never parse again.
-use oer_elf::rv32::{self, Role};
-use oer_elf::{Function, SymbolKind};
-use oer_riscv_model::*;
+use oer_tool_analysis_elf::rv32::{self, Role};
+use oer_tool_analysis_elf::{Function, SymbolKind};
+use oer_tool_analysis_riscv_model::*;
 
 pub struct ImageFacts<'a> {
     bytes: &'a [u8],
-    file: oer_elf::Elf<'a>,
+    file: oer_tool_analysis_elf::Elf<'a>,
     functions: Vec<Function>,
     /// Admits `functions` with every name it holds.
     _functions: MemoryReservation<'a>,
@@ -60,7 +60,7 @@ impl<'a> ImageFacts<'a> {
         c: &mut dyn RunControl,
     ) -> Result<Self> {
         c.bytes(bytes.len())?;
-        let file = oer_elf::Elf::executable(bytes)
+        let file = oer_tool_analysis_elf::Elf::executable(bytes)
             .map_err(|_| invalid("a static little-endian RV32 executable is required"))?;
         // `functions` holds at most one entry and one name per symbol.
         let (mut symbols, mut names) = (0u64, 0u64);
@@ -206,12 +206,12 @@ impl<'a> ImageFacts<'a> {
     }
 
     /// The parsed file.
-    pub fn file(&self) -> &oer_elf::Elf<'a> {
+    pub fn file(&self) -> &oer_tool_analysis_elf::Elf<'a> {
         &self.file
     }
 
     /// The defined code symbols as functions, ascending by address
-    /// ([`oer_elf::Elf::functions`]).
+    /// ([`oer_tool_analysis_elf::Elf::functions`]).
     pub fn functions(&self) -> &[Function] {
         &self.functions
     }

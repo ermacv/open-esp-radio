@@ -261,7 +261,7 @@ fn projected_arrays_compare_cross_chunk_snapshots_and_bulk_initialization_once()
             ..Default::default()
         };
         input.calls = vec![CallDeclaration {
-            repetition: blobray_domain::CallRepetition::Finite,
+            repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
             id: "allocate".into(),
             applicability: "test".into(),
             lifetime: RegionLifetime::Phase,

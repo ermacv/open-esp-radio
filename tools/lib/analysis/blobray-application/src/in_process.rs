@@ -219,7 +219,7 @@ pub(crate) fn resolve_goal(
         ));
     }
     let executable = find(executables, &symbol.object.artifact)?;
-    let address = oer_riscv_program::code_symbol_at(
+    let address = oer_tool_analysis_riscv_program::code_symbol_at(
         &executable.bytes(),
         symbol.table_section,
         symbol.index,
@@ -310,9 +310,11 @@ fn run(
             let mut starts = std::collections::BTreeSet::new();
             for id in &target.executables {
                 let executable = find(input.executables, id)?;
-                for (address, _) in
-                    oer_riscv_program::code_symbols(&executable.bytes(), memory, control)?
-                {
+                for (address, _) in oer_tool_analysis_riscv_program::code_symbols(
+                    &executable.bytes(),
+                    memory,
+                    control,
+                )? {
                     starts.insert(address);
                 }
             }
@@ -354,8 +356,8 @@ fn run(
     // stopped where the vendor side came to depend on the replacement
     // recorded only a prefix, which `verify` discards.
     if !reused || outcome.vendor_independent {
-        blobray_verification::validate_records(
-            &blobray_verification::RecordedRun {
+        oer_tool_analysis_blobray_verification::validate_records(
+            &oer_tool_analysis_blobray_verification::RecordedRun {
                 request,
                 effects: &effects,
                 projections: &projections,

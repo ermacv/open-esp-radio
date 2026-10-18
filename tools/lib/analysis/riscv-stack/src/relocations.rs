@@ -1,8 +1,8 @@
 //! The addresses an image takes: what the link's relocations say about
 //! which functions a pointer may reach.
-use oer_elf::rv32::{self, Role};
-use oer_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_elf::rv32::{self, Role};
+use oer_tool_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 
 /// Every address an allocated section of `image` takes: a relocation's
 /// target other than a call, a jump, a branch or a linker hint.
@@ -25,7 +25,8 @@ pub fn taken_addresses(
                 || rv32::kind(relocation.r_type).role == Role::Hint
                 || matches!(
                     relocation.target,
-                    oer_elf::Target::Section(_) | oer_elf::Target::Other
+                    oer_tool_analysis_elf::Target::Section(_)
+                        | oer_tool_analysis_elf::Target::Other
                 )
             {
                 continue;

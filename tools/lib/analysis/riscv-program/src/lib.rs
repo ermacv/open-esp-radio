@@ -2,8 +2,8 @@
 pub mod facts;
 pub mod mapping;
 pub mod tables;
-use oer_elf::{ProgramHeaderKind, SectionKind, rv32};
-use oer_riscv_model::*;
+use oer_tool_analysis_elf::{ProgramHeaderKind, SectionKind, rv32};
+use oer_tool_analysis_riscv_model::*;
 
 /// `PF_X` of an [`ImageSegment`]'s raw ELF permissions.
 const PF_X: u32 = 1;
@@ -44,7 +44,7 @@ fn bad(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::LinkBlocked, message)
 }
 /// The ELF-declared floating-point calling convention of an RV32 image.
-pub fn abi(file: &oer_elf::Elf<'_>) -> Result<RiscvAbi> {
+pub fn abi(file: &oer_tool_analysis_elf::Elf<'_>) -> Result<RiscvAbi> {
     let flags = rv32::header_flags(file.header_flags());
     if flags.rve {
         return Err(bad("RV32E is outside the RV32 integer-register profile"));
@@ -98,7 +98,7 @@ impl<'a> ProgramView<'a> {
     /// ordinary data, thread-local storage itself is never memory.
     pub fn new(
         bytes: &'a [u8],
-        file: &oer_elf::Elf<'_>,
+        file: &oer_tool_analysis_elf::Elf<'_>,
         read_only: &[ReadOnlyWindow],
         memory: &'a WorkingMemory,
         c: &mut dyn RunControl,
@@ -283,7 +283,7 @@ pub fn execution_segments(
         control.position(),
     )?;
     source.read_at(0, &mut bytes, control)?;
-    let file = oer_elf::Elf::executable(&bytes)
+    let file = oer_tool_analysis_elf::Elf::executable(&bytes)
         .map_err(|_| invalid("execution requires static little-endian RV32 ELF"))?;
     let (segments, _capacity) = execution_profile(&bytes, &file, memory, control)?;
     let boot = boot_data(&file, &bytes, control)?;
@@ -330,7 +330,7 @@ pub fn execution_segments(
 /// themselves.
 fn execution_profile<'a>(
     bytes: &[u8],
-    file: &oer_elf::Elf<'_>,
+    file: &oer_tool_analysis_elf::Elf<'_>,
     memory: &'a WorkingMemory,
     c: &mut dyn RunControl,
 ) -> Result<(Vec<ImageSegment>, MemoryReservation<'a>)> {
@@ -438,7 +438,7 @@ pub fn code_symbol_at(
         control.position(),
     )?;
     source.read_at(0, &mut bytes, control)?;
-    let file = oer_elf::Elf::executable(&bytes)
+    let file = oer_tool_analysis_elf::Elf::executable(&bytes)
         .map_err(|_| invalid("code symbols require a static RV32 executable"))?;
     let physical = file
         .symbol_table_section()
@@ -458,7 +458,7 @@ pub fn code_symbol_at(
     if !symbol.defined
         || !matches!(
             symbol.kind,
-            oer_elf::SymbolKind::Text | oer_elf::SymbolKind::Unknown
+            oer_tool_analysis_elf::SymbolKind::Text | oer_tool_analysis_elf::SymbolKind::Unknown
         )
         || !section.executable
         || address < section.address
@@ -482,13 +482,13 @@ pub fn code_symbols(
         control.position(),
     )?;
     source.read_at(0, &mut bytes, control)?;
-    let file = oer_elf::Elf::executable(&bytes)
+    let file = oer_tool_analysis_elf::Elf::executable(&bytes)
         .map_err(|_| invalid("code symbols require a static RV32 executable"))?;
     let mut symbols = Vec::new();
     for symbol in file.symbols() {
         control.checkpoint(1)?;
         if !symbol.defined
-            || symbol.kind != oer_elf::SymbolKind::Text
+            || symbol.kind != oer_tool_analysis_elf::SymbolKind::Text
             || symbol.name.is_empty()
             || symbol.name.starts_with('$')
         {
@@ -511,7 +511,7 @@ pub fn code_symbols(
 /// copies them there at start-up; execution begins from that state. Sections
 /// that overlap with content, or exceed the file, are rejected.
 fn boot_data<'b>(
-    file: &oer_elf::Elf<'_>,
+    file: &oer_tool_analysis_elf::Elf<'_>,
     bytes: &'b [u8],
     control: &mut dyn RunControl,
 ) -> Result<Vec<(u64, &'b [u8])>> {
@@ -556,7 +556,7 @@ pub fn executable_sections(
     control: &mut dyn RunControl,
     consume: &mut impl FnMut(ExecutableSectionView<'_>, &mut dyn RunControl) -> Result<()>,
 ) -> Result<()> {
-    let file = oer_elf::Elf::executable(bytes)
+    let file = oer_tool_analysis_elf::Elf::executable(bytes)
         .map_err(|_| invalid("audit requires static little-endian RV32 ELF"))?;
     let _view = ProgramView::new(bytes, &file, &[], memory, control)?;
     let mut found = false;
@@ -725,7 +725,7 @@ pub(crate) mod tests {
         let mut bytes = object.write().unwrap();
         // The same file as an executable (`e_type` ET_EXEC).
         bytes[16..18].copy_from_slice(&2u16.to_le_bytes());
-        let elf = oer_elf::Elf::executable(&bytes).unwrap();
+        let elf = oer_tool_analysis_elf::Elf::executable(&bytes).unwrap();
         let table = elf.symbol_table_section().unwrap() as u32;
         let index = elf
             .raw_symbols()
@@ -814,7 +814,7 @@ pub(crate) mod tests {
         b
     }
     fn view(bytes: &[u8], read_only: &[ReadOnlyWindow]) -> Result<Option<[u8; 4]>> {
-        let file = oer_elf::Elf::parse(bytes).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(bytes).unwrap();
         let memory = WorkingMemory::new(1 << 20).unwrap();
         let view = ProgramView::new(bytes, &file, read_only, &memory, &mut || Ok(()))?;
         let mut word = [0; 4];
@@ -900,7 +900,7 @@ pub(crate) mod tests {
         );
         // The RWE segment's data loads, but stays writable.
         assert_eq!(view(&bytes, &[]).unwrap(), None);
-        let file = oer_elf::Elf::parse(bytes.as_slice()).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(bytes.as_slice()).unwrap();
         let memory = WorkingMemory::new(1 << 20).unwrap();
         let window = [ReadOnlyWindow {
             start: 0x4000,

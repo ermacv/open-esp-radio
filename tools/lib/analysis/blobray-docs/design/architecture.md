@@ -58,20 +58,20 @@ requires a reviewed change to the contract, not an automatic transfer.
 
 Crate boundaries enforce independent dependency and authority rules. Modules
 inside each crate divide implementation without acquiring extra capabilities.
-The command line package is `blobray-cli` and its executable is `blobray`; the
-Linux linker adapters are the separate `blobray-linker`, so a consumer that
+The command line package is `oer-tool-cli-blobray` and its executable is `blobray`; the
+Linux linker adapters are the separate `oer-tool-analysis-blobray-linker`, so a consumer that
 links, such as the vendor scenarios, does not depend on the command line.
 
 | Crate | Principal modules | Owns | Allowed local dependencies |
 | --- | --- | --- | --- |
-| `blobray-domain` | identity, observations, effects, resources, ports | Shared values and narrow extension interfaces | `oer-riscv-model` |
-| `blobray-artifacts` | containers, objects, symbols, relocations, mappings | Structural inspection of supplied immutable bytes | `blobray-domain`, `oer-elf`, `oer-riscv-model`, `oer-riscv-program` |
-| `blobray-analysis` | target audit, code closure, register navigation | Blobray analyses over the shared function analysis | `blobray-domain`, `oer-riscv-model`, `oer-riscv-analysis` |
-| `blobray-backend-riscv` | execution over lifted RV32 | Concrete machine state and RV32 execution | `blobray-domain`, `oer-riscv-model`, `oer-riscv-decode`, `oer-riscv-lift` |
-| `blobray-verification` | scenarios, comparison, record validation | Comparison relations and verdict construction | `blobray-domain`, `oer-riscv-model` |
-| `blobray-application` | captured, library, linking, data, audit, in_process | Operations over given executables and their resource ownership | `blobray-domain`, `blobray-artifacts`, `blobray-analysis`, `blobray-verification`, `oer-riscv-model`, `oer-riscv-analysis`, `oer-riscv-program` |
-| `blobray-linker` | GNU ld and LLD adapters, bounded subprocess transport | External linker processes behind `LinkerHost` | `blobray-domain`, `blobray-application`, `oer-riscv-model` |
-| `blobray-cli` | CLI, JSON wire documents | Process entry point, rendering and concrete dependency selection | `blobray-application`, `blobray-domain`, `blobray-backend-riscv`, `oer-riscv-model`, `oer-riscv-lift` |
+| `oer-tool-analysis-blobray-domain` | identity, observations, effects, resources, ports | Shared values and narrow extension interfaces | `oer-tool-analysis-riscv-model` |
+| `oer-tool-analysis-blobray-artifacts` | containers, objects, symbols, relocations, mappings | Structural inspection of supplied immutable bytes | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-elf`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-program` |
+| `oer-tool-analysis-blobray-analysis` | target audit, code closure, register navigation | Blobray analyses over the shared function analysis | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-analysis` |
+| `oer-tool-analysis-blobray-riscv` | execution over lifted RV32 | Concrete machine state and RV32 execution | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-decode`, `oer-tool-analysis-riscv-lift` |
+| `oer-tool-analysis-blobray-verification` | scenarios, comparison, record validation | Comparison relations and verdict construction | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-riscv-model` |
+| `oer-tool-analysis-blobray-application` | captured, library, linking, data, audit, in_process | Operations over given executables and their resource ownership | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-artifacts`, `oer-tool-analysis-blobray-analysis`, `oer-tool-analysis-blobray-verification`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-analysis`, `oer-tool-analysis-riscv-program` |
+| `oer-tool-analysis-blobray-linker` | GNU ld and LLD adapters, bounded subprocess transport | External linker processes behind `LinkerHost` | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-application`, `oer-tool-analysis-riscv-model` |
+| `oer-tool-cli-blobray` | CLI, JSON wire documents | Process entry point, rendering and concrete dependency selection | `oer-tool-analysis-blobray-application`, `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-riscv`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-lift` |
 
 The `oer-riscv-*` crates belong to the
 [shared RV32 layer](../../../riscv/README.md), which is Blobray's ISA layer:
@@ -79,7 +79,7 @@ decoding, lifting, function analysis and the static image view live there and
 the stack analyzer shares them. Application depends on the ISA-neutral model,
 the function analysis and the static image view; RV32 facts such as relocation
 types and register numbers stay in that layer. The command line selects the
-concrete decoder from `oer-riscv-lift`. The allowed
+concrete decoder from `oer-tool-analysis-riscv-lift`. The allowed
 dependencies are `oer_repo::policy::COMPONENTS`. Verification can
 request execution through an injected executor and compares typed
 observations; it cannot select a different input behind the caller's back.
@@ -138,15 +138,15 @@ flowchart TD
     RV --> Lift
     RV --> Decode
     subgraph ISA[Shared RV32 layer]
-        Lift[oer-riscv-lift] --> Decode[oer-riscv-decode]
-        FnAnalysis[oer-riscv-analysis]
-        Program[oer-riscv-program]
+        Lift[oer-tool-analysis-riscv-lift] --> Decode[oer-tool-analysis-riscv-decode]
+        FnAnalysis[oer-tool-analysis-riscv-analysis]
+        Program[oer-tool-analysis-riscv-program]
     end
 ```
 
-The graph leaves out the edges to `oer-riscv-model` (from every Blobray crate
-and from `oer-riscv-lift`, `oer-riscv-analysis` and `oer-riscv-program`) and to
-`oer-elf` (from `blobray-artifacts`, `oer-riscv-lift` and `oer-riscv-program`). The table above lists
+The graph leaves out the edges to `oer-tool-analysis-riscv-model` (from every Blobray crate
+and from `oer-tool-analysis-riscv-lift`, `oer-tool-analysis-riscv-analysis` and `oer-tool-analysis-riscv-program`) and to
+`oer-tool-analysis-elf` (from `oer-tool-analysis-blobray-artifacts`, `oer-tool-analysis-riscv-lift` and `oer-tool-analysis-riscv-program`). The table above lists
 the Blobray crates' edges, and the
 [shared layer's table](../../../riscv/README.md#dependency-table) lists the edges
 of the `oer-riscv-*` crates.

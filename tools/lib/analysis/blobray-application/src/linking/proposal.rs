@@ -79,7 +79,11 @@ pub fn propose_companions(
     );
     let mut outputs = Outputs::default();
     run(host, &invocation, &mut outputs, control)?;
-    let names = blobray_artifacts::undefined_names(&outputs.elf.as_slice(), memory, control)?;
+    let names = oer_tool_analysis_blobray_artifacts::undefined_names(
+        &outputs.elf.as_slice(),
+        memory,
+        control,
+    )?;
     // (candidate position, name index, local binding, symbol)
     let mut found = Vec::new();
     for (position, candidate) in candidates.iter().enumerate() {

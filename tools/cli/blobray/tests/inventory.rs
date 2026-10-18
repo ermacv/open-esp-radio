@@ -1,10 +1,10 @@
 //! In-process inventory of captured executables, identified by content.
 #[allow(dead_code)]
 mod support;
-use blobray_application::captured::inventory;
-use blobray_application::in_process::{Executable, Limits};
-use blobray_domain::*;
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application::captured::inventory;
+use oer_tool_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 
 fn inventory_of(bytes: Vec<u8>) -> (Executable, ArtifactInventory) {
     let executable = Executable::new(bytes);

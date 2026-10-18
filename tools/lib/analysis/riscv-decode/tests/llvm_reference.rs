@@ -7,17 +7,17 @@
 //! are covered by the unit tests; this checks the accepted encoding space.
 //!
 //! Ignored by default because it runs an external tool:
-//! `cargo test -p oer-riscv-decode --test llvm_reference -- --ignored`. It uses
+//! `cargo test -p oer-tool-analysis-riscv-decode --test llvm_reference -- --ignored`. It uses
 //! `$LLVM_OBJDUMP`, or the `llvm-objdump` of the `llvm-tools` component that
 //! `rust-toolchain.toml` installs.
 
-use oer_riscv_decode::{Extensions, decode};
+use oer_tool_analysis_riscv_decode::{Extensions, decode};
 use std::{env, fs, path::PathBuf, process::Command};
 
 const ATTRIBUTES: &str = "+m,+a,+f,+c,+zba,+zbb,+zbs,+zcb,+zcmp";
 
 fn objdump() -> PathBuf {
-    oer_toolchain::program(oer_toolchain::Tool::LlvmObjdump)
+    oer_tool_base_toolchain::program(oer_tool_base_toolchain::Tool::LlvmObjdump)
         .unwrap()
         .into()
 }

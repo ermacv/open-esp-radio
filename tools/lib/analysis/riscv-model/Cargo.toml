@@ -1,5 +1,5 @@
 [package]
-name = "oer-riscv-model"
+name = "oer-tool-analysis-riscv-model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

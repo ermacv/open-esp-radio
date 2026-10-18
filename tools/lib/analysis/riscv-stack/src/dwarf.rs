@@ -5,15 +5,15 @@
 //!
 //! [`read`] reads the return types, the copies and the type facts in one
 //! pass over the debug sections borrowed from the ELF's bytes (a compressed
-//! one is an error: `oer-elf` reads none), and admits everything it
+//! one is an error: `oer-tool-analysis-elf` reads none), and admits everything it
 //! keeps or builds on the way in the analysis's working memory; what only
 //! the pass needs borrows its strings from the sections. Inline chains are
 //! addr2line's, over sections shared with the same bytes
 //! ([`Symbolizer::shared`]): the caches it grows as it answers are the
 //! library's own, which the working memory does not account.
 use crate::cha::{TypeFacts, TypeWalk};
-use oer_elf::dwarf::{DebugSections, SliceReader, Symbolizer, gimli};
-use oer_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_tool_analysis_elf::dwarf::{DebugSections, SliceReader, Symbolizer, gimli};
+use oer_tool_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -96,7 +96,7 @@ pub fn read(
     control: &mut dyn RunControl,
 ) -> Result<(Dwarf, TypeFacts)> {
     let memory = keep.memory();
-    let file = oer_elf::Elf::parse(elf).map_err(|_| invalid("invalid ELF"))?;
+    let file = oer_tool_analysis_elf::Elf::parse(elf).map_err(|_| invalid("invalid ELF"))?;
     let sections = DebugSections::load(&file).map_err(|error| invalid(error.to_string()))?;
     let dwarf = sections
         .dwarf()
@@ -266,7 +266,7 @@ impl Copies {
         if let Some(value) = entry.attr_value(gimli::DW_AT_linkage_name)
             && let Some(linkage) = text(dwarf, unit, value)
         {
-            let path = keep.string(&plain(&oer_elf::demangle(&linkage)), control)?;
+            let path = keep.string(&plain(&oer_tool_analysis_elf::demangle(&linkage)), control)?;
             keep.insert(&mut self.paths, offset, path, control)?;
         }
         // A copy names its subprogram by origin, or is one itself.

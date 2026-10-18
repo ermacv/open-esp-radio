@@ -1,7 +1,7 @@
 //! Vendor coverage of the root closures that in-process executions exercise.
 use crate::execution::{LoadedSegment, Sources};
 use crate::*;
-use blobray_analysis::closure::{ClosureInput, CodeMemory, code_closure};
+use oer_tool_analysis_blobray_analysis::closure::{ClosureInput, CodeMemory, code_closure};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Executable segments of one target, ascending by address.
@@ -210,7 +210,9 @@ pub fn report_in_process(
     let mut names: BTreeMap<u32, String> = BTreeMap::new();
     for id in &target.executables {
         let executable = crate::in_process::find(executables, id)?;
-        for (address, name) in oer_riscv_program::code_symbols(&executable.bytes(), memory, c)? {
+        for (address, name) in
+            oer_tool_analysis_riscv_program::code_symbols(&executable.bytes(), memory, c)?
+        {
             // The first name in order identifies a start with several names.
             names.entry(address).or_insert(name);
         }

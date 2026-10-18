@@ -8,7 +8,9 @@
 
 use std::collections::HashMap;
 
-use oer_riscv_model::{AbstractValue, Expression, FunctionRecord, IntegerOp, MemoryKind, SymbolId};
+use oer_tool_analysis_riscv_model::{
+    AbstractValue, Expression, FunctionRecord, IntegerOp, MemoryKind, SymbolId,
+};
 use serde::{Deserialize, Serialize};
 
 /// What an access's address chain starts from.

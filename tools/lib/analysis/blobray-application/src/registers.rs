@@ -1,6 +1,6 @@
 //! Candidate memory addresses one analyzed function accesses.
 use crate::*;
-use blobray_analysis::navigation::Facts;
+use oer_tool_analysis_blobray_analysis::navigation::Facts;
 
 fn invalid(s: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, s)
@@ -37,8 +37,10 @@ pub(crate) fn observe<'a, 'm>(
     // A store's stored bits are evaluated only once one of its candidates
     // is in range, and once for all of them, so a store the ranges exclude
     // costs no work and no memo.
-    let mut evaluator = blobray_analysis::registers::StoredBitsEvaluator::new(facts, memory);
-    let mut indexed_addresses = blobray_analysis::registers::IndexedAddresses::new(facts, memory);
+    let mut evaluator =
+        oer_tool_analysis_blobray_analysis::registers::StoredBitsEvaluator::new(facts, memory);
+    let mut indexed_addresses =
+        oer_tool_analysis_blobray_analysis::registers::IndexedAddresses::new(facts, memory);
     let mut observe = |record: u64,
                        width: u8,
                        address: &'a AbstractValue,
@@ -65,7 +67,7 @@ pub(crate) fn observe<'a, 'm>(
             if let Some(value) = stored_value
                 && stored.is_none()
             {
-                stored = Some(blobray_analysis::registers::stored_bits(
+                stored = Some(oer_tool_analysis_blobray_analysis::registers::stored_bits(
                     &mut evaluator,
                     address,
                     width,
@@ -89,7 +91,12 @@ pub(crate) fn observe<'a, 'm>(
     };
     facts.accesses(c, &mut |access, c| {
         let mask = access.value.and_then(|v| {
-            blobray_analysis::registers::write_mask(facts, access.address, access.width, v)
+            oer_tool_analysis_blobray_analysis::registers::write_mask(
+                facts,
+                access.address,
+                access.width,
+                v,
+            )
         });
         let stored_value = access
             .value
@@ -107,7 +114,7 @@ pub(crate) fn observe<'a, 'm>(
         c.checkpoint(1)?;
         if let FunctionRecord::Expression { expression, .. } = fact
             && let Some((address, width, mask)) =
-                blobray_analysis::registers::read_mask(facts, expression)
+                oer_tool_analysis_blobray_analysis::registers::read_mask(facts, expression)
         {
             observe(record as u64, width, address, Some(mask), None, c)?;
         }

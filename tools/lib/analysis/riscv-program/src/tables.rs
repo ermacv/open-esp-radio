@@ -7,12 +7,12 @@
 //! `SHT_REL` keeps an entry's addend in the table word itself, which this
 //! source does not read, so a REL table is never proven, and a section that
 //! two RELA sections relocate names no entry.
-use oer_elf::{SectionKind, Target, rv32};
-use oer_riscv_model::*;
+use oer_tool_analysis_elf::{SectionKind, Target, rv32};
+use oer_tool_analysis_riscv_model::*;
 
 /// The relocated words of one object's read-only data.
 pub struct ObjectTables<'a> {
-    file: oer_elf::Elf<'a>,
+    file: oer_tool_analysis_elf::Elf<'a>,
     /// The static symbol table's section.
     symbol_table: Option<usize>,
     /// `((section, offset), (target section, target offset))`, sorted.
@@ -31,7 +31,8 @@ impl<'a> ObjectTables<'a> {
         control: &mut dyn RunControl,
     ) -> Result<Self> {
         control.bytes(bytes.len())?;
-        let file = oer_elf::Elf::parse(bytes).map_err(|error| invalid(error.to_string()))?;
+        let file =
+            oer_tool_analysis_elf::Elf::parse(bytes).map_err(|error| invalid(error.to_string()))?;
         // The sections each RELA section relocates, sorted, to count the
         // RELA sections of a section by a search.
         let mut relocated = AdmittedVec::new(memory);
@@ -291,7 +292,7 @@ mod tests {
             )
             .unwrap();
         let bytes = object.write().unwrap();
-        let index = oer_elf::Elf::parse(&bytes)
+        let index = oer_tool_analysis_elf::Elf::parse(&bytes)
             .unwrap()
             .raw_symbols()
             .find(|s| s.name == Some(b".Ltable".as_slice()))
@@ -302,7 +303,7 @@ mod tests {
 
     /// The section header of the section named `name`: its file offset.
     fn header(bytes: &[u8], name: &str) -> usize {
-        let file = oer_elf::Elf::parse(bytes).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(bytes).unwrap();
         let index = file.sections().find(|s| s.name == name).unwrap().index;
         let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
         let half = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());
@@ -312,7 +313,7 @@ mod tests {
     fn entries(bytes: &[u8], table: u64, count: Option<u32>) -> Option<Vec<u64>> {
         let memory = WorkingMemory::new(1 << 20).unwrap();
         let tables = ObjectTables::new(bytes, &memory, &mut || Ok(())).unwrap();
-        let file = oer_elf::Elf::parse(bytes).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(bytes).unwrap();
         let symbol = SymbolId {
             object: ObjectId {
                 artifact: ArtifactId::of_bytes(b"object"),
@@ -374,7 +375,7 @@ mod tests {
     #[test]
     fn a_section_two_rela_sections_relocate_names_no_entry() {
         let (mut bytes, table) = object(1);
-        let rodata = oer_elf::Elf::parse(&bytes)
+        let rodata = oer_tool_analysis_elf::Elf::parse(&bytes)
             .unwrap()
             .sections()
             .find(|s| s.name == ".rodata")

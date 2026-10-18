@@ -14,7 +14,7 @@
 //! indirect gaps. Passes end within the function's dispatch count, every
 //! pass charged to the same control.
 use crate::{AnalysisSummary, FunctionInput, KnownJump, research};
-use oer_riscv_model::*;
+use oer_tool_analysis_riscv_model::*;
 
 /// The tables one pass over a function proves, with the working memory
 /// that admits them, their entries and the jumps the next pass follows.

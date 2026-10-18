@@ -1,14 +1,14 @@
 # RV32 stack bounds
 
-`oer-riscv-stack` computes worst-case stack bounds of a static RV32 image from
+`oer-tool-analysis-riscv-stack` computes worst-case stack bounds of a static RV32 image from
 its machine code, over the program model of
-[`oer-riscv-program`](../program/README.md),
-[`oer-riscv-analysis`](../analysis/README.md) and
-[`oer-riscv-lift`](../lift/README.md). It reads the image through one
-`ImageFacts` of `oer-riscv-program` (functions with their aliases,
+[`oer-tool-analysis-riscv-program`](../program/README.md),
+[`oer-tool-analysis-riscv-analysis`](../analysis/README.md) and
+[`oer-tool-analysis-riscv-lift`](../lift/README.md). It reads the image through one
+`ImageFacts` of `oer-tool-analysis-riscv-program` (functions with their aliases,
 executable ranges, read-only words, sized data objects, relocated address
 words and `.LJTI*` labels, parsed once) and its frame records, relocations
-and DWARF through [`oer-elf`](../../elf/README.md), whose RV32 relocation
+and DWARF through [`oer-tool-analysis-elf`](../../elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
 
 `analyze` works in the caller's `WorkingMemory` and charges the caller's
@@ -17,7 +17,7 @@ table decides which relocation is an address word or a control transfer.
 (`stack_sizes`, `taken_addresses`, `waker_vtables`, `interrupt_table`,
 `vector_table`, `trap_entry`) charge the same control for each relocation,
 word, entry or step they read. The caller decides both; the image
-checks' budget is `oer_image_check_stack::budget`. Every structure that
+checks' budget is `oer_tool_service_image_check_stack::budget`. Every structure that
 grows with the image is admitted in that memory before it is made: what
 the analysis keeps (each function's facts, the DWARF facts and type facts
 of `read_debug`, the vtables, taken addresses, frame records and
@@ -35,9 +35,9 @@ integrity error): a compiler jump table is the run of relocated words from its
 function become edges of the value analysis's graph, which then also reaches
 the code behind them. Any other table is located as Blobray locates it: the
 value analysis records each jump through `table[index]` as a `Dispatch`
-record, the shared recognizer (`RecognizedTables` of `oer-riscv-analysis`)
+record, the shared recognizer (`RecognizedTables` of `oer-tool-analysis-riscv-analysis`)
 proves its entries from the image's facts (`ImageTables` of
-`oer-riscv-program`: a labelled table, a sized object or a run the guarding
+`oer-tool-analysis-riscv-program`: a labelled table, a sized object or a run the guarding
 bounds check counts), and the shared driver (`research_following_tables`)
 analyzes the function again following it, while each pass proves again
 every table it followed and more; a pass that loses one reports the
@@ -222,5 +222,5 @@ root through `Analysis::bound_with` with the same resolutions. An ELF without
 and requires a review for every function without a record.
 
 ```console
-cargo test -p oer-riscv-stack
+cargo test -p oer-tool-analysis-riscv-stack
 ```

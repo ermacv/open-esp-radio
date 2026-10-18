@@ -12,11 +12,11 @@
 //! which also lists the suites: set `BLOBRAY_RISCV_ARCH_TEST` to the pinned
 //! riscv-arch-test checkout, `BLOBRAY_RISCV_CC` to a clang with the riscv32
 //! target and lld and `BLOBRAY_SAIL` to the pinned `sail_riscv_sim`, then run
-//! `cargo test -p blobray-cli --test riscv_conformance -- --ignored`.
-use blobray_application as app;
-use blobray_domain::*;
+//! `cargo test -p oer-tool-cli-blobray --test riscv_conformance -- --ignored`.
 use object::{Object, ObjectSymbol};
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application as app;
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -171,7 +171,7 @@ fn run(elf: &[u8]) -> std::result::Result<Vec<u32>, String> {
             dependence: None,
             patches: &[],
         },
-        &blobray_backend_riscv::RiscvExecutor,
+        &oer_tool_analysis_blobray_riscv::RiscvExecutor,
         &memory,
         &mut || Ok(()),
     )

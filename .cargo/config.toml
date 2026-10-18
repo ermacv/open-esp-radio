@@ -5,6 +5,9 @@ registers = "run --quiet --profile tools -p oer-tool-cli-registers --"
 # The firmware tool: build, flash and run staged images on the stand's
 # boards (tools/lib/service/firmware/README.md).
 fw = "run --quiet --profile tools -p oer-tool-cli-fw --"
+# Fetch and verify a chip's pinned vendor artifacts into the host-wide store
+# (tools/lib/data/vendor-artifacts).
+pins = "run --quiet --profile tools -p oer-tool-cli-pins --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git

@@ -48,7 +48,7 @@ impl records::Parser for Parser {
         channel: LinkOutput,
         line: &[u8],
         evidence: LinkEvidenceSpan,
-        members: &[blobray_application::linking::LinkMember],
+        members: &[oer_tool_analysis_blobray_application::linking::LinkMember],
         sink: &mut dyn LinkOutputSink,
         control: &mut dyn RunControl,
     ) -> Result<()> {

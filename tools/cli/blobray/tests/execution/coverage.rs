@@ -151,7 +151,7 @@ fn report(f: &Fixture, requests: &[ExecutionRequest]) -> Result<CodeCoverageRepo
     app::in_process::coverage(
         &executions,
         &f.inputs,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &WorkingMemory::new(32 * 1024 * 1024).unwrap(),
         &mut || Ok(()),
     )
@@ -344,7 +344,7 @@ fn in_process_verification_needs_symbol_executables_and_one_executable_per_sourc
                 dependence: None,
                 patches: &[],
             },
-            &blobray_backend_riscv::RiscvExecutor,
+            &oer_tool_analysis_blobray_riscv::RiscvExecutor,
             &memory,
             &mut || Ok(()),
         )
@@ -375,7 +375,7 @@ fn reused_vendor_results_yield_the_records_of_a_full_execution() {
             patches: &[],
         }
     }
-    let executor = &blobray_backend_riscv::RiscvExecutor;
+    let executor = &oer_tool_analysis_blobray_riscv::RiscvExecutor;
     let verify = |request: &ExecutionRequest, vendor: Option<&app::in_process::VendorResults>| {
         app::in_process::verify(
             &app::in_process::InProcessComparison {

@@ -58,7 +58,7 @@ fn check_once(
         table_section: 6,
         index: 4,
     };
-    let roots = blobray_artifacts::inspect_link_input(
+    let roots = oer_tool_analysis_blobray_artifacts::inspect_link_input(
         &bytes::ENTRY,
         members[0].payload.as_ref().unwrap(),
         &[selection],
@@ -118,9 +118,15 @@ fn check_once(
             return Err(invalid("probe output exceeds 64 KiB"));
         }
         let bytes = &output.elf;
-        blobray_artifacts::validate_image(&bytes.as_slice(), &layout, &roots, &memory, control)?;
+        oer_tool_analysis_blobray_artifacts::validate_image(
+            &bytes.as_slice(),
+            &layout,
+            &roots,
+            &memory,
+            control,
+        )?;
         let mut facts = Facts::default();
-        blobray_artifacts::inspect_payload(
+        oer_tool_analysis_blobray_artifacts::inspect_payload(
             bytes,
             &found.members[0].object,
             &memory,

@@ -21,7 +21,7 @@ Which crate may depend on which, the `oer-riscv-*` crates of the
 [shared RV32 layer](../../../../riscv/README.md) included, is the enforced table
 of [Blobray's architecture](../../../docs/design/architecture.md#crates-and-modules).
 
-Every operation is a function call over `blobray_application::in_process::Executable`
+Every operation is a function call over `oer_tool_analysis_blobray_application::in_process::Executable`
 values, a `WorkingMemory` and a `RunControl`; the
 [contracts](../../../docs/design/contracts.md#operations-in-process) list them.
 Libraries do not discover executables, install signal handlers or change
@@ -48,7 +48,7 @@ is independent of target execution support.
 ## JSON and checks
 
 Typed clients decode `--format json` output with the host library's
-`blobray_cli::wire` module. The renderer emits the same types, and their
+`oer_tool_cli_blobray::wire` module. The renderer emits the same types, and their
 payloads are the application and domain records, so clients never copy a
 schema.
 

@@ -3,10 +3,10 @@
 //! A filter selects observations only. Blocked functions and gaps stay in the
 //! output and the summary always counts the whole analysis, so a selection
 //! cannot hide that the analysis was incomplete.
-use blobray_domain::{
+use oer_tool_analysis_blobray_domain::{
     IndexedAddress, RegisterAccess, RegisterMask, RegisterMaskKind, StoredBits, StoredBitsSource,
 };
-use oer_riscv_model::{FunctionRecord, MemoryKind, ObjectLocation, SymbolId};
+use oer_tool_analysis_riscv_model::{FunctionRecord, MemoryKind, ObjectLocation, SymbolId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

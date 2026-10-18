@@ -3,7 +3,7 @@
 //!
 //! Every function is a defined code symbol of the image. Its frame is the
 //! compiler's `.stack_sizes` entry, cross-checked with the deepest entry-relative
-//! `sp` the bounded value analysis of `oer-riscv-analysis` observes; a function
+//! `sp` the bounded value analysis of `oer-tool-analysis-riscv-analysis` observes; a function
 //! without an entry takes the observed depth only when its control-flow graph
 //! is complete. Its callees are every direct call and out-of-function jump of a
 //! linear sweep over its whole extent, which also reaches code behind jump
@@ -34,10 +34,10 @@ mod sweep;
 mod trap;
 mod wakers;
 
-use oer_riscv_model::{
+use oer_tool_analysis_riscv_model::{
     CodeRange, Error, ErrorCode, FunctionRecord, Ledger, Result, RunControl, WorkingMemory,
 };
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -46,8 +46,10 @@ pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Field, TableEntry, TableLayout, interrupt_table};
-use oer_riscv_analysis::{JumpTable, JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
-use oer_riscv_program::tables::ImageTables;
+use oer_tool_analysis_riscv_analysis::{
+    JumpTable, JumpTableSource, KnownJump, ProvenTables, RecognizedTables,
+};
+use oer_tool_analysis_riscv_program::tables::ImageTables;
 pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions};
 pub use summaries::{Summary, parse as parse_summaries};

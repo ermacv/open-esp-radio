@@ -1,5 +1,5 @@
 //! Bounded local control-flow exploration. No filesystem, project or ISA implementation.
-use oer_riscv_model::*;
+use oer_tool_analysis_riscv_model::*;
 mod dispatch;
 mod references;
 mod tables;

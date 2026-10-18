@@ -1,8 +1,8 @@
 //! The stack gate of an image build. One analysis of each ELF
-//! (`oer-riscv-stack`, with the pinned ROM ELF and its reviewed summaries)
+//! (`oer-tool-analysis-riscv-stack`, with the pinned ROM ELF and its reviewed summaries)
 //! bounds every stack the image runs on:
 //!
-//! - the runtime's interrupt stacks (`oer-image-check-interrupts`);
+//! - the runtime's interrupt stacks (`oer-tool-service-image-check-interrupts`);
 //! - each task stack the policy names, from the function that runs on it
 //!   (its root, by symbol): the root's worst-case call chain must leave the
 //!   stack's storage the policy's minimum free bytes;
@@ -25,9 +25,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;
 
-use oer_riscv_model::{Ledger, RunControl, WorkingMemory};
-use oer_riscv_program::facts::ImageFacts;
-use oer_riscv_stack::{
+use oer_tool_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_stack::{
     Analysis, Bound, Dwarf, Function, Reason, Resolutions, Summary, analyze,
     function_pointer_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
     waker_resolutions, waker_vtables,
@@ -36,7 +36,7 @@ use oer_riscv_stack::{
 use crate::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
-use oer_image_policy::{StackPolicy, Storage, TaskStack};
+use oer_tool_data_image_policy::{StackPolicy, Storage, TaskStack};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -45,8 +45,8 @@ use crate::contract::Contract;
 /// The assumptions a check admits in a bound, each by name: a bound resting
 /// on one is conditional and passes with a warning; any other fails. Each
 /// leaves this list in the pull request that proves it ().
-pub const ADMITTED: &[oer_riscv_stack::Assumption] =
-    &[oer_riscv_stack::Assumption::ExecutorInvariant];
+pub const ADMITTED: &[oer_tool_analysis_riscv_stack::Assumption] =
+    &[oer_tool_analysis_riscv_stack::Assumption::ExecutorInvariant];
 
 /// The runtime task stacks' report.
 pub const RUNTIME_REPORT: &str = "runtime-stack.txt";
@@ -71,7 +71,7 @@ pub fn audit_runtime_stacks(
 /// with; `None` when the policy names no bootstrap stack.
 pub fn audit_bootstrap_stack(
     root: &Path,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tool_data_chip_profile::Profile,
     elf: &Path,
     policy: &StackPolicy,
     output: &Path,
@@ -107,7 +107,11 @@ pub struct Image {
 impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
-    pub fn read(root: &Path, profile: &oer_chip_profile::Profile, elf: &Path) -> Result<Self> {
+    pub fn read(
+        root: &Path,
+        profile: &oer_tool_data_chip_profile::Profile,
+        elf: &Path,
+    ) -> Result<Self> {
         let elf = std::fs::read(elf)
             .map_err(|error| format!("cannot read {}: {error}", elf.display()))?;
         Self::of_bytes(root, profile, elf)
@@ -116,14 +120,18 @@ impl Image {
     /// [`Self::read`] of the ELF bytes `elf`.
     pub fn of_bytes(
         root: &Path,
-        profile: &oer_chip_profile::Profile,
+        profile: &oer_tool_data_chip_profile::Profile,
         elf: Vec<u8>,
     ) -> Result<Self> {
         let rom = profile
             .rom
             .as_ref()
             .ok_or_else(|| format!("platform/{}/chip.toml names no [rom] ELF", profile.id))?;
-        let rom_elf = std::fs::read(oer_vendor_artifacts::ensure(root, &profile.id, &rom.elf)?)?;
+        let rom_elf = std::fs::read(oer_tool_data_vendor_artifacts::ensure(
+            root,
+            &profile.id,
+            &rom.elf,
+        )?)?;
         let summaries = match &rom.summaries {
             Some(path) => parse_summaries(&std::fs::read_to_string(root.join(path))?)?,
             None => Vec::new(),
@@ -159,7 +167,7 @@ impl Image {
         let companions = companions
             .iter()
             .map(|companion| ImageFacts::new(companion, &[], &memory, &mut control))
-            .collect::<oer_riscv_model::Result<Vec<_>>>()?;
+            .collect::<oer_tool_analysis_riscv_model::Result<Vec<_>>>()?;
         let companions: Vec<&ImageFacts<'_>> = companions.iter().collect();
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
@@ -176,7 +184,7 @@ impl Image {
             )?;
             keep.push(&mut functions, function.clone(), &mut control)?;
             if let Some(name) = function.names.first() {
-                let name = keep.string(&oer_elf::demangle(name), &mut control)?;
+                let name = keep.string(&oer_tool_analysis_elf::demangle(name), &mut control)?;
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
@@ -244,7 +252,7 @@ impl Image {
             .names
             .get(&start)
             .cloned()
-            .unwrap_or_else(|| oer_elf::demangle(&facts.function.label()));
+            .unwrap_or_else(|| oer_tool_analysis_elf::demangle(&facts.function.label()));
         if address == start {
             name
         } else {
@@ -255,7 +263,7 @@ impl Image {
     /// The capacity of `storage` in bytes, or `None` when the image links
     /// none of its symbols.
     fn capacity(&self, storage: Storage<'_>) -> Result<Option<u64>> {
-        let file = oer_elf::Elf::parse(&self.elf)?;
+        let file = oer_tool_analysis_elf::Elf::parse(&self.elf)?;
         let defined = |name: &str| file.symbol(name);
         let address = |name: &str| file.address(name);
         match storage {
@@ -311,7 +319,7 @@ impl Image {
                         keep.admit(Resolutions::admission(targets.len()), control)?;
                         resolutions.add(
                             transfer.site,
-                            oer_riscv_stack::Fact::IpcPosts,
+                            oer_tool_analysis_riscv_stack::Fact::IpcPosts,
                             targets.iter().copied(),
                         );
                     }

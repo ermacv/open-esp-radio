@@ -1,14 +1,14 @@
 //! The pins of a chip's vendor artifacts: the one reader of its tracked
-//! `verification/<chip>/artifacts.toml` (sources, artifacts, the SHA-256 of
+//! `knowledge/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
-//! Fetching and the host-wide store are `oer-vendor-artifacts`.
+//! Fetching and the host-wide store are `oer-tool-data-vendor-artifacts`.
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Directory of every chip's verification project, relative to the root.
-const VERIFICATION: &str = "verification";
+/// Directory of every chip's knowledge, relative to the root.
+const KNOWLEDGE: &str = "knowledge";
 
 /// Cache of fetched artifacts, relative to the repository root; a link to
 /// the host-wide store.
@@ -17,17 +17,17 @@ pub const CACHE: &str = "target/vendor";
 /// The pin of `chip`'s vendor artifacts, relative to the repository root,
 /// whether or not the chip has one.
 pub fn manifest(chip: &str) -> String {
-    format!("{VERIFICATION}/{chip}/artifacts.toml")
+    format!("{KNOWLEDGE}/{chip}/vendor/artifacts.toml")
 }
 
 /// Tracked manifest of `chip`, relative to the repository root: an error
 /// that lists the supported chips for an unsupported one, or names the
 /// missing manifest of a chip without a vendor verification project.
 pub fn manifest_path(root: &Path, chip: &str) -> Result<String> {
-    let profile = oer_chip_profile::Profile::load(root, chip)?;
+    let profile = oer_tool_data_chip_profile::Profile::load(root, chip)?;
     let manifest = manifest(&profile.id);
     if !root.join(&manifest).is_file() {
-        return Err(format!("chip {chip} has no vendor verification project ({manifest})").into());
+        return Err(format!("chip {chip} has no vendor artifact pins ({manifest})").into());
     }
     Ok(manifest)
 }

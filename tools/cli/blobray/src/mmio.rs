@@ -1,5 +1,5 @@
 //! The human form of an `mmio-diff` report.
-use blobray_domain::{
+use oer_tool_analysis_blobray_domain::{
     MmioAccess, MmioDiff, MmioLocation, MmioOperation, MmioStoredBits, MmioStoredSource,
     RegisterMaskKind,
 };
@@ -97,10 +97,10 @@ pub fn render(diff: &MmioDiff) -> String {
         for gap in gaps {
             let object = match &gap.object {
                 Some(object) => match object.location {
-                    oer_riscv_model::ObjectLocation::ArchiveMember { ordinal } => {
+                    oer_tool_analysis_riscv_model::ObjectLocation::ArchiveMember { ordinal } => {
                         format!(" member {ordinal}")
                     }
-                    oer_riscv_model::ObjectLocation::Standalone => String::new(),
+                    oer_tool_analysis_riscv_model::ObjectLocation::Standalone => String::new(),
                 },
                 None => String::new(),
             };
@@ -112,7 +112,7 @@ pub fn render(diff: &MmioDiff) -> String {
         }
     }
     for change in &diff.changes {
-        use blobray_domain::MmioFunctionState::{Absent, Analyzed, Blocked};
+        use oer_tool_analysis_blobray_domain::MmioFunctionState::{Absent, Analyzed, Blocked};
         let presence = match change.state {
             [Analyzed, Absent] => " (old only)",
             [Absent, Analyzed] => " (new only)",

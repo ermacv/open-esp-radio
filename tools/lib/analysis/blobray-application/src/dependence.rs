@@ -40,7 +40,8 @@ const INPUT: u32 = u32::MAX;
 /// The calling convention dependence assumes: a call clobbers its
 /// registers and returns through its links, and the argument words travel
 /// in its argument registers.
-const ABI: oer_riscv_model::CallAbi = oer_riscv_model::CallAbi::RiscvInteger;
+const ABI: oer_tool_analysis_riscv_model::CallAbi =
+    oer_tool_analysis_riscv_model::CallAbi::RiscvInteger;
 /// Argument words passed in registers.
 const REGISTER_ARGUMENTS: usize = ABI.arguments().len();
 /// Instructions of one function's recovered CFG; a larger function gets no
@@ -154,7 +155,7 @@ pub struct ObservedInstructions {
     pub reads: BTreeSet<(u32, u8)>,
 }
 
-use blobray_analysis::closure::CodeMemory as Code;
+use oer_tool_analysis_blobray_analysis::closure::CodeMemory as Code;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {

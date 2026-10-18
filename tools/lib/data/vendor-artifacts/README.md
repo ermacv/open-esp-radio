@@ -1,4 +1,4 @@
-# oer-vendor-artifacts
+# oer-tool-data-vendor-artifacts
 
 The pinned vendor artifacts of a chip. `verification/<chip>/artifacts.toml`
 is the only pin: git sources at a revision and release assets, each
@@ -8,7 +8,7 @@ catalog image whose recipe builds them and by no digest. This crate is its only 
 `Manifest::location`, `fetched(root, chip, id)` for one verified artifact
 such as the ROM ELF the firmware stack gate reads). It resolves every
 artifact in the host-wide store (`$OER_VENDOR_CACHE`, default `open-esp-radio/vendor` in the
-user's XDG cache directory, through `oer-durable`, linked from each
+user's XDG cache directory, through `oer-tool-base-durable`, linked from each
 checkout's `target/vendor`), and fetches and verifies what is missing.
 
 It depends only on `toml`, `serde` and the foundation crates, so the host

@@ -5,9 +5,9 @@
 //! that identity. No project, store, journal or worker participates, and every
 //! result stays with the caller.
 
-use blobray_artifacts::{MemberCursor, inspect_source};
-use blobray_domain::*;
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_artifacts::{MemberCursor, inspect_source};
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 use std::path::Path;
 
 pub mod audit;
@@ -28,5 +28,5 @@ pub mod linking;
 pub mod mmio_diff;
 mod registers;
 
-pub use blobray_verification::VERIFIER as EXECUTION_VERIFIER;
 pub use execution::EXECUTION_ENVIRONMENT;
+pub use oer_tool_analysis_blobray_verification::VERIFIER as EXECUTION_VERIFIER;

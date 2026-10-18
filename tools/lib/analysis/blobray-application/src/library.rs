@@ -2,7 +2,7 @@
 use crate::captured::{Member, visit_members};
 use crate::in_process::Executable;
 use crate::*;
-use blobray_analysis::navigation::Facts;
+use oer_tool_analysis_blobray_analysis::navigation::Facts;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One analyzed function with its records, borrowed for a visit.
@@ -342,7 +342,7 @@ pub struct Assumptions<'a> {
     /// With it, a call the analysis cannot follow keeps the registers this
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
-    pub abi: Option<oer_riscv_model::CallAbi>,
+    pub abi: Option<oer_tool_analysis_riscv_model::CallAbi>,
     /// A call to a function whose every return leaves only known constants
     /// in a result register takes them for that register. A first pass
     /// analyzes every function to collect those constants
@@ -401,12 +401,18 @@ impl ElfSink for Selection {
 /// object's other functions.
 #[allow(clippy::too_many_arguments)]
 fn research_function<'m>(
-    object: &mut blobray_artifacts::PreparedObject<'_, '_>,
-    references: &mut AdmittedVec<'m, (u32, oer_riscv_analysis::PreparedReferences<'m>)>,
+    object: &mut oer_tool_analysis_blobray_artifacts::PreparedObject<'_, '_>,
+    references: &mut AdmittedVec<
+        'm,
+        (
+            u32,
+            oer_tool_analysis_riscv_analysis::PreparedReferences<'m>,
+        ),
+    >,
     symbol: &SymbolId,
     input: u64,
     payload: &ArtifactId,
-    abi: Option<oer_riscv_model::CallAbi>,
+    abi: Option<oer_tool_analysis_riscv_model::CallAbi>,
     returns: &dyn CallReturns,
     tables: &dyn TableEntries,
     decoder: &dyn FunctionSemantics,
@@ -414,8 +420,8 @@ fn research_function<'m>(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<(
-    oer_riscv_analysis::AnalysisSummary,
-    oer_riscv_analysis::ProvenTables<'m, oer_riscv_analysis::JumpTable>,
+    oer_tool_analysis_riscv_analysis::AnalysisSummary,
+    oer_tool_analysis_riscv_analysis::ProvenTables<'m, oer_tool_analysis_riscv_analysis::JumpTable>,
 )> {
     let mut position = RunPosition {
         phase: RunPhase::AnalyzeFunction,
@@ -436,7 +442,7 @@ fn research_function<'m>(
         {
             index
         } else {
-            let prepared = oer_riscv_analysis::PreparedReferences::new(
+            let prepared = oer_tool_analysis_riscv_analysis::PreparedReferences::new(
                 view.relocations,
                 view.section,
                 decoder,
@@ -446,8 +452,8 @@ fn research_function<'m>(
             references.push((view.section, prepared), control.position())?;
             references.len() - 1
         };
-        oer_riscv_analysis::research_following_tables(
-            oer_riscv_analysis::FunctionInput {
+        oer_tool_analysis_riscv_analysis::research_following_tables(
+            oer_tool_analysis_riscv_analysis::FunctionInput {
                 image: view.image,
                 section: view.section,
                 extent: view.extent,
@@ -457,7 +463,7 @@ fn research_function<'m>(
                 jumps: &[],
                 returns,
             },
-            &oer_riscv_analysis::RecognizedTables {
+            &oer_tool_analysis_riscv_analysis::RecognizedTables {
                 entries: tables,
                 section: view.section,
             },
@@ -483,7 +489,7 @@ impl FunctionSink for Records<'_, '_> {
 fn analyze_object(
     input: u64,
     member: Member<'_>,
-    abi: Option<oer_riscv_model::CallAbi>,
+    abi: Option<oer_tool_analysis_riscv_model::CallAbi>,
     read_only: &[ReadOnlyWindow],
     returns: &dyn CallReturns,
     mut collect: Option<&mut Collect<'_, '_>>,
@@ -586,7 +592,7 @@ fn analyze_object(
         return Ok(());
     }
     let mut entered = false;
-    let result = blobray_artifacts::with_prepared_object(
+    let result = oer_tool_analysis_blobray_artifacts::with_prepared_object(
         bytes,
         &payload,
         read_only,
@@ -611,12 +617,16 @@ fn analyze_object(
             let mut object_tables = None;
             let mut image_facts = None;
             match object_type {
-                Some(1) => match oer_riscv_program::tables::ObjectTables::new(bytes, memory, c) {
+                Some(1) => match oer_tool_analysis_riscv_program::tables::ObjectTables::new(
+                    bytes, memory, c,
+                ) {
                     Ok(tables) => object_tables = Some(tables),
                     Err(error) => unreadable(error, c)?,
                 },
                 Some(2) => {
-                    match oer_riscv_program::facts::ImageFacts::new(bytes, read_only, memory, c) {
+                    match oer_tool_analysis_riscv_program::facts::ImageFacts::new(
+                        bytes, read_only, memory, c,
+                    ) {
                         Ok(facts) => image_facts = Some(facts),
                         Err(error) => unreadable(error, c)?,
                     }
@@ -625,7 +635,7 @@ fn analyze_object(
             }
             let image_tables = image_facts
                 .as_ref()
-                .map(|image| oer_riscv_program::tables::ImageTables { image });
+                .map(|image| oer_tool_analysis_riscv_program::tables::ImageTables { image });
             let tables: &dyn TableEntries = match (&object_tables, &image_tables) {
                 (Some(tables), _) => tables,
                 (None, Some(tables)) => tables,

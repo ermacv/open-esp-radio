@@ -350,7 +350,7 @@ fn declared_model_and_service_memory_effects_enter_the_timeline_once() {
     let mut r = ram_request(&f);
     r.replacement.as_mut().unwrap().executables = vec![f.id(1)];
     r.cases[0].vendor.calls = vec![CallDeclaration {
-        repetition: blobray_domain::CallRepetition::Finite,
+        repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
         id: "output".into(),
         applicability: "test".into(),
         lifetime: RegionLifetime::Phase,
@@ -487,7 +487,7 @@ fn modeled_allocation_compares_the_initialized_prefix_once_not_backing_capacity(
         let mut r = f.request();
         r.cases[0].vendor.arguments = vec![Some(requested)];
         r.cases[0].vendor.calls = vec![CallDeclaration {
-            repetition: blobray_domain::CallRepetition::Finite,
+            repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
             id: "allocate".into(),
             applicability: "test".into(),
             lifetime: RegionLifetime::Phase,

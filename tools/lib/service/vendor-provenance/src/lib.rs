@@ -1,10 +1,10 @@
 //! Vendor function provenance. A recovered fact cites the vendor function
-//! it came from in a `SOURCE` block (`oer_markers::source`, the one recogniser
+//! it came from in a `SOURCE` block (`oer_tool_data_markers::source`, the one recogniser
 //! of that grammar, which tidy uses too), and the citation is registered with
 //! that function's [`fingerprint`] in the chip's provenance registry
 //! ([`registry`]): its check fails when a pinned artifact's function no
 //! longer matches its registered fingerprint. [`diff`] compares two
-//! revisions of an archive function by function, and `oer-symbol-lineage`
+//! revisions of an archive function by function, and `oer-tool-service-symbol-lineage`
 //! pairs functions across revisions by the same fingerprints.
 
 #![forbid(unsafe_code)]

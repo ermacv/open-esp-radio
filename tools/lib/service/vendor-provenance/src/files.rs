@@ -14,7 +14,8 @@ use crate::Result;
 const SKIPPED: [&str; 2] = ["target", ".git"];
 
 fn skipped(path: &str) -> bool {
-    path.split('/').any(|component| SKIPPED.contains(&component))
+    path.split('/')
+        .any(|component| SKIPPED.contains(&component))
 }
 
 /// The files of one tree, repository-relative.
@@ -36,7 +37,7 @@ impl Files {
 
     fn from_git(root: &Path) -> Result<Self> {
         let list = |arguments: &[&str]| -> Result<Vec<String>> {
-            let output = oer_process::git::output(root, arguments)
+            let output = oer_tool_base_process::git::output(root, arguments)
                 .map_err(|error| format!("git ls-files failed: {error}"))?;
             let listing = String::from_utf8(output)
                 .map_err(|_| "git ls-files printed a non-UTF-8 path".to_owned())?;
@@ -73,7 +74,11 @@ impl Files {
                 if skipped(&name) {
                     continue;
                 }
-                if entry.file_type().map_err(|error| error.to_string())?.is_dir() {
+                if entry
+                    .file_type()
+                    .map_err(|error| error.to_string())?
+                    .is_dir()
+                {
                     pending.push(path);
                 } else {
                     files.insert(name);
@@ -94,8 +99,7 @@ impl Files {
     /// The files below `directory`.
     pub fn below<'a>(&'a self, directory: &'a str) -> impl Iterator<Item = &'a str> {
         let prefix = format!("{}/", directory.trim_end_matches('/'));
-        self.files()
-            .filter(move |file| file.starts_with(&prefix))
+        self.files().filter(move |file| file.starts_with(&prefix))
     }
 
     /// The text of `file`.

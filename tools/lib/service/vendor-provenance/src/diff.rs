@@ -226,13 +226,14 @@ pub fn run(
 ) -> Result<()> {
     let pairs: Vec<(String, PathBuf, PathBuf)> = match (old, new, baseline) {
         (Some(old), Some(new), None) => vec![(new.display().to_string(), old, new)],
-        (None, None, Some(baseline)) => oer_vendor_artifacts::pinned(root, chip)?
+        (None, None, Some(baseline)) => oer_tool_data_vendor_artifacts::pinned(root, chip)?
             .into_iter()
             .filter(|a| !a.firmware)
             .filter_map(|a| {
                 let name = a.path.file_name()?.to_owned();
                 let old = baseline.join(name);
-                let binary = std::fs::read(&a.path).is_ok_and(|bytes| oer_elf::is_binary(&bytes));
+                let binary = std::fs::read(&a.path)
+                    .is_ok_and(|bytes| oer_tool_analysis_elf::is_binary(&bytes));
                 (binary && old.is_file()).then_some((a.id, old, a.path))
             })
             .collect(),

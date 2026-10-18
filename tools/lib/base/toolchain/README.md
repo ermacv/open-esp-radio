@@ -1,6 +1,6 @@
 # Host toolchain
 
-`oer-toolchain` is the one place repository tools locate the host programs
+`oer-tool-base-toolchain` is the one place repository tools locate the host programs
 builds run and record which ones ran.
 
 - `program(Tool)` / `command(Tool)`: a non-empty override variable names the
@@ -16,7 +16,7 @@ builds run and record which ones ran.
   command: the unstable stack and move flags under `RUSTC_BOOTSTRAP`, the
   stack-size section for C and C++, and the image linker, which
   `image::build_linker` builds from the tree being built (a checkout or a
-  source snapshot) through `oer-process`.
+  source snapshot) through `oer-tool-base-process`.
 - `host_target()` names the host's target triple, for a workspace whose
   Cargo configuration defaults to a chip target.
 - `blobray::{cargo, binary, host}`: Cargo commands in the separate Blobray
@@ -24,8 +24,8 @@ builds run and record which ones ran.
   every caller that builds or runs Blobray from the root workspace (the
   vendor scenarios, the register inventory, the conformance check) reaches them.
 
-It depends only on `oer-process`.
+It depends only on `oer-tool-base-process`.
 
 ```console
-cargo test -p oer-toolchain
+cargo test -p oer-tool-base-toolchain
 ```

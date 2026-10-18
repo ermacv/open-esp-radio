@@ -34,7 +34,7 @@ symbol: a base the block or a loop's preheader forms holds on every pass even
 when the index merges to an unknown value; `jump_tables` reads those records, the
 bounds check guarding the dispatch block where its index is known, and asks
 the model's `TableEntries` port what the table at `base` holds; every entry
-must land inside the function. `oer-riscv-program` implements the port for
+must land inside the function. `oer-tool-analysis-riscv-program` implements the port for
 relocatable objects (`ObjectTables`, which needs a bound) and static images
 (`ImageTables`: an `--emit-relocs` image's labelled `.LJTI*` table needs
 none); Blobray uses both. The stack analyzer's source reads an

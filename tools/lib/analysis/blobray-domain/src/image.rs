@@ -106,7 +106,7 @@ pub struct ResolvedRoot {
     pub symbol: SymbolId,
     pub address: u64,
     pub size: u64,
-    #[serde(with = "oer_riscv_model::symbol_name")]
+    #[serde(with = "oer_tool_analysis_riscv_model::symbol_name")]
     pub name: Vec<u8>,
 }
 /// One linked image: what was linked, by which linker, and where every

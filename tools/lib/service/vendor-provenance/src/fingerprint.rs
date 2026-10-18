@@ -3,7 +3,7 @@
 //! Relocatable objects leave every relocated field unresolved, so identical
 //! source produces identical bytes except inside those fields. A function's
 //! fingerprint covers its code bytes with exactly the bits each relocation
-//! patches cleared ([`oer_elf::rv32::mask`], the one relocation table),
+//! patches cleared ([`oer_tool_analysis_elf::rv32::mask`], the one relocation table),
 //! followed by each relocation's type and, for a target inside the
 //! function's own section, its offset from the function start. Opcodes,
 //! registers and the relocation shape stay significant.
@@ -17,11 +17,11 @@
 //! relocations; the token sequence is the similarity feature of changed
 //! functions ([`similarity_ppm`]).
 
-use oer_elf::{Code, Reference, Site, rv32};
+use oer_tool_analysis_elf::{Code, Reference, Site, rv32};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-pub use oer_elf::is_binary;
+pub use oer_tool_analysis_elf::is_binary;
 
 /// Similarity prefilters use runs of this many instruction tokens.
 const SHINGLE: usize = 4;
@@ -131,17 +131,19 @@ fn token(bytes: &[u8], sites: &[&Site], named: bool) -> u64 {
 }
 
 /// Every defined function of an archive's ELF members, or of one ELF.
-pub fn functions(bytes: &[u8]) -> oer_elf::Result<Vec<Function>> {
+pub fn functions(bytes: &[u8]) -> oer_tool_analysis_elf::Result<Vec<Function>> {
     Ok(functions_and_symbols(bytes)?.0)
 }
 
 /// Every defined function and the name of every symbol the members define
 /// (sections and files aside), in one pass over an archive's ELF members or
 /// one ELF.
-pub fn functions_and_symbols(bytes: &[u8]) -> oer_elf::Result<(Vec<Function>, BTreeSet<String>)> {
+pub fn functions_and_symbols(
+    bytes: &[u8],
+) -> oer_tool_analysis_elf::Result<(Vec<Function>, BTreeSet<String>)> {
     let mut functions = vec![];
     let mut symbols = BTreeSet::new();
-    for (member, elf) in oer_elf::objects(bytes)? {
+    for (member, elf) in oer_tool_analysis_elf::objects(bytes)? {
         functions.extend(elf.code(&member)?.iter().map(Function::of));
         symbols.extend(
             elf.symbols()
@@ -150,7 +152,8 @@ pub fn functions_and_symbols(bytes: &[u8]) -> oer_elf::Result<(Vec<Function>, BT
                         && !s.name.is_empty()
                         && !matches!(
                             s.kind,
-                            oer_elf::SymbolKind::Section | oer_elf::SymbolKind::File
+                            oer_tool_analysis_elf::SymbolKind::Section
+                                | oer_tool_analysis_elf::SymbolKind::File
                         )
                 })
                 .map(|s| s.name.to_owned()),

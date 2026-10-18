@@ -4,16 +4,16 @@
 #[allow(dead_code)]
 #[path = "../../../../cli/blobray/tests/support/mod.rs"]
 mod support;
-use blobray_application::in_process::{Executable, Limits};
-use blobray_application::linking::{LinkedImage, link, propose_companions};
-use blobray_domain::*;
-use blobray_linker::ElfLinker;
 use object::{
     Architecture, BinaryFormat, Endianness, RelocationFlags, SectionKind, SymbolFlags, SymbolKind,
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tool_analysis_blobray_application::linking::{LinkedImage, link, propose_companions};
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_blobray_linker::ElfLinker;
+use oer_tool_analysis_riscv_model::*;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -186,7 +186,7 @@ fn layout() -> ImageLayout {
 /// The exact symbol `name` of object `member` of `executable`.
 fn defined(executable: &Executable, member: usize, name: &[u8]) -> SymbolId {
     let memory = WorkingMemory::new(16 * 1024 * 1024).unwrap();
-    let inventory = blobray_application::captured::inventory(
+    let inventory = oer_tool_analysis_blobray_application::captured::inventory(
         executable,
         &memory,
         &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(30)),

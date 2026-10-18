@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "tools/cli/pins",
     "tools/lib/base/toolchain",
     "tools/lib/analysis/elf",
     "tools/lib/analysis/riscv-analysis",
@@ -19,7 +20,7 @@ members = [
     "tools/lib/data/vendor-artifacts",
     "tools/lib/data/vendor-pins",
     "tools/lib/data/image-policy",
-    "tools/lib/service/markers",
+    "tools/lib/data/markers",
     "tools/lib/service/vendor-provenance",
     "tools/lib/service/symbol-lineage",
     "tools/lib/service/image-check-stack",
@@ -105,6 +106,7 @@ members = [
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [
+    "tools/cli/pins",
     "tools/lib/base/toolchain",
     "tools/lib/analysis/elf",
     "tools/lib/analysis/riscv-analysis",
@@ -124,7 +126,7 @@ default-members = [
     "tools/lib/data/vendor-artifacts",
     "tools/lib/data/vendor-pins",
     "tools/lib/data/image-policy",
-    "tools/lib/service/markers",
+    "tools/lib/data/markers",
     "tools/lib/service/vendor-provenance",
     "tools/lib/service/symbol-lineage",
     "tools/lib/service/image-check-stack",

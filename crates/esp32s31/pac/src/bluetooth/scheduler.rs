@@ -395,7 +395,7 @@ impl BluetoothTaskRegisters {
     /// Read the current head of one hardware list once, then fence.
     ///
     /// SOURCE: complete current `r_sym_bt_qkNMymdnaJnYUfzpKgEp`, carried by
-    /// `oer-symbol-lineage` from same-chip named
+    /// `oer-tool-service-symbol-lineage` from same-chip named
     /// `r_btdm_sched_delete_specified_items`, reads the head once after a set
     /// diagnostic BUSY sample and compares chained item start times against
     /// it before skipping them.
@@ -409,7 +409,7 @@ impl BluetoothTaskRegisters {
     /// Observe whether the hardware list admitted by one RUN is now empty.
     ///
     /// SOURCE: the post-picker tail of current
-    /// `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV`, carried by `oer-symbol-lineage`
+    /// `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV`, carried by `oer-tool-service-symbol-lineage`
     /// from same-chip named `r_sched_txn_onSchedHwListDone`, freshly reads the
     /// hardware-list head
     /// after the source manager becomes empty and asserts that head is empty

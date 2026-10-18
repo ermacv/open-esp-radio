@@ -142,7 +142,7 @@ impl Drop for MemoryReservation<'_> {
 /// Scratch cannot be detached from its accounting or outlive its operation.
 ///
 /// ```compile_fail
-/// use blobray_domain::{WorkingMemory, RunPosition};
+/// use oer_tool_analysis_blobray_domain::{WorkingMemory, RunPosition};
 /// let bytes = { let memory = WorkingMemory::new(8).unwrap();
 ///     memory.bytes(8, RunPosition::default()).unwrap() };
 /// println!("{}", bytes.len());

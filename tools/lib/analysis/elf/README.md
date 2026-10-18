@@ -1,4 +1,4 @@
-# oer-elf
+# oer-tool-analysis-elf
 
 The one view of ELF files and static archives that every host tool reads
 through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
@@ -25,7 +25,7 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
   `rv32::header_flags` decodes into the floating-point ABI and RV32E.
 - No `object` type appears in the public interface: callers see only these
   views and this crate's `Error`. `object`, `gimli` and `addr2line` are this
-  crate's to depend on; `blobray-artifacts`, Blobray's metered streaming
+  crate's to depend on; `oer-tool-analysis-blobray-artifacts`, Blobray's metered streaming
   reader and object writer, is the one other owner of `object`
   ([format libraries](../riscv/README.md#format-libraries)).
 - Relocations: `relocations(section)`, each with an explicit or implicit
@@ -40,7 +40,7 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
   bytes and relocation `Site`s, each target resolved to an offset in the
   function's own section (`Reference::Local`), a named symbol, an anonymous
   section, or nothing. The vendor fingerprints are computed over it
-  ([`oer-vendor-provenance`](../vendor-provenance/README.md)).
+  ([`oer-tool-service-vendor-provenance`](../vendor-provenance/README.md)).
 - `dwarf::Symbolizer::frames(address)`: the inline chain at an address with
   each frame's demangled function, file and line. `Symbolizer::new` copies
   each debug section; `Symbolizer::shared` reads them as ranges of the ELF's

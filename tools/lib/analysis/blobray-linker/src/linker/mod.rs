@@ -1,6 +1,6 @@
 //! External ELF capability dispatcher. Application owns selection and publication.
 use super::*;
-use blobray_application::linking::{
+use oer_tool_analysis_blobray_application::linking::{
     LinkInput, LinkInvocation, LinkOutput, LinkOutputSink, LinkWorkspace, LinkerHost,
     UnresolvedSymbols,
 };
@@ -32,7 +32,9 @@ impl LinkerHost for ElfLinker {
         workspace: &LinkWorkspace,
         control: &mut dyn RunControl,
     ) -> Result<LinkerIdentity> {
-        let path = path.canonicalize().map_err(io)?;
+        // Absolute, not canonical: a multi-call linker such as `ld.lld` →
+        // `lld` picks its driver from the name it is run by.
+        let path = std::path::absolute(path).map_err(io)?;
         let before = digest(&path, control)?;
         let mut child = ChildOwner(command(&path).arg("--version").spawn().map_err(io)?);
         let stdout = child.0.stdout.take().unwrap();

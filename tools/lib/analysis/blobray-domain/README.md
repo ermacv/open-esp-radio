@@ -1,9 +1,9 @@
 # Blobray domain
 
-`blobray-domain` owns Blobray's inventory, image, data, audit, execution,
+`oer-tool-analysis-blobray-domain` owns Blobray's inventory, image, data, audit, execution,
 device and comparison records and its byte/record ports. Identities, errors,
 run control, working memory and the function decoding and lifting contracts
-belong to [`oer-riscv-model`](../../../riscv/model/README.md), its only internal
+belong to [`oer-tool-analysis-riscv-model`](../../../riscv/model/README.md), its only internal
 dependency. It has no filesystem, database, backend or frontend dependencies.
 
 [Inventory records](src/lib.rs) retain lossless names and the

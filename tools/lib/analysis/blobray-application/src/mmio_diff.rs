@@ -236,7 +236,11 @@ fn collect<'m>(
                 entry.analyzed = true;
                 entry.incomplete |= !analyzed.complete();
                 c.phase(RunPhase::AnalyzeValues)?;
-                let facts = blobray_analysis::navigation::Facts::new(analyzed.records, memory, c)?;
+                let facts = oer_tool_analysis_blobray_analysis::navigation::Facts::new(
+                    analyzed.records,
+                    memory,
+                    c,
+                )?;
                 crate::registers::observe(
                     analyzed.records,
                     &facts,

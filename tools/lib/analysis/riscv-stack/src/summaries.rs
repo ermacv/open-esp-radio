@@ -2,7 +2,7 @@
 //! the machine-code analysis cannot bound alone: each one's frame and the
 //! functions it calls, checked against the companion where the analysis can.
 use crate::{Analysis, FrameSource, Transfer, TransferKind};
-use oer_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_tool_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 

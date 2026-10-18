@@ -2,11 +2,11 @@
 //!
 //! The renderer emits these shapes and typed clients decode them; payloads are
 //! the application/domain records themselves, not copies of their schemas.
-use blobray_domain::{
+use oer_tool_analysis_blobray_domain::{
     CheckVerdict, ForbiddenTargetRange, LibraryFunction, RegisterAccess, RegisterAccessSummary,
     TargetAuditRecord, TargetAuditSummary,
 };
-use oer_riscv_model::{
+use oer_tool_analysis_riscv_model::{
     ArtifactId, CallAbi, Error, FunctionCoverage, FunctionRecord, ReadOnlyWindow, SemanticSummary,
 };
 use serde::{Deserialize, Serialize};
@@ -98,7 +98,7 @@ pub struct FieldAccessesDocument {
     /// some of their accesses may be missing above.
     pub partial: u64,
     /// `partial` by cause.
-    pub partial_causes: blobray_domain::PartialCauses,
+    pub partial_causes: oer_tool_analysis_blobray_domain::PartialCauses,
     /// Code no function covers, whose accesses are unknown too.
     pub gaps: u64,
     /// Accesses of the analyzed functions whose address is not known at
@@ -147,7 +147,7 @@ pub enum NamedFunction {
         /// The jump tables the analysis followed, proven by the build's
         /// facts.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        jump_tables: Vec<blobray_domain::JumpTable>,
+        jump_tables: Vec<oer_tool_analysis_blobray_domain::JumpTable>,
     },
     /// It cannot be analyzed; its behavior is unknown.
     Blocked {
@@ -215,7 +215,7 @@ pub struct CallArgumentsDocument {
     /// they can hold further call sites or less precise values.
     pub partial: u64,
     /// `partial` by cause.
-    pub partial_causes: blobray_domain::PartialCauses,
+    pub partial_causes: oer_tool_analysis_blobray_domain::PartialCauses,
     /// Code no function covers.
     pub gaps: u64,
 }
@@ -244,7 +244,7 @@ pub struct MmioDiffDocument {
     /// The windows the analysis took as read-only.
     pub read_only: Vec<ReadOnlyWindow>,
     #[serde(flatten)]
-    pub diff: blobray_domain::MmioDiff,
+    pub diff: oer_tool_analysis_blobray_domain::MmioDiff,
 }
 
 /// Schema of the `symbols` document (`{"schema":1,"inputs":[...],"symbols":[...]}`).

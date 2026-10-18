@@ -56,30 +56,37 @@ fn read(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
 ) -> Result<DataExport> {
-    blobray_artifacts::with_prepared_object(source, &payload, &[], memory, control, |object, c| {
-        if let Some(symbol) = &request.symbol {
-            object.validate_data_symbol(&request.object, symbol)?;
-        }
-        let mut spans = Vec::new();
-        let mut bytes = Vec::new();
-        let mut export_offset = 0u64;
-        for selector in &request.ranges {
-            object.with_data(&request.object, selector, c, |view, c| {
-                c.bytes(view.bytes.len())?;
-                bytes.extend_from_slice(view.bytes);
-                let mut span = view.span;
-                span.export_offset = export_offset;
-                export_offset = export_offset
-                    .checked_add(span.file_range.length)
-                    .ok_or_else(|| invalid("export size overflow"))?;
-                spans.push(span);
-                Ok(())
-            })?;
-        }
-        Ok(DataExport {
-            payload: payload.clone(),
-            spans,
-            bytes,
-        })
-    })
+    oer_tool_analysis_blobray_artifacts::with_prepared_object(
+        source,
+        &payload,
+        &[],
+        memory,
+        control,
+        |object, c| {
+            if let Some(symbol) = &request.symbol {
+                object.validate_data_symbol(&request.object, symbol)?;
+            }
+            let mut spans = Vec::new();
+            let mut bytes = Vec::new();
+            let mut export_offset = 0u64;
+            for selector in &request.ranges {
+                object.with_data(&request.object, selector, c, |view, c| {
+                    c.bytes(view.bytes.len())?;
+                    bytes.extend_from_slice(view.bytes);
+                    let mut span = view.span;
+                    span.export_offset = export_offset;
+                    export_offset = export_offset
+                        .checked_add(span.file_range.length)
+                        .ok_or_else(|| invalid("export size overflow"))?;
+                    spans.push(span);
+                    Ok(())
+                })?;
+            }
+            Ok(DataExport {
+                payload: payload.clone(),
+                spans,
+                bytes,
+            })
+        },
+    )
 }

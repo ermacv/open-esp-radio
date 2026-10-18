@@ -94,14 +94,14 @@ pub fn cargo_program() -> OsString {
 
 /// Cargo started in `directory`.
 pub fn cargo_in(directory: &Path) -> Command {
-    let mut command = oer_process::command(cargo_program());
+    let mut command = oer_tool_base_process::command(cargo_program());
     command.current_dir(directory);
     command
 }
 
 /// `tool` as a command, without arguments.
 pub fn command(tool: Tool) -> Result<Command> {
-    Ok(oer_process::command(program(tool)?))
+    Ok(oer_tool_base_process::command(program(tool)?))
 }
 
 /// [`program`] with `variable` reading the environment and `bin` giving the
@@ -152,7 +152,8 @@ pub fn lld() -> Result<PathBuf> {
 /// `<sysroot>/lib/rustlib/<host>/bin` of `rustc`.
 fn sysroot_bin(rustc: &OsStr) -> Result<PathBuf> {
     let text = |arguments: &[&str]| -> Result<String> {
-        let output = oer_process::capture(oer_process::command(rustc).args(arguments))?;
+        let output =
+            oer_tool_base_process::capture(oer_tool_base_process::command(rustc).args(arguments))?;
         Ok(String::from_utf8(output.stdout)?)
     };
     let sysroot = text(&["--print", "sysroot"])?;
@@ -175,7 +176,7 @@ fn host_of(verbose: &str) -> Result<String> {
 /// workspace whose Cargo configuration defaults to a chip target.
 pub fn host_target() -> Result<String> {
     let rustc = program(Tool::Rustc)?;
-    let output = oer_process::capture(oer_process::command(rustc).arg("-vV"))?;
+    let output = oer_tool_base_process::capture(oer_tool_base_process::command(rustc).arg("-vV"))?;
     host_of(&String::from_utf8(output.stdout)?)
 }
 
@@ -187,9 +188,9 @@ pub fn require(tool: Tool) -> Result<()> {
 /// Fails unless `program` runs with `--version`: a host program a workload
 /// or fixture needs besides the toolchain.
 pub fn require_program(program: &OsStr) -> Result<()> {
-    let mut command = oer_process::command(program);
+    let mut command = oer_tool_base_process::command(program);
     command.arg("--version");
-    match oer_process::output(&mut command, Some(std::time::Duration::from_secs(60))) {
+    match oer_tool_base_process::output(&mut command, Some(std::time::Duration::from_secs(60))) {
         Ok(output) if output.status.success() => Ok(()),
         _ => Err(format!(
             "required program `{}` is unavailable",
@@ -230,10 +231,11 @@ pub fn versions() -> Vec<ToolVersion> {
 }
 
 fn version_of(program: &OsStr, tool: Tool) -> Option<String> {
-    let mut command = oer_process::command(program);
+    let mut command = oer_tool_base_process::command(program);
     command.args(tool.version_arguments());
     let output =
-        oer_process::output(&mut command, Some(std::time::Duration::from_secs(60))).ok()?;
+        oer_tool_base_process::output(&mut command, Some(std::time::Duration::from_secs(60)))
+            .ok()?;
     output
         .status
         .success()

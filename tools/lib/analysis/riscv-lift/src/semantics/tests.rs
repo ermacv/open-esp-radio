@@ -1,5 +1,5 @@
 use super::*;
-use oer_riscv_model::{FunctionDecoder, InstructionFlow};
+use oer_tool_analysis_riscv_model::{FunctionDecoder, InstructionFlow};
 
 #[test]
 fn compressed_and_full_instructions_lift_without_display_parsing() {
@@ -87,7 +87,7 @@ fn stack_forms_decode_as_the_assembler_wrote_them() {
     }
     // The frame stores s11 at the top and ra at the bottom.
     assert_eq!(
-        oer_riscv_decode::list_registers(9).collect::<Vec<_>>(),
+        oer_tool_analysis_riscv_decode::list_registers(9).collect::<Vec<_>>(),
         [20, 19, 18, 9, 8, 1]
     );
     // Zcmt table jumps and a register list below {ra} are not decoded.

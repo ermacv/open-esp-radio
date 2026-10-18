@@ -7,13 +7,13 @@ Bound an operation's work, time and working memory, and read its failures.
 ## Cooperative control and failure diagnostics
 
 Every operation runs in its caller's process and charges one `RunControl` the
-caller supplies. `blobray_application::in_process::Limits::new(max_work_units,
+caller supplies. `oer_tool_analysis_blobray_application::in_process::Limits::new(max_work_units,
 timeout)` is the control the CLI and the vendor scenarios use: it counts work
 units against their limit on every checkpoint, checks the wall-clock deadline
 every 256 checkpoints, and keeps the run position a failure reports. The CLI
 exposes `--working-memory-mib` (default 256), `--timeout-secs` (default 900) and
 `--max-work-units` (default 1,000,000,000); the defaults are the `DEFAULT_*`
-constants of `blobray-domain`. Reaching a limit fails the operation with
+constants of `oer-tool-analysis-blobray-domain`. Reaching a limit fails the operation with
 `resource-limited`; no automatic limit increase or reduced scope occurs.
 
 Work policy 1 charges one unit per visited structural record and one per block of

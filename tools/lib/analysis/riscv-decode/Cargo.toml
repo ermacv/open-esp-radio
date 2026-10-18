@@ -1,5 +1,5 @@
 [package]
-name = "oer-riscv-decode"
+name = "oer-tool-analysis-riscv-decode"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,7 +12,7 @@ description = "RV32 instruction decoding over rv-asm with the F, Zicsr, Zba, Zbb
 rv-asm = "=0.2.1"
 
 [dev-dependencies]
-oer-toolchain = { path = "../../base/toolchain" }
+oer-tool-base-toolchain = { path = "../../base/toolchain" }
 
 [lints]
 workspace = true

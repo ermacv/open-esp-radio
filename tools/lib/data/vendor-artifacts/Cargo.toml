@@ -1,5 +1,5 @@
 [package]
-name = "oer-vendor-artifacts"
+name = "oer-tool-data-vendor-artifacts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ publish = false
 description = "The pinned vendor artifacts of a chip: the host-wide store, fetching into it and verifying against the pins"
 
 [dependencies]
-oer-process = { path = "../../base/process" }
-oer-durable = { path = "../../base/durable" }
-oer-chip-profile = { path = "../chip-profile" }
-oer-vendor-pins = { path = "../vendor-pins" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-data-chip-profile = { path = "../chip-profile" }
+oer-tool-data-vendor-pins = { path = "../vendor-pins" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

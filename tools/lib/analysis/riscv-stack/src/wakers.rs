@@ -8,8 +8,8 @@
 //! built at run time in writable memory (a leaked allocation) is not.
 use crate::dwarf::Dwarf;
 use crate::{Analysis, Fact, Resolutions, TransferKind};
-use oer_riscv_model::{Ledger, Result, RunControl};
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_model::{Ledger, Result, RunControl};
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeSet;
 
 const RAW_WAKER: &str = "core::task::wake::RawWaker";

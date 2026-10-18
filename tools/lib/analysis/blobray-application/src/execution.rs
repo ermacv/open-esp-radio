@@ -51,23 +51,28 @@ fn segments<'a>(
     c: &mut dyn RunControl,
 ) -> Result<Vec<LoadedSegment<'a>>> {
     let mut result = Vec::new();
-    oer_riscv_program::execution_segments(source, memory, c, &mut |segment, bytes, c| {
-        let mut copy = memory.bytes(bytes.len(), c.position())?;
-        for (chunk, source) in copy.chunks_mut(WORK_BLOCK).zip(bytes.chunks(WORK_BLOCK)) {
-            c.checkpoint(1)?;
-            chunk.copy_from_slice(source);
-        }
-        result
-            .try_reserve(1)
-            .map_err(|_| Error::new(ErrorCode::ResourceLimited, "segment allocation refused"))?;
-        result.push(LoadedSegment {
-            address: segment.address as u32,
-            memory_size: segment.memory_size as usize,
-            flags: segment.flags,
-            bytes: copy,
-        });
-        Ok(())
-    })?;
+    oer_tool_analysis_riscv_program::execution_segments(
+        source,
+        memory,
+        c,
+        &mut |segment, bytes, c| {
+            let mut copy = memory.bytes(bytes.len(), c.position())?;
+            for (chunk, source) in copy.chunks_mut(WORK_BLOCK).zip(bytes.chunks(WORK_BLOCK)) {
+                c.checkpoint(1)?;
+                chunk.copy_from_slice(source);
+            }
+            result.try_reserve(1).map_err(|_| {
+                Error::new(ErrorCode::ResourceLimited, "segment allocation refused")
+            })?;
+            result.push(LoadedSegment {
+                address: segment.address as u32,
+                memory_size: segment.memory_size as usize,
+                flags: segment.flags,
+                bytes: copy,
+            });
+            Ok(())
+        },
+    )?;
     Ok(result)
 }
 fn session<'a>(
@@ -309,12 +314,12 @@ pub(crate) fn run_resolved<'m>(
         }
         if let (Some(right), Some(relation)) = (&right, &case.relation) {
             control.phase(RunPhase::Compare)?;
-            let comparison = blobray_verification::compare(
+            let comparison = oer_tool_analysis_blobray_verification::compare(
                 &left,
                 right,
                 relation,
                 selected_projection(case.relation.as_ref(), resolved.projections)?.map(
-                    |resolved| blobray_verification::ProjectionComparison {
+                    |resolved| oer_tool_analysis_blobray_verification::ProjectionComparison {
                         resolved,
                         vendor: &case.vendor,
                         replacement: case.replacement.as_ref().unwrap(),
@@ -333,7 +338,7 @@ pub(crate) fn run_resolved<'m>(
                 _ => ComparisonVerdict::Match,
             });
             if let Some(steps) = sides[1].session.as_mut().and_then(|s| s.steps()) {
-                let compared = blobray_verification::compared_observations(
+                let compared = oer_tool_analysis_blobray_verification::compared_observations(
                     right,
                     case.replacement.as_ref().unwrap(),
                     relation,

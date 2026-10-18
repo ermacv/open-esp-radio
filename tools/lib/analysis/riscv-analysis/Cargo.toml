@@ -1,5 +1,5 @@
 [package]
-name = "oer-riscv-analysis"
+name = "oer-tool-analysis-riscv-analysis"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ publish = false
 description = "Bounded control-flow and value analysis of one function over the RV32 program model"
 
 [dependencies]
-oer-riscv-model = { path = "../riscv-model" }
+oer-tool-analysis-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

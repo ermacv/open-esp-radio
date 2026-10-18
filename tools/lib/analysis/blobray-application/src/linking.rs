@@ -252,7 +252,7 @@ struct Collected {
     members: Vec<Member>,
     /// Companion then absent-name definitions of the request.
     definitions: Vec<(String, u32)>,
-    roots: Vec<blobray_artifacts::LinkRootFacts>,
+    roots: Vec<oer_tool_analysis_blobray_artifacts::LinkRootFacts>,
     blockers: Vec<String>,
 }
 
@@ -368,7 +368,9 @@ fn collect(
                     .filter(|s| s.object == m.id)
                     .cloned()
                     .collect();
-                match blobray_artifacts::inspect_link_input(bytes, payload, &selected, memory, c) {
+                match oer_tool_analysis_blobray_artifacts::inspect_link_input(
+                    bytes, payload, &selected, memory, c,
+                ) {
                     Ok(facts) => {
                         consume(&member, bytes, c)?;
                         root_facts.extend(facts);
@@ -636,7 +638,7 @@ pub fn link(
     let mut outputs = Outputs::default();
     run(host, &invocation, &mut outputs, control)?;
     let (roots, mappings) = evidence::roots(&outputs, &found, &invocation, control)?;
-    let validated = blobray_artifacts::validate_image(
+    let validated = oer_tool_analysis_blobray_artifacts::validate_image(
         &outputs.elf.as_slice(),
         &request.layout,
         &roots,

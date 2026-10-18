@@ -23,8 +23,8 @@
 //! units. A site whose load address or field is unknown stays unresolved.
 use crate::dwarf::{Entry, Reader, Unit, reference, text};
 use crate::{Analysis, Fact, Resolutions, TransferKind};
-use oer_elf::dwarf::gimli;
-use oer_riscv_model::{Ledger, Result, RunControl};
+use oer_tool_analysis_elf::dwarf::gimli;
+use oer_tool_analysis_riscv_model::{Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One type's name and layout.
@@ -125,7 +125,7 @@ pub struct TypeFacts {
 /// The trait and method of a trait implementation's symbol,
 /// `<Type as path::Trait>::method`, by its demangled name.
 fn trait_method(symbol: &str) -> Option<(String, String)> {
-    let demangled = oer_elf::demangle(symbol);
+    let demangled = oer_tool_analysis_elf::demangle(symbol);
     let name = crate::dwarf::plain(&demangled);
     // A legacy symbol ends in its hash.
     let name = match name.rsplit_once("::h") {
@@ -192,7 +192,7 @@ pub(crate) struct TypeWalk {
 impl TypeWalk {
     /// The walk over the DWARF of `file`, with its function symbols.
     pub(crate) fn new(
-        file: &oer_elf::Elf<'_>,
+        file: &oer_tool_analysis_elf::Elf<'_>,
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<Self> {
@@ -200,7 +200,7 @@ impl TypeWalk {
         let mut sized: BTreeMap<u32, Vec<String>> = BTreeMap::new();
         for symbol in file.symbols() {
             control.checkpoint(1)?;
-            if symbol.kind == oer_elf::SymbolKind::Text
+            if symbol.kind == oer_tool_analysis_elf::SymbolKind::Text
                 && symbol.size > 0
                 && let Ok(address) = u32::try_from(symbol.address)
             {

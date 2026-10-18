@@ -1,14 +1,14 @@
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod support;
-use blobray_application::in_process::{Executable, Limits};
-use blobray_application::library::{Assumptions, register_accesses};
-use blobray_domain::*;
 use object::{
     Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
     write::{Object, Symbol, SymbolSection},
 };
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tool_analysis_blobray_application::library::{Assumptions, register_accesses};
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 use std::process::Command;
 
 /// A relocatable object with one function `entry` of `size` bytes over `code`.
@@ -56,7 +56,7 @@ fn accesses_with(
         inputs,
         assumptions,
         ranges,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |record, _| {
@@ -251,9 +251,12 @@ fn the_command_streams_one_document_of_every_access() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::RegisterAccessDocument =
+    let document: oer_tool_cli_blobray::wire::RegisterAccessDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document.schema, blobray_cli::wire::REGISTER_ACCESSES_SCHEMA);
+    assert_eq!(
+        document.schema,
+        oer_tool_cli_blobray::wire::REGISTER_ACCESSES_SCHEMA
+    );
     assert_eq!(document.inputs[0].role, "code");
     assert_eq!(&document.inputs[0].sha256, library.id());
     let (summary, records) = accesses(
@@ -288,16 +291,19 @@ fn the_command_reports_every_record_of_the_named_functions() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::FunctionRecordsDocument =
+    let document: oer_tool_cli_blobray::wire::FunctionRecordsDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document.schema, blobray_cli::wire::FUNCTION_RECORDS_SCHEMA);
+    assert_eq!(
+        document.schema,
+        oer_tool_cli_blobray::wire::FUNCTION_RECORDS_SCHEMA
+    );
     assert_eq!(&document.inputs[0].sha256, library.id());
     assert!(document.missing.is_empty());
     // One `entry` in each of the two members, both analyzed to the end of
     // their nine instructions, with the register load among their records.
     assert_eq!(document.functions.len(), 2);
     for function in &document.functions {
-        let blobray_cli::wire::NamedFunction::Analyzed { records, .. } = function else {
+        let oer_tool_cli_blobray::wire::NamedFunction::Analyzed { records, .. } = function else {
             panic!("`entry` is analyzable: {function:?}");
         };
         assert!(
@@ -334,9 +340,12 @@ fn the_command_reports_the_accesses_of_one_field() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::FieldAccessesDocument =
+    let document: oer_tool_cli_blobray::wire::FieldAccessesDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document.schema, blobray_cli::wire::FIELD_ACCESSES_SCHEMA);
+    assert_eq!(
+        document.schema,
+        oer_tool_cli_blobray::wire::FIELD_ACCESSES_SCHEMA
+    );
     assert_eq!(&document.inputs[0].sha256, library.id());
     assert!(document.blocked.is_empty());
     // One `entry` in each of the two members.
@@ -349,7 +358,7 @@ fn the_command_reports_the_accesses_of_one_field() {
         assert_eq!(access.path, [0]);
         assert_eq!(
             access.root,
-            blobray_cli::field::FieldRoot::EntryRegister { register: 10 }
+            oer_tool_cli_blobray::field::FieldRoot::EntryRegister { register: 10 }
         );
     }
 
@@ -384,7 +393,7 @@ fn filters_select_observations_while_the_summary_counts_the_whole_analysis() {
         assert!(output.status.success(), "{output:?}");
         output.stdout
     };
-    let parse = |bytes: Vec<u8>| -> blobray_cli::wire::RegisterAccessDocument {
+    let parse = |bytes: Vec<u8>| -> oer_tool_cli_blobray::wire::RegisterAccessDocument {
         serde_json::from_slice(&bytes).unwrap()
     };
     let all = parse(run(&[], true));
@@ -397,16 +406,21 @@ fn filters_select_observations_while_the_summary_counts_the_whole_analysis() {
         word.summary, all.summary,
         "a filter never changes the summary"
     );
-    let observations = |document: &blobray_cli::wire::RegisterAccessDocument| {
+    let observations = |document: &oer_tool_cli_blobray::wire::RegisterAccessDocument| {
         document
             .records
             .iter()
-            .filter(|record| matches!(record, blobray_domain::RegisterAccess::Observation { .. }))
+            .filter(|record| {
+                matches!(
+                    record,
+                    oer_tool_analysis_blobray_domain::RegisterAccess::Observation { .. }
+                )
+            })
             .count()
     };
     assert!(observations(&word) > 0 && observations(&word) <= observations(&all));
     assert!(word.records.iter().all(|record| match record {
-        blobray_domain::RegisterAccess::Observation { address, .. } =>
+        oer_tool_analysis_blobray_domain::RegisterAccess::Observation { address, .. } =>
             address.is_some_and(|address| address & !3 == 0x20000),
         _ => true,
     }));
@@ -507,13 +521,16 @@ fn the_command_reports_the_arguments_of_each_call_site() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::CallArgumentsDocument =
+    let document: oer_tool_cli_blobray::wire::CallArgumentsDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document.schema, blobray_cli::wire::CALL_ARGUMENTS_SCHEMA);
+    assert_eq!(
+        document.schema,
+        oer_tool_cli_blobray::wire::CALL_ARGUMENTS_SCHEMA
+    );
     assert_eq!(document.callers.len(), 1, "{document:?}");
     let sites = &document.callers[0].sites;
     assert_eq!(sites.len(), 1);
-    use blobray_cli::call_arguments::ArgumentValue;
+    use oer_tool_cli_blobray::call_arguments::ArgumentValue;
     assert_eq!(sites[0].offset, 16, "the jalr of the call pair");
     assert_eq!(
         &sites[0].arguments[..4],
@@ -620,7 +637,7 @@ fn symbols_strings_and_referenced_text_come_from_the_captured_bytes() {
         assert!(output.status.success(), "{output:?}");
         output.stdout
     };
-    let symbols: blobray_cli::wire::SymbolsDocument = serde_json::from_slice(&run(&[
+    let symbols: oer_tool_cli_blobray::wire::SymbolsDocument = serde_json::from_slice(&run(&[
         "--format", "json", "symbols", "--match", "gre*", "--input",
     ]))
     .unwrap();
@@ -637,7 +654,7 @@ fn symbols_strings_and_referenced_text_come_from_the_captured_bytes() {
                 && row.kind == "function"
                 && row.section.as_deref() == Some(".text"))
     );
-    let strings: blobray_cli::wire::StringsDocument =
+    let strings: oer_tool_cli_blobray::wire::StringsDocument =
         serde_json::from_slice(&run(&["--format", "json", "strings", "--input"])).unwrap();
     let texts: Vec<_> = strings
         .strings
@@ -1049,10 +1066,10 @@ fn a_bounded_relocated_switch_is_followed_and_any_other_stays_a_gap() {
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        let document: blobray_cli::wire::FunctionRecordsDocument =
+        let document: oer_tool_cli_blobray::wire::FunctionRecordsDocument =
             serde_json::from_slice(&output.stdout).unwrap();
         match document.functions.into_iter().next().unwrap() {
-            blobray_cli::wire::NamedFunction::Analyzed {
+            oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
                 coverage,
                 records,
                 jump_tables,
@@ -1081,7 +1098,7 @@ fn a_bounded_relocated_switch_is_followed_and_any_other_stays_a_gap() {
     assert!(complete, "every case is reached");
     assert_eq!(
         tables,
-        [blobray_domain::JumpTable {
+        [oer_tool_analysis_blobray_domain::JumpTable {
             site: 0x1c,
             first_case: Some(0),
             entries: vec![0x20, 0x28, 0x30],
@@ -1128,9 +1145,9 @@ fn a_table_a_later_pass_no_longer_proves_is_never_reported() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::FunctionRecordsDocument =
+    let document: oer_tool_cli_blobray::wire::FunctionRecordsDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    let blobray_cli::wire::NamedFunction::Analyzed {
+    let oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
         coverage,
         records,
         jump_tables,
@@ -1177,9 +1194,9 @@ fn a_switch_reached_only_through_another_tables_case_is_followed_too() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::FunctionRecordsDocument =
+    let document: oer_tool_cli_blobray::wire::FunctionRecordsDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    let blobray_cli::wire::NamedFunction::Analyzed {
+    let oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
         coverage,
         jump_tables,
         ..
@@ -1187,7 +1204,7 @@ fn a_switch_reached_only_through_another_tables_case_is_followed_too() {
     else {
         panic!()
     };
-    let table = |site, entries: &[u64]| blobray_domain::JumpTable {
+    let table = |site, entries: &[u64]| oer_tool_analysis_blobray_domain::JumpTable {
         site,
         first_case: Some(0),
         entries: entries.to_vec(),
@@ -1388,10 +1405,10 @@ fn an_image_follows_its_labelled_table_only_with_the_links_relocations() {
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        let document: blobray_cli::wire::FunctionRecordsDocument =
+        let document: oer_tool_cli_blobray::wire::FunctionRecordsDocument =
             serde_json::from_slice(&output.stdout).unwrap();
         match document.functions.into_iter().next().unwrap() {
-            blobray_cli::wire::NamedFunction::Analyzed {
+            oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
                 coverage,
                 semantics,
                 jump_tables,
@@ -1408,7 +1425,7 @@ fn an_image_follows_its_labelled_table_only_with_the_links_relocations() {
     );
     assert_eq!(
         tables,
-        [blobray_domain::JumpTable {
+        [oer_tool_analysis_blobray_domain::JumpTable {
             site: 0x1014,
             first_case: Some(0),
             entries: vec![0x1018, 0x1020, 0x1028],
@@ -1688,7 +1705,7 @@ fn the_read_only_windows_are_recorded_and_bounded() {
     };
     let output = run("0x40000000:0x100");
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::RegisterAccessDocument =
+    let document: oer_tool_cli_blobray::wire::RegisterAccessDocument =
         serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         document.read_only,

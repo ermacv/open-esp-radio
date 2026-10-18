@@ -1,5 +1,5 @@
 [package]
-name = "oer-markers"
+name = "oer-tool-data-markers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

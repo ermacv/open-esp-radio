@@ -22,7 +22,7 @@
 //! the image's configuration: the firmware gate checks where its writers run
 //! ([`crate::instances`]).
 use crate::{Analysis, Assumption, Bound, Fact, LevelDrop, Resolutions, TableEntry, TrapEntry};
-use oer_riscv_model::Result;
+use oer_tool_analysis_riscv_model::Result;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What the stacks of an image are bounded from.

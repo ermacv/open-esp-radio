@@ -45,7 +45,7 @@ fn swapping() -> Vec<Symbols> {
 }
 
 fn audit_entries(bytes: &[u8]) -> Result<()> {
-    let elf = oer_elf::Elf::parse(bytes).unwrap();
+    let elf = oer_tool_analysis_elf::Elf::parse(bytes).unwrap();
     audit_stack_swap_entries(&elf, &elf.addresses(), &swapping())
 }
 

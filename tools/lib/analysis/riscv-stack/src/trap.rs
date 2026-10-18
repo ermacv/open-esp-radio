@@ -12,10 +12,10 @@
 //! learn only from an unsigned comparison of the two values.
 use crate::image::Function;
 use crate::sweep::destination;
-use oer_elf::rv32::{self, Role};
-use oer_riscv_decode::{Extension, Extensions, Float, Inst, Instruction, decode};
-use oer_riscv_model::{Error, ErrorCode, Result, RunControl};
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_elf::rv32::{self, Role};
+use oer_tool_analysis_riscv_decode::{Extension, Extensions, Float, Inst, Instruction, decode};
+use oer_tool_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 
 /// `mscratch`.
 const MSCRATCH: u16 = 0x340;
@@ -176,7 +176,7 @@ pub fn trap_entry(
 }
 
 /// The code bytes at `address`, to the end of their section.
-fn code<'a>(file: &oer_elf::Elf<'a>, address: u32) -> Option<&'a [u8]> {
+fn code<'a>(file: &oer_tool_analysis_elf::Elf<'a>, address: u32) -> Option<&'a [u8]> {
     let address = u64::from(address);
     file.sections().find_map(|section| {
         if !section.executable || !section.contains(address) {
@@ -441,7 +441,7 @@ impl State {
                 source,
                 csr,
             }) => {
-                use oer_riscv_decode::{CsrOp, Operand};
+                use oer_tool_analysis_riscv_decode::{CsrOp, Operand};
                 let operand = match source {
                     Operand::Register(register) => self.get(register),
                     Operand::Immediate(value) => Value::Constant(value),

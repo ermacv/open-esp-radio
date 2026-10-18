@@ -1,7 +1,7 @@
 //! Strict RV32 link-input and prepared-image checks over admitted captured bytes.
-use blobray_domain::*;
 use object::{Object, ObjectSection, ObjectSegment, ObjectSymbol};
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 
 #[derive(Clone, Debug)]
 pub struct LinkRootFacts {
@@ -37,7 +37,9 @@ fn check(bytes: &[u8], file: &object::File<'_>, kind: object::ObjectKind) -> Res
     {
         return Err(bad("requires little-endian RV32 ELF of the declared kind"));
     }
-    oer_riscv_program::abi(&oer_elf::Elf::parse(bytes).map_err(|e| bad(e.to_string()))?)
+    oer_tool_analysis_riscv_program::abi(
+        &oer_tool_analysis_elf::Elf::parse(bytes).map_err(|e| bad(e.to_string()))?,
+    )
 }
 pub fn inspect_link_input(
     source: &dyn ByteSource,

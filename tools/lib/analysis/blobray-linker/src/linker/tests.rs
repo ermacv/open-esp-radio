@@ -1,5 +1,5 @@
 use super::*;
-use blobray_application::linking::LinkMember;
+use oer_tool_analysis_blobray_application::linking::LinkMember;
 use records::Parser;
 #[derive(Default)]
 struct Sink(Vec<LinkObservation>);

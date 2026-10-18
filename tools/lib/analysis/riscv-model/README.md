@@ -1,6 +1,6 @@
 # RV32 program model
 
-`oer-riscv-model` owns the identities, errors, run control, working memory
+`oer-tool-analysis-riscv-model` owns the identities, errors, run control, working memory
 and the ISA-neutral function decoding and lifting contracts that the
 [analysis](../analysis/README.md), the [RV32 lifting](../lift/README.md) and
 Blobray share. It has no internal dependency, no filesystem access and no ISA.

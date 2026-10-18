@@ -56,24 +56,24 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
     let arguments = match expand_response_files(arguments) {
         Ok(arguments) => arguments,
         Err(error) => {
-            eprintln!("oer-image-linker: {error}");
+            eprintln!("oer-tool-service-image-linker: {error}");
             return 1;
         }
     };
     let violations = match check_inputs(&arguments, zeroed) {
         Ok(violations) => violations,
         Err(error) => {
-            eprintln!("oer-image-linker: {error}");
+            eprintln!("oer-tool-service-image-linker: {error}");
             return 1;
         }
     };
     if !violations.is_empty() {
         for violation in &violations {
-            eprintln!("oer-image-linker: {violation}");
+            eprintln!("oer-tool-service-image-linker: {violation}");
         }
         eprintln!(
-            "oer-image-linker: a static in a zeroed region must start as all zero bytes \
-             (`oer_memory::zeroed_static!`)"
+            "oer-tool-service-image-linker: a static in a zeroed region must start as all zero bytes \
+             (`oer_base_memory::zeroed_static!`)"
         );
         return 1;
     }
@@ -83,14 +83,14 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
 /// `rust-lld -flavor gnu` with the arguments, from the `PATH` rustc gives
 /// its linker (the sysroot's tool directory).
 fn run_linker(arguments: &[OsString]) -> i32 {
-    let mut command = oer_process::command("rust-lld");
+    let mut command = oer_tool_base_process::command("rust-lld");
     if arguments.first().map(OsString::as_os_str) != Some(OsStr::new("-flavor")) {
         command.args(["-flavor", "gnu"]);
     }
     match command.args(arguments).status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(error) => {
-            eprintln!("oer-image-linker: cannot run rust-lld: {error}");
+            eprintln!("oer-tool-service-image-linker: cannot run rust-lld: {error}");
             1
         }
     }
@@ -270,7 +270,7 @@ fn check_file(
 ) {
     if data.starts_with(b"!<arch>\n") {
         // A thin archive holds no members of its own to check.
-        for (member, member_data) in oer_elf::members(data).unwrap_or_default() {
+        for (member, member_data) in oer_tool_analysis_elf::members(data).unwrap_or_default() {
             check_object(
                 &format!("{name}({member})"),
                 member_data,
@@ -292,7 +292,7 @@ fn check_object(
     if !data.starts_with(b"\x7fELF") {
         return;
     }
-    let Ok(file) = oer_elf::Elf::parse(data) else {
+    let Ok(file) = oer_tool_analysis_elf::Elf::parse(data) else {
         return;
     };
     for section in file.sections() {

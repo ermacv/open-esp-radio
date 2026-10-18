@@ -1,7 +1,7 @@
 //! Fixed-depth expression observations, never physical field inference.
 use crate::navigation::Facts;
-use blobray_domain::*;
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 
 fn constant(v: &AbstractValue) -> Option<u32> {
     if let AbstractValue::Constant { value } = v {

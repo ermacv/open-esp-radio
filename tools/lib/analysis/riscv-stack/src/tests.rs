@@ -984,7 +984,8 @@ fn a_summary_the_image_does_not_reach_is_unused() {
 
 #[test]
 fn the_platform_rom_summaries_parse() {
-    let platforms = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../firmware/platform");
+    let platforms =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../firmware/platform");
     let mut parsed = 0;
     for platform in std::fs::read_dir(platforms).unwrap() {
         let path = platform.unwrap().path().join("linker/rom/functions.toml");
@@ -1211,7 +1212,7 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
 fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
     let mut elf = table_image(&[(25, 1, 0, Some(TEXT))], true);
     let at = {
-        let file = oer_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(&elf).unwrap();
         let table = file.symbol("__OER_INTERRUPT_TABLE").unwrap();
         let section = file.section(table.section.unwrap()).unwrap();
         (section.file_offset + table.address + 4 - section.address) as usize
@@ -2244,7 +2245,7 @@ fn every_image_query_charges_its_reads_to_the_work_budget() {
     // size claims: the words past the data are never charged.
     let mut oversized = image(&[leaf(Some(32))], &[TEXT, TEXT], true);
     let at = {
-        let file = oer_elf::Elf::parse(&oversized).unwrap();
+        let file = oer_tool_analysis_elf::Elf::parse(&oversized).unwrap();
         let table = file.symbol("table").unwrap();
         let symtab = file.section(file.symbol_table_section().unwrap()).unwrap();
         // `st_size` of the table's ELF32 symbol entry.
@@ -2329,8 +2330,8 @@ fn the_analysis_charges_each_table_entry_it_follows() {
 
 #[test]
 fn image_tables_read_a_labelled_table_a_sized_object_or_a_bounded_run() {
-    use oer_riscv_model::{AbstractValue, TableEntries};
-    use oer_riscv_program::tables::ImageTables;
+    use oer_tool_analysis_riscv_model::{AbstractValue, TableEntries};
+    use oer_tool_analysis_riscv_program::tables::ImageTables;
     let entries = |elf: &[u8], base: AbstractValue, count: Option<u32>| {
         with_facts(elf, |facts| {
             let memory = WorkingMemory::new(TEST_MEMORY)?;
@@ -2367,7 +2368,7 @@ fn shared_sections_give_the_inline_chain_copied_ones_give() {
     for program in [WAKER_PROGRAM, WRITER_PROGRAM] {
         let elf = compiled(program);
         let (dwarf, _) = debug(&elf);
-        let copied = oer_elf::dwarf::Symbolizer::new(&elf).unwrap();
+        let copied = oer_tool_analysis_elf::dwarf::Symbolizer::new(&elf).unwrap();
         let mut inlined = 0;
         for function in functions(&elf).unwrap() {
             for address in (function.address..function.address + function.size).step_by(2) {
@@ -2454,7 +2455,7 @@ fn the_analyzers_own_structures_fail_on_working_memory() {
 
 #[test]
 fn a_compressed_debug_section_is_an_error_not_a_read() {
-    // `oer-elf` reads no compressed section; the analysis fails closed.
+    // `oer-tool-analysis-elf` reads no compressed section; the analysis fails closed.
     let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"]);
     let error = crate::read_debug(
         &std::rc::Rc::from(&compressed[..]),
@@ -2470,7 +2471,9 @@ fn a_compressed_debug_section_is_an_error_not_a_read() {
     );
     // The symbolizer, which reads sections as ranges of the bytes, never
     // hands addr2line compressed bytes as DWARF.
-    let Err(error) = oer_elf::dwarf::Symbolizer::shared(std::rc::Rc::from(&compressed[..])) else {
+    let Err(error) =
+        oer_tool_analysis_elf::dwarf::Symbolizer::shared(std::rc::Rc::from(&compressed[..]))
+    else {
         panic!("the symbolizer read a compressed section");
     };
     assert!(

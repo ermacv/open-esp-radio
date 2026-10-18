@@ -7,7 +7,7 @@ Run explicit RV32 scenarios with selected inputs, device models and comparison o
 ## Concrete execution and comparison
 
 Execution runs inside the calling process through
-[`blobray_application::in_process`](#in-process-verification): the caller
+[`oer_tool_analysis_blobray_application::in_process`](#in-process-verification): the caller
 supplies a request, the ELF bytes of its targets' sources and the effect
 contracts and layout projections its relations select, and receives the
 records, the aggregate verdict and completeness in memory. No CLI command
@@ -478,7 +478,7 @@ instruction that never executed.
 
 ### Record validation
 
-`blobray_verification::validate_records` checks the records of a run against
+`oer_tool_analysis_blobray_verification::validate_records` checks the records of a run against
 its request, the effect contracts and layout projections the request selects and
 the reported verdict and completeness, independently of the execution and
 comparison code that produced them. `in_process::verify` and `in_process::vendor`
@@ -495,7 +495,7 @@ authority.
 
 ### In-process verification
 
-`blobray_application::in_process::verify` executes and compares one request. The caller supplies the executables its
+`oer_tool_analysis_blobray_application::in_process::verify` executes and compares one request. The caller supplies the executables its
 targets name, as `Executable` values that hash their bytes once when made and
 can be reused across calls, and the effect
 contracts and layout projections its relations select. Those are reviewed
@@ -538,7 +538,7 @@ After each session, a forward pass gives every step its dependencies:
   function over 65,536 instructions, or a branch without a path to the
   function exit, controls the rest of the frame;
 
-Sinks are the replacement observations `blobray_verification::compared_observations`
+Sinks are the replacement observations `oer_tool_analysis_blobray_verification::compared_observations`
 lists for each case's relation, at event granularity: the step that emitted a
 compared event, the argument registers of a compared call (words beyond the
 eight argument registers are not followed), the selected return words, the
@@ -572,7 +572,7 @@ reuse key are unaffected.
 ### ISA conformance
 
 ```console
-cargo test -p blobray-cli --test riscv_conformance -- --ignored
+cargo test -p oer-tool-cli-blobray --test riscv_conformance -- --ignored
 ```
 
 The `riscv_conformance` test checks the RISC-V executor against the official

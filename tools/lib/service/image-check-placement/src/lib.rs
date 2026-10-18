@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_chip_profile::{Memory, Placement, Region, Symbols};
+use oer_tool_data_chip_profile::{Memory, Placement, Region, Symbols};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// Audit the ELF `elf` and, when the contract names a flattened image, its
@@ -20,7 +20,7 @@ pub fn audit(
     binary: Option<&Path>,
 ) -> Result<String> {
     let bytes = fs::read(elf)?;
-    let elf = oer_elf::Elf::executable(&bytes)?;
+    let elf = oer_tool_analysis_elf::Elf::executable(&bytes)?;
     let symbols = elf.addresses();
     let symbol = |name: &str| -> Result<u64> {
         symbols
@@ -109,11 +109,11 @@ pub fn audit(
 /// Each named entry's first instruction swaps `sp` with `mscratch`
 /// (`csrrw sp, mscratch, sp`) before anything touches the interrupted stack.
 fn audit_stack_swap_entries(
-    elf: &oer_elf::Elf<'_>,
+    elf: &oer_tool_analysis_elf::Elf<'_>,
     symbols: &BTreeMap<&str, u64>,
     entries: &[Symbols],
 ) -> Result<()> {
-    use oer_riscv_decode::{CsrOp, Extension, Extensions, Instruction, Operand};
+    use oer_tool_analysis_riscv_decode::{CsrOp, Extension, Extensions, Instruction, Operand};
     const SP: u8 = 2;
     const MSCRATCH: u16 = 0x340;
     for name in entries.iter().flat_map(Symbols::names) {
@@ -128,7 +128,7 @@ fn audit_stack_swap_entries(
         let instruction = section
             .data
             .get(at..)
-            .and_then(|bytes| oer_riscv_decode::decode(bytes, Extensions::ALL))
+            .and_then(|bytes| oer_tool_analysis_riscv_decode::decode(bytes, Extensions::ALL))
             .map(|(instruction, _)| instruction)
             .ok_or_else(|| format!("the code has no instruction for `{name}`"))?;
         let swaps = matches!(

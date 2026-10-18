@@ -3,8 +3,8 @@
 //! symbol holds (its pointer word relocated to the entries, then its length);
 //! every non-zero handler word carries the relocation that names it, and a
 //! zero word is an entry the build left out.
-use oer_riscv_model::{Error, ErrorCode, Result, RunControl};
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 
 /// Where one field lies in a table entry, in bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

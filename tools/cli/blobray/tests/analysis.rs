@@ -3,14 +3,16 @@
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod support;
-use blobray_application::in_process::{Executable, Limits};
-use blobray_application::library::{Assumptions, LibraryOutcome, analyze_library};
 use object::{
     Architecture, BinaryFormat, Endianness, RelocationFlags, SectionKind, SymbolFlags, SymbolKind,
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tool_analysis_blobray_application::library::{
+    Assumptions, LibraryOutcome, analyze_library,
+};
+use oer_tool_analysis_riscv_model::*;
 
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {
     Symbol {
@@ -100,7 +102,7 @@ fn analyze_with(object: Vec<u8>, memory: u64, control: &mut Limits) -> Result<An
     analyze_library(
         &[library],
         Assumptions::default(),
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         control,
         &mut |outcome, _| {

@@ -32,7 +32,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use serde::Serialize;
 
 use crate::archive::Revision;
-use oer_vendor_provenance::fingerprint::similarity_ppm;
+use oer_tool_service_vendor_provenance::fingerprint::similarity_ppm;
 
 /// Candidates kept after the shingle prefilter.
 const PREFILTER_CANDIDATES: usize = 6;

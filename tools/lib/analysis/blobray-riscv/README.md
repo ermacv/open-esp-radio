@@ -1,7 +1,7 @@
 # Concrete RV32 execution
 
-`blobray-backend-riscv` owns Blobray's concrete RV32 executor over the decoding
-and lifting of [`oer-riscv-lift`](../../../riscv/lift/README.md). It receives
+`oer-tool-analysis-blobray-riscv` owns Blobray's concrete RV32 executor over the decoding
+and lifting of [`oer-tool-analysis-riscv-lift`](../../../riscv/lift/README.md). It receives
 bytes and structural facts, never an archive path or loader capability.
 
 Neither executor profile runs floating point: the Rv32imac profile decodes

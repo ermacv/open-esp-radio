@@ -135,7 +135,9 @@ pub(super) fn resolve(
             ));
         }
         let bytes: &[u8] = find(executables, &symbol.object.artifact)?.bytes();
-        let address = blobray_artifacts::inspect_link_definition(&bytes, symbol, memory, c)?;
+        let address = oer_tool_analysis_blobray_artifacts::inspect_link_definition(
+            &bytes, symbol, memory, c,
+        )?;
         if request.layout.code.contains(u64::from(address), 1)
             || request.layout.data.contains(u64::from(address), 1)
         {

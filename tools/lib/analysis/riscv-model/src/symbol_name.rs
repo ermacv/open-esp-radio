@@ -1,8 +1,8 @@
 //! Serde form of an ELF symbol name: a string when its bytes are UTF-8, as
 //! nearly every name is, and its byte array otherwise, so no name is lost.
 //!
-//! Use with `#[serde(with = "oer_riscv_model::symbol_name")]` on a
-//! `Vec<u8>` and `#[serde(with = "oer_riscv_model::symbol_name::option")]`
+//! Use with `#[serde(with = "oer_tool_analysis_riscv_model::symbol_name")]` on a
+//! `Vec<u8>` and `#[serde(with = "oer_tool_analysis_riscv_model::symbol_name::option")]`
 //! on an `Option<Vec<u8>>`.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

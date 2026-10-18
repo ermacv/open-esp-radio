@@ -67,7 +67,7 @@ impl CaseSinks {
     /// Sinks of the observations of `right` that `compared` lists. Call
     /// argument words beyond the registers are not followed.
     pub fn of(
-        compared: &blobray_verification::ComparedObservations,
+        compared: &oer_tool_analysis_blobray_verification::ComparedObservations,
         right: &ExecutionObservation,
     ) -> Self {
         let mut sinks = Self::default();

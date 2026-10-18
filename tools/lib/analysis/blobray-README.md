@@ -19,15 +19,15 @@ Real input needs your own identified vendor artifacts.
 | Task | Interface | Reference |
 | --- | --- | --- |
 | List symbols and strings | `blobray symbols`, `blobray strings` | [Symbols and strings](cli/reference/inventory-linking/README.md#symbols-and-strings) |
-| Inspect inputs | `blobray_application::captured::inventory` | [Inventory](cli/reference/inventory-linking/README.md#inventory) |
-| Investigate code | `blobray function-records`, `blobray field-accesses`, `blobray callers`, `blobray_application::library::analyze_library` | [Function analysis](cli/reference/analysis/README.md#function-analysis-contract) |
+| Inspect inputs | `oer_tool_analysis_blobray_application::captured::inventory` | [Inventory](cli/reference/inventory-linking/README.md#inventory) |
+| Investigate code | `blobray function-records`, `blobray field-accesses`, `blobray callers`, `oer_tool_analysis_blobray_application::library::analyze_library` | [Function analysis](cli/reference/analysis/README.md#function-analysis-contract) |
 | Investigate call arguments | `blobray call-arguments` | [Call arguments](cli/reference/analysis/README.md#call-arguments) |
 | Investigate registers | `blobray register-accesses` | [Library register accesses](cli/reference/registers-data/README.md#library-register-accesses) |
 | Check what a change does to the hardware | `blobray mmio-diff` | [MMIO difference between builds](cli/reference/registers-data/README.md#mmio-difference-between-builds) |
-| Recover tables and coefficients | `blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
-| Link an image | `blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
+| Recover tables and coefficients | `oer_tool_analysis_blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
+| Link an image | `oer_tool_analysis_blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
 | Audit a final image | `blobray audit-targets` | [Target audit](cli/reference/analysis/README.md#final-image-target-audit) |
-| Execute and compare | `blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
+| Execute and compare | `oer_tool_analysis_blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
 
 | Question | Required input | Inspect in the result | Next action |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ Related tools have different owners: `cargo registers` publishes reviewed
 hardware interfaces; `cargo xtask` checks and builds repository compositions;
 `cargo hil` obtains device observations. Blobray does not decide product readiness.
 
-`cargo blobray` invokes `blobray-cli`; the
+`cargo blobray` invokes `oer-tool-cli-blobray`; the
 [operator index](cli/README.md#reference-navigation) describes that interface.
 CLI and JSON use the same application operations. `--help` is available on the
 top-level command and subcommands. Blobray has no TUI or code generation.
@@ -65,7 +65,7 @@ limits remain the adapter's policy; the analysis core does not depend on
 subprocess mechanisms. The crate boundary test enforces that split.
 
 ```console
-cargo build --manifest-path tools/blobray/Cargo.toml --profile blobray -p blobray-cli --bin blobray
+cargo build --manifest-path tools/blobray/Cargo.toml --profile blobray -p oer-tool-cli-blobray --bin blobray
 cargo blobray --format json register-accesses --input vendor=/path/to/lib.a --range 0x60000000:0x100000
 cargo blobray --format json audit-targets --artifact firmware.elf --forbid rom=0x40000000..0x40100000
 ```

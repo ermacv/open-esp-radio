@@ -1,20 +1,20 @@
 //! Functions, compiler frame records and value-analysis observations of one
 //! static RV32 image.
 use crate::TransferKind;
-use oer_riscv_analysis::{
+use oer_tool_analysis_riscv_analysis::{
     FunctionInput, JumpTableSource, KnownJump, PreparedReferences, research_following_tables,
 };
-use oer_riscv_lift::RiscvDecoder;
-use oer_riscv_model::Ledger;
-use oer_riscv_model::*;
-use oer_riscv_program::ProgramView;
-use oer_riscv_program::facts::ImageFacts;
+use oer_tool_analysis_riscv_lift::RiscvDecoder;
+use oer_tool_analysis_riscv_model::Ledger;
+use oer_tool_analysis_riscv_model::*;
+use oer_tool_analysis_riscv_program::ProgramView;
+use oer_tool_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeMap;
 
 const SP: u8 = 2;
 
 /// A defined code symbol and every alias at its address.
-pub use oer_elf::Function;
+pub use oer_tool_analysis_elf::Function;
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::Integrity, message)
@@ -125,7 +125,10 @@ pub fn stack_sizes(
 }
 
 /// The bytes of `function` in its section.
-pub(crate) fn function_bytes<'a>(file: &oer_elf::Elf<'a>, function: &Function) -> Result<&'a [u8]> {
+pub(crate) fn function_bytes<'a>(
+    file: &oer_tool_analysis_elf::Elf<'a>,
+    function: &Function,
+) -> Result<&'a [u8]> {
     let section = file
         .section(function.section)
         .map_err(|_| invalid("function in a missing section"))?;
@@ -253,7 +256,8 @@ pub(crate) fn exact_registers(registers: &[AbstractValue]) -> [Option<u32>; 32] 
 }
 
 /// The jump tables of a function's dispatches, from the facts of its image.
-pub(crate) type Tables<'a> = dyn JumpTableSource<Table = oer_riscv_analysis::JumpTable> + 'a;
+pub(crate) type Tables<'a> =
+    dyn JumpTableSource<Table = oer_tool_analysis_riscv_analysis::JumpTable> + 'a;
 
 /// The bounded value analysis of one function, its control-flow graph
 /// following the indirect jumps the given jumps name and the jump tables

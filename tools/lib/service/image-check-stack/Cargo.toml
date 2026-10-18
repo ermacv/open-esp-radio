@@ -1,5 +1,5 @@
 [package]
-name = "oer-image-check-stack"
+name = "oer-tool-service-image-check-stack"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,13 +9,13 @@ publish = false
 description = "The stack check of an image: task and bootstrap stacks bounded from their roots with the pinned ROM, and the frame coverage review"
 
 [dependencies]
-oer-chip-profile = { path = "../../data/chip-profile" }
-oer-elf = { path = "../../analysis/elf" }
-oer-image-policy = { path = "../../data/image-policy" }
-oer-riscv-model = { path = "../../analysis/riscv-model" }
-oer-riscv-program = { path = "../../analysis/riscv-program" }
-oer-riscv-stack = { path = "../../analysis/riscv-stack" }
-oer-vendor-artifacts = { path = "../../data/vendor-artifacts" }
+oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
+oer-tool-analysis-elf = { path = "../../analysis/elf" }
+oer-tool-data-image-policy = { path = "../../data/image-policy" }
+oer-tool-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-tool-analysis-riscv-program = { path = "../../analysis/riscv-program" }
+oer-tool-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
+oer-tool-data-vendor-artifacts = { path = "../../data/vendor-artifacts" }
 rustc-demangle = "=0.1.28"
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "1.1"

@@ -9,7 +9,7 @@ pub(super) trait Parser {
         channel: LinkOutput,
         line: &[u8],
         span: LinkEvidenceSpan,
-        members: &[blobray_application::linking::LinkMember],
+        members: &[oer_tool_analysis_blobray_application::linking::LinkMember],
         sink: &mut dyn LinkOutputSink,
         control: &mut dyn RunControl,
     ) -> Result<()>;
@@ -106,7 +106,7 @@ impl<P: Parser> LinkOutputSink for Observed<'_, '_, P> {
     }
 }
 pub(super) fn occurrence(
-    members: &[blobray_application::linking::LinkMember],
+    members: &[oer_tool_analysis_blobray_application::linking::LinkMember],
     alias: &[u8],
 ) -> Result<ObjectId> {
     members

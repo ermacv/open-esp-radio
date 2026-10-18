@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn model_trace_effects_returns_and_consumption_cannot_be_forged() {
         let d = CallDeclaration {
-            repetition: blobray_domain::CallRepetition::Finite,
+            repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
             id: "fixture".into(),
             applicability: "fixture".into(),
             lifetime: RegionLifetime::Phase,

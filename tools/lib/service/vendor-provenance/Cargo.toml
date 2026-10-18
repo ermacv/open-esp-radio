@@ -1,5 +1,5 @@
 [package]
-name = "oer-vendor-provenance"
+name = "oer-tool-service-vendor-provenance"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,11 +10,11 @@ description = "Vendor function provenance: the SOURCE citation grammar, the one 
 readme = "README.md"
 
 [dependencies]
-oer-process = { path = "../../base/process" }
-oer-elf = { path = "../../analysis/elf" }
-oer-markers = { path = "../markers" }
-oer-register-model = { path = "../../data/register-model" }
-oer-vendor-artifacts = { path = "../../data/vendor-artifacts" }
+oer-tool-base-process = { path = "../../base/process" }
+oer-tool-analysis-elf = { path = "../../analysis/elf" }
+oer-tool-data-markers = { path = "../../data/markers" }
+oer-tool-data-register-model = { path = "../../data/register-model" }
+oer-tool-data-vendor-artifacts = { path = "../../data/vendor-artifacts" }
 sha2 = "=0.10.9"
 toml = "=1.1.4"
 

@@ -8,7 +8,7 @@
 //! The values are may-values of one call site, without interprocedural
 //! expansion: a value does not prove that the path reaching the call runs.
 use crate::listing::{ImageSymbols, signed_hex};
-use oer_riscv_model::{
+use oer_tool_analysis_riscv_model::{
     AbstractValue, Expression, FunctionRecord, ReferenceKind, SymbolId, ValueAlternative,
 };
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ const ARGUMENTS: std::ops::Range<usize> = 10..18;
 pub struct CallSite {
     /// The transfer instruction's offset, or its image address.
     pub offset: u64,
-    #[serde(with = "oer_riscv_model::symbol_name")]
+    #[serde(with = "oer_tool_analysis_riscv_model::symbol_name")]
     pub target: Vec<u8>,
     /// `a0`..`a7` before the transfer; empty when the analysis kept no
     /// register state at this site.
@@ -41,7 +41,7 @@ pub enum ArgumentValue {
         address: u32,
     },
     Symbol {
-        #[serde(with = "oer_riscv_model::symbol_name")]
+        #[serde(with = "oer_tool_analysis_riscv_model::symbol_name")]
         name: Vec<u8>,
         addend: i64,
     },
@@ -88,7 +88,10 @@ impl ArgumentValue {
             ),
             Self::EntryArgument { index } => format!("arg{index}"),
             Self::EntryRegister { register } => {
-                format!("entry {}", oer_riscv_lift::register_name(*register))
+                format!(
+                    "entry {}",
+                    oer_tool_analysis_riscv_lift::register_name(*register)
+                )
             }
             Self::Unknown => String::from("?"),
         }

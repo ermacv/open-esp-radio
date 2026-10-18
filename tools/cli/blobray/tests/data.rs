@@ -2,14 +2,14 @@
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod support;
-use blobray_application::data::{DataExport, export};
-use blobray_application::in_process::{Executable, Limits};
-use blobray_domain::*;
 use object::{
     Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
     write::{Object, Symbol, SymbolSection},
 };
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_application::data::{DataExport, export};
+use oer_tool_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {
     Symbol {
@@ -71,7 +71,7 @@ fn data_object() -> Vec<u8> {
 }
 
 fn objects(executable: &Executable) -> Vec<ObjectInventory> {
-    blobray_application::captured::inventory(
+    oer_tool_analysis_blobray_application::captured::inventory(
         executable,
         &WorkingMemory::new(16 * 1024 * 1024).unwrap(),
         &mut Limits::new(DEFAULT_WORK_UNITS, std::time::Duration::from_secs(30)),

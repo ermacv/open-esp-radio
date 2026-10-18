@@ -1,7 +1,7 @@
 # Blobray analyses
 
 Blobray's analyses over the bounded CFG and value analysis of
-[`oer-riscv-analysis`](../../../riscv/analysis/README.md): register-access
+[`oer-tool-analysis-riscv-analysis`](../../../riscv/analysis/README.md): register-access
 recognition, final-image target audits, code-coverage closures and record
 navigation. They have no filesystem authority.
 

@@ -1,5 +1,5 @@
 use super::*;
-use oer_elf::rv32::{R_RISCV_BRANCH, R_RISCV_CALL, R_RISCV_HI20, R_RISCV_LO12_I};
+use oer_tool_analysis_elf::rv32::{R_RISCV_BRANCH, R_RISCV_CALL, R_RISCV_HI20, R_RISCV_LO12_I};
 
 fn site(offset: usize, r_type: u32, reference: Reference) -> Site {
     Site {

@@ -1,7 +1,7 @@
 //! Borrowed ELF function views; no linker or ISA semantics.
-use blobray_domain::*;
 use object::{Object, ObjectSection, ObjectSymbol, ObjectSymbolTable};
-use oer_riscv_model::*;
+use oer_tool_analysis_blobray_domain::*;
+use oer_tool_analysis_riscv_model::*;
 
 pub struct FunctionView<'a> {
     pub abi: RiscvAbi,
@@ -24,10 +24,10 @@ pub struct PreparedObject<'a, 'm> {
     bytes: &'a [u8],
     file: object::File<'a>,
     /// The same bytes through the repository's ELF view, for the static
-    /// image and mapping-symbol readers of `oer-riscv-program`.
-    elf: oer_elf::Elf<'a>,
+    /// image and mapping-symbol readers of `oer-tool-analysis-riscv-program`.
+    elf: oer_tool_analysis_elf::Elf<'a>,
     occurrence: Option<ObjectId>,
-    image: Option<oer_riscv_program::ProgramView<'a>>,
+    image: Option<oer_tool_analysis_riscv_program::ProgramView<'a>>,
     abi: RiscvAbi,
     memory: &'m WorkingMemory,
     targets: Vec<Option<std::sync::Arc<ReferenceTarget>>>,
@@ -37,7 +37,7 @@ pub struct PreparedObject<'a, 'm> {
 }
 struct PreparedSection<'a> {
     relocations: Vec<FunctionRelocation>,
-    mappings: oer_riscv_program::mapping::DataRanges<'a>,
+    mappings: oer_tool_analysis_riscv_program::mapping::DataRanges<'a>,
     _capacity: MemoryReservation<'a>,
 }
 fn reserved<T>(count: usize) -> Result<Vec<T>> {
@@ -74,8 +74,8 @@ pub fn with_prepared_object<T>(
         ));
     }
     let file = object::File::parse(&*bytes).map_err(parse)?;
-    let view =
-        oer_elf::Elf::parse(&bytes).map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?;
+    let view = oer_tool_analysis_elf::Elf::parse(&bytes)
+        .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?;
     if file.is_64()
         || !file.is_little_endian()
         || file.architecture() != object::Architecture::Riscv32
@@ -107,13 +107,13 @@ pub fn with_prepared_object<T>(
         return Err(invalid("ambiguous physical symbol tables"));
     }
     let image = if file.kind() == object::ObjectKind::Executable {
-        Some(oer_riscv_program::ProgramView::new(
+        Some(oer_tool_analysis_riscv_program::ProgramView::new(
             &bytes, &view, read_only, memory, control,
         )?)
     } else {
         None
     };
-    let abi = oer_riscv_program::abi(&view)
+    let abi = oer_tool_analysis_riscv_program::abi(&view)
         .map_err(|e| Error::new(ErrorCode::Incompatible, e.message))?;
     let object::File::Elf32(elf) = &file else {
         unreachable!()
@@ -392,7 +392,7 @@ impl<'data> PreparedObject<'data, '_> {
                 (count as u64).saturating_mul(u64::from(usize::BITS - count.leading_zeros())),
             )?;
             relocations.sort_unstable_by_key(|r| (r.offset, r.section, r.index));
-            let mappings = oer_riscv_program::mapping::data_ranges(
+            let mappings = oer_tool_analysis_riscv_program::mapping::data_ranges(
                 &self.elf,
                 section_index.0,
                 memory,

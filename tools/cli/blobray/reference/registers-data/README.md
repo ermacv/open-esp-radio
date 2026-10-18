@@ -6,7 +6,7 @@ Inspect MMIO candidates and captured data.
 
 ## Captured data, tables and coefficients
 
-`blobray_application::data::export(request, executables, memory, control)`
+`oer_tool_analysis_blobray_application::data::export(request, executables, memory, control)`
 reads exact ranges from one captured object in process. It does not run an
 analyzer or infer a table boundary.
 

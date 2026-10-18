@@ -230,7 +230,7 @@ fn modeled_boundaries_have_generic_capture_before_their_effects() {
     let mut r = f.request();
     select(&mut r, 1);
     r.cases[0].vendor.calls = vec![CallDeclaration {
-        repetition: blobray_domain::CallRepetition::Finite,
+        repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
         id: "delay".into(),
         applicability: "test".into(),
         lifetime: RegionLifetime::Phase,

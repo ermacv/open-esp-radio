@@ -1,6 +1,6 @@
 //! Function extraction from a static archive of RISC-V relocatable objects.
 
-use oer_vendor_provenance::fingerprint::{self, Function};
+use oer_tool_service_vendor_provenance::fingerprint::{self, Function};
 use sha2::{Digest, Sha256};
 
 /// One archive revision with every defined function it contains.

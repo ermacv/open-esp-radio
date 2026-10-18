@@ -1,5 +1,7 @@
-use blobray_domain::{LibraryFunction, RegisterAccess, RegisterMask, RegisterMaskKind};
-use oer_riscv_model::{
+use oer_tool_analysis_blobray_domain::{
+    LibraryFunction, RegisterAccess, RegisterMask, RegisterMaskKind,
+};
+use oer_tool_analysis_riscv_model::{
     AbstractValue, ArtifactId, Error, ErrorCode, FunctionRecord, MemoryKind, ObjectId,
     ObjectLocation, SymbolId, SymbolTableKind,
 };
@@ -223,7 +225,7 @@ fn same_named_functions_of_different_members_stay_apart() {
 #[test]
 fn stored_runs_render_high_bits_first() {
     use super::stored_human;
-    use blobray_domain::{StoredBits, StoredBitsSource};
+    use oer_tool_analysis_blobray_domain::{StoredBits, StoredBitsSource};
     let load = |low, width, same_word| StoredBits {
         low,
         width,
@@ -271,7 +273,7 @@ fn stored_runs_render_high_bits_first() {
 
 #[test]
 fn loads_of_different_widths_stay_separate_entries() {
-    use blobray_domain::{StoredBits, StoredBitsSource};
+    use oer_tool_analysis_blobray_domain::{StoredBits, StoredBitsSource};
     let store = |width| {
         let mut record = observation("store_byte", MemoryKind::Store, Some(0x2010_702c), None);
         if let RegisterAccess::Observation { stored, .. } = &mut record {
@@ -304,7 +306,7 @@ fn loads_of_different_widths_stay_separate_entries() {
 
 #[test]
 fn an_indexed_observation_is_selected_by_the_words_its_progression_reaches() {
-    use blobray_domain::IndexedAddress;
+    use oer_tool_analysis_blobray_domain::IndexedAddress;
     let mut record = observation("coex_hw_timer_set", MemoryKind::Store, None, None);
     if let RegisterAccess::Observation { indexed, .. } = &mut record {
         *indexed = Some(IndexedAddress {

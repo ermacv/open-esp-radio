@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "addr2line"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e567177890eb1617b1f774005b66b26b2377afd138a2ca37aae7d8f0c81429d4"
+dependencies = [
+ "gimli 0.34.0",
+ "rustc-demangle",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1069,7 +1079,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1357,7 +1367,7 @@ dependencies = [
  "bytemuck",
  "esp-idf-part",
  "flate2",
- "gimli",
+ "gimli 0.32.3",
  "libc",
  "log",
  "md-5 0.11.0",
@@ -1425,6 +1435,12 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "form_urlencoded"
@@ -1544,6 +1560,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10"
+dependencies = [
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1575,7 +1600,7 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
- "foldhash",
+ "foldhash 0.1.5",
 ]
 
 [[package]]
@@ -1583,6 +1608,9 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "heapless"
@@ -2061,7 +2089,10 @@ version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
 dependencies = [
+ "crc32fast",
  "flate2",
+ "hashbrown 0.17.1",
+ "indexmap",
  "memchr",
  "ruzstd",
 ]
@@ -2143,6 +2174,10 @@ dependencies = [
  "embassy-sync 0.8.0",
  "oer-base-time",
 ]
+
+[[package]]
+name = "oer-base-trace"
+version = "0.1.0"
 
 [[package]]
 name = "oer-base-ui-cases"
@@ -2703,6 +2738,151 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-analysis-blobray-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-riscv-analysis",
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-application"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-blobray-analysis",
+ "oer-tool-analysis-blobray-artifacts",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-blobray-verification",
+ "oer-tool-analysis-riscv-analysis",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-analysis-riscv-program",
+ "rustc-demangle",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-artifacts"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-analysis-riscv-program",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-domain"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-riscv-model",
+ "serde",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-linker"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "object 0.39.1",
+ "oer-tool-analysis-blobray-application",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-base-process",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-riscv"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-riscv-decode",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-blobray-verification"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-elf"
+version = "0.1.0"
+dependencies = [
+ "addr2line",
+ "gimli 0.34.0",
+ "object 0.39.1",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-decode"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-toolchain",
+ "rv-asm",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-lift"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-decode",
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-program"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tool-analysis-riscv-stack"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-analysis",
+ "oer-tool-analysis-riscv-decode",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-analysis-riscv-program",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-base-command-tree"
 version = "0.1.0"
 dependencies = [
@@ -2733,12 +2913,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-base-toolchain"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-cli-blobray"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "object 0.39.1",
+ "oer-tool-analysis-blobray-application",
+ "oer-tool-analysis-blobray-domain",
+ "oer-tool-analysis-blobray-riscv",
+ "oer-tool-analysis-riscv-lift",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-data-vendor-artifacts",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-cli-fw"
 version = "0.1.0"
 dependencies = [
  "clap",
  "oer-tool-base-command-tree",
  "oer-tool-service-firmware",
+]
+
+[[package]]
+name = "oer-tool-cli-pins"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tool-base-command-tree",
+ "oer-tool-data-vendor-artifacts",
 ]
 
 [[package]]
@@ -2759,8 +2975,22 @@ name = "oer-tool-data-chip-profile"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "tempfile",
  "toml",
 ]
+
+[[package]]
+name = "oer-tool-data-image-policy"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-toolchain",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-data-markers"
+version = "0.1.0"
 
 [[package]]
 name = "oer-tool-data-register-bindings"
@@ -2817,6 +3047,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-data-vendor-artifacts"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-vendor-pins",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-data-vendor-pins"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-data-chip-profile",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-service-firmware"
 version = "0.1.0"
 dependencies = [
@@ -2832,6 +3082,55 @@ dependencies = [
  "serialport",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-tool-service-image-check-interrupts"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-analysis-riscv-program",
+ "oer-tool-analysis-riscv-stack",
+ "oer-tool-data-chip-profile",
+ "oer-tool-service-image-check-stack",
+]
+
+[[package]]
+name = "oer-tool-service-image-check-placement"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-decode",
+ "oer-tool-data-chip-profile",
+]
+
+[[package]]
+name = "oer-tool-service-image-check-stack"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-analysis-riscv-model",
+ "oer-tool-analysis-riscv-program",
+ "oer-tool-analysis-riscv-stack",
+ "oer-tool-data-chip-profile",
+ "oer-tool-data-image-policy",
+ "oer-tool-data-vendor-artifacts",
+ "rustc-demangle",
+ "serde",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tool-service-image-linker"
+version = "0.1.0"
+dependencies = [
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-base-process",
+ "tempfile",
 ]
 
 [[package]]
@@ -2863,6 +3162,34 @@ dependencies = [
  "tempfile",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "oer-tool-service-symbol-lineage"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "object 0.39.1",
+ "oer-tool-analysis-elf",
+ "oer-tool-base-process",
+ "oer-tool-service-vendor-provenance",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oer-tool-service-vendor-provenance"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-base-process",
+ "oer-tool-data-markers",
+ "oer-tool-data-register-model",
+ "oer-tool-data-vendor-artifacts",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -3163,6 +3490,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
+
+[[package]]
 name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3172,7 +3505,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3189,6 +3522,12 @@ checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
 dependencies = [
  "twox-hash",
 ]
+
+[[package]]
+name = "rv-asm"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5713b6e431d860b0c0a95e410df4a859c3579db2b6e98470ae9e69658da59a38"
 
 [[package]]
 name = "ryu"
@@ -3626,7 +3965,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3933,7 +4272,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

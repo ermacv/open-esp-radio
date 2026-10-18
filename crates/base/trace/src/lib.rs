@@ -16,13 +16,13 @@
 //!
 //! ```ignore
 //! #[unsafe(link_section = ".rtc_fast.persistent")]
-//! static RETAINED: oer_trace::Retained<512, 2, 1024> = oer_trace::Retained::new();
-//! static TRACE: oer_trace::Trace = oer_trace::Trace::new(&RETAINED);
-//! oer_trace::clock!(oer_time_embassy::now_micros);
+//! static RETAINED: oer_base_trace::Retained<512, 2, 1024> = oer_base_trace::Retained::new();
+//! static TRACE: oer_base_trace::Trace = oer_base_trace::Trace::new(&RETAINED);
+//! oer_base_trace::clock!(oer_adapters_embassy_time::now_micros);
 //!
-//! let boot = oer_trace::install(&TRACE); // holds what the previous boot left
+//! let boot = oer_base_trace::install(&TRACE); // holds what the previous boot left
 //! // ... drain `boot.previous` if it matters ...
-//! oer_trace::start(default_mask);
+//! oer_base_trace::start(default_mask);
 //! ```
 //!
 //! Retained memory only ever sees plain loads and stores: the write index,

@@ -28,7 +28,7 @@
 //! registration.
 use crate::Result;
 use crate::fingerprint::Function;
-use oer_vendor_artifacts::project::{self, Project};
+use oer_tool_data_vendor_artifacts::project::{self, Project};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -39,7 +39,7 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
 
 /// Production sources scanned for `SOURCE:` blocks: Rust files and, with
 /// `#` comments, TOML files such as the platform's ROM function summaries.
-const PRODUCTION: [&str; 2] = ["crates", "platform"];
+const PRODUCTION: [&str; 2] = ["crates", "firmware"];
 /// The chip's reviewed verification decisions, relative to its
 /// verification directory: the coverage decisions' data and the scenario
 /// crate's decision modules.
@@ -262,7 +262,7 @@ fn citable_chips(root: &Path, supported: &[String]) -> Vec<String> {
 /// Identifiers of every `SOURCE:` comment block under `directory` that cites
 /// `chip`, a violation for every block that is malformed or names its chips
 /// wrongly, and the location and identifiers of every chip-neutral block
-/// that names no chip (see `oer_markers::source`). Paths are reported
+/// that names no chip (see `oer_tool_data_markers::source`). Paths are reported
 /// and placed relative to `base`.
 /// A violation for every chip-neutral block without a chip list that cites
 /// one of the scanned chip's `known` functions. A block that cites no vendor
@@ -342,7 +342,7 @@ fn production_words(
     directory: &str,
     found: &mut Found,
 ) -> Result<()> {
-    use oer_markers::source::{Attribution, Syntax, attribute, blocks_in, place};
+    use oer_tool_data_markers::source::{Attribution, Syntax, attribute, blocks_in, place};
     let files: Box<dyn Iterator<Item = &str>> = if directory.is_empty() {
         Box::new(repo.files())
     } else {
@@ -428,13 +428,13 @@ fn pinned_functions(
 ) -> Result<(BTreeMap<String, (PathBuf, Vec<Function>)>, BTreeSet<String>)> {
     let mut out = BTreeMap::new();
     let mut symbols = BTreeSet::new();
-    for artifact in oer_vendor_artifacts::pinned(root, chip)? {
+    for artifact in oer_tool_data_vendor_artifacts::pinned(root, chip)? {
         if artifact.firmware {
             continue;
         }
         let bytes = std::fs::read(&artifact.path)
             .map_err(|e| format!("{}: {e}", artifact.path.display()))?;
-        if !oer_elf::is_binary(&bytes) {
+        if !oer_tool_analysis_elf::is_binary(&bytes) {
             continue;
         }
         let (functions, defined) = crate::fingerprint::functions_and_symbols(&bytes)?;
@@ -502,7 +502,7 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
             &mut found,
         )?;
     }
-    for (file, text) in oer_register_model::descriptions(root, chip)? {
+    for (file, text) in oer_tool_data_register_model::descriptions(root, chip)? {
         found.cite(&file.display().to_string(), &text);
     }
     let Found {

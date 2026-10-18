@@ -1,14 +1,13 @@
 //! The compiler setup every image build shares: the single owner of the
 //! image compiler flags. No `.cargo/config.toml` carries Rust flags for an
-//! image; `cargo xtask build firmware`, the HIL image builder and their type
-//! checks all apply [`configure`].
+//! image; `cargo fw build` applies [`configure`].
 //!
 //! `RUSTC_BOOTSTRAP=1` is set here, on the image's Cargo command only, and
 //! exists for the unstable `-Z` flags alone (`emit-stack-sizes`,
 //! `move-size-limit`, `share-generics`) on the exact stable toolchain that
 //! `rust-toolchain.toml` pins.
 //!
-//! Every image links through the image linker (`tools/image/linker`), which
+//! Every image links through the image linker (`tools/lib/service/image-linker`), which
 //! refuses an input section named as zero-initialized that carries bytes and
 //! otherwise runs the target's `rust-lld` with the same arguments. The linker
 //! is built from the sources being built, the checkout or source snapshot at
@@ -36,8 +35,12 @@ pub const BUILD_ROOT_ENV: &str = "OER_BUILD_ROOT";
 /// source snapshots and their build workspaces. One per host, so each
 /// agent's build of the same sources reuses the same compiled units.
 pub fn host_build_root() -> Result<PathBuf> {
-    oer_durable::xdg::overridable(BUILD_ROOT_ENV, oer_durable::xdg::Base::Cache, "build")
-        .map_err(|error| error.to_string().into())
+    oer_tool_base_durable::xdg::overridable(
+        BUILD_ROOT_ENV,
+        oer_tool_base_durable::xdg::Base::Cache,
+        "build",
+    )
+    .map_err(|error| error.to_string().into())
 }
 
 /// The one compile cache (`CARGO_TARGET_DIR`) below `build_root` of every
@@ -61,10 +64,10 @@ pub fn linker_target(build_root: &Path) -> PathBuf {
 
 /// The lock of the shared compile cache `cache`: one build at a time, the
 /// next waiting for it.
-pub fn lock_compile_cache(cache: &Path) -> Result<oer_process::lock::FileLock> {
-    oer_process::lock::FileLock::wait(
+pub fn lock_compile_cache(cache: &Path) -> Result<oer_tool_base_process::lock::FileLock> {
+    oer_tool_base_process::lock::FileLock::wait(
         &cache.join("build.lock"),
-        oer_process::lock::Mode::Exclusive,
+        oer_tool_base_process::lock::Mode::Exclusive,
         &format!("waiting for another build in {}", cache.display()),
     )
     .map_err(|error| error.to_string().into())
@@ -73,7 +76,7 @@ pub fn lock_compile_cache(cache: &Path) -> Result<oer_process::lock::FileLock> {
 /// What an image's compiler setup depends on.
 #[derive(Clone, Debug)]
 pub struct ImageCompiler<'a> {
-    /// The tree being built: its `tools/image/linker` becomes the linker.
+    /// The tree being built: its `oer-tool-service-image-linker` becomes the linker.
     pub root: &'a Path,
     /// The Cargo target directory of the linker's host build.
     pub linker_target: &'a Path,
@@ -121,9 +124,9 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
             "build",
             "--quiet",
             "-p",
-            "oer-image-linker",
+            "oer-tool-service-image-linker",
             "--bin",
-            "oer-image-linker",
+            "oer-tool-service-image-linker",
         ])
         .arg("--manifest-path")
         .arg(root.join("Cargo.toml"))
@@ -138,13 +141,13 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
     ] {
         command.env_remove(variable);
     }
-    oer_process::run(&mut command).map_err(|error| {
+    oer_tool_base_process::run(&mut command).map_err(|error| {
         format!(
             "building the image linker of {} failed: {error}",
             root.display()
         )
     })?;
-    Ok(target_dir.join("debug/oer-image-linker"))
+    Ok(target_dir.join("debug/oer-tool-service-image-linker"))
 }
 
 /// The per-target C and C++ flag variables the `cc` and `cmake` crates read.
@@ -230,18 +233,18 @@ mod tests {
             rustflags(
                 Some("-C debuginfo=1".into()),
                 4096,
-                Path::new("/repo/target/image-linker/debug/oer-image-linker"),
+                Path::new("/repo/target/image-linker/debug/oer-tool-service-image-linker"),
             )
             .unwrap(),
             "-C debuginfo=1 -Z emit-stack-sizes -Z move-size-limit=4096 \
              -D large-assignments -Z share-generics=y \
-             -C linker=/repo/target/image-linker/debug/oer-image-linker -C linker-flavor=ld.lld"
+             -C linker=/repo/target/image-linker/debug/oer-tool-service-image-linker -C linker-flavor=ld.lld"
         );
         // A path RUSTFLAGS would split is refused.
         assert!(rustflags(None, 4096, Path::new("/a b/linker")).is_err());
     }
 
-    /// A tree whose `oer-image-linker` is a stand-in that announces its tree.
+    /// A tree whose `oer-tool-service-image-linker` is a stand-in that announces its tree.
     fn tree_with_linker(marker: &str) -> tempfile::TempDir {
         let tree = tempfile::tempdir().unwrap();
         let package = tree.path().join("linker");
@@ -253,7 +256,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             package.join("Cargo.toml"),
-            "[package]\nname = \"oer-image-linker\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"oer-tool-service-image-linker\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         )
         .unwrap();
         std::fs::write(
@@ -271,7 +274,7 @@ mod tests {
         let target = tempfile::tempdir().unwrap();
         for (tree, marker) in [(&first, "first"), (&second, "second")] {
             let linker = build_linker(tree.path(), &target.path().join(marker)).unwrap();
-            let output = oer_process::command(&linker).output().unwrap();
+            let output = oer_tool_base_process::command(&linker).output().unwrap();
             assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
         }
     }

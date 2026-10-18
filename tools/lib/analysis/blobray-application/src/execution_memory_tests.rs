@@ -241,7 +241,7 @@ fn modeled_allocation_capacity_is_owned_but_only_requested_bytes_are_accessible(
         s.calls
             .install(
                 &[CallDeclaration {
-                    repetition: blobray_domain::CallRepetition::Finite,
+                    repetition: oer_tool_analysis_blobray_domain::CallRepetition::Finite,
                     id: "allocator".into(),
                     applicability: "fixture".into(),
                     lifetime: RegionLifetime::Phase,

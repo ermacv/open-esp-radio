@@ -216,7 +216,7 @@ fn run(old: &[u8], new: &[u8], format: &str) -> std::process::Output {
         .unwrap()
 }
 
-fn diff(old: Vec<u8>, new: Vec<u8>) -> blobray_domain::MmioDiff {
+fn diff(old: Vec<u8>, new: Vec<u8>) -> oer_tool_analysis_blobray_domain::MmioDiff {
     let dir = tempfile::tempdir().unwrap();
     let (old_path, new_path) = (dir.path().join("old.elf"), dir.path().join("new.elf"));
     std::fs::write(&old_path, old).unwrap();
@@ -236,9 +236,12 @@ fn diff(old: Vec<u8>, new: Vec<u8>) -> blobray_domain::MmioDiff {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::MmioDiffDocument =
+    let document: oer_tool_cli_blobray::wire::MmioDiffDocument =
         serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document.schema, blobray_cli::wire::MMIO_DIFF_SCHEMA);
+    assert_eq!(
+        document.schema,
+        oer_tool_cli_blobray::wire::MMIO_DIFF_SCHEMA
+    );
     document.diff
 }
 
@@ -289,19 +292,21 @@ fn a_changed_stored_mask_is_exactly_that_store_of_that_function() {
         (1, 1),
         "{change:?}"
     );
-    let constant = |access: &blobray_domain::MmioAccess| match access.stored.as_slice() {
-        [
-            blobray_domain::MmioStoredBits {
-                low: 0,
-                width: 32,
-                source: blobray_domain::MmioStoredSource::Constant { value, .. },
-            },
-        ] => *value,
-        other => panic!("{other:?}"),
-    };
+    let constant =
+        |access: &oer_tool_analysis_blobray_domain::MmioAccess| match access.stored.as_slice() {
+            [
+                oer_tool_analysis_blobray_domain::MmioStoredBits {
+                    low: 0,
+                    width: 32,
+                    source:
+                        oer_tool_analysis_blobray_domain::MmioStoredSource::Constant { value, .. },
+                },
+            ] => *value,
+            other => panic!("{other:?}"),
+        };
     assert_eq!(
         change.removed[0].location,
-        blobray_domain::MmioLocation::At {
+        oer_tool_analysis_blobray_domain::MmioLocation::At {
             address: 0x2010_9c18
         }
     );
@@ -319,7 +324,7 @@ fn a_function_that_stops_writing_mmio_is_a_change_not_a_removal() {
     let change = &diff.changes[0];
     assert_eq!(
         change.state,
-        [blobray_domain::MmioFunctionState::Analyzed; 2],
+        [oer_tool_analysis_blobray_domain::MmioFunctionState::Analyzed; 2],
         "it is defined in both builds"
     );
     assert_eq!((change.removed.len(), change.added.len()), (1, 0));
@@ -340,8 +345,8 @@ fn a_blocked_function_reports_its_state_and_no_accesses() {
     assert_eq!(
         change.state,
         [
-            blobray_domain::MmioFunctionState::Analyzed,
-            blobray_domain::MmioFunctionState::Blocked
+            oer_tool_analysis_blobray_domain::MmioFunctionState::Analyzed,
+            oer_tool_analysis_blobray_domain::MmioFunctionState::Blocked
         ]
     );
     assert!(
@@ -372,7 +377,7 @@ fn a_function_both_builds_block_is_uncertain_not_unchanged() {
     assert_eq!(uncertain, ["demo::poke"]);
     assert_eq!(
         diff.uncertain[0].state,
-        [blobray_domain::MmioFunctionState::Blocked; 2]
+        [oer_tool_analysis_blobray_domain::MmioFunctionState::Blocked; 2]
     );
     assert_eq!(diff.uncertain[0].complete, [false, false]);
 }
@@ -464,14 +469,14 @@ fn a_member_the_build_cannot_analyze_is_named_with_its_input_and_ordinal() {
     );
     let output = run(&old, &new, "json");
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::MmioDiffDocument =
+    let document: oer_tool_cli_blobray::wire::MmioDiffDocument =
         serde_json::from_slice(&output.stdout).unwrap();
     assert!(document.diff.gaps[0].is_empty());
     let gap = &document.diff.gaps[1][0];
     assert_eq!(gap.input, 0);
     assert_eq!(
         gap.object.as_ref().map(|object| object.location.clone()),
-        Some(oer_riscv_model::ObjectLocation::ArchiveMember { ordinal: 1 })
+        Some(oer_tool_analysis_riscv_model::ObjectLocation::ArchiveMember { ordinal: 1 })
     );
     let human = run(&old, &new, "human");
     let text = String::from_utf8_lossy(&human.stdout);
@@ -505,7 +510,7 @@ fn a_store_that_overlaps_a_window_only_partly_still_compares() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let document: blobray_cli::wire::MmioDiffDocument =
+    let document: oer_tool_cli_blobray::wire::MmioDiffDocument =
         serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
         document.diff.changes.len(),

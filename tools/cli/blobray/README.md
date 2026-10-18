@@ -1,8 +1,8 @@
 # Blobray CLI: in-process operations over captured executables
 
-`blobray-cli` is the `blobray` command line and the JSON wire types in
-`blobray_cli::wire`; the Linux linker adapters live in
-[`blobray-linker`](../crates/linker/src/lib.rs). Every operation runs
+`oer-tool-cli-blobray` is the `blobray` command line and the JSON wire types in
+`oer_tool_cli_blobray::wire`; the Linux linker adapters live in
+[`oer-tool-analysis-blobray-linker`](../crates/linker/src/lib.rs). Every operation runs
 in the calling process over executables given as bytes and identified by
 content: inventory, whole-library analysis and register accesses, synthetic
 linking with explicit ROM companions, exact data export, final-image target
@@ -27,7 +27,7 @@ and each command's `--help`.
 
 `blobray __command-tree` prints every visible command with its long flags as
 JSON, tracked in [`command-tree.json`](command-tree.json) so documentation
-checks need not build Blobray. `cargo test -p blobray-cli` fails when the
+checks need not build Blobray. `cargo test -p oer-tool-cli-blobray` fails when the
 tracked tree differs from the command line; run it with
 `BLOBRAY_COMMAND_TREE_UPDATE=1` to rewrite the file.
 

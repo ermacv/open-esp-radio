@@ -1,7 +1,7 @@
 //! Readable views of one function's records: its instruction listing with
 //! the symbols its relocations name, and the references it makes to named
 //! symbols.
-use oer_riscv_model::{
+use oer_tool_analysis_riscv_model::{
     AbstractValue, EdgeKind, FunctionRecord, MemoryKind, ReferenceKind, SymbolId, ValueAlternative,
 };
 use serde::{Deserialize, Serialize};
@@ -71,7 +71,7 @@ pub fn listing(
                 if let Some(value) = render(value, &names) {
                     notes.entry(*offset).or_default().push(format!(
                         "{}={value}",
-                        oer_riscv_lift::register_name(*register)
+                        oer_tool_analysis_riscv_lift::register_name(*register)
                     ));
                 }
             }
@@ -253,7 +253,7 @@ pub struct SymbolReference {
     /// The referencing instruction's offset in its function.
     pub offset: u64,
     pub kind: ReferenceKind,
-    #[serde(with = "oer_riscv_model::symbol_name")]
+    #[serde(with = "oer_tool_analysis_riscv_model::symbol_name")]
     pub target: Vec<u8>,
 }
 

@@ -1,9 +1,9 @@
 //! Command-line adapter for Blobray operations that run in this process.
 
-use blobray_application as app;
-use blobray_domain::CheckVerdict;
 use clap::{Parser, Subcommand, ValueEnum};
-use oer_riscv_model::{
+use oer_tool_analysis_blobray_application as app;
+use oer_tool_analysis_blobray_domain::CheckVerdict;
+use oer_tool_analysis_riscv_model::{
     CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionDecoder, FunctionSemantics,
     ReadOnlyWindow, Result,
 };
@@ -76,19 +76,19 @@ enum Command {
         artifact: PathBuf,
         /// NAME=START..END (half-open RV32 address range).
         #[arg(long, required=true, value_parser=parse_forbidden)]
-        forbid: Vec<blobray_domain::ForbiddenTargetRange>,
+        forbid: Vec<oer_tool_analysis_blobray_domain::ForbiddenTargetRange>,
         #[command(flatten)]
         limits: InProcessOptions,
     },
     /// Analyze every function of captured libraries in this process and report
     /// the memory addresses they access, with blocked functions and gaps.
     RegisterAccesses {
-        /// Repeat ROLE=PATH; a function names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// START:LENGTH candidate interval; without one, every numeric address.
         #[arg(long = "range", value_parser = parse_range)]
-        ranges: Vec<blobray_domain::ImageRegion>,
+        ranges: Vec<oer_tool_analysis_blobray_domain::ImageRegion>,
         /// Keep only observations in this 32-bit word; repeat for several.
         /// Blocked functions, gaps and the summary are never filtered.
         #[arg(long = "address", value_parser = parse_number, value_name = "ADDRESS")]
@@ -109,7 +109,7 @@ enum Command {
     /// the complete records of the named functions: every fact, expression and
     /// value the analysis derived, with coverage and semantics completeness.
     FunctionRecords {
-        /// Repeat ROLE=PATH; a function names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// A function symbol name to report; repeat for several.
@@ -124,7 +124,7 @@ enum Command {
     /// every memory access that lands on one field offset, as a root symbol,
     /// register or stack and the path of loaded pointers to the field.
     FieldAccesses {
-        /// Repeat ROLE=PATH; a function names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// The field's byte displacement from its pointer or root.
@@ -142,7 +142,7 @@ enum Command {
     /// every reference to the named symbols: calls, jumps and addresses taken,
     /// each a relocation in a relocatable object.
     Callers {
-        /// Repeat ROLE=PATH; a function names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// A symbol name whose references to report; repeat for several.
@@ -159,7 +159,7 @@ enum Command {
     /// offsets and the addresses of loaded data do not differ; a stored
     /// image address does only where no sized symbol names it.
     MmioDiff {
-        /// The old build: repeat ROLE=PATH.
+        /// The old build: repeat ROLE=PATH or ROLE=pin:CHIP/ID.
         #[arg(long = "old", required = true, value_name = "ROLE=PATH")]
         old: Vec<OsString>,
         /// The new build: repeat ROLE=PATH.
@@ -167,7 +167,7 @@ enum Command {
         new: Vec<OsString>,
         /// START:LENGTH MMIO window; repeat for several.
         #[arg(long = "range", required = true, value_parser = parse_range)]
-        ranges: Vec<blobray_domain::ImageRegion>,
+        ranges: Vec<oer_tool_analysis_blobray_domain::ImageRegion>,
         #[command(flatten)]
         assumptions: Assumptions,
         #[command(flatten)]
@@ -176,7 +176,7 @@ enum Command {
     /// List the defined function and data symbols of captured inputs with
     /// member, section, address, size and their `ROLE[member]::name` citation.
     Symbols {
-        /// Repeat ROLE=PATH; use the pinned artifact id as ROLE to print the
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; use the pinned artifact id as ROLE to print the
         /// citation form provenance checks use.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
@@ -189,14 +189,14 @@ enum Command {
     /// List the NUL-terminated text in the read-only data sections of
     /// captured inputs, with member, section and offset.
     Strings {
-        /// Repeat ROLE=PATH; a string names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a string names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// Only this archive member.
         #[arg(long = "object", value_name = "MEMBER")]
         object: Option<String>,
         /// The shortest string reported.
-        #[arg(long = "min-length", default_value_t = blobray_cli::symbols::MIN_STRING)]
+        #[arg(long = "min-length", default_value_t = oer_tool_cli_blobray::symbols::MIN_STRING)]
         min_length: usize,
         #[command(flatten)]
         limits: InProcessOptions,
@@ -205,7 +205,7 @@ enum Command {
     /// the argument registers a0..a7 at every call site of the named
     /// functions: constants, symbols, the caller's own arguments or unknown.
     CallArguments {
-        /// Repeat ROLE=PATH; a function names its input by position.
+        /// Repeat ROLE=PATH or ROLE=pin:CHIP/ID; a function names its input by position.
         #[arg(long = "input", required = true, value_name = "ROLE=PATH")]
         inputs: Vec<OsString>,
         /// A called function's name; repeat for several.
@@ -226,10 +226,10 @@ enum GroupKey {
 }
 
 impl GroupKey {
-    fn by(self) -> blobray_cli::access_groups::GroupBy {
+    fn by(self) -> oer_tool_cli_blobray::access_groups::GroupBy {
         match self {
-            Self::Address => blobray_cli::access_groups::GroupBy::Address,
-            Self::Function => blobray_cli::access_groups::GroupBy::Function,
+            Self::Address => oer_tool_cli_blobray::access_groups::GroupBy::Address,
+            Self::Function => oer_tool_cli_blobray::access_groups::GroupBy::Function,
         }
     }
 }
@@ -241,15 +241,15 @@ const MIB: u64 = 1024 * 1024;
 struct InProcessOptions {
     #[arg(long, default_value_t = DEFAULT_WORKING_BYTES / MIB)]
     working_memory_mib: u64,
-    #[arg(long, default_value_t = oer_riscv_model::DEFAULT_TIMEOUT_MS / 1000)]
+    #[arg(long, default_value_t = oer_tool_analysis_riscv_model::DEFAULT_TIMEOUT_MS / 1000)]
     timeout_secs: u64,
-    #[arg(long, default_value_t = oer_riscv_model::DEFAULT_WORK_UNITS)]
+    #[arg(long, default_value_t = oer_tool_analysis_riscv_model::DEFAULT_WORK_UNITS)]
     max_work_units: u64,
 }
 
 impl InProcessOptions {
-    fn memory(&self) -> Result<oer_riscv_model::WorkingMemory> {
-        oer_riscv_model::WorkingMemory::new(
+    fn memory(&self) -> Result<oer_tool_analysis_riscv_model::WorkingMemory> {
+        oer_tool_analysis_riscv_model::WorkingMemory::new(
             self.working_memory_mib
                 .checked_mul(MIB)
                 .ok_or_else(|| invalid("working memory limit overflow"))?,
@@ -323,7 +323,7 @@ fn run(command: Command, format: Format) -> Result<ExitCode> {
                         .map_err(|_| invalid("--address exceeds 32 bits"))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let filter = blobray_cli::access_groups::AccessFilter { words, functions };
+            let filter = oer_tool_cli_blobray::access_groups::AccessFilter { words, functions };
             register_accesses(
                 inputs,
                 ranges,
@@ -416,11 +416,11 @@ fn field_accesses(
     let mut gaps = 0_u64;
     let mut unknown_addresses = 0_u64;
     let mut partial = 0_u64;
-    let mut partial_causes = blobray_domain::PartialCauses::default();
+    let mut partial_causes = oer_tool_analysis_blobray_domain::PartialCauses::default();
     app::library::analyze_library(
         &executables,
         assumptions,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |outcome, c| {
@@ -428,11 +428,15 @@ fn field_accesses(
                 app::library::LibraryOutcome::Analyzed(analyzed) => {
                     partial += u64::from(!analyzed.complete());
                     partial_causes.add(analyzed.partial_causes(c)?);
-                    unknown_addresses += blobray_cli::field::unknown_addresses(analyzed.records);
-                    let accesses =
-                        blobray_cli::field::field_accesses(analyzed.records, offset, width);
+                    unknown_addresses +=
+                        oer_tool_cli_blobray::field::unknown_addresses(analyzed.records);
+                    let accesses = oer_tool_cli_blobray::field::field_accesses(
+                        analyzed.records,
+                        offset,
+                        width,
+                    );
                     if !accesses.is_empty() {
-                        functions.push(blobray_cli::wire::FieldAccessFunction {
+                        functions.push(oer_tool_cli_blobray::wire::FieldAccessFunction {
                             function: analyzed.function.clone(),
                             accesses,
                         });
@@ -449,13 +453,13 @@ fn field_accesses(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::FieldAccessesDocument {
-                schema: blobray_cli::wire::FIELD_ACCESSES_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::FieldAccessesDocument {
+                schema: oer_tool_cli_blobray::wire::FIELD_ACCESSES_SCHEMA,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -486,7 +490,7 @@ fn field_accesses(
                     .unwrap_or_default();
                 for access in &function.accesses {
                     let root = match &access.root {
-                        blobray_cli::field::FieldRoot::Symbol {
+                        oer_tool_cli_blobray::field::FieldRoot::Symbol {
                             name: Some(name), ..
                         } => name.clone(),
                         other => format!("{other:?}"),
@@ -508,7 +512,7 @@ fn field_accesses(
                 "{} functions access the field; {} functions blocked; {partial} functions analyzed incompletely{}; {gaps} gaps; {unknown_addresses} accesses at unknown addresses",
                 functions.len(),
                 blocked.len(),
-                blobray_cli::partial::human(&partial_causes),
+                oer_tool_cli_blobray::partial::human(&partial_causes),
             )
             .map_err(io_error)?;
             if assumptions.abi.is_none() && unknown_addresses > 0 {
@@ -562,7 +566,7 @@ fn function_records(
         Format::Human => string_sections(&executables, &names, &memory, &mut control)?,
         Format::Json => std::collections::BTreeMap::new(),
     };
-    let wanted = |function: &blobray_domain::LibraryFunction| {
+    let wanted = |function: &oer_tool_analysis_blobray_domain::LibraryFunction| {
         function
             .name
             .as_deref()
@@ -572,13 +576,13 @@ fn function_records(
     app::library::analyze_library(
         &executables,
         assumptions,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |outcome, _| {
             match outcome {
                 app::library::LibraryOutcome::Analyzed(analyzed) if wanted(analyzed.function) => {
-                    functions.push(blobray_cli::wire::NamedFunction::Analyzed {
+                    functions.push(oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
                         function: analyzed.function.clone(),
                         complete: analyzed.complete(),
                         coverage: analyzed.coverage,
@@ -588,7 +592,7 @@ fn function_records(
                     });
                 }
                 app::library::LibraryOutcome::Blocked { function, error } if wanted(function) => {
-                    functions.push(blobray_cli::wire::NamedFunction::Blocked {
+                    functions.push(oer_tool_cli_blobray::wire::NamedFunction::Blocked {
                         function: function.clone(),
                         error: error.clone(),
                     });
@@ -600,8 +604,8 @@ fn function_records(
     )?;
     let found = |name: &str| {
         functions.iter().any(|function| {
-            let (blobray_cli::wire::NamedFunction::Analyzed { function, .. }
-            | blobray_cli::wire::NamedFunction::Blocked { function, .. }) = function;
+            let (oer_tool_cli_blobray::wire::NamedFunction::Analyzed { function, .. }
+            | oer_tool_cli_blobray::wire::NamedFunction::Blocked { function, .. }) = function;
             function.name.as_deref() == Some(name.as_bytes())
         })
     };
@@ -615,13 +619,13 @@ fn function_records(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::FunctionRecordsDocument {
-                schema: blobray_cli::wire::FUNCTION_RECORDS_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::FunctionRecordsDocument {
+                schema: oer_tool_cli_blobray::wire::FUNCTION_RECORDS_SCHEMA,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -639,7 +643,7 @@ fn function_records(
         Format::Human => {
             for function in &functions {
                 match function {
-                    blobray_cli::wire::NamedFunction::Analyzed {
+                    oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
                         function,
                         complete,
                         records,
@@ -654,7 +658,7 @@ fn function_records(
                         if *complete { "complete" } else { "incomplete" }
                     )
                     .and_then(|()| {
-                        blobray_cli::listing::listing(
+                        oer_tool_cli_blobray::listing::listing(
                             records,
                             images.get(function.input as usize).and_then(Option::as_ref),
                             &texts
@@ -666,15 +670,17 @@ fn function_records(
                     })
                     .and_then(|()| {
                         jump_tables.iter().try_for_each(|table| {
-                            writeln!(out, "{}", blobray_cli::jump_table::human(table))
+                            writeln!(out, "{}", oer_tool_cli_blobray::jump_table::human(table))
                         })
                     }),
-                    blobray_cli::wire::NamedFunction::Blocked { function, error } => writeln!(
-                        out,
-                        "{} (input {}): blocked: {error}",
-                        String::from_utf8_lossy(function.name.as_deref().unwrap_or_default()),
-                        function.input
-                    ),
+                    oer_tool_cli_blobray::wire::NamedFunction::Blocked { function, error } => {
+                        writeln!(
+                            out,
+                            "{} (input {}): blocked: {error}",
+                            String::from_utf8_lossy(function.name.as_deref().unwrap_or_default()),
+                            function.input
+                        )
+                    }
                 }
                 .map_err(io_error)?;
             }
@@ -692,9 +698,9 @@ fn function_records(
 fn string_sections(
     executables: &[app::in_process::Executable],
     names: &[String],
-    memory: &oer_riscv_model::WorkingMemory,
+    memory: &oer_tool_analysis_riscv_model::WorkingMemory,
     control: &mut app::in_process::Limits,
-) -> Result<std::collections::BTreeMap<(oer_riscv_model::ObjectId, u32), Vec<u8>>> {
+) -> Result<std::collections::BTreeMap<(oer_tool_analysis_riscv_model::ObjectId, u32), Vec<u8>>> {
     let mut sections = std::collections::BTreeMap::new();
     for executable in executables {
         let inventory = app::captured::inventory(executable, memory, control)?;
@@ -710,8 +716,8 @@ fn string_sections(
             if !defines {
                 continue;
             }
-            for section in blobray_cli::symbols::read_only_data(elf) {
-                if blobray_cli::symbols::is_string_section(elf, section.index) {
+            for section in oer_tool_cli_blobray::symbols::read_only_data(elf) {
+                if oer_tool_cli_blobray::symbols::is_string_section(elf, section.index) {
                     let bytes = section_bytes(&object.id, section, executables, memory, control)?;
                     sections.insert((object.id.clone(), section.index), bytes);
                 }
@@ -728,23 +734,23 @@ fn string_sections(
 /// such as jump tables, are not text.
 #[allow(clippy::type_complexity)]
 fn referenced_strings(
-    functions: &[blobray_cli::wire::NamedFunction],
-    sections: &std::collections::BTreeMap<(oer_riscv_model::ObjectId, u32), Vec<u8>>,
+    functions: &[oer_tool_cli_blobray::wire::NamedFunction],
+    sections: &std::collections::BTreeMap<(oer_tool_analysis_riscv_model::ObjectId, u32), Vec<u8>>,
 ) -> std::collections::BTreeMap<
-    (u64, oer_riscv_model::SymbolId),
+    (u64, oer_tool_analysis_riscv_model::SymbolId),
     std::collections::BTreeMap<u64, Vec<String>>,
 > {
     let mut texts: std::collections::BTreeMap<_, std::collections::BTreeMap<u64, Vec<String>>> =
         std::collections::BTreeMap::new();
     for function in functions {
-        let blobray_cli::wire::NamedFunction::Analyzed {
+        let oer_tool_cli_blobray::wire::NamedFunction::Analyzed {
             function, records, ..
         } = function
         else {
             continue;
         };
         for record in records {
-            let oer_riscv_model::FunctionRecord::Reference {
+            let oer_tool_analysis_riscv_model::FunctionRecord::Reference {
                 raw,
                 target,
                 addend,
@@ -762,8 +768,8 @@ fn referenced_strings(
             let Some(offset) = target.offset.checked_add_signed(addend.unwrap_or(0)) else {
                 continue;
             };
-            if let Some(text) =
-                blobray_cli::symbols::string_at(bytes, offset).filter(|text| !text.is_empty())
+            if let Some(text) = oer_tool_cli_blobray::symbols::string_at(bytes, offset)
+                .filter(|text| !text.is_empty())
             {
                 texts
                     .entry((function.input, function.symbol.clone()))
@@ -780,16 +786,16 @@ fn referenced_strings(
 /// The complete bytes of `section` of `object`, as its inventory record
 /// sizes it, without another inventory pass.
 fn section_bytes(
-    object: &oer_riscv_model::ObjectId,
-    section: &blobray_domain::SectionRecord,
+    object: &oer_tool_analysis_riscv_model::ObjectId,
+    section: &oer_tool_analysis_blobray_domain::SectionRecord,
     executables: &[app::in_process::Executable],
-    memory: &oer_riscv_model::WorkingMemory,
+    memory: &oer_tool_analysis_riscv_model::WorkingMemory,
     control: &mut app::in_process::Limits,
 ) -> Result<Vec<u8>> {
-    let request = blobray_domain::DataRequest {
+    let request = oer_tool_analysis_blobray_domain::DataRequest {
         object: object.clone(),
         symbol: None,
-        ranges: vec![blobray_domain::DataSelector::Section {
+        ranges: vec![oer_tool_analysis_blobray_domain::DataSelector::Section {
             section: section.index,
             offset: 0,
             length: section.size,
@@ -802,7 +808,7 @@ fn section_bytes(
 fn mmio_diff(
     old: Vec<OsString>,
     new: Vec<OsString>,
-    ranges: Vec<blobray_domain::ImageRegion>,
+    ranges: Vec<oer_tool_analysis_blobray_domain::ImageRegion>,
     assumptions: app::library::Assumptions<'_>,
     limits: InProcessOptions,
     format: Format,
@@ -831,15 +837,15 @@ fn mmio_diff(
         &new,
         assumptions,
         &ranges,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
     )?;
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::MmioDiffDocument {
-                schema: blobray_cli::wire::MMIO_DIFF_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::MmioDiffDocument {
+                schema: oer_tool_cli_blobray::wire::MMIO_DIFF_SCHEMA,
                 old: described(&old_inputs, &old),
                 new: described(&new_inputs, &new),
                 abi: assumptions.abi,
@@ -851,7 +857,7 @@ fn mmio_diff(
             writeln!(out).map_err(io_error)?;
         }
         Format::Human => {
-            out.write_all(blobray_cli::mmio::render(&diff).as_bytes())
+            out.write_all(oer_tool_cli_blobray::mmio::render(&diff).as_bytes())
                 .map_err(io_error)?;
         }
     }
@@ -883,7 +889,7 @@ fn symbols(
     let mut rows = Vec::new();
     for (index, (input, executable)) in inputs.iter().zip(&executables).enumerate() {
         let inventory = app::captured::inventory(executable, &memory, &mut control)?;
-        rows.extend(blobray_cli::symbols::rows(
+        rows.extend(oer_tool_cli_blobray::symbols::rows(
             index as u64,
             &input.role,
             &inventory,
@@ -893,8 +899,8 @@ fn symbols(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::SymbolsDocument {
-                schema: blobray_cli::wire::SYMBOLS_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::SymbolsDocument {
+                schema: oer_tool_cli_blobray::wire::SYMBOLS_SCHEMA,
                 inputs: described(&inputs, &executables),
                 symbols: rows,
             };
@@ -958,11 +964,11 @@ fn strings(
                 continue;
             }
             let Some(elf) = &object.elf else { continue };
-            for section in blobray_cli::symbols::read_only_data(elf) {
+            for section in oer_tool_cli_blobray::symbols::read_only_data(elf) {
                 let bytes =
                     section_bytes(&object.id, section, &executables, &memory, &mut control)?;
-                for (offset, text) in blobray_cli::symbols::strings(&bytes, minimum) {
-                    rows.push(blobray_cli::wire::StringRow {
+                for (offset, text) in oer_tool_cli_blobray::symbols::strings(&bytes, minimum) {
+                    rows.push(oer_tool_cli_blobray::wire::StringRow {
                         input: index as u64,
                         member: name.clone(),
                         section: section
@@ -979,8 +985,8 @@ fn strings(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::StringsDocument {
-                schema: blobray_cli::wire::STRINGS_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::StringsDocument {
+                schema: oer_tool_cli_blobray::wire::STRINGS_SCHEMA,
                 inputs: described(&inputs, &executables),
                 strings: rows,
             };
@@ -1010,12 +1016,12 @@ fn strings(
 fn described(
     inputs: &[Input],
     executables: &[app::in_process::Executable],
-) -> Vec<blobray_cli::wire::RegisterAccessInput> {
+) -> Vec<oer_tool_cli_blobray::wire::RegisterAccessInput> {
     inputs
         .iter()
         .zip(executables)
         .map(
-            |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+            |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                 role: input.role.clone(),
                 sha256: executable.id().clone(),
             },
@@ -1029,14 +1035,14 @@ fn described(
 /// no further.
 fn image_symbols(
     executable: &app::in_process::Executable,
-    memory: &oer_riscv_model::WorkingMemory,
+    memory: &oer_tool_analysis_riscv_model::WorkingMemory,
     control: &mut app::in_process::Limits,
-) -> Result<Option<blobray_cli::listing::ImageSymbols>> {
+) -> Result<Option<oer_tool_cli_blobray::listing::ImageSymbols>> {
     const ET_EXEC: u16 = 2;
     const STT_FUNC: u8 = 2;
     // Decide from the ELF header alone, so an archive or relocatable object
     // costs no second inventory pass against the analysis' shared budget.
-    if !blobray_cli::listing::is_executable_image(executable.bytes()) {
+    if !oer_tool_cli_blobray::listing::is_executable_image(executable.bytes()) {
         return Ok(None);
     }
     let inventory = app::captured::inventory(executable, memory, control)?;
@@ -1046,7 +1052,7 @@ fn image_symbols(
     let Some(elf) = object.elf.as_ref().filter(|elf| elf.object_type == ET_EXEC) else {
         return Ok(None);
     };
-    Ok(Some(blobray_cli::listing::ImageSymbols::new(
+    Ok(Some(oer_tool_cli_blobray::listing::ImageSymbols::new(
         elf.symbols
             .iter()
             .filter(|symbol| symbol.symbol_type & 0xf == STT_FUNC)
@@ -1062,36 +1068,82 @@ fn image_symbols(
 }
 
 fn io_error(e: std::io::Error) -> Error {
-    oer_riscv_model::storage_io(e)
+    oer_tool_analysis_riscv_model::storage_io(e)
 }
 
 fn invalid(message: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
 }
 
-/// One `ROLE=PATH` input binding.
+/// One `ROLE=PATH` or `ROLE=pin:CHIP/ID` input binding.
 struct Input {
     role: String,
     path: PathBuf,
 }
 
+/// The repository this tool runs in, whose pins name the vendor artifacts.
+fn root() -> Result<PathBuf> {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .map_err(io_error)
+}
+
+/// `ROLE=PATH`, or `ROLE=pin:CHIP/ID` for the pinned vendor artifact `ID`
+/// of `CHIP`, fetched and verified against its SHA-256. A vendor artifact
+/// is read only by its pin: a path into the vendor store is refused.
 fn parse_input(value: OsString) -> Result<Input> {
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
     let bytes = value.as_os_str().as_bytes();
     let split = bytes
         .iter()
         .position(|b| *b == b'=')
-        .ok_or_else(|| invalid("expected ROLE=PATH"))?;
+        .ok_or_else(|| invalid("expected ROLE=PATH or ROLE=pin:CHIP/ID"))?;
     let role = std::str::from_utf8(&bytes[..split])
         .map_err(|_| invalid("role must be UTF-8"))?
         .to_owned();
     if split + 1 == bytes.len() {
         return Err(invalid("input path is empty"));
     }
-    Ok(Input {
-        role,
-        path: OsString::from_vec(bytes[split + 1..].to_vec()).into(),
-    })
+    let value = &bytes[split + 1..];
+    if let Some(pin) = value.strip_prefix(b"pin:") {
+        let pin = std::str::from_utf8(pin).map_err(|_| invalid("pin must be UTF-8"))?;
+        let (chip, id) = pin
+            .split_once('/')
+            .ok_or_else(|| invalid("expected pin:CHIP/ID"))?;
+        let path = oer_tool_data_vendor_artifacts::ensure(&root()?, chip, id)
+            .map_err(|error| invalid(&format!("pin {pin}: {error}")))?;
+        return Ok(Input { role, path });
+    }
+    let path = PathBuf::from(OsString::from_vec(value.to_vec()));
+    refuse_store_path(&path)?;
+    Ok(Input { role, path })
+}
+
+/// Refuse `path` when it lies in the vendor store: a vendor artifact is
+/// read by its pin, which verifies it.
+fn refuse_store_path(path: &std::path::Path) -> Result<()> {
+    let store = oer_tool_data_vendor_artifacts::store()
+        .map_err(|error| invalid(&format!("vendor store: {error}")))?;
+    refuse_inside(path, &[&store, &root()?.join("target/vendor")])
+}
+
+/// Refuse `path` when it resolves below one of `stores`.
+fn refuse_inside(path: &std::path::Path, stores: &[&std::path::Path]) -> Result<()> {
+    let Ok(resolved) = path.canonicalize() else {
+        return Ok(());
+    };
+    if stores.iter().any(|store| {
+        store
+            .canonicalize()
+            .is_ok_and(|store| resolved.starts_with(store))
+    }) {
+        return Err(invalid(&format!(
+            "{} is a vendor artifact: name it by its pin, ROLE=pin:CHIP/ID",
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 fn parse_number(v: &str) -> std::result::Result<u64, String> {
@@ -1105,10 +1157,10 @@ fn parse_number(v: &str) -> std::result::Result<u64, String> {
 
 fn parse_forbidden(
     value: &str,
-) -> std::result::Result<blobray_domain::ForbiddenTargetRange, String> {
+) -> std::result::Result<oer_tool_analysis_blobray_domain::ForbiddenTargetRange, String> {
     let (name, bounds) = value.split_once('=').ok_or("expected NAME=START..END")?;
     let (start, end) = bounds.split_once("..").ok_or("expected START..END")?;
-    let range = blobray_domain::ForbiddenTargetRange {
+    let range = oer_tool_analysis_blobray_domain::ForbiddenTargetRange {
         name: name.into(),
         start: u32::try_from(parse_number(start)?).map_err(|e| e.to_string())?,
         end: parse_number(end)?,
@@ -1117,9 +1169,11 @@ fn parse_forbidden(
     Ok(range)
 }
 
-fn parse_range(text: &str) -> std::result::Result<blobray_domain::ImageRegion, String> {
+fn parse_range(
+    text: &str,
+) -> std::result::Result<oer_tool_analysis_blobray_domain::ImageRegion, String> {
     let (start, length) = text.split_once(':').ok_or("expected START:LENGTH")?;
-    Ok(blobray_domain::ImageRegion {
+    Ok(oer_tool_analysis_blobray_domain::ImageRegion {
         start: u32::try_from(parse_number(start)?).map_err(|e| e.to_string())?,
         length: parse_number(length)?,
     })
@@ -1144,14 +1198,14 @@ fn json_error(e: serde_json::Error) -> Error {
 /// with no forbidden target and no coverage gap, succeeds.
 fn audit_targets(
     artifact: PathBuf,
-    ranges: Vec<blobray_domain::ForbiddenTargetRange>,
+    ranges: Vec<oer_tool_analysis_blobray_domain::ForbiddenTargetRange>,
     limits: InProcessOptions,
     format: Format,
 ) -> Result<ExitCode> {
     let executable = app::in_process::Executable::new(std::fs::read(&artifact).map_err(io_error)?);
     let memory = limits.memory()?;
     let mut control = limits.control();
-    let decoder = oer_riscv_lift::RiscvDecoder;
+    let decoder = oer_tool_analysis_riscv_lift::RiscvDecoder;
     let mut records = Vec::new();
     let summary = app::audit::audit_targets(
         &executable,
@@ -1176,8 +1230,8 @@ fn audit_targets(
         Format::Json => {
             serde_json::to_writer(
                 &mut out,
-                &blobray_cli::wire::TargetAuditDocument {
-                    schema: blobray_cli::wire::TARGET_AUDIT_SCHEMA,
+                &oer_tool_cli_blobray::wire::TargetAuditDocument {
+                    schema: oer_tool_cli_blobray::wire::TARGET_AUDIT_SCHEMA,
                     artifact: executable.id().clone(),
                     decoder: decoder.identity().into(),
                     semantics: decoder.semantic_identity().into(),
@@ -1218,9 +1272,9 @@ fn audit_targets(
 /// register accesses, streaming the JSON records as they are found.
 fn register_accesses(
     inputs: Vec<OsString>,
-    ranges: Vec<blobray_domain::ImageRegion>,
-    filter: blobray_cli::access_groups::AccessFilter,
-    group_by: Option<blobray_cli::access_groups::GroupBy>,
+    ranges: Vec<oer_tool_analysis_blobray_domain::ImageRegion>,
+    filter: oer_tool_cli_blobray::access_groups::AccessFilter,
+    group_by: Option<oer_tool_cli_blobray::access_groups::GroupBy>,
     assumptions: app::library::Assumptions<'_>,
     limits: InProcessOptions,
     format: Format,
@@ -1243,16 +1297,16 @@ fn register_accesses(
     let json = matches!(format, Format::Json);
     let filtered = !filter.words.is_empty() || !filter.functions.is_empty();
     let group_by = match (group_by, json, filtered) {
-        (None, false, true) => Some(blobray_cli::access_groups::GroupBy::Address),
+        (None, false, true) => Some(oer_tool_cli_blobray::access_groups::GroupBy::Address),
         (group_by, _, _) => group_by,
     };
-    let mut groups = group_by.map(blobray_cli::access_groups::AccessGroups::new);
+    let mut groups = group_by.map(oer_tool_cli_blobray::access_groups::AccessGroups::new);
     if json {
         let described: Vec<_> = inputs
             .iter()
             .zip(&executables)
             .map(
-                |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+                |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                     role: input.role.clone(),
                     sha256: executable.id().clone(),
                 },
@@ -1261,7 +1315,7 @@ fn register_accesses(
         write!(
             out,
             "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_returns\":{},\"read_only\":{},\"records\":[",
-            blobray_cli::wire::REGISTER_ACCESSES_SCHEMA,
+            oer_tool_cli_blobray::wire::REGISTER_ACCESSES_SCHEMA,
             serde_json::to_string(&described).map_err(json_error)?,
             serde_json::to_string(&assumptions.abi).map_err(json_error)?,
             assumptions.call_returns,
@@ -1274,7 +1328,7 @@ fn register_accesses(
         &executables,
         assumptions,
         &ranges,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |record, _| {
@@ -1322,7 +1376,7 @@ fn register_accesses(
             "{} functions ({} partial{}, {} blocked), {} gaps, {} observations ({} unresolved, {} indexed)",
             summary.functions,
             summary.partial_functions,
-            blobray_cli::partial::human(&summary.partial_causes),
+            oer_tool_cli_blobray::partial::human(&summary.partial_causes),
             summary.blocked_functions,
             summary.gaps,
             summary.observations,
@@ -1365,11 +1419,11 @@ fn call_arguments(
     let mut callers = Vec::new();
     let mut blocked = Vec::new();
     let (mut partial, mut gaps) = (0_u64, 0_u64);
-    let mut partial_causes = blobray_domain::PartialCauses::default();
+    let mut partial_causes = oer_tool_analysis_blobray_domain::PartialCauses::default();
     app::library::analyze_library(
         &executables,
         assumptions,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |outcome, c| {
@@ -1380,10 +1434,13 @@ fn call_arguments(
                     let image = images
                         .get(analyzed.function.input as usize)
                         .and_then(Option::as_ref);
-                    let sites =
-                        blobray_cli::call_arguments::call_sites(analyzed.records, &symbols, image);
+                    let sites = oer_tool_cli_blobray::call_arguments::call_sites(
+                        analyzed.records,
+                        &symbols,
+                        image,
+                    );
                     if !sites.is_empty() {
-                        callers.push(blobray_cli::wire::CallingFunction {
+                        callers.push(oer_tool_cli_blobray::wire::CallingFunction {
                             function: analyzed.function.clone(),
                             sites,
                         });
@@ -1400,13 +1457,13 @@ fn call_arguments(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::CallArgumentsDocument {
-                schema: blobray_cli::wire::CALL_ARGUMENTS_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::CallArgumentsDocument {
+                schema: oer_tool_cli_blobray::wire::CALL_ARGUMENTS_SCHEMA,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -1460,7 +1517,7 @@ fn call_arguments(
                 out,
                 "{count} call sites in {} functions; {partial} partial{}, {} blocked, {gaps} gaps",
                 callers.len(),
-                blobray_cli::partial::human(&partial_causes),
+                oer_tool_cli_blobray::partial::human(&partial_causes),
                 blocked.len(),
             )
             .map_err(io_error)?;
@@ -1499,16 +1556,16 @@ fn callers(
     app::library::analyze_library(
         &executables,
         assumptions,
-        &oer_riscv_lift::RiscvDecoder,
+        &oer_tool_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |outcome, _| {
             match outcome {
                 app::library::LibraryOutcome::Analyzed(analyzed) => {
                     let references =
-                        blobray_cli::listing::references_to(analyzed.records, &symbols);
+                        oer_tool_cli_blobray::listing::references_to(analyzed.records, &symbols);
                     if !references.is_empty() {
-                        callers.push(blobray_cli::wire::Caller {
+                        callers.push(oer_tool_cli_blobray::wire::Caller {
                             function: analyzed.function.clone(),
                             references,
                         });
@@ -1525,13 +1582,13 @@ fn callers(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = blobray_cli::wire::CallersDocument {
-                schema: blobray_cli::wire::CALLERS_SCHEMA,
+            let document = oer_tool_cli_blobray::wire::CallersDocument {
+                schema: oer_tool_cli_blobray::wire::CALLERS_SCHEMA,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| blobray_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tool_cli_blobray::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -1579,4 +1636,32 @@ fn callers(
     }
     out.flush().map_err(io_error)?;
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+
+    #[test]
+    fn a_path_into_a_vendor_store_is_refused_and_others_pass() {
+        let store = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let pinned = store.path().join("libphy.a");
+        let own = other.path().join("image.elf");
+        std::fs::write(&pinned, b"x").unwrap();
+        std::fs::write(&own, b"x").unwrap();
+        let error = refuse_inside(&pinned, &[store.path()]).unwrap_err();
+        assert!(error.to_string().contains("ROLE=pin:CHIP/ID"), "{error}");
+        refuse_inside(&own, &[store.path()]).unwrap();
+    }
+
+    #[test]
+    fn a_pin_names_its_chip_and_id() {
+        let error = parse_input("lib=pin:libphy".into()).err().unwrap();
+        assert!(error.to_string().contains("pin:CHIP/ID"), "{error}");
+        let error = parse_input("lib=pin:esp32s31/no-such-artifact".into())
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("no-such-artifact"), "{error}");
+    }
 }

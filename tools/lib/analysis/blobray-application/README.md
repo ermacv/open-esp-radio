@@ -1,6 +1,6 @@
 # Blobray application
 
-`blobray-application` owns the operations Blobray performs over executables
+`oer-tool-analysis-blobray-application` owns the operations Blobray performs over executables
 its caller gives as bytes, inside the caller's process. Its internal
 dependencies are [domain](../domain/README.md),
 [artifacts](../artifacts/README.md), [analysis](../analysis/README.md) and

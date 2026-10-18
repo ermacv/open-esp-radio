@@ -136,7 +136,7 @@ pub struct LibraryFunction {
     /// Position of the defining input among the analyzed inputs.
     pub input: u64,
     pub symbol: SymbolId,
-    #[serde(with = "oer_riscv_model::symbol_name::option")]
+    #[serde(with = "oer_tool_analysis_riscv_model::symbol_name::option")]
     pub name: Option<Vec<u8>>,
 }
 
