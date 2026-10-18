@@ -130,6 +130,11 @@ tree is a selection of a predecessor repository, without its history.
   prefix, TX descriptor words, BLE exchange memory) is described in the
   register model as memory layouts with generated PAC accessors; the handover
   protocol stays in the HAL ([hardware memory](hardware-memory.md)).
+- **Registers, layouts and protocol meet in the block's HAL engine**: pointer
+  fields name their layout and take typed references; placement is proved by
+  the linker, not checked at run time; `unsafe` stays in the PAC, the
+  placement constructor and the protocol core, and crates above the HAL
+  forbid it (owner, 2026-10-18).
 
 ## 2026-10-18: decisions recovered from the predecessor
 

@@ -148,6 +148,38 @@ to hardware-shared memory.
 `DmaSpace`, `StableDmaRange`, the `.dma.bss.*` sections and the firmware
 placement check, unchanged, reading the region bounds from the model.
 
+## Where registers, layouts and the protocol meet
+
+Approved by the owner (2026-10-18).
+
+- **One IP block, one description.** A layout belongs to the peripheral that
+  consumes it, beside its registers. A register field the hardware reads as
+  a pointer names its target in the model (`points-to =
+  "WIFI_RX_DMA_DESCRIPTOR"`), and the PAC accessor then takes a typed
+  reference (`DmaRef<WifiRxDmaDescriptor>`), never a bare `u32`.
+- **The protocol is that block's HAL engine.** One HAL type owns both the
+  block's register token (from the ownership root) and its placed arena; the
+  base register, the doorbell and every descriptor publication are its
+  methods. Neither the registers nor the arena is reachable apart from it.
+  Drivers above see leases, cursors and outcomes, never addresses.
+- **Placement is proved before run time.** An arena is declared through a
+  macro that puts its static into the block's `.dma.bss.<block>` section; a
+  linker `ASSERT` keeps the section inside the DMA window and off a base whose
+  low 20 bits are zero. `DmaRef<T>` is built only from such a placed static,
+  and buffer addresses are typed offsets inside the same arena, so they are
+  valid by construction. Size and alignment are compile-time checks. The
+  run-time address checks (`descriptor_address_valid`, the run-time part of
+  `placement.rs`, the firmware placement warning) are removed. What the
+  hardware writes back (`NEXT`, `LAST`) is outside input and stays checked,
+  against the arena rather than the window. Host tests keep the `HostDma`
+  space with the same types.
+- **The unsafe boundary.** Three narrow places, all in the PAC and the HAL:
+  the generated volatile word accesses (a safe API over plain words); the one
+  placement constructor (justified by the linker assertion and a single
+  `take`); and the protocol core, where a CPU view of a buffer is created
+  after the completion proof and where a buffer is handed back to the
+  hardware. Crates above the HAL carry `#![forbid(unsafe_code)]`.
+
 ## Order of work
 
 1. Pilot: the Wi-Fi DMA descriptor and the RX control prefix, both proven on
@@ -155,10 +187,15 @@ placement check, unchanged, reading the region bounds from the model.
    regions; `descriptor.rs` and `prefix.rs` switch to the generated types; all
    their tests keep passing. During the predecessor port, before the
    ESP32-C5 HAL and W2's TX structures, so both start on the new kind.
-2. W2: the TX descriptor words and the A-MPDU descriptors; the offset-named
+2. Typed links, then within the same port wave: `points-to` in the model and
+   typed references in the PAC; placement through the macro and the linker
+   assertion; the RX DMA engine in the HAL as the only owner of its registers
+   and arena; the run-time address checks removed; `forbid(unsafe_code)` in
+   the driver and above.
+3. W2: the TX descriptor words and the A-MPDU descriptors; the offset-named
    fields become `_OPAQUE` fields with their evidence until their meaning is
    known.
-3. The second radio block: BLE exchange memory or the 802.15.4 frame buffers.
+4. The second radio block: BLE exchange memory or the 802.15.4 frame buffers.
 
 ## Open questions
 
