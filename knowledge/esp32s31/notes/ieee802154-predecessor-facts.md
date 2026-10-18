@@ -1,0 +1,10 @@
+# Facts recorded by the predecessor
+
+Carried from the predecessor's issue discussions as written; unverified unless a line says otherwise.
+
+- **228.** "Research needed before 2.4 GHz HT40 AP coexistence: which S31 counters give channel utilization and primary/secondary occupancy (denominator, window, wrap, behaviour across sleep and retune). The IEEE 802.15.4 counters are not evidence." This became a prerequisite once the 2026-10-18 decision put AP 40 MHz in 2.4 GHz in scope.
+- **253, method.** "Pair cold and restart (or 802.15.4 and restart) calibration points from one boot lifecycle: flash vendor to ota_0 and production to ota_1 once; select a slot; erase phy_init/nvs for a cold start; verify the actual boot slot; reject stale or incomplete pairs." Belongs with the PHY cross-check that returns before R1.
+- **496 — opaque-word coverage numbers and the 10 words without vendor access.** (b, no). Inventory over 16 pinned S31 vendor binaries (2026-10-10): opaque words with a vendor access 607 of 617 (7 only through an index); vendor-touched words in owned MMIO 1 001 → 2 178. The 10 without: `READ_RESULT_1..4` (PHY_PBUS 0x20100898..0x201008a4), `TXEN_STOP_DELAY` (0x20103108), `CONT_RX_DELAY` (0x20103118), `DCDC_CTRL` (0x2010311c), `CORE0_ROUTE` (0x20585210), `CORE1_ROUTE` (0x20585a10), and `BLE_HW_POSITIONAL_WORD_891C` (0x2010891c). The 802.15.4 ones are written only by ESP-IDF driver sources; `CONT_RX_DELAY` is 6 bits per IDF `reg.h`.
+- **459 — 802.15.4 receive flush bound.** (b, partly). "On the engine a stop flushes at most the one frame in flight: one receive DMA, re-armed only after its `RxDone` is serviced." (host reasoning in the PR, not a hardware measurement; verify against the engine in `crates/espressif/i-engine`).
+- Re-enabling would keep old OpenThread Link Metrics initiators.
+- **668.** (if the 802.15.4 ISR-owned engine is built; check / first): commands through a lock-free SPSC queue + doorbell at the MAC's level and core; ISR drains commands, then hardware events; `state`, `frame_counter`, `recent_rssi` as single-writer atomic snapshots; CSMA-CA backoff on a command or ISR-owned timer;
