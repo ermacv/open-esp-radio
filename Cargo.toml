@@ -6,10 +6,8 @@ members = [
     "firmware/verification/esp32s31/boot-state-probe",
     "tools/lib/data/vendor-evidence-shard",
     "tools/lib/service/hil-family-phy",
-    "tools/lib/service/hil-family-phy-esp32s31",
     "tools/lib/service/phy-archive",
     "tools/lib/service/phy-calibration-capture",
-    "tools/lib/service/phy-vendor-calibration-esp32s31",
     "crates/esp32c5/pac",
     "crates/esp32c5/pac-raw",
     "crates/esp32c5/hal",
@@ -181,10 +179,8 @@ members = [
 default-members = [
     "tools/lib/data/vendor-evidence-shard",
     "tools/lib/service/hil-family-phy",
-    "tools/lib/service/hil-family-phy-esp32s31",
     "tools/lib/service/phy-archive",
     "tools/lib/service/phy-calibration-capture",
-    "tools/lib/service/phy-vendor-calibration-esp32s31",
     "crates/esp32c5/pac",
     "crates/esp32c5/pac-raw",
     "crates/esp32c5/hal",
@@ -342,6 +338,10 @@ resolver = "3"
 # Ported packages that do not build yet, each with why; they join the
 # workspace when what they need is there.
 exclude = [
+    # needs tools/lib/analysis/phy-relation-esp32s31, which does not build
+    "tools/lib/service/phy-vendor-calibration-esp32s31",
+    # needs tools/lib/service/phy-vendor-calibration-esp32s31
+    "tools/lib/service/hil-family-phy-esp32s31",
     # not building: its tests and probe feature need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
     "crates/esp32s31/bluetooth/driver",
     # not building: its tests need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
