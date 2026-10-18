@@ -26,7 +26,9 @@ fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
     let start = core::ptr::from_ref(&*arena).addr();
     let end = start + core::mem::size_of::<HostArena>();
 
-    let (parts, mut stop, frames) = arena.bind().expect("a zeroed arena binds");
+    let (parts, mut stop, frames) =
+        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
+            .expect("a zeroed arena binds");
 
     let descriptors = parts.rx().descriptors().as_ptr().addr();
     assert!(descriptors > start && descriptors < end);

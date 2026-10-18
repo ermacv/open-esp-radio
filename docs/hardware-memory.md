@@ -145,8 +145,20 @@ to hardware-shared memory.
 
 ### 3. Placement: platform and HAL
 
-`DmaSpace`, `StableDmaRange`, the `.dma.bss.*` sections and the firmware
-placement check, unchanged, reading the region bounds from the model.
+A DMA static is declared with `oer_esp32s31_hal::dma_static!`: a zeroed
+`DmaStatic<T>` in a `.dma.bss.<block>` section (the macro refuses any other
+section name), claimed once as a `Placed<T>`. The register generator writes
+`firmware/platform/esp32s31/linker/dma-window.x` from the model: the
+`dma-window` region and the width of `RX_NEXT_DESCRIPTOR.ADDRESS_LOW`. The
+runtime linker script includes it and asserts that all DMA storage lies in
+the window and holds no address whose low address bits are zero; the
+runtime link uses `--orphan-handling=error`, so a mistyped section name
+cannot leave a static unplaced. A storage that publishes its own addresses
+binds from a `Placed` value (`WifiRxArena::bind`); host models use
+`Placed::host` (test support). `DmaSpace` and `StableDmaRange` stay. The
+run-time address checks and the firmware placement warning go with the HAL
+RX DMA engine (step 3); `cargo fw` refuses an image that enables
+`test-support`.
 
 ## Where registers, layouts and the protocol meet
 

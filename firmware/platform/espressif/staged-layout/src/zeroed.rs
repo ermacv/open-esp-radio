@@ -4,8 +4,9 @@
 //! These output sections are `NOLOAD`: no bytes of their inputs reach the
 //! image, and the boot clears the range. A static placed there by name must
 //! therefore start as all zero bytes, or its initializer is silently lost.
-//! An image linker can check every link input against
-//! [`RUNTIME_ZEROED_REGIONS`]; a test keeps it equal to the linker script.
+//! That no input carries initialized bytes there is to be checked by
+//! `cargo fw` after the link (planned; nothing checks it yet). A test keeps
+//! [`RUNTIME_ZEROED_REGIONS`] equal to the linker script.
 
 /// One output section the boot zeroes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,6 +108,20 @@ mod tests {
     use super::*;
 
     const SCRIPT: &str = include_str!("../../linker/runtime/sections.x");
+
+    #[test]
+    fn dma_storage_is_checked_against_the_generated_window() {
+        let script: String = SCRIPT.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(script.contains("INCLUDE dma-window.x"), "{SCRIPT}");
+        for check in [
+            "__runtime_dma_data_start >= DMA_WINDOW_ORIGIN",
+            "__runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH",
+            "(__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0",
+            "(__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) == ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)",
+        ] {
+            assert!(script.contains(check), "{check}");
+        }
+    }
 
     /// The body of output section `name` and whether it is `NOLOAD`.
     fn output_section(name: &str) -> Option<(bool, &'static str)> {

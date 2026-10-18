@@ -104,6 +104,10 @@ impl<
     /// stop handle and the two ends of the staged-frame queue (the runner's
     /// publisher end and the application's receiver).
     ///
+    /// The arena is `placed` in the DMA window
+    /// ([`oer_esp32s31_hal::dma_static!`]): its descriptors and buffers are
+    /// published to the MAC by their own addresses.
+    ///
     /// # Errors
     ///
     /// The DMA storage has no valid layout in its address space; nothing
@@ -113,7 +117,7 @@ impl<
         reason = "the parts, the stop handle and the queue ends are the owners of one bind"
     )]
     pub fn bind(
-        &'static mut self,
+        placed: oer_esp32s31_hal::dma_static::Placed<Self>,
     ) -> Result<
         (
             WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>,
@@ -143,7 +147,7 @@ impl<
             buffer_addresses,
             stage,
             rx,
-        } = self;
+        } = placed.into_inner();
         let descriptor_base = rx.dma_layout(buffer_addresses)?;
         let (requests, counters): (&'static WifiIrqRequests, &'static WifiRxCounters) =
             (requests, counters);

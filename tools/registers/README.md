@@ -109,6 +109,12 @@ field's builder takes that type (`Option<DmaRef<L>>` for a link, `None` for
 none); its getter returns the word as read. No ordering, fence or ownership
 is generated.
 
+A chip publication may name `[outputs.linker]`: `path` and
+`address-low-field = "PERIPHERAL.REGISTER.FIELD"`. It writes a linker
+fragment with `DMA_WINDOW_ORIGIN` and `DMA_WINDOW_LENGTH` (the memory map's
+`dma-window` region) and `DMA_ADDRESS_LOW_BITS` (that field's width, from
+bit 0), which the runtime linker script includes.
+
 A complete-register write in the API policy takes either a `domain` or, for
 a register the hardware reads as a pointer, `points-to = "<LAYOUT>"`: its
 bridge then takes a `DmaRef` to that layout of the model.

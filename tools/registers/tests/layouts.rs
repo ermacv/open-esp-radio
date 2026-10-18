@@ -32,6 +32,18 @@ access = "read-write"
 name = "FLAG"
 bitOffset = 3
 bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "NEXT"
+addressOffset = 4
+size = 32
+access = "read-only"
+
+[[peripherals.registers.register.fields]]
+name = "ADDRESS_LOW"
+bitOffset = 0
+bitWidth = 20
 "#;
 
 const NODE: &str = r#"schema = 1
@@ -199,4 +211,55 @@ fn a_layout_is_placed_only_in_ram_regions_of_the_memory_map() {
             );
         }
     }
+}
+
+#[test]
+fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = |name: &str| directory.path().join(name);
+    for (name, text) in [
+        ("device.toml", DEVICE),
+        ("radio.toml", FRAGMENT),
+        ("node.toml", NODE),
+        ("prefix.toml", PREFIX),
+        ("memory.toml", MEMORY),
+    ] {
+        fs::write(path(name), text).unwrap();
+    }
+    let model = oer_register_model::RegisterModel::load(&path("device.toml")).unwrap();
+    let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+    let (svd, _) = model.render_svd().unwrap();
+    let fragment =
+        oer_register_model::render_dma_linker_fragment(&svd, &memory, "RADIO.NEXT.ADDRESS_LOW")
+            .unwrap();
+    for line in [
+        "DMA_WINDOW_ORIGIN = 0x30000000;",
+        "DMA_WINDOW_LENGTH = 0x00080000;",
+        "DMA_ADDRESS_LOW_BITS = 20;",
+    ] {
+        assert!(fragment.contains(line), "{line}\n{fragment}");
+    }
+    // The field must be a low field of its register, and must exist.
+    for (field, reason) in [
+        ("RADIO.STATUS.FLAG", "bits N-1:0"),
+        ("RADIO.NEXT.MISSING", "unknown field"),
+        ("RADIO.NEXT", "PERIPHERAL.REGISTER.FIELD"),
+    ] {
+        let error = oer_register_model::render_dma_linker_fragment(&svd, &memory, field)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(reason), "{field}: {error}");
+    }
+    // A memory map without the DMA region has no fragment.
+    fs::write(
+        path("memory.toml"),
+        MEMORY.replace("\"dma-window\"", "\"sram\""),
+    )
+    .unwrap();
+    let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+    let error =
+        oer_register_model::render_dma_linker_fragment(&svd, &memory, "RADIO.NEXT.ADDRESS_LOW")
+            .unwrap_err()
+            .to_string();
+    assert!(error.contains("no RAM region dma-window"), "{error}");
 }

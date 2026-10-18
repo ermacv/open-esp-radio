@@ -33,3 +33,7 @@ api = "../../../crates/esp32s31/pac/src/generated.rs"
 crate-name = "oer_esp32s31_pac_raw"
 target = "none"
 edition = "2024"
+
+[outputs.linker]
+path = "../../../firmware/platform/esp32s31/linker/dma-window.x"
+address-low-field = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.ADDRESS_LOW"

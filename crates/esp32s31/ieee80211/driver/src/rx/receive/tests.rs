@@ -408,7 +408,9 @@ where
     let host: &'static Host = leak(Host::new());
     let arena: &'static mut WifiRxArena<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
-    let (parts, stop, frames) = arena.bind().expect("a zeroed arena binds");
+    let (parts, stop, frames) =
+        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
+            .expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
     let clock: &'static VirtualClock = leak(VirtualClock::new());
@@ -967,7 +969,8 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     let cell = &first.host.cell;
     let host: &'static Host = leak(Host::new());
     let arena: &'static mut HostArena = leak(bytemuck::Zeroable::zeroed());
-    let (parts, mut stop, _frames) = arena.bind().unwrap();
+    let (parts, mut stop, _frames) =
+        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena)).unwrap();
     let counters = parts.counters();
     let mut runner = Box::pin(receive(
         leak(HostRadio { host }),

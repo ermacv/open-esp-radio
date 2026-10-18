@@ -55,10 +55,13 @@ type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS>;
 /// The arena's DMA storage.
 pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
-oer_memory::zeroed_static! {
+oer_esp32s31_hal::dma_static! {
     /// Placement: the receive epoch's arena, descriptors and buffers in the
-    /// DMA tier of SRAM.
-    static RX_ARENA: ZeroedStatic<Arena> = zeroed in ".dma.bss.wifi_rx";
+    /// DMA window.
+    static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
+}
+
+oer_memory::zeroed_static! {
     /// Placement: the line the three P3 handlers run, in critical SRAM.
     static RX_LINE: HandlerCell<WifiIrqLine<Epoch>> = zeroed in ".critical.bss.wifi_rx_line";
 }
@@ -178,6 +181,8 @@ pub struct P1Ends {
 pub enum Bound {
     Ends(P1Ends),
     Refused(RxDmaStorageError),
+    /// The arena was already claimed: the task ran twice.
+    Claimed,
 }
 
 /// The handoff clock of the staged frames.
@@ -193,7 +198,11 @@ pub async fn rx_task(
     doorbell: ImageDoorbell,
     bound: AffineSpscSender<'static, Bound, 1>,
 ) {
-    let (parts, stop, RxFrameEnds { sender, receiver }) = match RX_ARENA.take().bind() {
+    let Some(arena) = RX_ARENA.take() else {
+        let _full = bound.try_send(Bound::Claimed);
+        return;
+    };
+    let (parts, stop, RxFrameEnds { sender, receiver }) = match Arena::bind(arena) {
         Ok(parts) => parts,
         Err(error) => {
             let _full = bound.try_send(Bound::Refused(error));
