@@ -1,14 +1,14 @@
 //! The minimal SRAM-placement check of a linked runtime, reported as
 //! warnings (it never fails a build): code that runs while cached PSRAM may
-//! be unavailable, and memory DMA reads, must lie in internal SRAM.
+//! be unavailable must lie in internal SRAM.
 //!
 //! - every handler of the image's interrupt table (`__OER_INTERRUPT_TABLE`);
 //! - the panic entry (`rust_begin_unwind`) and the image's panic hook;
-//! - the DMA and critical sections (`.dma.*`, `.critical.*`);
-//! - a DMA section starting at an address whose low 20 bits are zero
-//!   (`0x2f00_0000`): an RX descriptor there reads as an exhausted list,
-//!   which the ring refuses (`oer-esp32s31-hal`
-//!   `descriptor_aliases_an_exhausted_list`).
+//! - the critical sections (`.critical.*`).
+//!
+//! DMA storage is not checked here: the runtime link refuses it outside the
+//! DMA window or at an address whose low DMA address bits are zero (the
+//! generated `dma-window.x`).
 
 use object::{Object as _, ObjectSection as _, ObjectSymbol as _, read::elf::ElfFile32};
 use oer_firmware_platform_espressif_staged_layout::Region;
@@ -24,11 +24,8 @@ pub const HANDLER_OFFSET: u32 = 8;
 /// The panic entry's symbol, under its mangled path.
 pub const PANIC_ENTRY: &str = "rust_begin_unwind";
 pub const PANIC_HOOK: &str = "oer_platform_panic_hook";
-/// The address bits the Wi-Fi RX walker's NEXT register reports; a zero there
-/// means the descriptor list is exhausted (`RxDmaNextDescriptor::is_zero`).
-pub const RX_NEXT_LOW_MASK: u32 = 0x000f_ffff;
 /// Sections whose every byte must be in SRAM.
-pub const SRAM_SECTION_PREFIXES: [&str; 2] = [".dma", ".critical"];
+pub const SRAM_SECTION_PREFIXES: [&str; 1] = [".critical"];
 
 /// What the check reads of a linked image.
 pub struct Image<'a> {
@@ -99,12 +96,6 @@ pub fn check(image: &Image<'_>, sram: Region) -> Vec<String> {
         {
             warnings.push(format!(
                 "section `{name}` at {address:#010x}+{size:#x} is not in SRAM"
-            ));
-        }
-        if *size > 0 && name.starts_with(".dma") && address & RX_NEXT_LOW_MASK == 0 {
-            warnings.push(format!(
-                "section `{name}` starts at {address:#010x}: an RX descriptor base there reads \
-                 as an exhausted list and the ring refuses it"
             ));
         }
     }
@@ -211,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn psram_handlers_panic_paths_and_dma_sections_warn() {
+    fn psram_handlers_panic_paths_and_critical_sections_warn() {
         let table = 0x5001_0000;
         let entries = 0x5001_0100;
         let words = HashMap::from([
@@ -232,32 +223,30 @@ mod tests {
             ],
         );
         let warnings = check(&image, SRAM);
-        assert_eq!(warnings.len(), 5, "{warnings:#?}");
+        assert_eq!(warnings.len(), 4, "{warnings:#?}");
         assert!(warnings[0].contains("handler 0x50014000"));
         assert!(warnings[1].contains("panic entry"));
         assert!(warnings[2].contains("panic hook"));
-        assert!(warnings[3].contains(".dma.data"));
-        assert!(warnings[4].contains(".critical.bss"));
+        assert!(warnings[3].contains(".critical.bss"));
     }
 
     #[test]
-    fn a_dma_section_at_a_zero_low_address_warns() {
+    fn dma_sections_are_left_to_the_link() {
+        // Outside SRAM and at a zero low address: the link refuses both, so
+        // the placement check does not report them.
         let image = image(
             HashMap::new(),
             &[(TABLE_SYMBOL, 0), (PANIC_ENTRY, 0x2f00_1000)],
             &[
                 (".dma.bss", 0x2f00_0000, 0x100),
-                (".dma.data", 0x2f00_0100, 0x10),
+                (".dma.data", 0x5002_0000, 0x10),
             ],
         );
         let warnings = check(&image, SRAM);
         assert!(
-            warnings
-                .iter()
-                .any(|warning| warning.contains(".dma.bss") && warning.contains("exhausted list")),
+            !warnings.iter().any(|warning| warning.contains(".dma")),
             "{warnings:#?}"
         );
-        assert!(!warnings.iter().any(|warning| warning.contains(".dma.data")));
     }
 
     #[test]

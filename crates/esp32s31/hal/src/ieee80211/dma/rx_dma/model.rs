@@ -505,12 +505,13 @@ mod tests {
         let storage = std::boxed::Box::leak(std::boxed::Box::new(
             RxDmaStorage::<2, 16, 20, HostDma>::new(),
         ));
-        let mut buffers = [0; 2];
-        let base = storage.dma_layout(&mut buffers).unwrap();
+        let placed = RxDmaStorage::place(crate::dma_static::Placed::host(storage)).unwrap();
+        let storage = placed.storage();
+        let base = placed.descriptor_base();
         let reserved = base + 2 * DESCRIPTOR_BYTES;
         let mut walker = RxWalkerModel::new();
-        let live = storage
-            .prepare_ring(&mut walker, base, &buffers)
+        let live = placed
+            .prepare_ring(&mut walker)
             .unwrap()
             .try_start(&mut walker)
             .map_err(|(_, error)| error)

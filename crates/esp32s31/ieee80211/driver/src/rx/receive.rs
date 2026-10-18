@@ -157,8 +157,6 @@ where
 {
     let WifiRxParts {
         rx,
-        descriptor_base,
-        buffer_addresses,
         stage,
         irq,
         power,
@@ -172,7 +170,7 @@ where
     let mut receiver = Receiver {
         hardware,
         rx_dma,
-        rx,
+        rx: rx.storage(),
         stage,
         irq,
         power,
@@ -188,12 +186,8 @@ where
         full_since: None,
     };
 
-    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
-        receiver.rx_dma,
-        rx,
-        descriptor_base,
-        buffer_addresses,
-    ) {
+    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(receiver.rx_dma, rx)
+    {
         Ok(frontier) => frontier,
         Err(error) => {
             return receiver
@@ -223,7 +217,7 @@ where
     receiver.routes.enable();
 
     let cause = match frontier
-        .start_with_storage(receiver.timer, receiver.rx_dma, rx)
+        .start_with_storage(receiver.timer, receiver.rx_dma, rx.storage())
         .await
     {
         Err(error) => WifiRxCause::Start(error),

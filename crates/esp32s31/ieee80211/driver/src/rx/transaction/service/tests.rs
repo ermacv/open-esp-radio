@@ -77,17 +77,21 @@ impl Hooks for &Recorder {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
-    let storage = Box::leak(Box::new(RxDmaStorage::<
-        COUNT,
-        BUFFER,
-        { BUFFER + 4 },
-        HostDma,
-    >::new()));
-    let buffers = Box::leak(Box::new([0; COUNT]));
-    let base = storage.dma_layout(buffers).unwrap();
+    let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+        oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(RxDmaStorage::<
+            COUNT,
+            BUFFER,
+            { BUFFER + 4 },
+            HostDma,
+        >::new()))),
+    )
+    .unwrap();
+    let storage = placed.storage();
+    let buffers = storage.buffer_addresses();
+    let base = placed.descriptor_base();
     let mut hardware = RxWalkerModel::new();
-    let mut ring = storage
-        .prepare_ring(&mut hardware, base, buffers)
+    let mut ring = placed
+        .prepare_ring(&mut hardware)
         .unwrap()
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)
@@ -204,12 +208,15 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
 
 #[test]
 fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
-    let storage: &'static Storage = Box::leak(Box::new(Storage::new()));
-    let buffers = Box::leak(Box::new([0; COUNT]));
-    let base = storage.dma_layout(buffers).unwrap();
+    let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+        oer_esp32s31_hal::dma_static::Placed::host(Box::leak(Box::new(Storage::new()))),
+    )
+    .unwrap();
+    let storage = placed.storage();
+    let base = placed.descriptor_base();
     let mut hardware = RxWalkerModel::new();
-    let mut ring = storage
-        .prepare_ring(&mut hardware, base, buffers)
+    let mut ring = placed
+        .prepare_ring(&mut hardware)
         .unwrap()
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)

@@ -36,7 +36,7 @@ use super::*;
 use crate::{
     irq::{run_doorbell, service_mac_line, service_power_line},
     rx::{
-        arena::WifiRxArena,
+        arena::{WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
         counters::{WifiRxContinuationReport, WifiRxReport, WifiRxTeardownReport},
         frontier::RxFrontierError,
@@ -55,7 +55,7 @@ const SLOTS: usize = 32;
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
 type HostLine = WifiIrqLine<HostEpoch>;
-type HostArena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS, HostDma, HostEpoch>;
+type HostStatic = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, HostDma, HostEpoch>;
 type HostStorage = RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>;
 
 fn leak<T>(value: T) -> &'static mut T {
@@ -336,7 +336,7 @@ where
     M: Admission + 'static,
 {
     let host = Host::leaked();
-    let arena: &'static mut WifiRxArena<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
+    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
     let (parts, stop, frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
@@ -902,7 +902,7 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     // the executor itself, and its routes are never enabled.
     let cell = &first.host.cell;
     let host = Host::leaked();
-    let arena: &'static mut HostArena = leak(bytemuck::Zeroable::zeroed());
+    let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
     let (parts, mut stop, _frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena)).unwrap();
     let counters = parts.counters();

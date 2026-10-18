@@ -19,7 +19,7 @@ use oer_esp32s31_ieee80211_driver::{
         service_power_line,
     },
     rx::{
-        arena::WifiRxArena,
+        arena::{WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
         counters::WifiRxCounters,
         receive::receive,
@@ -52,13 +52,15 @@ pub const SLOTS: usize = 32;
 
 type Epoch = ActiveEpoch<Moderated>;
 type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS>;
+/// The arena and its RX DMA storage, placed together.
+type Static = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS>;
 /// The arena's DMA storage.
 pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
 oer_esp32s31_hal::dma_static! {
     /// Placement: the receive epoch's arena, descriptors and buffers in the
     /// DMA window.
-    static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
+    static RX_ARENA: Static = zeroed in ".dma.bss.wifi_rx";
 }
 
 oer_base_memory::zeroed_static! {

@@ -11,8 +11,9 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-use oer_base_memory::ExternalRxBuffer;
+use crate::dma_static::Placed;
 use crate::layouts::WifiRxDmaDescriptorControl;
+use oer_base_memory::ExternalRxBuffer;
 
 use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
@@ -267,17 +268,6 @@ pub enum RxDmaStorageError {
     Count,
 }
 
-/// First immutable DMA-address binding that no longer matches its arena.
-///
-/// This is fault evidence only. It exposes neither descriptor mutation nor a
-/// way to repair a live ring after adjacent memory corruption.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RxBufferAddressMismatch {
-    pub index: usize,
-    pub expected: u32,
-    pub observed: u32,
-}
-
 /// Read authority for one completed descriptor and its matching DMA buffer.
 ///
 /// The token retains the unique mutable borrow of the live ring. Consequently
@@ -530,6 +520,9 @@ pub struct RxDmaStorage<
     /// buffer `(i + offset) % COUNT`. Zero is the identity binding, so the
     /// arena's zero bytes bind every descriptor to its own buffer.
     descriptor_buffer_offsets: [AtomicU8; COUNT],
+    /// Per descriptor, the DMA address of its bound buffer, written once
+    /// when the storage is placed ([`RxDmaStorage::place`]).
+    buffer_addresses: RxDmaBufferAddresses<COUNT>,
     arena: RxArenaWords,
     space: PhantomData<S>,
 }
@@ -543,6 +536,68 @@ unsafe impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: us
 {
 }
 
+/// An RX DMA storage placed in the DMA window ([`RxDmaStorage::place`]).
+///
+/// It is the only way to a ring: the descriptor base and the buffer
+/// addresses it publishes are the placed storage's own, so the link's
+/// assertions over the DMA range (`dma-window.x`) prove them, and the ring
+/// checks no address against the window at run time. A [`Placed`] value is
+/// a claimed `'static`, so temporary storage cannot authorize a DMA
+/// lifecycle.
+pub struct PlacedRxDma<
+    const COUNT: usize,
+    const BUFFER_SIZE: usize,
+    const STORAGE_SIZE: usize,
+    S: DmaSpace = ChipDma,
+> {
+    storage: &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
+    descriptor_base: u32,
+}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Clone
+    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Copy
+    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+{
+}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
+    PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+{
+    /// The placed storage.
+    pub const fn storage(self) -> &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S> {
+        self.storage
+    }
+
+    /// The DMA address of descriptor 0.
+    pub const fn descriptor_base(self) -> u32 {
+        self.descriptor_base
+    }
+
+    /// Prepare the first stopped ring of the storage.
+    ///
+    /// The storage is `'static`: safe code may forget a live ring, so the
+    /// DMA-visible descriptors and buffers stay allocated even when the
+    /// typestate owner is lost.
+    ///
+    /// # Errors
+    ///
+    /// The storage already has a ring or must be reset, or an unexpectedly
+    /// live walker did not stop.
+    pub fn prepare_ring<M: RxDma>(
+        self,
+        mmio: &mut M,
+    ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
+        self.storage.prepare_ring_bound(mmio, self.descriptor_base)
+    }
+}
+
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
@@ -552,6 +607,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             buffers: [const { RxDmaBuffer::new() }; COUNT],
             reserved_buffer: RxDmaBuffer::new(),
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
+            buffer_addresses: [0; COUNT],
             arena: RxArenaWords::new(),
             space: PhantomData,
         }
@@ -578,6 +634,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         result: Result<Option<RxLiveAppend<COUNT>>, RxRingError>,
     ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError> {
         result
+    }
+
+    /// Per descriptor, the DMA address of its bound buffer, as placing the
+    /// storage recorded it (zero before).
+    pub const fn buffer_addresses(&self) -> &RxDmaBufferAddresses<COUNT> {
+        &self.buffer_addresses
     }
 
     /// Sticky lifecycle state stored with the static arena rather than in its
@@ -637,36 +699,50 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         prepare_recycled_buffer(buffer.cpu_owned_storage_mut(), BUFFER_SIZE)
     }
 
-    pub fn dma_layout(
-        &self,
-        buffer_addresses: &mut RxDmaBufferAddresses<COUNT>,
-    ) -> Result<u32, RxDmaStorageError> {
-        self.dma_layout_rotated(buffer_addresses, 0)
+    /// Place the storage: bind each descriptor to its buffer and record the
+    /// buffers' DMA addresses. Only a placed storage prepares a ring, so
+    /// every address the ring publishes lies in the DMA window by the link's
+    /// proof (`dma-window.x`).
+    ///
+    /// # Errors
+    ///
+    /// An address does not fit the DMA address width of the space.
+    pub fn place(
+        placed: Placed<Self>,
+    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
+        Self::place_rotated(placed, 0)
     }
 
-    /// Bind each physical descriptor to a cyclically shifted arena buffer.
+    /// [`Self::place`] with each physical descriptor bound to a cyclically
+    /// shifted buffer.
     ///
     /// Rotation zero is the production identity layout. A non-zero rotation
     /// is a target proof that every CPU ownership path follows the explicit
     /// descriptor-to-buffer binding instead of indexing the buffer arena by
     /// descriptor number. The binding is frozen before the first ring owner
     /// exists and remains immutable for that complete DMA lifecycle.
-    #[allow(
-        unsafe_code,
-        reason = "Reusable lifecycle is the exclusive pre-ring binding boundary"
-    )]
-    pub fn dma_layout_rotated(
-        &self,
-        buffer_addresses: &mut RxDmaBufferAddresses<COUNT>,
+    ///
+    /// # Errors
+    ///
+    /// The rotation is not below `COUNT`, or an address does not fit the
+    /// DMA address width of the space.
+    pub fn place_rotated(
+        placed: Placed<Self>,
         rotation: usize,
-    ) -> Result<u32, RxDmaStorageError> {
-        self.validate_descriptor_rotation(rotation)?;
-        for (descriptor_index, address) in buffer_addresses.iter_mut().enumerate() {
+    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
+        let storage = placed.into_inner();
+        storage.validate_descriptor_rotation(rotation)?;
+        for descriptor_index in 0..COUNT {
             let buffer_id = (descriptor_index + rotation) % COUNT;
-            *address = self.buffer_dma_address(&self.buffers[buffer_id])?;
+            let address = storage.buffer_dma_address(&storage.buffers[buffer_id])?;
+            storage.buffer_addresses[descriptor_index] = address;
         }
-        self.bind_descriptor_rotation(rotation)?;
-        self.descriptor_base_address()
+        storage.bind_descriptor_rotation(rotation)?;
+        let descriptor_base = storage.descriptor_base_address()?;
+        Ok(PlacedRxDma {
+            storage,
+            descriptor_base,
+        })
     }
 
     fn validate_descriptor_rotation(&self, rotation: usize) -> Result<(), RxDmaStorageError> {
@@ -720,41 +796,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.buffers.get(buffer_id)
     }
 
-    /// Prepare the first stopped ring on a hardware target.
-    ///
-    /// The `'static` receiver is essential: safe code may forget a live ring,
-    /// so DMA-visible descriptors and buffers must remain allocated even when
-    /// the typestate owner is lost. Borrowing the arena for `'static` also
-    /// prevents later safe mutable pre-publication access.
-    ///
-    /// Temporary storage cannot authorize a DMA lifecycle, including in a model:
-    /// ```compile_fail,E0597
-    /// use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaStorage};
-    /// fn temporary(hardware: &mut impl RxDma) {
-    ///     let storage = RxDmaStorage::<2, 16, 20>::new();
-    ///     let _ = storage.prepare_ring(hardware, 0x2f001000, &[0x2f002000, 0x2f002100]);
-    /// }
-    /// ```
-    /// A static arena can return an owner borrowing the address table:
-    /// ```
-    /// use oer_esp32s31_hal::ieee80211::dma::{
-    ///     rx_dma::RxDma, rx_ring::{RxRingError, RxRingStopped}, rx_storage::RxDmaStorage,
-    /// };
-    /// fn prepare<'a>(storage: &'static RxDmaStorage<2, 16, 20>,
-    ///     hardware: &mut impl RxDma, addresses: &'a [u32; 2])
-    ///     -> Result<RxRingStopped<'a, 2>, RxRingError> {
-    ///     storage.prepare_ring(hardware, 0x2f001000, addresses)
-    /// }
-    /// ```
-    pub fn prepare_ring<'addresses, M: RxDma>(
-        &'static self,
-        mmio: &mut M,
-        descriptor_base: u32,
-        buffer_addresses: &'addresses RxDmaBufferAddresses<COUNT>,
-    ) -> Result<RxRingStopped<'addresses, COUNT>, RxRingError> {
-        self.prepare_ring_bound(mmio, descriptor_base, buffer_addresses)
-    }
-
     #[allow(
         unsafe_code,
         reason = "stopped ring exclusively owns initial buffer rearm"
@@ -763,10 +804,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         &'storage self,
         mmio: &mut M,
         descriptor_base: u32,
-        buffer_addresses: &'storage RxDmaBufferAddresses<COUNT>,
     ) -> Result<RxRingStopped<'storage, COUNT>, RxRingError> {
-        self.validate_descriptor_base(descriptor_base)?;
-        self.validate_buffer_addresses(buffer_addresses)?;
+        let buffer_addresses = &self.buffer_addresses;
         match self.lifecycle_state() {
             RxDmaArenaState::Reusable => {}
             RxDmaArenaState::Prepared | RxDmaArenaState::Live => {
@@ -791,7 +830,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 buffer_size,
                 |index| {
                     // SAFETY: stopped-ring preparation owns every descriptor and
-                    // the validated address table binds `index` to this arena.
+                    // the storage's own address table binds `index` to this
+                    // arena.
                     unsafe { self.prepare_stopped_buffer(index) }
                 },
                 || {
@@ -831,15 +871,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 return Err((ring, RxRingError::Busy));
             }
         }
-        if let Err(error) = self.validate_ring_layout(
-            ring.descriptor_base(),
-            ring.descriptors(),
-            ring.buffer_addresses(),
-        ) {
-            return Err((ring, error));
-        }
-        if self.reserved_buffer_address() != Ok(ring.reserved_buffer_address()) {
-            return Err((ring, RxRingError::BufferAddress));
+        if !ring.belongs_to_arena(&self.arena) {
+            return Err((ring, RxRingError::DescriptorOwnerAddress));
         }
         let buffer_size = match u32::try_from(BUFFER_SIZE) {
             Ok(buffer_size) => buffer_size,
@@ -849,8 +882,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             mmio,
             buffer_size,
             |index| {
-                // SAFETY: the halted owner proves that DMA is stopped, and the
-                // validated layout binds the descriptor to this exact buffer.
+                // SAFETY: the halted owner proves that DMA is stopped, and it
+                // belongs to this arena, whose layout binds the descriptor to
+                // this exact buffer.
                 unsafe { self.prepare_stopped_buffer(index) }
             },
             || {
@@ -1245,26 +1279,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     fn validate_live_ring(&self, ring: &RxRingLive<'_, COUNT>) -> Result<(), RxRingError> {
         if ring.belongs_to_arena(&self.arena) {
-            return Ok(());
+            Ok(())
+        } else {
+            Err(RxRingError::DescriptorOwnerAddress)
         }
-        self.validate_ring_layout(
-            ring.descriptor_base(),
-            ring.descriptors(),
-            ring.buffer_addresses(),
-        )
-    }
-
-    fn validate_ring_layout(
-        &self,
-        descriptor_base: u32,
-        descriptors: &[RxDescriptor; COUNT],
-        buffer_addresses: &RxDmaBufferAddresses<COUNT>,
-    ) -> Result<(), RxRingError> {
-        if !core::ptr::eq(descriptors, self.descriptors.ring()) {
-            return Err(RxRingError::DescriptorOwnerAddress);
-        }
-        self.validate_descriptor_base(descriptor_base)?;
-        self.validate_buffer_addresses(buffer_addresses)
     }
 
     /// The DMA address of descriptor 0 in this arena's space.
@@ -1284,58 +1302,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
     ) -> Result<u32, RxDmaStorageError> {
         S::address(self, buffer.0.get()).ok_or(RxDmaStorageError::AddressWidth)
-    }
-
-    fn validate_descriptor_base(&self, descriptor_base: u32) -> Result<(), RxRingError> {
-        if self
-            .descriptor_base_address()
-            .map_err(|_| RxRingError::Address)?
-            != descriptor_base
-        {
-            return Err(RxRingError::DescriptorBaseAddress);
-        }
-        Ok(())
-    }
-
-    fn validate_buffer_addresses(
-        &self,
-        buffer_addresses: &RxDmaBufferAddresses<COUNT>,
-    ) -> Result<(), RxRingError> {
-        for (index, &address) in buffer_addresses.iter().enumerate() {
-            let buffer = self
-                .buffer_for_descriptor(index)
-                .ok_or(RxRingError::Count)?;
-            if self
-                .buffer_dma_address(buffer)
-                .map_err(|_| RxRingError::Address)?
-                != address
-            {
-                return Err(if index + 1 == COUNT {
-                    RxRingError::TailBufferAddress
-                } else {
-                    RxRingError::BufferAddress
-                });
-            }
-        }
-        Ok(())
-    }
-
-    pub fn first_buffer_address_mismatch(
-        &self,
-        buffer_addresses: &RxDmaBufferAddresses<COUNT>,
-    ) -> Option<RxBufferAddressMismatch> {
-        for (index, &observed) in buffer_addresses.iter().enumerate() {
-            let buffer = self.buffer_for_descriptor(index)?;
-            let expected = self.buffer_dma_address(buffer).ok()?;
-            if expected != observed {
-                return Some(RxBufferAddressMismatch {
-                    index,
-                    expected,
-                    observed,
-                });
-            }
-        }
-        None
     }
 }
 

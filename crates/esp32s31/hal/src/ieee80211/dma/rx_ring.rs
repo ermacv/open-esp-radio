@@ -4,19 +4,16 @@
 //! decoding remains in the MAC crate, while the semantic MMIO operations are
 //! defined by [`crate::ieee80211::dma::rx_dma::RxDma`].
 
+use crate::dma_address;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
-use crate::dma_address;
 
 use crate::ieee80211::dma::ring_index::RingIndex;
 
 use crate::layouts::WifiRxDmaDescriptorControl;
 
 use crate::ieee80211::dma::{
-    descriptor::{
-        DESCRIPTOR_BYTES, RxDescriptor, descriptor_address_valid, dma_range_valid, rx_armed_word,
-        rx_detached_word, rx_rearm_word,
-    },
+    descriptor::{DESCRIPTOR_BYTES, RxDescriptor, rx_armed_word, rx_detached_word, rx_rearm_word},
     rx_dma::{RxDma, RxDmaBinding},
 };
 
@@ -39,23 +36,6 @@ fn rx_buffer_address_snapshot<const COUNT: usize>(
 }
 
 const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
-
-/// Whether a descriptor of the table at `descriptor_base` (the ring's
-/// `COUNT` descriptors and the reserved descriptor R at index `COUNT`) has a
-/// zero low address. The walker's NEXT register reports only the low 20
-/// address bits, and a zero NEXT means the list is exhausted
-/// ([`RxDmaNextDescriptor::is_zero`](crate::ieee80211::dma::rx_dma::RxDmaNextDescriptor::is_zero),
-/// read by [`RxRingLive::accepted_list_remaining_from_next`] and the
-/// exhausted-list reclaim): such a descriptor could not be told apart from
-/// the end of the list, whatever the linker's layout.
-fn descriptor_aliases_an_exhausted_list<const COUNT: usize>(descriptor_base: u32) -> bool {
-    (0..=COUNT as u32).any(|index| {
-        index
-            .checked_mul(DESCRIPTOR_BYTES)
-            .and_then(|offset| descriptor_base.checked_add(offset))
-            .is_none_or(|address| address & RX_DESCRIPTOR_ADDRESS_LOW_MASK == 0)
-    })
-}
 
 /// The descriptors one RX arena publishes: the ring and, right after it, the
 /// reserved descriptor R.
@@ -138,9 +118,6 @@ pub enum RxRingError {
     Count,
     Address,
     DescriptorOwnerAddress,
-    DescriptorBaseAddress,
-    BufferAddress,
-    TailBufferAddress,
     Size,
     Overflow,
     Busy,
@@ -704,6 +681,11 @@ pub struct RxRingHalted<'a, const COUNT: usize> {
 }
 
 impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
+    /// Whether this halted ring was built from the storage owning `arena`.
+    pub(crate) fn belongs_to_arena(&self, arena: &RxArenaWords) -> bool {
+        core::ptr::eq(self.arena, arena)
+    }
+
     pub const fn descriptor_base(&self) -> u32 {
         self.descriptor_base
     }
@@ -714,10 +696,6 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
 
     pub const fn buffer_addresses(&self) -> &RxDmaBufferAddresses<COUNT> {
         self.buffer_addresses
-    }
-
-    pub(crate) const fn reserved_buffer_address(&self) -> u32 {
-        self.reserved_buffer_address
     }
 
     /// Observe one halted descriptor without recovering mutation authority.
@@ -843,16 +821,10 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         R: FnOnce() -> Result<(), RxRingError>,
     {
         validate_live_ring_geometry::<COUNT>()?;
-        if descriptor_aliases_an_exhausted_list::<COUNT>(descriptor_base) {
-            return Err(RxRingError::Address);
-        }
         let buffer_size_u16 = u16::try_from(buffer_size).map_err(|_| RxRingError::Size)?;
         let Some(armed_word) = rx_armed_word(buffer_size) else {
             return Err(RxRingError::Size);
         };
-        if !dma_range_valid(reserved_buffer_address, buffer_size) {
-            return Err(RxRingError::Address);
-        }
         let descriptors = table.ring();
         let binding = RxDmaBinding::new(table, descriptor_base, arena).ok_or(RxRingError::Count)?;
         if mmio.walker_enabled() {
@@ -901,12 +873,11 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             initial_start,
         )?;
         let head = descriptor_address(descriptor_base, initial_start.get())?;
-        // SAFETY: `prepare_inner`'s only callers, `RxDmaStorage::prepare_ring`
-        // and `prepare_halted`, pass the DMA addresses of their own pinned
-        // descriptor table and buffers, which `validate_descriptor_base` and
-        // `validate_buffer_addresses` checked, and the window checks above
-        // accepted them.
-        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        // SAFETY: `prepare_inner`'s only callers, `PlacedRxDma::prepare_ring`
+        // and `prepare_halted`, pass the DMA addresses of their own placed
+        // descriptor table and buffers: the link keeps them in the DMA window
+        // and the storage stays allocated for the DMA epoch.
+        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
         let (reserved_buffer, head) = unsafe {
             (
                 dma_address::placed(reserved_buffer_address),
@@ -1069,8 +1040,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// table before it installs this exact arena-local lifecycle capability.
     /// The capability then travels through stopped/live/halted typestates, so
     /// pointer identity is a constant-time proof of the same binding during a
-    /// live epoch. A ring of another arena fails this identity check and
-    /// falls back to complete address validation.
+    /// live epoch. A ring of another arena fails this identity check.
     pub(crate) fn belongs_to_arena(&self, arena: &RxArenaWords) -> bool {
         core::ptr::eq(self.arena, arena)
     }
@@ -2119,9 +2089,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 .bound_buffer_address(index.get())
                 .ok_or(RxRingError::Count)?;
             // SAFETY: the live ring's descriptor base and buffer table are the
-            // ones `prepare_inner` took from its storage arena, validated there
-            // as that arena's pinned descriptors and buffers in the DMA window.
-            #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+            // ones `prepare_inner` took from its placed storage arena: that
+            // arena's descriptors and buffers, which the link keeps in the DMA
+            // window.
+            #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
             let (buffer, next) = unsafe {
                 (
                     dma_address::placed(buffer_address),
@@ -2140,8 +2111,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // appended group were observed complete, rearmed and remain
         // unreachable until this old-tail link and the following doorbell.
         // SAFETY: as for the group above, `head_address` names a descriptor
-        // of the live ring's validated table.
-        #[allow(unsafe_code, reason = "a link to a descriptor of the validated table")]
+        // of the live ring's placed table.
+        #[allow(unsafe_code, reason = "a link to a descriptor of the placed table")]
         let head = unsafe { dma_address::placed_link(head_address) };
         accepted_tail.publish_next(head);
         mmio.fence();
@@ -2637,8 +2608,7 @@ fn ring_topology_snapshot<const COUNT: usize>(
         terminal_descriptors: 0,
         valid: false,
     };
-    if validate_live_ring_geometry::<COUNT>().is_err() || !descriptor_address_valid(descriptor_base)
-    {
+    if validate_live_ring_geometry::<COUNT>().is_err() {
         return snapshot;
     }
 
@@ -2664,7 +2634,6 @@ fn ring_topology_snapshot<const COUNT: usize>(
         if require_armed {
             let capacity = u32::from(word0.size());
             if capacity == 0
-                || !dma_range_valid(buffer_address, capacity)
                 || u32::from(word0.length()) != capacity
                 || !word0.owner()
                 || word0.bit_29_opaque()
@@ -2761,9 +2730,9 @@ fn relink_rotated_ring<const COUNT: usize>(
             0
         };
         let word0 = descriptors[index.get()].word0();
-        // SAFETY: only `prepare_inner` calls this, with the validated
-        // descriptor base and buffer table of its storage arena.
-        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        // SAFETY: only `prepare_inner` calls this, with the descriptor base
+        // and the buffer table of its placed storage arena.
+        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
         let (buffer, next) = unsafe {
             (
                 dma_address::placed(buffer_addresses[index.get()]),
@@ -2814,24 +2783,21 @@ fn build_cold_ring_inner(
     let span = count
         .checked_mul(DESCRIPTOR_BYTES)
         .ok_or(RxRingError::Overflow)?;
-    if descriptor_dma_base & 3 != 0 || !dma_range_valid(descriptor_dma_base, span) {
-        return Err(RxRingError::Address);
-    }
-    for &buffer in buffer_addresses {
-        if !dma_range_valid(buffer, buffer_size) {
-            return Err(RxRingError::Address);
-        }
-    }
+    // The links below add descriptor offsets to the base.
+    let _end = descriptor_dma_base
+        .checked_add(span)
+        .ok_or(RxRingError::Overflow)?;
     for (index, descriptor) in descriptors.iter().enumerate() {
         let next = if index + 1 < descriptors.len() {
             descriptor_dma_base + (index as u32 + 1) * DESCRIPTOR_BYTES
         } else {
             0
         };
-        // SAFETY: only `prepare_inner` calls this, with the validated
-        // descriptor base and buffer table of its storage arena, and the
-        // window checks above accepted every address.
-        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        // SAFETY: only `prepare_inner` calls this, with the descriptor base
+        // and the buffer table of its placed storage arena
+        // (`PlacedRxDma`): the link keeps every one of them in the DMA
+        // window, and the storage stays allocated for the DMA epoch.
+        #[allow(unsafe_code, reason = "typed addresses of the placed arena")]
         let (buffer, next) = unsafe {
             (
                 dma_address::placed(buffer_addresses[index]),
@@ -2848,9 +2814,6 @@ fn publish_cold_ring_inner<M: RxDma>(
     binding: &RxDmaBinding<'_>,
     arena: &RxArenaWords,
 ) -> Result<(), RxRingError> {
-    if !descriptor_address_valid(binding.reserved_address()) {
-        return Err(RxRingError::Address);
-    }
     mmio.fence();
     mmio.configure_descriptor_window(binding);
     mmio.write_descriptor_base(binding);

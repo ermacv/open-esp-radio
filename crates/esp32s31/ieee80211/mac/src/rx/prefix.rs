@@ -13,7 +13,6 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_esp32s31_hal::ieee80211::dma::descriptor::descriptor_address_valid;
 use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
@@ -147,16 +146,12 @@ pub fn view_normalized_rx_frame<'frame>(
 }
 
 /// The bytes the hardware wrote into `segment`'s buffer, when its
-/// descriptor is a valid RX node whose length fits its capacity and buffer.
+/// descriptor is an RX node whose length fits its capacity and buffer. The
+/// descriptor is one of a placed storage's, so its address needs no check.
 fn received_bytes<'frame>(segment: &RxSegment<'frame>) -> Option<&'frame [u8]> {
     let capacity = usize::from(segment.descriptor_word0.size());
     let length = usize::from(segment.descriptor_word0.length());
-    if !descriptor_address_valid(segment.descriptor_address)
-        || !segment.descriptor_word0.owner()
-        || capacity == 0
-        || length == 0
-        || length > capacity
-    {
+    if !segment.descriptor_word0.owner() || capacity == 0 || length == 0 || length > capacity {
         return None;
     }
     segment

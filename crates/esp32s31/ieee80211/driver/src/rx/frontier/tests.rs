@@ -2,6 +2,7 @@ use crate::rx::storage::ReceiveDmaStorage;
 
 use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::{RxWalkerModel, RxWalkerOperation},
+    rx_storage::PlacedRxDma,
     space::HostDma,
 };
 
@@ -15,38 +16,29 @@ const STORAGE_SIZE: usize = 128;
 /// The host arena's descriptor base: descriptors lead the arena.
 const BASE: u32 = oer_esp32s31_hal::ieee80211::dma::space::HOST_ARENA_BASE;
 
-/// A static host arena, as the product's is static.
-fn leaked<const N: usize, const S: usize>() -> &'static ReceiveDmaStorage<N, BUFFER_SIZE, S, HostDma>
-{
-    std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new()))
-}
-
-/// The arena's own buffer address table.
-fn layout<const N: usize, const S: usize>(
-    storage: &'static ReceiveDmaStorage<N, BUFFER_SIZE, S, HostDma>,
-) -> &'static [u32; N] {
-    let addresses = std::boxed::Box::leak(std::boxed::Box::new([0; N]));
-    assert_eq!(storage.dma_layout(addresses), Ok(BASE));
-    addresses
+/// A placed static host arena, as the product's is placed.
+fn leaked<const N: usize, const S: usize>() -> PlacedRxDma<N, BUFFER_SIZE, S, HostDma> {
+    let placed = ReceiveDmaStorage::place(oer_esp32s31_hal::dma_static::Placed::host(
+        std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new())),
+    ))
+    .unwrap();
+    assert_eq!(placed.descriptor_base(), BASE);
+    placed
 }
 
 fn halted_ring(
     hardware: &mut RxWalkerModel,
-    storage: &'static ReceiveDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, HostDma>,
+    storage: PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, HostDma>,
 ) -> RxRingHalted<'static, COUNT> {
-    storage
-        .prepare_ring(hardware, BASE, layout(storage))
-        .unwrap()
-        .into_halted()
+    storage.prepare_ring(hardware).unwrap().into_halted()
 }
 
 #[test]
 fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() {
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
+    let placed = leaked::<COUNT, STORAGE_SIZE>();
+    let storage = placed.storage();
     let mut hardware = RxWalkerModel::default();
-    let prepared = storage
-        .prepare_ring(&mut hardware, BASE, layout(storage))
-        .unwrap();
+    let prepared = placed.prepare_ring(&mut hardware).unwrap();
     let mut rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_prepared(prepared);
     block_on(rx.start_with_storage(
         &oer_base_time_virtual::SkipClock::new(),
@@ -76,10 +68,11 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
 
 #[test]
 fn owner_round_trips_a_live_ring_between_phases() {
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
+    let placed = leaked::<COUNT, STORAGE_SIZE>();
+    let storage = placed.storage();
     let mut hardware = RxWalkerModel::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, placed));
     block_on(rx.start_with_storage(
         &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
@@ -99,10 +92,10 @@ fn owner_round_trips_a_live_ring_between_phases() {
 
 #[test]
 fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
+    let placed = leaked::<COUNT, STORAGE_SIZE>();
+    let storage = placed.storage();
     let mut hardware = RxWalkerModel::default();
-    let rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+    let rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, placed));
     let live = block_on(rx.try_into_live_with_storage(
         &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
@@ -189,10 +182,11 @@ fn the_walker_starts_only_after_its_settle_on_the_caller_timer() {
     };
     use oer_base_time::{Duration, Instant};
 
-    let storage = leaked::<COUNT, STORAGE_SIZE>();
+    let placed = leaked::<COUNT, STORAGE_SIZE>();
+    let storage = placed.storage();
     let mut hardware = RxWalkerModel::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, placed));
     let clock: oer_base_time_virtual::VirtualClock =
         oer_base_time_virtual::VirtualClock::starting_at(Instant::from_micros(100));
     let mut context = Context::from_waker(Waker::noop());

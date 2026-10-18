@@ -5,6 +5,7 @@
 
 use std::{boxed::Box, vec, vec::Vec};
 
+use oer_esp32s31_hal::dma_static::Placed;
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
@@ -48,13 +49,14 @@ pub(crate) struct Ring {
 
 impl Ring {
     pub(crate) fn new() -> Self {
-        let storage: &'static Storage = Box::leak(Box::new(Storage::new()));
-        let buffers = Box::leak(Box::new([0; COUNT]));
-        let base = storage.dma_layout(buffers).unwrap();
-        let buffers: &'static [u32; COUNT] = buffers;
+        let placed = RxDmaStorage::place(Placed::host(Box::leak(Box::new(Storage::new()))))
+            .expect("the host storage has a layout");
+        let storage: &'static Storage = placed.storage();
+        let buffers: &'static [u32; COUNT] = storage.buffer_addresses();
+        let base = placed.descriptor_base();
         let mut walker = RxWalkerModel::new();
-        let live = storage
-            .prepare_ring(&mut walker, base, buffers)
+        let live = placed
+            .prepare_ring(&mut walker)
             .unwrap()
             .try_start(&mut walker)
             .map_err(|(_, error)| error)

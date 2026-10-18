@@ -1,9 +1,12 @@
 use crate::*;
+use oer_esp32s31_hal::dma_static::Placed;
 pub(super) use oer_esp32s31_hal::ieee80211::dma::rx_dma::model::{
     RxWalkerModel, RxWalkerOperation as Walker,
 };
 use oer_esp32s31_hal::ieee80211::dma::{
-    rx_ring::RxDmaBufferAddresses, rx_storage::RxDmaStorage, space::HostDma,
+    rx_ring::RxDmaBufferAddresses,
+    rx_storage::{PlacedRxDma, RxDmaStorage},
+    space::HostDma,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -178,6 +181,7 @@ pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
 /// One leaked RX DMA arena in the host address space and the layout it
 /// published.
 pub(super) struct HostRxArena<const COUNT: usize, const BUFFER: usize, const STORAGE: usize> {
+    placed: PlacedRxDma<COUNT, BUFFER, STORAGE, HostDma>,
     pub(super) storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>,
     pub(super) base: u32,
     pub(super) buffers: &'static RxDmaBufferAddresses<COUNT>,
@@ -193,13 +197,13 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         for index in 0..COUNT {
             storage.buffer_mut(index).unwrap().fill(STALE_PAYLOAD);
         }
-        let storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma> = Box::leak(storage);
-        let mut buffers = [0; COUNT];
-        let base = storage.dma_layout(&mut buffers).unwrap();
+        let placed = RxDmaStorage::place(Placed::host(Box::leak(storage))).unwrap();
+        let storage = placed.storage();
         Self {
+            placed,
             storage,
-            base,
-            buffers: Box::leak(Box::new(buffers)),
+            base: placed.descriptor_base(),
+            buffers: storage.buffer_addresses(),
         }
     }
 
@@ -215,7 +219,7 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         &self,
         mmio: &mut RxWalkerModel,
     ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
-        self.storage.prepare_ring(mmio, self.base, self.buffers)
+        self.placed.prepare_ring(mmio)
     }
 
     pub(super) fn start(&self, mmio: &mut RxWalkerModel) -> RxRingLive<'static, COUNT> {

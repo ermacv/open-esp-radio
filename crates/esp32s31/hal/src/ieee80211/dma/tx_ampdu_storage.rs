@@ -4,20 +4,18 @@
 //! External zero-copy aggregates receive prepare/start authority only through
 //! an owner which also retains every referenced [`StableDmaBacking`](oer_base_memory::StableDmaBacking) lease.
 
+use crate::dma_address;
 use crate::ieee80211::dma::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
-use crate::dma_address;
 
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
-use crate::dma_static::PlacedBacking;
+use crate::dma_static::{Placed, PlacedBacking};
 use crate::types::MacTxQueueDetached;
+use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::layouts::WifiTxDmaDescriptorControl;
 
-use crate::ieee80211::dma::descriptor::{
-    DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
-};
+use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, TxDescriptor, tx_owned_word};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, bytemuck::Zeroable)]
 #[repr(u8)]
@@ -148,10 +146,13 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         }
     }
 
-    /// Bind the static storage at its DMA addresses in space `S`, once.
-    pub fn pin_static<S: DmaSpace>(
-        storage: &'static mut Self,
+    /// Bind the placed storage at its DMA addresses in space `S`, once. The
+    /// link keeps the placed storage in the DMA window, so its addresses
+    /// need no window check.
+    pub fn pin<S: DmaSpace>(
+        placed: Placed<Self>,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
+        let storage = placed.into_inner();
         let descriptor_base = S::address(storage, storage.descriptors.as_ptr())
             .ok_or(AmpduDmaStorageError::Address)?;
         let buffer_base = if BUFFER_SIZE == 0 {
@@ -178,14 +179,11 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         external_region: fn(&[u8]) -> Option<u32>,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
         let descriptor_count = u8::try_from(SLOTS).map_err(|_| AmpduDmaStorageError::Count)?;
-        if descriptor_count == 0 || !descriptor_address_valid(descriptor_base) {
+        if descriptor_count == 0 {
             return Err(AmpduDmaStorageError::Count);
         }
         let descriptor_len = u32::try_from(core::mem::size_of_val(&storage.descriptors))
             .map_err(|_| AmpduDmaStorageError::Address)?;
-        if !dma_range_valid(descriptor_base, descriptor_len) {
-            return Err(AmpduDmaStorageError::Address);
-        }
         let descriptor_range = unsafe {
             // SAFETY: the returned owner permanently retains this unique
             // static descriptor allocation and owns every state transition.
@@ -202,9 +200,6 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         } else {
             let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
                 .map_err(|_| AmpduDmaStorageError::Address)?;
-            if !dma_range_valid(buffer_base, buffer_len) {
-                return Err(AmpduDmaStorageError::Address);
-            }
             Some(unsafe {
                 // SAFETY: the same static owner retains the entire aligned
                 // internal buffer arena for every DMA lifecycle state.
@@ -398,8 +393,9 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
                 descriptor_addresses[index + 1]
             };
             let word0 = words[index].with_tx_last(next_address == 0);
-            // SAFETY: the binding derived both addresses from the pinned
-            // static's validated descriptor and buffer bases.
+            // SAFETY: the binding derived both addresses from the placed
+            // static's descriptor and buffer bases, which the link keeps in
+            // the DMA window.
             #[allow(unsafe_code, reason = "typed addresses of the pinned aggregate")]
             let (buffer, next) = unsafe {
                 (
@@ -1170,7 +1166,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             let word0 = words[index].with_tx_last(next_address == 0);
             // SAFETY: each buffer lies in a `PlacedBacking` retained for this
             // publication, placed in the DMA window by its pool; the links
-            // name descriptors of the pinned static's validated base.
+            // name descriptors of the placed static's base.
             #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
             let (buffer, next) = unsafe {
                 (
@@ -1235,8 +1231,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             let word0 = descriptor.word0.with_tx_last(next_address == 0);
             // SAFETY: the retained descriptor image's buffer lies in a
             // `PlacedBacking` still retained, placed in the DMA window by its
-            // pool; the link names a descriptor of the pinned static's
-            // validated base.
+            // pool; the link names a descriptor of the placed static's base.
             #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
             let (buffer, next) = unsafe {
                 (

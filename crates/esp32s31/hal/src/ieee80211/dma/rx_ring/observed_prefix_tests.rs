@@ -45,15 +45,3 @@ fn counts_linear_wrapped_full_and_holed_prefixes() {
         96
     );
 }
-
-#[test]
-fn the_alias_check_covers_the_reserved_descriptor() {
-    // Ring descriptors at 0x2f0f_ffe8 and 0x2f0f_fff4; R at 0x2f10_0000,
-    // whose low 20 bits read as an exhausted NEXT.
-    assert!(super::descriptor_aliases_an_exhausted_list::<2>(
-        0x2f10_0000 - 2 * crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
-    ));
-    assert!(!super::descriptor_aliases_an_exhausted_list::<2>(
-        0x2f10_0000 - 3 * crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
-    ));
-}

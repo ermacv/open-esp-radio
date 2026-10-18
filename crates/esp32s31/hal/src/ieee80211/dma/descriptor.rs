@@ -5,7 +5,7 @@
 #![forbid(unsafe_code)]
 
 use crate::layouts::{
-    DMA_WINDOW, DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorBuffer,
+    DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorBuffer,
     WifiRxDmaDescriptorControl, WifiRxDmaDescriptorNext, WifiTxDmaDescriptor,
     WifiTxDmaDescriptorBuffer, WifiTxDmaDescriptorControl, WifiTxDmaDescriptorNext,
 };
@@ -202,20 +202,6 @@ impl Default for TxDescriptor {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[inline]
-pub const fn dma_range_valid(address: u32, size: u32) -> bool {
-    size != 0
-        && address >= DMA_WINDOW.start
-        && address < DMA_WINDOW.end
-        && size <= DMA_WINDOW.end - address
-}
-
-#[inline]
-pub const fn descriptor_address_valid(address: u32) -> bool {
-    address.is_multiple_of(WifiRxDmaDescriptor::ALIGN as u32)
-        && dma_range_valid(address, DESCRIPTOR_BYTES)
 }
 
 /// A capacity both size fields hold, or `None`.

@@ -13,10 +13,10 @@ proposes how the register model, the PAC and the HAL describe them.
 
 | Structure | Where it is described now | Shared how |
 | --- | --- | --- |
-| Wi-Fi DMA descriptor (12-byte node: control word, buffer address, next) | `ieee80211/dma/src/descriptor.rs`: hand-written masks and shifts (`SIZE_MASK`, `LENGTH_SHIFT`, owner and done bits) | CPU arms, the walker fills, owner bit 31 hands it over |
+| Wi-Fi DMA descriptor (12-byte node: control word, buffer address, next) | `hal/src/ieee80211/dma/descriptor.rs`: hand-written masks and shifts (`SIZE_MASK`, `LENGTH_SHIFT`, owner and done bits) | CPU arms, the walker fills, owner bit 31 hands it over |
 | Wi-Fi RX control prefix (metadata the MAC writes at the start of each received buffer: RSSI, PHY info, local timestamp) | `ieee80211/mac/src/rx/prefix.rs`: hand-written byte offsets | hardware writes, CPU reads after completion |
 | Wi-Fi TX descriptor words (flags, security, HE control, rate context) | `ieee80211/mac/src/tx/policy.rs`: shifts and fields named by offset (`byte_0x38`, `byte_0x2f_bit_2`) | CPU writes, hardware reads at transmission |
-| A-MPDU internal and external descriptors | `ieee80211/dma/src/tx_ampdu_storage.rs` | CPU builds, hardware walks |
+| A-MPDU internal and external descriptors | `hal/src/ieee80211/dma/tx_ampdu_storage.rs` | CPU builds, hardware walks |
 | BLE controller exchange memory (packet headers, scheduler lists, CTE ring) | evidence descriptions and `knowledge/esp32s31/bluetooth/` only | CPU and controller both, by protocol |
 | IEEE 802.15.4 frame buffers (length byte, PSDU) | `crates/espressif/ieee802154-engine` | CPU and engine |
 | The DMA-capable window `0x2f00_0000..0x2f08_0000` | three hand-written copies (`dma/src/descriptor.rs`, `hal/src/ieee802154.rs`, the esp-hal adapter's mem2mem) | placement rule |
@@ -154,11 +154,14 @@ runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the
 runtime link uses `--orphan-handling=error`, so a mistyped section name
 cannot leave a static unplaced. A storage that publishes its own addresses
-binds from a `Placed` value (`WifiRxArena::bind`); host models use
-`Placed::host` (test support). `DmaSpace` and `StableDmaRange` stay. The
-run-time address checks and the firmware placement warning go with the HAL
-RX DMA engine (step 3); `cargo fw` refuses an image that enables
-`test-support`.
+binds from a `Placed` value: the receive static is the driver's arena and the
+HAL's RX DMA storage placed together (`WifiRxStatic`), split once
+(`Placed::split`); only a `PlacedRxDma` (`RxDmaStorage::place`) prepares a
+ring, and the TX storages pin only placed storage (`TxDmaStorage::pin`,
+`AmpduDmaStorage::pin`). Host models use `Placed::host` (test support).
+`DmaSpace` and `StableDmaRange` stay. The run-time window checks and the
+firmware placement warning's DMA rules are gone: the link proves what they
+checked. `cargo fw` refuses an image that enables `test-support`.
 
 A transmit pool is placed the same way: `PlacedTxPool::pin` takes a
 `Placed<PinnedDmaTxPool>`, and its radio leases are `PlacedTxLease`s. The

@@ -80,6 +80,15 @@ impl<T: 'static> Placed<T> {
     }
 }
 
+impl<A: 'static, B: 'static> Placed<(A, B)> {
+    /// The two values of a pair placed together: each lies inside the
+    /// placed static, so each is placed.
+    pub fn split(self) -> (Placed<A>, Placed<B>) {
+        let (first, second) = self.value;
+        (Placed { value: first }, Placed { value: second })
+    }
+}
+
 /// A transmit pool placed in the DMA window ([`dma_static!`](crate::dma_static!)):
 /// the radio leases it issues are [`PlacedTxLease`]s, buffers the DMA
 /// hardware may read without a further address check.
@@ -255,6 +264,26 @@ macro_rules! dma_static {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_placed_pair_splits_into_its_own_two_values() {
+        let pair: &'static mut (u32, [u8; 4]) =
+            std::boxed::Box::leak(std::boxed::Box::new((7, [1; 4])));
+        let (first_address, second_address) = (
+            core::ptr::addr_of!(pair.0).addr(),
+            core::ptr::addr_of!(pair.1).addr(),
+        );
+        let (first, second) = Placed::host(pair).split();
+        let (first, second) = (first.into_inner(), second.into_inner());
+        assert_eq!((*first, *second), (7, [1; 4]));
+        assert_eq!(
+            (
+                core::ptr::from_mut(first).addr(),
+                core::ptr::from_mut(second).addr()
+            ),
+            (first_address, second_address)
+        );
+    }
 
     #[test]
     fn only_a_named_dma_bss_section_is_a_dma_section() {

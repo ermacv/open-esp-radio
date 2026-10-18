@@ -12,10 +12,10 @@ use oer_ieee80211_softmac::MacTxWork;
 
 use core::{marker::PhantomPinned, pin::Pin};
 
+use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError;
 use oer_esp32s31_hal::types::{
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTriggerTxQueueSnapshot,
 };
-use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError;
 use pin_project::pin_project;
 
 pub mod block_ack;
