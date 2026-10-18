@@ -113,6 +113,12 @@ fragments = [
     "peripherals/ieee802154-interrupt-route.toml",
     "peripherals/modem-etm.toml",
 ]
+layouts = [
+    "layouts/wifi-rx-dma-descriptor.toml",
+    "layouts/wifi-tx-dma-descriptor.toml",
+    "layouts/wifi-rx-control-prefix.toml",
+    "layouts/wifi-rx-control-tail.toml",
+]
 
 [[shared-fragments]]
 library = "../../ieee80211/model/library.toml"

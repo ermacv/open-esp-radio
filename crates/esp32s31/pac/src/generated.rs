@@ -8592,3 +8592,1135 @@ pub(crate) fn radio_phy_register_image(
 ) -> Option<u32> {
     crate::svd::partition_image_read::radio_phy_register_image(registers, index)
 }
+
+/// Memory layouts: structures in RAM whose format the hardware defines,
+/// generated from the register model's `layouts/`. They carry no protocol:
+/// no ordering, fences or ownership.
+pub mod layouts {
+    /// The `dma-window` RAM region of the memory map.
+    pub const DMA_WINDOW: core::ops::Range<u32> = 0x2f000000..0x2f080000;
+
+    /// The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
+    /// buffer address and the link to the next node.
+    ///
+    /// 12 bytes, aligned to 4; its zero bytes are an all-zero structure.
+    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    #[repr(C, align(4))]
+    pub struct WifiRxDmaDescriptor {
+        control: WifiRxDmaDescriptorControlCell,
+        buffer: WifiRxDmaDescriptorBufferCell,
+        next: WifiRxDmaDescriptorNextCell,
+    }
+
+    const _: () = {
+        assert!(core::mem::size_of::<WifiRxDmaDescriptor>() == 12);
+        assert!(core::mem::align_of::<WifiRxDmaDescriptor>() == 4);
+    };
+
+    #[allow(
+        unsafe_code,
+        reason = "a layout of volatile words is valid as zero bytes"
+    )]
+    // SAFETY: every field is a `VolatileCell<u32>`, a transparent
+    // `UnsafeCell<u32>` wrapper, so the all-zero bit pattern is a valid value.
+    unsafe impl bytemuck::Zeroable for WifiRxDmaDescriptor {}
+
+    impl WifiRxDmaDescriptor {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 12;
+        /// The alignment the hardware requires, in bytes.
+        pub const ALIGN: usize = 4;
+        /// The RAM regions the structure must lie in.
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[DMA_WINDOW];
+
+        /// The all-zero structure.
+        pub const fn zeroed() -> Self {
+            Self {
+                control: WifiRxDmaDescriptorControlCell(vcell::VolatileCell::new(0)),
+                buffer: WifiRxDmaDescriptorBufferCell(vcell::VolatileCell::new(0)),
+                next: WifiRxDmaDescriptorNextCell(vcell::VolatileCell::new(0)),
+            }
+        }
+
+        /// The `CONTROL` word at offset 0x0.
+        pub const fn control(&self) -> &WifiRxDmaDescriptorControlCell {
+            &self.control
+        }
+
+        /// The `BUFFER` word at offset 0x4.
+        pub const fn buffer(&self) -> &WifiRxDmaDescriptorBufferCell {
+            &self.buffer
+        }
+
+        /// The `NEXT` word at offset 0x8.
+        pub const fn next(&self) -> &WifiRxDmaDescriptorNextCell {
+            &self.next
+        }
+    }
+
+    /// The `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
+    pub struct WifiRxDmaDescriptorControlCell(vcell::VolatileCell<u32>);
+
+    impl WifiRxDmaDescriptorControlCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiRxDmaDescriptorControl {
+            WifiRxDmaDescriptorControl(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiRxDmaDescriptorControl) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_RX_DMA_DESCRIPTOR.CONTROL` word.
+    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiRxDmaDescriptorControl(u32);
+
+    impl WifiRxDmaDescriptorControl {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The buffer's capacity in bytes.
+        ///
+        /// `SIZE`, bits 13:0; written by the CPU.
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        pub const fn size(self) -> u16 {
+            (self.0 & 0x3fff) as u16
+        }
+
+        /// This value with `SIZE` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_size(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xffffc000) | value as u32))
+            }
+        }
+
+        /// Project-assigned name. The bytes the hardware wrote into the buffer; software sets it to SIZE when it arms the descriptor.
+        ///
+        /// `LENGTH`, bits 27:14; written by the hardware.
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        pub const fn length(self) -> u16 {
+            ((self.0 >> 14) & 0x3fff) as u16
+        }
+
+        /// This value with `LENGTH` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_length(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xf0003fff) | (value as u32) << 14))
+            }
+        }
+
+        /// Opaque: meaning not established. Cleared when the descriptor is rearmed and clear on every armed descriptor; what the hardware does with it is unknown.
+        ///
+        /// `BIT_29_OPAQUE`, bit 29; written by the CPU.
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        pub const fn bit_29_opaque(self) -> bool {
+            self.0 & 0x20000000 != 0
+        }
+
+        /// This value with `BIT_29_OPAQUE` set to `value`.
+        pub const fn with_bit_29_opaque(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x20000000)
+            } else {
+                Self(self.0 & 0xdfffffff)
+            }
+        }
+
+        /// Project-assigned name. Set by the hardware on a receive unit's terminal descriptor when the unit completes; a walk is delimited by it through the saved LAST. Software clears it on rearm.
+        ///
+        /// `RX_DONE`, bit 30; written by the hardware.
+        /// SOURCE: ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_OWNER_BIT_2026_10_18.
+        pub const fn rx_done(self) -> bool {
+            self.0 & 0x40000000 != 0
+        }
+
+        /// This value with `RX_DONE` set to `value`.
+        pub const fn with_rx_done(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x40000000)
+            } else {
+                Self(self.0 & 0xbfffffff)
+            }
+        }
+
+        /// Project-assigned name. 1: the walker may fill this descriptor; it stops at one with 0 without writing it, and a reload doorbell after the bit is set again resumes it there. The hardware checks it and never clears it: completion is RX_DONE. It does not check the bit of LAST when a doorbell follows LAST's link.
+        ///
+        /// `OWNER`, bit 31; written by the CPU.
+        /// SOURCE: HIL_W1_OWNER_BIT_2026_10_18.
+        pub const fn owner(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `OWNER` set to `value`.
+        pub const fn with_owner(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
+            }
+        }
+    }
+
+    /// The `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
+    pub struct WifiRxDmaDescriptorBufferCell(vcell::VolatileCell<u32>);
+
+    impl WifiRxDmaDescriptorBufferCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiRxDmaDescriptorBuffer {
+            WifiRxDmaDescriptorBuffer(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiRxDmaDescriptorBuffer) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_RX_DMA_DESCRIPTOR.BUFFER` word.
+    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiRxDmaDescriptorBuffer(u32);
+
+    impl WifiRxDmaDescriptorBuffer {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The buffer's address.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// The `WIFI_RX_DMA_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
+    pub struct WifiRxDmaDescriptorNextCell(vcell::VolatileCell<u32>);
+
+    impl WifiRxDmaDescriptorNextCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiRxDmaDescriptorNext {
+            WifiRxDmaDescriptorNext(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiRxDmaDescriptorNext) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_RX_DMA_DESCRIPTOR.NEXT` word.
+    /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiRxDmaDescriptorNext(u32);
+
+    impl WifiRxDmaDescriptorNext {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The next descriptor's address, or zero at the end.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address of a [`WifiRxDmaDescriptor`], or zero.
+        /// SOURCE: ROM_REV0_WDEV_APPEND_RX_BLOCKS, ROM_REV0_HAL_MAC_RX_LAST_DESCRIPTOR, HIL_W1_RX_WALKER_2026_10_18, HIL_OPEN_RX_LIVE_APPEND_2026_07_27.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// The 12-byte node the Wi-Fi TX DMA engine follows: the control word, the
+    /// buffer address and the link to the next node of a chain.
+    ///
+    /// 12 bytes, aligned to 4; its zero bytes are an all-zero structure.
+    /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+    #[repr(C, align(4))]
+    pub struct WifiTxDmaDescriptor {
+        control: WifiTxDmaDescriptorControlCell,
+        buffer: WifiTxDmaDescriptorBufferCell,
+        next: WifiTxDmaDescriptorNextCell,
+    }
+
+    const _: () = {
+        assert!(core::mem::size_of::<WifiTxDmaDescriptor>() == 12);
+        assert!(core::mem::align_of::<WifiTxDmaDescriptor>() == 4);
+    };
+
+    #[allow(
+        unsafe_code,
+        reason = "a layout of volatile words is valid as zero bytes"
+    )]
+    // SAFETY: every field is a `VolatileCell<u32>`, a transparent
+    // `UnsafeCell<u32>` wrapper, so the all-zero bit pattern is a valid value.
+    unsafe impl bytemuck::Zeroable for WifiTxDmaDescriptor {}
+
+    impl WifiTxDmaDescriptor {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 12;
+        /// The alignment the hardware requires, in bytes.
+        pub const ALIGN: usize = 4;
+        /// The RAM regions the structure must lie in.
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[DMA_WINDOW];
+
+        /// The all-zero structure.
+        pub const fn zeroed() -> Self {
+            Self {
+                control: WifiTxDmaDescriptorControlCell(vcell::VolatileCell::new(0)),
+                buffer: WifiTxDmaDescriptorBufferCell(vcell::VolatileCell::new(0)),
+                next: WifiTxDmaDescriptorNextCell(vcell::VolatileCell::new(0)),
+            }
+        }
+
+        /// The `CONTROL` word at offset 0x0.
+        pub const fn control(&self) -> &WifiTxDmaDescriptorControlCell {
+            &self.control
+        }
+
+        /// The `BUFFER` word at offset 0x4.
+        pub const fn buffer(&self) -> &WifiTxDmaDescriptorBufferCell {
+            &self.buffer
+        }
+
+        /// The `NEXT` word at offset 0x8.
+        pub const fn next(&self) -> &WifiTxDmaDescriptorNextCell {
+            &self.next
+        }
+    }
+
+    /// The `WIFI_TX_DMA_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
+    pub struct WifiTxDmaDescriptorControlCell(vcell::VolatileCell<u32>);
+
+    impl WifiTxDmaDescriptorControlCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiTxDmaDescriptorControl {
+            WifiTxDmaDescriptorControl(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiTxDmaDescriptorControl) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_TX_DMA_DESCRIPTOR.CONTROL` word.
+    /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiTxDmaDescriptorControl(u32);
+
+    impl WifiTxDmaDescriptorControl {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The buffer's capacity in bytes.
+        ///
+        /// `SIZE`, bits 13:0; written by the CPU.
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn size(self) -> u16 {
+            (self.0 & 0x3fff) as u16
+        }
+
+        /// This value with `SIZE` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_size(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xffffc000) | value as u32))
+            }
+        }
+
+        /// Project-assigned name. The populated source bytes of the buffer.
+        ///
+        /// `LENGTH`, bits 27:14; written by the CPU.
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn length(self) -> u16 {
+            ((self.0 >> 14) & 0x3fff) as u16
+        }
+
+        /// This value with `LENGTH` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_length(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xf0003fff) | (value as u32) << 14))
+            }
+        }
+
+        /// Project-assigned name. Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; not the RX RX_DONE.
+        ///
+        /// `TX_LAST`, bit 30; written by the CPU.
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn tx_last(self) -> bool {
+            self.0 & 0x40000000 != 0
+        }
+
+        /// This value with `TX_LAST` set to `value`.
+        pub const fn with_tx_last(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x40000000)
+            } else {
+                Self(self.0 & 0xbfffffff)
+            }
+        }
+
+        /// Project-assigned name. Set by software to hand the descriptor to the MAC. Whether the TX engine checks it as the RX walker checks OWNER is not verified.
+        ///
+        /// `TX_OWNED`, bit 31; written by the CPU.
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn tx_owned(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `TX_OWNED` set to `value`.
+        pub const fn with_tx_owned(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
+            }
+        }
+    }
+
+    /// The `WIFI_TX_DMA_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
+    pub struct WifiTxDmaDescriptorBufferCell(vcell::VolatileCell<u32>);
+
+    impl WifiTxDmaDescriptorBufferCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiTxDmaDescriptorBuffer {
+            WifiTxDmaDescriptorBuffer(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiTxDmaDescriptorBuffer) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_TX_DMA_DESCRIPTOR.BUFFER` word.
+    /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiTxDmaDescriptorBuffer(u32);
+
+    impl WifiTxDmaDescriptorBuffer {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The buffer's address.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// The `WIFI_TX_DMA_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
+    pub struct WifiTxDmaDescriptorNextCell(vcell::VolatileCell<u32>);
+
+    impl WifiTxDmaDescriptorNextCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiTxDmaDescriptorNext {
+            WifiTxDmaDescriptorNext(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiTxDmaDescriptorNext) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_TX_DMA_DESCRIPTOR.NEXT` word.
+    /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiTxDmaDescriptorNext(u32);
+
+    impl WifiTxDmaDescriptorNext {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The next descriptor's address, or zero at the end.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address of a [`WifiTxDmaDescriptor`], or zero.
+        /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// The fixed RX-control prefix the Wi-Fi MAC writes at the start of a received
+    /// unit's first buffer: RSSI, PHY information and the local receive time. The
+    /// dynamic tail follows it after the optional HE-SIG-B and channel information.
+    ///
+    /// A decoder over the 56 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiRxControlPrefix<'a> {
+        bytes: &'a [u8; 56],
+    }
+
+    impl<'a> WifiRxControlPrefix<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 56;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 56]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 56] {
+            self.bytes
+        }
+
+        /// The `RSSI` range: byte 0x0.
+        pub const fn rssi(self) -> WifiRxControlPrefixRssi {
+            WifiRxControlPrefixRssi(u8::from_le_bytes([self.bytes[0]]))
+        }
+
+        /// The `RATE` range: byte 0x1.
+        pub const fn rate(self) -> WifiRxControlPrefixRate {
+            WifiRxControlPrefixRate(u8::from_le_bytes([self.bytes[1]]))
+        }
+
+        /// The `HE_SIGA1` range: bytes 0x4..0x8, little-endian.
+        pub const fn he_siga1(self) -> WifiRxControlPrefixHeSiga1 {
+            WifiRxControlPrefixHeSiga1(u32::from_le_bytes([
+                self.bytes[4],
+                self.bytes[5],
+                self.bytes[6],
+                self.bytes[7],
+            ]))
+        }
+
+        /// The `RXEND_STATE` range: byte 0x8.
+        pub const fn rxend_state(self) -> WifiRxControlPrefixRxendState {
+            WifiRxControlPrefixRxendState(u8::from_le_bytes([self.bytes[8]]))
+        }
+
+        /// The `HE_SIGA2` range: bytes 0x9..0xb, little-endian.
+        pub const fn he_siga2(self) -> WifiRxControlPrefixHeSiga2 {
+            WifiRxControlPrefixHeSiga2(u16::from_le_bytes([self.bytes[9], self.bytes[10]]))
+        }
+
+        /// The `TIMESTAMP` range: bytes 0xc..0x10, little-endian.
+        pub const fn timestamp(self) -> WifiRxControlPrefixTimestamp {
+            WifiRxControlPrefixTimestamp(u32::from_le_bytes([
+                self.bytes[12],
+                self.bytes[13],
+                self.bytes[14],
+                self.bytes[15],
+            ]))
+        }
+
+        /// The `HE_MU_RU_SIZE` range: byte 0x1a.
+        pub const fn he_mu_ru_size(self) -> WifiRxControlPrefixHeMuRuSize {
+            WifiRxControlPrefixHeMuRuSize(u8::from_le_bytes([self.bytes[26]]))
+        }
+
+        /// The `HE_MU_RU_POSITION` range: byte 0x1e.
+        pub const fn he_mu_ru_position(self) -> WifiRxControlPrefixHeMuRuPosition {
+            WifiRxControlPrefixHeMuRuPosition(u8::from_le_bytes([self.bytes[30]]))
+        }
+
+        /// The `SINGLE_MPDU` range: byte 0x1f.
+        pub const fn single_mpdu(self) -> WifiRxControlPrefixSingleMpdu {
+            WifiRxControlPrefixSingleMpdu(u8::from_le_bytes([self.bytes[31]]))
+        }
+
+        /// The `BB_FORMAT` range: byte 0x25.
+        pub const fn bb_format(self) -> WifiRxControlPrefixBbFormat {
+            WifiRxControlPrefixBbFormat(u8::from_le_bytes([self.bytes[37]]))
+        }
+
+        /// The `CHANNEL_ESTIMATE` range: bytes 0x26..0x28, little-endian.
+        pub const fn channel_estimate(self) -> WifiRxControlPrefixChannelEstimate {
+            WifiRxControlPrefixChannelEstimate(u16::from_le_bytes([self.bytes[38], self.bytes[39]]))
+        }
+
+        /// The `HE_SIG_B` range: bytes 0x28..0x2c, little-endian.
+        pub const fn he_sig_b(self) -> WifiRxControlPrefixHeSigB {
+            WifiRxControlPrefixHeSigB(u32::from_le_bytes([
+                self.bytes[40],
+                self.bytes[41],
+                self.bytes[42],
+                self.bytes[43],
+            ]))
+        }
+
+        /// The `HE_MU_COMMON` range: bytes 0x2c..0x30, little-endian.
+        pub const fn he_mu_common(self) -> WifiRxControlPrefixHeMuCommon {
+            WifiRxControlPrefixHeMuCommon(u32::from_le_bytes([
+                self.bytes[44],
+                self.bytes[45],
+                self.bytes[46],
+                self.bytes[47],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.RSSI` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixRssi(u8);
+
+    impl WifiRxControlPrefixRssi {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The frame's RSSI in dBm, a signed byte.
+        ///
+        /// `VALUE`, bits 7:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn value(self) -> u8 {
+            self.0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.RATE` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixRate(u8);
+
+    impl WifiRxControlPrefixRate {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The PHY rate code; for 802.11b the transmission rate.
+        ///
+        /// `RATE`, bits 4:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn rate(self) -> u8 {
+            self.0 & 0x1f
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_SIGA1` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_HE_SU_SIG, ESP_WIFI_SYS_S31_HE_MU_SIG, BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeSiga1(u32);
+
+    impl WifiRxControlPrefixHeSiga1 {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. HE-SIG-A1, or HT-SIG for an HT PPDU, captured verbatim.
+        ///
+        /// `VALUE`, bits 31:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_HE_SU_SIG, ESP_WIFI_SYS_S31_HE_MU_SIG, BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+        pub const fn value(self) -> u32 {
+            self.0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.RXEND_STATE` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixRxendState(u8);
+
+    impl WifiRxControlPrefixRxendState {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The reception end state: 0 successful, others a failure.
+        ///
+        /// `VALUE`, bits 7:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn value(self) -> u8 {
+            self.0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_SIGA2` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_HE_SU_SIG, ESP_WIFI_SYS_S31_HE_MU_SIG, BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeSiga2(u16);
+
+    impl WifiRxControlPrefixHeSiga2 {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u16 {
+            self.0
+        }
+
+        /// Project-assigned name. HE-SIG-A2 captured verbatim.
+        ///
+        /// `VALUE`, bits 15:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_HE_SU_SIG, ESP_WIFI_SYS_S31_HE_MU_SIG, BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+        pub const fn value(self) -> u16 {
+            self.0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.TIMESTAMP` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, BLOB_LIBPP_MAC_LOCAL_TIME.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixTimestamp(u32);
+
+    impl WifiRxControlPrefixTimestamp {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The MAC local time when the frame was received, a wrapping 32-bit value.
+        ///
+        /// `VALUE`, bits 31:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, BLOB_LIBPP_MAC_LOCAL_TIME.
+        pub const fn value(self) -> u32 {
+            self.0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_MU_RU_SIZE` range.
+    /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeMuRuSize(u8);
+
+    impl WifiRxControlPrefixHeMuRuSize {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The HE-MU resource unit size.
+        ///
+        /// `RU_SIZE`, bits 1:0; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn ru_size(self) -> u8 {
+            self.0 & 0x3
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_MU_RU_POSITION` range.
+    /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeMuRuPosition(u8);
+
+    impl WifiRxControlPrefixHeMuRuPosition {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The HE-MU resource unit position.
+        ///
+        /// `RU_POSITION`, bits 7:4; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn ru_position(self) -> u8 {
+            self.0 >> 4
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.SINGLE_MPDU` range.
+    /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixSingleMpdu(u8);
+
+    impl WifiRxControlPrefixSingleMpdu {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. 1: a VHT or HE single-MPDU A-MPDU (S-MPDU).
+        ///
+        /// `SINGLE_MPDU`, bit 0; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_PPDU.
+        pub const fn single_mpdu(self) -> bool {
+            self.0 & 0x1 != 0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.BB_FORMAT` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_RX_BB_FORMAT.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixBbFormat(u8);
+
+    impl WifiRxControlPrefixBbFormat {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The PPDU format (11b, 11g, HT, VHT, HE SU, HE MU, HE ER SU, HE TB, VHT MU).
+        ///
+        /// `BB_FORMAT`, bits 7:4; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL, ESP_WIFI_SYS_S31_RX_BB_FORMAT.
+        pub const fn bb_format(self) -> u8 {
+            self.0 >> 4
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.CHANNEL_ESTIMATE` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixChannelEstimate(u16);
+
+    impl WifiRxControlPrefixChannelEstimate {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u16 {
+            self.0
+        }
+
+        /// Project-assigned name. The bytes of channel information (CSI) appended after the prefix and the HE-SIG-B bytes.
+        ///
+        /// `LENGTH`, bits 9:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn length(self) -> u16 {
+            self.0 & 0x3ff
+        }
+
+        /// Project-assigned name. 1: the channel information is valid.
+        ///
+        /// `VALID`, bit 10; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn valid(self) -> bool {
+            self.0 & 0x400 != 0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_SIG_B` range.
+    /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeSigB(u32);
+
+    impl WifiRxControlPrefixHeSigB {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The selected HE-SIG-B user field.
+        ///
+        /// `SELECTED_USER`, bits 20:0; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn selected_user(self) -> u32 {
+            self.0 & 0x1fffff
+        }
+
+        /// Project-assigned name. The HE-SIG-B length's bits beyond whole bytes.
+        ///
+        /// `LENGTH_BITS`, bits 23:21; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn length_bits(self) -> u8 {
+            ((self.0 >> 21) & 0x7) as u8
+        }
+
+        /// Project-assigned name. The HE-SIG-B length's whole bytes.
+        ///
+        /// `LENGTH_BYTES`, bits 30:24; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn length_bytes(self) -> u8 {
+            ((self.0 >> 24) & 0x7f) as u8
+        }
+
+        /// Project-assigned name. 1: the complete HE-SIG-B bytes follow the prefix.
+        ///
+        /// `PRESENT`, bit 31; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn present(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_PREFIX.HE_MU_COMMON` range.
+    /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlPrefixHeMuCommon(u32);
+
+    impl WifiRxControlPrefixHeMuCommon {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Project-assigned name. The HE-SIG-B common field.
+        ///
+        /// `COMMON_INFO`, bits 30:10; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_DBG_DUMP_RX_SIGB.
+        pub const fn common_info(self) -> u32 {
+            (self.0 >> 10) & 0x1fffff
+        }
+    }
+
+    /// The eight-byte tail of the RX-control metadata: after the fixed prefix and the
+    /// optional HE-SIG-B and channel-information bytes, each rounded up to a word,
+    /// and right before the MPDU.
+    ///
+    /// A decoder over the 8 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiRxControlTail<'a> {
+        bytes: &'a [u8; 8],
+    }
+
+    impl<'a> WifiRxControlTail<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 8;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 8]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 8] {
+            self.bytes
+        }
+
+        /// The `SIGNAL_LENGTH` range: bytes 0x0..0x2, little-endian.
+        pub const fn signal_length(self) -> WifiRxControlTailSignalLength {
+            WifiRxControlTailSignalLength(u16::from_le_bytes([self.bytes[0], self.bytes[1]]))
+        }
+
+        /// The `DUMP_LENGTH` range: bytes 0x2..0x4, little-endian.
+        pub const fn dump_length(self) -> WifiRxControlTailDumpLength {
+            WifiRxControlTailDumpLength(u16::from_le_bytes([self.bytes[2], self.bytes[3]]))
+        }
+
+        /// The `RX_STATE` range: byte 0x4.
+        pub const fn rx_state(self) -> WifiRxControlTailRxState {
+            WifiRxControlTailRxState(u8::from_le_bytes([self.bytes[4]]))
+        }
+
+        /// The `BYTE_0005_OPAQUE` range: byte 0x5.
+        pub const fn byte_0005_opaque(self) -> WifiRxControlTailByte0005Opaque {
+            WifiRxControlTailByte0005Opaque(u8::from_le_bytes([self.bytes[5]]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_TAIL.SIGNAL_LENGTH` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlTailSignalLength(u16);
+
+    impl WifiRxControlTailSignalLength {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u16 {
+            self.0
+        }
+
+        /// Project-assigned name. sig_len: the received MPDU's length, FCS included.
+        ///
+        /// `LENGTH`, bits 13:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn length(self) -> u16 {
+            self.0 & 0x3fff
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_TAIL.DUMP_LENGTH` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlTailDumpLength(u16);
+
+    impl WifiRxControlTailDumpLength {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u16 {
+            self.0
+        }
+
+        /// Project-assigned name. dump_len: the length the MAC recorded for the MPDU.
+        ///
+        /// `LENGTH`, bits 13:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn length(self) -> u16 {
+            self.0 & 0x3fff
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_CONTROL_TAIL.RX_STATE` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlTailRxState(u8);
+
+    impl WifiRxControlTailRxState {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Project-assigned name. The reception state: 0 successful, others a failure.
+        ///
+        /// `VALUE`, bits 7:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn value(self) -> u8 {
+            self.0
+        }
+    }
+
+    /// Opaque: meaning not established.
+    ///
+    /// The `WIFI_RX_CONTROL_TAIL.BYTE_0005_OPAQUE` range.
+    /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxControlTailByte0005Opaque(u8);
+
+    impl WifiRxControlTailByte0005Opaque {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Opaque: meaning not established. Reserved in the public structure; read as a diagnostic.
+        ///
+        /// `BITS_0_7_OPAQUE`, bits 7:0; written by the hardware.
+        /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
+        pub const fn bits_0_7_opaque(self) -> u8 {
+            self.0
+        }
+    }
+}

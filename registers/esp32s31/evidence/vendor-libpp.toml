@@ -257,6 +257,10 @@ id = "BLOB_LIBPP_DBG_DUMP_RX_PPDU"
 description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_dump_rx_ppdu size 0xa36, extracted object sha256 2d3eb6f1123aba62387d98864ecfe1ececc507e52f7f8b72a3efaf40cc5042e5. In the HE-SU and HE-extended-range-SU branch at offsets 0x1b0..0x280, instructions at 0x1e6..0x1ec shift the captured HE-SIG-A1 word right by 23 and mask three bits. The pinned format string at section offset 0x1b0 names that value nsts_and_midamble_periodicity."
 
 [[sources]]
+id = "BLOB_LIBPP_DBG_DUMP_RX_SIGB"
+description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4 (knowledge/esp32s31/vendor/artifacts.toml libpp); complete test_hal_rx_mu_sigb.o dbg_dump_rx_sigb, size 0x1e6, function code sha256 c93bcb8686043d6ee41e7c692c3370ddb25e6777a306de3bc4bd8fb8bf0bcbb2 (knowledge/esp32s31/vendor/facts/provenance.toml). On an RX-control prefix it reads the HE-SIG-B bit length from byte 0x2a bits 7:5 and byte 0x2b bits 6:0, its presence from byte 0x2b bit 7, the selected user field from bytes 0x28..0x2a (byte 0x2a bits 4:0), the common field from byte 0x2d bits 7:2 through byte 0x2f bits 6:0, the RU size from byte 0x1a bits 1:0, the RU position from byte 0x1e bits 7:4, and the complete SIG-B bytes from offset 0x38."
+
+[[sources]]
 id = "BLOB_LIBPP_DEBUG_STATISTICS_CONTROL"
 description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_clr_hw_count size 0x08 and reachable esp_test_clr_hw_statistics size 0x30. The wrapper tail-calls the leaf, which sets 0x20104c00 bit 16, pulses 0x20104308 bit 0 high then low, and clears 0x20104c00 bit 16 using fresh reads before every write."
 

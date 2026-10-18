@@ -126,6 +126,18 @@ id = "IEEE80211_HE_PHY_CAP_DCM"
 description = "IEEE 802.11 HE PHY Capabilities byte three field semantics as exposed by Linux include/linux/ieee80211-he.h: bits 1:0 encode DCM maximum TX constellation and bits 4:3 encode DCM maximum RX constellation, with encodings NotSupported, BPSK, QPSK and 16-QAM."
 
 [[sources]]
+id = "ESP_WIFI_SYS_S31_RXCTRL"
+description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_wifi_he_types.h sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d, packed esp_wifi_rxctrl_t, branch CONFIG_SOC_WIFI_MAC_VERSION_NUM == 3. The same commit's c/include/esp32s31/sdkconfig.h (sha256 a665ef249e07f5985f59bd7aef3e3e78f3a9762775296658a1d03ed37f25f2ba) defines CONFIG_SOC_WIFI_MAC_VERSION_NUM 3 and c/include/esp32s31/soc/soc_caps.h (sha256 ffa7a4e918be8d1628ad0a8ea307c989a8486790daa75fb5da1eeef0a33ceb29) SOC_WIFI_MAC_VERSION_NUM (3); ESP-IDF fff9895c82d744c7237be8847347bdd1b07c6643 components/soc/esp32s31/include/soc/soc_caps.h agrees. In that branch the 64-byte structure places signed rssi in byte 0, the five-bit rate in byte 1 bits 4:0, he_siga1 at bytes 4..8, rxend_state (0 successful) in byte 8, he_siga2 at bytes 9..11, is_group in byte 11 bit 7, the 32-bit local-time timestamp at bytes 12..16, cur_bb_format in byte 0x25 bits 7:4, the ten-bit rx_channel_estimate_len at bytes 0x26..0x28 bits 9:0 with rx_channel_estimate_info_vld at bit 10, and, in the last eight bytes, sig_len in bits 13:0 of the first halfword, dump_len in bits 13:0 of the second and rx_state (0 successful) in the following byte. Byte 0x1f, the byte after rx_state and the HE-SIG-B option fields are reserved in this branch."
+
+[[sources]]
+id = "ESP_WIFI_SYS_S31_RX_BB_FORMAT"
+description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_wifi_he_types.h sha256 602abd515ad617d06d8fe01e94fdf755890e72194a56a03821fa49770544162d, wifi_rx_bb_format_t: 11B 0, 11G/11A 1, HT 2, VHT 3, HE_SU 4, HE_MU 5, HE_ERSU 6, HE_TB 7, VHT_MU 11; the value of esp_wifi_rxctrl_t.cur_bb_format."
+
+[[sources]]
+id = "ESP_WIFI_SYS_S31_HE_MU_SIG"
+description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_private/esp_wifi_he_types_private.h sha256 928b50eef6e9daa369a1c0f2aca8f07dde79b952eda2cdeb5355541fe1b2469b, complete esp_wifi_mu_siga1_t and packed esp_wifi_mu_siga2_t layouts: the HE-MU interpretation of the he_siga1 and he_siga2 words of esp_wifi_rxctrl_t."
+
+[[sources]]
 id = "ESP_WIFI_SYS_S31_HE_SU_SIG"
 description = "Sibling esp-wifi-sys commit 72b97e6fe55307aa92c8c1edf3fdb3f4df816e80, c/headers/esp32s31/esp_private/esp_wifi_he_types_private.h complete esp_wifi_su_siga1_t and packed esp_wifi_su_siga2_t layouts. These standard field names are joined only to bit positions independently exercised by the complete S31 blob formatter."
 

@@ -2119,10 +2119,12 @@ dependencies = [
 name = "oer-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "oer-esp32s31-pac-raw",
  "oer-espressif-ieee80211-pac",
  "oer-espressif-ieee802154-pac",
  "oer-memory",
+ "vcell",
 ]
 
 [[package]]
