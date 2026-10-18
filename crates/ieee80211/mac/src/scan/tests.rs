@@ -144,6 +144,43 @@ fn parses_beacon_into_owned_bounded_record() {
     assert!(record.rsn);
 }
 
+/// `rich_frame(8)` with the Order bit set and an HT Control field after the
+/// MAC header, as an HT or HE access point may send it.
+fn ht_control_beacon() -> std::vec::Vec<u8> {
+    let mut frame = rich_frame(8);
+    frame[1] |= 0x80;
+    frame.splice(24..24, [0x0d, 0xf0, 0xad, 0x0b]);
+    frame
+}
+
+#[test]
+fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
+    let plain = parse_management(&rich_frame(8), 1, -40).unwrap();
+    let record = parse_management(&ht_control_beacon(), 1, -40).unwrap();
+    assert_eq!(record.ssid_bytes(), b"test");
+    assert_eq!(record.beacon_interval_tu, 100);
+    assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
+    assert_eq!(record.capability_info, 0x0011);
+    assert!(!record.information_elements_truncated);
+    assert_eq!(record, plain);
+}
+
+#[test]
+fn a_beacon_whose_ht_control_leaves_no_fixed_fields_is_ignored() {
+    let mut frame = ht_control_beacon();
+    // The header with its HT Control field and eleven of the twelve fixed
+    // bytes.
+    frame.truncate(24 + 4 + 11);
+    assert!(parse_management(&frame, 1, -40).is_none());
+}
+
+#[test]
+fn a_management_frame_of_another_protocol_version_is_ignored() {
+    let mut frame = rich_frame(8);
+    frame[0] |= 0x01;
+    assert!(parse_management(&frame, 1, -40).is_none());
+}
+
 #[test]
 fn retains_erp_use_protection_without_confusing_the_element_header() {
     let mut frame = [0_u8; 43];
@@ -369,7 +406,13 @@ fn scan_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
     let mut hidden = std::vec![0_u8; 38];
     hidden[0] = 0x80;
     hidden[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
-    std::vec![rich_frame(8), rich_frame(5), beacon, hidden]
+    std::vec![
+        rich_frame(8),
+        rich_frame(5),
+        ht_control_beacon(),
+        beacon,
+        hidden
+    ]
 }
 
 /// Read every accessor of a parsed record.

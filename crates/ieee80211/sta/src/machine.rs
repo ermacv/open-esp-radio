@@ -77,10 +77,9 @@ use oer_ieee80211_arbiter::{
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
 use oer_ieee80211_lower_mac::{
-    AckHeader, Channel, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength, ReceiveFilter,
-    ReturnedMpdu, RxEvidence, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
-    Station as StationRole, StationReceive, SupportedChannel, SupportedFilter, TxBufferMemory,
-    TxOutcome,
+    AckHeader, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength, ReceiveFilter,
+    ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole,
+    StationReceive, SupportedChannel, SupportedFilter, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_mac::address::{Bssid, IndividualAddress, OwnAddress};
 use oer_ieee80211_mac::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
@@ -113,6 +112,10 @@ use oer_ieee80211_rsn::{
 use oer_ieee80211_upper_mac::HePacketPadding;
 
 use crate::association::StaAssociatedPeer;
+use crate::receive::{Management, Received, observe_scan};
+// The machine's tests build receive metadata through `use super::*`.
+#[cfg(test)]
+use oer_ieee80211_lower_mac::RxEvidence;
 use oer_time::{Duration, Instant};
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
@@ -3512,15 +3515,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         meta: T::RxMeta,
         mut deliver: impl FnMut(oer_ieee80211_mac::data::EthernetFrameParts<'frame>),
     ) -> Result<(), StaRxError> {
-        use oer_ieee80211_mac::{
-            frame::DecodedHeader,
-            receive::{AdmittedData, RxDropReason},
+        use oer_ieee80211_mac::receive::{AdmittedData, RxDropReason};
+        let header = match crate::receive::classify(frame)? {
+            Received::Management(management) => {
+                self.received_management(now, management, meta);
+                return Ok(());
+            }
+            Received::Data(header) => header,
         };
-        let header = DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?;
-        if !header.control().is_data() {
-            self.received_management(now, frame, meta);
-            return Ok(());
-        }
         let (bssid, replay) = match &mut self.state {
             State::Handshake(handshake) => (
                 handshake.bssid,
@@ -3590,19 +3592,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     }
 
     /// Take a received frame.
-    fn received_management(&mut self, now: Instant, frame: &[u8], meta: T::RxMeta) {
-        let receive_channel = meta.common().channel;
-        let rssi = match meta.common().rssi_dbm {
-            RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => rssi,
-            RxEvidence::Unavailable => i8::MIN,
-        };
+    fn received_management(&mut self, now: Instant, management: Management<'_>, meta: T::RxMeta) {
+        let frame = management.frame();
         let state = self.take_state();
         self.state = match state {
             State::Scan(scan)
                 if scan.step == ScanStep::Listen || scan.step == ScanStep::NeedProbe =>
             {
-                self.scan
-                    .observe_management(frame, receive_channel.number(), rssi, Some(now));
+                observe_scan(&mut self.scan, now, management, &meta);
                 State::Scan(scan)
             }
             State::Join(mut join) => {
@@ -3722,13 +3719,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 }
             }
             State::Connected(connected) => {
-                self.connected_received(connected, now, frame, receive_channel, rssi)
+                self.connected_received(connected, now, management, &meta)
             }
             State::Confirming(Confirming {
                 connected,
                 deadline,
             }) => {
-                let state = self.connected_received(connected, now, frame, receive_channel, rssi);
+                let state = self.connected_received(connected, now, management, &meta);
                 still_confirming(state, deadline)
             }
             state => state,
@@ -3740,10 +3737,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         &mut self,
         mut connected: Connected<T, K>,
         now: Instant,
-        frame: &[u8],
-        receive_channel: Channel,
-        rssi: i8,
+        management: Management<'_>,
+        meta: &T::RxMeta,
     ) -> State<T, K> {
+        let frame = management.frame();
         let disconnect = match connected
             .rsn
             .as_mut()
@@ -3791,8 +3788,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             Some(BackgroundStep::HomeProbe { .. } | BackgroundStep::HomeListen { .. })
         );
         if away || home {
-            self.scan
-                .observe_management(frame, receive_channel.number(), rssi, Some(now));
+            observe_scan(&mut self.scan, now, management, meta);
             if away {
                 return State::Connected(connected);
             }

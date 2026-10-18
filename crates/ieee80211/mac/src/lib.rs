@@ -22,11 +22,13 @@
 //! subsequent processing. Replacing indexing mechanically with `.get()` or
 //! suppressing its lint does not establish the contract.
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 extern crate std;
 
-#[cfg(test)]
-mod fuzz;
+/// Deterministic received-byte inputs, shared with other crates' tests
+/// through the `test-support` feature.
+#[cfg(any(test, feature = "test-support"))]
+pub mod fuzz;
 
 pub mod address;
 pub mod ampdu;

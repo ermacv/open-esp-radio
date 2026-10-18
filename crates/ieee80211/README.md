@@ -107,3 +107,10 @@ Module namespaces do not create independent owners. Tests live in child files
 beside their owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the complete layering
 contract.
+
+## Open debt
+
+- **Before W3** (AP selection by RSSI): `mac/src/scan.rs` `ScanRecord` stores
+  RSSI as `i8` with `i8::MIN` as the "unknown" marker
+  (`sta/src/receive.rs` `observe_scan` writes it for a frame without a
+  signal level); make it `Option<i8>`.

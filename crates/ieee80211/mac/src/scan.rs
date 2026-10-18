@@ -523,54 +523,19 @@ pub fn best_matching_ssid_and_security<'a>(
 
 /// Decode one beacon or probe response into an owned bounded record.
 ///
-/// The fixed management and beacon fields are checked as one array before
-/// interpreting the variable information elements.
+/// The fixed fields start where the decoded MAC header ends, so a frame
+/// with the Order bit set carries its HT Control field before them. They
+/// are checked as one array before interpreting the variable information
+/// elements.
 pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<ScanRecord> {
-    let (header, mut elements) = frame.split_first_chunk::<36>()?;
-    let [
-        fc0,
-        fc1,
-        _duration0,
-        _duration1,
-        // Receiver and transmitter addresses.
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        b0,
-        b1,
-        b2,
-        b3,
-        b4,
-        b5,
-        _sequence0,
-        _sequence1,
-        t0,
-        t1,
-        t2,
-        t3,
-        t4,
-        t5,
-        t6,
-        t7,
-        i0,
-        i1,
-        c0,
-        c1,
-    ] = *header;
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let subtype = (frame_control >> 4) & 0x0f;
-    if frame_control & 0x000c != 0 || !matches!(subtype, 5 | 8) {
+    let header = crate::frame::DecodedHeader::decode(frame)?;
+    let control = header.control();
+    if control.is_data() || !matches!(control.subtype(), 5 | 8) {
         return None;
     }
+    let (fixed, mut elements) = header.body().split_first_chunk::<12>()?;
+    let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
+    let [b0, b1, b2, b3, b4, b5] = header.address3();
 
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
     let mut record = ScanRecord::new(bssid, fallback_channel, rssi);

@@ -23,6 +23,7 @@ oer-time = { path = "../../base/time" }
 oer-radio-port = { path = "../../radio/port" }
 
 [dev-dependencies]
+oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
 
 [lints]
