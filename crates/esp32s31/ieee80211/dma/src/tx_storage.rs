@@ -13,8 +13,10 @@ use pin_project::pin_project;
 
 use crate::space::DmaSpace;
 
+use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
+
 use crate::descriptor::{
-    DESCRIPTOR_BYTES, Descriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
+    DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
 
 /// DMA-memory state independent of an EDCA queue or protocol cookie.
@@ -53,7 +55,7 @@ struct TxDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 #[repr(C)]
 pub struct TxDmaStorage<const BUFFER_SIZE: usize> {
     #[pin]
-    descriptor: Descriptor,
+    descriptor: TxDescriptor,
     #[pin]
     buffer: TxDmaBuffer<BUFFER_SIZE>,
     state: TxDmaState,
@@ -64,7 +66,7 @@ pub struct TxDmaStorage<const BUFFER_SIZE: usize> {
 impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
     pub const fn new() -> Self {
         Self {
-            descriptor: Descriptor::new(),
+            descriptor: TxDescriptor::new(),
             buffer: TxDmaBuffer([0; BUFFER_SIZE]),
             state: TxDmaState::Free,
             _pin: PhantomPinned,
@@ -216,7 +218,7 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         Ok(&mut storage.buffer.get_mut().0)
     }
 
-    pub fn descriptor_word0(&self) -> u32 {
+    pub fn descriptor_word0(&self) -> WifiTxDmaDescriptorControl {
         self.storage.as_ref().get_ref().descriptor.word0()
     }
 
@@ -315,7 +317,11 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         if *storage.state != expected {
             return Err(TxDmaStorageError::State);
         }
-        storage.descriptor.as_ref().get_ref().publish_owned(0, 0, 0);
+        storage
+            .descriptor
+            .as_ref()
+            .get_ref()
+            .publish_owned(WifiTxDmaDescriptorControl::ZERO, 0, 0);
         *storage.state = TxDmaState::Free;
         Ok(())
     }

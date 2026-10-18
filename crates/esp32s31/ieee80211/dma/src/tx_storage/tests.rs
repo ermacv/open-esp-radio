@@ -69,7 +69,7 @@ fn dropped_publication_remains_cancellable_software_state() {
     assert_eq!(storage.state(), TxDmaState::Reserved);
     storage.cancel_reservation().unwrap();
     assert_eq!(storage.state(), TxDmaState::Free);
-    assert_eq!(storage.descriptor_word0(), 0);
+    assert_eq!(storage.descriptor_word0(), WifiTxDmaDescriptorControl::ZERO);
 }
 
 #[test]

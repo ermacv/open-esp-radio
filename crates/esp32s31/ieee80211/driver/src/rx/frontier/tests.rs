@@ -1,7 +1,6 @@
 use crate::rx::storage::ReceiveDmaStorage;
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::RX_DONE,
     rx_dma::model::{RxWalkerModel, RxWalkerOperation},
     space::HostDma,
 };
@@ -115,7 +114,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
         storage,
     ))
     .expect("finite protocol phase starts the ring");
-    storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | RX_DONE);
+    storage.descriptors()[0].write_word0(storage.descriptors()[0].word0().with_rx_done(true));
     // The final protocol frame remains observed before promotion.
     let ring = already_live.live_mut().expect("the frontier is live");
     // The walker reports descriptor zero as LAST: only that releases it.
@@ -143,7 +142,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
         hardware.operation_count(RxWalkerOperation::RequestReload),
         reload_count
     );
-    assert_ne!(storage.descriptors()[0].word0() & RX_DONE, 0);
+    assert!(storage.descriptors()[0].word0().rx_done());
     assert!(!live.observed_mask().is_empty());
     let halted = match live.try_stop(&mut hardware) {
         Ok(halted) => halted,

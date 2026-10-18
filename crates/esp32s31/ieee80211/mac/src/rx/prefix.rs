@@ -13,68 +13,64 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_esp32s31_ieee80211_dma::descriptor::{
-    OWNER, descriptor_address_valid, length as descriptor_length, rx_done, size as descriptor_size,
-};
+use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
+use oer_esp32s31_ieee80211_dma::descriptor::descriptor_address_valid;
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
 use super::{
-    CSI_APPEND_ENABLE, CSI_LENGTH_FLAGS_OFFSET, CSI_LENGTH_LOW_OFFSET, DYNAMIC_TAIL_SIZE, FCS_SIZE,
-    FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP, INGRESS_STRICT_RXEND, INGRESS_VALID_FLAGS,
-    NormalizedRxFrame, OPTION_LENGTH_FLAGS_OFFSET, OPTION_LENGTH_HINT_OFFSET,
-    PREFIX_RXEND_STATE_OFFSET, RX_LOCAL_TIMESTAMP_OFFSET, RX_PHY_BB_FORMAT_OFFSET,
-    RX_PHY_HE_SIGA1_OFFSET, RX_PHY_HE_SIGA2_OFFSET, RX_PHY_RATE_OFFSET, RX_PHY_RSSI_OFFSET,
-    RX_PHY_SINGLE_MPDU_OFFSET, RxError, RxFirstSegmentLayout, RxIngressConfig, RxPhyInfo,
-    RxSegment, TAIL_INTERNAL_OFFSET, TAIL_STATE_OFFSET,
+    CSI_APPEND_ENABLE, DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP,
+    INGRESS_STRICT_RXEND, INGRESS_VALID_FLAGS, NormalizedRxFrame, RxError, RxFirstSegmentLayout,
+    RxIngressConfig, RxPhyInfo, RxSegment,
 };
 
-/// The prefix bytes the PHY view reads: through `cur_bb_format` at `0x25`.
-const RX_PHY_INFO_SIZE: usize = RX_PHY_BB_FORMAT_OFFSET + 1;
-/// The prefix bytes through the four-byte receive timestamp.
-const RX_LOCAL_TIMESTAMP_END: usize = RX_LOCAL_TIMESTAMP_OFFSET + 4;
 /// The shortest MPDU `sig_len` may describe: its two-byte frame control.
 const MIN_FRAME_LENGTH: usize = 2;
+
+/// Tail `rx_state` of a frame whose MIC check failed. Observed; no source:
+/// neither the public structure nor a recorded stand run names the value.
+const RX_STATE_MIC_FAILURE: u8 = 0xf5;
+/// Tail `rx_state` of a frame the MAC quarantined. Observed; no source:
+/// neither the public structure nor a recorded stand run names the value.
+const RX_STATE_QUARANTINED: u8 = 0xc6;
+
+/// The decoder over a buffer's fixed RX-control prefix; `None` when the
+/// buffer is shorter than the prefix, which the hardware always writes whole.
+fn control_prefix(buffer: &[u8]) -> Option<WifiRxControlPrefix<'_>> {
+    buffer
+        .first_chunk::<FIXED_PREFIX_SIZE>()
+        .map(WifiRxControlPrefix::new)
+}
 
 /// The receive timestamp of the S31 RX-control prefix: the Wi-Fi MAC local
 /// time (`WIFI_MAC_LOCAL_TIME`) the hardware recorded for this frame, a
 /// wrapping 32-bit value in the counter's unit.
 ///
-/// SOURCE: public ESP32-S31 `esp_wifi_rxctrl_t` definition. The packed ABI
-/// places the 32-bit `timestamp` at bytes 12..16, after `is_group` in byte
-/// 11; vendor `libpp[lmac.o]::lmacAdjustTimestamp` reads and rewrites the same word
-/// relative to the local-time counter.
+/// SOURCE\[ESP_WIFI_SYS_S31_RXCTRL]: the packed public `esp_wifi_rxctrl_t`
+/// places the 32-bit `timestamp` at bytes 12..16;
+/// SOURCE\[BLOB_LIBPP_MAC_LOCAL_TIME]: vendor `libpp[lmac.o]::lmacAdjustTimestamp`
+/// reads and rewrites the same word relative to the local-time counter.
 pub fn decode_rx_local_timestamp(buffer: &[u8]) -> Option<u32> {
-    buffer
-        .first_chunk::<RX_LOCAL_TIMESTAMP_END>()
-        .map(local_timestamp)
-}
-
-fn local_timestamp(prefix: &[u8; RX_LOCAL_TIMESTAMP_END]) -> u32 {
-    let [.., b0, b1, b2, b3] = *prefix;
-    u32::from_le_bytes([b0, b1, b2, b3])
+    control_prefix(buffer).map(|prefix| prefix.timestamp().value())
 }
 
 /// Decode the finite PHY-rate view without interpreting the format-specific
 /// HE-SIG bitfields.
 pub fn decode_rx_phy_info(buffer: &[u8]) -> Option<RxPhyInfo> {
-    buffer.first_chunk::<RX_PHY_INFO_SIZE>().map(phy_info)
+    control_prefix(buffer).map(phy_info)
 }
 
-fn phy_info(prefix: &[u8; RX_PHY_INFO_SIZE]) -> RxPhyInfo {
+fn phy_info(prefix: WifiRxControlPrefix<'_>) -> RxPhyInfo {
     RxPhyInfo {
-        rate: prefix[RX_PHY_RATE_OFFSET] & 0x1f,
-        bb_format: prefix[RX_PHY_BB_FORMAT_OFFSET] >> 4,
-        he_siga1: u32::from_le_bytes([
-            prefix[RX_PHY_HE_SIGA1_OFFSET],
-            prefix[RX_PHY_HE_SIGA1_OFFSET + 1],
-            prefix[RX_PHY_HE_SIGA1_OFFSET + 2],
-            prefix[RX_PHY_HE_SIGA1_OFFSET + 3],
-        ]),
-        he_siga2: u16::from_le_bytes([
-            prefix[RX_PHY_HE_SIGA2_OFFSET],
-            prefix[RX_PHY_HE_SIGA2_OFFSET + 1],
-        ]),
+        rate: prefix.rate().rate(),
+        bb_format: prefix.bb_format().bb_format(),
+        he_siga1: prefix.he_siga1().value(),
+        he_siga2: prefix.he_siga2().value(),
     }
+}
+
+/// The frame's RSSI in dBm: the prefix's signed RSSI byte.
+fn rssi_dbm(prefix: WifiRxControlPrefix<'_>) -> i8 {
+    i8::from_le_bytes([prefix.rssi().value()])
 }
 
 /// Decode the portable metadata available at the S31 staged-frame boundary.
@@ -95,19 +91,17 @@ fn phy_info(prefix: &[u8; RX_PHY_INFO_SIZE]) -> RxPhyInfo {
 /// unavailable until a later owner has direct hardware or protocol evidence;
 /// an active BA agreement and the 802.11 Protected bit are not substitutes.
 pub fn decode_normalized_rx_metadata(buffer: &[u8]) -> Option<MacRxMetadata<RxPhyInfo>> {
-    buffer
-        .first_chunk::<RX_PHY_INFO_SIZE>()
-        .map(normalized_metadata)
+    control_prefix(buffer).map(normalized_metadata)
 }
 
-fn normalized_metadata(prefix: &[u8; RX_PHY_INFO_SIZE]) -> MacRxMetadata<RxPhyInfo> {
+fn normalized_metadata(prefix: WifiRxControlPrefix<'_>) -> MacRxMetadata<RxPhyInfo> {
     let rate = phy_info(prefix);
     MacRxMetadata {
         channel: MacRxEvidence::Unavailable,
         rate: MacRxEvidence::HardwareObserved(rate),
-        rssi_dbm: MacRxEvidence::HardwareObserved(prefix[RX_PHY_RSSI_OFFSET] as i8),
+        rssi_dbm: MacRxEvidence::HardwareObserved(rssi_dbm(prefix)),
         crypto: MacRxEvidence::Unavailable,
-        s_mpdu: MacRxEvidence::HardwareObserved(prefix[RX_PHY_SINGLE_MPDU_OFFSET] & 1 != 0),
+        s_mpdu: MacRxEvidence::HardwareObserved(prefix.single_mpdu().single_mpdu()),
         ampdu: match rate.ht_aggregation() {
             Some(ampdu) => MacRxEvidence::HardwareObserved(ampdu),
             None => match rate.protocol_ampdu_containment() {
@@ -130,7 +124,7 @@ pub fn view_normalized_rx_frame<'frame>(
     segment: &RxSegment<'frame>,
     config: RxIngressConfig,
 ) -> Result<NormalizedRxFrame<'frame>, RxError> {
-    if !rx_done(segment.descriptor_word0) {
+    if !segment.descriptor_word0.rx_done() {
         return Err(RxError::Chain);
     }
     let first = first_segment(segment, config)?;
@@ -140,24 +134,25 @@ pub fn view_normalized_rx_frame<'frame>(
         .frame
         .split_at_checked(first.layout.expected_frame_length)
         .map_or(first.frame, |(mpdu, _)| mpdu);
-    let metadata = decode_normalized_rx_metadata(first.prefix).ok_or(RxError::Metadata)?;
+    let prefix = WifiRxControlPrefix::new(first.prefix);
+    let metadata = normalized_metadata(prefix);
     Ok(NormalizedRxFrame {
         mpdu,
         mpdu_offset: first.layout.frame_offset,
         metadata,
-        rssi_dbm: first.prefix[RX_PHY_RSSI_OFFSET] as i8,
+        rssi_dbm: rssi_dbm(prefix),
         logical_length: first.layout.expected_frame_length,
-        stamp: decode_rx_local_timestamp(first.prefix),
+        stamp: Some(prefix.timestamp().value()),
     })
 }
 
 /// The bytes the hardware wrote into `segment`'s buffer, when its
 /// descriptor is a valid RX node whose length fits its capacity and buffer.
 fn received_bytes<'frame>(segment: &RxSegment<'frame>) -> Option<&'frame [u8]> {
-    let capacity = descriptor_size(segment.descriptor_word0) as usize;
-    let length = descriptor_length(segment.descriptor_word0) as usize;
+    let capacity = usize::from(segment.descriptor_word0.size());
+    let length = usize::from(segment.descriptor_word0.length());
     if !descriptor_address_valid(segment.descriptor_address)
-        || segment.descriptor_word0 & OWNER == 0
+        || !segment.descriptor_word0.owner()
         || capacity == 0
         || length == 0
         || length > capacity
@@ -176,20 +171,18 @@ pub(super) fn segment_valid(segment: &RxSegment<'_>) -> bool {
 
 /// Where the dynamic tail starts: after the fixed prefix, the optional
 /// HE-SIG-B bytes and the optional CSI bytes, each rounded to a word.
-fn dynamic_tail_offset(prefix: &[u8; FIXED_PREFIX_SIZE], csi_config: u32) -> Option<usize> {
+fn dynamic_tail_offset(prefix: WifiRxControlPrefix<'_>, csi_config: u32) -> Option<usize> {
     let mut offset = FIXED_PREFIX_SIZE;
-    let option_flags = prefix[OPTION_LENGTH_FLAGS_OFFSET];
-    if option_flags & 0x80 != 0 {
-        let hint = prefix[OPTION_LENGTH_HINT_OFFSET];
+    let sig_b = prefix.he_sig_b();
+    if sig_b.present() {
         let option_length =
-            usize::from(option_flags & 0x7f).checked_add(usize::from(hint >> 5 != 0))?;
+            usize::from(sig_b.length_bytes()).checked_add(usize::from(sig_b.length_bits() != 0))?;
         offset = offset.checked_add(option_length.checked_add(3)? & !3)?;
     }
     if csi_config & CSI_APPEND_ENABLE != 0 {
-        let low = prefix[CSI_LENGTH_LOW_OFFSET];
-        let flags = prefix[CSI_LENGTH_FLAGS_OFFSET];
-        let csi_length = usize::from(u16::from_le_bytes([low, flags & 0x03]));
-        if flags & 0x04 != 0 || csi_length != 0 {
+        let channel_estimate = prefix.channel_estimate();
+        let csi_length = usize::from(channel_estimate.length());
+        if channel_estimate.valid() || csi_length != 0 {
             offset = offset.checked_add(csi_length.checked_add(3)? & 0x7fc)?;
         }
     }
@@ -230,7 +223,8 @@ fn first_segment<'frame>(
     let (prefix, _) = received
         .split_first_chunk::<FIXED_PREFIX_SIZE>()
         .ok_or(RxError::Bounds)?;
-    let tail_offset = dynamic_tail_offset(prefix, config.csi_config).ok_or(RxError::Bounds)?;
+    let tail_offset = dynamic_tail_offset(WifiRxControlPrefix::new(prefix), config.csi_config)
+        .ok_or(RxError::Bounds)?;
     let (_, tail_and_frame) = received
         .split_at_checked(tail_offset)
         .ok_or(RxError::Bounds)?;
@@ -238,15 +232,14 @@ fn first_segment<'frame>(
         .split_first_chunk::<DYNAMIC_TAIL_SIZE>()
         .ok_or(RxError::Bounds)?;
 
-    // The tail word: `sig_len` in bits 13:0, the dump length in 29:16.
-    let [signal_low, signal_high, dump_low, dump_high, ..] = *tail;
-    let signal_length = usize::from(u16::from_le_bytes([signal_low, signal_high]) & 0x3fff);
-    let dump_length = usize::from(u16::from_le_bytes([dump_low, dump_high]) & 0x3fff);
-    let rxend_state = prefix[PREFIX_RXEND_STATE_OFFSET];
-    let rx_state = tail[TAIL_STATE_OFFSET];
+    let tail = WifiRxControlTail::new(tail);
+    let signal_length = usize::from(tail.signal_length().length());
+    let dump_length = usize::from(tail.dump_length().length());
+    let rxend_state = WifiRxControlPrefix::new(prefix).rxend_state().value();
+    let rx_state = tail.rx_state().value();
     match rx_state {
-        0xf5 => return Err(RxError::MicFailure),
-        0xc6 => return Err(RxError::Quarantined),
+        RX_STATE_MIC_FAILURE => return Err(RxError::MicFailure),
+        RX_STATE_QUARANTINED => return Err(RxError::Quarantined),
         0 => {}
         _ => return Err(RxError::RxFailure),
     }
@@ -281,7 +274,7 @@ fn first_segment<'frame>(
             frame_shortfall: expected_frame_length.saturating_sub(available_frame_bytes),
             rxend_state,
             rx_state,
-            internal_state: tail[TAIL_INTERNAL_OFFSET],
+            internal_state: tail.byte_0005_opaque().bits_0_7_opaque(),
             dump_length_matches,
         },
         prefix,

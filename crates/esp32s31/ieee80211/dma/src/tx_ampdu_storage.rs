@@ -11,8 +11,10 @@ use oer_esp32s31_hal::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaRange};
 use pin_project::pin_project;
 
+use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
+
 use crate::descriptor::{
-    DESCRIPTOR_BYTES, Descriptor, TX_LAST, descriptor_address_valid, dma_range_valid, tx_owned_word,
+    DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, bytemuck::Zeroable)]
@@ -119,7 +121,7 @@ struct AmpduDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 #[repr(C)]
 pub struct AmpduDmaStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
     #[pin]
-    descriptors: [Descriptor; SLOTS],
+    descriptors: [TxDescriptor; SLOTS],
     #[pin]
     buffers: [AmpduDmaBuffer<BUFFER_SIZE>; SLOTS],
     state: AmpduDmaState,
@@ -135,7 +137,7 @@ pub struct AmpduDmaStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
 impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER_SIZE> {
     pub const fn new() -> Self {
         Self {
-            descriptors: [const { Descriptor::new() }; SLOTS],
+            descriptors: [const { TxDescriptor::new() }; SLOTS],
             buffers: [const { AmpduDmaBuffer([0; BUFFER_SIZE]) }; SLOTS],
             state: AmpduDmaState::Free,
             lease_generation: 0,
@@ -364,7 +366,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         // memory. In particular, a backing arena may be larger than the
         // descriptor's 14-bit size field; discovering that on a later entry
         // must not leave an earlier descriptor published.
-        let mut words = [0_u32; SLOTS];
+        let mut words = [WifiTxDmaDescriptorControl::ZERO; SLOTS];
         let mut buffer_addresses = [0_u32; SLOTS];
         let mut descriptor_addresses = [0_u32; SLOTS];
         for (index, entry) in entries.iter().enumerate() {
@@ -393,10 +395,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             } else {
                 descriptor_addresses[index + 1]
             };
-            let mut word0 = words[index];
-            if next_address != 0 {
-                word0 &= !TX_LAST;
-            }
+            let word0 = words[index].with_tx_last(next_address == 0);
             self.storage.as_ref().get_ref().descriptors[index].publish_owned(
                 word0,
                 buffer_addresses[index],
@@ -408,13 +407,13 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         Ok(AmpduDmaPublication { owner: self })
     }
 
-    pub fn descriptor_word0(&self, index: usize) -> Option<u32> {
+    pub fn descriptor_word0(&self, index: usize) -> Option<WifiTxDmaDescriptorControl> {
         self.storage
             .as_ref()
             .get_ref()
             .descriptors
             .get(index)
-            .map(Descriptor::word0)
+            .map(TxDescriptor::word0)
     }
 
     pub fn descriptor_next_address(&self, index: usize) -> Option<u32> {
@@ -423,7 +422,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             .get_ref()
             .descriptors
             .get(index)
-            .map(Descriptor::next_address)
+            .map(TxDescriptor::next_address)
     }
 
     pub fn descriptor_buffer_address(&self, index: usize) -> Option<u32> {
@@ -432,7 +431,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             .get_ref()
             .descriptors
             .get(index)
-            .map(Descriptor::buffer_address)
+            .map(TxDescriptor::buffer_address)
     }
 
     pub fn cancel(&mut self) -> Result<(), AmpduDmaStorageError> {
@@ -513,7 +512,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             .iter()
             .take(published_count)
         {
-            descriptor.publish_owned(0, 0, 0);
+            descriptor.publish_owned(WifiTxDmaDescriptorControl::ZERO, 0, 0);
         }
         let storage = self.storage.as_mut().project();
         *storage.published_count = 0;
@@ -582,7 +581,7 @@ struct RetainedDmaBackingIdentity {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RetainedDmaDescriptor {
     buffer_address: u32,
-    word0: u32,
+    word0: WifiTxDmaDescriptorControl,
 }
 
 impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
@@ -1119,7 +1118,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
 
         // This is a transaction over the descriptor arena: derive every
         // address and ownership word before the first volatile publication.
-        let mut words = [0_u32; SLOTS];
+        let mut words = [WifiTxDmaDescriptorControl::ZERO; SLOTS];
         let mut buffer_addresses = [0_u32; SLOTS];
         let mut descriptor_addresses = [0_u32; SLOTS];
         for (index, entry) in entries.iter().enumerate() {
@@ -1158,10 +1157,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             } else {
                 descriptor_addresses[index + 1]
             };
-            let mut word0 = words[index];
-            if next_address != 0 {
-                word0 &= !TX_LAST;
-            }
+            let word0 = words[index].with_tx_last(next_address == 0);
             self.dma().storage.as_ref().get_ref().descriptors[index].publish_owned(
                 word0,
                 buffer_addresses[index],
@@ -1219,11 +1215,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                     .descriptor_address(logical_index + 1)
                     .ok_or(AmpduDmaStorageError::Address)?
             };
-            let word0 = if next_address == 0 {
-                descriptor.word0
-            } else {
-                descriptor.word0 & !TX_LAST
-            };
+            let word0 = descriptor.word0.with_tx_last(next_address == 0);
             self.dma().storage.as_ref().get_ref().descriptors[logical_index].publish_owned(
                 word0,
                 descriptor.buffer_address,

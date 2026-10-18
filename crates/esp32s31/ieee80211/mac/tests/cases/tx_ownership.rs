@@ -200,8 +200,8 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     slot.as_mut().buffer_mut().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
     let cookie = slot.as_mut().reserve(512, 100).unwrap();
     assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
-    assert_eq!(size(slot.descriptor_word0()), 512);
-    assert_eq!(length(slot.descriptor_word0()), 100);
+    assert_eq!(slot.descriptor_word0().size(), 512);
+    assert_eq!(slot.descriptor_word0().length(), 100);
     assert_eq!(slot.state(), TxSlotState::Reserved);
     let mut mmio = MockMmio::default();
     assert_eq!(
@@ -244,7 +244,10 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
 
     assert_eq!(slot.as_mut().cancel_reservation(cookie), Ok(()));
     assert_eq!(slot.state(), TxSlotState::Free);
-    assert_eq!(slot.descriptor_word0(), 0);
+    assert_eq!(
+        slot.descriptor_word0(),
+        oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl::ZERO
+    );
     assert!(slot.as_mut().buffer_mut().is_ok());
     assert_eq!(
         slot.as_mut().cancel_reservation(cookie),

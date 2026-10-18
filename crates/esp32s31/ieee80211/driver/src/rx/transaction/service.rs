@@ -218,9 +218,7 @@ where
                 payload_length: storage
                     .descriptors()
                     .get(unit_head_index)
-                    .map(|descriptor| {
-                        oer_esp32s31_ieee80211_dma::descriptor::length(descriptor.word0()) as usize
-                    })
+                    .map(|descriptor| usize::from(descriptor.word0().length()))
                     .unwrap_or(0),
             };
             let maximum_payload_length = admission

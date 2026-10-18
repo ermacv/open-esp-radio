@@ -30,7 +30,7 @@ use super::{
     RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
     RxDmaWalkerEnabled, RxDmaWalkerStopped,
 };
-use crate::descriptor::{DESCRIPTOR_BYTES, LENGTH_SHIFT, OWNER, RX_DONE, rx_owner, size};
+use crate::descriptor::{DESCRIPTOR_BYTES, rx_completed_word};
 
 /// The walker's cursor registers report the low 20 address bits.
 const CURSOR_LOW_MASK: u32 = 0x000f_ffff;
@@ -195,12 +195,14 @@ impl RxWalkerModel {
         let Some(descriptor) = table.descriptor_at_low(next) else {
             return RxWalkerLanding::Exhausted;
         };
-        if self.stopped_on_owner || !rx_owner(descriptor.word0()) {
+        if self.stopped_on_owner || !descriptor.word0().owner() {
             self.stopped_on_owner = true;
             return RxWalkerLanding::StoppedOnOwner(next);
         }
-        let done = if terminal { RX_DONE } else { 0 };
-        descriptor.write_word0(size(descriptor.word0()) | (length << LENGTH_SHIFT) | done | OWNER);
+        descriptor.write_word0(
+            rx_completed_word(descriptor.word0(), length, terminal)
+                .expect("a modelled landing length fits the length field"),
+        );
         if terminal {
             self.last_descriptor_low = next;
         }
@@ -326,7 +328,7 @@ impl RxDma for RxWalkerModel {
             // carries the owner bit again.
             self.reload_resumes_in_place = binding
                 .descriptor_at_low(self.next_descriptor_low)
-                .is_some_and(|stopped| rx_owner(stopped.word0()));
+                .is_some_and(|stopped| stopped.word0().owner());
             return;
         }
         if self.next_descriptor_low != 0 {
@@ -395,6 +397,7 @@ mod tests {
         rx_storage::RxDmaStorage,
         space::{HOST_ARENA_BASE, HostDma},
     };
+    use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
 
     extern crate std;
 
@@ -457,15 +460,28 @@ mod tests {
 
     const BASE: u32 = HOST_ARENA_BASE;
 
+    /// A 16-byte descriptor the walker completed with `length` bytes as a
+    /// unit's terminal.
+    fn completed(length: u32) -> WifiRxDmaDescriptorControl {
+        let armed = crate::descriptor::rx_armed_word(16).unwrap();
+        rx_completed_word(armed, length, true).unwrap()
+    }
+
     /// A bound four-descriptor table at [`BASE`] whose descriptor 3 links to
     /// descriptor 1 and whose reserved descriptor links to descriptor 2.
     fn linked_binding() -> RxDmaBinding<'static> {
         let table = std::boxed::Box::leak(std::boxed::Box::new(RxDescriptorTable::<4>::new()));
         let arena = std::boxed::Box::leak(std::boxed::Box::new(RxArenaWords::new()));
-        table.ring()[3].inject_corrupt_words(0, 0, BASE + DESCRIPTOR_BYTES);
-        table
-            .reserved()
-            .inject_corrupt_words(0, 0, BASE + 2 * DESCRIPTOR_BYTES);
+        table.ring()[3].inject_corrupt_words(
+            WifiRxDmaDescriptorControl::ZERO,
+            0,
+            BASE + DESCRIPTOR_BYTES,
+        );
+        table.reserved().inject_corrupt_words(
+            WifiRxDmaDescriptorControl::ZERO,
+            0,
+            BASE + 2 * DESCRIPTOR_BYTES,
+        );
         RxDmaBinding::new(table, BASE, arena).unwrap()
     }
 
@@ -572,14 +588,14 @@ mod tests {
             RxWalkerLanding::Landed(descriptor_low(BASE, 1))
         );
         let first = table.ring[1].word0();
-        assert_eq!((rx_owner(first), first & RX_DONE), (true, 0));
+        assert_eq!((first.owner(), first.rx_done()), (true, false));
         assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 3));
         assert_eq!(
             walker.land(table, 7, true),
             RxWalkerLanding::Landed(descriptor_low(BASE, 2))
         );
         let terminal = table.ring[2].word0();
-        assert_eq!(terminal, 16 | (7 << LENGTH_SHIFT) | RX_DONE | OWNER);
+        assert_eq!(terminal, completed(7));
         assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 2));
         assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 3));
 
@@ -591,8 +607,7 @@ mod tests {
     #[test]
     fn the_walker_stops_on_a_clear_owner_bit_without_writing_it() {
         let (table, _) = armed_table();
-        let detached =
-            crate::descriptor::rx_detached_word(16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER);
+        let detached = crate::descriptor::rx_detached_word(completed(9));
         table.ring[1].write_word0(detached);
         let mut walker = walking_at(1);
         for _ in 0..3 {
@@ -610,7 +625,7 @@ mod tests {
     #[test]
     fn a_rearmed_descriptor_and_one_doorbell_resume_the_stopped_walker_in_place() {
         let (table, binding) = armed_table();
-        let completed = 16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER;
+        let completed = completed(9);
         table.ring[1].write_word0(crate::descriptor::rx_detached_word(completed));
         let mut walker = walking_at(1);
         let stopped = RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1));
@@ -643,9 +658,7 @@ mod tests {
     fn a_doorbell_follows_last_next_whatever_last_s_owner_bit() {
         let (table, binding) = armed_table();
         // LAST, descriptor 3, is detached: its owner bit is clear.
-        table.ring[3].write_word0(crate::descriptor::rx_detached_word(
-            16 | (9 << LENGTH_SHIFT) | RX_DONE | OWNER,
-        ));
+        table.ring[3].write_word0(crate::descriptor::rx_detached_word(completed(9)));
         let mut walker = exhausted_at(3);
         walker.request_reload(&binding);
         assert!(!walker.reload_pending());

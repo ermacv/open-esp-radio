@@ -192,11 +192,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live rotated epoch");
-    storage.descriptors()[0].write_word0(
-        16 | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
@@ -244,11 +240,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
-    storage.descriptors()[0].write_word0(
-        16 | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     // Model the finite list exhausted at its accepted tail. Merely seeing
     // NEXT name descriptor one is not sufficient: hardware proved that image
     // may precede hardware fetching descriptor zero's link word.
@@ -278,10 +270,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
         Ok(None),
         "live network token must keep the descriptor CPU-owned"
     );
-    assert_ne!(
-        storage.descriptors()[0].word0() & crate::descriptor::RX_DONE,
-        0
-    );
+    assert!(storage.descriptors()[0].word0().rx_done());
 
     drop(network);
     let append = storage
@@ -290,10 +279,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
         .expect("one descriptor appended");
     assert_eq!(append.descriptor_count, 1);
     assert_eq!(storage.released_buffer_count(), 0);
-    assert_eq!(
-        storage.descriptors()[0].word0() & crate::descriptor::RX_DONE,
-        0
-    );
+    assert!(!storage.descriptors()[0].word0().rx_done());
 }
 
 #[test]
@@ -311,11 +297,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
-    storage.descriptors()[0].write_word0(
-        16 | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
@@ -346,10 +328,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
         RX_BUFFER_RING,
         "republished DMA descriptor and buffer state must move together"
     );
-    assert_eq!(
-        storage.descriptors()[0].word0() & crate::descriptor::RX_DONE,
-        0
-    );
+    assert!(!storage.descriptors()[0].word0().rx_done());
 }
 
 #[test]
@@ -368,11 +347,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
         .map_err(|(_, error)| error)
         .expect("live epoch");
     for descriptor in &storage.descriptors()[..2] {
-        descriptor.write_word0(
-            16 | (8 << crate::descriptor::LENGTH_SHIFT)
-                | crate::descriptor::RX_DONE
-                | crate::descriptor::OWNER,
-        );
+        descriptor.write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     }
     mmio.last_descriptor_low = (base + 3 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
@@ -425,7 +400,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
     assert!(
         storage.descriptors()[..2]
             .iter()
-            .all(|descriptor| descriptor.word0() & crate::descriptor::RX_DONE == 0)
+            .all(|descriptor| !descriptor.word0().rx_done())
     );
 }
 
@@ -505,11 +480,7 @@ fn first_frontier_returns_one_unit_from_a_terminal_burst() {
         .expect("live epoch");
 
     for descriptor in storage.descriptors() {
-        descriptor.write_word0(
-            16 | (4 << crate::descriptor::LENGTH_SHIFT)
-                | crate::descriptor::RX_DONE
-                | crate::descriptor::OWNER,
-        );
+        descriptor.write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     }
     mmio.last_descriptor_low = (base + 3 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
@@ -597,7 +568,9 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
         .map_err(|(_, error)| error)
         .expect("live epoch");
     storage.descriptors()[0].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -616,7 +589,9 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
         Ok(None),
     );
     storage.descriptors()[1].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert_eq!(
@@ -644,14 +619,11 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
             .map_err(|(_, error)| error)
             .expect("live epoch");
         let descriptor = &storage.descriptors()[0];
-        let mut word0 = 16
-            | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER;
+        let mut word0 = crate::descriptor::rx_landed_word(16, 8, true);
         let mut buffer_address = buffers[0];
         let mut next_address = base + crate::descriptor::DESCRIPTOR_BYTES;
         match corruption {
-            0 => word0 = (word0 & !crate::descriptor::SIZE_MASK) | 17,
+            0 => word0 = word0.with_size(17).unwrap(),
             1 => buffer_address = buffers[0] + 4,
             2 => next_address = 0,
             _ => unreachable!(),
@@ -687,7 +659,9 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
         .map_err(|(_, error)| error)
         .expect("live epoch");
     storage.descriptors()[0].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -705,7 +679,9 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
             .is_none()
     );
     storage.descriptors()[1].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert!(
@@ -744,7 +720,9 @@ fn in_arena_intermediate_last_rerings_the_doorbell() {
     let reserved = base + COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES;
     assert_eq!(mmio.descriptor_base, reserved);
     storage.descriptors()[0].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -762,7 +740,9 @@ fn in_arena_intermediate_last_rerings_the_doorbell() {
             .is_none()
     );
     storage.descriptors()[1].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert!(
@@ -823,7 +803,9 @@ fn ring_after_exhausted_reload_rering() -> (
         .map_err(|(_, error)| error)
         .expect("live epoch");
     storage.descriptors()[0].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.set_cursor(base, 0, Some(1));
     let frozen = live.freeze_cursor(&mut mmio).unwrap();
@@ -840,7 +822,9 @@ fn ring_after_exhausted_reload_rering() -> (
             .is_none()
     );
     storage.descriptors()[1].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     // The walker still reports a descriptor of the old list when the
     // doorbell rings, so the doorbell resumes nothing.
@@ -913,10 +897,7 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
-    let done = 16
-        | (4 << crate::descriptor::LENGTH_SHIFT)
-        | crate::descriptor::RX_DONE
-        | crate::descriptor::OWNER;
+    let done = crate::descriptor::rx_landed_word(16, 4, true);
 
     // Return descriptor zero while the old finite list has already
     // exhausted at descriptor three. The doorbell, rung with NEXT zero,
@@ -1002,7 +983,9 @@ fn dropping_a_taken_completed_unit_requires_radio_reset() {
         .map_err(|(_, error)| error)
         .expect("live epoch");
     storage.descriptors()[0].write_word0(
-        crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
+        crate::descriptor::rx_armed_word(16)
+            .expect("valid size")
+            .with_rx_done(true),
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -1035,11 +1018,7 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
     assert_eq!(live.recycle_start().get(), 0);
     assert_eq!(live.accepted_tail().get(), COUNT - 1);
 
-    storage.descriptors()[0].write_word0(
-        16 | (4 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     let frozen_cursor = live.freeze_cursor(&mut mmio).unwrap();
@@ -1055,10 +1034,7 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
         .expect("LAST itself releases the observed descriptor");
     assert_eq!(append.head_index.get(), 0);
     assert_eq!(append.descriptor_count, 1);
-    assert_eq!(
-        storage.descriptors()[0].word0() & crate::descriptor::RX_DONE,
-        0
-    );
+    assert!(!storage.descriptors()[0].word0().rx_done());
     assert!(live.observed_mask().is_empty());
     live.complete_pending_reload(&mut mmio)
         .expect("vendor reload suffix");
@@ -1086,11 +1062,7 @@ fn two_completed_frames_last_on_the_first() -> (
         .map_err(|(_, error)| error)
         .expect("live epoch");
     for descriptor in &storage.descriptors()[..2] {
-        descriptor.write_word0(
-            16 | (4 << crate::descriptor::LENGTH_SHIFT)
-                | crate::descriptor::RX_DONE
-                | crate::descriptor::OWNER,
-        );
+        descriptor.write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     }
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -1129,7 +1101,7 @@ fn a_descriptor_take_never_passes_the_frozen_last() {
     // image there is no ring fault, because it is never read.
     let descriptor = &storage.descriptors()[1];
     descriptor.inject_corrupt_words(
-        (descriptor.word0() & !crate::descriptor::SIZE_MASK) | 17,
+        descriptor.word0().with_size(17).unwrap(),
         descriptor.buffer_address(),
         descriptor.next_address(),
     );
@@ -1156,7 +1128,7 @@ fn a_descriptor_take_never_passes_the_frozen_last() {
     );
     let descriptor = &storage.descriptors()[1];
     descriptor.inject_corrupt_words(
-        (descriptor.word0() & !crate::descriptor::SIZE_MASK) | 16,
+        descriptor.word0().with_size(16).unwrap(),
         descriptor.buffer_address(),
         descriptor.next_address(),
     );
@@ -1176,11 +1148,7 @@ fn a_descriptor_take_refuses_a_cursor_of_an_earlier_live_epoch() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("next live epoch");
-    storage.descriptors()[0].write_word0(
-        16 | (4 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     assert!(
         storage
             .take_completed(&mut live, earlier, 0)
@@ -1249,11 +1217,7 @@ fn a_cursor_of_an_earlier_live_epoch_takes_nothing() {
         .expect("next live epoch");
     // The rebuilt epoch restarts its generation count at zero on the same
     // arena; only the epoch tells the two cursors apart.
-    storage.descriptors()[0].write_word0(
-        16 | (4 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     assert!(
         storage
             .take_completed_unit(&mut live, earlier)
@@ -1287,11 +1251,7 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
         .expect("live epoch");
 
     for index in 0..2 {
-        storage.descriptors()[index].write_word0(
-            16 | (4 << crate::descriptor::LENGTH_SHIFT)
-                | crate::descriptor::RX_DONE
-                | crate::descriptor::OWNER,
-        );
+        storage.descriptors()[index].write_word0(crate::descriptor::rx_landed_word(16, 4, true));
     }
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + 2 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
@@ -1310,9 +1270,8 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     assert_eq!(append.head_index.get(), 0);
     assert_eq!(append.descriptor_count, 1);
     assert!(live.observed_mask().is_empty());
-    assert_ne!(
-        storage.descriptors()[1].word0() & crate::descriptor::RX_DONE,
-        0,
+    assert!(
+        storage.descriptors()[1].word0().rx_done(),
         "the following complete unit must remain a distinct vendor chain"
     );
     live.complete_pending_reload(&mut mmio)
@@ -1396,8 +1355,9 @@ enum AtWindowStart {}
 
 impl crate::space::DmaSpace for AtWindowStart {
     fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
-        HostDma::address(arena, field)
-            .map(|address| address - crate::space::HOST_ARENA_BASE + crate::descriptor::DMA_LOW)
+        HostDma::address(arena, field).map(|address| {
+            address - crate::space::HOST_ARENA_BASE + oer_esp32s31_hal::layouts::DMA_WINDOW.start
+        })
     }
 }
 
@@ -1406,7 +1366,7 @@ fn a_descriptor_base_that_reads_as_an_exhausted_list_is_refused() {
     let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, AtWindowStart>::new()));
     let mut buffers = [0; 2];
     let base = storage.dma_layout(&mut buffers).unwrap();
-    assert_eq!(base, crate::descriptor::DMA_LOW);
+    assert_eq!(base, oer_esp32s31_hal::layouts::DMA_WINDOW.start);
     let mut mmio = MockRxDma::default();
     assert!(matches!(
         storage.prepare_ring(&mut mmio, base, &buffers),
@@ -1447,11 +1407,7 @@ fn host_dma_port_writes_only_inside_one_ring_buffer() {
     let mut read = [0; 4];
     storage.dma_read(&live, buffers[1] + 4, &mut read).unwrap();
     assert_eq!(read, [1, 2, 3, 4]);
-    storage.descriptors()[1].write_word0(
-        16 | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[1].write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     // The walker reports descriptor one as LAST: only that releases it.
     mmio.last_descriptor_low =
         (live.descriptor_base() + crate::descriptor::DESCRIPTOR_BYTES) & 0x000f_ffff;
@@ -1514,11 +1470,7 @@ fn host_dma_port_refuses_a_foreign_ring_and_a_detached_buffer() {
         Err(HostDmaAccessError::ForeignRing)
     );
 
-    storage.descriptors()[0].write_word0(
-        16 | (8 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::RX_DONE
-            | crate::descriptor::OWNER,
-    );
+    storage.descriptors()[0].write_word0(crate::descriptor::rx_landed_word(16, 8, true));
     // The walker reports descriptor zero as LAST: only that releases it.
     mmio.last_descriptor_low = live.descriptor_base() & 0x000f_ffff;
     let frozen = live.freeze_cursor(&mut mmio).unwrap();
@@ -1715,7 +1667,6 @@ fn a_walker_that_does_not_stop_returns_the_live_owner_busy() {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
-    use crate::descriptor::{LENGTH_SHIFT, OWNER, RX_DONE, SIZE_MASK};
     use crate::rx_dma::model::RxWalkerModel;
     const COUNT: usize = 4;
     const BUFFER: u32 = 8_192;
@@ -1736,9 +1687,9 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
         storage
             .dma_write(&live, buffer, &[0; 4])
             .expect("the walker filled the segment");
-        descriptor.write_word0(BUFFER | (BUFFER << LENGTH_SHIFT) | OWNER);
+        descriptor.write_word0(crate::descriptor::rx_landed_word(BUFFER, BUFFER, false));
     }
-    storage.descriptors()[2].write_word0(BUFFER | (100 << LENGTH_SHIFT) | RX_DONE | OWNER);
+    storage.descriptors()[2].write_word0(crate::descriptor::rx_landed_word(BUFFER, 100, true));
     mmio.set_cursor(base, 2, Some(3));
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     let frontier = storage
@@ -1752,7 +1703,10 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
         .expect("the complete chain is owned");
     assert_eq!(unit.descriptor_count(), 3);
     assert_eq!(unit.total_length(), 2 * BUFFER as usize + 100);
-    assert!(unit.total_length() > SIZE_MASK as usize);
+    assert!(
+        crate::descriptor::rx_armed_word(u32::try_from(unit.total_length()).unwrap()).is_none(),
+        "no descriptor word holds the chain's length"
+    );
     assert_eq!(unit.metadata().staged_word0(), None);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 
@@ -1795,8 +1749,11 @@ fn ring_with_pending_reload(
         .try_start(mmio)
         .map_err(|(_, error)| error)
         .unwrap();
-    storage.descriptors()[0]
-        .write_word0(crate::descriptor::rx_armed_word(16).unwrap() | crate::descriptor::RX_DONE);
+    storage.descriptors()[0].write_word0(
+        crate::descriptor::rx_armed_word(16)
+            .unwrap()
+            .with_rx_done(true),
+    );
     mmio.set_cursor(base, 0, Some(1));
     let cursor = live.freeze_cursor(mmio).unwrap();
     storage
@@ -1859,8 +1816,11 @@ fn reload_attempts_record_the_largest_observation_count() {
     // Descriptor one completes and is appended behind descriptor zero; its
     // quicker reload does not lower the epoch's maximum.
     mmio.reload_latency = 1;
-    storage.descriptors()[1]
-        .write_word0(crate::descriptor::rx_armed_word(16).unwrap() | crate::descriptor::RX_DONE);
+    storage.descriptors()[1].write_word0(
+        crate::descriptor::rx_armed_word(16)
+            .unwrap()
+            .with_rx_done(true),
+    );
     mmio.set_cursor(live.descriptor_base(), 1, Some(0));
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     storage
@@ -2144,7 +2104,7 @@ fn a_late_landing_in_r_is_counted_and_fails_closed() {
         assert!(ring.live.reserved_left());
         let reserved = ring.storage.reserved_descriptor();
         match late {
-            0 => reserved.write_word0(reserved.word0() | crate::descriptor::RX_DONE),
+            0 => reserved.write_word0(reserved.word0().with_rx_done(true)),
             1 => ring
                 .storage
                 .dma_write(&ring.live, reserved.buffer_address(), &[0xa5; 4])
@@ -2292,10 +2252,7 @@ fn a_unit_spanning_the_whole_ring_is_rejected() {
     let mut ring = Walked::<COUNT>::start();
     // The walker passed three descriptors unwritten and ended a frame in the
     // accepted tail: NEXT=0/LAST=tail releases one unit of all four.
-    let done = 16
-        | (4 << crate::descriptor::LENGTH_SHIFT)
-        | crate::descriptor::RX_DONE
-        | crate::descriptor::OWNER;
+    let done = crate::descriptor::rx_landed_word(16, 4, true);
     ring.storage.descriptors()[COUNT - 1].write_word0(done);
     ring.walker.set_cursor(ring.base, COUNT - 1, None);
     let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
@@ -2369,7 +2326,6 @@ impl<const COUNT: usize> Walked<COUNT> {
 
 #[test]
 fn a_detach_clears_the_owner_bit_and_fences_before_the_lease_is_returned() {
-    use crate::descriptor::{OWNER, RX_DONE, length, rx_owner, size};
     use crate::rx_dma::model::RxWalkerOperation;
     let mut ring = Walked::<4>::start();
     assert!(ring.land(4, true));
@@ -2378,7 +2334,7 @@ fn a_detach_clears_the_owner_bit_and_fences_before_the_lease_is_returned() {
         .unwrap();
     assert!(ring.land(12, true));
     let completed = ring.storage.descriptors()[0].word0();
-    assert!(rx_owner(completed), "hardware leaves the owner bit set");
+    assert!(completed.owner(), "hardware leaves the owner bit set");
     let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let unit = ring
         .storage
@@ -2390,23 +2346,23 @@ fn a_detach_clears_the_owner_bit_and_fences_before_the_lease_is_returned() {
     // The lease exists only now: its descriptor already carries the
     // completed image with the owner bit clear, and the write was fenced.
     let word0 = ring.storage.descriptors()[0].word0();
-    assert_eq!(word0, completed & !OWNER);
+    assert_eq!(word0, completed.with_owner(false));
     assert_eq!(
-        (word0 & RX_DONE, length(word0), size(word0)),
-        (RX_DONE, 12, 16)
+        (word0.rx_done(), word0.length(), word0.size()),
+        (true, 12, 16)
     );
     assert_eq!(ring.walker.operations(), [RxWalkerOperation::Fence]);
     // The staged metadata keeps the completed image.
-    assert!(rx_owner(detached.descriptor_word0()));
+    assert!(detached.descriptor_word0().owner());
     // The other descriptors are untouched.
-    assert!(rx_owner(ring.storage.descriptors()[1].word0()));
+    assert!(ring.storage.descriptors()[1].word0().owner());
     drop(detached);
     assert!(ring.live.try_stop(&mut ring.walker).is_ok());
 }
 
 #[test]
 fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
-    use crate::descriptor::{OWNER, rx_armed_word, rx_owner};
+    use crate::descriptor::rx_armed_word;
     use crate::rx_dma::model::RxWalkerLanding;
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
@@ -2419,7 +2375,7 @@ fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
     // Every detached descriptor, LAST (the accepted tail) included, carries
     // the owner bit clear.
     for descriptor in ring.storage.descriptors() {
-        assert!(!rx_owner(descriptor.word0()));
+        assert!(!descriptor.word0().owner());
     }
     assert_eq!(ring.walker.last_descriptor_low, ring.low(COUNT - 1));
     drop(leases);
@@ -2433,7 +2389,7 @@ fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
     for descriptor in &ring.storage.descriptors()[..COUNT - 1] {
         assert_eq!(descriptor.word0(), rx_armed_word(16).unwrap());
     }
-    assert_eq!(ring.storage.descriptors()[COUNT - 1].word0() & OWNER, 0);
+    assert!(!ring.storage.descriptors()[COUNT - 1].word0().owner());
     // H1: the doorbell follows LAST.next without checking LAST's owner bit.
     ring.live.complete_pending_reload(&mut ring.walker).unwrap();
     assert_eq!(ring.walker.next_descriptor_low, ring.low(0));
@@ -2510,7 +2466,6 @@ fn a_settled_doorbell_leaving_next_on_a_detached_descriptor_fails_closed() {
 
 #[test]
 fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
-    use crate::descriptor::{rx_done, rx_owner};
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     assert!(ring.land(4, true));
@@ -2524,7 +2479,7 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
     // cursor past it yet: LAST still names 1 and NEXT holds 2.
     ring.walker.last_descriptor_low = ring.low(1);
     ring.walker.next_descriptor_low = ring.low(2);
-    assert!(rx_done(ring.storage.descriptors()[2].word0()));
+    assert!(ring.storage.descriptors()[2].word0().rx_done());
 
     let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let frontier = ring
@@ -2570,8 +2525,8 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
         0
     );
     assert!(!ring.live.observed_mask().contains(2));
-    assert!(rx_owner(ring.storage.descriptors()[2].word0()));
-    assert!(!rx_owner(ring.storage.descriptors()[1].word0()));
+    assert!(ring.storage.descriptors()[2].word0().owner());
+    assert!(!ring.storage.descriptors()[1].word0().owner());
     assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
 
     // Descriptor 0 returns and appends behind the accepted tail; the settle
@@ -2595,7 +2550,6 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
 
 #[test]
 fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
-    use crate::descriptor::rx_owner;
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
@@ -2613,7 +2567,7 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
     let leases = ring.detach_all(pool);
     assert_eq!(leases.len(), COUNT);
     // LAST, the accepted tail, is detached; NEXT = 0 names no descriptor.
-    assert!(!rx_owner(ring.storage.descriptors()[COUNT - 1].word0()));
+    assert!(!ring.storage.descriptors()[COUNT - 1].word0().owner());
     assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
     drop(leases);
     ring.storage

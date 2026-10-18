@@ -1,6 +1,6 @@
 //! Permanently located storage for an ESP32-S31 RX DMA ring.
 //!
-//! This module owns only the chip DMA memory representation. Descriptor count,
+//! This module owns only the chip DMA memory representation. RxDescriptor count,
 //! payload capacity and placement policy are selected by the board or the
 //! integrating firmware and remain const-generic here.
 
@@ -11,10 +11,11 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
+use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
 use oer_memory::ExternalRxBuffer;
 
 use crate::{
-    descriptor::Descriptor,
+    descriptor::RxDescriptor,
     rx_dma::RxDma,
     rx_ring::{
         RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
@@ -26,17 +27,6 @@ use crate::{
 };
 
 /// One aligned DMA-visible buffer with room for the hardware recycle guard.
-#[allow(
-    unsafe_code,
-    reason = "a descriptor's zero words are the empty descriptor"
-)]
-// REVIEWED-LAYOUT: vcell 0.1.3
-// SAFETY: `vcell::VolatileCell<u32>` is `repr(transparent)` over
-// `UnsafeCell<u32>`, so a descriptor's zero bytes are three zero words: the
-// empty, software-owned descriptor `Descriptor::new` builds. (`descriptor.rs`
-// forbids `unsafe`, and neither `vcell` nor `bytemuck` is ours.)
-unsafe impl bytemuck::Zeroable for crate::descriptor::Descriptor {}
-
 #[repr(C, align(4))]
 #[derive(bytemuck::Zeroable)]
 pub struct RxDmaBuffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
@@ -361,7 +351,7 @@ pub struct RxDmaCompletedUnit<
 pub struct RxDmaDetachedUnit {
     buffer: ExternalRxBuffer,
     descriptor_address: u32,
-    descriptor_word0: u32,
+    descriptor_word0: WifiRxDmaDescriptorControl,
     length: usize,
 }
 
@@ -370,7 +360,7 @@ impl RxDmaDetachedUnit {
         self.descriptor_address
     }
 
-    pub const fn descriptor_word0(&self) -> u32 {
+    pub const fn descriptor_word0(&self) -> WifiRxDmaDescriptorControl {
         self.descriptor_word0
     }
 
@@ -513,7 +503,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     }
 }
 
-/// Descriptor and buffer arena whose address remains stable for a DMA epoch.
+/// RxDescriptor and buffer arena whose address remains stable for a DMA epoch.
 ///
 /// The buffer address table remains caller-owned because the live ring borrows
 /// it for its entire epoch. Keeping that table separate avoids a
@@ -598,12 +588,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     /// The ring's descriptors; the reserved descriptor is
     /// [`Self::reserved_descriptor`].
-    pub const fn descriptors(&self) -> &[Descriptor; COUNT] {
+    pub const fn descriptors(&self) -> &[RxDescriptor; COUNT] {
         self.descriptors.ring()
     }
 
     /// The reserved descriptor R, the one `RX_DESCRIPTOR_BASE` names.
-    pub const fn reserved_descriptor(&self) -> &Descriptor {
+    pub const fn reserved_descriptor(&self) -> &RxDescriptor {
         self.descriptors.reserved()
     }
 
@@ -1004,7 +994,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         while released < MAX_BATCH.min(COUNT) {
             let index = start.advance(released).get();
             if !observed.contains(index)
-                || !crate::descriptor::rx_done(self.descriptors()[index].word0())
+                || !self.descriptors()[index].word0().rx_done()
                 || !self
                     .buffer_for_descriptor(index)
                     .ok_or(RxRingError::Count)?
@@ -1067,7 +1057,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => return Ok(None),
                 _ => return Err(RxRingError::Corrupt),
             }
-            if crate::descriptor::rx_done(self.descriptors()[index].word0()) {
+            if self.descriptors()[index].word0().rx_done() {
                 return Ok(Some(step + 1));
             }
         }
@@ -1141,7 +1131,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         let index = self
             .completion_frontier_head(ring)?
             .ok_or(RxRingError::Corrupt)?;
-        let available = crate::descriptor::length(ring.descriptors()[index].word0()) as usize;
+        let available = usize::from(ring.descriptors()[index].word0().length());
         let Some(end) = offset
             .checked_add(output.len())
             .filter(|end| *end <= available)
@@ -1267,7 +1257,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     fn validate_ring_layout(
         &self,
         descriptor_base: u32,
-        descriptors: &[Descriptor; COUNT],
+        descriptors: &[RxDescriptor; COUNT],
         buffer_addresses: &RxDmaBufferAddresses<COUNT>,
     ) -> Result<(), RxRingError> {
         if !core::ptr::eq(descriptors, self.descriptors.ring()) {

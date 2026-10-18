@@ -4,9 +4,7 @@ use core::cell::RefCell;
 use std::{boxed::Box, vec::Vec};
 
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE, SIZE_MASK, rx_armed_word},
-    rx_dma::model::RxWalkerModel,
-    rx_ring::RxDmaArenaState,
+    descriptor::rx_armed_word, rx_dma::model::RxWalkerModel, rx_ring::RxDmaArenaState,
     space::HostDma,
 };
 use oer_esp32s31_ieee80211_mac::rx::pool::NetworkRxFrame;
@@ -99,9 +97,17 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     // descriptor's 14-bit length field holds.
     for (descriptor, &buffer) in storage.descriptors().iter().zip(buffers.iter()).take(2) {
         storage.dma_write(&ring, buffer, &[0; 4]).unwrap();
-        descriptor.write_word0(BUFFER as u32 | ((BUFFER as u32) << LENGTH_SHIFT) | OWNER);
+        descriptor.write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+            BUFFER as u32,
+            BUFFER as u32,
+            false,
+        ));
     }
-    storage.descriptors()[2].write_word0(BUFFER as u32 | (100 << LENGTH_SHIFT) | RX_DONE | OWNER);
+    storage.descriptors()[2].write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+        BUFFER as u32,
+        100,
+        true,
+    ));
     hardware.set_cursor(base, 2, Some(3));
 
     let pool = RxStagePool::<SLOTS, CAPACITY>::new();
@@ -124,7 +130,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     .expect("an oversized chain is dropped, not a ring fault");
 
     let length = 2 * BUFFER + 100;
-    assert!(length > SIZE_MASK as usize);
+    assert!(rx_armed_word(u32::try_from(length).unwrap()).is_none());
     assert_eq!(*recorder.discards.borrow(), [Discard::Oversized]);
     assert_eq!(
         *recorder.observations.borrow(),
@@ -163,7 +169,7 @@ type Storage = RxDmaStorage<COUNT, BUFFER, { BUFFER + 4 }, HostDma>;
 struct WordAtPublish {
     storage: &'static Storage,
     base: u32,
-    seen: RefCell<Vec<u32>>,
+    seen: RefCell<Vec<oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl>>,
 }
 
 impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
@@ -206,7 +212,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)
         .unwrap();
-    let completed = BUFFER as u32 | (40 << LENGTH_SHIFT) | RX_DONE | OWNER;
+    let completed = oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(BUFFER as u32, 40, true);
     storage.descriptors()[0].write_word0(completed);
     hardware.set_cursor(base, 0, Some(1));
 
@@ -234,7 +240,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     )
     .expect("one frame is staged");
     assert_eq!((units, bytes), (1, 40));
-    assert_eq!(*publisher.seen.borrow(), [completed & !OWNER]);
+    assert_eq!(*publisher.seen.borrow(), [completed.with_owner(false)]);
     assert_eq!(ring.reload_evidence().walker_on_detached, 0);
     assert!(ring.try_stop(&mut hardware).is_ok());
 }

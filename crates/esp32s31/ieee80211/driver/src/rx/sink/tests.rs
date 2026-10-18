@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use oer_esp32s31_ieee80211_dma::descriptor::SIZE_MASK;
+use oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word;
 
 use super::*;
 use crate::rx::{
@@ -33,7 +33,7 @@ fn chained_frame_is_a_counted_drop_and_the_next_frame_is_received() {
     // A chain longer than the length field is counted apart.
     let mut oversized = [BUFFER as u32; 10];
     oversized[9] = 1_500;
-    assert!(oversized.iter().sum::<u32>() > SIZE_MASK);
+    assert!(rx_armed_word(oversized.iter().sum::<u32>()).is_none());
     ring.complete(&oversized);
     ring.complete(&[400]);
     ring.drain(&sink, &admission);

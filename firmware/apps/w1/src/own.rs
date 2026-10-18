@@ -26,7 +26,7 @@
 //! (`w1.exhaust ring_base=`).
 
 use oer_esp32s31_ieee80211::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
-use oer_esp32s31_ieee80211_dma::descriptor::{DESCRIPTOR_BYTES, Descriptor, rx_owner};
+use oer_esp32s31_ieee80211_dma::descriptor::{DESCRIPTOR_BYTES, RxDescriptor};
 
 use crate::{
     irq::{COUNT, SLOTS},
@@ -136,10 +136,10 @@ pub fn cursor_index(low: u32, ring_base: u32) -> Option<usize> {
 /// Whether descriptor `index` of `descriptors` carries the owner bit clear,
 /// as a detached descriptor must while its lease is held; `false` for an
 /// unknown index.
-pub fn owner_clear(descriptors: &[Descriptor], index: Option<usize>) -> bool {
+pub fn owner_clear(descriptors: &[RxDescriptor], index: Option<usize>) -> bool {
     index
         .and_then(|index| descriptors.get(index))
-        .is_some_and(|descriptor| !rx_owner(descriptor.word0()))
+        .is_some_and(|descriptor| !descriptor.word0().owner())
 }
 
 /// Whether a hold is full, and why.

@@ -239,7 +239,11 @@ impl RxDma for MockMmio {
 }
 
 pub(super) const fn rx_descriptor_low(address: u32) -> u32 {
-    if address == 0 { 0 } else { address - DMA_LOW }
+    if address == 0 {
+        0
+    } else {
+        address - oer_esp32s31_hal::layouts::DMA_WINDOW.start
+    }
 }
 
 /// Prove a completed unit's link release through the product observation:
@@ -248,7 +252,7 @@ pub(super) const fn rx_descriptor_low(address: u32) -> u32 {
 pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
     live: &mut RxRingLive<'_, COUNT>,
     mmio: &mut MockMmio,
-    descriptors: &[Descriptor; COUNT],
+    descriptors: &[RxDescriptor; COUNT],
     descriptor_base: u32,
     last_descriptor_address: u32,
     descriptor_count: usize,
@@ -261,7 +265,7 @@ pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
     let tail_index =
         usize::try_from((last_descriptor_address - descriptor_base) / DESCRIPTOR_BYTES).unwrap();
     let later_index = (tail_index + 1) % COUNT;
-    descriptors[later_index].write_word0(descriptors[later_index].word0() | RX_DONE);
+    descriptors[later_index].write_word0(descriptors[later_index].word0().with_rx_done(true));
     mmio.set_rx_last_descriptor_address(descriptor_base + later_index as u32 * DESCRIPTOR_BYTES);
     assert!(live.observe_current_completed_unit_link_release(mmio, descriptor_count));
 }
@@ -294,7 +298,7 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         }
     }
 
-    pub(super) fn descriptors(&self) -> &'static [Descriptor; COUNT] {
+    pub(super) fn descriptors(&self) -> &'static [RxDescriptor; COUNT] {
         self.storage.descriptors()
     }
 

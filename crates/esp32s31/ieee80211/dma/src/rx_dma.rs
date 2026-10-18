@@ -228,16 +228,16 @@ impl RxDmaCursorObservation<'_> {
 #[derive(Clone, Copy)]
 pub struct RxWalkerTable<'storage> {
     descriptor_base: u32,
-    ring: &'storage [crate::descriptor::Descriptor],
-    reserved: &'storage crate::descriptor::Descriptor,
+    ring: &'storage [crate::descriptor::RxDescriptor],
+    reserved: &'storage crate::descriptor::RxDescriptor,
 }
 
 #[cfg(any(test, feature = "test-support"))]
 impl<'storage> RxWalkerTable<'storage> {
     pub(crate) const fn new(
         descriptor_base: u32,
-        ring: &'storage [crate::descriptor::Descriptor],
-        reserved: &'storage crate::descriptor::Descriptor,
+        ring: &'storage [crate::descriptor::RxDescriptor],
+        reserved: &'storage crate::descriptor::RxDescriptor,
     ) -> Self {
         Self {
             descriptor_base,
@@ -248,7 +248,7 @@ impl<'storage> RxWalkerTable<'storage> {
 
     /// The descriptor at the low address bits `low`, which the walker's
     /// LAST/NEXT registers report, when it belongs to this table.
-    pub fn descriptor_at_low(&self, low: u32) -> Option<&'storage crate::descriptor::Descriptor> {
+    pub fn descriptor_at_low(&self, low: u32) -> Option<&'storage crate::descriptor::RxDescriptor> {
         const LOW_MASK: u32 = 0x000f_ffff;
         let reserved_offset = u32::try_from(self.ring.len())
             .ok()?
@@ -313,7 +313,7 @@ impl<'storage> RxDmaBinding<'storage> {
     pub(crate) fn descriptor_at_low(
         &self,
         low: u32,
-    ) -> Option<&'storage crate::descriptor::Descriptor> {
+    ) -> Option<&'storage crate::descriptor::RxDescriptor> {
         self.table.descriptor_at_low(low)
     }
 
