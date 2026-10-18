@@ -53,6 +53,7 @@ members = [
     "tools/lib/command-tree",
     "tools/lib/durable",
     "tools/lib/process",
+    "tools/lib/ui-cases",
     "tools/registers",
     "tools/registers/bindings",
     "tools/registers/contracts",

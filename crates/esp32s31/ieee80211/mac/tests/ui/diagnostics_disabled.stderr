@@ -1,0 +1,5 @@
+error[E0599]: no method named `diagnostics` found for struct `IrqPublisher<'irq>` in the current scope
+ --> tests/ui/diagnostics_disabled.rs:6:28
+  |
+6 |     let _count = publisher.diagnostics().rx_post_count(); // ui-error: E0599
+  |                            ^^^^^^^^^^^ method not found in `IrqPublisher<'_>`
