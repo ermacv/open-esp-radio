@@ -238,6 +238,70 @@ defaults, queue bounds) live in the code that applies them, not here.
   `esp32s31-bt-lib`; this replaces the earlier rule that only facts from that
   library enter the repository (owner, 2026-10-18).
 
+## 2026-10-18: decisions confirmed from the predecessor audit
+
+The owner confirmed these again on this date; where the code differs, the
+decision holds and the code is changed in the port's fix pass.
+
+- **Dropped futures.** A caller that drops an admitted request detaches only
+  its waker; the owner keeps the registration, queue position and buffer
+  lease until the terminal event and reclaims exactly once.
+- **Station TSF.** An update that would cross 2^64 is refused before any TSF
+  write; a beacon whose TSF the station cannot follow is dropped whole; a
+  join beacon whose TSF cannot be taken ends the association as an ordinary
+  disconnect with a candidate refresh.
+- **Interrupt code placement.** Code reachable from interrupts runs from SRAM
+  or ROM only, checked by an image gate.
+- **Stack bounds.** Interrupt stacks need a proven bound; task stacks accept
+  any result with a warning; an observed depth above a bound fails the run;
+  no baseline of accepted holes. A function leaves a call site's candidates
+  only when every place that takes its address provably keeps its type.
+- **HE trigger-based and beamformee** stay fail-closed until a hardware path
+  is verified.
+- **Port event streams** end with the uninstall; the next install starts
+  with an empty queue.
+- **STA+AP.** An upstream the pair cannot rejoin is reported as an event
+  (`UpstreamNotJoined`) while the access point keeps running; the station
+  reports the upstream's EDCA set as a fact and the pair applies it; the
+  station's doze never closes the access point's transmit gate.
+- **Keys and timeouts.** After an unconfirmed stop, secrets are erased by a
+  required synchronous hook and the installation stays quarantined until
+  reset; packet-number exhaustion is a typed port fault; no retry after a
+  hardware TX timeout until compared with the vendor.
+- **Wi-Fi MAC ownership.** The channel switch writes only the MAC control
+  word and the REGDMA link select; TBTT events from the power interrupt are
+  lossy, so the driver times its own TBTT wakes; coexistence values reach the
+  driver by message.
+- **RX Block Ack banks** form one pool for both roles, with separate role
+  tables.
+- **Bluetooth LE.** Among conflicting connections the one closest to its
+  supervision timeout wins; HCI is the world boundary; an internal backend
+  inconsistency is a radio fault that poisons the port; Host backpressure
+  withholds acknowledgement instead of dropping the link.
+- **No critical sections in portable protocols**: no `critical-section` or
+  blocking mutex there, checked by the build with a reasoned allow-list.
+- **Reference models.** Every port has a reference model that keeps its
+  contract; doubles that break the contract stay out of the conformance
+  suite.
+- **Knowledge stays, shape goes.** Code whose value is recovered knowledge or
+  a pure algorithm is kept; ownership, orchestration and wiring are rebuilt.
+- **Compile time first.** Every check that can run at compile time runs
+  there.
+- **Stand.** Roles belong to firmware, not boards; each chip has a pinned
+  recovery image; every scenario declares its air use; power loss is proved
+  by the USB device leaving and returning.
+- **MSDU age** starts at software admission, and every subframe keeps its
+  own age through A-MPDU formation and retry; removing an aged head under an
+  active Block Ack agreement sends a BlockAckReq.
+- **Interrupt handlers** reach tasks through static typed signals, never
+  through an executor's waker vtable.
+- **EDCA** belongs to a VIF, not to the port.
+- **IEEE 802.15.4 configuration** is admitted in any radio state, as in
+  ESP-IDF.
+- **Performance A/B** also measures per-core CPU load over the traffic
+  window; more CPU for the same throughput blocks the change. The threshold
+  is set with the owner at the first A/B.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
