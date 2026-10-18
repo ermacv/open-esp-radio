@@ -66,9 +66,12 @@ jobs:
       - name: Toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
       - name: Radio crates for the chip target
+        # Every crate of crates/ builds for the chip except the ui-test
+        # runner, a host test library that compiles cases with rustc.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
-            | jq -r '.packages[] | select(.manifest_path | contains("/crates/")) | "-p " + .name')
+            | jq -r '.packages[] | select(.manifest_path | contains("/crates/"))
+              | select(.name != "oer-ui-cases") | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
@@ -88,6 +91,15 @@ jobs:
           : > "$RUNNER_TEMP/empty-runtime.bin"
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
             cargo check --locked --target riscv32imafc-unknown-none-elf --workspace
+      - name: Firmware host tests
+        # The host-built layout crates of the firmware workspace: the staged
+        # layout (its linker-script and zeroed-input tests) and the S31 image
+        # layout. The other firmware packages build only for the chip;
+        # staged-runtime's tests do not build on the host (tools/README.md).
+        working-directory: firmware
+        run: |
+          cargo test --locked --target x86_64-unknown-linux-gnu \
+            -p oer-espressif-staged-layout -p oer-esp32s31-platform-layout
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
         # reviewed entry (registers/esp32s31/shared-words.toml). Cargo resolves
