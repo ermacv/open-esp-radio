@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 
 use crate::{
     descriptor::{DESCRIPTOR_BYTES, Descriptor},
-    rx_ring::RxArenaWords,
+    rx_ring::{RxArenaWords, RxDescriptorTable},
 };
 
 use oer_memory::StableDmaRange;
@@ -21,9 +21,17 @@ use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
 /// Public trait methods accept this type so owning a runtime radio capability
 /// alone is insufficient to publish an arbitrary DMA address. Constructors remain
 /// inside the chip DMA leaf and ring typestates keep the value private.
+///
+/// The binding names one descriptor table: the ring and the reserved
+/// descriptor R after it. [`RxDma::write_descriptor_base`] publishes R and
+/// nothing else, so a ring descriptor can never be written to
+/// `RX_DESCRIPTOR_BASE`: every live publication goes through the reload
+/// doorbell.
 pub struct RxDmaBinding<'storage> {
     descriptor_base: u32,
-    descriptor_count: u8,
+    reserved_address: u32,
+    ring: &'storage [Descriptor],
+    reserved: &'storage Descriptor,
     range: StableDmaRange<'storage>,
     arena: &'storage RxArenaWords,
 }
@@ -149,21 +157,21 @@ impl RxDmaNextDescriptor {
     }
 }
 
-/// Ordered observation used only by the vendor reload-repair suffix.
+/// Ordered observation used only by the reload settle.
 ///
 /// `wDev_AppendRxBlocks` samples `NEXT` first and reads `LAST` only when the
-/// walker reports a zero successor. This is intentionally a different
-/// contract from [`RxDmaCursorObservation`], whose `LAST -> NEXT` order proves
-/// release of a completed descriptor link. Combining the two observations
-/// can pair values from different hardware epochs and authorize a stale BASE
-/// repair.
-pub struct RxDmaReloadRepairObservation<'confirmation> {
+/// walker reports a zero successor; the ring keeps that order to decide
+/// whether a settled doorbell needs one re-ring. This is intentionally a
+/// different contract from [`RxDmaCursorObservation`], whose `LAST -> NEXT`
+/// order proves release of a completed descriptor link. Combining the two
+/// observations can pair values from different hardware epochs.
+pub struct RxDmaReloadObservation<'confirmation> {
     next_descriptor: RxDmaNextDescriptor,
     last_descriptor_low: Option<u32>,
     _confirmation: PhantomData<&'confirmation mut ()>,
 }
 
-impl RxDmaReloadRepairObservation<'_> {
+impl RxDmaReloadObservation<'_> {
     const fn confirmed(
         next_descriptor: RxDmaNextDescriptor,
         last_descriptor_low: Option<u32>,
@@ -219,31 +227,57 @@ impl<'storage> RxDmaBinding<'storage> {
         reason = "ring construction retains the descriptor owner for the DMA epoch"
     )]
     pub(crate) fn new<const COUNT: usize>(
-        descriptors: &'storage [Descriptor; COUNT],
+        table: &'storage RxDescriptorTable<COUNT>,
         descriptor_base: u32,
         arena: &'storage RxArenaWords,
     ) -> Option<Self> {
-        let descriptor_count = u8::try_from(COUNT).ok()?;
-        let range_len = u32::try_from(core::mem::size_of_val(descriptors)).ok()?;
-        // SAFETY: the binding retains the descriptor borrow. Only
+        if COUNT == 0 || u8::try_from(COUNT).is_err() {
+            return None;
+        }
+        let range_len = u32::try_from(core::mem::size_of_val(table)).ok()?;
+        // `RxDescriptorTable` is `repr(C)`: COUNT 12-byte, 4-aligned ring
+        // descriptors, then R, so R lies exactly one descriptor after the
+        // ring and the table has no padding.
+        let reserved_offset = u32::try_from(COUNT).ok()?.checked_mul(DESCRIPTOR_BYTES)?;
+        if range_len != reserved_offset.checked_add(DESCRIPTOR_BYTES)? {
+            return None;
+        }
+        let reserved_address = descriptor_base.checked_add(reserved_offset)?;
+        // SAFETY: the binding retains the descriptor-table borrow. Only
         // `RxDmaStorage` lends it, and its first ring requires static
         // storage (`prepare_ring`). Native models have no asynchronous DMA
         // actor.
-        let range = unsafe { StableDmaRange::from_owner(descriptors, descriptor_base, range_len) }?;
-        (descriptor_count != 0).then_some(Self {
+        let range = unsafe { StableDmaRange::from_owner(table, descriptor_base, range_len) }?;
+        Some(Self {
             descriptor_base,
-            descriptor_count,
+            reserved_address,
+            ring: table.ring(),
+            reserved: table.reserved(),
             range,
             arena,
         })
     }
 
-    fn admits(&self, address: u32) -> bool {
-        let Some(offset) = address.checked_sub(self.descriptor_base) else {
-            return false;
-        };
-        offset % DESCRIPTOR_BYTES == 0
-            && offset / DESCRIPTOR_BYTES < u32::from(self.descriptor_count)
+    /// The DMA address of the reserved descriptor R, the only value
+    /// `RX_DESCRIPTOR_BASE` is ever given.
+    pub const fn reserved_address(&self) -> u32 {
+        self.reserved_address
+    }
+
+    /// The descriptor at the low address bits `low`, which the walker's
+    /// LAST/NEXT registers report, when it belongs to this table.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn descriptor_at_low(&self, low: u32) -> Option<&'storage Descriptor> {
+        const LOW_MASK: u32 = 0x000f_ffff;
+        if low == self.reserved_address & LOW_MASK {
+            return Some(self.reserved);
+        }
+        let offset = low.checked_sub(self.descriptor_base & LOW_MASK)?;
+        if offset % DESCRIPTOR_BYTES != 0 {
+            return None;
+        }
+        self.ring
+            .get(usize::try_from(offset / DESCRIPTOR_BYTES).ok()?)
     }
 
     fn range(&self) -> &StableDmaRange<'storage> {
@@ -283,11 +317,11 @@ pub trait RxDma {
         observed: impl for<'confirmation> FnOnce(RxDmaCursorObservation<'confirmation>) -> R,
     ) -> R;
 
-    /// Preserve the exact reload-repair observation order recovered from
+    /// Preserve the exact reload observation order recovered from
     /// `wDev_AppendRxBlocks`: `NEXT`, a device fence, and conditional `LAST`.
-    fn with_reload_repair_observation<R>(
+    fn with_reload_observation<R>(
         &mut self,
-        observed: impl for<'confirmation> FnOnce(RxDmaReloadRepairObservation<'confirmation>) -> R,
+        observed: impl for<'confirmation> FnOnce(RxDmaReloadObservation<'confirmation>) -> R,
     ) -> R {
         let next_descriptor = self.next_descriptor();
         self.fence();
@@ -298,7 +332,7 @@ pub trait RxDma {
         } else {
             None
         };
-        observed(RxDmaReloadRepairObservation::confirmed(
+        observed(RxDmaReloadObservation::confirmed(
             next_descriptor,
             last_descriptor_low,
         ))
@@ -310,7 +344,11 @@ pub trait RxDma {
         settled: impl for<'confirmation> FnOnce(RxDmaReloadSettled<'confirmation>) -> R,
     ) -> Option<R>;
     fn configure_descriptor_window(&mut self, binding: &RxDmaBinding<'_>);
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32);
+    /// Write the binding's reserved descriptor R to `RX_DESCRIPTOR_BASE`.
+    ///
+    /// The cold publication of an epoch is the only caller: one BASE write
+    /// per epoch, always R.
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>);
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>);
     fn request_reload(&mut self, binding: &RxDmaBinding<'_>);
     fn try_with_walker_enabled<R>(
@@ -387,12 +425,8 @@ impl RxDma for WifiMacHal<'_> {
         self.configure_rx_descriptor_window(binding.range());
     }
 
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32) {
-        assert!(
-            binding.admits(address),
-            "RX descriptor base must belong to the bound static ring"
-        );
-        self.write_rx_descriptor_base(binding.range(), address);
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
+        self.write_rx_descriptor_base(binding.range(), binding.reserved_address());
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
@@ -473,8 +507,8 @@ impl RxDma for RadioRuntimeOwner {
         RxDma::configure_descriptor_window(&mut self.wifi_mac_hal(), binding);
     }
 
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32) {
-        RxDma::write_descriptor_base(&mut self.wifi_mac_hal(), binding, address);
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
+        RxDma::write_descriptor_base(&mut self.wifi_mac_hal(), binding);
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {

@@ -185,7 +185,8 @@ impl RxDma for MockMmio {
         self.operations.push(Operation::ConfigureRxDescriptorWindow);
     }
 
-    fn write_descriptor_base(&mut self, _: &RxDmaBinding, address: u32) {
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding) {
+        let address = binding.reserved_address();
         self.rx_descriptor_base = address;
         self.operations
             .push(Operation::PublishRxDescriptorBase(address));

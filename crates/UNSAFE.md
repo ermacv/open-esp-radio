@@ -82,8 +82,9 @@ the client posts only with the slot's token, which the answer returns.
 `test-support`: the host model of the DMA engine's memory port,
 `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in `rx_storage/host_dma.rs`.
 It copies bytes into or out of one buffer's `UnsafeCell` at a published
-`HostDma` address, refusing any range outside a single buffer and any buffer
-detached to an upper owner. Its caller lends the arena's live ring shared:
+`HostDma` address (a ring buffer or the reserved descriptor's buffer),
+refusing any range outside a single buffer and any buffer detached to an
+upper owner. Its caller lends the arena's live ring shared:
 completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 

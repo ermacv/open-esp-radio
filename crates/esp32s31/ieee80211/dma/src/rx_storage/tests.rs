@@ -63,9 +63,9 @@ impl RxDma for MockRxDma {
 
     fn configure_descriptor_window(&mut self, _: &RxDmaBinding<'_>) {}
 
-    fn write_descriptor_base(&mut self, _: &RxDmaBinding<'_>, address: u32) {
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
         self.publications += 1;
-        self.descriptor_base = address;
+        self.descriptor_base = binding.reserved_address();
     }
 
     fn publish_walker_enable(&mut self, _: &RxDmaBinding<'_>) {
@@ -718,7 +718,7 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
 }
 
 #[test]
-fn in_arena_intermediate_last_repairs_from_its_successor() {
+fn in_arena_intermediate_last_rerings_the_doorbell() {
     const COUNT: usize = 4;
     const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
@@ -732,6 +732,8 @@ fn in_arena_intermediate_last_repairs_from_its_successor() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
+    let reserved = base + COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES;
+    assert_eq!(mmio.descriptor_base, reserved);
     storage.descriptors()[0].write_word0(
         crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::BIT_30,
     );
@@ -755,21 +757,28 @@ fn in_arena_intermediate_last_repairs_from_its_successor() {
             .is_some()
     );
     assert!(live.reload_pending());
+    let publications = mmio.publications;
 
     // Old accepted tail is descriptor 3 and the pending tail is 0, but
-    // hardware can still report the earlier descriptor 1 while the vendor
-    // worker is returning several completed units. Its successor is the
-    // exact base-repair value used by wDev_AppendRxBlocks.
+    // hardware reports the earlier descriptor 1 with NEXT zero. The ring
+    // rings the doorbell once more instead of writing BASE.
     mmio.next_descriptor_low = 0;
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert_eq!(
         live.poll_pending_reload(&mut mmio),
+        Ok(crate::rx_ring::RxReloadObservation::Pending)
+    );
+    assert_eq!(mmio.publications, publications + 1, "one more doorbell");
+    assert_eq!(mmio.descriptor_base, reserved, "BASE is not written again");
+    assert_eq!(live.reload_evidence().reload_rerings, 1);
+
+    // The doorbell resumed the walker at LAST.next.
+    mmio.next_descriptor_low = (base + 2 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
+    assert_eq!(
+        live.poll_pending_reload(&mut mmio),
         Ok(crate::rx_ring::RxReloadObservation::Settled)
     );
-    assert_eq!(
-        mmio.descriptor_base,
-        base + 2 * crate::descriptor::DESCRIPTOR_BYTES
-    );
+    assert_eq!(live.accepted_tail().get(), 0);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
     assert!(live.try_stop(&mut mmio).is_ok());
 }
@@ -778,19 +787,19 @@ const REPAIR_COUNT: usize = 2;
 const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
 
 /// A live two-descriptor ring whose walker exhausted the accepted tail
-/// before it observed the new link, so the reload suffix republished the
-/// head (`base`) through BASE.
-fn ring_after_exhausted_reload_repair() -> (
+/// after its doorbell was rung while NEXT was still nonzero, so the settle
+/// rang it once more and the walker resumed at the appended head (`base`).
+fn ring_after_exhausted_reload_rering() -> (
     &'static RxDmaStorage<REPAIR_COUNT, 16, 20, HostDma>,
     RxRingLive<'static, REPAIR_COUNT>,
-    MockRxDma,
+    crate::rx_dma::model::RxWalkerModel,
     u32,
 ) {
     const COUNT: usize = REPAIR_COUNT;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let buffers = Box::leak(Box::new([0; COUNT]));
     let base = storage.dma_layout(buffers).unwrap();
-    let mut mmio = MockRxDma::default();
+    let mut mmio = crate::rx_dma::model::RxWalkerModel::new();
     let prepared = storage
         .prepare_ring(&mut mmio, base, buffers)
         .expect("prepared owner");
@@ -801,8 +810,7 @@ fn ring_after_exhausted_reload_repair() -> (
     storage.descriptors()[0].write_word0(
         crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::BIT_30,
     );
-    mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
-    mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
+    mmio.set_cursor(base, 0, Some(1));
     assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
     assert!(
         storage
@@ -813,7 +821,9 @@ fn ring_after_exhausted_reload_repair() -> (
     storage.descriptors()[1].write_word0(
         crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::BIT_30,
     );
-    mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
+    // The walker still reports a descriptor of the old list when the
+    // doorbell rings, so the doorbell resumes nothing.
+    mmio.set_cursor(base, 1, Some(1));
     assert!(
         storage
             .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -821,71 +831,59 @@ fn ring_after_exhausted_reload_repair() -> (
             .is_some()
     );
 
-    // The walker exhausted the previously accepted tail before observing
-    // its new link. The vendor suffix republishes that link through base.
-    mmio.next_descriptor_low = 0;
-    mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    assert_eq!(
-        live.poll_pending_reload(&mut mmio),
-        Ok(crate::rx_ring::RxReloadObservation::Settled)
-    );
-    assert_eq!(mmio.descriptor_base, base);
+    // It then exhausted the old tail before it followed the new link.
+    mmio.clear_operations();
+    mmio.set_cursor(base, 1, None);
+    live.complete_pending_reload(&mut mmio)
+        .expect("the re-rung doorbell resumes the walker");
     (storage, live, mmio, base)
 }
 
 #[test]
-fn exhausted_reload_records_the_direct_base_repair_facts() {
-    let (_storage, live, mut mmio, base) = ring_after_exhausted_reload_repair();
+fn exhausted_reload_records_the_rering_facts() {
+    use crate::rx_dma::model::RxWalkerOperation;
+    let (storage, live, mut mmio, base) = ring_after_exhausted_reload_rering();
     assert_eq!(
-        live.reload_repair_evidence(),
-        crate::rx_ring::RxReloadRepairEvidence {
-            max_reload_attempts: 0,
-            observations: 1,
+        live.reload_evidence(),
+        crate::rx_ring::RxReloadEvidence {
+            max_reload_attempts: 1,
+            observations: 2,
             unknown_upper_with_zero_address: 0,
-            base_repairs: 1,
-            last_next_low: 0,
-            last_last_low: Some((base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK),
-            last_repair_head: Some(base),
-            exhausted_republications: 1,
-            republications_accepted: 0,
+            reload_rerings: 1,
+            rering_failures: 0,
+            last_next_low: base & ADDRESS_LOW_MASK,
+            last_last_low: None,
+            base_writes: 1,
+            reserved_landings: 0,
+            reserved_late_landings: 0,
         }
     );
-    assert!(live.try_stop(&mut mmio).is_ok());
-}
-
-#[test]
-fn a_republished_head_is_accepted_once_when_the_walker_fetches_it() {
-    let (_storage, mut live, mut mmio, base) = ring_after_exhausted_reload_repair();
-    let accepted = |live: &RxRingLive<'_, REPAIR_COUNT>| {
-        let evidence = live.reload_repair_evidence();
-        (
-            evidence.exhausted_republications,
-            evidence.republications_accepted,
-        )
-    };
-    // NEXT still zero: the BASE store has not reached the walker.
-    live.observe_exhausted_republication(&mut mmio);
-    assert_eq!(accepted(&live), (1, 0));
-    // The walker fetched the head; the probe's last observation and any
-    // later one count nothing more.
-    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
-    live.observe_exhausted_republication(&mut mmio);
-    assert_eq!(accepted(&live), (1, 1));
-    live.observe_exhausted_republication(&mut mmio);
-    live.observe_exhausted_republication(&mut mmio);
-    assert!(!live.exhausted_republication_probe_pending());
-    assert_eq!(accepted(&live), (1, 1));
+    // A second doorbell, NEXT = LAST.next, and BASE untouched.
+    assert_eq!(mmio.operation_count(RxWalkerOperation::RequestReload), 1);
+    assert!(
+        !mmio
+            .operations()
+            .iter()
+            .any(|operation| matches!(operation, RxWalkerOperation::WriteDescriptorBase(_)))
+    );
+    assert_eq!(mmio.next_descriptor_low, base & ADDRESS_LOW_MASK);
+    assert_eq!(
+        mmio.descriptor_base,
+        base + REPAIR_COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES
+    );
+    assert_eq!(live.accepted_tail().get(), 0);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
 #[test]
 fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
+    use crate::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
     const COUNT: usize = 4;
-    const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
     let mut buffers = [0; COUNT];
     let base = storage.dma_layout(&mut buffers).unwrap();
-    let mut mmio = MockRxDma::default();
+    let mut mmio = RxWalkerModel::new();
     let prepared = storage
         .prepare_ring(&mut mmio, base, &buffers)
         .expect("prepared owner");
@@ -893,17 +891,16 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
+    let done = 16
+        | (4 << crate::descriptor::LENGTH_SHIFT)
+        | crate::descriptor::BIT_30
+        | crate::descriptor::BIT_31;
 
     // Return descriptor zero while the old finite list has already
-    // exhausted at descriptor three. The vendor append suffix repairs
-    // base to the returned descriptor, leaving software head at one.
-    storage.descriptors()[0].write_word0(
-        16 | (4 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::BIT_30
-            | crate::descriptor::BIT_31,
-    );
-    mmio.last_descriptor_low = (base + 3 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    mmio.next_descriptor_low = 0;
+    // exhausted at descriptor three. The doorbell, rung with NEXT zero,
+    // resumes the walker at three's new link: descriptor zero.
+    storage.descriptors()[0].write_word0(done);
+    mmio.set_cursor(base, 3, None);
     let unit = storage
         .take_completed_unit(&mut live, 1)
         .expect("completed descriptor")
@@ -912,20 +909,18 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
         .expect("live append")
         .expect("returned descriptor");
     live.complete_pending_reload(&mut mmio)
-        .expect("vendor reload repair");
+        .expect("doorbell resumes the walker");
+    assert_eq!(mmio.next_descriptor_low, base & ADDRESS_LOW_MASK);
     assert_eq!(live.recycle_start().get(), 1);
     assert_eq!(live.accepted_tail().get(), 0);
+    assert_eq!(live.reload_evidence().reload_rerings, 0);
 
-    // Hardware consumed only the repaired terminal before exhausting
-    // again. Descriptors one through three retain their guards and armed
-    // lengths, but NEXT=0/LAST=tail proves their links are released.
-    storage.descriptors()[0].write_word0(
-        16 | (4 << crate::descriptor::LENGTH_SHIFT)
-            | crate::descriptor::BIT_30
-            | crate::descriptor::BIT_31,
-    );
-    mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
-    mmio.next_descriptor_low = 0;
+    // Hardware walked one and two without writing them, ended a frame in
+    // three and exhausted at zero. NEXT=0/LAST=tail proves the untouched
+    // links released: one unit of three descriptors, one short of the ring.
+    storage.descriptors()[3].write_word0(done);
+    storage.descriptors()[0].write_word0(done);
+    mmio.set_cursor(base, 0, None);
     let frontier = storage
         .first_completed_unit_frontier_through_cursor(
             &live,
@@ -934,27 +929,39 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
         )
         .expect("exhausted frontier");
     assert_eq!(frontier.unit_count, 1);
-    assert_eq!(frontier.descriptor_count, COUNT);
+    assert_eq!(frontier.descriptor_count, COUNT - 1);
 
     let unit = storage
         .take_completed_unit(&mut live, frontier.descriptor_count)
         .expect("released unit")
         .expect("terminal payload owner");
-    assert_eq!(unit.descriptor_count(), COUNT);
+    assert_eq!(unit.descriptor_count(), COUNT - 1);
     assert_eq!(unit.total_length(), 4);
     assert_eq!(unit.segment(0), Some(&[][..]));
     assert_eq!(unit.segment(1), Some(&[][..]));
-    assert_eq!(unit.segment(2), Some(&[][..]));
-    assert_eq!(unit.segment(3).map(<[u8]>::len), Some(4));
+    assert_eq!(unit.segment(2).map(<[u8]>::len), Some(4));
     let append = unit
         .recycle(&mut mmio)
         .expect("exhausted list recycle")
-        .expect("full list republished");
+        .expect("unit republished");
     assert_eq!(append.head_index.get(), 1);
-    assert_eq!(append.descriptor_count, COUNT);
-    assert_eq!(live.recycle_start().get(), 1);
-    assert_eq!(live.accepted_tail().get(), 0);
+    assert_eq!(append.descriptor_count, COUNT - 1);
+    live.complete_pending_reload(&mut mmio)
+        .expect("doorbell resumes the walker");
+    assert_eq!(
+        mmio.next_descriptor_low,
+        (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK
+    );
+    assert_eq!(live.recycle_start().get(), 0);
+    assert_eq!(live.accepted_tail().get(), 3);
     assert!(live.topology_snapshot().valid);
+    assert_eq!(
+        mmio.operation_count(RxWalkerOperation::WriteDescriptorBase(
+            base + COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES
+        )),
+        1,
+        "the cold publication is the only BASE write"
+    );
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
@@ -1363,8 +1370,8 @@ impl RxDma for ForeignStopProof {
         self.walker.configure_descriptor_window(binding);
     }
 
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32) {
-        self.walker.write_descriptor_base(binding, address);
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
+        self.walker.write_descriptor_base(binding);
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
@@ -1593,7 +1600,7 @@ fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
     );
     assert!(mmio.overflowed(), "every attempt observed the doorbell");
     assert_eq!(
-        live.reload_repair_evidence().max_reload_attempts,
+        live.reload_evidence().max_reload_attempts,
         RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT
     );
     assert!(live.reload_pending(), "the append stays pending");
@@ -1616,10 +1623,10 @@ fn reload_attempts_record_the_largest_observation_count() {
     let mut mmio = RxWalkerModel::new();
     mmio.reload_latency = 3;
     let (storage, mut live) = ring_with_pending_reload(&mut mmio);
-    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 0);
+    assert_eq!(live.reload_evidence().max_reload_attempts, 0);
 
     live.complete_pending_reload(&mut mmio).unwrap();
-    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 4);
+    assert_eq!(live.reload_evidence().max_reload_attempts, 4);
     assert!(!live.reload_pending());
 
     // Descriptor one completes and is appended behind descriptor zero; its
@@ -1641,6 +1648,469 @@ fn reload_attempts_record_the_largest_observation_count() {
     assert!(live.reload_pending());
     live.complete_pending_reload(&mut mmio).unwrap();
     assert!(!live.reload_pending());
-    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 4);
+    assert_eq!(live.reload_evidence().max_reload_attempts, 4);
     assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+/// A live host ring whose walker model plays the DMA engine: frames land
+/// where NEXT points and the walker follows each descriptor's link.
+struct Walked<const COUNT: usize> {
+    storage: &'static RxDmaStorage<COUNT, 16, 20, HostDma>,
+    base: u32,
+    walker: crate::rx_dma::model::RxWalkerModel,
+    live: RxRingLive<'static, COUNT>,
+}
+
+impl<const COUNT: usize> Walked<COUNT> {
+    fn start() -> Self {
+        let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+        let buffers = Box::leak(Box::new([0; COUNT]));
+        let base = storage.dma_layout(buffers).unwrap();
+        let mut walker = crate::rx_dma::model::RxWalkerModel::new();
+        let live = storage
+            .prepare_ring(&mut walker, base, buffers)
+            .unwrap()
+            .try_start(&mut walker)
+            .map_err(|(_, error)| error)
+            .unwrap();
+        Self {
+            storage,
+            base,
+            walker,
+            live,
+        }
+    }
+
+    fn reserved_address(&self) -> u32 {
+        self.base + COUNT as u32 * crate::descriptor::DESCRIPTOR_BYTES
+    }
+
+    /// The descriptor at NEXT, or `None` when the walker is exhausted.
+    fn next(&self) -> Option<&'static crate::descriptor::Descriptor> {
+        let next = self.walker.next_descriptor_low;
+        if next == 0 {
+            return None;
+        }
+        if next == self.reserved_address() & ADDRESS_LOW_MASK {
+            return Some(self.storage.reserved_descriptor());
+        }
+        let index = (next - (self.base & ADDRESS_LOW_MASK)) / crate::descriptor::DESCRIPTOR_BYTES;
+        self.storage.descriptors().get(index as usize)
+    }
+
+    /// Land one `length`-byte frame (`terminal`: its last segment) where
+    /// NEXT points; whether the walker had a descriptor.
+    fn land(&mut self, length: u32, terminal: bool) -> bool {
+        let Some(descriptor) = self.next() else {
+            return false;
+        };
+        self.storage
+            .dma_write(&self.live, descriptor.buffer_address(), &[0xa5; 4])
+            .unwrap();
+        let address = core::ptr::from_ref(descriptor).addr()
+            - core::ptr::from_ref(&self.storage.descriptors()[0]).addr();
+        let low = (self.base + address as u32) & ADDRESS_LOW_MASK;
+        if terminal {
+            descriptor.write_word0(
+                16 | (length << crate::descriptor::LENGTH_SHIFT)
+                    | crate::descriptor::BIT_30
+                    | crate::descriptor::BIT_31,
+            );
+            self.walker.last_descriptor_low = low;
+        }
+        self.walker.next_descriptor_low = descriptor.next_address() & ADDRESS_LOW_MASK;
+        true
+    }
+
+    fn base_writes(&self) -> usize {
+        self.walker
+            .operations()
+            .iter()
+            .filter(|operation| {
+                matches!(
+                    operation,
+                    crate::rx_dma::model::RxWalkerOperation::WriteDescriptorBase(_)
+                )
+            })
+            .count()
+    }
+}
+
+#[test]
+fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_releases() {
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    assert_eq!(
+        ring.walker.operation_count(
+            crate::rx_dma::model::RxWalkerOperation::WriteDescriptorBase(ring.reserved_address())
+        ),
+        1
+    );
+    assert_eq!(ring.walker.descriptor_base, ring.reserved_address());
+    ring.walker.clear_operations();
+    let pool = oer_memory::ExternalRxHandoffPool::<16, COUNT>::new();
+
+    // The epoch's first frame lands in R.
+    assert!(ring.land(4, true));
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    for round in 0..24 {
+        // Frames fill every armed descriptor until the walker runs out.
+        while ring.land(4, true) {}
+        assert_eq!(ring.walker.next_descriptor_low, 0, "round {round}");
+        let mut leases = std::vec::Vec::new();
+        while let Some(unit) = ring.storage.take_completed_unit(&mut ring.live, 1).unwrap() {
+            let detached = unit.detach_single().unwrap();
+            let slot = leases.len();
+            let radio = pool
+                .try_claim_radio(detached.into_buffer(), slot)
+                .map_err(drop)
+                .unwrap();
+            let length = radio.frame().len();
+            leases.push(pool.claim_network(radio.republish(0, length)));
+        }
+        assert!(
+            !ring.live.observed_mask().contains(COUNT),
+            "R is never observed"
+        );
+        // Every lease returns: the whole ring is released at once.
+        drop(leases);
+        assert_eq!(ring.storage.released_buffer_count(), COUNT);
+        let append = ring
+            .storage
+            .recycle_released_prefix::<COUNT, _>(&mut ring.live, &mut ring.walker)
+            .unwrap()
+            .expect("all but the walker's LAST append");
+        assert_eq!(append.descriptor_count, COUNT - 1, "round {round}");
+        ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+        // The doorbell resumed the walker at the old tail's new link.
+        assert_eq!(
+            ring.walker.next_descriptor_low,
+            append.head_address & ADDRESS_LOW_MASK
+        );
+        // The old LAST stays released until the walker moves past it.
+        assert_eq!(ring.storage.released_buffer_count(), 1);
+        assert_eq!(ring.live.observed_mask().count_ones(), 1);
+        ring.storage
+            .observe_reserved(&mut ring.live, &mut ring.walker)
+            .unwrap();
+        assert_eq!(ring.base_writes(), 0, "round {round}");
+        ring.walker.clear_operations();
+        // The next round's first frame moves the walker on; the old LAST
+        // rejoins with the next release.
+    }
+    let evidence = ring.live.reload_evidence();
+    assert_eq!(evidence.base_writes, 1);
+    assert_eq!(evidence.reserved_landings, 1);
+    assert_eq!(evidence.reserved_late_landings, 0);
+    assert_eq!(evidence.reload_rerings, 0);
+    assert_eq!(ring.storage.reserved_descriptor().next_address(), 0);
+    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(ring.live.topology_snapshot().valid);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    let reserved = ring.storage.reserved_descriptor();
+    let armed = crate::descriptor::rx_armed_word(16).unwrap();
+    assert_eq!(reserved.next_address(), ring.base);
+    assert_eq!(reserved.word0(), armed);
+
+    // The first frame lands in R: counted, dropped, R rearmed; its link
+    // still leads the walker to the ring head.
+    assert!(ring.land(4, true));
+    assert_eq!(
+        ring.walker.last_descriptor_low,
+        ring.reserved_address() & ADDRESS_LOW_MASK
+    );
+    assert_eq!(
+        ring.storage
+            .first_completed_unit_frontier_through_cursor(
+                &ring.live,
+                ring.walker.last_descriptor_low,
+                ring.walker.next_descriptor_low,
+            )
+            .unwrap()
+            .unit_count,
+        0,
+        "LAST naming R releases no ring descriptor"
+    );
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
+    assert_eq!(reserved.word0(), armed);
+    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
+    assert_eq!(
+        reserved.next_address(),
+        ring.base,
+        "not cleared before a take"
+    );
+    assert!(!ring.live.reserved_left());
+
+    // The next frame lands in the head; until it is taken, R keeps its link.
+    assert!(ring.land(4, true));
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert_eq!(reserved.next_address(), ring.base);
+    let unit = ring
+        .storage
+        .take_completed_unit(&mut ring.live, 1)
+        .unwrap()
+        .expect("the head's unit");
+    assert!(!unit.metadata().continues_reserved_landing());
+    unit.retain_for_deferred_recycle();
+    assert_eq!(reserved.next_address(), 0, "cleared by the first take");
+    assert!(ring.live.reserved_left());
+    assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
+
+    // Later takes leave it cleared and count nothing.
+    assert!(ring.land(4, true));
+    ring.storage
+        .take_completed_unit(&mut ring.live, 1)
+        .unwrap()
+        .expect("the second unit")
+        .retain_for_deferred_recycle();
+    assert_eq!(reserved.next_address(), 0);
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    let evidence = ring.live.reload_evidence();
+    assert_eq!(
+        (evidence.reserved_landings, evidence.reserved_late_landings),
+        (1, 0)
+    );
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn a_frame_continuing_from_r_into_the_head_is_taken_as_its_tail() {
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    // R holds the frame's first segment (no RX_DONE), the head its end.
+    assert!(ring.land(16, false));
+    assert!(ring.land(8, true));
+    // A frame still being written into R is left alone.
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert_eq!(ring.live.reload_evidence().reserved_landings, 0);
+    let unit = ring
+        .storage
+        .take_completed_unit(&mut ring.live, 1)
+        .unwrap()
+        .expect("the head's unit");
+    assert!(unit.metadata().continues_reserved_landing());
+    unit.retain_for_deferred_recycle();
+    assert_eq!(ring.live.reload_evidence().reserved_landings, 1);
+    assert!(!ring.storage.reserved_buffer.leading_guard_overwritten());
+    assert_eq!(ring.storage.reserved_descriptor().next_address(), 0);
+    ring.storage
+        .observe_reserved(&mut ring.live, &mut ring.walker)
+        .unwrap();
+    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn a_late_landing_in_r_is_counted_and_fails_closed() {
+    const COUNT: usize = 4;
+    for late in 0..3 {
+        let mut ring = Walked::<COUNT>::start();
+        assert!(ring.land(4, true));
+        assert!(ring.land(4, true));
+        ring.storage
+            .take_completed_unit(&mut ring.live, 1)
+            .unwrap()
+            .expect("the head's unit")
+            .retain_for_deferred_recycle();
+        assert!(ring.live.reserved_left());
+        let reserved = ring.storage.reserved_descriptor();
+        match late {
+            0 => reserved.write_word0(reserved.word0() | crate::descriptor::BIT_30),
+            1 => ring
+                .storage
+                .dma_write(&ring.live, reserved.buffer_address(), &[0xa5; 4])
+                .unwrap(),
+            _ => ring.walker.last_descriptor_low = ring.reserved_address() & ADDRESS_LOW_MASK,
+        }
+        assert_eq!(
+            ring.storage
+                .observe_reserved(&mut ring.live, &mut ring.walker),
+            Err(RxRingError::Corrupt),
+            "late landing {late}"
+        );
+        let evidence = ring.live.reload_evidence();
+        assert_eq!(evidence.reserved_late_landings, 1);
+        assert_eq!(evidence.reserved_landings, 1, "the epoch's first frame");
+        assert_eq!(
+            ring.storage.lifecycle_state(),
+            RxDmaArenaState::ResetRequired
+        );
+        assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+    }
+}
+
+#[test]
+fn a_retained_next_naming_r_is_a_cold_start() {
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    let reserved = ring.reserved_address();
+    // Stopped while NEXT named R: the walker resumes at R.
+    assert_eq!(ring.walker.next_descriptor_low, reserved & ADDRESS_LOW_MASK);
+    let halted = ring
+        .live
+        .try_stop(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    ring.walker.clear_operations();
+    let stopped = ring
+        .storage
+        .prepare_halted(halted, &mut ring.walker)
+        .map_err(|(_, error)| error)
+        .expect("NEXT = R is a cold start, not a corrupt cursor");
+    assert_eq!(stopped.initial_start().get(), 0);
+    assert_eq!(stopped.retained_next_low(), reserved & ADDRESS_LOW_MASK);
+    assert_eq!(stopped.reserved_snapshot().next_address, ring.base);
+    assert_eq!(
+        ring.walker
+            .operations()
+            .iter()
+            .filter(|operation| **operation
+                == crate::rx_dma::model::RxWalkerOperation::WriteDescriptorBase(reserved))
+            .count(),
+        1
+    );
+    let live = stopped
+        .try_start(&mut ring.walker)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    assert_eq!(
+        live.reload_evidence().base_writes,
+        1,
+        "a new epoch's one write"
+    );
+    assert!(live.try_stop(&mut ring.walker).is_ok());
+}
+
+/// A ring whose whole list was consumed (every descriptor completed, the
+/// walker exhausted at the accepted tail) with descriptor 0 appended behind
+/// the tail; the model loses its first `lost` doorbells.
+fn exhausted_with_head_returned(lost: u32) -> Walked<4> {
+    let mut ring = Walked::<4>::start();
+    ring.walker.lose_reloads = lost;
+    ring.walker.next_descriptor_low = ring.base & ADDRESS_LOW_MASK;
+    while ring.land(4, true) {}
+    ring.walker.clear_operations();
+    ring.storage
+        .take_completed_unit(&mut ring.live, 1)
+        .unwrap()
+        .expect("the head's unit")
+        .recycle(&mut ring.walker)
+        .unwrap()
+        .expect("descriptor 0 appends behind the exhausted tail");
+    ring
+}
+
+#[test]
+fn a_lost_doorbell_is_rerung_once_and_counted() {
+    use crate::rx_dma::model::RxWalkerOperation;
+    let mut ring = exhausted_with_head_returned(1);
+    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    assert_eq!(
+        ring.walker
+            .operation_count(RxWalkerOperation::RequestReload),
+        2
+    );
+    assert_eq!(ring.base_writes(), 0);
+    assert_eq!(
+        ring.walker.next_descriptor_low,
+        ring.base & ADDRESS_LOW_MASK
+    );
+    let evidence = ring.live.reload_evidence();
+    assert_eq!((evidence.reload_rerings, evidence.rering_failures), (1, 0));
+    assert_eq!(ring.live.accepted_tail().get(), 0);
+    assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+
+    // Without a lost doorbell nothing is re-rung.
+    let mut ring = exhausted_with_head_returned(0);
+    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    assert_eq!(
+        ring.walker
+            .operation_count(RxWalkerOperation::RequestReload),
+        1
+    );
+    assert_eq!(ring.live.reload_evidence().reload_rerings, 0);
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn doorbells_that_never_resume_the_walker_fail_closed_after_one_rering() {
+    use crate::rx_dma::model::RxWalkerOperation;
+    let mut ring = exhausted_with_head_returned(u32::MAX);
+    assert_eq!(
+        ring.live.complete_pending_reload(&mut ring.walker),
+        Err(RxRingError::Corrupt)
+    );
+    assert_eq!(
+        ring.walker
+            .operation_count(RxWalkerOperation::RequestReload),
+        2
+    );
+    let evidence = ring.live.reload_evidence();
+    assert_eq!((evidence.reload_rerings, evidence.rering_failures), (1, 1));
+    assert_eq!(ring.base_writes(), 0);
+    assert_eq!(
+        ring.storage.lifecycle_state(),
+        RxDmaArenaState::ResetRequired
+    );
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+}
+
+#[test]
+fn a_unit_spanning_the_whole_ring_is_rejected() {
+    const COUNT: usize = 4;
+    let mut ring = Walked::<COUNT>::start();
+    // The walker passed three descriptors unwritten and ended a frame in the
+    // accepted tail: NEXT=0/LAST=tail releases one unit of all four.
+    let done = 16
+        | (4 << crate::descriptor::LENGTH_SHIFT)
+        | crate::descriptor::BIT_30
+        | crate::descriptor::BIT_31;
+    ring.storage.descriptors()[COUNT - 1].write_word0(done);
+    ring.walker.set_cursor(ring.base, COUNT - 1, None);
+    let frontier = ring
+        .storage
+        .first_completed_unit_frontier_through_cursor(
+            &ring.live,
+            ring.walker.last_descriptor_low,
+            ring.walker.next_descriptor_low,
+        )
+        .unwrap();
+    assert_eq!(frontier.descriptor_count, COUNT);
+    let unit = ring
+        .storage
+        .take_completed_unit(&mut ring.live, COUNT)
+        .unwrap()
+        .expect("the whole-ring unit");
+    assert_eq!(unit.recycle(&mut ring.walker), Err(RxRingError::Corrupt));
+    assert_eq!(
+        ring.storage.lifecycle_state(),
+        RxDmaArenaState::ResetRequired
+    );
+    assert_eq!(ring.base_writes(), 1, "only the cold publication");
+    assert!(ring.live.try_stop(&mut ring.walker).is_ok());
+
+    // No product geometry can carry a frame that long.
+    use crate::rx_ring::rx_ring_outspans_any_unit;
+    assert!(rx_ring_outspans_any_unit(32, 1_664));
+    assert!(rx_ring_outspans_any_unit(96, 4_608));
+    assert!(!rx_ring_outspans_any_unit(COUNT, 16));
+    assert!(!rx_ring_outspans_any_unit(2, 8_192));
 }

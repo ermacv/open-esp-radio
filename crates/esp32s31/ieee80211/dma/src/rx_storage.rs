@@ -18,9 +18,9 @@ use crate::{
     rx_dma::RxDma,
     rx_ring::{
         RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
-        RxCompletedUnitFrontier, RxDmaArenaState, RxDmaBufferAddresses, RxFrozenCursor,
-        RxLiveAppend, RxRingError, RxRingHalted, RxRingLive, RxRingStopped, RxSegment,
-        prepare_recycled_buffer,
+        RxCompletedUnitFrontier, RxDescriptorTable, RxDmaArenaState, RxDmaBufferAddresses,
+        RxFrozenCursor, RxLiveAppend, RxReservedBuffer, RxRingError, RxRingHalted, RxRingLive,
+        RxRingStopped, RxSegment, prepare_recycled_buffer,
     },
     space::{ChipDma, DmaSpace},
 };
@@ -244,6 +244,31 @@ unsafe fn release_detached_buffer<const BUFFER_SIZE: usize, const STORAGE_SIZE: 
         Ok(RX_BUFFER_DETACHED),
         "detached RX DMA buffer must be released exactly once"
     );
+}
+
+/// The reserved descriptor's buffer lent to its live ring.
+struct ReservedBufferPort<'a, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>(
+    &'a RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
+);
+
+impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxReservedBuffer
+    for ReservedBufferPort<'_, BUFFER_SIZE, STORAGE_SIZE>
+{
+    fn guard_overwritten(&self) -> bool {
+        self.0.leading_guard_overwritten()
+    }
+
+    #[allow(
+        unsafe_code,
+        reason = "the live ring rearms the reserved buffer only after the walker finished it"
+    )]
+    fn restore_guards(&self) -> Result<(), RxRingError> {
+        // SAFETY: the reserved buffer is never detached or leased, so the
+        // ring is its only CPU owner, and the ring calls this only after the
+        // walker finished writing it (`RX_DONE` on R, or a later ring
+        // descriptor completed).
+        unsafe { self.0.prepare_for_recycle() }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -500,8 +525,11 @@ pub struct RxDmaStorage<
     const STORAGE_SIZE: usize,
     S: DmaSpace = ChipDma,
 > {
-    descriptors: [Descriptor; COUNT],
+    /// The ring and, right after it, the reserved descriptor R.
+    descriptors: RxDescriptorTable<COUNT>,
     buffers: [RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; COUNT],
+    /// R's buffer: never one of `buffers`, never detached or leased.
+    reserved_buffer: RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
     /// Per descriptor, the distance to its bound buffer: descriptor `i` uses
     /// buffer `(i + offset) % COUNT`. Zero is the identity binding, so the
     /// arena's zero bytes bind every descriptor to its own buffer.
@@ -524,8 +552,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 {
     pub const fn new() -> Self {
         Self {
-            descriptors: [const { Descriptor::new() }; COUNT],
+            descriptors: RxDescriptorTable::new(),
             buffers: [const { RxDmaBuffer::new() }; COUNT],
+            reserved_buffer: RxDmaBuffer::new(),
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
             arena: RxArenaWords::new(),
             space: PhantomData,
@@ -561,8 +590,19 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         RxDmaArenaState::load(self.arena.lifecycle())
     }
 
+    /// The ring's descriptors; the reserved descriptor is
+    /// [`Self::reserved_descriptor`].
     pub const fn descriptors(&self) -> &[Descriptor; COUNT] {
-        &self.descriptors
+        self.descriptors.ring()
+    }
+
+    /// The reserved descriptor R, the one `RX_DESCRIPTOR_BASE` names.
+    pub const fn reserved_descriptor(&self) -> &Descriptor {
+        self.descriptors.reserved()
+    }
+
+    fn reserved_port(&self) -> ReservedBufferPort<'_, BUFFER_SIZE, STORAGE_SIZE> {
+        ReservedBufferPort(&self.reserved_buffer)
     }
 
     pub const fn buffers(&self) -> &[RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; COUNT] {
@@ -732,19 +772,27 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         if !RxDmaArenaState::claim_prepared(self.arena.lifecycle()) {
             return Err(RxRingError::Busy);
         }
-        let prepared = RxRingStopped::prepare_inner(
-            mmio,
-            &self.descriptors,
-            descriptor_base,
-            buffer_addresses,
-            buffer_size,
-            |index| {
-                // SAFETY: stopped-ring preparation owns every descriptor and
-                // the validated address table binds `index` to this arena.
-                unsafe { self.prepare_stopped_buffer(index) }
-            },
-            &self.arena,
-        );
+        let prepared = match self.reserved_buffer_address() {
+            Ok(reserved_buffer_address) => RxRingStopped::prepare_inner(
+                mmio,
+                &self.descriptors,
+                descriptor_base,
+                buffer_addresses,
+                reserved_buffer_address,
+                buffer_size,
+                |index| {
+                    // SAFETY: stopped-ring preparation owns every descriptor and
+                    // the validated address table binds `index` to this arena.
+                    unsafe { self.prepare_stopped_buffer(index) }
+                },
+                || {
+                    // SAFETY: stopped-ring preparation owns R and its buffer.
+                    unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
+                },
+                &self.arena,
+            ),
+            Err(error) => Err(error),
+        };
         if prepared.is_err() {
             // Preparation may have failed while disabling an unexpectedly
             // live walker. Without the returned ring capability there is no
@@ -781,15 +829,27 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         ) {
             return Err((ring, error));
         }
+        if self.reserved_buffer_address() != Ok(ring.reserved_buffer_address()) {
+            return Err((ring, RxRingError::BufferAddress));
+        }
         let buffer_size = match u32::try_from(BUFFER_SIZE) {
             Ok(buffer_size) => buffer_size,
             Err(_) => return Err((ring, RxRingError::Size)),
         };
-        ring.prepare_owned(mmio, buffer_size, |index| {
-            // SAFETY: the halted owner proves that DMA is stopped, and the
-            // validated layout binds the descriptor to this exact buffer.
-            unsafe { self.prepare_stopped_buffer(index) }
-        })
+        ring.prepare_owned(
+            mmio,
+            buffer_size,
+            |index| {
+                // SAFETY: the halted owner proves that DMA is stopped, and the
+                // validated layout binds the descriptor to this exact buffer.
+                unsafe { self.prepare_stopped_buffer(index) }
+            },
+            || {
+                // SAFETY: the halted owner proves that DMA is stopped; R's
+                // buffer belongs to this arena.
+                unsafe { self.reserved_buffer.prepare_for_stopped_ring() }
+            },
+        )
     }
 
     /// # Safety
@@ -828,7 +888,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 return Err(error);
             }
         }
-        let Some(descriptor) = ring.take_completed_owned(index) else {
+        let Some(descriptor) = ring.take_completed_owned(index, &self.reserved_port()) else {
             return Ok(None);
         };
         let buffer = self
@@ -912,7 +972,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         while released < MAX_BATCH.min(COUNT) {
             let index = start.advance(released).get();
             if !observed.contains(index)
-                || !crate::descriptor::rx_done(self.descriptors[index].word0())
+                || !crate::descriptor::rx_done(self.descriptors()[index].word0())
                 || !self
                     .buffer_for_descriptor(index)
                     .ok_or(RxRingError::Count)?
@@ -975,7 +1035,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => return Ok(None),
                 _ => return Err(RxRingError::Corrupt),
             }
-            if crate::descriptor::rx_done(self.descriptors[index].word0()) {
+            if crate::descriptor::rx_done(self.descriptors()[index].word0()) {
                 return Ok(Some(step + 1));
             }
         }
@@ -1139,10 +1199,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         RxRingError,
     > {
         self.validate_live_ring(ring)?;
-        let unit = match ring.take_completed_unit_owned(descriptor_limit, |index| {
-            self.buffer_for_descriptor(index)
-                .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-        }) {
+        let unit = match ring.take_completed_unit_owned(
+            descriptor_limit,
+            |index| {
+                self.buffer_for_descriptor(index)
+                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
+            },
+            &self.reserved_port(),
+        ) {
             Ok(Some(unit)) => unit,
             Ok(None) => return Ok(None),
             Err(error) => {
@@ -1190,6 +1254,19 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.observe_append(result)
     }
 
+    /// Check the reserved descriptor once per service pass: count a frame
+    /// that landed in it before the walker reached the ring, and fail
+    /// closed on any write into it after
+    /// ([`RxRingLive`]'s reserved-descriptor rules).
+    pub fn observe_reserved<M: RxDma>(
+        &self,
+        ring: &mut RxRingLive<'_, COUNT>,
+        mmio: &mut M,
+    ) -> Result<(), RxRingError> {
+        self.validate_live_ring(ring)?;
+        ring.observe_reserved_owned(mmio, &self.reserved_port())
+    }
+
     fn validate_live_ring(&self, ring: &RxRingLive<'_, COUNT>) -> Result<(), RxRingError> {
         if ring.belongs_to_arena(&self.arena) {
             return Ok(());
@@ -1207,7 +1284,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         descriptors: &[Descriptor; COUNT],
         buffer_addresses: &RxDmaBufferAddresses<COUNT>,
     ) -> Result<(), RxRingError> {
-        if !core::ptr::eq(descriptors, &self.descriptors) {
+        if !core::ptr::eq(descriptors, self.descriptors.ring()) {
             return Err(RxRingError::DescriptorOwnerAddress);
         }
         self.validate_descriptor_base(descriptor_base)?;
@@ -1216,7 +1293,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     /// The DMA address of descriptor 0 in this arena's space.
     fn descriptor_base_address(&self) -> Result<u32, RxDmaStorageError> {
-        S::address(self, self.descriptors.as_ptr()).ok_or(RxDmaStorageError::AddressWidth)
+        S::address(self, self.descriptors.ring().as_ptr()).ok_or(RxDmaStorageError::AddressWidth)
+    }
+
+    /// The DMA address of R's buffer in this arena's space.
+    fn reserved_buffer_address(&self) -> Result<u32, RxRingError> {
+        self.buffer_dma_address(&self.reserved_buffer)
+            .map_err(|_| RxRingError::Address)
     }
 
     /// The DMA address of `buffer`, one of this arena's buffers.

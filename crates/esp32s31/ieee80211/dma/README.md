@@ -42,6 +42,22 @@ checks. A walker stop proof names the arena whose binding it stopped; an RX
 ring halts or rebuilds only on a proof naming its own arena, and a proof for
 another arena poisons the arena until radio reset.
 
+## RX publication
+
+The RX arena publishes a descriptor table: the ring and, right after it, a
+reserved descriptor R with its own buffer
+([`RxDescriptorTable`](src/rx_ring.rs)). `RX_DESCRIPTOR_BASE` names R and
+nothing else, by type: `RxDma::write_descriptor_base` takes only the binding.
+The cold publication of an epoch is the one BASE write: BASE = R, `R.next` =
+the ring head. A frame landing in R before the first ring take is counted and
+dropped uncopied; that take clears `R.next`, and any later write into R
+fails closed. Every live publication links the accepted tail and rings the
+reload doorbell. A settled doorbell that left NEXT zero short of the new
+tail is rung once more; a group that would cover the accepted tail appends
+all but it. R is never observed, taken, leased or recycled. The rules and
+their hardware basis are in
+[the RX walker notes](../../../../knowledge/esp32s31/wifi/rx-walker.md).
+
 [`PinnedTxDmaStorage`](src/tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.
 External aggregate retention stores leases without automatic destruction.

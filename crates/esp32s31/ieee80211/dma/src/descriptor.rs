@@ -101,6 +101,16 @@ impl Descriptor {
     pub(crate) fn publish_next_address(&self, next_address: u32) {
         self.next_address.set(next_address)
     }
+
+    /// Rewrites only the ownership word, keeping the buffer and the link.
+    ///
+    /// The live RX-ring owner uses it to rearm the reserved descriptor after
+    /// a frame landed in it; that descriptor's link is the walker's and is
+    /// changed separately, only after the walker left it.
+    #[inline]
+    pub(crate) fn publish_word0(&self, word0: u32) {
+        self.word0.set(word0);
+    }
 }
 
 impl Default for Descriptor {
