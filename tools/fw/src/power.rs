@@ -11,7 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Result, boards::Attached, stand};
+use oer_lab::stand;
+
+use crate::{Result, boards::Attached};
 
 /// How long the port stays off.
 const OFF: Duration = Duration::from_secs(2);

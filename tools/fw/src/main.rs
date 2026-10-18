@@ -11,8 +11,6 @@ mod pack;
 mod placement;
 mod port;
 mod power;
-mod router;
-mod stand;
 mod w1;
 
 use std::{
@@ -23,6 +21,7 @@ use std::{
 };
 
 use clap::{CommandFactory as _, Parser, Subcommand};
+use oer_lab::{router, ssh, stand};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -251,7 +250,7 @@ fn w1_stand(
     shown.push(format!("w1 {}", applied.describe()));
     let config = w1::Config {
         channel: applied.channel,
-        bssid: w1::Bssid::new(applied.bssid)?,
+        bssid: applied.bssid,
         ssid: w1::Ssid::new(router.ssid.expose().as_bytes())?,
     };
     Ok((config, shown))
@@ -263,7 +262,7 @@ fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<Ex
         // The router is changed only for a board that is there.
         tty(&board)?;
         let router = stand.router()?;
-        let mut ssh = router::Ssh::new(router.ssh_target.expose())?;
+        let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
         let (config, shown) = w1_stand(&router, &mut ssh)?;
         for line in shown {
             eprintln!("fw: {line}");
@@ -634,10 +633,7 @@ passphrase = "made-up-ap-passphrase"
             format!("{config:?}"),
             wrong.to_string(),
             unreachable.to_string(),
-            format!(
-                "{:?}",
-                router::Ssh::new(router.ssh_target.expose()).unwrap()
-            ),
+            format!("{:?}", ssh::Ssh::new(router.ssh_target.expose()).unwrap()),
             router::plan().join("\n"),
         ]);
         let shown = shown.join("\n");

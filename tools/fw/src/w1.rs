@@ -2,8 +2,8 @@
 //! router's AP after the profile, `router.rs`, and the stand's SSID) and the
 //! check of the report block it prints after its exit.
 //!
-//! The BSSID is never printed whole: its `Debug` and `Display` and every
-//! message show only its last two octets (`xx:xx:xx:xx:F6:D0`); the SSID is
+//! The BSSID is never printed whole: it is an `oer_lab::mac::Mac`, and every
+//! message shows only its last two octets (`xx:xx:xx:xx:F6:D0`); the SSID is
 //! never shown at all. Both go only into the environment of the image's
 //! runtime build.
 //!
@@ -13,6 +13,8 @@
 //! malformed block.
 
 use std::fmt;
+
+use oer_lab::mac::Mac;
 
 /// The image these parameters belong to.
 pub const IMAGE: &str = "w1";
@@ -45,50 +47,6 @@ const MAX_TSF_PAIRS: usize = 64;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
-/// A BSSID: a unicast, nonzero MAC address.
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub struct Bssid([u8; 6]);
-
-impl Bssid {
-    /// `octets`, unicast and nonzero; the message never repeats them.
-    pub fn new(octets: [u8; 6]) -> Result<Self, String> {
-        if octets == [0; 6] {
-            return Err("the BSSID is all zero".to_owned());
-        }
-        if octets[0] & 1 != 0 {
-            return Err("the BSSID is a multicast address".to_owned());
-        }
-        Ok(Self(octets))
-    }
-
-    /// `xx:xx:xx:xx:HH:HH`: the only form in which a BSSID is shown.
-    pub fn masked(&self) -> String {
-        format!("xx:xx:xx:xx:{:02X}:{:02X}", self.0[4], self.0[5])
-    }
-
-    /// The full address, colon-separated upper case, for the runtime
-    /// build's environment only.
-    fn unmasked(&self) -> String {
-        self.0
-            .iter()
-            .map(|octet| format!("{octet:02X}"))
-            .collect::<Vec<_>>()
-            .join(":")
-    }
-}
-
-impl fmt::Debug for Bssid {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "Bssid({})", self.masked())
-    }
-}
-
-impl fmt::Display for Bssid {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.masked())
-    }
-}
-
 /// The stand's SSID, 1 to 32 bytes; its `Debug` shows only its length and
 /// it has no `Display`.
 #[derive(Clone, Eq, PartialEq)]
@@ -114,13 +72,23 @@ impl fmt::Debug for Ssid {
     }
 }
 
+/// The full address, colon-separated upper case, for the runtime build's
+/// environment only.
+fn unmasked(mac: &Mac) -> String {
+    mac.octets()
+        .iter()
+        .map(|octet| format!("{octet:02X}"))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 /// The stand image `w1` is built for and checked against.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
     /// The router AP's channel after the profile.
     pub channel: u8,
     /// The router AP's BSSID: the stand.
-    pub bssid: Bssid,
+    pub bssid: Mac,
     /// The SSID the stand's beacons carry.
     pub ssid: Ssid,
 }
@@ -130,7 +98,7 @@ impl Config {
     pub fn runtime_env(&self) -> [(&'static str, String); 3] {
         [
             (ENV_CHANNEL, self.channel.to_string()),
-            (ENV_BSSID, self.bssid.unmasked()),
+            (ENV_BSSID, unmasked(&self.bssid)),
             (ENV_SSID, self.ssid.hex()),
         ]
     }
@@ -1836,13 +1804,12 @@ pub fn check<S: AsRef<str>>(lines: &[S], result_line: &str, expected: &Config) -
 mod tests {
     use super::*;
 
-    const STAND: Bssid = Bssid([0x02, 0, 0, 0, 0xF6, 0xD0]);
     const SSID: &str = "Made Up 'Lab' Net";
 
     fn expected() -> Config {
         Config {
             channel: 6,
-            bssid: STAND,
+            bssid: Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
             ssid: Ssid::new(SSID.as_bytes()).unwrap(),
         }
     }
@@ -1934,28 +1901,6 @@ mod tests {
 
     fn host_gate(body: &[String], name: GateName) -> HostGate {
         *host_of(body).gate(name).unwrap()
-    }
-
-    #[test]
-    fn a_bssid_shows_only_its_last_two_octets() {
-        let bssid = Bssid::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap();
-        assert_eq!(bssid.masked(), "xx:xx:xx:xx:F6:D0");
-        for shown in [
-            format!("{bssid}"),
-            format!("{bssid:?}"),
-            format!("{bssid:#?}"),
-        ] {
-            assert!(shown.contains("xx:xx:xx:xx:F6:D0"), "{shown}");
-            for hidden in ["AB", "CD", "EF", "ab"] {
-                assert!(!shown.contains(hidden), "{shown}");
-            }
-        }
-        assert!(Bssid::new([0; 6]).unwrap_err().contains("zero"));
-        assert!(
-            Bssid::new([0x03, 0, 0, 0, 0xF6, 0xD0])
-                .unwrap_err()
-                .contains("multicast")
-        );
     }
 
     #[test]
@@ -2327,7 +2272,7 @@ mod tests {
     fn nothing_of_the_stand_is_shown_but_its_mask() {
         let config = Config {
             channel: 6,
-            bssid: Bssid::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap(),
+            bssid: Mac::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap(),
             ssid: Ssid::new(SSID.as_bytes()).unwrap(),
         };
         let mut shown = vec![format!("{config:?}"), format!("{config:#?}")];

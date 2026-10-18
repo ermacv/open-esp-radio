@@ -241,7 +241,7 @@ mod tests {
     fn only_w1s_runtime_build_gets_its_parameters() {
         let config = w1::Config {
             channel: 11,
-            bssid: w1::Bssid::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
+            bssid: oer_lab::mac::Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
             ssid: w1::Ssid::new(b"Lab").unwrap(),
         };
         assert_eq!(

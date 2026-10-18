@@ -2293,6 +2293,7 @@ dependencies = [
  "oer-command-tree",
  "oer-esp32s31-platform-layout",
  "oer-espressif-staged-layout",
+ "oer-lab",
  "oer-process",
  "serde",
  "serialport",
@@ -2450,6 +2451,16 @@ dependencies = [
 [[package]]
 name = "oer-interrupt-table"
 version = "0.1.0"
+
+[[package]]
+name = "oer-lab"
+version = "0.1.0"
+dependencies = [
+ "oer-process",
+ "serde",
+ "tempfile",
+ "toml",
+]
 
 [[package]]
 name = "oer-memory"

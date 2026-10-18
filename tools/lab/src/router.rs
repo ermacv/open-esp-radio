@@ -25,12 +25,12 @@
 //! never shown (ssh's own errors name the host). Values reach the remote
 //! shell single-quoted.
 //!
-//! The module needs nothing of the rest of the tool: [`Remote`] runs one
-//! command, [`Ssh`] is the real one.
+//! [`Remote`] runs one command; [`crate::ssh::Ssh`] is the real one.
 
 use std::{fmt, time::Duration};
 
-pub type Result<T> = std::result::Result<T, String>;
+pub use crate::ssh::{Remote, Result};
+use crate::{mac::Mac, ssh::token};
 
 /// The radio's `htmode`: HT 20 MHz, which every 802.11n radio (mt76
 /// included, HE capable or not) accepts.
@@ -41,8 +41,6 @@ pub const BEACON_INTERVAL_TU: u16 = 100;
 pub const SETTLE_ATTEMPTS: u32 = 16;
 /// The pause between two of those: 15 pauses, 30 s in all.
 pub const SETTLE_PAUSE: Duration = Duration::from_secs(2);
-/// The longest one remote command may take.
-pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 /// The `uci show` options read; every other one (`key`, `encryption`, …) is
 /// dropped unread.
 pub const KEPT_OPTIONS: [&str; 10] = [
@@ -57,87 +55,6 @@ pub const KEPT_OPTIONS: [&str; 10] = [
     "htmode",
     "beacon_int",
 ];
-
-/// Runs one command on the router.
-pub trait Remote {
-    /// `command`'s standard output when it exits 0; otherwise why not,
-    /// naming neither the router nor the command.
-    fn run(&mut self, command: &str) -> Result<String>;
-    /// Wait `duration` between two `iw` reads.
-    fn pause(&mut self, duration: Duration) {
-        std::thread::sleep(duration);
-    }
-}
-
-/// `ssh -o BatchMode=yes -o ConnectTimeout=5 <target> <command>`: never
-/// prompts, never waits longer than [`COMMAND_TIMEOUT`].
-pub struct Ssh {
-    target: String,
-}
-
-impl fmt::Debug for Ssh {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Ssh(<target hidden>)")
-    }
-}
-
-impl Ssh {
-    /// SSH to `target`: letters, digits, `.`, `_`, `-` and `@`, not starting
-    /// with `-`.
-    pub fn new(target: &str) -> Result<Self> {
-        if !token(target) {
-            return Err(
-                "[station_fixture].ssh_target holds characters other than letters, digits, \
-                 `.`, `_`, `-` and `@`, or starts with `-`"
-                    .to_owned(),
-            );
-        }
-        Ok(Self {
-            target: target.to_owned(),
-        })
-    }
-
-    fn command(&self, command: &str) -> std::process::Command {
-        let mut ssh = oer_process::command("ssh");
-        ssh.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
-            .arg(&self.target)
-            .arg(command);
-        ssh
-    }
-}
-
-impl Remote for Ssh {
-    fn run(&mut self, command: &str) -> Result<String> {
-        let output = oer_process::output(&mut self.command(command), Some(COMMAND_TIMEOUT))
-            .map_err(|error| {
-                if error.to_string().contains("deadline") {
-                    format!("no answer within {} s", COMMAND_TIMEOUT.as_secs())
-                } else {
-                    format!("cannot run ssh: {error}")
-                }
-            })?;
-        match output.status.code() {
-            Some(0) => String::from_utf8(output.stdout)
-                .map_err(|_| "the router's answer is not UTF-8".to_owned()),
-            Some(255) => Err(
-                "ssh could not reach the router or was refused (exit 255; BatchMode needs a \
-                 loaded key)"
-                    .to_owned(),
-            ),
-            Some(code) => Err(format!("the remote command exited with {code}")),
-            None => Err("ssh was killed by a signal".to_owned()),
-        }
-    }
-}
-
-/// Letters, digits, `.`, `_`, `-` and `@`, not empty, not starting with `-`.
-fn token(text: &str) -> bool {
-    !text.is_empty()
-        && !text.starts_with('-')
-        && text
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'@'))
-}
 
 /// A UCI section name: letters, digits and `_`.
 fn section_name(text: &str) -> bool {
@@ -258,8 +175,7 @@ impl Profile {
 }
 
 /// The remote commands in order, values as `<placeholders>`: what
-/// [`apply`] runs, as `tools/fw/README.md` lists them.
-#[cfg(test)]
+/// [`apply`] runs, as the README lists them.
 pub fn plan() -> Vec<String> {
     let profile = Profile {
         radio: "<radio>".to_owned(),
@@ -287,37 +203,17 @@ const CHANGES: &str = "uci changes wireless";
 const SHOW: &str = "uci show wireless";
 
 /// The applied profile: the stand AP's BSSID and channel.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Applied {
-    pub bssid: [u8; 6],
+    pub bssid: Mac,
     pub channel: u8,
-}
-
-impl fmt::Debug for Applied {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "Applied {{ bssid: {}, channel: {} }}",
-            masked(&self.bssid),
-            self.channel
-        )
-    }
 }
 
 impl Applied {
     /// The one line that may be shown of it.
     pub fn describe(&self) -> String {
-        format!(
-            "the stand AP {} is on channel {}",
-            masked(&self.bssid),
-            self.channel
-        )
+        format!("the stand AP {} is on channel {}", self.bssid, self.channel)
     }
-}
-
-/// `xx:xx:xx:xx:HH:HH`.
-pub fn masked(bssid: &[u8; 6]) -> String {
-    format!("xx:xx:xx:xx:{:02X}:{:02X}", bssid[4], bssid[5])
 }
 
 /// Bring the router to `profile` and verify it; the stand AP's BSSID and
@@ -655,27 +551,14 @@ impl Wireless {
 }
 
 /// What `iw dev <interface> info` says of the AP.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IwInfo {
-    pub bssid: [u8; 6],
+    pub bssid: Mac,
     pub channel: u8,
     pub width: Width,
     pub ap: bool,
     /// Whether its `ssid` line is the stand's SSID.
     pub stand_ssid: bool,
-}
-
-impl fmt::Debug for IwInfo {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("IwInfo")
-            .field("bssid", &masked(&self.bssid))
-            .field("channel", &self.channel)
-            .field("width", &self.width)
-            .field("ap", &self.ap)
-            .field("stand_ssid", &self.stand_ssid)
-            .finish()
-    }
 }
 
 /// A channel's width as `iw` prints it.
@@ -707,20 +590,6 @@ impl IwInfo {
             None
         }
     }
-}
-
-/// Six `:`-separated hex octets, unicast and nonzero.
-fn parse_mac(text: &str) -> Option<[u8; 6]> {
-    let mut octets = [0; 6];
-    let mut parts = text.split(':');
-    for octet in &mut octets {
-        let part = parts.next()?;
-        if part.len() != 2 || !part.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return None;
-        }
-        *octet = u8::from_str_radix(part, 16).ok()?;
-    }
-    (parts.next().is_none() && octets != [0; 6] && octets[0] & 1 == 0).then_some(octets)
 }
 
 /// An SSID as `iw` prints it: `\xHH` for a byte it does not print.
@@ -784,7 +653,7 @@ pub fn parse_iw_info(text: &str, ssid: &str) -> Result<IwInfo> {
         match word {
             "addr" => {
                 let address =
-                    parse_mac(rest).ok_or("iw: the addr line holds no unicast MAC address")?;
+                    Mac::parse(rest).ok_or("iw: the addr line holds no unicast MAC address")?;
                 if bssid.replace(address).is_some() {
                     return Err("iw: two addr lines".to_owned());
                 }
@@ -935,7 +804,7 @@ mod tests {
     fn the_profile_is_applied_verified_and_settles() {
         let mut remote = good();
         let applied = apply(&mut remote, &profile()).unwrap();
-        assert_eq!(applied.bssid, [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
+        assert_eq!(applied.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
         assert_eq!(applied.channel, 6);
         assert_eq!(remote.pauses, 2);
         assert_eq!(
@@ -983,7 +852,7 @@ mod tests {
             "iw dev '<wireless_interface>' info (up to 16 times, 2 s apart)"
         );
         // The README lists the very plan.
-        let readme = include_str!("../README.md");
+        let readme = include_str!("../../fw/README.md");
         for command in &plan {
             assert!(
                 readme.contains(command.as_str()),
@@ -1141,7 +1010,7 @@ mod tests {
     #[test]
     fn iw_info_parses_and_refuses_garbage() {
         let info = parse_iw_info(&iw(6, "20 MHz", IW_SSID), SSID).unwrap();
-        assert_eq!(info.bssid, [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
+        assert_eq!(info.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
         assert_eq!((info.channel, info.width, info.ap), (6, Width::Ht20, true));
         assert!(info.stand_ssid);
         assert_eq!(info.mismatch(6), None);
@@ -1230,32 +1099,7 @@ mod tests {
     }
 
     #[test]
-    fn the_real_runner_never_prompts() {
-        // Not run: only its command line is checked.
-        let ssh = Ssh::new(TARGET).unwrap();
-        let command = ssh.command("uci show wireless");
-        assert_eq!(command.get_program(), "ssh");
-        assert_eq!(
-            command
-                .get_args()
-                .map(|argument| argument.to_string_lossy().into_owned())
-                .collect::<Vec<_>>(),
-            [
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=5",
-                TARGET,
-                "uci show wireless"
-            ]
-        );
-    }
-
-    #[test]
     fn values_are_validated_without_being_repeated() {
-        assert!(Ssh::new("-oProxyCommand=x").is_err());
-        assert!(Ssh::new("host name").is_err());
-        assert!(Ssh::new("user@lab-router.local").is_ok());
         for (radio, ap, interface, channel, ssid) in [
             ("radio 9", "lab_ap", INTERFACE, 6, SSID),
             ("radio9", "@wifi-iface[0]", INTERFACE, 6, SSID),
@@ -1283,7 +1127,7 @@ mod tests {
     fn nothing_secret_is_shown() {
         let profile = profile();
         let applied = apply(&mut good(), &profile).unwrap();
-        let ssh = Ssh::new(TARGET).unwrap();
+        let ssh = crate::ssh::Ssh::new(TARGET).unwrap();
         let info = parse_iw_info(&iw(6, "20 MHz", IW_SSID), SSID).unwrap();
         let shown = [
             format!("{profile:?}"),
