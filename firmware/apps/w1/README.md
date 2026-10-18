@@ -31,14 +31,27 @@ beacons in the window (N = beacons − duplicates, at least
 AP interface, and its stored SSID must be the stand's: heard with another
 SSID it fails `stand-mismatch`, not heard `stand-absent`, however many other
 BSSIDs carry the SSID), the applied channel, a clean exit, the walker's
-restart (in the first cycle every staging lease held, no unit received
-during the 1 s hold, frames after the release; `w1.hold cycle=0`), the
+restart (in the first cycle a full hold, no unit received during the 1 s
+hold, frames after the release; `w1.hold cycle=0`), the
 ownership experiment (`w1.own`, below), at least 4096 free bytes of the
 interrupt stack, no service error, no MAC or WDEVPWR entry without the line,
 and no timer wait of the image (P1, and P2's stress task) returning before
 its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`). A
 failure before the runner hands over its ends prints only
 `OER-RESULT: fail w1 <reason>`.
+
+A hold is full (`w1.hold full=1`) with every staging lease held
+(`reason=all`), or stuck one short (`reason=stuck-at-last`): 31 leases,
+and the runner's latest drain end (`WifiRxReport::drain_end`, printed as
+`end_*=`) shows 31 buffers staged and detached, the one released buffer
+being the descriptor without a lease and the walker's LAST, NEXT zero
+(no armed descriptor), and no unit received since the last lease for the
+3 s fill timeout (one lease short, the fill waits that long after the last
+lease). Otherwise `full=0 reason=-`.
+
+```text
+w1.hold cycle=<0|1> reached=<n> slots=32 full=<0|1> reason=all|stuck-at-last|- units=<n> mac_irqs=<n> stage_capacity_blocks=<n> admission_blocks=<n> end_released=<n|-> end_detached=<n|-> end_staged=<n|-> end_observed=<n|-> end_recycle_start=<n|-> end_accepted_tail=<n|-> end_next=<0xhex|-> end_last=<0xhex|->
+```
 
 The ownership experiment asks whether the walker writes into a buffer the
 application holds. Each cycle fingerprints every lease it takes: a CRC-32
@@ -48,7 +61,8 @@ index, `(descriptor_address − ring_base) / 12` with `ring_base` the DMA
 address of descriptor 0 that the arena's bind laid out (the ring prepared
 from it has the same base, `w1.exhaust ring_base=`). At the end of the
 1 s hold, before any drop, every fingerprint is rechecked
-(`hold_mismatch=`). When the 32 leases cover the 32 descriptors once,
+(`hold_mismatch=`). When the leases cover the 32 descriptors once (31 of
+them, for a stuck hold: the buffer at LAST has no lease and is skipped),
 the first lease taken stands for the recycle frontier and the last for
 the accepted tail: `forward` drops from the first lease taken in ring
 order (the tail's lease last), `reverse` from the last one against ring
@@ -64,14 +78,22 @@ indices of the first 16 frames taken (`first_after_release=`, `x` outside
 the ring, `-` none), the pairs among them not consecutive in the ring
 (`order_breaks=`, recomputed by `cargo fw` from the list and the
 `arena=` size), and the chained and oversized drops from the first drop
-on (`chained=`, `oversized=`). The `ownership` gate fails, `foreign-write`,
+on (`chained=`, `oversized=`). `discards=` lists every nonzero drop or
+refusal count over the same window as `<reason>:<n>` (`-` none): the
+runner's drops `empty`, `too_long`, `chained`, `oversized`, `overload`,
+whose unit never reaches the application (its index is missing from the
+list), then the application's RX-control prefix refusals `rx_failure`,
+`mic_failure`, `quarantined`, `invalid`, `prefix_chain`, `bounds`,
+`output_small`, `metadata`, `ignored`, `unsupported`, whose frame was
+taken (its index is listed). `cargo fw` sets the descriptors the list
+skips against the runner's drops and names the skips no drop counts. The `ownership` gate fails, `foreign-write`,
 on any changed lease or chained drop in either cycle; otherwise a cycle
-short of 32 leases leaves it unexercised (`pool-not-exhausted`), as does
+whose hold was not full leaves it unexercised (`pool-not-exhausted`), as does
 one whose leases did not cover the ring (`ring-order`). The second cycle
 starts after the first one's 2 s of frames, once the ring has recovered.
 
 ```text
-w1.own cycle=<0|1> order=forward|reverse held=<n> first_drop=<idx|-> hold_mismatch=<n> dwell_mismatch=<n> release_mismatch=<n> first_mismatch=<idx|x|-> first_after_release=<i,i,…|-> order_breaks=<n> chained=<n> oversized=<n>
+w1.own cycle=<0|1> order=forward|reverse held=<n> first_drop=<idx|-> hold_mismatch=<n> dwell_mismatch=<n> release_mismatch=<n> first_mismatch=<idx|x|-> first_after_release=<i,i,…|-> order_breaks=<n> chained=<n> oversized=<n> discards=<reason>:<n>,…|-
 ```
 
 Report-only: `w1.config ssid_matches=`, how many BSSIDs carry the stand's
@@ -89,8 +111,7 @@ completed a reload: `next_after_doorbell=`, NEXT right after the doorbell
 cleared, and `last_after_doorbell=`, LAST, which that read takes only
 when NEXT is zero (`-` without a reload in that pass); and
 `desc_hash_changed=`, whether a hash of every descriptor word changed
-between the first drain that left the pool full and the snapshot. One
-`w1.hold` line per cycle carries the hold's counters. `w1.reload`, how the ring
+between the first drain that left the pool full and the snapshot. `w1.reload`, how the ring
 recovered; per BSS the stamp and handoff spans of its stamped frames, whose
 ratio is the MAC stamp clock's rate; and `w1.lag`, the receive stamp and
 handoff lag (handoff low 32 bits less stamp) of the first 64 stamped units
@@ -117,7 +138,7 @@ less one in ppm (floored); `-` below two pairs.
 cargo fw run w1 --board s31-a --timeout 60s
 ```
 
-The two hold cycles take 10 to 16 s, which makes a run longer than the
+The two hold cycles take 10 to 19 s, which makes a run longer than the
 default 30 s timeout.
 
 `cargo fw run w1` first brings the stand router to the W1 profile (the

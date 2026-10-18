@@ -22,7 +22,7 @@ use oer_ieee80211_runtime::survey::{BssTally, Survey};
 use crate::{
     irq::{BUFFER, COUNT, SLOTS},
     measure::{self, CLOCKS, ClockOp, Phase, TIMED_PHASES, Tick, TimerLine},
-    own::{CYCLES, Cycle},
+    own::{CYCLES, Cycle, DISCARDS},
 };
 
 /// The survey's table size.
@@ -427,9 +427,9 @@ fn woke_early() -> bool {
 }
 
 /// Both cycles: a changed held lease or a chained drop in a release window
-/// fails it (`foreign-write`); otherwise a cycle that did not hold every
-/// lease (`pool-not-exhausted`) or whose leases did not cover the ring
-/// once (`ring-order`) leaves it unexercised.
+/// fails it (`foreign-write`); otherwise a cycle whose hold was not full
+/// (`pool-not-exhausted`) or whose leases did not cover the ring
+/// (`ring-order`) leaves it unexercised.
 fn ownership(cycles: &[Cycle]) -> Outcome {
     if cycles.iter().any(|cycle| {
         cycle.hold_mismatch > 0
@@ -454,7 +454,7 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 9]) {
     // walker ran out), frames after the release; how the ring recovered is
     // report-only.
     let first = &run.cycles[0];
-    let walker_restart = if first.hold.reached < SLOTS {
+    let walker_restart = if !first.full.held() {
         Outcome::Unexercised("pool-not-exhausted")
     } else if first.hold.units > 0 {
         Outcome::Fail("received-while-held")
@@ -709,13 +709,24 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     ))?;
     for (index, cycle) in run.cycles.iter().enumerate() {
         let hold = &cycle.hold;
+        let end = cycle.end.as_ref();
         block.line(format_args!(
-            "w1.hold cycle={index} reached={} slots={SLOTS} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={}",
+            "w1.hold cycle={index} reached={} slots={SLOTS} full={} reason={} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={} end_released={} end_detached={} end_staged={} end_observed={} end_recycle_start={} end_accepted_tail={} end_next={} end_last={}",
             hold.reached,
+            u8::from(cycle.full.held()),
+            cycle.full.reason(),
             hold.units,
             hold.mac_irqs,
             hold.stage_capacity_blocks,
             hold.admission_blocks,
+            OrDash(end.map(|end| end.released)),
+            OrDash(end.map(|end| end.detached)),
+            OrDash(end.map(|end| end.staged)),
+            OrDash(end.map(|end| end.observed)),
+            OrDash(end.map(|end| end.recycle_start)),
+            OrDash(end.map(|end| end.accepted_tail)),
+            HexOrDash(end.map(|end| end.next_low)),
+            HexOrDash(end.map(|end| end.last_low)),
         ))?;
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
@@ -723,7 +734,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     }
     for (index, cycle) in run.cycles.iter().enumerate() {
         block.line(format_args!(
-            "w1.own cycle={index} order={} held={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={}",
+            "w1.own cycle={index} order={} held={} first_drop={} hold_mismatch={} dwell_mismatch={} release_mismatch={} first_mismatch={} first_after_release={} order_breaks={} chained={} oversized={} discards={}",
             cycle.order.name(),
             cycle.held,
             OrDash(cycle.first_drop.and_then(|index| u32::try_from(index).ok())),
@@ -738,6 +749,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             cycle.order_breaks,
             cycle.chained,
             cycle.oversized,
+            Discards(&cycle.discards),
         ))?;
     }
     let prefix = &rx.prefix;
@@ -978,6 +990,29 @@ impl fmt::Display for Flag {
             Some(set) => write!(f, "{}", u8::from(set)),
             None => f.write_str("-"),
         }
+    }
+}
+
+/// The nonzero discard counts as `<reason>:<n>` joined by `,`, or `-`.
+struct Discards<'a>(&'a [u32; 15]);
+
+impl fmt::Display for Discards<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut first = true;
+        for (reason, &count) in DISCARDS.iter().zip(self.0) {
+            if count == 0 {
+                continue;
+            }
+            if !first {
+                f.write_char(',')?;
+            }
+            write!(f, "{reason}:{count}")?;
+            first = false;
+        }
+        if first {
+            f.write_str("-")?;
+        }
+        Ok(())
     }
 }
 

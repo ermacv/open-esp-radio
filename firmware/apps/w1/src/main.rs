@@ -394,7 +394,9 @@ async fn drain(receiver: &mut Receiver, channel: Channel, admitted: &mut u32) ->
 }
 
 /// One hold cycle into `cycle`: take every staging lease (at most
-/// [`HOLD_FILL`]) and fingerprint each, hold them [`HOLD`] and recheck
+/// [`HOLD_FILL`]; one short, until [`HOLD_FILL`] passed without a unit
+/// since the last lease, which may leave the hold stuck at LAST, see
+/// [`own::fullness`]) and fingerprint each, hold them [`HOLD`] and recheck
 /// them, drop the first in `cycle.order`, dwell [`DWELL`] without taking a
 /// frame and recheck the rest, drop them one at a time [`RELEASE_STEP`]
 /// apart, each rechecked just before its drop, and take frames for
@@ -408,8 +410,17 @@ async fn hold_cycle(
     cycle: &mut Cycle,
 ) {
     let mut leases = heapless::Vec::<(Held, Fingerprint), SLOTS>::new();
-    let deadline = after(HOLD_FILL);
+    let fill_deadline = after(HOLD_FILL);
+    // When the last lease was taken, and the units received then.
+    let mut last_lease = (EmbassyClock.now(), counters.report().units);
     while !leases.is_full() {
+        // One short: the fill waits until no unit came for the fill
+        // timeout, so a stuck hold is told from a slow one.
+        let deadline = if leases.len() + 1 == SLOTS {
+            fill_deadline.max(last_lease.0.saturating_add(HOLD_FILL))
+        } else {
+            fill_deadline
+        };
         match select(
             receiver.next(),
             measure::wait_until(measure::P1_COMPARATOR, deadline),
@@ -421,11 +432,21 @@ async fn hold_cycle(
                 let segment = held.segment();
                 let print = Fingerprint::of(segment.buffer, segment.descriptor_address, ring_base);
                 let _full = leases.push((held, print));
+                last_lease = (EmbassyClock.now(), counters.report().units);
             }
             Either::Second(()) => break,
         }
     }
     cycle.held = leases.len();
+    let mut indices = heapless::Vec::<Option<usize>, SLOTS>::new();
+    for (_, print) in &leases {
+        let _full = indices.push(print.index);
+    }
+    let filled = counters.report();
+    cycle.end = filled.drain_end;
+    let quiet = filled.units == last_lease.1
+        && EmbassyClock.now().saturating_duration_since(last_lease.0) >= HOLD_FILL;
+    cycle.full = own::fullness(&indices, cycle.end.as_ref(), quiet, ring_base);
     let before = counters.report();
     measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
     cycle.hold = report::Hold::between(leases.len(), &before, &counters.report());
@@ -435,16 +456,13 @@ async fn hold_cycle(
         }
     }
 
-    // The release order: the ring's when the leases cover it, otherwise the
-    // order they were taken in (forward) or its reverse.
-    let mut indices = heapless::Vec::<Option<usize>, SLOTS>::new();
-    for (_, print) in &leases {
-        let _full = indices.push(print.index);
-    }
+    // The release order: the ring's when the leases cover it (one short
+    // of it, for a stuck hold), otherwise the order they were taken in
+    // (forward) or its reverse.
     let ring = own::release_order(&indices, cycle.order);
     let mut positions = heapless::Vec::<usize, SLOTS>::new();
     for step in 0..leases.len() {
-        let position = match ring {
+        let position = match &ring {
             Some(ring) => ring.get(step).copied().unwrap_or(step),
             None if cycle.order == Order::Forward => step,
             None => leases.len() - 1 - step,
@@ -512,6 +530,10 @@ async fn hold_cycle(
     let end = counters.report();
     cycle.chained = end.chained_drops.wrapping_sub(released.chained_drops);
     cycle.oversized = end.oversized_drops.wrapping_sub(released.oversized_drops);
+    let (from, to) = (own::discards(&released), own::discards(&end));
+    for ((delta, to), from) in cycle.discards.iter_mut().zip(to).zip(from) {
+        *delta = to.wrapping_sub(from);
+    }
 }
 
 fn after(duration: Duration) -> Instant {

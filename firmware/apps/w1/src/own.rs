@@ -10,13 +10,19 @@
 //! `reverse` from the accepted tail against it. Report-only but for the
 //! `ownership` gate.
 //!
+//! A hold is full when it holds every staging lease, or when it is stuck:
+//! one lease short, the missing descriptor's buffer released at the
+//! walker's LAST, every other buffer detached, NEXT zero (no armed
+//! descriptor) at the end of the runner's latest drain, and no unit
+//! received since the last lease, for at least the fill timeout.
+//!
 //! A lease's descriptor index is `(descriptor_address − ring_base) / 12`,
 //! with `ring_base` the DMA address of descriptor 0 that the arena's bind
 //! laid out (`WifiRxParts::descriptor_base`, sent with the application's
 //! ends); the ring prepared from that arena has the same base
 //! (`w1.exhaust ring_base=`).
 
-use oer_esp32s31_ieee80211::rx::counters::WifiRxExhaustion;
+use oer_esp32s31_ieee80211::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
 use oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES;
 
 use crate::{
@@ -101,11 +107,136 @@ pub fn crc32(bytes: &[u8]) -> u32 {
 /// at `ring_base`; `None` outside the ring or between descriptors.
 pub fn descriptor_index(address: u32, ring_base: u32) -> Option<usize> {
     let offset = address.checked_sub(ring_base)?;
-    if offset % DESCRIPTOR_BYTES != 0 {
+    if !offset.is_multiple_of(DESCRIPTOR_BYTES) {
         return None;
     }
     let index = usize::try_from(offset / DESCRIPTOR_BYTES).ok()?;
     (index < COUNT).then_some(index)
+}
+
+/// The address bits a walker cursor register holds: `RX_LAST_DESCRIPTOR`
+/// and `RX_NEXT_DESCRIPTOR` carry a descriptor's low 20 address bits
+/// (`oer-esp32s31-ieee80211-dma`'s `RX_DESCRIPTOR_ADDRESS_LOW_MASK`).
+const CURSOR_ADDRESS_BITS: u32 = 0x000f_ffff;
+
+/// The ring index of the descriptor whose low address a cursor register
+/// read as `low`, in the ring at `ring_base`.
+pub fn cursor_index(low: u32, ring_base: u32) -> Option<usize> {
+    let offset = low.wrapping_sub(ring_base & CURSOR_ADDRESS_BITS) & CURSOR_ADDRESS_BITS;
+    if !offset.is_multiple_of(DESCRIPTOR_BYTES) {
+        return None;
+    }
+    let index = usize::try_from(offset / DESCRIPTOR_BYTES).ok()?;
+    (index < COUNT).then_some(index)
+}
+
+/// Whether a hold is full, and why.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Full {
+    /// Short of every lease, and not stuck.
+    #[default]
+    No,
+    /// Every staging lease held.
+    All,
+    /// One lease short, the missing buffer at LAST, no armed descriptor.
+    StuckAtLast,
+}
+
+impl Full {
+    pub const fn held(self) -> bool {
+        !matches!(self, Self::No)
+    }
+
+    /// The reason in `w1.hold`.
+    pub const fn reason(self) -> &'static str {
+        match self {
+            Self::No => "-",
+            Self::All => "all",
+            Self::StuckAtLast => "stuck-at-last",
+        }
+    }
+}
+
+/// Whether the leases of descriptors `indices` make a full hold. `end` is
+/// the runner's latest drain end and `quiet` whether no unit was received
+/// since the last lease, for at least the fill timeout.
+pub fn fullness(
+    indices: &[Option<usize>],
+    end: Option<&WifiRxDrainEnd>,
+    quiet: bool,
+    ring_base: u32,
+) -> Full {
+    if indices.len() == SLOTS {
+        return Full::All;
+    }
+    let (Some(end), true) = (end, quiet && indices.len() + 1 == SLOTS) else {
+        return Full::No;
+    };
+    // The one ring index without a lease.
+    let mut leased = [false; COUNT];
+    for index in indices {
+        match index.and_then(|index| leased.get_mut(index)) {
+            Some(slot) if !*slot => *slot = true,
+            _ => return Full::No,
+        }
+    }
+    let missing = leased.iter().position(|leased| !leased);
+    let one_short = |count: u32| usize::try_from(count).is_ok_and(|count| count + 1 == SLOTS);
+    if one_short(end.staged)
+        && one_short(end.detached)
+        && end.released == 1
+        && end.next_low == 0
+        && missing.is_some()
+        && cursor_index(end.last_low, ring_base) == missing
+    {
+        Full::StuckAtLast
+    } else {
+        Full::No
+    }
+}
+
+/// The reasons a unit was dropped or refused: the runner's drops first
+/// (their unit never reaches the application, so its descriptor index is
+/// missing from the frames taken), then the application's RX-control
+/// prefix refusals (the frame was taken; its index is listed).
+pub const DISCARDS: [&str; 15] = [
+    "empty",
+    "too_long",
+    "chained",
+    "oversized",
+    "overload",
+    "rx_failure",
+    "mic_failure",
+    "quarantined",
+    "invalid",
+    "prefix_chain",
+    "bounds",
+    "output_small",
+    "metadata",
+    "ignored",
+    "unsupported",
+];
+
+/// The counts of [`DISCARDS`] in `report`.
+pub fn discards(report: &WifiRxReport) -> [u32; 15] {
+    let prefix = &report.prefix;
+    [
+        report.empty_drops,
+        report.too_long_drops,
+        report.chained_drops,
+        report.oversized_drops,
+        report.overload_drops,
+        prefix.rx_failure,
+        prefix.mic_failure,
+        prefix.quarantined,
+        prefix.invalid,
+        prefix.chain,
+        prefix.bounds,
+        prefix.output_small,
+        prefix.metadata,
+        prefix.ignored,
+        prefix.unsupported,
+    ]
 }
 
 /// One lease as it was taken.
@@ -135,10 +266,14 @@ impl Fingerprint {
 
 /// The positions (in the order the leases were taken) of a cycle's leases
 /// in release order, when their descriptor indices are every ring index
-/// once; the first lease taken is taken for the recycle frontier and the
-/// last for the accepted tail. `None` otherwise.
-pub fn release_order(indices: &[Option<usize>], order: Order) -> Option<[usize; COUNT]> {
-    if indices.len() != COUNT {
+/// once, or every one but one (a stuck hold: the missing descriptor is
+/// skipped); the first lease taken is taken for the recycle frontier and
+/// the last for the accepted tail. `None` otherwise.
+pub fn release_order(
+    indices: &[Option<usize>],
+    order: Order,
+) -> Option<heapless::Vec<usize, COUNT>> {
+    if indices.len() + 1 < COUNT || indices.len() > COUNT {
         return None;
     }
     let mut position_of = [None; COUNT];
@@ -150,13 +285,15 @@ pub fn release_order(indices: &[Option<usize>], order: Order) -> Option<[usize; 
         *slot = Some(position);
     }
     let start = (*indices.first()?)?;
-    let mut positions = [0; COUNT];
-    for (step, position) in positions.iter_mut().enumerate() {
+    let mut positions = heapless::Vec::new();
+    for step in 0..COUNT {
         let index = match order {
             Order::Forward => (start + step) % COUNT,
             Order::Reverse => (start + 2 * COUNT - 1 - step) % COUNT,
         };
-        *position = (*position_of.get(index)?)?;
+        if let Some(position) = position_of.get(index).copied().flatten() {
+            let _full = positions.push(position);
+        }
     }
     Some(positions)
 }
@@ -191,9 +328,14 @@ pub struct Cycle {
     pub order: Order,
     /// Leases held when the hold began.
     pub held: usize,
+    /// Whether the hold was full, and the runner's drain end as the fill
+    /// ended.
+    pub full: Full,
+    pub end: Option<WifiRxDrainEnd>,
     pub hold: Hold,
     /// The descriptor index of the first lease dropped; `None` when the
-    /// leases' indices were not every ring index once (then the leases
+    /// leases' indices were not every ring index (or every one but one)
+    /// once (then the leases
     /// dropped in the order they were taken, or its reverse).
     pub first_drop: Option<usize>,
     pub hold_mismatch: u32,
@@ -206,9 +348,11 @@ pub struct Cycle {
     pub first_after_release: heapless::Vec<Option<usize>, FIRST_AFTER>,
     pub order_breaks: u32,
     /// Chained and oversized drops from the first drop to the end of the
-    /// frames after the release.
+    /// frames after the release, and every [`DISCARDS`] count over the
+    /// same window.
     pub chained: u32,
     pub oversized: u32,
+    pub discards: [u32; 15],
     /// Frames taken after the last drop.
     pub frames_after_release: u32,
     /// The exhaustion snapshots counted at the end of the dwell, and the
@@ -238,8 +382,8 @@ impl Cycle {
         }
     }
 
-    /// Whether the cycle held every lease.
+    /// Whether the cycle's hold was full.
     pub const fn exercised(&self) -> bool {
-        self.held >= SLOTS
+        self.full.held()
     }
 }
