@@ -1,6 +1,9 @@
 //! ESP32-S31 lowering of portable Wi-Fi channel definitions.
 
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_mac::{
+    channel::{WifiChannel, WifiChannelWidth},
+    regulatory::LegalChannel,
+};
 
 /// Exact arguments accepted by the recovered ESP32-S31 PHY channel root.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24,6 +27,18 @@ pub(crate) const fn lower_wifi_channel(channel: WifiChannel) -> PhyChannel {
             cbw: 3,
         },
     }
+}
+
+/// The PHY's runtime TX power limit, in quarter-dBm, for `channel`'s
+/// ceiling; a ceiling above the limit's range saturates, which the
+/// calibrated maximum bounds anyway.
+///
+/// The ceiling is EIRP, and the PHY target is the power at the antenna
+/// port: this applies it with no antenna gain subtracted, so a board with
+/// a gain above 0 dBi radiates up to that gain more. The board's antenna
+/// gain is not a recovered value yet.
+pub(crate) const fn tx_ceiling_quarter_dbm(channel: &LegalChannel) -> i8 {
+    channel.max_eirp_dbm().saturating_mul(4)
 }
 
 #[cfg(test)]

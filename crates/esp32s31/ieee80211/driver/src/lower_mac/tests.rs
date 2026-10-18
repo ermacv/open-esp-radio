@@ -968,6 +968,47 @@ fn queued<'a>(core: &'a Core<'_>, index: usize) -> &'a QueuedSingleAttempt<'stat
 }
 
 #[test]
+fn the_espressif_selection_sends_a_probe_once_at_dsss_1m_on_this_port() {
+    use oer_esp32s31_ieee80211_mac::{portable::Esp32s31Ack, tx::LegacyRate};
+    use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
+    use oer_ieee80211_lower_mac::{RetryStage, SupportedChannel};
+    use oer_ieee80211_upper_mac::rate_selection::{FrameRates, RateSelection};
+
+    // The selection is one for this port's metadata and ACK evidence.
+    fn probe(
+        selection: &impl RateSelection<Esp32s31RxMeta, Esp32s31Ack>,
+    ) -> Option<oer_ieee80211_lower_mac::RetryPlan<TxPhyRate>> {
+        selection.plan(FrameRates::Probe, |rate| TxPhyRate::try_from(rate).ok())
+    }
+    let selection = EspressifRateSelection::<Esp32s31Capabilities<512>>::new();
+    let plan = probe(&selection).expect("a probe has a plan");
+    let stages: Vec<_> = plan.stages().collect();
+    assert_eq!(stages.len(), 1);
+    let RetryStage {
+        rate,
+        transmissions,
+        protection,
+    } = stages[0];
+    assert_eq!(*rate, TxPhyRate::Legacy(LegacyRate::Dsss1MLong));
+    assert_eq!(transmissions.get(), 1);
+    assert_eq!(*protection, Protection::None);
+    assert_eq!(plan.transmissions(), 1);
+    // The brand carries the S31 capabilities.
+    assert!(
+        SupportedChannel::<Esp32s31Capabilities<512>>::new(
+            Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()
+        )
+        .is_some()
+    );
+    assert!(
+        SupportedChannel::<Esp32s31Capabilities<512>>::new(
+            Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()
+        )
+        .is_none()
+    );
+}
+
+#[test]
 fn capabilities_are_the_s31_limits_on_2_4_ghz() {
     let caps = esp32s31_lower_mac_capabilities(512);
     assert_eq!(

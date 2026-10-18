@@ -155,7 +155,7 @@ use oer_esp32s31_ieee80211_mac::{
 };
 use oer_ieee80211_lower_mac::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, CoexPriority, CoexPrioritySet,
-    LinkMetric, LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
+    Ieee80211Capabilities, LinkMetric, LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
     ReceiveFilter, RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError,
     TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
 };
@@ -281,6 +281,17 @@ impl SignalMetadata for Esp32s31RxMeta {
     fn link_metric(&self) -> LinkMetric {
         LinkMetric::new(self.rssi_dbm, self.noise_floor_dbm)
     }
+}
+
+/// The ESP32-S31 lower MAC with TX slots of `BUFFER_SIZE` bytes, as the
+/// brand of its validated values: its capabilities are
+/// [`esp32s31_lower_mac_capabilities`]`(BUFFER_SIZE)`, and its SPP A-MSDU
+/// setting is interface-wide (the crate documentation names the source).
+pub enum Esp32s31Capabilities<const BUFFER_SIZE: usize> {}
+
+impl<const BUFFER_SIZE: usize> Ieee80211Capabilities for Esp32s31Capabilities<BUFFER_SIZE> {
+    type SppScope = oer_ieee80211_mac::security::spp::Interface;
+    const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(BUFFER_SIZE);
 }
 
 /// What the ESP32-S31 lower MAC accepts through this core, with TX slots of

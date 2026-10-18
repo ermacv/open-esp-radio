@@ -23,7 +23,7 @@ use oer_esp32s31_radio_client::{
         WifiTracked,
     },
 };
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_mac::{channel::WifiChannel, regulatory::RegulatoryDomain};
 use oer_time::{Clock as _, Duration, Instant};
 use oer_time_virtual::VirtualClock;
 
@@ -187,8 +187,9 @@ fn cold() -> WifiCold {
 fn track_request(wifi: WifiClocked) -> WifiTrack {
     WifiTrack {
         wifi,
-        channel: WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-        maximum_tx_power_quarter_dbm: 80,
+        channel: RegulatoryDomain::WORLD
+            .legal(WifiChannel::mhz20(6).unwrap())
+            .unwrap(),
         mac: MacColdStartConfig {
             handshake_sample_limit: 100,
             station_address: [2, 0, 0, 0, 0, 1],

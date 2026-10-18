@@ -69,3 +69,5 @@ pub mod vif;
 /// Checked management/data headers and receive admission.
 pub mod frame;
 pub mod receive;
+/// Where a radio may transmit, and at what power.
+pub mod regulatory;

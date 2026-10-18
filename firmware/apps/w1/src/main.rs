@@ -62,6 +62,7 @@ use oer_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_mac::{
     address::{Bssid, IndividualAddress},
     channel::{Channel, WifiChannel, WifiChannelWidth},
+    regulatory::RegulatoryDomain,
 };
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_softmac::WifiMacAddress;
@@ -601,6 +602,10 @@ async fn run(
     };
     let channel =
         WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
+    // The world domain until the image takes the stand's country.
+    let channel = RegulatoryDomain::WORLD
+        .legal(channel)
+        .map_err(|_| "regulatory")?;
     let start = RadioStartConfig::new(
         WifiColdStartConfig::new(channel),
         WifiMacStartConfig::new(u32::from(HARDWARE_EDGE_LIMIT), station, access_point),

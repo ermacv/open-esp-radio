@@ -257,3 +257,26 @@ fn the_s31_hardware_services_are_the_six_below_the_port() {
             .union(HardwareServices::TX_BLOCK_ACK_CAPTURE)
     );
 }
+
+#[test]
+fn ack_evidence_exists_only_for_a_successful_completion() {
+    use crate::{
+        portable::Esp32s31Ack,
+        tx::{CompletionObservation, TxCompletion, TxCookie},
+    };
+    use oer_ieee80211_lower_mac::AckSnr;
+
+    let observed = |status| match TxCompletion::new_model(TxCookie(1), status, 0) {
+        Ok(CompletionObservation::Observed(completion)) => {
+            completion.with_ack_snr_encoded_model(0x8b)
+        }
+        _ => panic!("status {status} is an observed completion"),
+    };
+    let success = observed(0);
+    let ack = Esp32s31Ack::from_completion(&success).expect("a success carries its ACK");
+    // The vendor's 0x60 offset, narrowed to a signed byte.
+    assert_eq!(ack.snr_db(), -21);
+    assert_eq!(Some(ack.snr_db()), success.ack_snr_sample());
+    // An ACK timeout carries no ACK.
+    assert_eq!(Esp32s31Ack::from_completion(&observed(5)), None);
+}

@@ -23,7 +23,7 @@ use oer_esp32s31_radio_client::{
     Untracked,
     wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
 };
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_mac::{channel::WifiChannel, regulatory::LegalChannel};
 use oer_ieee80211_softmac::WifiMacAddress;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
@@ -38,23 +38,23 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 }
 
 /// Application-selected inputs for one Wi-Fi bring-up.
+///
+/// The initial channel is a [`LegalChannel`]: the regulatory domain allowed
+/// it, and its ceiling (the domain's limit, or a lower lab cap through
+/// [`LegalChannel::capped`]) bounds the TX power of every rate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
-    pub initial_channel: WifiChannel,
-    pub maximum_tx_power_quarter_dbm: i8,
+    initial_channel: LegalChannel,
 }
 
 impl WifiColdStartConfig {
-    pub const fn new(initial_channel: WifiChannel) -> Self {
-        Self {
-            initial_channel,
-            maximum_tx_power_quarter_dbm: i8::MAX,
-        }
+    pub const fn new(initial_channel: LegalChannel) -> Self {
+        Self { initial_channel }
     }
 
-    pub const fn with_maximum_tx_power_quarter_dbm(mut self, maximum: i8) -> Self {
-        self.maximum_tx_power_quarter_dbm = maximum;
-        self
+    /// The initial channel and its power ceiling.
+    pub const fn initial_channel(self) -> LegalChannel {
+        self.initial_channel
     }
 }
 
@@ -181,7 +181,6 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     let request = WifiTrack {
         wifi,
         channel: config.wifi.initial_channel,
-        maximum_tx_power_quarter_dbm: config.wifi.maximum_tx_power_quarter_dbm,
         mac: MacColdStartConfig {
             handshake_sample_limit: config.mac.handshake_sample_limit,
             station_address: config.mac.station_address.bytes(),
@@ -200,7 +199,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     };
     platform.install_phy_tx_power_profile(report.tx_power);
     let report = WifiStartReport {
-        initial_channel: config.wifi.initial_channel,
+        initial_channel: config.wifi.initial_channel.channel(),
         epoch,
         phy,
         track: report,

@@ -3165,23 +3165,47 @@ impl AmpduTxConfig {
 }
 
 impl LegacyTxConfig {
-    /// Conservative 1-Mbit/s management-frame profile used by the first
-    /// hardware run.
+    /// One plain legacy MPDU of `mpdu_length` encoded bytes at `rate`, with
+    /// `hardware_mic_length` bytes of hardware-generated MIC, at the
+    /// calibrated gain-table index `data_power`; `None` when the on-air
+    /// PSDU does not fit the legacy program's 12-bit length.
     ///
-    /// The timeout is the exact q0 image observed while the pinned vendor
-    /// driver submitted an open-authentication MPDU on ESP32-S31 rev0. The
-    /// no-backoff base image is `TX_Q0_CONFIG = 0x1200_03ff`
-    /// (`scheduler=1`, `timeout=0x3ff`, `AIFSN=2`, `CW=0`) and
-    /// `TX_Q0_PTI = 0x0011_1110` (`count=1`, four packet-PTI lanes at 1).
+    /// Hardware appends the four-byte FCS, which the PSDU length
+    /// (PLCP1 `signal`) counts: a 30-byte open-authentication MPDU requires
+    /// `0x22`. S31 hardware proved that replaying the vendor-context value
+    /// `0x00b6` instead produces TX status four and no authentication
+    /// response.
+    ///
+    /// The other fields are the queue image observed while the pinned
+    /// vendor driver submitted an open-authentication MPDU on ESP32-S31
+    /// rev0, which the caller replaces per attempt: the no-backoff base
+    /// image is `TX_Q0_CONFIG = 0x1200_03ff` (`scheduler=1`,
+    /// `timeout=0x3ff`, `AIFSN=2`, `CW=0`) and `TX_Q0_PTI = 0x0011_1110`
+    /// (`count=1`, four packet-PTI lanes at 1), an individual frame's ACK
+    /// response, the station interface and no key.
     /// SOURCE: a live station authentication run on hardware plus complete
     /// `libpp.a[hal_mac_tx.o,hal_mac.o,hal_coex.o]` and
     /// `libcoexist.a[coexist_core.o]`.
-    pub const fn management_1m(signal: u16) -> Self {
-        Self {
+    pub const fn single_mpdu(
+        rate: LegacyRate,
+        mpdu_length: u16,
+        hardware_mic_length: u8,
+        data_power: u8,
+    ) -> Option<Self> {
+        let Some(signal) = mpdu_length.checked_add(hardware_mic_length as u16) else {
+            return None;
+        };
+        let Some(signal) = signal.checked_add(LEGACY_FCS_LENGTH) else {
+            return None;
+        };
+        if signal > 0x0fff {
+            return None;
+        }
+        Some(Self {
             control: TxControlFrame::UNPROTECTED,
-            rate: LegacyRate::Dsss1MLong,
+            rate,
             signal,
-            data_power: 8,
+            data_power,
             aifsn: 2,
             contention_window: 0,
             timeout: TxLifetimeClass::DirectMpdu.fresh_queue_timeout(),
@@ -3193,23 +3217,7 @@ impl LegacyTxConfig {
             pti_count: 1,
             response: MacLegacyTxResponse::Ack,
             hardware_key_selector: 0,
-        }
-    }
-
-    /// Builds the direct q0 profile from the owned MPDU length.
-    ///
-    /// Hardware appends the four-byte FCS. For example, a 30-byte open
-    /// authentication MPDU requires PLCP1 `0x22`. S31 hardware proved that
-    /// replaying the vendor-context value `0x00b6` instead produces TX status
-    /// four and no authentication response.
-    pub const fn management_1m_from_mpdu_length(mpdu_length: u16) -> Option<Self> {
-        let Some(signal) = mpdu_length.checked_add(LEGACY_FCS_LENGTH) else {
-            return None;
-        };
-        if signal > 0x0fff {
-            return None;
-        }
-        Some(Self::management_1m(signal))
+        })
     }
 }
 

@@ -58,20 +58,11 @@ impl PhyTxTargetPowerPair {
 pub struct PhyTxTargetPowerProfile {
     maximum: i8,
     target: [i8; PHY_TX_TARGET_POWER_COUNT],
-    regulatory_override: bool,
 }
 
 impl PhyTxTargetPowerProfile {
-    pub(crate) const fn new(
-        maximum: i8,
-        target: [i8; PHY_TX_TARGET_POWER_COUNT],
-        regulatory_override: bool,
-    ) -> Self {
-        Self {
-            maximum,
-            target,
-            regulatory_override,
-        }
+    pub(crate) const fn new(maximum: i8, target: [i8; PHY_TX_TARGET_POWER_COUNT]) -> Self {
+        Self { maximum, target }
     }
 
     /// Apply the upper-MAC transmit-power limit expressed in quarter-dBm.
@@ -102,22 +93,12 @@ impl PhyTxTargetPowerProfile {
             return PhyTxTargetPowerPair::ZERO;
         };
 
-        // With the cold profile's regulatory flag clear, complete
-        // phy_get_chan_target_power clamps every signed target first to the
-        // selected FCC byte. All four default bytes at ROM 0x2f84_834c are 84.
-        //
-        // The override branch selects country/FCC state not yet owned by the
-        // open driver. Its strongest safe bound is the calibrated maximum.
-        let target = |target_index: usize| {
-            let regulatory_limit = if self.regulatory_override {
-                self.maximum
-            } else {
-                84
-            };
-            self.target[target_index]
-                .min(regulatory_limit)
-                .min(self.maximum)
-        };
+        // The ROM's `phy_get_chan_target_power` also clamps every target to
+        // a per-channel FCC byte (84 at ROM 0x2f84_834c) while its
+        // regulatory flag is clear. The open driver has no such fixed
+        // clamp: the regulatory ceiling is the legal channel's, applied
+        // through `with_maximum_quarter_dbm`.
+        let target = |target_index: usize| self.target[target_index].min(self.maximum);
         let primary = target(index);
         let alternate = if (6..=9).contains(&index) {
             target(index + 8)

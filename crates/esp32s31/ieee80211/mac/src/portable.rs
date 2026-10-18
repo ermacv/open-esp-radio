@@ -7,7 +7,7 @@
 //! meaning, such as an HE MU reception or a rate the S31 formatter cannot
 //! send, fails closed instead of approximating.
 
-use oer_ieee80211_lower_mac::RxMeta;
+use oer_ieee80211_lower_mac::{AckSnr, RxMeta};
 use oer_ieee80211_mac::{
     channel::Channel,
     phy::{self, DsssPreamble, FecCoding, HeGiLtf, PhyRate, PpduBandwidth, SpatialStreams},
@@ -18,9 +18,36 @@ use crate::{
     rx::{HeBandwidth, HeGuardIntervalAndLtf, RxBasebandFormat, RxPhyInfo},
     tx::{
         HeBccDcmMcs, HeFecCoding, HeLdpcDcmMcs, HeMcs, HeRate, HtChannelWidth, HtGuardInterval,
-        HtMcs, HtRate, LegacyRate, TxPhyRate,
+        HtMcs, HtRate, LegacyRate, TxCompletion, TxPhyRate,
     },
 };
+
+/// The evidence of the ACK that answered an ESP32-S31 MPDU: the SNR
+/// sample the MAC's completion carries for it
+/// ([`TxCompletion::ack_snr_sample`]). Every acknowledged completion has
+/// one, so the port's ACK evidence is [`AckSnr`] and a rate selection that
+/// needs the ACK's SNR builds for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Esp32s31Ack {
+    snr_db: i8,
+}
+
+impl Esp32s31Ack {
+    /// The ACK evidence of `completion`; `None` for a completion that is
+    /// no success, which carries no ACK.
+    pub const fn from_completion(completion: &TxCompletion) -> Option<Self> {
+        match completion.ack_snr_sample() {
+            Some(snr_db) => Some(Self { snr_db }),
+            None => None,
+        }
+    }
+}
+
+impl AckSnr for Esp32s31Ack {
+    fn snr_db(&self) -> i8 {
+        self.snr_db
+    }
+}
 
 impl LegacyRate {
     /// The portable non-HT rate.

@@ -1537,11 +1537,16 @@ where
                     TxPhyRate::Legacy(rate),
                     psdu_length.into(),
                 );
-                let mut config = LegacyTxConfig::management_1m(psdu_length);
-                config.rate = rate;
-                config.control = self.control_frame(TxPhyRate::Legacy(rate), decision, ceiling);
-                config.data_power =
+                let frame_length = u16::try_from(active.frame_length)
+                    .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
+                let mic_length = u8::try_from(active.hardware_mic_length)
+                    .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
+                let data_power =
                     capped_power(self.power.power_pair(rate.code()), ceiling).primary as u8;
+                let mut config =
+                    LegacyTxConfig::single_mpdu(rate, frame_length, mic_length, data_power)
+                        .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
+                config.control = self.control_frame(TxPhyRate::Legacy(rate), decision, ceiling);
                 config.aifsn = contention.aifsn();
                 config.contention_window = contention_window;
                 config.scheduler_priority = active.scheduler_priority;

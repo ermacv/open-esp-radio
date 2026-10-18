@@ -16,7 +16,7 @@ use oer_esp32s31_ieee80211_mac::init::{
     MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
-use oer_ieee80211_mac::channel::WifiChannel;
+use oer_ieee80211_mac::regulatory::LegalChannel;
 
 use crate::{Client, PhyPreparation, sealed};
 
@@ -75,8 +75,9 @@ pub struct WifiJoined {
 /// `track`: the clocked client and the MAC bring-up inputs.
 pub struct WifiTrack {
     pub wifi: WifiClocked,
-    pub channel: WifiChannel,
-    pub maximum_tx_power_quarter_dbm: i8,
+    /// The initial channel, with the power ceiling every transmission on
+    /// it keeps.
+    pub channel: LegalChannel,
     pub mac: MacColdStartConfig,
     pub slow_clock: MacSlowClockCalibration,
     pub delay_random: u32,

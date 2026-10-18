@@ -36,7 +36,10 @@ use oer_esp32s31_radio_esp_hal::{EspHalClocks, RadioSingletons, take_radio};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_espressif_executor_embassy::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
-use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+use oer_ieee80211_mac::{
+    channel::{WifiChannel, WifiChannelWidth},
+    regulatory::RegulatoryDomain,
+};
 use oer_ieee80211_softmac::WifiMacAddress;
 use oer_time_embassy::EmbassyClock;
 use static_cell::StaticCell;
@@ -230,6 +233,10 @@ async fn run(
         return Err("efuse-mac");
     };
     let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
+    // The world domain until the image takes the stand's country.
+    let channel = RegulatoryDomain::WORLD
+        .legal(channel)
+        .map_err(|_| "regulatory")?;
     let config = RadioStartConfig::new(
         WifiColdStartConfig::new(channel),
         WifiMacStartConfig::new(u32::from(HARDWARE_EDGE_LIMIT), station, access_point),
