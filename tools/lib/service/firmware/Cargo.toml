@@ -1,0 +1,29 @@
+[package]
+name = "oer-firmware"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Build, flash and run staged firmware images on the stand's boards: the service behind `cargo fw`"
+
+[dependencies]
+oer-process = { path = "../../base/process" }
+oer-lab = { path = "../lab" }
+oer-stand-file = { path = "../../data/stand-file" }
+oer-chip-profile = { path = "../../data/chip-profile" }
+oer-espressif-staged-layout = { path = "../../../../firmware/platform/espressif/staged-layout" }
+oer-esp32s31-platform-layout = { path = "../../../../firmware/platform/esp32s31/layout" }
+espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
+object = { version = "=0.37.3", default-features = false, features = ["read_core", "elf", "std"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serialport = { version = "4.7", default-features = false }
+toml = "=1.1.4"
+
+[dev-dependencies]
+object = { version = "=0.37.3", default-features = false, features = ["read_core", "elf", "std", "write"] }
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true

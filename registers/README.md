@@ -16,6 +16,6 @@ places at its own base addresses; its outputs are
 [`crates/espressif/ieee80211-pac`](../crates/espressif/ieee80211-pac/README.md).
 
 Generic loading, validation and generation remain in
-[register tool](../tools/registers/README.md). A vendor project references the
+[register tool](../tools/lib/service/registers/README.md). A vendor project references the
 same reviewed model while selecting its own artifact context and comparison
 policy. Neither source generation nor binary analysis decides product readiness.

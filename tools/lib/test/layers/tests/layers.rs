@@ -1,0 +1,232 @@
+//! The dependency rules of `tools/README.md`, read from the path dependencies
+//! of every `Cargo.toml` below `tools/` and `crates/`. A package's layer is
+//! its folder; manifests carry no layer metadata.
+
+use std::path::{Component, Path, PathBuf};
+
+/// The `service → service` dependencies `tools/README.md` allows, in order.
+const SERVICE_ORDER: [(&str, &str); 1] = [("firmware", "lab")];
+
+/// The portable parts of `crates/` that `tools/` may use.
+const PORTABLE_CRATES: [&str; 5] = [
+    "crates/base/",
+    "crates/radio/",
+    "crates/ieee80211/",
+    "crates/bluetooth/",
+    "crates/ieee802154/",
+];
+
+/// The host-built image layout crates only `lib/service/firmware` may use.
+const IMAGE_LAYOUT: [&str; 2] = [
+    "firmware/platform/espressif/staged-layout",
+    "firmware/platform/esp32s31/layout",
+];
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Place {
+    Crates,
+    Cli(String),
+    Service(String),
+    Analysis,
+    Data,
+    Base,
+    Test,
+    Firmware,
+    Other,
+}
+
+fn place(path: &str) -> Place {
+    let part = |prefix: &str| {
+        path.strip_prefix(prefix)
+            .map(|rest| rest.split('/').next().unwrap_or_default().to_owned())
+    };
+    if path.starts_with("crates/") {
+        Place::Crates
+    } else if let Some(name) = part("tools/cli/") {
+        Place::Cli(name)
+    } else if let Some(name) = part("tools/lib/service/") {
+        Place::Service(name)
+    } else if path.starts_with("tools/lib/analysis/") {
+        Place::Analysis
+    } else if path.starts_with("tools/lib/data/") {
+        Place::Data
+    } else if path.starts_with("tools/lib/base/") {
+        Place::Base
+    } else if path.starts_with("tools/lib/test/") {
+        Place::Test
+    } else if path.starts_with("firmware/") {
+        Place::Firmware
+    } else {
+        Place::Other
+    }
+}
+
+/// Why `from` may not depend on `to`, both repository-relative package
+/// directories, or `None` when it may.
+fn refusal(from: &str, to: &str) -> Option<String> {
+    use Place::*;
+    let (source, target) = (place(from), place(to));
+    let refused = |why: &str| Some(format!("{from} → {to}: {why}"));
+    match (&source, &target) {
+        (Crates, Crates) => None,
+        (Crates, _) => refused("crates/ never depends on tools/ or firmware/"),
+        (Other, _) | (_, Other) => refused("a package outside tools/, crates/ and firmware/"),
+        (Firmware, _) => None,
+        (_, Crates) if PORTABLE_CRATES.iter().any(|prefix| to.starts_with(prefix)) => None,
+        (_, Crates) => refused("tools/ uses only the portable crates (base, radio, the protocols)"),
+        (Service(name), Firmware) if name == "firmware" && IMAGE_LAYOUT.contains(&to) => None,
+        (_, Firmware) => refused(
+            "only lib/service/firmware uses firmware/, and only its host-built image layout",
+        ),
+        (Cli(_), Cli(_)) => refused("a CLI never depends on another CLI"),
+        (Cli(_), Service(_) | Analysis | Data | Base) => None,
+        (Service(a), Service(b)) if SERVICE_ORDER.contains(&(a.as_str(), b.as_str())) => None,
+        (Service(_), Service(_)) => {
+            refused("a service → service edge tools/README.md does not list")
+        }
+        (Service(_), Analysis | Data | Base) => None,
+        (Analysis, Base) | (Data, Data | Base) | (Base, Base) => None,
+        (Test, Service(_) | Analysis | Data | Base | Test) => None,
+        _ => refused("dependencies go only down: cli → service → analysis, data → base"),
+    }
+}
+
+fn root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .canonicalize()
+        .unwrap()
+}
+
+/// Every package directory below `directory`, repository-relative.
+fn packages(root: &Path, directory: &str, found: &mut Vec<String>) {
+    let mut stack = vec![root.join(directory)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            if path.is_dir() && name != "target" && !name.to_string_lossy().starts_with('.') {
+                stack.push(path);
+            } else if name == "Cargo.toml" {
+                let package = path.parent().unwrap().strip_prefix(root).unwrap();
+                found.push(package.to_string_lossy().into_owned());
+            }
+        }
+    }
+    found.sort();
+}
+
+/// `path`, joined to `base` and with `.`/`..` resolved, repository-relative.
+fn resolve(base: &str, path: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for component in Path::new(base).join(path).components() {
+        match component {
+            Component::ParentDir => {
+                parts.pop();
+            }
+            Component::Normal(part) => parts.push(part.to_string_lossy().into_owned()),
+            _ => {}
+        }
+    }
+    parts.join("/")
+}
+
+/// The path dependencies of the package at `package` (all kinds, targets
+/// included), repository-relative.
+fn path_dependencies(root: &Path, package: &str) -> Vec<String> {
+    let text = std::fs::read_to_string(root.join(package).join("Cargo.toml")).unwrap();
+    let manifest: toml::Table = toml::from_str(&text).unwrap();
+    let mut tables = Vec::new();
+    let mut collect = |table: &toml::Table| {
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(toml::Value::Table(dependencies)) = table.get(kind) {
+                tables.push(dependencies.clone());
+            }
+        }
+    };
+    collect(&manifest);
+    if let Some(toml::Value::Table(targets)) = manifest.get("target") {
+        for target in targets.values() {
+            if let toml::Value::Table(target) = target {
+                collect(target);
+            }
+        }
+    }
+    tables
+        .iter()
+        .flat_map(|dependencies| dependencies.values())
+        .filter_map(|dependency| dependency.get("path")?.as_str())
+        .map(|path| resolve(package, path))
+        .collect()
+}
+
+#[test]
+fn every_dependency_goes_down_its_layers() {
+    let root = root();
+    let mut found = Vec::new();
+    packages(&root, "tools", &mut found);
+    packages(&root, "crates", &mut found);
+    assert!(found.len() > 20, "{found:?}");
+    let refusals = found
+        .iter()
+        .flat_map(|package| {
+            path_dependencies(&root, package)
+                .into_iter()
+                .filter_map(|dependency| refusal(package, &dependency))
+        })
+        .collect::<Vec<_>>();
+    assert!(refusals.is_empty(), "{}", refusals.join("\n"));
+}
+
+#[test]
+fn no_package_sits_inside_another() {
+    let root = root();
+    let mut found = Vec::new();
+    packages(&root, "tools", &mut found);
+    packages(&root, "crates", &mut found);
+    let nested = found
+        .iter()
+        .filter_map(|inner| {
+            found
+                .iter()
+                .find(|outer| *outer != inner && inner.starts_with(&format!("{outer}/")))
+                .map(|outer| format!("{inner} is inside {outer}"))
+        })
+        .collect::<Vec<_>>();
+    assert!(nested.is_empty(), "{}", nested.join("\n"));
+}
+
+#[test]
+fn the_rules_refuse_what_the_readme_forbids() {
+    for (from, to) in [
+        ("crates/base/memory", "tools/lib/base/process"),
+        ("tools/lib/data/stand-file", "tools/lib/service/lab"),
+        ("tools/lib/analysis/stack", "tools/lib/data/register-model"),
+        ("tools/cli/fw", "tools/cli/registers"),
+        ("tools/lib/service/lab", "tools/lib/service/firmware"),
+        ("tools/lib/service/registers", "crates/esp32s31/pac"),
+        ("tools/lib/service/lab", "firmware/platform/esp32s31/layout"),
+        ("tools/lib/service/firmware", "firmware/apps/w1"),
+    ] {
+        assert!(refusal(from, to).is_some(), "{from} → {to}");
+    }
+    for (from, to) in [
+        ("tools/cli/fw", "tools/lib/service/firmware"),
+        ("tools/lib/service/firmware", "tools/lib/service/lab"),
+        (
+            "tools/lib/service/firmware",
+            "firmware/platform/esp32s31/layout",
+        ),
+        (
+            "tools/lib/data/register-model",
+            "tools/lib/data/register-contracts",
+        ),
+        ("tools/lib/analysis/stack", "tools/lib/base/process"),
+        ("crates/esp32s31/hal", "crates/base/ui-cases"),
+    ] {
+        assert_eq!(refusal(from, to), None, "{from} → {to}");
+    }
+}

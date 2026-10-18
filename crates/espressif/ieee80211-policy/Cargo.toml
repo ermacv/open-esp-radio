@@ -17,7 +17,7 @@ oer-ieee80211-upper-mac = { path = "../../ieee80211/upper-mac" }
 oer-time = { path = "../../base/time" }
 
 [dev-dependencies]
-oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+oer-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

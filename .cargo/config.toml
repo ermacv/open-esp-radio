@@ -1,9 +1,9 @@
 [alias]
 # The register tool: validate the register model and generate SVD, PAC and
-# bindings (tools/registers/README.md).
-registers = "run --quiet --profile tools -p oer-register-tool --"
+# bindings (tools/lib/service/registers/README.md).
+registers = "run --quiet --profile tools -p oer-registers-cli --"
 # The firmware tool: build, flash and run staged images on the stand's
-# boards (tools/fw/README.md).
+# boards (tools/lib/service/firmware/README.md).
 fw = "run --quiet --profile tools -p oer-fw --"
 
 [net]

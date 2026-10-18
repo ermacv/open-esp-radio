@@ -17,7 +17,7 @@ oer-time = { path = "../../base/time" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
-oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+oer-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

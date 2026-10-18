@@ -24,7 +24,7 @@ analysis read this model; neither owns a second copy.
 | `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause register the host reads through JTAG after a power cycle; SVD and `published/platform.bindings.toml` only, no PAC (ESP-HAL owns the block at runtime) |
 
 The generic generator is
-[`tools/registers/model`](../../tools/registers/model/README.md).
+[`tools/lib/data/register-model`](../../tools/lib/data/register-model/README.md).
 Its other two checked outputs are
 [`pac/raw/src/lib.rs`](../../crates/esp32s31/pac-raw/src/lib.rs) and
 [`pac/src/generated.rs`](../../crates/esp32s31/pac/src/generated.rs).
@@ -113,7 +113,7 @@ Source provenance catalogs retain their exact source IDs, revisions and hashes.
 Reserved fields remain absent. A register or field whose meaning is not
 established is named by its position alone (`WORD_<offset>_OPAQUE`,
 `BIT_<n>_OPAQUE`, `BITS_<low>_<high>_OPAQUE`) and reviewed with
-`naming = "opaque"`; see [name origin](../../tools/registers/model/README.md). Neighboring-chip
+`naming = "opaque"`; see [name origin](../../tools/lib/data/register-model/README.md). Neighboring-chip
 similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed
 source assertions, vendor comparison and dated hardware observations retain
 their distinct strength. Publication verifies consistency and reproducibility.
