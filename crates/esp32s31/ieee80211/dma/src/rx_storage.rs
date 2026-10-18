@@ -888,15 +888,28 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
 
     /// Transfer one completed descriptor together with its buffer read
     /// authority. The returned token prevents a concurrent recycle borrow.
+    ///
+    /// Only a descriptor from the recycle frontier through the LAST of
+    /// `cursor` inclusive is taken: the walker no longer writes it. A
+    /// descriptor past that LAST, or a cursor of another ring, live epoch or
+    /// descriptor generation, takes nothing, before any descriptor image is
+    /// read.
     pub fn take_completed<'owner, 'ring>(
         &'owner self,
         ring: &'owner mut RxRingLive<'ring, COUNT>,
+        cursor: RxFrozenCursor,
         index: usize,
     ) -> Result<
         Option<RxDmaCompletedDescriptor<'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE>>,
         RxRingError,
     > {
         self.validate_live_ring(ring)?;
+        if index >= COUNT {
+            return Err(RxRingError::Count);
+        }
+        if !ring.frozen_cursor_releases_index(cursor, index) {
+            return Ok(None);
+        }
         match ring.validate_completed_descriptor(index) {
             Ok(true) => {}
             Ok(false) => return Ok(None),
@@ -1061,86 +1074,41 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         Ok(None)
     }
 
-    pub fn completed_unit_frontier(
-        &self,
-        ring: &RxRingLive<'_, COUNT>,
-    ) -> Result<RxCompletedUnitFrontier, RxRingError> {
-        self.validate_live_ring(ring)?;
-        Ok(ring.completed_unit_frontier_with(|index| {
-            self.buffer_for_descriptor(index)
-                .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-        }))
-    }
-
-    /// Return only complete units which the hardware last-descriptor frontier
-    /// has released to software. A descriptor-local `RX_DONE` observation is
-    /// intentionally insufficient for recycling its link word.
-    pub fn completed_unit_frontier_through(
-        &self,
-        ring: &RxRingLive<'_, COUNT>,
-        last_descriptor_low: u32,
-    ) -> Result<RxCompletedUnitFrontier, RxRingError> {
-        self.validate_live_ring(ring)?;
-        Ok(
-            ring.completed_unit_frontier_through_with(last_descriptor_low, |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            }),
-        )
-    }
-
-    /// LAST-bounded frontier with the matching ordered NEXT observation.
-    /// NEXT=0 and LAST at the accepted tail release untouched intermediate
-    /// descriptors which the vendor worker also walks before the terminal.
+    /// Snapshot the complete units which one frozen cursor has released to
+    /// software, through its LAST inclusive. A descriptor-local `RX_DONE`
+    /// observation is intentionally insufficient for recycling its link
+    /// word. NEXT=0 and LAST at the accepted tail release untouched
+    /// intermediate descriptors which the vendor worker also walks before
+    /// the terminal.
     pub fn completed_unit_frontier_through_cursor(
         &self,
         ring: &RxRingLive<'_, COUNT>,
-        last_descriptor_low: u32,
-        next_descriptor_low: u32,
-    ) -> Result<RxCompletedUnitFrontier, RxRingError> {
-        self.validate_live_ring(ring)?;
-        Ok(ring.completed_unit_frontier_through_cursor_with(
-            last_descriptor_low,
-            next_descriptor_low,
-            |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            },
-        ))
-    }
-
-    /// Return the first complete unit at the software frontier, bounded by
-    /// the hardware LAST snapshot. This is the unit-sized counterpart used
-    /// when every recycle requires its own link-release proof.
-    pub fn first_completed_unit_frontier_through(
-        &self,
-        ring: &RxRingLive<'_, COUNT>,
-        last_descriptor_low: u32,
+        cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
         Ok(
-            ring.first_completed_unit_frontier_through_with(last_descriptor_low, |index| {
+            ring.completed_unit_frontier_through_cursor_with(cursor, |index| {
                 self.buffer_for_descriptor(index)
                     .is_some_and(RxDmaBuffer::leading_guard_overwritten)
             }),
         )
     }
 
+    /// Return the first complete unit at the software frontier, bounded by
+    /// the LAST of one frozen cursor. This is the unit-sized counterpart used
+    /// when every recycle requires its own link-release proof.
     pub fn first_completed_unit_frontier_through_cursor(
         &self,
         ring: &RxRingLive<'_, COUNT>,
-        last_descriptor_low: u32,
-        next_descriptor_low: u32,
+        cursor: RxFrozenCursor,
     ) -> Result<RxCompletedUnitFrontier, RxRingError> {
         self.validate_live_ring(ring)?;
-        Ok(ring.first_completed_unit_frontier_through_cursor_with(
-            last_descriptor_low,
-            next_descriptor_low,
-            |index| {
+        Ok(
+            ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
                 self.buffer_for_descriptor(index)
                     .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            },
-        ))
+            }),
+        )
     }
 
     /// Copy bytes from the first descriptor of the first complete unit without
@@ -1158,20 +1126,15 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     pub fn copy_first_completed_unit_bytes_through_cursor(
         &self,
         ring: &RxRingLive<'_, COUNT>,
-        last_descriptor_low: u32,
-        next_descriptor_low: u32,
+        cursor: RxFrozenCursor,
         offset: usize,
         output: &mut [u8],
     ) -> Result<bool, RxRingError> {
         self.validate_live_ring(ring)?;
-        let frontier = ring.first_completed_unit_frontier_through_cursor_with(
-            last_descriptor_low,
-            next_descriptor_low,
-            |index| {
-                self.buffer_for_descriptor(index)
-                    .is_some_and(RxDmaBuffer::leading_guard_overwritten)
-            },
-        );
+        let frontier = ring.first_completed_unit_frontier_through_cursor_with(cursor, |index| {
+            self.buffer_for_descriptor(index)
+                .is_some_and(RxDmaBuffer::leading_guard_overwritten)
+        });
         if frontier.unit_count == 0 {
             return Ok(false);
         }
@@ -1209,17 +1172,21 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         Ok((observed != COUNT).then(|| ring.recycle_start().advance(observed).get()))
     }
 
+    /// Transfer the complete unit at the software frontier, ending at or
+    /// before the LAST of `cursor` inclusive, together with its buffer read
+    /// authority. Only a cursor frozen on `ring` in its current live epoch
+    /// and descriptor generation takes a unit; any other takes nothing.
     pub fn take_completed_unit<'storage, 'owner, 'ring>(
         &'storage self,
         ring: &'owner mut RxRingLive<'ring, COUNT>,
-        descriptor_limit: usize,
+        cursor: RxFrozenCursor,
     ) -> Result<
         Option<RxDmaCompletedUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>>,
         RxRingError,
     > {
         self.validate_live_ring(ring)?;
         let unit = match ring.take_completed_unit_owned(
-            descriptor_limit,
+            cursor,
             |index| {
                 self.buffer_for_descriptor(index)
                     .is_some_and(RxDmaBuffer::leading_guard_overwritten)

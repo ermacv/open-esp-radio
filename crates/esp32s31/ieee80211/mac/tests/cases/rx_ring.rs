@@ -57,7 +57,13 @@ fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(arena.base);
     mmio.set_rx_next_descriptor_address(arena.address(1));
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(
         &mut live,
         &mut mmio,
@@ -79,7 +85,13 @@ fn completed_rx_descriptor_rearms_only_for_the_expected_storage() {
     // Descriptor one completed while the append settled. A buffer address
     // which is not the arena buffer bound to it must not be rearmed.
     mmio.set_rx_reload_pending(false);
-    assert!(storage.take_completed(&mut live, 1).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 1)
+            .unwrap()
+            .is_some()
+    );
     let completed = descriptors[1].word0();
     descriptors[1].inject_corrupt_words(completed, arena.buffers[0], descriptors[1].next_address());
     assert_eq!(
@@ -162,18 +174,26 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     assert_eq!(
         storage
-            .take_completed(&mut live, 0)
+            .take_completed(&mut live, frozen, 0)
             .unwrap()
             .unwrap()
             .index(),
         0
     );
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_none());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_none()
+    );
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     assert_eq!(
         storage
-            .take_completed(&mut live, 1)
+            .take_completed(&mut live, frozen, 1)
             .unwrap()
             .unwrap()
             .index(),
@@ -210,8 +230,21 @@ fn live_rx_ring_owns_physical_cold_order_reload_and_rerings_an_exhausted_doorbel
     }
     descriptors[2].write_word0(COMPLETED);
     descriptors[3].write_word0(COMPLETED);
-    assert!(storage.take_completed(&mut live, 2).unwrap().is_some());
-    assert!(storage.take_completed(&mut live, 3).unwrap().is_some());
+    // The walker reports three, the old tail, as LAST: both are released.
+    mmio.set_rx_last_descriptor_address(base + 3 * DESCRIPTOR_BYTES);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 2)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 3)
+            .unwrap()
+            .is_some()
+    );
 
     // Model bit-0 self-clear at a terminal frontier: the walker exhausted
     // the old tail three before it followed the new link. The ring rings
@@ -465,7 +498,13 @@ fn live_rx_ring_can_replenish_one_descriptor_per_rom_append() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(&mut live, &mut mmio, descriptors, base, base, 1);
     let first = storage
         .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -489,7 +528,13 @@ fn live_rx_ring_can_replenish_one_descriptor_per_rom_append() {
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 1).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 1)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(
         &mut live,
         &mut mmio,
@@ -531,7 +576,13 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(&mut live, &mut mmio, descriptors, base, base, 1);
     storage
         .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -555,8 +606,20 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_next_descriptor_address(0);
     mmio.set_rx_last_descriptor_address(base);
-    assert!(storage.take_completed(&mut live, 1).unwrap().is_some());
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 1)
+            .unwrap()
+            .is_some()
+    );
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     mmio.operations.clear();
     let append = storage
         .recycle_completed_prefix::<COUNT, _>(&mut live, &mut mmio)
@@ -622,10 +685,16 @@ fn live_rx_ring_appends_all_but_the_exhausted_tail_through_the_doorbell() {
         live.poll_pending_reload(&mut mmio).unwrap(),
         RxReloadObservation::Settled
     );
-    let frontier = live.completed_unit_frontier_through_with(mmio.last_descriptor_low(), |_| true);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    let frontier = storage
+        .completed_unit_frontier_through_cursor(&live, frozen)
+        .unwrap();
     assert_eq!(frontier.unit_count, 1);
     assert_eq!(frontier.descriptor_count, 1);
-    let unit = storage.take_completed_unit(&mut live, 1).unwrap().unwrap();
+    let unit = storage
+        .take_completed_unit(&mut live, frozen)
+        .unwrap()
+        .unwrap();
     assert_eq!(unit.head_index(), 1);
     unit.retain_for_deferred_recycle();
     assert!(live.try_stop(&mut mmio).is_ok());
@@ -661,8 +730,9 @@ fn live_rx_ring_does_not_rewrite_a_nonterminal_link_before_next_accepts_it() {
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     assert!(live.observe_current_completed_unit_link_release(&mut mmio, 1));
     assert!(!live.completion_release_probe_pending());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .unwrap()
         .retain_for_deferred_recycle();
@@ -691,7 +761,13 @@ fn exercise_single_descriptor_rx_interleavings<const COUNT: usize>() {
             );
             descriptor.write_word0(COMPLETED);
             mmio.set_rx_last_descriptor_address(arena.address(cursor));
-            assert!(storage.take_completed(&mut live, cursor).unwrap().is_some());
+            let frozen = live.freeze_cursor(&mut mmio).unwrap();
+            assert!(
+                storage
+                    .take_completed(&mut live, frozen, cursor)
+                    .unwrap()
+                    .is_some()
+            );
 
             // LAST/RX_DONE without the old successor in NEXT does not release
             // the link word. A failed probe must be a read-only transaction.
@@ -763,7 +839,13 @@ fn live_rx_frontier_rejects_last_beyond_the_accepted_tail_during_reload() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(&mut live, &mut mmio, descriptors, base, base, 1);
     storage
         .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -777,8 +859,11 @@ fn live_rx_frontier_rejects_last_beyond_the_accepted_tail_during_reload() {
     // 1 -> 2 -> 3. Even if descriptor one is complete, that impossible LAST
     // snapshot must not manufacture ownership before reload settles.
     descriptors[1].write_word0(COMPLETED);
-    let pending_tail_low = rx_descriptor_low(base);
-    let frontier = live.completed_unit_frontier_through_with(pending_tail_low, |_| true);
+    mmio.set_rx_last_descriptor_address(base);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    let frontier = storage
+        .completed_unit_frontier_through_cursor(&live, frozen)
+        .unwrap();
     assert_eq!(frontier, Default::default());
 
     mmio.set_rx_walker_enabled(true);
@@ -788,7 +873,10 @@ fn live_rx_frontier_rejects_last_beyond_the_accepted_tail_during_reload() {
         live.poll_pending_reload(&mut mmio).unwrap(),
         RxReloadObservation::Settled
     );
-    let frontier = live.completed_unit_frontier_through_with(pending_tail_low, |_| true);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    let frontier = storage
+        .completed_unit_frontier_through_cursor(&live, frozen)
+        .unwrap();
     assert_eq!(frontier.unit_count, 1);
     assert_eq!(frontier.descriptor_count, 1);
     assert!(live.try_stop(&mut mmio).is_ok());
@@ -806,7 +894,13 @@ fn live_rx_recycle_rejects_a_corrupt_append_tail_before_any_mutation() {
     descriptors[0].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
 
     // The accepted tail must be zero-terminated until the sole ring owner
     // publishes an append. Model foreign/corrupt mutation of that link.
@@ -860,9 +954,15 @@ fn live_rx_ring_snapshots_only_the_current_contiguous_frontier() {
     descriptors[3].write_word0(COMPLETED);
     assert_eq!(live.completed_frontier_len(), 2);
 
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
     mmio.set_rx_last_descriptor_address(base);
     mmio.set_rx_next_descriptor_address(base + DESCRIPTOR_BYTES);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     assert_eq!(live.completed_frontier_len(), 0);
     confirm_completed_unit_link_release(&mut live, &mut mmio, descriptors, base, base, 1);
     let first = storage
@@ -901,7 +1001,10 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
 
     assert_eq!(live.completed_frontier_len(), 0);
-    let frontier = live.completed_unit_frontier();
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    let frontier = storage
+        .completed_unit_frontier_through_cursor(&live, frozen)
+        .unwrap();
     assert_eq!(frontier.unit_count, 1);
     assert_eq!(frontier.descriptor_count, 2);
     // The unit token keeps the ring borrowed until its recycle, so prove the
@@ -914,8 +1017,9 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
         base + DESCRIPTOR_BYTES,
         2,
     );
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let unit = storage
-        .take_completed_unit(&mut live, frontier.descriptor_count)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .unwrap();
     assert_eq!(unit.head_index(), 0);
@@ -951,8 +1055,20 @@ fn live_rx_ring_replenishes_the_available_variable_prefix() {
     descriptors[1].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
-    assert!(storage.take_completed(&mut live, 1).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 1)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(
         &mut live,
         &mut mmio,
@@ -980,7 +1096,13 @@ fn live_rx_ring_replenishes_the_available_variable_prefix() {
     descriptors[2].write_word0(COMPLETED);
     mmio.set_rx_last_descriptor_address(base + 2 * DESCRIPTOR_BYTES);
     mmio.set_rx_next_descriptor_address(base + 3 * DESCRIPTOR_BYTES);
-    assert!(storage.take_completed(&mut live, 2).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 2)
+            .unwrap()
+            .is_some()
+    );
     confirm_completed_unit_link_release(
         &mut live,
         &mut mmio,
@@ -1097,9 +1219,10 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         .write_word0(BUFFER_SIZE | ((RECEIVED as u32) << LENGTH_SHIFT) | RX_DONE | OWNER);
     mmio.set_rx_last_descriptor_address(arena.address(1));
     mmio.set_rx_next_descriptor_address(0);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = arena
         .storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit")
         .detach_single(&mut mmio)

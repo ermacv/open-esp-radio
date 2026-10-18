@@ -118,7 +118,10 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | RX_DONE);
     // The final protocol frame remains observed before promotion.
     let ring = already_live.live_mut().expect("the frontier is live");
-    assert!(storage.take_completed(ring, 0).unwrap().is_some());
+    // The walker reports descriptor zero as LAST: only that releases it.
+    hardware.set_cursor(BASE, 0, Some(1));
+    let frozen = ring.freeze_cursor(&mut hardware).unwrap();
+    assert!(storage.take_completed(ring, frozen, 0).unwrap().is_some());
     let enable_count = hardware.operation_count(RxWalkerOperation::Enable);
     let disable_count = hardware.operation_count(RxWalkerOperation::Stop);
     let reload_count = hardware.operation_count(RxWalkerOperation::RequestReload);

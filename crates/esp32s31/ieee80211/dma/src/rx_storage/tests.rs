@@ -200,8 +200,9 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed rotated unit")
         .detach_single(&mut mmio)
@@ -254,8 +255,9 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit")
         .detach_single(&mut mmio)
@@ -317,8 +319,9 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit")
         .detach_single(&mut mmio)
@@ -374,14 +377,16 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
     mmio.last_descriptor_low = (base + 3 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = 0;
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let first = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("first completed unit")
         .detach_single(&mut mmio)
         .expect("first single descriptor");
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let second = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("second completed unit")
         .detach_single(&mut mmio)
@@ -465,15 +470,16 @@ fn live_binding_rejects_a_foreign_storage_arena() {
     let base = storage.dma_layout(&mut buffers).unwrap();
     let foreign = RxDmaStorage::<COUNT, 16, 20, HostDma>::new();
     let mut mmio = MockRxDma::default();
-    let live = storage
+    let mut live = storage
         .prepare_ring(&mut mmio, base, &buffers)
         .expect("prepared owner")
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live owner");
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     assert_eq!(
-        foreign.completed_unit_frontier(&live),
+        foreign.completed_unit_frontier_through_cursor(&live, frozen),
         Err(RxRingError::DescriptorOwnerAddress)
     );
 
@@ -493,7 +499,7 @@ fn first_frontier_returns_one_unit_from_a_terminal_burst() {
     let prepared = storage
         .prepare_ring(&mut mmio, base, &buffers)
         .expect("prepared owner");
-    let live = prepared
+    let mut live = prepared
         .try_start(&mut mmio)
         .map_err(|(_, error)| error)
         .expect("live epoch");
@@ -508,22 +514,15 @@ fn first_frontier_returns_one_unit_from_a_terminal_burst() {
     mmio.last_descriptor_low = (base + 3 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let complete = storage
-        .completed_unit_frontier_through_cursor(
-            &live,
-            mmio.last_descriptor_low,
-            mmio.next_descriptor_low,
-        )
+        .completed_unit_frontier_through_cursor(&live, frozen)
         .expect("complete burst frontier");
     assert_eq!(complete.unit_count, COUNT);
     assert_eq!(complete.descriptor_count, COUNT);
 
     let first = storage
-        .first_completed_unit_frontier_through_cursor(
-            &live,
-            mmio.last_descriptor_low,
-            mmio.next_descriptor_low,
-        )
+        .first_completed_unit_frontier_through_cursor(&live, frozen)
         .expect("first unit frontier");
     assert_eq!(first.unit_count, 1);
     assert_eq!(first.descriptor_count, 1);
@@ -604,8 +603,9 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     // An upper owner keeps descriptor zero's buffer, so its rearm fails
     // inside the recycle transaction, after every descriptor check passed.
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit")
         .detach_single(&mut mmio)
@@ -657,9 +657,12 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
             _ => unreachable!(),
         }
         descriptor.inject_corrupt_words(word0, buffer_address, next_address);
+        // The walker reports descriptor zero as LAST: its image is final.
+        mmio.last_descriptor_low = base & 0x000f_ffff;
 
+        let frozen = live.freeze_cursor(&mut mmio).unwrap();
         assert!(matches!(
-            storage.take_completed(&mut live, 0),
+            storage.take_completed(&mut live, frozen, 0),
             Err(RxRingError::Corrupt)
         ));
         assert!(live.observed_mask().is_empty());
@@ -688,7 +691,13 @@ fn impossible_reload_frontier_quarantines_the_static_arena() {
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     assert!(
         storage
             .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -739,7 +748,13 @@ fn in_arena_intermediate_last_rerings_the_doorbell() {
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     assert!(
         storage
             .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -811,7 +826,13 @@ fn ring_after_exhausted_reload_rering() -> (
         crate::descriptor::rx_armed_word(16).expect("valid size") | crate::descriptor::RX_DONE,
     );
     mmio.set_cursor(base, 0, Some(1));
-    assert!(storage.take_completed(&mut live, 0).unwrap().is_some());
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, frozen, 0)
+            .unwrap()
+            .is_some()
+    );
     assert!(
         storage
             .recycle_completed_prefix::<1, _>(&mut live, &mut mmio)
@@ -902,8 +923,9 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
     // resumes the walker at three's new link: descriptor zero.
     storage.descriptors()[0].write_word0(done);
     mmio.set_cursor(base, 3, None);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let unit = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .expect("completed descriptor")
         .expect("unit owner");
     unit.recycle(&mut mmio)
@@ -922,18 +944,16 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
     storage.descriptors()[3].write_word0(done);
     storage.descriptors()[0].write_word0(done);
     mmio.set_cursor(base, 0, None);
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let frontier = storage
-        .first_completed_unit_frontier_through_cursor(
-            &live,
-            mmio.last_descriptor_low,
-            mmio.next_descriptor_low,
-        )
+        .first_completed_unit_frontier_through_cursor(&live, frozen)
         .expect("exhausted frontier");
     assert_eq!(frontier.unit_count, 1);
     assert_eq!(frontier.descriptor_count, COUNT - 1);
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let unit = storage
-        .take_completed_unit(&mut live, frontier.descriptor_count)
+        .take_completed_unit(&mut live, frozen)
         .expect("released unit")
         .expect("terminal payload owner");
     assert_eq!(unit.descriptor_count(), COUNT - 1);
@@ -986,11 +1006,9 @@ fn dropping_a_taken_completed_unit_requires_radio_reset() {
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    let frontier = storage
-        .completed_unit_frontier_through(&live, mmio.last_descriptor_low)
-        .unwrap();
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let unit = storage
-        .take_completed_unit(&mut live, frontier.descriptor_count)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit");
 
@@ -1026,7 +1044,7 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     let frozen_cursor = live.freeze_cursor(&mut mmio).unwrap();
     let unit = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen_cursor)
         .expect("completed descriptor")
         .expect("descriptor owner");
     unit.retain_for_deferred_recycle();
@@ -1046,6 +1064,209 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
         .expect("vendor reload suffix");
     assert_eq!(live.accepted_tail().get(), 0);
     assert!(live.topology_snapshot().valid);
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+/// Two completed single-descriptor frames, LAST on the first: the walker
+/// still writes the second, so only the first unit can be taken.
+fn two_completed_frames_last_on_the_first() -> (
+    &'static RxDmaStorage<4, 16, 20, HostDma>,
+    MockRxDma,
+    RxRingLive<'static, 4>,
+) {
+    const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+    let storage = Box::leak(Box::new(RxDmaStorage::<4, 16, 20, HostDma>::new()));
+    let buffers = Box::leak(Box::new([0; 4]));
+    let base = storage.dma_layout(buffers).unwrap();
+    let mut mmio = MockRxDma::default();
+    let live = storage
+        .prepare_ring(&mut mmio, base, buffers)
+        .expect("prepared owner")
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    for descriptor in &storage.descriptors()[..2] {
+        descriptor.write_word0(
+            16 | (4 << crate::descriptor::LENGTH_SHIFT)
+                | crate::descriptor::RX_DONE
+                | crate::descriptor::OWNER,
+        );
+    }
+    mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
+    mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
+    (storage, mmio, live)
+}
+
+#[test]
+fn a_take_never_passes_the_frozen_last() {
+    let (storage, mut mmio, mut live) = two_completed_frames_last_on_the_first();
+    let cursor = live.freeze_cursor(&mut mmio).unwrap();
+    let first = storage
+        .take_completed_unit(&mut live, cursor)
+        .unwrap()
+        .expect("LAST itself is released");
+    assert_eq!(first.head_index(), 0);
+    first.retain_for_deferred_recycle();
+    // Descriptor one carries RX_DONE, but it lies beyond the frozen LAST.
+    assert!(
+        storage
+            .take_completed_unit(&mut live, cursor)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        storage.completed_unit_frontier_through_cursor(&live, cursor),
+        Ok(RxCompletedUnitFrontier::default())
+    );
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_descriptor_take_never_passes_the_frozen_last() {
+    let (storage, mut mmio, mut live) = two_completed_frames_last_on_the_first();
+    // Past LAST the walker may still be writing the descriptor: a torn
+    // image there is no ring fault, because it is never read.
+    let descriptor = &storage.descriptors()[1];
+    descriptor.inject_corrupt_words(
+        (descriptor.word0() & !crate::descriptor::SIZE_MASK) | 17,
+        descriptor.buffer_address(),
+        descriptor.next_address(),
+    );
+    let cursor = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, cursor, 1)
+            .unwrap()
+            .is_none()
+    );
+    assert!(!live.observed_mask().contains(1));
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(matches!(
+        storage.take_completed(&mut live, cursor, 4),
+        Err(RxRingError::Count)
+    ));
+    assert_eq!(
+        storage
+            .take_completed(&mut live, cursor, 0)
+            .unwrap()
+            .expect("LAST itself is released")
+            .index(),
+        0
+    );
+    let descriptor = &storage.descriptors()[1];
+    descriptor.inject_corrupt_words(
+        (descriptor.word0() & !crate::descriptor::SIZE_MASK) | 16,
+        descriptor.buffer_address(),
+        descriptor.next_address(),
+    );
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_descriptor_take_refuses_a_cursor_of_an_earlier_live_epoch() {
+    let (storage, mut mmio, mut live) = two_completed_frames_last_on_the_first();
+    let earlier = live.freeze_cursor(&mut mmio).unwrap();
+    let halted = live
+        .try_stop(&mut mmio)
+        .unwrap_or_else(|_| panic!("walker stops"));
+    let mut live = storage
+        .prepare_halted(halted, &mut mmio)
+        .unwrap_or_else(|_| panic!("halted arena rebuilds"))
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("next live epoch");
+    storage.descriptors()[0].write_word0(
+        16 | (4 << crate::descriptor::LENGTH_SHIFT)
+            | crate::descriptor::RX_DONE
+            | crate::descriptor::OWNER,
+    );
+    assert!(
+        storage
+            .take_completed(&mut live, earlier, 0)
+            .unwrap()
+            .is_none()
+    );
+    let current = live.freeze_cursor(&mut mmio).unwrap();
+    assert!(
+        storage
+            .take_completed(&mut live, current, 0)
+            .unwrap()
+            .is_some()
+    );
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_cursor_of_an_earlier_generation_takes_nothing() {
+    let (storage, mut mmio, mut live) = two_completed_frames_last_on_the_first();
+    let stale = live.freeze_cursor(&mut mmio).unwrap();
+    storage
+        .take_completed_unit(&mut live, stale)
+        .unwrap()
+        .expect("first unit")
+        .retain_for_deferred_recycle();
+    storage
+        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, stale, 1)
+        .unwrap()
+        .expect("LAST releases descriptor zero");
+    live.complete_pending_reload(&mut mmio).unwrap();
+    // The append changed the generation. The walker has moved on to one.
+    mmio.last_descriptor_low = mmio.next_descriptor_low;
+    mmio.next_descriptor_low = 0;
+    assert!(
+        storage
+            .take_completed_unit(&mut live, stale)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        storage.first_completed_unit_frontier_through_cursor(&live, stale),
+        Ok(RxCompletedUnitFrontier::default())
+    );
+    let fresh = live.freeze_cursor(&mut mmio).unwrap();
+    let second = storage
+        .take_completed_unit(&mut live, fresh)
+        .unwrap()
+        .expect("a fresh cursor releases descriptor one");
+    assert_eq!(second.head_index(), 1);
+    second.retain_for_deferred_recycle();
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_cursor_of_an_earlier_live_epoch_takes_nothing() {
+    let (storage, mut mmio, mut live) = two_completed_frames_last_on_the_first();
+    let earlier = live.freeze_cursor(&mut mmio).unwrap();
+    let halted = live
+        .try_stop(&mut mmio)
+        .unwrap_or_else(|_| panic!("walker stops"));
+    let mut live = storage
+        .prepare_halted(halted, &mut mmio)
+        .unwrap_or_else(|_| panic!("halted arena rebuilds"))
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("next live epoch");
+    // The rebuilt epoch restarts its generation count at zero on the same
+    // arena; only the epoch tells the two cursors apart.
+    storage.descriptors()[0].write_word0(
+        16 | (4 << crate::descriptor::LENGTH_SHIFT)
+            | crate::descriptor::RX_DONE
+            | crate::descriptor::OWNER,
+    );
+    assert!(
+        storage
+            .take_completed_unit(&mut live, earlier)
+            .unwrap()
+            .is_none()
+    );
+    let current = live.freeze_cursor(&mut mmio).unwrap();
+    assert_ne!(current, earlier);
+    storage
+        .take_completed_unit(&mut live, current)
+        .unwrap()
+        .expect("the current epoch's cursor releases descriptor zero")
+        .retain_for_deferred_recycle();
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
@@ -1076,8 +1297,9 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     mmio.next_descriptor_low = (base + 2 * crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .expect("first unit inspection")
         .expect("first unit owner")
         .retain_for_deferred_recycle();
@@ -1096,8 +1318,9 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
     live.complete_pending_reload(&mut mmio)
         .expect("first vendor reload suffix");
 
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .expect("second unit inspection")
         .expect("second unit owner")
         .retain_for_deferred_recycle();
@@ -1229,8 +1452,12 @@ fn host_dma_port_writes_only_inside_one_ring_buffer() {
             | crate::descriptor::RX_DONE
             | crate::descriptor::OWNER,
     );
+    // The walker reports descriptor one as LAST: only that releases it.
+    mmio.last_descriptor_low =
+        (live.descriptor_base() + crate::descriptor::DESCRIPTOR_BYTES) & 0x000f_ffff;
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let completed = storage
-        .take_completed(&mut live, 1)
+        .take_completed(&mut live, frozen, 1)
         .unwrap()
         .expect("completed descriptor");
     assert_eq!(completed.segment().buffer[4..8], [1, 2, 3, 4]);
@@ -1292,8 +1519,11 @@ fn host_dma_port_refuses_a_foreign_ring_and_a_detached_buffer() {
             | crate::descriptor::RX_DONE
             | crate::descriptor::OWNER,
     );
+    // The walker reports descriptor zero as LAST: only that releases it.
+    mmio.last_descriptor_low = live.descriptor_base() & 0x000f_ffff;
+    let frozen = live.freeze_cursor(&mut mmio).unwrap();
     let detached = storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, frozen)
         .unwrap()
         .expect("completed unit")
         .detach_single(&mut mmio)
@@ -1512,16 +1742,12 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
     mmio.set_cursor(base, 2, Some(3));
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     let frontier = storage
-        .completed_unit_frontier_through_cursor(
-            &live,
-            cursor.last_descriptor_low(),
-            cursor.next_descriptor_low(),
-        )
+        .completed_unit_frontier_through_cursor(&live, cursor)
         .unwrap();
     assert_eq!(frontier.descriptor_count, 3);
 
     let unit = storage
-        .take_completed_unit(&mut live, frontier.descriptor_count)
+        .take_completed_unit(&mut live, cursor)
         .expect("an oversized chain is air input, not a ring fault")
         .expect("the complete chain is owned");
     assert_eq!(unit.descriptor_count(), 3);
@@ -1574,7 +1800,7 @@ fn ring_with_pending_reload(
     mmio.set_cursor(base, 0, Some(1));
     let cursor = live.freeze_cursor(mmio).unwrap();
     storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, cursor)
         .unwrap()
         .unwrap()
         .retain_for_deferred_recycle();
@@ -1638,7 +1864,7 @@ fn reload_attempts_record_the_largest_observation_count() {
     mmio.set_cursor(live.descriptor_base(), 1, Some(0));
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     storage
-        .take_completed_unit(&mut live, 1)
+        .take_completed_unit(&mut live, cursor)
         .unwrap()
         .unwrap()
         .retain_for_deferred_recycle();
@@ -1740,7 +1966,12 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
         while ring.land(4, true) {}
         assert_eq!(ring.walker.next_descriptor_low, 0, "round {round}");
         let mut leases = std::vec::Vec::new();
-        while let Some(unit) = ring.storage.take_completed_unit(&mut ring.live, 1).unwrap() {
+        let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
+        while let Some(unit) = ring
+            .storage
+            .take_completed_unit(&mut ring.live, frozen)
+            .unwrap()
+        {
             let detached = unit.detach_single(&mut ring.walker).unwrap();
             let slot = leases.len();
             let radio = pool
@@ -1807,13 +2038,10 @@ fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
         ring.walker.last_descriptor_low,
         ring.reserved_address() & ADDRESS_LOW_MASK
     );
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     assert_eq!(
         ring.storage
-            .first_completed_unit_frontier_through_cursor(
-                &ring.live,
-                ring.walker.last_descriptor_low,
-                ring.walker.next_descriptor_low,
-            )
+            .first_completed_unit_frontier_through_cursor(&ring.live, frozen,)
             .unwrap()
             .unit_count,
         0,
@@ -1838,9 +2066,10 @@ fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
         .observe_reserved(&mut ring.live, &mut ring.walker)
         .unwrap();
     assert_eq!(reserved.next_address(), ring.base);
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let unit = ring
         .storage
-        .take_completed_unit(&mut ring.live, 1)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("the head's unit");
     assert!(!unit.metadata().continues_reserved_landing());
@@ -1851,8 +2080,9 @@ fn a_cold_landing_is_dropped_and_r_next_clears_only_at_the_first_ring_take() {
 
     // Later takes leave it cleared and count nothing.
     assert!(ring.land(4, true));
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     ring.storage
-        .take_completed_unit(&mut ring.live, 1)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("the second unit")
         .retain_for_deferred_recycle();
@@ -1880,9 +2110,10 @@ fn a_frame_continuing_from_r_into_the_head_is_taken_as_its_tail() {
         .observe_reserved(&mut ring.live, &mut ring.walker)
         .unwrap();
     assert_eq!(ring.live.reload_evidence().reserved_landings, 0);
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let unit = ring
         .storage
-        .take_completed_unit(&mut ring.live, 1)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("the head's unit");
     assert!(unit.metadata().continues_reserved_landing());
@@ -1904,8 +2135,9 @@ fn a_late_landing_in_r_is_counted_and_fails_closed() {
         let mut ring = Walked::<COUNT>::start();
         assert!(ring.land(4, true));
         assert!(ring.land(4, true));
+        let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
         ring.storage
-            .take_completed_unit(&mut ring.live, 1)
+            .take_completed_unit(&mut ring.live, frozen)
             .unwrap()
             .expect("the head's unit")
             .retain_for_deferred_recycle();
@@ -1987,8 +2219,9 @@ fn exhausted_with_head_returned(lost: u32) -> Walked<4> {
     ring.walker.next_descriptor_low = ring.base & ADDRESS_LOW_MASK;
     while ring.land(4, true) {}
     ring.walker.clear_operations();
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     ring.storage
-        .take_completed_unit(&mut ring.live, 1)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("the head's unit")
         .recycle(&mut ring.walker)
@@ -2065,18 +2298,16 @@ fn a_unit_spanning_the_whole_ring_is_rejected() {
         | crate::descriptor::OWNER;
     ring.storage.descriptors()[COUNT - 1].write_word0(done);
     ring.walker.set_cursor(ring.base, COUNT - 1, None);
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let frontier = ring
         .storage
-        .first_completed_unit_frontier_through_cursor(
-            &ring.live,
-            ring.walker.last_descriptor_low,
-            ring.walker.next_descriptor_low,
-        )
+        .first_completed_unit_frontier_through_cursor(&ring.live, frozen)
         .unwrap();
     assert_eq!(frontier.descriptor_count, COUNT);
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let unit = ring
         .storage
-        .take_completed_unit(&mut ring.live, COUNT)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("the whole-ring unit");
     assert_eq!(unit.recycle(&mut ring.walker), Err(RxRingError::Corrupt));
@@ -2118,7 +2349,12 @@ impl<const COUNT: usize> Walked<COUNT> {
         pool: &'static oer_memory::ExternalRxHandoffPool<16, COUNT>,
     ) -> std::vec::Vec<oer_memory::ExternalRxNetworkLease<'static, 16>> {
         let mut leases = std::vec::Vec::new();
-        while let Some(unit) = self.storage.take_completed_unit(&mut self.live, 1).unwrap() {
+        let frozen = self.live.freeze_cursor(&mut self.walker).unwrap();
+        while let Some(unit) = self
+            .storage
+            .take_completed_unit(&mut self.live, frozen)
+            .unwrap()
+        {
             let detached = unit.detach_single(&mut self.walker).unwrap();
             let radio = pool
                 .try_claim_radio(detached.into_buffer(), leases.len())
@@ -2143,9 +2379,10 @@ fn a_detach_clears_the_owner_bit_and_fences_before_the_lease_is_returned() {
     assert!(ring.land(12, true));
     let completed = ring.storage.descriptors()[0].word0();
     assert!(rx_owner(completed), "hardware leaves the owner bit set");
+    let frozen = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let unit = ring
         .storage
-        .take_completed_unit(&mut ring.live, 1)
+        .take_completed_unit(&mut ring.live, frozen)
         .unwrap()
         .expect("descriptor zero completed");
     ring.walker.clear_operations();
@@ -2292,11 +2529,7 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
     let cursor = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     let frontier = ring
         .storage
-        .completed_unit_frontier_through_cursor(
-            &ring.live,
-            cursor.last_descriptor_low(),
-            cursor.next_descriptor_low(),
-        )
+        .completed_unit_frontier_through_cursor(&ring.live, cursor)
         .unwrap();
     // The LAST-bounded frontier stops at LAST: descriptor 2 is not in it.
     assert_eq!((frontier.unit_count, frontier.descriptor_count), (2, 2));
@@ -2308,7 +2541,7 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
     while remaining != 0 {
         let unit = ring
             .storage
-            .take_completed_unit(&mut ring.live, remaining)
+            .take_completed_unit(&mut ring.live, cursor)
             .unwrap()
             .expect("a unit through LAST");
         remaining -= unit.descriptor_count();
@@ -2320,15 +2553,18 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
         let length = radio.frame().len();
         leases.push(pool.claim_network(radio.republish(0, length)));
     }
+    // The take itself stops at LAST: the same cursor hands out nothing more.
+    assert!(
+        ring.storage
+            .take_completed_unit(&mut ring.live, cursor)
+            .unwrap()
+            .is_none()
+    );
     // Descriptor 2 was not handed out: it is neither observed nor detached.
     let refreshed = ring.live.freeze_cursor(&mut ring.walker).unwrap();
     assert_eq!(
         ring.storage
-            .completed_unit_frontier_through_cursor(
-                &ring.live,
-                refreshed.last_descriptor_low(),
-                refreshed.next_descriptor_low(),
-            )
+            .completed_unit_frontier_through_cursor(&ring.live, refreshed)
             .unwrap()
             .unit_count,
         0
@@ -2368,11 +2604,7 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
     assert_eq!(cursor.last_descriptor_low(), ring.low(COUNT - 1));
     let frontier = ring
         .storage
-        .completed_unit_frontier_through_cursor(
-            &ring.live,
-            cursor.last_descriptor_low(),
-            cursor.next_descriptor_low(),
-        )
+        .completed_unit_frontier_through_cursor(&ring.live, cursor)
         .unwrap();
     assert_eq!(frontier.descriptor_count, COUNT);
     let pool = Box::leak(Box::new(

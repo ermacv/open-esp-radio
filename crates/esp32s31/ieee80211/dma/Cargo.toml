@@ -23,6 +23,7 @@ vcell = "0.1.3"
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-ui-cases = { path = "../../../../tools/lib/ui-cases" }
 
 [lints]
 workspace = true

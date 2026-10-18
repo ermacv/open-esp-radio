@@ -2089,6 +2089,7 @@ dependencies = [
  "bytemuck",
  "oer-esp32s31-hal",
  "oer-memory",
+ "oer-ui-cases",
  "pin-project",
  "vcell",
 ]

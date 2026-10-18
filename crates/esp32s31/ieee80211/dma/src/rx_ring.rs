@@ -254,6 +254,11 @@ pub struct RxArenaWords {
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
     walker_on_detached: AtomicU32,
+    /// Live epochs started on this arena. A frozen cursor names the epoch it
+    /// was sampled in, so a cursor of an earlier epoch on the same arena,
+    /// whose generation count restarted at zero, never authorizes a take or
+    /// recycle in a later one. Not evidence: [`Self::reset_evidence`] keeps it.
+    live_epochs: AtomicU32,
 }
 
 impl RxArenaWords {
@@ -271,7 +276,12 @@ impl RxArenaWords {
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
             walker_on_detached: AtomicU32::new(0),
+            live_epochs: AtomicU32::new(0),
         }
+    }
+
+    fn live_epoch(&self) -> u32 {
+        self.live_epochs.load(Ordering::Relaxed)
     }
 
     pub(crate) const fn lifecycle(&self) -> &AtomicU8 {
@@ -467,15 +477,31 @@ impl RxObservedMask {
 
 /// One ordered hardware cursor bound to a live descriptor generation.
 ///
-/// Addresses can be reused immediately after append. Keeping the generation
-/// and arena identity private prevents a stale LAST from authorizing mutation
-/// of descriptors which have already returned to hardware.
+/// Addresses can be reused immediately after append. Keeping the generation,
+/// live epoch and arena identity private prevents a stale LAST from
+/// authorizing mutation of descriptors which have already returned to
+/// hardware. Only [`RxRingLive::freeze_cursor`] makes one, so every unit
+/// take and frontier is bounded by a LAST the hardware reported for this
+/// exact ring generation; a cursor of another arena, live epoch or
+/// generation authorizes nothing.
+///
+/// ```compile_fail,E0451
+/// let _forged = oer_esp32s31_ieee80211_dma::rx_ring::RxFrozenCursor {
+///     last_descriptor_low: 0,
+///     next_descriptor_low: 0,
+///     descriptor_base: 0,
+///     arena_identity: 0,
+///     live_epoch: 0,
+///     generation: 0,
+/// };
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxFrozenCursor {
     last_descriptor_low: u32,
     next_descriptor_low: u32,
     descriptor_base: u32,
     arena_identity: usize,
+    live_epoch: u32,
     generation: u32,
 }
 
@@ -975,6 +1001,13 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             }
             return Err((self, error));
         }
+        let Some(live_epoch) = self.arena.live_epoch().checked_add(1) else {
+            // A frozen cursor names its epoch; a wrapped count could let a
+            // cursor of an earlier epoch authorize this one.
+            RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
+            return Err((self, RxRingError::Corrupt));
+        };
+        self.arena.live_epochs.store(live_epoch, Ordering::Relaxed);
         RxDmaArenaState::Live.store(self.arena.lifecycle());
         Ok(RxRingLive {
             descriptors: self.descriptors,
@@ -1320,17 +1353,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         completed
     }
 
-    /// Snapshot complete RX units, including units split across descriptors.
-    ///
-    /// A non-terminal descriptor is never reported by itself: the scan only
-    /// extends `descriptor_count` after observing a later `RX_DONE` terminal.
-    /// Thus an armed or partially filled frontier remains owned by hardware.
-    pub fn completed_unit_frontier(&self) -> RxCompletedUnitFrontier {
-        self.completed_unit_frontier_with_limit(COUNT, |_| true)
-    }
-
-    /// Snapshot a complete RX unit only through the descriptor frontier which
-    /// hardware has published in `RX_LAST_DESCRIPTOR`.
+    /// The descriptors after the observed prefix which one frozen cursor
+    /// releases to software, through its LAST inclusive, and whether the
+    /// cursor proves the finite hardware list exhausted.
     ///
     /// SOURCE: the complete vendor walker
     /// `libpp[wdev.o]::wdevProcessRxSucDataAll` snapshots `libpp[hal_mac_rx.o]::hal_mac_rx_get_last_dscr` before touching the software list,
@@ -1340,127 +1365,108 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// finished advancing its descriptor frontier. Returning such a node to
     /// the live append list can overwrite `next` while hardware still needs
     /// it, terminating RX after the first frame.
-    pub fn completed_unit_frontier_through_with<F>(
-        &self,
-        last_descriptor_low: u32,
-        nonterminal_consumed: F,
-    ) -> RxCompletedUnitFrontier
-    where
-        F: FnMut(usize) -> bool,
-    {
-        let Some(last_index) = descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
-        else {
-            return RxCompletedUnitFrontier::default();
-        };
-        let observed = self.observed_prefix_len();
-        if observed == COUNT {
-            return RxCompletedUnitFrontier::default();
-        }
-        let last_distance = self.recycle_start.distance_to(last_index);
-        let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
-        if last_distance < observed || last_distance > accepted_distance {
-            return RxCompletedUnitFrontier::default();
-        }
-        let descriptor_limit = last_distance + 1 - observed;
-        self.completed_unit_frontier_with_limit(descriptor_limit, nonterminal_consumed)
-    }
-
-    /// Snapshot complete units through one ordered LAST/NEXT cursor image.
     ///
     /// A zero NEXT with LAST at the accepted tail proves that the finite
     /// hardware list was exhausted. In that state every link from the
     /// software head through LAST has been consumed, even when an unused
     /// intermediate buffer retained its recycle guard. The complete vendor
     /// `wdevProcessRxSucDataAll` likewise walks every node through its saved
-    /// LAST and uses only the terminal `RX_DONE` (bit 30) to delimit receive units.
-    pub fn completed_unit_frontier_through_cursor_with<F>(
-        &self,
-        last_descriptor_low: u32,
-        next_descriptor_low: u32,
-        nonterminal_consumed: F,
-    ) -> RxCompletedUnitFrontier
-    where
-        F: FnMut(usize) -> bool,
-    {
-        if next_descriptor_low == 0
-            && descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
-                == Some(self.accepted_tail)
-        {
-            self.completed_unit_frontier_through_with(last_descriptor_low, |_| true)
-        } else {
-            self.completed_unit_frontier_through_with(last_descriptor_low, nonterminal_consumed)
+    /// LAST and uses only the terminal `RX_DONE` (bit 30) to delimit receive
+    /// units.
+    ///
+    /// `None` for a cursor of another ring, live epoch or descriptor
+    /// generation, and for a LAST outside the accepted list after the
+    /// observed prefix.
+    fn frozen_cursor_descriptor_limit(&self, cursor: RxFrozenCursor) -> Option<(usize, bool)> {
+        if !self.frozen_cursor_current(cursor) {
+            return None;
         }
-    }
-
-    /// Snapshot only the first complete unit through the hardware LAST
-    /// frontier. Unlike [`Self::completed_unit_frontier_through_with`], a run
-    /// of single-descriptor frames is deliberately truncated to one unit so
-    /// callers can prove and recycle each link before taking the next owner.
-    pub fn first_completed_unit_frontier_through_with<F>(
-        &self,
-        last_descriptor_low: u32,
-        nonterminal_consumed: F,
-    ) -> RxCompletedUnitFrontier
-    where
-        F: FnMut(usize) -> bool,
-    {
-        let Some(last_index) = descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
-        else {
-            return RxCompletedUnitFrontier::default();
-        };
+        let last_index =
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_base)?;
         let observed = self.observed_prefix_len();
         if observed == COUNT {
-            return RxCompletedUnitFrontier::default();
+            return None;
         }
         let last_distance = self.recycle_start.distance_to(last_index);
         let accepted_distance = self.recycle_start.distance_to(self.accepted_tail);
         if last_distance < observed || last_distance > accepted_distance {
-            return RxCompletedUnitFrontier::default();
+            return None;
         }
-        let descriptor_limit = last_distance + 1 - observed;
-        self.first_completed_unit_frontier_with_limit(descriptor_limit, nonterminal_consumed)
+        let exhausted = cursor.next_descriptor_low == 0 && last_index == self.accepted_tail;
+        Some((last_distance + 1 - observed, exhausted))
     }
 
-    /// Unit-sized counterpart of
-    /// [`Self::completed_unit_frontier_through_cursor_with`].
-    pub fn first_completed_unit_frontier_through_cursor_with<F>(
+    /// Whether one frozen cursor releases descriptor `index` to software: it
+    /// lies from the recycle frontier through the cursor's LAST inclusive.
+    /// `false` for a cursor of another ring, live epoch or descriptor
+    /// generation, for an index outside the ring and for a LAST outside the
+    /// accepted list.
+    pub(crate) fn frozen_cursor_releases_index(
         &self,
-        last_descriptor_low: u32,
-        next_descriptor_low: u32,
-        nonterminal_consumed: F,
-    ) -> RxCompletedUnitFrontier
-    where
-        F: FnMut(usize) -> bool,
-    {
-        if next_descriptor_low == 0
-            && descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_base)
-                == Some(self.accepted_tail)
-        {
-            self.first_completed_unit_frontier_through_with(last_descriptor_low, |_| true)
-        } else {
-            self.first_completed_unit_frontier_through_with(
-                last_descriptor_low,
-                nonterminal_consumed,
-            )
+        cursor: RxFrozenCursor,
+        index: usize,
+    ) -> bool {
+        if !self.frozen_cursor_current(cursor) {
+            return false;
         }
+        let (Some(index), Some(last_index)) = (
+            RingIndex::<COUNT>::checked(index),
+            descriptor_index::<COUNT>(cursor.last_descriptor_low, self.descriptor_base),
+        ) else {
+            return false;
+        };
+        let last_distance = self.recycle_start.distance_to(last_index);
+        last_distance <= self.recycle_start.distance_to(self.accepted_tail)
+            && self.recycle_start.distance_to(index) <= last_distance
     }
 
-    /// Variant of [`completed_unit_frontier`](Self::completed_unit_frontier)
-    /// that requires buffer-side evidence for each non-terminal descriptor.
+    /// Snapshot complete RX units, including units split across descriptors,
+    /// through the LAST of one frozen cursor
+    /// ([`Self::frozen_cursor_descriptor_limit`]).
     ///
-    /// An armed descriptor and a consumed full non-terminal descriptor can
-    /// have the same ownership word. The storage owner can disambiguate them
-    /// by checking the buffer guard restored at recycle. This also prevents a
-    /// terminal left elsewhere in a handoff epoch from being joined to an
-    /// untouched frontier descriptor.
-    pub fn completed_unit_frontier_with<F>(
+    /// A non-terminal descriptor is never reported by itself: the scan only
+    /// extends `descriptor_count` after observing a later `RX_DONE` terminal,
+    /// and `nonterminal_consumed` supplies buffer-side evidence for each
+    /// non-terminal descriptor. An armed descriptor and a consumed full
+    /// non-terminal descriptor can have the same ownership word; the storage
+    /// owner disambiguates them by the buffer guard restored at recycle.
+    pub(crate) fn completed_unit_frontier_through_cursor_with<F>(
         &self,
+        cursor: RxFrozenCursor,
         nonterminal_consumed: F,
     ) -> RxCompletedUnitFrontier
     where
         F: FnMut(usize) -> bool,
     {
-        self.completed_unit_frontier_with_limit(COUNT, nonterminal_consumed)
+        match self.frozen_cursor_descriptor_limit(cursor) {
+            None => RxCompletedUnitFrontier::default(),
+            Some((limit, true)) => self.completed_unit_frontier_with_limit(limit, |_| true),
+            Some((limit, false)) => {
+                self.completed_unit_frontier_with_limit(limit, nonterminal_consumed)
+            }
+        }
+    }
+
+    /// Snapshot only the first complete unit through the LAST of one frozen
+    /// cursor. Unlike [`Self::completed_unit_frontier_through_cursor_with`],
+    /// a run of single-descriptor frames is deliberately truncated to one
+    /// unit so callers can prove and recycle each link before taking the
+    /// next owner.
+    pub(crate) fn first_completed_unit_frontier_through_cursor_with<F>(
+        &self,
+        cursor: RxFrozenCursor,
+        nonterminal_consumed: F,
+    ) -> RxCompletedUnitFrontier
+    where
+        F: FnMut(usize) -> bool,
+    {
+        match self.frozen_cursor_descriptor_limit(cursor) {
+            None => RxCompletedUnitFrontier::default(),
+            Some((limit, true)) => self.first_completed_unit_frontier_with_limit(limit, |_| true),
+            Some((limit, false)) => {
+                self.first_completed_unit_frontier_with_limit(limit, nonterminal_consumed)
+            }
+        }
     }
 
     fn completed_unit_frontier_with_limit<F>(
@@ -1573,13 +1579,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     /// Transfer one complete RX unit at the recycle frontier exactly once.
     ///
-    /// `descriptor_limit` should come from a prior
-    /// [`completed_unit_frontier`](Self::completed_unit_frontier) snapshot. It
-    /// prevents a saturated producer from extending this ownership transfer
-    /// to a later completion epoch.
+    /// The unit ends at or before the LAST of `cursor`, inclusive
+    /// ([`Self::frozen_cursor_descriptor_limit`]): the walker no longer
+    /// writes any of its descriptors. A cursor of another ring, live epoch or
+    /// generation takes nothing. A saturated producer cannot extend this
+    /// ownership transfer to a later completion epoch: that needs a later
+    /// cursor.
     pub(crate) fn take_completed_unit_owned<F, B>(
         &mut self,
-        descriptor_limit: usize,
+        cursor: RxFrozenCursor,
         nonterminal_consumed: F,
         reserved: &B,
     ) -> Result<Option<RxCompletedUnit>, RxRingError>
@@ -1587,6 +1595,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         F: FnMut(usize) -> bool,
         B: RxReservedBuffer,
     {
+        let Some((descriptor_limit, _)) = self.frozen_cursor_descriptor_limit(cursor) else {
+            return Ok(None);
+        };
         let Some(mut unit) =
             self.take_completed_unit_inner(descriptor_limit, nonterminal_consumed)?
         else {
@@ -2166,34 +2177,33 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // the caller which receives this generation-bound snapshot.
         mmio.fence();
         // No false positive on a just-completed descriptor. A descriptor
-        // is detached only by `RxDmaCompletedUnit::detach_single`
-        // (rx_storage.rs:473), whose `detached_word` (rx_ring.rs:1175)
-        // requires it observed and RX_DONE. Its unit came from
-        // `take_completed_unit` (rx_storage.rs:1212) with a limit from a
-        // LAST-bounded frontier: the drain takes only through
-        // `completed_unit_frontier_through_cursor` or its first-unit form
-        // (driver rx/transaction/service.rs:150, 208, 316), which ends the
-        // limit at the frozen LAST inclusive (rx_ring.rs:1361-1364,
-        // 1417-1420). So every detached descriptor lies at or before a LAST
-        // sampled before its detach: the walker completed it. LAST names
-        // the last completed descriptor and NEXT the one to fill after it,
-        // `LAST.next` or zero (SOURCE[HIL_W1_OWNER_BIT_2026_10_18]: stopped
-        // at NEXT = P with LAST = P - 1; H1 in HIL_W1_RX_WALKER_2026_10_18:
-        // NEXT = LAST.next), so a NEXT read after that LAST never names it
-        // again. NEXT may hold a descriptor whose RX_DONE is already
-        // visible while LAST has not reached it; that unit is outside the
-        // LAST bound, not taken, and keeps its owner bit. No relink names a
-        // detached descriptor: a rearm sets the owner bit and leaves the
-        // observed mask (rx_ring.rs:2086, 2106), and a group's tail link is
-        // zero until the accepted tail links the rearmed head
-        // (rx_ring.rs:2097). The frozen-LAST unit at exhaustion is detached
-        // with NEXT = 0, which names no descriptor (rx_ring.rs:1207).
+        // is detached only by `RxDmaCompletedUnit::detach_single`, whose
+        // `detached_word` requires it observed and RX_DONE. Its unit came
+        // from `RxDmaStorage::take_completed_unit`, which requires an
+        // `RxFrozenCursor` and ends the unit at that cursor's LAST inclusive
+        // (`frozen_cursor_descriptor_limit`); a cursor of another ring, live
+        // epoch or generation takes nothing. So every detached descriptor
+        // lies at or before a LAST sampled before its detach: the walker
+        // completed it. LAST names the last completed descriptor and NEXT
+        // the one to fill after it, `LAST.next` or zero
+        // (SOURCE[HIL_W1_OWNER_BIT_2026_10_18]: stopped at NEXT = P with
+        // LAST = P - 1; H1 in HIL_W1_RX_WALKER_2026_10_18: NEXT =
+        // LAST.next), so a NEXT read after that LAST never names it again.
+        // NEXT may hold a descriptor whose RX_DONE is already visible while
+        // LAST has not reached it; that unit is outside the LAST bound, not
+        // taken, and keeps its owner bit. No relink names a detached
+        // descriptor: a rearm in `recycle_completed_group` sets the owner
+        // bit and leaves the observed mask, and a group's tail link is zero
+        // until the accepted tail links the rearmed head. The frozen-LAST
+        // unit at exhaustion is detached with NEXT = 0, which names no
+        // descriptor (`names_detached`).
         self.check_walker_on_detached(next_descriptor_low)?;
         Ok(RxFrozenCursor {
             last_descriptor_low,
             next_descriptor_low,
             descriptor_base: self.descriptor_base,
             arena_identity: self.descriptors.as_ptr() as usize,
+            live_epoch: self.arena.live_epoch(),
             generation: self.cursor_generation,
         })
     }
@@ -2277,6 +2287,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         })
     }
 
+    /// Whether `cursor` was frozen on this ring in its current live epoch and
+    /// descriptor generation.
+    fn frozen_cursor_current(&self, cursor: RxFrozenCursor) -> bool {
+        cursor.descriptor_base == self.descriptor_base
+            && cursor.arena_identity == self.descriptors.as_ptr() as usize
+            && cursor.live_epoch == self.arena.live_epoch()
+            && cursor.generation == self.cursor_generation
+    }
+
     /// Whether a frozen vendor-style LAST snapshot releases the current unit.
     ///
     /// `wdevProcessRxSucDataAll` mutates and returns the descriptor equal to
@@ -2287,10 +2306,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return false;
         }
-        if cursor.descriptor_base != self.descriptor_base
-            || cursor.arena_identity != self.descriptors.as_ptr() as usize
-            || cursor.generation != self.cursor_generation
-        {
+        if !self.frozen_cursor_current(cursor) {
             return false;
         }
         let Some(last_index) =
@@ -2447,16 +2463,15 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         self.record_reload_observation(next_descriptor, last_descriptor_low);
         // The doorbell resumed the walker: it must not hold a detached
         // descriptor. No false positive on a just-completed one: every
-        // detached descriptor was taken through a frozen LAST inclusive
-        // (rx_ring.rs:1361-1364, driver rx/transaction/service.rs:150,
-        // 316), so the walker had completed it and NEXT, which names the
-        // descriptor after LAST or zero, has left it for good (the proof
-        // next to the check in `freeze_cursor`). A doorbell rung on an
-        // exhausted list resumes at `LAST.next` (H1,
-        // HIL_W1_RX_WALKER_2026_10_18): the rearmed head linked at
-        // rx_ring.rs:2097, owner bit set, never observed. With LAST itself
-        // detached at exhaustion, a NEXT still zero names no descriptor
-        // (rx_ring.rs:1207).
+        // detached descriptor was taken through a frozen cursor's LAST
+        // inclusive (`frozen_cursor_descriptor_limit`), so the walker had
+        // completed it and NEXT, which names the descriptor after LAST or
+        // zero, has left it for good (the proof next to the check in
+        // `freeze_cursor`). A doorbell rung on an exhausted list resumes at
+        // `LAST.next` (H1, HIL_W1_RX_WALKER_2026_10_18): the rearmed head
+        // that `recycle_completed_group` linked, owner bit set, never
+        // observed. With LAST itself detached at exhaustion, a NEXT still
+        // zero names no descriptor (`names_detached`).
         self.check_walker_on_detached(next_descriptor.address_low())?;
         let exhausted_short = match exhausted_short {
             Ok(exhausted_short) => exhausted_short,
