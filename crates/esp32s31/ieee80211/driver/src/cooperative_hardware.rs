@@ -515,9 +515,10 @@ impl RxDma for CooperativeRadioHardware<'_> {
 
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding,
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
-        RxDma::try_with_walker_stopped(&mut self.wifi_mac_hal(), stopped)
+        RxDma::try_with_walker_stopped(&mut self.wifi_mac_hal(), binding, stopped)
     }
 
     fn fence(&mut self) {

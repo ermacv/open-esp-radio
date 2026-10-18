@@ -8,6 +8,8 @@ repository.workspace = true
 description = "Role-neutral ESP32-S31 Wi-Fi device composition"
 
 [dependencies]
+atomic-waker = "1.1.2"
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 oer-esp32s31-coex = { path = "../../radio/coex" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }

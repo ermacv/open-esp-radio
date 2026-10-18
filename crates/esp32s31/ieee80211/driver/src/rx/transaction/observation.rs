@@ -33,5 +33,7 @@ pub enum Discard {
     Empty,
     TooLong,
     Chained,
+    /// A chain whose total length exceeds one descriptor's length field.
+    Oversized,
     OverloadBulk,
 }

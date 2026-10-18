@@ -36,6 +36,26 @@ and `embassy-time`.
 An interrupt handler never shares a lock with a task. Drivers never block or
 spin. Lines `FROM_CPU` 0 and 1 are the per-core executors.
 
+### Radio doorbell
+
+While a Wi-Fi interrupt epoch is live, only P3 writes the MAC and WDEVPWR
+interrupt banks. The P3 handlers run one `WifiIrqLine` (Wi-Fi driver
+`irq.rs`) through a `HandlerCell`, an ownership state machine rather than a
+lock: the line holds the active epoch, the fact publishers and a request
+word. P2 asks for a bank change by setting a request bit (`fetch_or`,
+Release) and ringing the doorbell. The doorbell handler resets its software
+interrupt first, then takes every request at once (`swap(0)`, AcqRel), so a
+ring after the reset raises it again and requests before the take coalesce.
+`MASK_ALL` wins over `UNMASK_RX`: the line masks both banks once and posts
+the masked fact; an unmask after it is ignored and counted. P2 requests
+`UNMASK_RX` only after the RX frontier drained with no released buffer left
+to rearm. Installing a line clears a stale request. The doorbell route is
+enabled at boot; the MAC and WDEVPWR routes are enabled after the line is
+installed and silenced right after the mask is confirmed. A lease the upper
+layer returns posts the RX-capacity fact (`RxReturnNotifier`), so the runner
+rearms the returned descriptors even when an exhausted walker raises no RX
+interrupt; the notice touches no ring state.
+
 ## Ownership
 
 - One owner per resource, neither `Clone` nor `Copy`: `&mut` within a call, a

@@ -557,16 +557,6 @@ impl<'arena> RadioAccess<'arena> {
             .try_with_mut(|registers| setup.prepare_connected_sta_with_pac(registers))
     }
 
-    /// Apply connected-STA interrupt policy through the live ISR capability
-    /// while the runtime register owner remains serialized in the arena.
-    pub fn try_prepare_active_connected_sta_without_power_save(
-        &self,
-        interrupt: &mut crate::owner::MacInterruptRegisters,
-    ) -> Result<crate::owner::ConnectedStaInterruptPrepared, RadioOwnerArenaError> {
-        self.arena
-            .try_with_mut(|registers| interrupt.prepare_connected_sta_with_pac(registers))
-    }
-
     /// Read the associated-STA policy as a value-only HAL observation.
     pub fn try_station_receive_policy_snapshot(
         &self,

@@ -448,6 +448,8 @@ impl<
         if self.unit.descriptor_count() != 1 {
             return Err(RxRingError::Count);
         }
+        // A single descriptor's length always fits its own length field.
+        let descriptor_word0 = self.unit.staged_word0().ok_or(RxRingError::Size)?;
         let index = self.unit.head_index();
         let buffer_id = self
             .storage
@@ -460,7 +462,7 @@ impl<
         Ok(RxDmaDetachedUnit {
             buffer,
             descriptor_address: self.unit.descriptor_address(),
-            descriptor_word0: self.unit.staged_word0(),
+            descriptor_word0,
             length: self.unit.total_length(),
         })
     }

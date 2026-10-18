@@ -36,7 +36,11 @@ field's offset in its arena. The RX arena carries its space and checks the
 published layout against it at every preparation; a TX storage takes its space
 when its binding is built (`pin_static::<S>`). The arena checks run the same
 code in both spaces. Test support supplies models of the hardware (the host
-space, the proofs a mock walker reports), never bypasses of these checks.
+space, the proofs a mock walker reports, and the shared register model of the
+RX walker, [`RxWalkerModel`](src/rx_dma/model.rs)), never bypasses of these
+checks. A walker stop proof names the arena whose binding it stopped; an RX
+ring halts or rebuilds only on a proof naming its own arena, and a proof for
+another arena poisons the arena until radio reset.
 
 [`PinnedTxDmaStorage`](src/tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.

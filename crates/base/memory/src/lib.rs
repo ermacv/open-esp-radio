@@ -10,11 +10,13 @@
 //! [`StableDmaRange`] carries an unforgeable address/lifetime proof from those
 //! audited storage leaves into otherwise safe register APIs. Higher protocol
 //! and integration crates use only these safe capabilities. [`zeroed`] gives
-//! statics in regions the boot zeroes an initializer that is all zero bytes.
+//! statics in regions the boot zeroes an initializer that is all zero bytes;
+//! [`HandlerCell`] in such a static hands one value to an interrupt handler.
 
 use core::marker::PhantomData;
 
 mod affine_spsc;
+mod handler_cell;
 mod indexed_custody;
 mod pinned_tx;
 mod rx_external_handoff;
@@ -26,6 +28,7 @@ pub use affine_spsc::{
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError, UniqueQueueIndex,
 };
+pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 pub use pinned_tx::{
     DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,

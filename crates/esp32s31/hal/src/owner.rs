@@ -3,10 +3,7 @@
 use crate::{
     domain::RadioDomain,
     ieee80211::{channel, mac as wifi_mac, station_wake::StationWakeState},
-    types::{
-        MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, MacPowerWakeCause,
-        PhyAdcRate,
-    },
+    types::{MacInterruptMask, MacInterruptSnapshot, MacPowerInterruptSnapshot, PhyAdcRate},
 };
 
 use super::*;
@@ -498,27 +495,9 @@ pub struct MacInterruptRegisters {
 }
 
 impl MacInterruptRegisters {
-    /// Apply connected-STA interrupt policy while the physical route remains
-    /// installed. The platform adapter must exclude the ISR while lending
-    /// this capability to task context.
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        radio: &mut RadioRuntimeOwner,
-    ) -> ConnectedStaInterruptPrepared {
-        let _ = self
-            .inner
-            .prepare_connected_sta_without_power_save(&mut radio.registers);
-        ConnectedStaInterruptPrepared { _private: () }
-    }
-
-    pub(crate) fn prepare_connected_sta_with_pac(
-        &mut self,
-        registers: &mut WifiRadioRegisters,
-    ) -> ConnectedStaInterruptPrepared {
-        let _ = self
-            .inner
-            .prepare_connected_sta_without_power_save(registers);
-        ConnectedStaInterruptPrepared { _private: () }
+    /// Mask every MAC source of the live epoch; nothing is acknowledged.
+    pub fn mask_all_mac_interrupts(&mut self) {
+        self.inner.mask_all_mac_interrupts();
     }
 
     pub fn mac_interrupt_status(&self) -> MacInterruptSnapshot {
@@ -550,12 +529,9 @@ pub struct MacPowerInterruptRegisters {
 }
 
 impl MacPowerInterruptRegisters {
-    pub fn mask_and_acknowledge_wake_cause(&mut self, cause: MacPowerWakeCause) {
-        self.inner.mask_and_acknowledge_wake_cause(cause);
-    }
-
-    pub fn acknowledge_wake_cause(&mut self, cause: MacPowerWakeCause) {
-        self.inner.acknowledge_wake_cause(cause);
+    /// Mask every WDEVPWR cause of the live epoch; nothing is acknowledged.
+    pub fn mask_all_power_interrupts(&mut self) {
+        self.inner.mask_all_power_interrupts();
     }
 
     pub fn power_interrupt_status(&self) -> MacPowerInterruptSnapshot {

@@ -68,6 +68,20 @@ checks:
   port into the arena's ring buffers (an address outside them is an error);
 - `Descriptor::inject_corrupt_words`, a fault model (memory corruption or a
   foreign write), used to show that the product's checks catch it;
+- `dma` `rx_dma::model::RxWalkerModel`, the RX walker's registers (LAST,
+  NEXT, BASE, WALKER_ENABLE, the reload doorbell) with an operation log; a
+  test refuses the stop or delays the doorbell through its fields;
+- `mac` `irq::model::{MacInterruptModel, PowerInterruptModel}`, both
+  interrupt banks: latched events, the enable state, the masked STATUS
+  image, `line_asserted()` and an operation log; an
+  `ActiveEpoch::for_host_test` owns them like the PAC banks;
+- the driver's receive tests compose these into the whole W1 RX path: the
+  interrupt line runs through a leaked `HandlerCell` and the same line
+  functions the image's handlers call, a host doorbell runs its handler
+  synchronously, and frames complete by descriptor word and LAST/NEXT. A
+  chained unit needs the DMA engine's write into each non-terminal buffer
+  (`dma_write`, which borrows the live ring), so chained and oversized drops
+  are tested over the service and the counting sink, not the runner;
 - `mac` `tx::ampdu::model`, a reference model of the vendor's A-MPDU assembly
   for cross-checking, not a product path.
 

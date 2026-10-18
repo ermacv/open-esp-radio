@@ -306,3 +306,35 @@ fn entry_cycles_stop_before_the_owned_waker_runs() {
     assert_eq!(snapshot.mac_irq_entries, 1);
     assert_eq!(snapshot.mac_irq_cycles, 25);
 }
+
+#[test]
+fn masked_is_published_once_and_survives_only_one_batch() {
+    let mut storage = IrqStorage::new();
+    let (publisher, mut consumer) = storage.split();
+    let wakes = Arc::new(WakeCount::default());
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(consumer.poll_batch(&mut cx).is_pending());
+
+    publisher.notify_masked();
+    publisher.notify_masked();
+    // A hardware publication cannot forge the fact.
+    publisher.publish(u32::MAX);
+
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    let batch = consumer.take_batch();
+    assert!(batch.masked() && !batch.rx_capacity_returned());
+    assert_eq!(
+        batch.collect::<std::vec::Vec<_>>(),
+        [
+            IrqWork::RxSuccess,
+            IrqWork::TxComplete,
+            IrqWork::TxTimeout,
+            IrqWork::Collision,
+        ]
+    );
+    assert!(consumer.take_batch().is_empty());
+
+    publisher.publish(EVENT_RX_SUCCESS);
+    assert!(!consumer.take_batch().masked());
+}

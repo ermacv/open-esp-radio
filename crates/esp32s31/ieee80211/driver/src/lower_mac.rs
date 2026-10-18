@@ -354,7 +354,7 @@ pub const ESP32S31_BEACON_TIMING_CAPABILITIES: BeaconTimingCapabilities =
     };
 
 /// The station TBTT schedule of the MAC's interface-zero timer, whose event
-/// fires on the power interrupt (`MacPowerWakeCause::StaTbtt`).
+/// fires on the power interrupt (`MacPowerInterruptObservation::sta_tbtt`).
 pub trait StationTbttHardware {
     fn start_station_tbtt(&mut self, schedule: StaTbttSchedule);
     fn stop_station_tbtt(&mut self);
@@ -2070,7 +2070,7 @@ where
     }
 
     /// Report the station TBTT whose event the power interrupt delivered
-    /// (`MacPowerWakeCause::StaTbtt`). Without a schedule the edge is stale
+    /// (`MacPowerInterruptObservation::sta_tbtt`). Without a schedule the edge is stale
     /// and reports nothing.
     pub fn station_tbtt<H: StationTsfHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
         &self,

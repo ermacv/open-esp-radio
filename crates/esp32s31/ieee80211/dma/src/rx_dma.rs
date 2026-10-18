@@ -7,7 +7,10 @@
 
 use core::marker::PhantomData;
 
-use crate::descriptor::{DESCRIPTOR_BYTES, Descriptor};
+use crate::{
+    descriptor::{DESCRIPTOR_BYTES, Descriptor},
+    rx_ring::RxArenaWords,
+};
 
 use oer_memory::StableDmaRange;
 
@@ -22,16 +25,27 @@ pub struct RxDmaBinding<'storage> {
     descriptor_base: u32,
     descriptor_count: u8,
     range: StableDmaRange<'storage>,
+    arena: &'storage RxArenaWords,
 }
 
 /// Opaque proof that the RX walker disable request completed and read back
-/// as stopped.
+/// as stopped, naming the arena whose binding the stop was requested for.
 ///
 /// Production code can obtain this value only from the PAC-backed
-/// [`RxDma`] implementation. Native models and explicit raw-DMA validation
-/// may construct a model proof for deterministic state-machine tests.
+/// [`RxDma`] implementation, which builds it from the binding it was handed.
+/// A ring accepts the proof only when it names the ring's own arena, so a
+/// forwarding layer which stops the walker for another binding cannot
+/// authorize a descriptor rebuild. Native models construct a model proof
+/// for deterministic state-machine tests.
+///
+/// The proof stays on the core that observed the walker: it is not `Send`.
+/// ```compile_fail,E0277
+/// fn send<T: Send>() {}
+/// send::<oer_esp32s31_ieee80211_dma::rx_dma::RxDmaWalkerStopped<'static>>();
+/// ```
 pub struct RxDmaWalkerStopped<'confirmation> {
-    _confirmation: PhantomData<&'confirmation mut ()>,
+    arena: &'confirmation RxArenaWords,
+    _not_send: PhantomData<*mut ()>,
 }
 
 /// Opaque current proof that the RX walker enable edge was accepted.
@@ -70,16 +84,23 @@ impl RxDmaReloadSettled<'_> {
     }
 }
 
-impl RxDmaWalkerStopped<'_> {
-    const fn confirmed() -> Self {
+impl<'confirmation> RxDmaWalkerStopped<'confirmation> {
+    pub(crate) const fn confirmed(binding: &'confirmation RxDmaBinding<'_>) -> Self {
         Self {
-            _confirmation: PhantomData,
+            arena: binding.arena,
+            _not_send: PhantomData,
         }
     }
 
+    /// A model walker's stop proof for the binding it was handed.
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn for_host_test() -> Self {
-        Self::confirmed()
+    pub const fn for_host_test(binding: &'confirmation RxDmaBinding<'_>) -> Self {
+        Self::confirmed(binding)
+    }
+
+    /// Whether this proof was issued for `arena`'s binding.
+    pub(crate) fn names(&self, arena: &RxArenaWords) -> bool {
+        core::ptr::eq(self.arena, arena)
     }
 }
 
@@ -200,6 +221,7 @@ impl<'storage> RxDmaBinding<'storage> {
     pub(crate) fn new<const COUNT: usize>(
         descriptors: &'storage [Descriptor; COUNT],
         descriptor_base: u32,
+        arena: &'storage RxArenaWords,
     ) -> Option<Self> {
         let descriptor_count = u8::try_from(COUNT).ok()?;
         let range_len = u32::try_from(core::mem::size_of_val(descriptors)).ok()?;
@@ -212,6 +234,7 @@ impl<'storage> RxDmaBinding<'storage> {
             descriptor_base,
             descriptor_count,
             range,
+            arena,
         })
     }
 
@@ -286,8 +309,12 @@ pub trait RxDma {
         binding: &RxDmaBinding<'_>,
         enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
     ) -> Option<R>;
+    /// Stop the walker for `binding` and pass a proof naming its arena.
+    ///
+    /// `None` means the walker did not read back as stopped.
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding<'_>,
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R>;
     fn fence(&mut self);
@@ -374,10 +401,11 @@ impl RxDma for WifiMacHal<'_> {
 
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding<'_>,
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
         self.try_disable_rx_walker()
-            .then(|| stopped(RxDmaWalkerStopped::confirmed()))
+            .then(|| stopped(RxDmaWalkerStopped::confirmed(binding)))
     }
 
     fn fence(&mut self) {
@@ -450,12 +478,16 @@ impl RxDma for RadioRuntimeOwner {
 
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding<'_>,
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
-        RxDma::try_with_walker_stopped(&mut self.wifi_mac_hal(), stopped)
+        RxDma::try_with_walker_stopped(&mut self.wifi_mac_hal(), binding, stopped)
     }
 
     fn fence(&mut self) {
         RxDma::fence(&mut self.wifi_mac_hal());
     }
 }
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod model;
