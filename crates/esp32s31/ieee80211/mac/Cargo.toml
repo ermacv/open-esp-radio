@@ -33,6 +33,7 @@ zeroize = { version = "1.9.0", default-features = false }
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-esp32s31-ieee80211-dma = { path = "../dma", features = ["test-support"] }
+oer-ieee80211-mac = { path = "../../../ieee80211/mac", features = ["test-support"] }
 oer-ui-cases = { path = "../../../../tools/lib/ui-cases" }
 
 [[test]]

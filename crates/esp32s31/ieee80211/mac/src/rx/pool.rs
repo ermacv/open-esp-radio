@@ -12,7 +12,10 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::rx::{RxPhyInfo, decode_normalized_rx_metadata};
+use crate::rx::{
+    NormalizedRxFrame, RxError, RxIngressConfig, RxPhyInfo, decode_normalized_rx_metadata,
+    view_normalized_rx_frame,
+};
 use oer_esp32s31_ieee80211_dma::{
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
@@ -254,6 +257,13 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
     /// The times of the first handoff, once marked.
     pub const fn times(&self) -> Option<RxTimes> {
         self.times
+    }
+
+    /// The staged unit at the normalized boundary: its MPDU without the
+    /// RX-control prefix and FCS, and the prefix's decoded metadata
+    /// ([`view_normalized_rx_frame`] over [`segment`](Self::segment)).
+    pub fn normalized(&self, config: RxIngressConfig) -> Result<NormalizedRxFrame<'_>, RxError> {
+        view_normalized_rx_frame(&self.segment(), config)
     }
 
     pub fn normalized_metadata(&self) -> Option<MacRxMetadata<RxPhyInfo>> {

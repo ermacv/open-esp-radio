@@ -1,8 +1,6 @@
 //! RX descriptor metadata decoding and bounded raw MPDU extraction.
 
-use oer_esp32s31_ieee80211_dma::descriptor::{
-    BIT_31, descriptor_address_valid, length as descriptor_length, rx_done, size as descriptor_size,
-};
+use oer_esp32s31_ieee80211_dma::descriptor::{length as descriptor_length, rx_done};
 pub use oer_esp32s31_ieee80211_dma::{
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
@@ -23,7 +21,7 @@ use oer_ieee80211_mac::he::{
     He20MuSigBNonMimoUsers, HeMuSigBUser,
 };
 use oer_ieee80211_mac::ht::HtDuplicateMcs32;
-use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
+use oer_ieee80211_softmac::MacRxMetadata;
 
 pub const INGRESS_STRICT_RXEND: u32 = 0x01;
 pub const INGRESS_STRICT_DUMP: u32 = 0x02;
@@ -192,6 +190,15 @@ pub enum RxBasebandFormat {
     Unknown(u8),
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl RxBasebandFormat {
     pub const fn decode(raw: u8) -> Self {
         match raw {
@@ -232,6 +239,15 @@ pub enum HeBandwidth {
     Mhz160Or80Plus80,
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl HeBandwidth {
     const fn decode(raw: u8) -> Self {
         match raw & 0x03 {
@@ -261,6 +277,15 @@ pub enum HeGuardIntervalAndLtf {
     FourLtf3200Ns,
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl HeGuardIntervalAndLtf {
     const fn decode(raw: u8) -> Self {
         match raw & 0x03 {
@@ -331,6 +356,15 @@ pub struct HeSuSignal {
     pub doppler: bool,
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl HeSuSignal {
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
         Self {
@@ -366,7 +400,9 @@ impl HeSuSignal {
         if self.doppler {
             None
         } else {
-            Some(self.nsts_and_midamble_periodicity + 1)
+            // The field is three bits; a wider value, which only a
+            // hand-built signal can hold, has no count.
+            self.nsts_and_midamble_periodicity.checked_add(1)
         }
     }
 
@@ -395,6 +431,15 @@ pub enum HeMuBandwidth {
     Unknown(u8),
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl HeMuBandwidth {
     const fn decode(raw: u8) -> Self {
         match raw & 0x07 {
@@ -460,6 +505,14 @@ pub struct HeMuSignal {
 }
 
 impl HeMuSignal {
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
         Self {
             uplink: siga1 & 1 != 0,
@@ -513,6 +566,15 @@ pub struct HeTriggerBasedSignal {
     pub txop: u8,
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl HeTriggerBasedSignal {
     pub const fn decode(siga1: u32, siga2: u16) -> Self {
         Self {
@@ -642,6 +704,15 @@ pub fn decode_rx_he_mu_sig_b(buffer: &[u8]) -> Option<RxHeMuSigBInfo<'_>> {
     })
 }
 
+// Reached by the RX-prefix decode: nothing here panics on received bits.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 impl RxPhyInfo {
     pub const fn baseband_format(self) -> RxBasebandFormat {
         RxBasebandFormat::decode(self.bb_format)
@@ -722,80 +793,6 @@ impl RxPhyInfo {
     }
 }
 
-/// The receive timestamp of the S31 RX-control prefix: the Wi-Fi MAC local
-/// time (`WIFI_MAC_LOCAL_TIME`) the hardware recorded for this frame, a
-/// wrapping 32-bit value in the counter's unit.
-///
-/// SOURCE: public ESP32-S31 `esp_wifi_rxctrl_t` definition. The packed ABI
-/// places the 32-bit `timestamp` at bytes 12..16, after `is_group` in byte
-/// 11; vendor `libpp[lmac.o]::lmacAdjustTimestamp` reads and rewrites the same word
-/// relative to the local-time counter.
-pub fn decode_rx_local_timestamp(buffer: &[u8]) -> Option<u32> {
-    Some(u32::from_le_bytes(
-        buffer
-            .get(RX_LOCAL_TIMESTAMP_OFFSET..RX_LOCAL_TIMESTAMP_OFFSET + 4)?
-            .try_into()
-            .ok()?,
-    ))
-}
-
-/// Decode the finite PHY-rate view without interpreting the format-specific
-/// HE-SIG bitfields.
-pub fn decode_rx_phy_info(buffer: &[u8]) -> Option<RxPhyInfo> {
-    Some(RxPhyInfo {
-        rate: *buffer.get(RX_PHY_RATE_OFFSET)? & 0x1f,
-        bb_format: *buffer.get(RX_PHY_BB_FORMAT_OFFSET)? >> 4,
-        he_siga1: u32::from_le_bytes(
-            buffer
-                .get(RX_PHY_HE_SIGA1_OFFSET..RX_PHY_HE_SIGA1_OFFSET + 4)?
-                .try_into()
-                .ok()?,
-        ),
-        he_siga2: u16::from_le_bytes(
-            buffer
-                .get(RX_PHY_HE_SIGA2_OFFSET..RX_PHY_HE_SIGA2_OFFSET + 2)?
-                .try_into()
-                .ok()?,
-        ),
-    })
-}
-
-/// Decode the portable metadata available at the S31 staged-frame boundary.
-///
-/// RSSI and rate come from instruction-proved raw-DMA fields. Channel does
-/// not: S31 hardware showed raw byte `0x1c` reporting 12 for a Probe Request
-/// whose DS Parameter Set was 1 while the radio was tuned to 1. The similarly
-/// laid out public `esp_wifi_rxctrl_t.channel` is therefore a later vendor callback
-/// value, not evidence available at this raw boundary. The adjacent public
-/// `cur_single_mpdu` bit is preserved as S-MPDU evidence: the Espressif header
-/// defines it as the IEEE
-/// VHT/HE single-MPDU A-MPDU form, not as the inverse of arbitrary physical
-/// aggregation. Complete vendor `dbg_dump_rx_ppdu` independently proves byte
-/// `0x1f`, bit zero. HT obtains A-MPDU containment from the independently
-/// proved HT-SIG Aggregation bit. VHT/HE format validation establishes that
-/// their MPDUs use an A-MPDU container, while legacy formats establish the
-/// opposite; neither path infers a member count. Crypto and A-MSDU remain
-/// unavailable until a later owner has direct hardware or protocol evidence;
-/// an active BA agreement and the 802.11 Protected bit are not substitutes.
-pub fn decode_normalized_rx_metadata(buffer: &[u8]) -> Option<MacRxMetadata<RxPhyInfo>> {
-    let rate = decode_rx_phy_info(buffer)?;
-    Some(MacRxMetadata {
-        channel: MacRxEvidence::Unavailable,
-        rate: MacRxEvidence::HardwareObserved(rate),
-        rssi_dbm: MacRxEvidence::HardwareObserved(*buffer.get(RX_PHY_RSSI_OFFSET)? as i8),
-        crypto: MacRxEvidence::Unavailable,
-        s_mpdu: MacRxEvidence::HardwareObserved(*buffer.get(RX_PHY_SINGLE_MPDU_OFFSET)? & 1 != 0),
-        ampdu: match rate.ht_aggregation() {
-            Some(ampdu) => MacRxEvidence::HardwareObserved(ampdu),
-            None => match rate.protocol_ampdu_containment() {
-                Some(ampdu) => MacRxEvidence::ProtocolValidated(ampdu),
-                None => MacRxEvidence::Unavailable,
-            },
-        },
-        amsdu: MacRxEvidence::Unavailable,
-    })
-}
-
 /// Borrowed ESP32-S31 MPDU at the normalized monitor boundary.
 ///
 /// The vendor RX-control prefix has been decoded into portable metadata and
@@ -818,47 +815,6 @@ pub struct NormalizedRxFrame<'frame> {
     /// The receive timestamp of the prefix: the raw MAC local time of the
     /// frame's reception ([`decode_rx_local_timestamp`]).
     pub stamp: Option<u32>,
-}
-
-/// Validate and borrow one contiguous completed unit for passive capture.
-///
-/// This entry performs no protocol/VIF filtering and mutates no receive state.
-/// It is therefore suitable for the promiscuous queue's synchronous monitor
-/// sink before the descriptor is recycled. Split DMA chains must first be
-/// copied into the existing contiguous staging owner.
-#[inline(always)]
-pub fn view_normalized_rx_frame<'frame>(
-    segment: &RxSegment<'frame>,
-    config: RxIngressConfig,
-) -> Result<NormalizedRxFrame<'frame>, RxError> {
-    if !rx_done(segment.descriptor_word0) {
-        return Err(RxError::Chain);
-    }
-    let layout = first_segment_layout(segment, config)?;
-    let captured_length = layout
-        .available_frame_bytes
-        .min(layout.expected_frame_length);
-    let end = layout
-        .frame_offset
-        .checked_add(captured_length)
-        .ok_or(RxError::Bounds)?;
-    let mpdu = segment
-        .buffer
-        .get(layout.frame_offset..end)
-        .ok_or(RxError::Bounds)?;
-    let metadata = decode_normalized_rx_metadata(segment.buffer).ok_or(RxError::Metadata)?;
-    let rssi_dbm = *segment
-        .buffer
-        .get(RX_PHY_RSSI_OFFSET)
-        .ok_or(RxError::Metadata)? as i8;
-    Ok(NormalizedRxFrame {
-        mpdu,
-        mpdu_offset: layout.frame_offset,
-        metadata,
-        rssi_dbm,
-        logical_length: layout.expected_frame_length,
-        stamp: decode_rx_local_timestamp(segment.buffer),
-    })
 }
 
 pub type RxManagementFrame = RxMpduFrame;
@@ -921,44 +877,6 @@ pub enum RxError {
     Unsupported,
 }
 
-#[inline]
-fn read_le32(bytes: &[u8]) -> Option<u32> {
-    Some(u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?))
-}
-
-fn dynamic_tail_offset(prefix: &[u8], csi_config: u32) -> Option<usize> {
-    if prefix.len() < FIXED_PREFIX_SIZE {
-        return None;
-    }
-    let mut offset = FIXED_PREFIX_SIZE;
-    let option_flags = *prefix.get(OPTION_LENGTH_FLAGS_OFFSET)?;
-    if option_flags & 0x80 != 0 {
-        let hint = *prefix.get(OPTION_LENGTH_HINT_OFFSET)?;
-        let option_length = usize::from(option_flags & 0x7f) + usize::from(hint >> 5 != 0);
-        offset = offset.checked_add((option_length + 3) & !3)?;
-    }
-    if csi_config & CSI_APPEND_ENABLE != 0 {
-        let low = *prefix.get(CSI_LENGTH_LOW_OFFSET)?;
-        let flags = *prefix.get(CSI_LENGTH_FLAGS_OFFSET)?;
-        let csi_length = usize::from(low) | (usize::from(flags & 0x03) << 8);
-        if flags & 0x04 != 0 || csi_length != 0 {
-            offset = offset.checked_add((csi_length + 3) & 0x7fc)?;
-        }
-    }
-    Some(offset)
-}
-
-fn segment_valid(segment: &RxSegment<'_>) -> bool {
-    let capacity = descriptor_size(segment.descriptor_word0) as usize;
-    let length = descriptor_length(segment.descriptor_word0) as usize;
-    descriptor_address_valid(segment.descriptor_address)
-        && segment.descriptor_word0 & BIT_31 != 0
-        && capacity != 0
-        && length != 0
-        && length <= capacity
-        && length <= segment.buffer.len()
-}
-
 fn copy_frame(
     segments: &[RxSegment<'_>],
     first_offset: usize,
@@ -983,75 +901,6 @@ fn copy_frame(
         copied += take;
     }
     copied == length
-}
-
-/// Decode the first-descriptor RX layout without requiring the complete MPDU
-/// to fit in that descriptor.
-///
-/// This is also the diagnostic boundary for a split hardware unit: callers
-/// can distinguish malformed metadata from a valid first segment whose
-/// remaining bytes are carried by following descriptors.
-#[inline(always)]
-pub fn first_segment_layout(
-    segment: &RxSegment<'_>,
-    config: RxIngressConfig,
-) -> Result<RxFirstSegmentLayout, RxError> {
-    if config.flags & !INGRESS_VALID_FLAGS != 0 || !segment_valid(segment) {
-        return Err(RxError::Invalid);
-    }
-
-    let received_length = descriptor_length(segment.descriptor_word0) as usize;
-    let tail_offset = dynamic_tail_offset(&segment.buffer[..received_length], config.csi_config)
-        .ok_or(RxError::Bounds)?;
-    if tail_offset < FIXED_PREFIX_SIZE
-        || tail_offset > received_length
-        || received_length - tail_offset < DYNAMIC_TAIL_SIZE
-    {
-        return Err(RxError::Bounds);
-    }
-
-    let tail_word = read_le32(&segment.buffer[tail_offset..]).ok_or(RxError::Bounds)?;
-    let signal_length = (tail_word & 0x3fff) as usize;
-    let dump_length = ((tail_word & 0x3fff_0000) >> 16) as usize;
-    let rxend_state = segment.buffer[PREFIX_RXEND_STATE_OFFSET];
-    let rx_state = segment.buffer[tail_offset + TAIL_STATE_OFFSET];
-    match rx_state {
-        0xf5 => return Err(RxError::MicFailure),
-        0xc6 => return Err(RxError::Quarantined),
-        0 => {}
-        _ => return Err(RxError::RxFailure),
-    }
-    if config.flags & INGRESS_STRICT_RXEND != 0 && rxend_state != 0 {
-        return Err(RxError::RxFailure);
-    }
-
-    let dump_length_matches = signal_length
-        .checked_add(FCS_SIZE)
-        .is_some_and(|expected| dump_length == expected);
-    if config.flags & INGRESS_STRICT_DUMP != 0 && !dump_length_matches {
-        return Err(RxError::Metadata);
-    }
-    if signal_length < 2 + FCS_SIZE {
-        return Err(RxError::Bounds);
-    }
-
-    let frame_offset = tail_offset + DYNAMIC_TAIL_SIZE;
-    let available_frame_bytes = received_length - frame_offset;
-    let expected_frame_length = signal_length - FCS_SIZE;
-    Ok(RxFirstSegmentLayout {
-        received_length,
-        tail_offset,
-        frame_offset,
-        signal_length,
-        dump_length,
-        expected_frame_length,
-        available_frame_bytes,
-        frame_shortfall: expected_frame_length.saturating_sub(available_frame_bytes),
-        rxend_state,
-        rx_state,
-        internal_state: segment.buffer[tail_offset + TAIL_INTERNAL_OFFSET],
-        dump_length_matches,
-    })
 }
 
 oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
@@ -1454,3 +1303,10 @@ fn validate_ccmp_data(
 pub mod ampdu;
 pub mod hardware;
 pub mod pool;
+mod prefix;
+
+use prefix::segment_valid;
+pub use prefix::{
+    decode_normalized_rx_metadata, decode_rx_local_timestamp, decode_rx_phy_info,
+    first_segment_layout, view_normalized_rx_frame,
+};

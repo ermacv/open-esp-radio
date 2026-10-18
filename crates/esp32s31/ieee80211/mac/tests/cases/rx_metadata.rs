@@ -250,6 +250,17 @@ fn he_su_stbc_distinguishes_space_time_and_spatial_stream_counts() {
 }
 
 #[test]
+fn he_su_stream_counts_have_no_value_for_a_field_wider_than_three_bits() {
+    // Only a hand-built signal holds such a field; its count cannot overflow.
+    let signal = HeSuSignal {
+        nsts_and_midamble_periodicity: u8::MAX,
+        ..HeSuSignal::decode(0x00e0_591b, 0x4a0c)
+    };
+    assert_eq!(signal.space_time_stream_count(), None);
+    assert_eq!(signal.spatial_stream_count(), None);
+}
+
+#[test]
 fn rx_phy_info_uses_the_blob_su_layout_for_extended_range_su() {
     let phy = RxPhyInfo {
         rate: 11,
