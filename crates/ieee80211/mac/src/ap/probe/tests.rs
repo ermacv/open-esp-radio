@@ -117,3 +117,65 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         assert!(short.iter().all(|byte| *byte == 0xaa));
     }
 }
+
+fn probe_parsers_never_panic(count: usize) {
+    use crate::{
+        beacon::write_ht_beacon, channel::WifiChannel, security::ApSecurityPolicy, ssid::WifiSsid,
+    };
+    let mut beacon = [0; 256];
+    let len = write_ht_beacon(
+        &TEST_ADVERTISEMENT,
+        &mut beacon,
+        AP,
+        &WifiSsid::new(b"ap").unwrap(),
+        crate::channel::Channel::from_wifi_channel(WifiChannel::mhz20(13).unwrap()),
+        100,
+        2,
+        seq(0),
+        ApSecurityPolicy::Wpa2Personal,
+        crate::protection::ApBssProtection::default(),
+    )
+    .unwrap();
+    let beacon = &beacon[..len];
+    let broadcast = request(b"", false);
+    let directed = request(b"ap", true);
+    let seeds: [&[u8]; 4] = [&broadcast[24..], &directed[24..], &beacon[36..], beacon];
+    crate::fuzz::inputs(&seeds, count, 160, |bytes| {
+        let _ = ssid(bytes);
+        // The received SSID against the AP's own advertisement, and received
+        // bytes in the advertisement's place.
+        let _ = matches_ssid(beacon, bytes);
+        let _ = matches_ssid(bytes, b"ap");
+    });
+}
+
+#[test]
+fn probe_parsers_never_panic_on_received_bytes() {
+    probe_parsers_never_panic(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn probe_parsers_never_panic_on_received_bytes_full() {
+    probe_parsers_never_panic(crate::fuzz::FULL);
+}
+
+#[test]
+fn an_ssid_needs_complete_elements_and_one_bounded_ssid() {
+    assert_eq!(ssid(&[0, 2, b'a', b'p', 1, 1, 0x82]), Some(&b"ap"[..]));
+    assert_eq!(ssid(&[0, 0]), Some(&b""[..]));
+    for elements in [
+        &[][..],
+        &[0],
+        &[0, 3, b'a', b'p'],
+        &[0, 2, b'a', b'p', 1],
+        &[0, 1, b'a', 0, 1, b'b'],
+        &[1, 1, 0x82],
+    ] {
+        assert_eq!(ssid(elements), None);
+    }
+    let mut long = std::vec![0, 33];
+    long.extend_from_slice(&[b'a'; 33]);
+    assert_eq!(ssid(&long), None);
+    assert!(!matches_ssid(&[0; 36], b""));
+}

@@ -141,3 +141,54 @@ fn transmit_packet_numbers_stop_at_the_48_bit_limit_without_wrapping() {
     );
     assert_eq!(near.allocate(), Err(CcmpTxPacketNumberError::Exhausted));
 }
+
+/// The input's first eight octets as a CCMP header and receive sequence;
+/// each following pair as a lane and a packet number's low octet.
+fn parse_and_check(bytes: &[u8]) {
+    let Some((header, rest)) = bytes.split_first_chunk::<CCMP_HEADER_LEN>() else {
+        return;
+    };
+    if let Ok(parsed) = CcmpHeader::parse(*header) {
+        assert_eq!(parsed.encode(), *header);
+        let _ = (parsed.packet_number().value(), parsed.key_id().value());
+    }
+    let _ = CcmpPacketNumber::from_header_bytes(*header);
+    let Ok(mut state) = CcmpRxReplayState::from_receive_sequence(*header) else {
+        return;
+    };
+    for &[lane, low] in rest.as_chunks::<2>().0 {
+        let lane = if lane == 0xff {
+            CcmpReplayLane::NonQos
+        } else {
+            CcmpReplayLane::Tid(lane)
+        };
+        let packet_number = CcmpPacketNumber::from_header_bytes([low, 0, 0, 0, 0, 0, 0, 0]);
+        let _ = state.highest(lane);
+        match state.prepare(lane, packet_number) {
+            Ok(candidate) if low & 1 == 0 => candidate.commit(),
+            Ok(_) | Err(_) => {}
+        }
+        let _ = state.commit_immediate(lane, packet_number);
+    }
+}
+
+fn run(count: usize) {
+    let header = CcmpHeader::new(
+        CcmpPacketNumber::new(0x6655_4433_2211).unwrap(),
+        CcmpKeyId::new(2).unwrap(),
+    )
+    .encode();
+    let sequence = [1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7, 3, 0xff, 4, 16, 5, 15, 6];
+    crate::fuzz::inputs(&[&header, &sequence], count, 64, parse_and_check);
+}
+
+#[test]
+fn header_parse_and_replay_lanes_never_panic() {
+    run(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn header_parse_and_replay_lanes_never_panic_full() {
+    run(crate::fuzz::FULL);
+}

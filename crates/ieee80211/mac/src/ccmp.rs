@@ -12,6 +12,16 @@
 //! [`Ccmp128Key`] is the shared zeroizing temporal-key owner. RSN constructs
 //! it from a borrowed PTK or GTK and moves it into lower-MAC installation;
 //! software CCMP and hardware programming borrow the same owner's bytes.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use core::num::NonZeroU8;
 
@@ -309,7 +319,9 @@ impl CcmpTxPacketNumber {
 
     /// Allocate the PN of the next MPDU.
     pub fn allocate(&mut self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
-        let next = self.last + u64::from(self.step.get());
+        // `last` is at most CCMP_PACKET_NUMBER_MAX (2^48 - 1) and the step at
+        // most 255, so the sum stays far below u64::MAX.
+        let next = self.last.saturating_add(u64::from(self.step.get()));
         if next > CCMP_PACKET_NUMBER_MAX {
             return Err(CcmpTxPacketNumberError::Exhausted);
         }
@@ -334,11 +346,25 @@ pub enum CcmpReplayLane {
 }
 
 impl CcmpReplayLane {
-    const fn index(self) -> Option<usize> {
+    /// This lane's entry among the non-QoS lane and the 16 TID lanes; `None`
+    /// for a TID above 15.
+    const fn select<T>(self, lanes: &[T; CCMP_REPLAY_LANE_COUNT]) -> Option<&T> {
+        let [non_qos, tids @ ..] = lanes;
         match self {
-            Self::NonQos => Some(0),
-            Self::Tid(tid) if tid < 16 => Some(tid as usize + 1),
-            Self::Tid(_) => None,
+            Self::NonQos => Some(non_qos),
+            Self::Tid(tid) => match tids.split_at_checked(tid as usize) {
+                Some((_, [lane, ..])) => Some(lane),
+                _ => None,
+            },
+        }
+    }
+
+    /// The mutable entry of [`Self::select`].
+    fn select_mut<T>(self, lanes: &mut [T; CCMP_REPLAY_LANE_COUNT]) -> Option<&mut T> {
+        let [non_qos, tids @ ..] = lanes;
+        match self {
+            Self::NonQos => Some(non_qos),
+            Self::Tid(tid) => tids.get_mut(usize::from(tid)),
         }
     }
 }
@@ -406,8 +432,10 @@ impl CcmpRxReplayState {
         lane: CcmpReplayLane,
         packet_number: CcmpPacketNumber,
     ) -> Result<CcmpRxReplayCandidate<'_>, CcmpReplayError> {
-        let index = lane.index().ok_or(CcmpReplayError::InvalidTid)?;
-        let highest = self.highest[index];
+        let frontier = lane
+            .select_mut(&mut self.highest)
+            .ok_or(CcmpReplayError::InvalidTid)?;
+        let highest = *frontier;
         if packet_number <= highest {
             return Err(CcmpReplayError::Replayed {
                 packet_number,
@@ -415,7 +443,7 @@ impl CcmpRxReplayState {
             });
         }
         Ok(CcmpRxReplayCandidate {
-            frontier: &mut self.highest[index],
+            frontier,
             lane,
             packet_number,
         })
@@ -434,8 +462,8 @@ impl CcmpRxReplayState {
     }
 
     pub const fn highest(&self, lane: CcmpReplayLane) -> Option<CcmpPacketNumber> {
-        match lane.index() {
-            Some(index) => Some(self.highest[index]),
+        match lane.select(&self.highest) {
+            Some(highest) => Some(*highest),
             None => None,
         }
     }

@@ -1,4 +1,14 @@
 //! Association/peer-scoped receive retry history.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 /// Per-traffic-class IEEE 802.11 receive history.
 ///
@@ -28,28 +38,46 @@ impl RxDuplicateFilter {
     /// their acceptance and retry history entirely inside the reassembler.
     #[inline(always)]
     pub fn is_known_duplicate(&self, retry: bool, sequence_control: u16, tid: Option<u8>) -> bool {
-        let index = match tid {
-            Some(tid @ 0..=15) => usize::from(tid) + 1,
-            _ => 0,
-        };
-        let mask = 1_u32 << index;
-        retry && self.valid & mask != 0 && self.last_sequence_control[index] == sequence_control
+        let (bit, last) = space(&self.last_sequence_control, tid);
+        retry && self.valid & bit != 0 && *last == sequence_control
     }
 
     #[inline(always)]
     pub fn is_duplicate(&mut self, retry: bool, sequence_control: u16, tid: Option<u8>) -> bool {
-        let index = match tid {
-            Some(tid @ 0..=15) => usize::from(tid) + 1,
-            _ => 0,
-        };
-        let mask = 1_u32 << index;
         if self.is_known_duplicate(retry, sequence_control, tid) {
             return true;
         }
-        self.last_sequence_control[index] = sequence_control;
-        self.valid |= mask;
+        let (bit, last) = space_mut(&mut self.last_sequence_control, tid);
+        *last = sequence_control;
+        self.valid |= bit;
         false
     }
+}
+
+/// The validity bit and history entry of `tid`'s sequence space: the legacy
+/// space (bit 0) for a non-QoS MPDU or a TID above 15, else that TID's
+/// (bits 1 to 16).
+fn space(history: &[u16; 17], tid: Option<u8>) -> (u32, &u16) {
+    let [legacy, tids @ ..] = history;
+    match tid.and_then(|tid| Some((tid, tids.get(usize::from(tid))?))) {
+        Some((tid, entry)) => (tid_bit(tid), entry),
+        None => (1, legacy),
+    }
+}
+
+/// The mutable entry of [`space`].
+fn space_mut(history: &mut [u16; 17], tid: Option<u8>) -> (u32, &mut u16) {
+    let [legacy, tids @ ..] = history;
+    match tid.and_then(|tid| Some((tid, tids.get_mut(usize::from(tid))?))) {
+        Some((tid, entry)) => (tid_bit(tid), entry),
+        None => (1, legacy),
+    }
+}
+
+/// The validity bit of TID `tid`, at most 15: bit `tid + 1`.
+const fn tid_bit(tid: u8) -> u32 {
+    // `tid` indexes one of the 16 TID entries, so the shift is at most 16.
+    2_u32 << tid
 }
 
 impl Default for RxDuplicateFilter {

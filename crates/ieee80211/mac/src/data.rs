@@ -7,6 +7,16 @@
 //! Encapsulation takes a checked `WmmUserPriority`; a basic data plan is
 //! infallible. Requesting hardware HE-Control can fail only when the resulting
 //! frame is not individual QoS data, reported as `HeControlRequiresQos`.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
@@ -119,19 +129,60 @@ pub struct EthernetFrameParts<'payload> {
 
 impl EthernetFrameParts<'_> {
     pub const fn length(self) -> usize {
-        ETHERNET_HEADER_LEN + self.payload.len()
+        // A byte slice holds at most isize::MAX bytes, so adding the 14-byte
+        // header cannot reach usize::MAX.
+        ETHERNET_HEADER_LEN.saturating_add(self.payload.len())
     }
 
     pub fn copy_to(self, output: &mut [u8]) -> Result<usize, DataDecapError> {
-        let required = self.length();
-        if output.len() < required {
-            return Err(DataDecapError::OutputTooSmall { required });
-        }
-        output[..6].copy_from_slice(&self.destination);
-        output[6..12].copy_from_slice(&self.source);
-        output[12..14].copy_from_slice(&self.ether_type.to_be_bytes());
-        output[14..required].copy_from_slice(self.payload);
-        Ok(required)
+        write_ethernet(
+            output,
+            self.length(),
+            ethernet_header(self.destination, self.source, self.ether_type),
+            self.payload,
+        )
+    }
+}
+
+/// The Ethernet-II header of `destination`, `source` and `ether_type`.
+const fn ethernet_header(
+    destination: [u8; 6],
+    source: [u8; 6],
+    ether_type: u16,
+) -> [u8; ETHERNET_HEADER_LEN] {
+    let [d0, d1, d2, d3, d4, d5] = destination;
+    let [s0, s1, s2, s3, s4, s5] = source;
+    let [e0, e1] = ether_type.to_be_bytes();
+    [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, e0, e1]
+}
+
+/// Write `header` and `payload` to the start of `output`, `required` bytes in
+/// all, or refuse an output shorter than that before writing anything.
+fn write_ethernet(
+    output: &mut [u8],
+    required: usize,
+    header: [u8; ETHERNET_HEADER_LEN],
+    payload: &[u8],
+) -> Result<usize, DataDecapError> {
+    let too_small = DataDecapError::OutputTooSmall { required };
+    let (output_header, rest) = output
+        .split_first_chunk_mut::<ETHERNET_HEADER_LEN>()
+        .ok_or(too_small)?;
+    let (output_payload, _) = rest.split_at_mut_checked(payload.len()).ok_or(too_small)?;
+    *output_header = header;
+    output_payload.copy_from_slice(payload);
+    Ok(required)
+}
+
+/// The EtherType after an RFC 1042 LLC/SNAP header, or `None` for another
+/// header.
+pub(crate) const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
+    let [p0, p1, p2, p3, p4, p5, e0, e1] = llc;
+    let [r0, r1, r2, r3, r4, r5] = RFC1042_LLC_SNAP_PREFIX;
+    if p0 == r0 && p1 == r1 && p2 == r2 && p3 == r3 && p4 == r4 && p5 == r5 {
+        Some(u16::from_be_bytes([e0, e1]))
+    } else {
+        None
     }
 }
 
@@ -232,55 +283,66 @@ impl<'a> Iterator for AmsduSubframes<'a> {
         if self.failed || self.remaining.is_empty() {
             return None;
         }
-        if self.remaining.len() < ETHERNET_HEADER_LEN {
-            self.failed = true;
-            return Some(Err(DataDecapError::Truncated));
-        }
-        let msdu_length = usize::from(u16::from_be_bytes([self.remaining[12], self.remaining[13]]));
-        let subframe_length = match ETHERNET_HEADER_LEN.checked_add(msdu_length) {
-            Some(length)
-                if msdu_length >= LLC_SNAP_HEADER_LEN && length <= self.remaining.len() =>
-            {
-                length
-            }
-            _ => {
-                self.failed = true;
-                return Some(Err(DataDecapError::Truncated));
-            }
-        };
-        let llc = &self.remaining[ETHERNET_HEADER_LEN..ETHERNET_HEADER_LEN + LLC_SNAP_HEADER_LEN];
-        if llc[..RFC1042_LLC_SNAP_PREFIX.len()] != RFC1042_LLC_SNAP_PREFIX {
-            self.failed = true;
-            return Some(Err(DataDecapError::InvalidLlcSnap));
-        }
-        let mut destination = [0; 6];
-        destination.copy_from_slice(&self.remaining[..6]);
-        let mut source = [0; 6];
-        source.copy_from_slice(&self.remaining[6..12]);
-        let subframe = AmsduSubframe {
-            destination,
-            source,
-            ether_type: u16::from_be_bytes([llc[6], llc[7]]),
-            payload: &self.remaining[ETHERNET_HEADER_LEN + LLC_SNAP_HEADER_LEN..subframe_length],
-        };
+        let subframe = self.split_subframe();
+        self.failed = subframe.is_err();
+        Some(subframe)
+    }
+}
 
-        if subframe_length == self.remaining.len() {
-            self.remaining = &[];
+impl<'a> AmsduSubframes<'a> {
+    /// Split the next subframe and its padding off `remaining`; on an error
+    /// `remaining` is unchanged.
+    fn split_subframe(&mut self) -> Result<AmsduSubframe<'a>, DataDecapError> {
+        let (header, body) = self
+            .remaining
+            .split_first_chunk::<ETHERNET_HEADER_LEN>()
+            .ok_or(DataDecapError::Truncated)?;
+        let [
+            d0,
+            d1,
+            d2,
+            d3,
+            d4,
+            d5,
+            s0,
+            s1,
+            s2,
+            s3,
+            s4,
+            s5,
+            length0,
+            length1,
+        ] = *header;
+        let msdu_length = u16::from_be_bytes([length0, length1]);
+        let (msdu, rest) = body
+            .split_at_checked(usize::from(msdu_length))
+            .ok_or(DataDecapError::Truncated)?;
+        let (llc, payload) = msdu
+            .split_first_chunk::<LLC_SNAP_HEADER_LEN>()
+            .ok_or(DataDecapError::Truncated)?;
+        let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
+        let subframe = AmsduSubframe {
+            destination: [d0, d1, d2, d3, d4, d5],
+            source: [s0, s1, s2, s3, s4, s5],
+            ether_type,
+            payload,
+        };
+        self.remaining = if rest.is_empty() {
+            rest
         } else {
-            let padded_length = match subframe_length.checked_add(3) {
-                Some(length) => length & !3,
-                None => {
-                    self.failed = true;
-                    return Some(Err(DataDecapError::Truncated));
-                }
-            };
-            if padded_length > self.remaining.len() {
-                self.failed = true;
-                return Some(Err(DataDecapError::Truncated));
-            }
-            self.remaining = &self.remaining[padded_length..];
-        }
-        Some(Ok(subframe))
+            // A non-final subframe is padded to a multiple of four bytes;
+            // only the low two bits of its length matter, so the wrapping
+            // arithmetic is exact.
+            let padding = usize::from(msdu_length)
+                .wrapping_add(ETHERNET_HEADER_LEN)
+                .wrapping_neg()
+                & 3;
+            let (_, next) = rest
+                .split_at_checked(padding)
+                .ok_or(DataDecapError::Truncated)?;
+            next
+        };
+        Ok(subframe)
     }
 }
 
@@ -320,31 +382,28 @@ pub const fn plan_data_encapsulation(
     let source = [s0, s1, s2, s3, s4, s5];
     let descriptor_multicast = matches!(role, DataInterfaceRole::AccessPoint) && d0 & 1 != 0;
     let qos = peer_qos && !descriptor_multicast;
-    let mut header = [0_u8; IEEE80211_QOS_DATA_HEADER_LEN];
-    header[0] = if qos {
-        IEEE80211_QOS_DATA
-    } else {
-        IEEE80211_DATA
+    let (direction, addresses) = match role {
+        DataInterfaceRole::Station => (IEEE80211_TO_DS, [bssid, source, destination]),
+        DataInterfaceRole::AccessPoint => (IEEE80211_FROM_DS, [destination, interface_mac, source]),
     };
-    match role {
-        DataInterfaceRole::Station => {
-            header[1] = IEEE80211_TO_DS;
-            copy_six(&mut header, 4, bssid);
-            copy_six(&mut header, 10, source);
-            copy_six(&mut header, 16, destination);
-        }
-        DataInterfaceRole::AccessPoint => {
-            header[1] = IEEE80211_FROM_DS;
-            copy_six(&mut header, 4, destination);
-            copy_six(&mut header, 10, interface_mac);
-            copy_six(&mut header, 16, source);
-        }
-    }
-    if qos {
-        header[24] = priority.value() | if no_ack_policy { QOS_NO_ACK_POLICY } else { 0 };
-    }
+    let frame_control = [
+        if qos {
+            IEEE80211_QOS_DATA
+        } else {
+            IEEE80211_DATA
+        },
+        direction,
+    ];
+    let qos_control = if qos {
+        [
+            priority.value() | if no_ack_policy { QOS_NO_ACK_POLICY } else { 0 },
+            0,
+        ]
+    } else {
+        [0, 0]
+    };
     DataEncapPlan {
-        header,
+        header: data_header_bytes(frame_control, addresses, qos_control),
         header_len: if qos {
             IEEE80211_QOS_DATA_HEADER_LEN as u8
         } else {
@@ -355,6 +414,24 @@ pub const fn plan_data_encapsulation(
         access_category: priority.access_category(),
         he_control: DataHeControl::Disabled,
     }
+}
+
+/// A QoS-length data header: frame control, a zero duration, three
+/// addresses, a zero sequence control and the QoS control.
+const fn data_header_bytes(
+    frame_control: [u8; 2],
+    [address1, address2, address3]: [[u8; 6]; 3],
+    qos_control: [u8; 2],
+) -> [u8; IEEE80211_QOS_DATA_HEADER_LEN] {
+    let [f0, f1] = frame_control;
+    let [a0, a1, a2, a3, a4, a5] = address1;
+    let [b0, b1, b2, b3, b4, b5] = address2;
+    let [c0, c1, c2, c3, c4, c5] = address3;
+    let [q0, q1] = qos_control;
+    [
+        f0, f1, 0, 0, a0, a1, a2, a3, a4, a5, b0, b1, b2, b3, b4, b5, c0, c1, c2, c3, c4, c5, 0, 0,
+        q0, q1,
+    ]
 }
 
 /// Hardware-generated HE-Control requires an individual QoS data MPDU.
@@ -422,6 +499,17 @@ pub fn plan_data_decapsulation(
     payload_offset: usize,
     payload_length: usize,
 ) -> Result<DataDecapPlan, DataDecapError> {
+    single_decapsulation(role, mpdu, payload_offset, payload_length).map(|(plan, _)| plan)
+}
+
+/// [`plan_data_decapsulation`] with the Ethernet view it locates.
+#[inline(always)]
+fn single_decapsulation(
+    role: DataInterfaceRole,
+    mpdu: &[u8],
+    payload_offset: usize,
+    payload_length: usize,
+) -> Result<(DataDecapPlan, EthernetFrameParts<'_>), DataDecapError> {
     let header = data_header(role, mpdu)?;
     if header
         .qos()
@@ -431,14 +519,22 @@ pub fn plan_data_decapsulation(
     }
     let payload = data_payload(header, payload_offset, payload_length)?;
     let parts = single_payload(header, payload)?;
-    Ok(DataDecapPlan {
+    #[expect(
+        clippy::expect_used,
+        reason = "data_payload found the payload, which begins with the LLC/SNAP header, within the MPDU"
+    )]
+    let ethernet_payload_offset = payload_offset
+        .checked_add(LLC_SNAP_HEADER_LEN)
+        .expect("the LLC/SNAP header lies within the MPDU");
+    let plan = DataDecapPlan {
         destination: parts.destination,
         source: parts.source,
         ether_type: parts.ether_type,
-        payload_offset: payload_offset + LLC_SNAP_HEADER_LEN,
+        payload_offset: ethernet_payload_offset,
         payload_length: parts.payload.len(),
         ethernet_length: parts.length(),
-    })
+    };
+    Ok((plan, parts))
 }
 
 fn data_header(
@@ -470,7 +566,16 @@ fn data_payload(
     let end = offset
         .checked_add(length)
         .ok_or(DataDecapError::Truncated)?;
-    if offset < header.frame().len() - header.body().len() {
+    #[expect(
+        clippy::expect_used,
+        reason = "DecodedHeader::decode keeps the body as a suffix of the frame"
+    )]
+    let header_length = header
+        .frame()
+        .len()
+        .checked_sub(header.body().len())
+        .expect("the body is a suffix of the frame");
+    if offset < header_length {
         return Err(DataDecapError::Truncated);
     }
     header
@@ -486,9 +591,7 @@ fn single_payload<'a>(
     let (llc, payload) = payload
         .split_first_chunk::<LLC_SNAP_HEADER_LEN>()
         .ok_or(DataDecapError::Truncated)?;
-    if llc[..RFC1042_LLC_SNAP_PREFIX.len()] != RFC1042_LLC_SNAP_PREFIX {
-        return Err(DataDecapError::InvalidLlcSnap);
-    }
+    let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
     let (destination, source) = match header.control().ds() {
         2 => (header.receiver(), header.address3()),
         1 => (header.address3(), header.transmitter()),
@@ -497,7 +600,7 @@ fn single_payload<'a>(
     Ok(EthernetFrameParts {
         destination,
         source,
-        ether_type: u16::from_be_bytes([llc[6], llc[7]]),
+        ether_type,
         payload,
     })
 }
@@ -574,14 +677,12 @@ pub fn decapsulate_amsdu_subframe(
     let required = ETHERNET_HEADER_LEN
         .checked_add(subframe.payload.len())
         .ok_or(DataDecapError::Truncated)?;
-    if ethernet.len() < required {
-        return Err(DataDecapError::OutputTooSmall { required });
-    }
-    ethernet[..6].copy_from_slice(&subframe.destination);
-    ethernet[6..12].copy_from_slice(&subframe.source);
-    ethernet[12..14].copy_from_slice(&subframe.ether_type.to_be_bytes());
-    ethernet[14..required].copy_from_slice(subframe.payload);
-    Ok(required)
+    write_ethernet(
+        ethernet,
+        required,
+        ethernet_header(subframe.destination, subframe.source, subframe.ether_type),
+        subframe.payload,
+    )
 }
 
 /// Copy one validated MSDU into caller-owned Ethernet storage.
@@ -599,26 +700,9 @@ pub fn decapsulate_data(
     payload_length: usize,
     ethernet: &mut [u8],
 ) -> Result<DataDecapPlan, DataDecapError> {
-    let plan = plan_data_decapsulation(role, mpdu, payload_offset, payload_length)?;
-    if ethernet.len() < plan.ethernet_length {
-        return Err(DataDecapError::OutputTooSmall {
-            required: plan.ethernet_length,
-        });
-    }
-    ethernet[..6].copy_from_slice(&plan.destination);
-    ethernet[6..12].copy_from_slice(&plan.source);
-    ethernet[12..14].copy_from_slice(&plan.ether_type.to_be_bytes());
-    ethernet[14..plan.ethernet_length]
-        .copy_from_slice(&mpdu[plan.payload_offset..plan.payload_offset + plan.payload_length]);
+    let (plan, parts) = single_decapsulation(role, mpdu, payload_offset, payload_length)?;
+    parts.copy_to(ethernet)?;
     Ok(plan)
-}
-
-const fn copy_six(output: &mut [u8; IEEE80211_QOS_DATA_HEADER_LEN], at: usize, value: [u8; 6]) {
-    let mut index = 0;
-    while index != value.len() {
-        output[at + index] = value[index];
-        index += 1;
-    }
 }
 
 #[cfg(test)]

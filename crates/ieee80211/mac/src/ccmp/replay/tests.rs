@@ -188,3 +188,59 @@ fn new_group_material_in_the_same_id_starts_from_its_key_rsc() {
         Ok(())
     );
 }
+
+/// The input's first two octets pick the group key and destination; then
+/// each record is a TID octet (none above 0x7f) and a CCMP header.
+fn check_all(bytes: &[u8]) {
+    let Some((&[key_id, rsc], mut records)) = bytes.split_first_chunk::<2>() else {
+        return;
+    };
+    let Some(group_key_id) = GroupKeyId::new(key_id & 3) else {
+        return;
+    };
+    let Ok(mut epoch) = CcmpRxReplayEpoch::new([rsc, 0, 0, 0, 0, 0, 0, 0], group_key_id, [0; 8])
+    else {
+        return;
+    };
+    let _ = epoch.has_group(group(key_id >> 2 & 3));
+    while let Some((&tid, rest)) = records.split_first() {
+        let Some((header, rest)) = rest.split_first_chunk::<8>() else {
+            return;
+        };
+        records = rest;
+        let Ok(header) = CcmpHeader::parse(*header) else {
+            continue;
+        };
+        let protection = match tid >> 6 {
+            0 => CcmpRxProtection::Pairwise,
+            1 => CcmpRxProtection::Group,
+            _ => CcmpRxProtection::Other,
+        };
+        let tid = (tid & 0x20 == 0).then_some(tid & 0x1f);
+        match epoch.prepare(protection, tid, header) {
+            Ok(candidate) if rsc & 1 == 0 => candidate.commit(),
+            Ok(_) | Err(_) => {}
+        }
+        let _ = epoch.check(protection, tid, header);
+    }
+}
+
+fn run(count: usize) {
+    let mut seed = std::vec![1, 0];
+    for (tid, packet_number, key_id) in [(0, 1, 0), (0x47, 2, 1), (0x05, 2, 0), (0x90, 3, 0)] {
+        seed.push(tid);
+        seed.extend_from_slice(&header(packet_number, key_id).encode());
+    }
+    crate::fuzz::inputs(&[&seed], count, 96, check_all);
+}
+
+#[test]
+fn replay_check_never_panics() {
+    run(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn replay_check_never_panics_full() {
+    run(crate::fuzz::FULL);
+}

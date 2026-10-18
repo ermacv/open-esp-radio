@@ -324,7 +324,7 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
                     .unwrap()
                     .0
             }
-            _ => unreachable!(),
+            _ => panic!("the loop names operations 0 through 4"),
         };
         assert!(release.iter().eq((1..64).map(|offset| RxReorderMpdu {
             sequence: start.wrapping_add(offset),
@@ -352,4 +352,128 @@ fn every_refusal_preserves_the_window_and_its_retained_slot() {
         assert_eq!(reorder.occupied(), 1);
         assert!(releases(&reorder.stop(), &[frame(102, 7)]));
     }
+}
+
+/// One operation script: the window and starting sequence, then four bytes
+/// per operation (kind, sequence low and high byte, slot). The sequence
+/// numbers are what received MPDUs and BlockAckReqs carry.
+fn script(window: u8, start: u16, operations: &[(u8, u16, u8)]) -> std::vec::Vec<u8> {
+    let mut bytes = std::vec![window];
+    bytes.extend_from_slice(&start.to_le_bytes());
+    for &(kind, sequence, slot) in operations {
+        bytes.push(kind);
+        bytes.extend_from_slice(&sequence.to_le_bytes());
+        bytes.push(slot);
+    }
+    bytes
+}
+
+/// Run one script against a buffer of this capacity and check that every
+/// release stays inside the window.
+fn run_script<const CAPACITY: usize, const SLOT_CAPACITY: usize>(bytes: &[u8]) {
+    let Some((&[window, start0, start1], operations)) = bytes.split_first_chunk() else {
+        return;
+    };
+    let start = SequenceNumber::from_low_bits(u16::from_le_bytes([start0, start1]));
+    let Ok(mut reorder) =
+        RxReorderBuffer::<CAPACITY, SLOT_CAPACITY>::new(start, u16::from(window) % 70)
+    else {
+        return;
+    };
+    let window = usize::from(reorder.window());
+    let check = |release: &RxReorderRelease<CAPACITY>,
+                 reorder: &RxReorderBuffer<CAPACITY, SLOT_CAPACITY>| {
+        assert!(release.iter().count() <= CAPACITY);
+        assert!(reorder.occupied() as usize <= window);
+    };
+    for operation in operations.chunks_exact(4) {
+        let [kind, low, high, slot]: [u8; 4] = operation.try_into().unwrap();
+        let sequence = SequenceNumber::from_low_bits(u16::from_le_bytes([low, high]));
+        let frame = RxReorderMpdu { sequence, slot };
+        match kind % 7 {
+            0 | 1 => {
+                let _ = reorder.retains_on_ingest(sequence);
+                if let Ok(release) = reorder.ingest(frame) {
+                    check(&release, &reorder);
+                }
+            }
+            2 => {
+                let _ = reorder.try_ingest_immediate(frame);
+            }
+            3 => {
+                if let Some(release) = reorder.move_window_to(sequence) {
+                    check(&release, &reorder);
+                }
+            }
+            4 => {
+                if let Some((release, next)) =
+                    reorder.resynchronize_stale_initial_ampdu(sequence, slot & 1 != 0)
+                {
+                    check(&release, &reorder);
+                    assert_eq!(reorder.next_sequence(), next);
+                }
+            }
+            5 => check(&reorder.expire_gap(), &reorder),
+            _ => check(&reorder.stop(), &reorder),
+        }
+    }
+}
+
+fn reorder_scripts(count: usize) {
+    let seeds = [
+        // In order, a gap filled out of order, and a window advance.
+        script(
+            64,
+            100,
+            &[
+                (0, 102, 2),
+                (0, 101, 1),
+                (0, 100, 0),
+                (2, 103, 3),
+                (0, 1000, 4),
+            ],
+        ),
+        // A small window across the sequence wrap, a gap expiry and a BAR.
+        script(
+            8,
+            4090,
+            &[
+                (0, 4092, 2),
+                (0, 4095, 5),
+                (5, 0, 0),
+                (0, 1, 1),
+                (3, 6, 0),
+                (6, 0, 0),
+            ],
+        ),
+        // A stale first aggregate rebases the window; duplicates refuse.
+        script(
+            16,
+            2000,
+            &[
+                (4, 100, 1),
+                (0, 103, 3),
+                (0, 103, 4),
+                (0, 104, 3),
+                (4, 3000, 0),
+            ],
+        ),
+    ];
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 96, |bytes| {
+        run_script::<WINDOW, SLOTS>(bytes);
+        // A capacity that does not divide the sequence space.
+        run_script::<7, 9>(bytes);
+    });
+}
+
+#[test]
+fn received_sequences_never_panic() {
+    reorder_scripts(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn received_sequences_never_panic_full() {
+    reorder_scripts(crate::fuzz::FULL);
 }

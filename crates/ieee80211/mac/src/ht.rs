@@ -4,6 +4,16 @@
 //! shared by the radio roles. The validated channel geometry decides whether a BSS
 //! advertises HT20 or HT40; callers cannot independently select contradictory
 //! capability and operation elements.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::channel::{Channel, WifiChannelWidth};
 use crate::protection::HtOperationProtection;
@@ -208,28 +218,38 @@ impl HtPeerCapabilities {
 
     /// Highest common one-spatial-stream MCS advertised by the peer.
     pub const fn highest_rx_mcs(self) -> u8 {
-        7 - self.rx_mcs_0_to_7.leading_zeros() as u8
+        #[expect(
+            clippy::expect_used,
+            reason = "`ht_peer_capabilities`, the only constructor, refuses a zero MCS bitmap"
+        )]
+        let highest = self
+            .rx_mcs_0_to_7
+            .checked_ilog2()
+            .expect("a peer advertises at least one receive MCS");
+        // The highest set bit of an octet is below eight.
+        highest as u8
     }
 }
 
 /// Parse a complete information-element stream into one-stream HT facts.
 pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
     let mut remaining = bytes;
-    while remaining.len() >= 2 {
-        let id = remaining[0];
-        let length = usize::from(remaining[1]);
-        let record = remaining.get(..length.saturating_add(2))?;
-        if id == 45 && length == 26 && record[5] != 0 {
+    while let [_, length, ..] = *remaining {
+        let (record, rest) = remaining.split_at_checked(usize::from(length).checked_add(2)?)?;
+        if let Ok(record) = <&[u8; HT_CAPABILITY_IE_LEN]>::try_from(record)
+            && let [45, _, c0, c1, ampdu_parameters, rx_mcs_0_to_7, ..] = *record
+            && rx_mcs_0_to_7 != 0
+        {
             return Some(HtPeerCapabilities {
-                capability_info: u16::from_le_bytes([record[2], record[3]]),
-                ampdu_parameters: record[4],
-                rx_mcs_0_to_7: record[5],
+                capability_info: u16::from_le_bytes([c0, c1]),
+                ampdu_parameters,
+                rx_mcs_0_to_7,
                 rx_ht_duplicate_mcs32: record[HtDuplicateMcs32::CAPABILITY_IE_BYTE]
                     & HtDuplicateMcs32::CAPABILITY_IE_MASK
                     != 0,
             });
         }
-        remaining = &remaining[record.len()..];
+        remaining = rest;
     }
     None
 }

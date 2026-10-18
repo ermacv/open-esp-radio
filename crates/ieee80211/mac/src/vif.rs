@@ -3,6 +3,16 @@
 //! The classifier interprets only public IEEE 802.11 header fields. It does
 //! not infer association, authorization, key ownership or hardware policy;
 //! role-local consumers must still validate those semantics after routing.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 const FRAME_TYPE_MASK: u16 = 0x000c;
 const MANAGEMENT_FRAME: u16 = 0x0000;
@@ -40,10 +50,14 @@ pub enum StaApRxRoute {
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
-    let Some(frame_control) = read_u16(mpdu, 0) else {
+    let Some((&[fc0, fc1], rest)) = mpdu.split_first_chunk::<2>() else {
         return StaApRxRoute::Malformed;
     };
-    let Some(receiver) = address(mpdu, 4) else {
+    let frame_control = u16::from_le_bytes([fc0, fc1]);
+    let Some((&receiver, rest)) = rest
+        .split_first_chunk::<2>()
+        .and_then(|(_duration, rest)| rest.split_first_chunk::<6>())
+    else {
         return StaApRxRoute::Malformed;
     };
     match frame_control & FRAME_TYPE_MASK {
@@ -51,22 +65,26 @@ pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRo
             receiver == addresses.station,
             receiver == addresses.access_point,
         ),
-        MANAGEMENT_FRAME => classify_management(mpdu, frame_control, receiver, addresses),
-        DATA_FRAME => classify_data(mpdu, frame_control, receiver, addresses),
+        MANAGEMENT_FRAME => classify_management(rest, frame_control, receiver, addresses),
+        DATA_FRAME => classify_data(rest, frame_control, receiver, addresses),
         _ => StaApRxRoute::Foreign,
     }
 }
 
+/// Address 2 and address 3, which follow the receiver address.
+fn second_and_third(after_receiver: &[u8]) -> Option<([u8; 6], [u8; 6])> {
+    let (&second, rest) = after_receiver.split_first_chunk::<6>()?;
+    let (&third, _) = rest.split_first_chunk::<6>()?;
+    Some((second, third))
+}
+
 fn classify_management(
-    mpdu: &[u8],
+    after_receiver: &[u8],
     frame_control: u16,
     receiver: [u8; 6],
     addresses: StaApRxAddresses,
 ) -> StaApRxRoute {
-    let Some(transmitter) = address(mpdu, 10) else {
-        return StaApRxRoute::Malformed;
-    };
-    let Some(bssid) = address(mpdu, 16) else {
+    let Some((transmitter, bssid)) = second_and_third(after_receiver) else {
         return StaApRxRoute::Malformed;
     };
     let group_receiver = is_group(receiver);
@@ -81,15 +99,12 @@ fn classify_management(
 }
 
 fn classify_data(
-    mpdu: &[u8],
+    after_receiver: &[u8],
     frame_control: u16,
     receiver: [u8; 6],
     addresses: StaApRxAddresses,
 ) -> StaApRxRoute {
-    let Some(transmitter) = address(mpdu, 10) else {
-        return StaApRxRoute::Malformed;
-    };
-    let Some(bssid_or_destination) = address(mpdu, 16) else {
+    let Some((transmitter, bssid_or_destination)) = second_and_third(after_receiver) else {
         return StaApRxRoute::Malformed;
     };
     let group_receiver = is_group(receiver);
@@ -117,17 +132,6 @@ const fn select(station: bool, access_point: bool) -> StaApRxRoute {
         (false, false) => StaApRxRoute::Foreign,
         (true, true) => StaApRxRoute::Ambiguous,
     }
-}
-
-fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
-    Some(u16::from_le_bytes([
-        *bytes.get(offset)?,
-        *bytes.get(offset + 1)?,
-    ]))
-}
-
-fn address(bytes: &[u8], offset: usize) -> Option<[u8; 6]> {
-    bytes.get(offset..offset + 6)?.try_into().ok()
 }
 
 const fn is_group(address: [u8; 6]) -> bool {

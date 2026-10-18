@@ -5,6 +5,16 @@
 //! radio owner; this module owns only bounded observations and selection. The
 //! implementation is chip-independent and forms the maintained upper-stack
 //! extraction.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::address::{Bssid, IndividualAddress};
 use crate::ht::{HtPeerCapabilities, ht_peer_capabilities};
@@ -39,13 +49,10 @@ pub enum HtSecondaryChannel {
 /// `libnet80211.a[ieee80211_he.o]::ieee80211_parse_heopr` and
 /// `libpp.a[hal_mac_ctl.o]::hal_he_set_default_pe`.
 pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8> {
-    if he_operation_ie.len() < 4
-        || he_operation_ie[0] != 255
-        || he_operation_ie[2] != HE_OPERATION_EXTENSION_ID
-    {
-        return None;
+    match *he_operation_ie {
+        [255, _, HE_OPERATION_EXTENSION_ID, parameters, ..] => Some(parameters & 0x07),
+        _ => None,
     }
-    Some(he_operation_ie[3] & 0x07)
 }
 
 /// Recover the peer's HE Operation `ER-SU-Disable` bit.
@@ -55,13 +62,10 @@ pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8
 /// logs complete-IE byte five bit zero as `ER-SU-Disable`, stores it at
 /// peer-state bit 10 and passes it unchanged to `hal_he_set_ersu`.
 pub fn he_extended_range_single_user_disabled(he_operation_ie: &[u8]) -> Option<bool> {
-    if he_operation_ie.len() < 6
-        || he_operation_ie[0] != 255
-        || he_operation_ie[2] != HE_OPERATION_EXTENSION_ID
-    {
-        return None;
+    match *he_operation_ie {
+        [255, _, HE_OPERATION_EXTENSION_ID, _, _, parameters, ..] => Some(parameters & 0x01 != 0),
+        _ => None,
     }
-    Some(he_operation_ie[5] & 0x01 != 0)
 }
 
 /// One bounded, owned observation from a beacon or probe response.
@@ -153,7 +157,7 @@ impl ScanRecord {
     }
 
     pub fn ssid_bytes(&self) -> &[u8] {
-        &self.ssid[..usize::from(self.ssid_len)]
+        stored(&self.ssid, self.ssid_len)
     }
 
     /// Whether this observation matches one exact requested security mode.
@@ -184,11 +188,14 @@ impl ScanRecord {
     }
 
     pub fn supported_rates_bytes(&self) -> &[u8] {
-        &self.supported_rates[..usize::from(self.supported_rates_len)]
+        stored(&self.supported_rates, self.supported_rates_len)
     }
 
     pub fn extended_supported_rates_bytes(&self) -> &[u8] {
-        &self.extended_supported_rates[..usize::from(self.extended_supported_rates_len)]
+        stored(
+            &self.extended_supported_rates,
+            self.extended_supported_rates_len,
+        )
     }
 
     pub const fn erp_information(&self) -> Option<u8> {
@@ -262,15 +269,15 @@ impl ScanRecord {
     }
 
     pub fn he_capability_ie_bytes(&self) -> &[u8] {
-        &self.he_capability_ie[..usize::from(self.he_capability_ie_len)]
+        stored(&self.he_capability_ie, self.he_capability_ie_len)
     }
 
     pub fn he_operation_ie_bytes(&self) -> &[u8] {
-        &self.he_operation_ie[..usize::from(self.he_operation_ie_len)]
+        stored(&self.he_operation_ie, self.he_operation_ie_len)
     }
 
     pub fn wmm_ie_bytes(&self) -> &[u8] {
-        &self.wmm_ie[..usize::from(self.wmm_ie_len)]
+        stored(&self.wmm_ie, self.wmm_ie_len)
     }
 
     pub fn wmm_parameters(&self) -> Option<crate::extensions::wmm::WmmParameterSet> {
@@ -278,11 +285,11 @@ impl ScanRecord {
     }
 
     pub fn rsn_ie_bytes(&self) -> &[u8] {
-        &self.rsn_ie[..usize::from(self.rsn_ie_len)]
+        stored(&self.rsn_ie, self.rsn_ie_len)
     }
 
     pub fn rsnxe_bytes(&self) -> &[u8] {
-        &self.rsnxe[..usize::from(self.rsnxe_len)]
+        stored(&self.rsnxe, self.rsnxe_len)
     }
 }
 
@@ -355,7 +362,7 @@ impl<const N: usize> ScanTable<N> {
         record.received_at = received_at;
         self.observed_frames = self.observed_frames.saturating_add(1);
 
-        for (index, existing) in self.records[..self.length].iter_mut().enumerate() {
+        for (index, existing) in self.records.iter_mut().take(self.length).enumerate() {
             let Some(existing) = existing else {
                 continue;
             };
@@ -395,13 +402,16 @@ impl<const N: usize> ScanTable<N> {
             }
         }
 
-        if self.length == N {
+        let index = self.length;
+        // Every cell below `length` is occupied, so the first vacant one is
+        // `length`; there is none when the table holds `N` records.
+        let Some(vacant) = self.records.get_mut(index) else {
             self.dropped_unique_bss = self.dropped_unique_bss.saturating_add(1);
             return ScanObservation::Dropped;
-        }
-        let index = self.length;
-        self.records[index] = Some(record);
-        self.length += 1;
+        };
+        *vacant = Some(record);
+        // `index` names a cell of an array of `N` cells, so `index + 1 <= N`.
+        self.length = index.wrapping_add(1);
         ScanObservation::Inserted { index }
     }
 }
@@ -445,128 +455,192 @@ pub fn best_matching_ssid_and_security<'a>(
 /// The fixed management and beacon fields are checked as one array before
 /// interpreting the variable information elements.
 pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<ScanRecord> {
-    let (header, elements) = frame.split_first_chunk::<36>()?;
-    let frame_control = u16::from_le_bytes([header[0], header[1]]);
+    let (header, mut elements) = frame.split_first_chunk::<36>()?;
+    let [
+        fc0,
+        fc1,
+        _duration0,
+        _duration1,
+        // Receiver and transmitter addresses.
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        _sequence0,
+        _sequence1,
+        t0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        t6,
+        t7,
+        i0,
+        i1,
+        c0,
+        c1,
+    ] = *header;
+    let frame_control = u16::from_le_bytes([fc0, fc1]);
     let subtype = (frame_control >> 4) & 0x0f;
     if frame_control & 0x000c != 0 || !matches!(subtype, 5 | 8) {
         return None;
     }
 
-    let bssid = Bssid::new(IndividualAddress::new(header[16..22].try_into().ok()?)?)?;
+    let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
     let mut record = ScanRecord::new(bssid, fallback_channel, rssi);
-    let [.., t0, t1, t2, t3, t4, t5, t6, t7, b0, b1, c0, c1] = *header;
     record.timestamp =
         crate::tsf::TsfInstant::from_micros(u64::from_le_bytes([t0, t1, t2, t3, t4, t5, t6, t7]));
-    record.beacon_interval_tu = u16::from_le_bytes([b0, b1]);
+    record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);
     record.privacy = record.capability_info & 0x0010 != 0;
 
-    let mut offset = 0;
-    while offset + 2 <= elements.len() {
-        let id = elements[offset];
-        let length = usize::from(elements[offset + 1]);
-        offset += 2;
-        let Some(end) = offset.checked_add(length) else {
+    while let Some((&element_header, rest)) = elements.split_first_chunk::<2>() {
+        let [id, length] = element_header;
+        let Some((value, rest)) = rest.split_at_checked(usize::from(length)) else {
             record.information_elements_truncated = true;
             break;
         };
-        if end > elements.len() {
-            record.information_elements_truncated = true;
-            break;
-        }
-        let value = &elements[offset..end];
-        match id {
-            0 if length <= record.ssid.len() => {
-                record.ssid[..length].copy_from_slice(value);
-                record.ssid_len = length as u8;
+        elements = rest;
+        match (id, value) {
+            (0, _) => {
+                if let Some(length) = store_value(&mut record.ssid, value) {
+                    record.ssid_len = length;
+                }
             }
-            1 if length <= record.supported_rates.len() => {
-                record.supported_rates[..length].copy_from_slice(value);
-                record.supported_rates_len = length as u8;
+            (1, _) => {
+                if let Some(length) = store_value(&mut record.supported_rates, value) {
+                    record.supported_rates_len = length;
+                }
             }
-            3 if length == 1 => record.channel = value[0],
-            42 if length == 1 => {
+            (3, &[channel]) => record.channel = channel,
+            (42, &[information]) => {
                 // Multiple ERP elements are malformed, but protection must
                 // fail closed while the broader scan record remains usable:
                 // retain every observed Use Protection assertion.
-                record.erp_information = Some(record.erp_information.unwrap_or(0) | value[0]);
+                record.erp_information = Some(record.erp_information.unwrap_or(0) | information);
             }
-            45 if length + 2 == HT_CAPABILITY_IE_LEN => {
-                record
-                    .ht_capability_ie
-                    .copy_from_slice(&elements[offset - 2..end]);
-                record.ht_capability_ie_present = true;
+            (45, _) => {
+                if let Some(element) = exact_element(element_header, value) {
+                    record.ht_capability_ie = element;
+                    record.ht_capability_ie_present = true;
+                }
             }
-            48 => {
+            (48, _) => {
                 record.rsn = true;
                 record.rsn_ie_count = record.rsn_ie_count.saturating_add(1);
-                let total = length + 2;
-                if total <= record.rsn_ie.len() {
-                    record.rsn_ie[..total].copy_from_slice(&elements[offset - 2..end]);
-                    record.rsn_ie_len = total as u8;
-                } else {
-                    record.information_elements_truncated = true;
+                match store_element(&mut record.rsn_ie, element_header, value) {
+                    Some(length) => record.rsn_ie_len = length,
+                    None => record.information_elements_truncated = true,
                 }
             }
-            50 => {
-                let copied = length.min(record.extended_supported_rates.len());
-                record.extended_supported_rates[..copied].copy_from_slice(&value[..copied]);
+            (50, _) => {
+                let copied = record
+                    .extended_supported_rates
+                    .iter_mut()
+                    .zip(value)
+                    .map(|(stored, rate)| *stored = *rate)
+                    .count();
+                // `copied` is at most EXTENDED_RATES_CAPACITY, which fits a u8.
                 record.extended_supported_rates_len = copied as u8;
-                record.information_elements_truncated |= copied != length;
+                record.information_elements_truncated |= copied != value.len();
             }
-            61 if length + 2 == HT_OPERATION_IE_LEN => {
-                record
-                    .ht_operation_ie
-                    .copy_from_slice(&elements[offset - 2..end]);
-                record.ht_operation_ie_present = true;
-            }
-            244 => {
-                let total = length + 2;
-                if total <= record.rsnxe.len() {
-                    record.rsnxe[..total].copy_from_slice(&elements[offset - 2..end]);
-                    record.rsnxe_len = total as u8;
-                } else {
-                    record.information_elements_truncated = true;
+            (61, _) => {
+                if let Some(element) = exact_element(element_header, value) {
+                    record.ht_operation_ie = element;
+                    record.ht_operation_ie_present = true;
                 }
             }
-            255 if value.first().copied() == Some(HE_CAPABILITIES_EXTENSION_ID) => {
-                let total = length + 2;
-                if total <= record.he_capability_ie.len() {
-                    record.he_capability_ie[..total].copy_from_slice(&elements[offset - 2..end]);
-                    record.he_capability_ie_len = total as u8;
-                } else {
-                    record.information_elements_truncated = true;
+            (244, _) => match store_element(&mut record.rsnxe, element_header, value) {
+                Some(length) => record.rsnxe_len = length,
+                None => record.information_elements_truncated = true,
+            },
+            (255, [HE_CAPABILITIES_EXTENSION_ID, ..]) => {
+                match store_element(&mut record.he_capability_ie, element_header, value) {
+                    Some(length) => record.he_capability_ie_len = length,
+                    None => record.information_elements_truncated = true,
                 }
             }
-            255 if value.first().copied() == Some(HE_OPERATION_EXTENSION_ID) => {
-                let total = length + 2;
-                if total <= record.he_operation_ie.len() {
-                    record.he_operation_ie[..total].copy_from_slice(&elements[offset - 2..end]);
-                    record.he_operation_ie_len = total as u8;
-                } else {
-                    record.information_elements_truncated = true;
+            (255, [HE_OPERATION_EXTENSION_ID, ..]) => {
+                match store_element(&mut record.he_operation_ie, element_header, value) {
+                    Some(length) => record.he_operation_ie_len = length,
+                    None => record.information_elements_truncated = true,
                 }
             }
-            221 if length >= 4 && value[..4] == [0x00, 0x50, 0xf2, 0x01] => {
-                record.legacy_wpa = true;
-            }
-            221 if length >= 6 && value[..4] == [0x00, 0x50, 0xf2, 0x02] => {
-                let total = length + 2;
-                if total <= record.wmm_ie.len() {
-                    record.wmm_ie[..total].copy_from_slice(&elements[offset - 2..end]);
-                    record.wmm_ie_len = total as u8;
-                } else {
-                    record.information_elements_truncated = true;
+            (221, [0x00, 0x50, 0xf2, 0x01, ..]) => record.legacy_wpa = true,
+            (221, [0x00, 0x50, 0xf2, 0x02, _, _, ..]) => {
+                match store_element(&mut record.wmm_ie, element_header, value) {
+                    Some(length) => record.wmm_ie_len = length,
+                    None => record.information_elements_truncated = true,
                 }
             }
             _ => {}
         }
-        offset = end;
     }
     // One trailing byte cannot form an IE header. Treat it as malformed,
     // rather than silently accepting it as absence of a later RSN/WPA IE.
-    record.information_elements_truncated |= offset != elements.len();
+    record.information_elements_truncated |= !elements.is_empty();
     Some(record)
+}
+
+/// The first `length` bytes of a record buffer.
+///
+/// The record's fields are public, so a caller can store a length beyond
+/// the buffer; the bytes the record holds are then the whole buffer.
+fn stored<const N: usize>(buffer: &[u8; N], length: u8) -> &[u8] {
+    buffer
+        .split_at_checked(usize::from(length))
+        .map_or(buffer.as_slice(), |(bytes, _)| bytes)
+}
+
+/// Copy an element's value to the front of `buffer`: its length, or `None`
+/// when it does not fit and `buffer` is unchanged.
+fn store_value<const N: usize>(buffer: &mut [u8; N], value: &[u8]) -> Option<u8> {
+    let length = u8::try_from(value.len()).ok()?;
+    let (front, _) = buffer.split_at_mut_checked(value.len())?;
+    front.copy_from_slice(value);
+    Some(length)
+}
+
+/// Copy a complete element, header and value, to the front of `buffer`: its
+/// length, or `None` when it does not fit and `buffer` is unchanged.
+fn store_element<const N: usize>(
+    buffer: &mut [u8; N],
+    header: [u8; 2],
+    value: &[u8],
+) -> Option<u8> {
+    let length = u8::try_from(value.len().checked_add(2)?).ok()?;
+    let (stored_header, rest) = buffer.split_first_chunk_mut::<2>()?;
+    let (stored_value, _) = rest.split_at_mut_checked(value.len())?;
+    *stored_header = header;
+    stored_value.copy_from_slice(value);
+    Some(length)
+}
+
+/// A complete element of exactly `N` bytes, or `None` for another length.
+fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N]> {
+    let mut element = [0; N];
+    let (stored_header, stored_value) = element.split_first_chunk_mut::<2>()?;
+    if stored_value.len() != value.len() {
+        return None;
+    }
+    *stored_header = header;
+    stored_value.copy_from_slice(value);
+    Some(element)
 }
 
 #[cfg(test)]

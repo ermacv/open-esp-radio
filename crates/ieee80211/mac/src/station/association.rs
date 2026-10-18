@@ -267,7 +267,7 @@ impl AssociationRequest<'_> {
         fixed[24..26].copy_from_slice(&capability.to_le_bytes());
         fixed[26..28].copy_from_slice(&self.listen_interval.to_le_bytes());
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
-        copy_rates(self.access_point, 0, &mut rates[..rates_len]);
+        copy_rates(self.access_point, &mut rates[..rates_len]);
         let extended_header = [50, extended_rates_len as u8];
         let power_capability = power_capability.map(|value| value.encode());
         let he_ul_mu_power = he_ul_mu_power.map(|value| value.encode());
@@ -353,16 +353,25 @@ impl AssociationResponse {
     }
 }
 
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_association_response(
     frame: &[u8],
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<AssociationResponse> {
-    if frame.len() < MANAGEMENT_HEADER_LEN + 6
-        || read_u16(frame, 0)? & 0x00fc != ASSOCIATION_RESPONSE_FRAME_CONTROL
-        || frame[4..10] != local
-        || frame[10..16] != bssid
-        || frame[16..22] != bssid
+    let (header, [capability_info, status_code, association_id], information_elements) =
+        split_received_management(frame)?;
+    if header.frame_control & 0x00fc != ASSOCIATION_RESPONSE_FRAME_CONTROL
+        || header.receiver != local
+        || header.transmitter != bssid
+        || header.bssid != bssid
     {
         return None;
     }
@@ -373,36 +382,39 @@ pub fn parse_association_response(
     let mut wmm = false;
     let mut wmm_parameters = None;
     let mut association_comeback_tu = None;
-    let mut offset = MANAGEMENT_HEADER_LEN + 6;
-    while offset + 2 <= frame.len() {
-        let id = frame[offset];
-        let length = usize::from(frame[offset + 1]);
-        let end = offset.checked_add(2 + length)?;
-        if end > frame.len() {
-            return None;
-        }
-        let value = &frame[offset + 2..end];
+    let mut remaining = information_elements;
+    while let [id, length, ..] = *remaining {
+        let length = usize::from(length);
+        let (element, tail) = remaining.split_at_checked(length.checked_add(2)?)?;
         ht_capability |= id == 45 && length == 26;
-        he_capability |= id == 255 && value.first() == Some(&35);
-        he_operation |= id == 255 && value.first() == Some(&36);
-        let is_wmm = id == 221 && length >= 6 && value.get(..4) == Some(&[0x00, 0x50, 0xf2, 0x02]);
+        he_capability |= matches!(element, [255, _, 35, ..]);
+        he_operation |= matches!(element, [255, _, 36, ..]);
+        let is_wmm = length >= 6 && matches!(element, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]);
         wmm |= is_wmm;
         if is_wmm {
-            wmm_parameters = parse_wmm_parameter_element(&frame[offset..end]).or(wmm_parameters);
+            wmm_parameters = parse_wmm_parameter_element(element).or(wmm_parameters);
         }
-        if let [TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK, a, b, c, d, ..] = *value
-            && id == TIMEOUT_INTERVAL_ELEMENT_ID
+        if let [
+            TIMEOUT_INTERVAL_ELEMENT_ID,
+            _,
+            TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK,
+            a,
+            b,
+            c,
+            d,
+            ..,
+        ] = *element
         {
             let comeback = u32::from_le_bytes([a, b, c, d]);
             association_comeback_tu = (comeback != 0).then_some(comeback);
         }
-        offset = end;
+        remaining = tail;
     }
 
     Some(AssociationResponse {
-        capability_info: read_u16(frame, 24)?,
-        status_code: read_u16(frame, 26)?,
-        association_id: read_u16(frame, 28)? & 0x3fff,
+        capability_info,
+        status_code,
+        association_id: association_id & 0x3fff,
         ht_capability,
         he_capability,
         he_operation,
@@ -419,13 +431,20 @@ const TIMEOUT_INTERVAL_ELEMENT_ID: u8 = 56;
 /// Timeout Interval type of the association comeback time.
 const TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK: u8 = 3;
 
-fn copy_rates(access_point: &ScanRecord, start: usize, output: &mut [u8]) {
-    let ordinary = access_point.supported_rates_bytes();
-    for (destination, index) in output.iter_mut().zip(start..) {
-        *destination = if index < ordinary.len() {
-            ordinary[index]
-        } else {
-            access_point.extended_supported_rates_bytes()[index - ordinary.len()]
-        };
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
+fn copy_rates(access_point: &ScanRecord, output: &mut [u8]) {
+    let rates = access_point
+        .supported_rates_bytes()
+        .iter()
+        .chain(access_point.extended_supported_rates_bytes());
+    for (destination, &rate) in output.iter_mut().zip(rates) {
+        *destination = rate;
     }
 }

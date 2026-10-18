@@ -1,4 +1,14 @@
 //! Checked management/data frame geometry shared by transmit and receive.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 /// Plain station-to-DS Data frame control.
 pub const DATA_TO_DS: u16 = 0x0108;
@@ -188,3 +198,6 @@ impl<'a> DecodedHeader<'a> {
         self.body
     }
 }
+
+#[cfg(test)]
+mod fuzz_tests;

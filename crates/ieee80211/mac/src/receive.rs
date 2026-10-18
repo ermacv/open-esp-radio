@@ -1,4 +1,14 @@
 //! One receive boundary for station Data and EAPOL.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::{
     address::{Bssid, OwnAddress},
@@ -250,5 +260,61 @@ mod tests {
             ));
             assert!(admit(&frame, Integrity::DecryptedAndVerified, &mut replay).is_ok());
         }
+    }
+
+    /// Admit and demultiplex one input with each integrity verdict.
+    fn admit_all(frame: &[u8]) {
+        let Some(header) = DecodedHeader::decode(frame) else {
+            return;
+        };
+        for integrity in [Integrity::Unverified, Integrity::DecryptedAndVerified] {
+            let mut replay =
+                CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
+            let Ok(admitted) = AdmittedData::admit(
+                header,
+                OwnAddress::new(IndividualAddress::new([2; 6]).unwrap()),
+                Bssid::new(IndividualAddress::new([4; 6]).unwrap()).unwrap(),
+                integrity,
+                Some(&mut replay),
+            ) else {
+                continue;
+            };
+            let _ = admitted.protected();
+            if let Ok(msdus) = admitted.msdus() {
+                for msdu in msdus {
+                    let _ = msdu.map(|parts| parts.length());
+                }
+            }
+        }
+    }
+
+    fn run(count: usize) {
+        let mut seeds = Vec::new();
+        for (qos, ht) in [(false, false), (true, false), (true, true)] {
+            for protected in [false, true] {
+                seeds.push(packet(qos, ht, protected));
+            }
+        }
+        let mut amsdu = packet(true, false, true);
+        amsdu.truncate(26 + crate::ccmp::CCMP_HEADER_LEN);
+        amsdu[24] |= 0x80;
+        amsdu.extend_from_slice(&[2, 2, 2, 2, 2, 2, 6, 6, 6, 6, 6, 6, 0, 10]);
+        amsdu.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0, 1, 2]);
+        amsdu.extend_from_slice(&[2, 2, 2, 2, 2, 2, 6, 6, 6, 6, 6, 6, 0, 10]);
+        amsdu.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x06, 0xde, 0xad]);
+        seeds.push(amsdu);
+        let seeds: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
+        crate::fuzz::inputs(&seeds, count, 96, admit_all);
+    }
+
+    #[test]
+    fn admission_never_panics() {
+        run(crate::fuzz::QUICK);
+    }
+
+    #[test]
+    #[ignore = "the full run"]
+    fn admission_never_panics_full() {
+        run(crate::fuzz::FULL);
     }
 }

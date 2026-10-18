@@ -304,3 +304,251 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
     }
     assert_eq!(best_matching_ssid(&records, b"test").unwrap().channel, 6);
 }
+
+/// A beacon (or, with `subtype` 5, a probe response) carrying every element
+/// `parse_management` retains.
+fn rich_frame(subtype: u8) -> std::vec::Vec<u8> {
+    let mut frame = std::vec![0_u8; 36];
+    frame[0] = subtype << 4;
+    frame[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
+    frame[24..32].copy_from_slice(&0x0123_4567_89ab_cdef_u64.to_le_bytes());
+    frame[32..34].copy_from_slice(&100_u16.to_le_bytes());
+    frame[34] = 0x11;
+    frame.extend_from_slice(&[0, 4, b't', b'e', b's', b't']);
+    frame.extend_from_slice(&[1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24]);
+    frame.extend_from_slice(&[3, 1, 6]);
+    frame.extend_from_slice(&[42, 1, 0x02]);
+    frame.extend_from_slice(&[50, 4, 0x30, 0x48, 0x60, 0x6c]);
+    let mut ht_capability = [0_u8; 28];
+    ht_capability[..6].copy_from_slice(&[45, 26, 0x6e, 0x10, 0x03, 0xff]);
+    ht_capability[9] = 1;
+    frame.extend_from_slice(&ht_capability);
+    let mut ht_operation = [0_u8; 24];
+    ht_operation[..5].copy_from_slice(&[61, 22, 6, 0x05, 0x01]);
+    frame.extend_from_slice(&ht_operation);
+    frame.extend_from_slice(&[
+        48, 20, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2,
+        0x80, 0,
+    ]);
+    frame.extend_from_slice(&[244, 1, 0x20]);
+    frame.extend_from_slice(&[255, 7, 35, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+    frame.extend_from_slice(&[255, 7, 36, 0xf4, 0x3f, 0x01, 0x05, 0xfd, 0xff]);
+    frame.extend_from_slice(&[
+        221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x85, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42,
+        0x43, 94, 0, 0x72, 0x32, 47, 0,
+    ]);
+    frame.extend_from_slice(&[221, 6, 0x00, 0x50, 0xf2, 0x01, 1, 0]);
+    frame
+}
+
+fn scan_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
+    let mut beacon = std::vec![0_u8; 47];
+    beacon[0] = 0x80;
+    beacon[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
+    beacon[34] = 0x10;
+    beacon[36..47].copy_from_slice(&[0, 4, b't', b'e', b's', b't', 3, 1, 11, 48, 0]);
+    let mut hidden = std::vec![0_u8; 38];
+    hidden[0] = 0x80;
+    hidden[16..22].copy_from_slice(&[2, 2, 3, 4, 5, 6]);
+    std::vec![rich_frame(8), rich_frame(5), beacon, hidden]
+}
+
+/// Read every accessor of a parsed record.
+fn read_record(record: &ScanRecord) {
+    let _ = record.ssid_bytes();
+    let _ = record.matches_security(crate::security::LinkProtection::Open);
+    let _ = record.matches_security(crate::security::LinkProtection::Ccmp);
+    let _ = record.supported_rates_bytes();
+    let _ = record.extended_supported_rates_bytes();
+    let _ = record.erp_information();
+    let _ = record.ht_capability_ie_bytes();
+    let _ = record
+        .ht_peer_capabilities()
+        .map(|peer| peer.highest_rx_mcs());
+    let _ = record.supports_ht_duplicate_mcs32();
+    let _ = record.ht_operation_ie_bytes();
+    let _ = record.supports_ht_short_guard_interval_20mhz();
+    let _ = record.supports_ht_short_guard_interval_40mhz();
+    let _ = record.ht40_secondary_channel();
+    let _ = record.he_capability_ie_bytes();
+    let _ = he_default_packet_extension_duration(record.he_operation_ie_bytes());
+    let _ = he_extended_range_single_user_disabled(record.he_operation_ie_bytes());
+    let _ = record.wmm_ie_bytes();
+    let _ = record.wmm_parameters();
+    let _ = crate::security::rsn::RsnElement::parse(record.rsn_ie_bytes());
+    let _ = record.rsnxe_bytes();
+}
+
+fn parse_management_never_panics(count: usize) {
+    let seeds = scan_seeds();
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 320, |frame| {
+        if let Some(record) = parse_management(frame, 6, -40) {
+            read_record(&record);
+            let _ = best_matching_ssid([&record], b"test");
+        }
+    });
+}
+
+#[test]
+fn parse_management_never_panics_on_received_bytes() {
+    parse_management_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn parse_management_never_panics_on_received_bytes_full() {
+    parse_management_never_panics(crate::fuzz::FULL);
+}
+
+fn observe_management_never_panics(count: usize) {
+    let seeds = scan_seeds();
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    let mut table = ScanTable::<4>::new();
+    let mut rssi = 0_i8;
+    crate::fuzz::inputs(&seeds, count, 320, |frame| {
+        rssi = rssi.wrapping_sub(7);
+        let _ = table.observe_management(frame, 1, rssi, Some(Instant::from_micros(1)));
+        if table.summary().observed_frames.is_multiple_of(64) {
+            table.clear();
+        }
+    });
+    for record in table.records() {
+        read_record(record);
+    }
+}
+
+#[test]
+fn observe_management_never_panics_on_received_bytes() {
+    observe_management_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn observe_management_never_panics_on_received_bytes_full() {
+    observe_management_never_panics(crate::fuzz::FULL);
+}
+
+fn he_operation_never_panics(count: usize) {
+    let seeds: [&[u8]; 3] = [
+        &[255, 4, 36, 0b1010_1100, 0, 0],
+        &[255, 4, 36, 0, 0, 1],
+        &[255, 7, 36, 0xf4, 0x3f, 0x01, 0x05, 0xfd, 0xff],
+    ];
+    crate::fuzz::inputs(&seeds, count, 16, |element| {
+        let _ = he_default_packet_extension_duration(element);
+        let _ = he_extended_range_single_user_disabled(element);
+    });
+}
+
+#[test]
+fn he_operation_readers_never_panic_on_received_bytes() {
+    he_operation_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn he_operation_readers_never_panic_on_received_bytes_full() {
+    he_operation_never_panics(crate::fuzz::FULL);
+}
+
+#[test]
+fn a_rich_frame_keeps_every_retained_element() {
+    let record = parse_management(&rich_frame(8), 1, -40).unwrap();
+    assert!(!record.information_elements_truncated);
+    assert_eq!(record.channel, 6);
+    assert_eq!(record.supported_rates_bytes().len(), 8);
+    assert_eq!(
+        record.extended_supported_rates_bytes(),
+        &[0x30, 0x48, 0x60, 0x6c]
+    );
+    assert_eq!(record.erp_information(), Some(0x02));
+    assert!(record.supports_ht_duplicate_mcs32());
+    assert_eq!(
+        record.ht40_secondary_channel(),
+        Some(HtSecondaryChannel::Above)
+    );
+    assert_eq!(record.rsn_ie_bytes().len(), 22);
+    // Mixed WPA/WPA2 advertisements match no exact mode.
+    assert!(!record.matches_security(crate::security::LinkProtection::Ccmp));
+    assert!(record.legacy_wpa);
+    assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
+    assert_eq!(record.he_capability_ie_bytes().len(), 9);
+    assert_eq!(
+        he_default_packet_extension_duration(record.he_operation_ie_bytes()),
+        Some(4)
+    );
+    assert_eq!(
+        he_extended_range_single_user_disabled(record.he_operation_ie_bytes()),
+        Some(true)
+    );
+    assert!(record.wmm_parameters().is_some());
+}
+
+#[test]
+fn an_oversized_element_marks_the_record_truncated_and_keeps_the_stored_one() {
+    let mut frame = rich_frame(8);
+    // A 30-byte RSNXE exceeds its 16-byte capacity.
+    frame.extend_from_slice(&[244, 28]);
+    frame.extend_from_slice(&[0; 28]);
+    let record = parse_management(&frame, 1, -40).unwrap();
+    assert!(record.information_elements_truncated);
+    assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
+}
+
+#[test]
+fn a_stored_length_beyond_its_buffer_reads_the_whole_buffer() {
+    // The record's fields are public; a caller-set length longer than the
+    // buffer cannot name more bytes than the record holds.
+    let mut record = ScanRecord::new(
+        crate::address::Bssid::new(
+            crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+        )
+        .unwrap(),
+        6,
+        -40,
+    );
+    record.ssid_len = u8::MAX;
+    record.supported_rates_len = u8::MAX;
+    record.extended_supported_rates_len = u8::MAX;
+    record.he_capability_ie_len = u8::MAX;
+    record.he_operation_ie_len = u8::MAX;
+    record.wmm_ie_len = u8::MAX;
+    record.rsn_ie_len = u8::MAX;
+    record.rsnxe_len = u8::MAX;
+    assert_eq!(record.ssid_bytes().len(), 32);
+    assert_eq!(record.supported_rates_bytes().len(), 8);
+    assert_eq!(
+        record.extended_supported_rates_bytes().len(),
+        super::EXTENDED_RATES_CAPACITY
+    );
+    assert_eq!(
+        record.he_capability_ie_bytes().len(),
+        super::HE_CAPABILITY_IE_CAPACITY
+    );
+    assert_eq!(
+        record.he_operation_ie_bytes().len(),
+        super::HE_OPERATION_IE_CAPACITY
+    );
+    assert_eq!(record.wmm_ie_bytes().len(), super::WMM_IE_CAPACITY);
+    assert_eq!(record.rsn_ie_bytes().len(), super::RSN_IE_CAPACITY);
+    assert_eq!(record.rsnxe_bytes().len(), super::RSNXE_CAPACITY);
+}
+
+#[test]
+fn a_full_table_drops_a_new_bss_and_keeps_its_records() {
+    let mut table = ScanTable::<1>::new();
+    let mut frame = rich_frame(8);
+    assert_eq!(
+        table.observe_management(&frame, 1, -40, None),
+        ScanObservation::Inserted { index: 0 }
+    );
+    frame[21] = 7;
+    assert_eq!(
+        table.observe_management(&frame, 1, -40, None),
+        ScanObservation::Dropped
+    );
+    assert_eq!(table.summary().records, 1);
+    assert_eq!(table.summary().dropped_unique_bss, 1);
+    assert_eq!(table.records().count(), 1);
+}

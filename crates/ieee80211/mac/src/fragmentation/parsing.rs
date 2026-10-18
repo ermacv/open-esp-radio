@@ -3,6 +3,16 @@
 //! The fixed MAC header and optional QoS control are split as arrays once.
 //! Fragment admission carries that decoded sequence control and payload view;
 //! it does not revisit raw offsets after validating the header.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::ccmp::CcmpHeader;
 use crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN;
@@ -226,3 +236,6 @@ fn parse_data_header(
         qos_amsdu_present: qos_control.is_some_and(|qos| qos & u16::from(QOS_AMSDU_PRESENT) != 0),
     })
 }
+
+#[cfg(test)]
+mod fuzz_tests;

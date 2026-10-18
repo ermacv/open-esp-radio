@@ -128,10 +128,72 @@ fn write_management_header(
     frame[22..24].copy_from_slice(&sequence_number.sequence_control().to_le_bytes());
 }
 
-fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
-    let value = bytes.get(offset..offset + 2)?;
-    Some(u16::from_le_bytes([value[0], value[1]]))
+/// The fields of a received management header the station parsers match.
+struct ReceivedManagementHeader {
+    frame_control: u16,
+    receiver: [u8; 6],
+    transmitter: [u8; 6],
+    bssid: [u8; 6],
 }
 
+/// Split a received management frame into its header fields, the six-byte
+/// fixed body that follows (the Authentication algorithm, transaction and
+/// status, or the Association Response capability, status and AID) and the
+/// rest; `None` when the frame is shorter than both.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
+fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u16; 3], &[u8])> {
+    let (header, body) = frame.split_first_chunk::<MANAGEMENT_HEADER_LEN>()?;
+    let (&[f0, f1, f2, f3, f4, f5], rest) = body.split_first_chunk()?;
+    let [
+        c0,
+        c1,
+        _duration0,
+        _duration1,
+        r0,
+        r1,
+        r2,
+        r3,
+        r4,
+        r5,
+        t0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        _sequence0,
+        _sequence1,
+    ] = *header;
+    Some((
+        ReceivedManagementHeader {
+            frame_control: u16::from_le_bytes([c0, c1]),
+            receiver: [r0, r1, r2, r3, r4, r5],
+            transmitter: [t0, t1, t2, t3, t4, t5],
+            bssid: [b0, b1, b2, b3, b4, b5],
+        },
+        [
+            u16::from_le_bytes([f0, f1]),
+            u16::from_le_bytes([f2, f3]),
+            u16::from_le_bytes([f4, f5]),
+        ],
+        rest,
+    ))
+}
+
+#[cfg(test)]
+mod fuzz_tests;
 #[cfg(test)]
 mod tests;

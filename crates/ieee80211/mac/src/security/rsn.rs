@@ -6,6 +6,16 @@
 //! their own acceptance rules to the same parsed element.
 //! Counted suite and PMKID lists retain array slices after parsing: each
 //! element's width is proved once, so iteration cannot omit a partial entry.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 /// Element ID of the RSN element.
 pub const RSN_ELEMENT_ID: u8 = 48;

@@ -37,3 +37,30 @@ fn sa_query_bodies_round_trip() {
     assert_eq!(SaQuery::parse(&[3, 0, 0x12, 0x34]), None);
     assert_eq!(SaQuery::parse(&[8, 0, 0x12]), None);
 }
+
+fn sa_queries(count: usize) {
+    let request = SaQuery::Request {
+        transaction: [0x12, 0x34],
+    }
+    .encode();
+    let response = SaQuery::Response {
+        transaction: [0xab, 0xcd],
+    }
+    .encode();
+    crate::fuzz::inputs(&[&request, &response], count, 16, |bytes| {
+        if let Some(query) = SaQuery::parse(bytes) {
+            assert_eq!(SaQuery::parse(&query.encode()), Some(query));
+        }
+    });
+}
+
+#[test]
+fn sa_query_parser_never_panics() {
+    sa_queries(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn sa_query_parser_never_panics_full() {
+    sa_queries(crate::fuzz::FULL);
+}

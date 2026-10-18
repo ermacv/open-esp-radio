@@ -54,3 +54,33 @@ fn rejects_wrong_identity_short_elements_and_duplicate_aci() {
     element[22] = 0x42;
     assert!(parse_wmm_parameter_element(&element).is_none());
 }
+
+fn parse_wmm_parameter_element_never_panics(count: usize) {
+    let mut long = STANDARD_PARAMETER_ELEMENT.to_vec();
+    long[1] = 28;
+    long.extend_from_slice(&[0xdd; 4]);
+    let seeds: [&[u8]; 2] = [&STANDARD_PARAMETER_ELEMENT, &long];
+    crate::fuzz::inputs(&seeds, count, 64, |element| {
+        if let Some(parameters) = parse_wmm_parameter_element(element) {
+            for category in [
+                WmmAccessCategory::BestEffort,
+                WmmAccessCategory::Background,
+                WmmAccessCategory::Video,
+                WmmAccessCategory::Voice,
+            ] {
+                let _ = parameters.access_category(category);
+            }
+        }
+    });
+}
+
+#[test]
+fn parse_wmm_parameter_element_never_panics_on_received_bytes() {
+    parse_wmm_parameter_element_never_panics(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn parse_wmm_parameter_element_never_panics_on_received_bytes_full() {
+    parse_wmm_parameter_element_never_panics(crate::fuzz::FULL);
+}

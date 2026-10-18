@@ -22,6 +22,12 @@
 //! subsequent processing. Replacing indexing mechanically with `.get()` or
 //! suppressing its lint does not establish the contract.
 
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod fuzz;
+
 pub mod address;
 pub mod ampdu;
 pub mod ap;

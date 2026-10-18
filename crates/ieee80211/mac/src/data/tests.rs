@@ -341,3 +341,192 @@ fn decapsulation_rejects_role_mismatch_amsdu_and_non_snap_payload() {
         Err(DataDecapError::InvalidLlcSnap)
     );
 }
+
+/// An ordinary MSDU from the AP to the station, as the AP plans it.
+fn ordinary_mpdu() -> std::vec::Vec<u8> {
+    let plan = plan_data_encapsulation(
+        DataInterfaceRole::AccessPoint,
+        BSSID,
+        BSSID,
+        ethernet(DESTINATION),
+        WmmUserPriority::UP5,
+        true,
+        false,
+    );
+    let mut mpdu = plan.header[..usize::from(plan.header_len)].to_vec();
+    mpdu.extend_from_slice(&plan.llc_snap);
+    mpdu.extend_from_slice(&[1, 2, 3, 4]);
+    mpdu
+}
+
+/// A protected non-QoS MSDU from the AP with its CCMP header.
+fn protected_mpdu() -> std::vec::Vec<u8> {
+    let mut mpdu = std::vec![IEEE80211_DATA, IEEE80211_FROM_DS | 0x40, 0, 0];
+    for address in [DESTINATION, BSSID, SOURCE] {
+        mpdu.extend_from_slice(&address);
+    }
+    mpdu.extend_from_slice(&[0, 0, 1, 0, 0, 0x20, 0, 0, 0, 0]);
+    mpdu.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x08, 0x06, 1, 2, 3, 4]);
+    mpdu
+}
+
+/// A QoS A-MSDU from the AP with two subframes, the first padded.
+fn amsdu_mpdu() -> std::vec::Vec<u8> {
+    let mut mpdu = std::vec![IEEE80211_QOS_DATA, IEEE80211_FROM_DS, 0, 0];
+    for address in [DESTINATION, BSSID, SOURCE] {
+        mpdu.extend_from_slice(&address);
+    }
+    mpdu.extend_from_slice(&[0, 0, IEEE80211_QOS_AMSDU_PRESENT, 0]);
+    mpdu.extend_from_slice(&DESTINATION);
+    mpdu.extend_from_slice(&SOURCE);
+    mpdu.extend_from_slice(&[0, 10, 0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1, 2]);
+    mpdu.extend_from_slice(&[0xff; 6]);
+    mpdu.extend_from_slice(&SOURCE);
+    mpdu.extend_from_slice(&[0, 11, 0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x06, 3, 4, 5]);
+    mpdu
+}
+
+/// The offset and length of the payload after the header geometry, after a
+/// CCMP header, and as the input's final two octets pick them.
+fn payload_windows(mpdu: &[u8]) -> std::vec::Vec<(usize, usize)> {
+    let mut windows = std::vec::Vec::new();
+    if let Some(header) = crate::frame::DecodedHeader::decode(mpdu) {
+        let start = mpdu.len().saturating_sub(header.body().len());
+        windows.push((start, header.body().len()));
+        windows.push((
+            start.saturating_add(8),
+            header.body().len().saturating_sub(8),
+        ));
+    }
+    if let [.., offset, length] = *mpdu {
+        let bound = mpdu.len().saturating_add(1);
+        windows.push((
+            usize::from(offset).checked_rem(bound).unwrap(),
+            usize::from(length).checked_rem(bound).unwrap(),
+        ));
+    }
+    windows.push((usize::MAX, 1));
+    windows
+}
+
+fn decapsulate_all(mpdu: &[u8]) {
+    // Room for any Ethernet frame the MPDU holds, and room for almost none.
+    let mut output = std::vec![0_u8; mpdu.len().saturating_add(ETHERNET_HEADER_LEN)];
+    let mut short = [0_u8; 15];
+    for role in [DataInterfaceRole::Station, DataInterfaceRole::AccessPoint] {
+        for (offset, length) in payload_windows(mpdu) {
+            if let Ok(plan) = plan_data_decapsulation(role, mpdu, offset, length) {
+                assert_eq!(
+                    decapsulate_data(role, mpdu, offset, length, &mut output),
+                    Ok(plan)
+                );
+                let _ = decapsulate_data(role, mpdu, offset, length, &mut short);
+            }
+            if let Ok(subframes) = amsdu_subframes(role, mpdu, offset, length) {
+                for subframe in subframes {
+                    let Ok(subframe) = subframe else { break };
+                    let _ = decapsulate_amsdu_subframe(subframe, &mut output);
+                    let _ = decapsulate_amsdu_subframe(subframe, &mut short);
+                }
+            }
+            if let Ok(frames) = decapsulate_data_frames(role, mpdu, offset, length) {
+                let _ = frames.is_amsdu();
+                for frame in frames {
+                    let Ok(frame) = frame else { break };
+                    let _ = frame.length();
+                    let _ = frame.copy_to(&mut output);
+                    let _ = frame.copy_to(&mut short);
+                }
+            }
+        }
+    }
+}
+
+fn run_decapsulation(count: usize) {
+    let seeds = [ordinary_mpdu(), protected_mpdu(), amsdu_mpdu()];
+    let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
+    crate::fuzz::inputs(&seeds, count, 128, decapsulate_all);
+}
+
+#[test]
+fn decapsulation_never_panics() {
+    let ordinary = ordinary_mpdu();
+    assert!(
+        decapsulate_data_frames(
+            DataInterfaceRole::Station,
+            &ordinary,
+            26,
+            ordinary.len() - 26
+        )
+        .is_ok()
+    );
+    let protected = protected_mpdu();
+    assert!(plan_data_decapsulation(DataInterfaceRole::Station, &protected, 32, 12).is_ok());
+    let amsdu = amsdu_mpdu();
+    assert_eq!(
+        amsdu_subframes(DataInterfaceRole::Station, &amsdu, 26, amsdu.len() - 26)
+            .unwrap()
+            .count(),
+        2
+    );
+    run_decapsulation(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn decapsulation_never_panics_full() {
+    run_decapsulation(crate::fuzz::FULL);
+}
+
+fn run_amsdu_body(count: usize) {
+    let amsdu = amsdu_mpdu();
+    crate::fuzz::inputs(&[&amsdu[26..]], count, 128, |body| {
+        if let Ok(subframes) = aggregate_payload(body) {
+            for subframe in subframes {
+                let _ = subframe.map(|subframe| subframe.payload.len());
+            }
+        }
+    });
+}
+
+#[test]
+fn amsdu_subframes_never_panic() {
+    run_amsdu_body(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn amsdu_subframes_never_panic_full() {
+    run_amsdu_body(crate::fuzz::FULL);
+}
+
+/// Each four octets are one MPDU's Retry, Sequence Control and TID (none
+/// when the fourth octet's top bit is set).
+fn run_duplicate(count: usize) {
+    let seed = [
+        0, 0x30, 0x12, 0, 1, 0x30, 0x12, 0, 1, 0x30, 0x12, 0x80, 0, 0x40, 0x12, 17,
+    ];
+    crate::fuzz::inputs(&[&seed], count, 128, |bytes| {
+        let mut filter = RxDuplicateFilter::new();
+        for &[retry, low, high, tid] in bytes.as_chunks::<4>().0 {
+            let retry = retry & 1 != 0;
+            let sequence_control = u16::from_le_bytes([low, high]);
+            let tid = (tid & 0x80 == 0).then_some(tid);
+            let known = filter.is_known_duplicate(retry, sequence_control, tid);
+            let duplicate = filter.is_duplicate(retry, sequence_control, tid);
+            assert_eq!(known, duplicate);
+            assert!(filter.is_known_duplicate(true, sequence_control, tid));
+        }
+    });
+}
+
+#[test]
+fn duplicate_filter_never_panics() {
+    run_duplicate(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn duplicate_filter_never_panics_full() {
+    run_duplicate(crate::fuzz::FULL);
+}

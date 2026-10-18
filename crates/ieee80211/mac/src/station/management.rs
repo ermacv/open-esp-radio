@@ -250,24 +250,32 @@ pub struct SaeAuthentication<'a> {
 
 /// Parse an SAE Authentication frame addressed to this station and BSSID;
 /// `None` for any other frame.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_sae_authentication(
     frame: &[u8],
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<SaeAuthentication<'_>> {
-    if frame.len() < MANAGEMENT_HEADER_LEN + 6
-        || read_u16(frame, 0)? & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
-        || frame[4..10] != local
-        || frame[10..16] != bssid
-        || frame[16..22] != bssid
-        || read_u16(frame, 24)? != SAE_AUTHENTICATION_ALGORITHM
+    let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
+    if header.frame_control & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
+        || header.receiver != local
+        || header.transmitter != bssid
+        || header.bssid != bssid
+        || algorithm != SAE_AUTHENTICATION_ALGORITHM
     {
         return None;
     }
     Some(SaeAuthentication {
-        transaction: read_u16(frame, 26)?,
-        status_code: read_u16(frame, 28)?,
-        body: &frame[MANAGEMENT_HEADER_LEN + 6..],
+        transaction,
+        status_code,
+        body,
     })
 }
 
@@ -276,24 +284,30 @@ pub fn parse_sae_authentication(
 /// `None` means that the frame is valid input but belongs to another
 /// management exchange. This lets an RX loop ignore beacons and other peers
 /// without treating them as protocol errors.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_open_authentication_response(
     frame: &[u8],
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<OpenAuthenticationResponse> {
-    if frame.len() < MANAGEMENT_HEADER_LEN + 6
-        || read_u16(frame, 0)? & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
-        || frame[4..10] != local
-        || frame[10..16] != bssid
-        || frame[16..22] != bssid
-        || read_u16(frame, 24)? != OPEN_SYSTEM_ALGORITHM
-        || read_u16(frame, 26)? != OPEN_SYSTEM_RESPONSE_SEQUENCE
+    let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
+    if header.frame_control & 0x00fc != OPEN_AUTHENTICATION_FRAME_CONTROL
+        || header.receiver != local
+        || header.transmitter != bssid
+        || header.bssid != bssid
+        || algorithm != OPEN_SYSTEM_ALGORITHM
+        || transaction != OPEN_SYSTEM_RESPONSE_SEQUENCE
     {
         return None;
     }
-    Some(OpenAuthenticationResponse {
-        status_code: read_u16(frame, 28)?,
-    })
+    Some(OpenAuthenticationResponse { status_code })
 }
 
 /// Parse a Disassociation or Deauthentication sent by the selected AP.
@@ -311,6 +325,14 @@ pub fn parse_open_authentication_response(
 /// (Disassociation) and `.L737` (Deauthentication) read the reason code at
 /// management-body offset zero (`frame + 24`) and immediately call
 /// `ieee80211_sta_new_state(g_ic, 0, (reason << 8) | subtype)`.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn parse_sta_disconnect(
     frame: &[u8],
     local: OwnAddress,
@@ -335,8 +357,9 @@ pub fn parse_sta_disconnect(
         DEAUTHENTICATION_FRAME_CONTROL => StaDisconnectKind::Deauthentication,
         _ => return None,
     };
+    let (reason_code, _) = header.body().split_first_chunk()?;
     Some(StaDisconnect {
         kind,
-        reason_code: read_u16(header.body(), 0)?,
+        reason_code: u16::from_le_bytes(*reason_code),
     })
 }

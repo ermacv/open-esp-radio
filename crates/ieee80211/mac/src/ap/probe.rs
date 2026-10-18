@@ -1,4 +1,8 @@
 //! Probe discovery reuses the AP's current beacon advertisement, without TIM.
+//!
+//! Received probe requests reach `ssid` and [`matches_ssid`], which deny
+//! every panicking construct; [`write_response`] builds a frame from the AP's
+//! own advertisement and takes no received bytes.
 
 use crate::sequence::SequenceNumber;
 
@@ -9,26 +13,47 @@ pub enum ResponseError {
 }
 
 /// Validate the complete IE stream and require exactly one bounded SSID.
+///
+/// A received probe request's elements reach this function; it does not
+/// panic on them.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     let mut found = None;
     while !elements.is_empty() {
-        let length = usize::from(*elements.get(1)?);
-        let value = elements.get(2..2 + length)?;
-        if elements[0] == 0 {
-            if found.is_some() || length > 32 {
+        let (&[id, length], rest) = elements.split_first_chunk::<2>()?;
+        let (value, rest) = rest.split_at_checked(usize::from(length))?;
+        if id == 0 {
+            if found.is_some() || value.len() > 32 {
                 return None;
             }
             found = Some(value);
         }
-        elements = &elements[2 + length..];
+        elements = rest;
     }
     found
 }
 
+/// Whether a probe request's `requested` SSID, received bytes, selects the
+/// advertisement `beacon`; it does not panic on either.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn matches_ssid(beacon: &[u8], requested: &[u8]) -> bool {
     beacon
-        .get(36..)
-        .and_then(ssid)
+        .split_first_chunk::<36>()
+        .and_then(|(_, elements)| ssid(elements))
         .is_some_and(|advertised| requested.is_empty() || requested == advertised)
 }
 

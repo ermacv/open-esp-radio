@@ -9,6 +9,16 @@
 //! target channel; this module parses and encodes them and owns no timing:
 //! the switch happens `count` target beacon transmission times later, which
 //! the caller schedules.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::channel::{Band, Channel, ChannelError, ChannelWidth};
 
@@ -135,27 +145,34 @@ impl ChannelSwitch {
             out.get_mut(..element.len())?.copy_from_slice(&element);
             return Some(element.len());
         }
-        let mut elements = [0_u8; 8];
-        elements[..5].copy_from_slice(&[
+        let announcement = [
             CHANNEL_SWITCH_ELEMENT_ID,
             3,
             mode_value(self.mode),
             self.channel_number,
             self.count,
-        ]);
-        let length = match self.secondary {
-            SecondaryChannelOffset::None => 5,
+        ];
+        let [a0, a1, a2, a3, a4] = announcement;
+        let with_offset;
+        let elements: &[u8] = match self.secondary {
+            SecondaryChannelOffset::None => &announcement,
             offset => {
-                elements[5..8].copy_from_slice(&[
+                with_offset = [
+                    a0,
+                    a1,
+                    a2,
+                    a3,
+                    a4,
                     SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
                     1,
                     offset_value(offset),
-                ]);
-                8
+                ];
+                &with_offset
             }
         };
-        out.get_mut(..length)?.copy_from_slice(&elements[..length]);
-        Some(length)
+        let (written, _) = out.split_at_mut_checked(elements.len())?;
+        written.copy_from_slice(elements);
+        Some(elements.len())
     }
 
     /// The Channel Switch Announcement action frame body: category, action
@@ -163,7 +180,7 @@ impl ChannelSwitch {
     pub fn encode_action(self, out: &mut [u8]) -> Option<usize> {
         let (head, rest) = out.split_at_mut_checked(2)?;
         head.copy_from_slice(&[SPECTRUM_MANAGEMENT_CATEGORY, CHANNEL_SWITCH_ACTION]);
-        Some(2 + self.encode_elements(rest)?)
+        head.len().checked_add(self.encode_elements(rest)?)
     }
 }
 
@@ -174,15 +191,16 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
     let mut plain = None;
     let mut extended = None;
     let mut secondary = SecondaryChannelOffset::None;
-    let mut offset = 0;
-    while offset < elements.len() {
-        let header = elements
-            .get(offset..offset + 2)
+    let mut remaining = elements;
+    while !remaining.is_empty() {
+        let (&[id, length], rest) = remaining
+            .split_first_chunk::<2>()
             .ok_or(ChannelSwitchError::Malformed)?;
-        let body = elements
-            .get(offset + 2..offset + 2 + usize::from(header[1]))
+        let (body, rest) = rest
+            .split_at_checked(usize::from(length))
             .ok_or(ChannelSwitchError::Malformed)?;
-        match (header[0], body) {
+        remaining = rest;
+        match (id, body) {
             (CHANNEL_SWITCH_ELEMENT_ID, &[mode, channel, count]) => {
                 plain = Some((mode_of(mode)?, channel, count));
             }
@@ -196,7 +214,6 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
             }
             _ => {}
         }
-        offset += 2 + body.len();
     }
     Ok(match (extended, plain) {
         (Some((mode, class, channel_number, count)), _) => Some(ChannelSwitch {

@@ -3,6 +3,16 @@
 //! This parser owns IEEE 802.11 fields only. It has no clock, executor,
 //! hardware or sleep policy; the connected runtime decides how a received
 //! observation changes its beacon-loss deadline and power state.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 const BEACON_FRAME_CONTROL: u16 = 0x0080;
 const FRAME_TYPE_AND_SUBTYPE_MASK: u16 = 0x00fc;
@@ -78,60 +88,97 @@ pub fn parse_sta_beacon(
     expected_bssid: [u8; 6],
     association_id: u16,
 ) -> Result<StaBeaconObservation, StaBeaconError> {
-    if mpdu.len() < FIXED_BEACON_LENGTH {
-        return Err(StaBeaconError::Truncated);
-    }
-    let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
+    let (header, elements) = mpdu
+        .split_first_chunk::<FIXED_BEACON_LENGTH>()
+        .ok_or(StaBeaconError::Truncated)?;
+    let [
+        fc0,
+        fc1,
+        _duration0,
+        _duration1,
+        // Receiver address.
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        a0,
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        b0,
+        b1,
+        b2,
+        b3,
+        b4,
+        b5,
+        _sequence0,
+        _sequence1,
+        t0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        t6,
+        t7,
+        i0,
+        i1,
+        c0,
+        c1,
+    ] = *header;
+    let frame_control = u16::from_le_bytes([fc0, fc1]);
     if frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != BEACON_FRAME_CONTROL {
         return Err(StaBeaconError::NotBeacon);
     }
-    if mpdu[10..16] != expected_bssid || mpdu[16..22] != expected_bssid {
+    if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
         return Err(StaBeaconError::ForeignBssid);
     }
-    let interval_tu = u16::from_le_bytes([mpdu[32], mpdu[33]]);
+    let interval_tu = u16::from_le_bytes([i0, i1]);
     if interval_tu == 0 {
         return Err(StaBeaconError::ZeroInterval);
     }
 
-    let mut timestamp = [0_u8; 8];
-    timestamp.copy_from_slice(&mpdu[24..32]);
     let mut tim = None;
     let mut protection = StaBeaconProtection::default();
-    let mut offset = FIXED_BEACON_LENGTH;
-    while offset < mpdu.len() {
-        let header = mpdu
-            .get(offset..offset + 2)
+    let mut remaining = elements;
+    while !remaining.is_empty() {
+        let (&[id, length], rest) = remaining
+            .split_first_chunk::<2>()
             .ok_or(StaBeaconError::MalformedInformationElement)?;
-        let length = usize::from(header[1]);
-        let body_start = offset + 2;
-        let body_end = body_start
-            .checked_add(length)
-            .filter(|end| *end <= mpdu.len())
+        let (body, rest) = rest
+            .split_at_checked(usize::from(length))
             .ok_or(StaBeaconError::MalformedInformationElement)?;
-        if header[0] == TIM_ELEMENT_ID {
-            let body = &mpdu[body_start..body_end];
-            if body.len() < 4 || body[1] == 0 || tim.is_some() {
+        remaining = rest;
+        if id == TIM_ELEMENT_ID {
+            let &[dtim_count, dtim_period, bitmap_control, ref bitmap @ ..] = body else {
+                return Err(StaBeaconError::MalformedTim);
+            };
+            if bitmap.is_empty() || dtim_period == 0 || tim.is_some() {
                 return Err(StaBeaconError::MalformedTim);
             }
-            let bitmap_control = body[2];
             let aid = usize::from(association_id & 0x3fff);
             let aid_byte = aid / 8;
             // Bitmap Offset is encoded in units of two octets in bits 7:1;
             // masking bit zero therefore already yields N1 in octets.
             let bitmap_offset = usize::from(bitmap_control & 0xfe);
+            // The AID's bit within its octet is below eight.
+            let aid_bit = 1_u8.wrapping_shl(u32::from(association_id & 7));
             let unicast_buffered = aid_byte
                 .checked_sub(bitmap_offset)
-                .and_then(|index| body.get(3 + index))
-                .is_some_and(|byte| byte & (1 << (aid & 7)) != 0);
+                .and_then(|index| bitmap.get(index))
+                .is_some_and(|byte| byte & aid_bit != 0);
             tim = Some(StaTimObservation {
-                dtim_count: body[0],
-                dtim_period: body[1],
+                dtim_count,
+                dtim_period,
                 unicast_buffered,
-                group_buffered: body[0] == 0 && bitmap_control & 1 != 0,
+                group_buffered: dtim_count == 0 && bitmap_control & 1 != 0,
             });
         }
-        let body = &mpdu[body_start..body_end];
-        match (header[0], body) {
+        match (id, body) {
             (ERP_ELEMENT_ID, [information]) => {
                 protection.erp = ErpProtection::from_information(Some(*information));
             }
@@ -147,15 +194,15 @@ pub fn parse_sta_beacon(
             }
             _ => {}
         }
-        offset = body_end;
     }
 
-    let channel_switch =
-        crate::channel_switch::parse_channel_switch(&mpdu[FIXED_BEACON_LENGTH..]).transpose();
+    let channel_switch = crate::channel_switch::parse_channel_switch(elements).transpose();
     Ok(StaBeaconObservation {
-        timestamp_tsf: crate::tsf::TsfInstant::from_micros(u64::from_le_bytes(timestamp)),
+        timestamp_tsf: crate::tsf::TsfInstant::from_micros(u64::from_le_bytes([
+            t0, t1, t2, t3, t4, t5, t6, t7,
+        ])),
         interval_tu,
-        capability_information: u16::from_le_bytes([mpdu[34], mpdu[35]]),
+        capability_information: u16::from_le_bytes([c0, c1]),
         tim,
         protection,
         channel_switch,

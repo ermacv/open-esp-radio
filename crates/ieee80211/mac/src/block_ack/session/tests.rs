@@ -129,3 +129,32 @@ fn rejected_response_returns_to_idle_without_a_timer_retry() {
     assert_eq!(session.operational(), None);
     assert!(!session.on_alarm(request.alarm));
 }
+
+fn responses(count: usize) {
+    let parameters = encode_ba_parameters(7, 32, true).to_le_bytes();
+    let accepted = [3, 1, 1, 0, 0, parameters[0], parameters[1], 0, 0];
+    let mut extended = std::vec::Vec::from(accepted);
+    // An HE peer's ADDBA Extension element after the fixed fields.
+    extended.extend_from_slice(&[159, 1, 0]);
+    let rejected = [3, 1, 1, 37, 0, 0, 0, 0, 0];
+    crate::fuzz::inputs(&[&accepted, &extended, &rejected], count, 32, |bytes| {
+        let mut session = TxBlockAckSession::new(CONFIG).unwrap();
+        let request = session.begin(seq(0x100), at(0)).unwrap();
+        assert_eq!(request.dialog_token, 1);
+        if let Ok(TxBlockAckResponse::Operational(agreement)) = session.on_response(bytes) {
+            assert!(agreement.window != 0 && agreement.window <= CONFIG.window);
+            assert_eq!(session.operational(), Some(agreement));
+        }
+    });
+}
+
+#[test]
+fn response_handling_never_panics() {
+    responses(crate::fuzz::QUICK);
+}
+
+#[test]
+#[ignore = "the full run"]
+fn response_handling_never_panics_full() {
+    responses(crate::fuzz::FULL);
+}

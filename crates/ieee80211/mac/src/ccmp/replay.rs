@@ -10,6 +10,16 @@
 //! The receive path checks a frame here once it is decrypted and verified,
 //! and after the reorder of its TID, when the receiver has one: within a
 //! lane the packet numbers then strictly increase.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use super::{
     CcmpHeader, CcmpKeyId, CcmpReplayError, CcmpReplayLane, CcmpRxReplayCandidate,
