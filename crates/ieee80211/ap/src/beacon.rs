@@ -21,6 +21,7 @@ use oer_ieee80211_mac::channel_switch::{
 };
 use oer_ieee80211_mac::sequence::SequenceNumber;
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::{
     ap::profile::Advertisement,
     beacon::{
@@ -33,7 +34,6 @@ use oer_ieee80211_mac::{
     ssid::WifiSsid,
     tbtt::next_tbtt,
 };
-use oer_time::{Duration, Instant};
 
 mod publication;
 pub use publication::{ApBeaconPublication, ApBeaconTxContext, ApBeaconTxOutcome, ApDtimRelease};

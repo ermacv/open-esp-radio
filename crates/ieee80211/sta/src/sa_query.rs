@@ -19,7 +19,7 @@
 //! `sta_try_sa_query`, `sta_sa_query_timeout` and
 //! `libnet80211.a[ieee80211.o]::ieee80211_recv_sa_query_resp`.
 
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 /// Period of the vendor's retry timer.
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);

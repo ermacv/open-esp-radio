@@ -1,6 +1,6 @@
 # Bluetooth LE Link Layer
 
-`oer-bluetooth-ll`: the allocation-free Bluetooth LE Link Layer protocol and
+`oer-bluetooth-le-ll`: the allocation-free Bluetooth LE Link Layer protocol and
 role state.
 
 ## Known defects

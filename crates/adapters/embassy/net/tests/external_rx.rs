@@ -5,11 +5,11 @@ use core::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use oer_embassy_net_owned::{
+use oer_adapters_embassy_net::{
     ExternalRxOrigin, ExternalRxRefusal, NetworkInterfaceId, OwnedEndpointResources,
     OwnedRxPublisher, RxEnqueueError,
 };
-use oer_memory::{ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxRadioLease};
+use oer_base_memory::{ExternalRxBuffer, ExternalRxHandoffPool, ExternalRxRadioLease};
 use xarxa_driver::{PacketBuf, PacketBufAllocator, PacketPool, PacketPoolStorage};
 
 const SLOTS: usize = 32;

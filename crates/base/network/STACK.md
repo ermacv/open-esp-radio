@@ -6,7 +6,7 @@ network stack.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/` | Stack-neutral interface, link and error values (`oer-network-interface`) |
+| `src/` | Stack-neutral interface, link and error values (`oer-base-network`) |
 | `../../adapters/embassy/net/` | Maintained Embassy/Xarxa packet-owner contract with explicit pools |
 
 Selecting a patched stack does not create another physical radio owner or

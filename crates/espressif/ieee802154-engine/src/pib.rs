@@ -13,8 +13,8 @@
 //! are not PIB values; the vendor driver writes them directly.
 
 pub use crate::types::Ieee802154MultipanIndex;
-pub use oer_ieee802154::AutoPendingMode;
-use oer_ieee802154::CcaThresholdError;
+pub use oer_ieee802154_mac::AutoPendingMode;
+use oer_ieee802154_mac::CcaThresholdError;
 
 use crate::channel::{IEEE802154_MIN_CHANNEL, Ieee802154Channel};
 use crate::ll::Ieee802154LowLevel;

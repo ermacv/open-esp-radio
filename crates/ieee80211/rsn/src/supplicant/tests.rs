@@ -605,7 +605,7 @@ fn connected_group_rekey_rejects_bad_mic_and_stale_replay() {
 
 #[test]
 fn response_deadlines_expire_exactly_at_their_total_wait() {
-    use oer_time::{Duration, Instant};
+    use oer_base_time::{Duration, Instant};
 
     let started = Instant::from_micros(500);
     for (wait, timeout) in [
@@ -633,7 +633,7 @@ fn response_deadlines_expire_exactly_at_their_total_wait() {
 
 #[test]
 fn a_response_deadline_past_the_time_range_is_refused() {
-    let late = oer_time::Instant::from_micros(u64::MAX);
+    let late = oer_base_time::Instant::from_micros(u64::MAX);
     assert_eq!(
         RsnStaResponseDeadline::start(RsnStaResponseWait::Message1, late),
         None

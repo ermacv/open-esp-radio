@@ -1,5 +1,5 @@
 [package]
-name = "oer-ui-cases"
+name = "oer-base-ui-cases"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

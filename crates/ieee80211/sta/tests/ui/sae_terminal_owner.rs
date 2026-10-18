@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_sta::join::sae::{StaSaeAuthentication, StaSaeEvent};
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub fn observe(exchange: StaSaeAuthentication, frame: &[u8], now: Instant) {
     let event = exchange.observe_management_frame(frame, now);

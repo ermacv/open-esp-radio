@@ -137,8 +137,8 @@ fn rendered_layouts_are_rust_items() {
         fs::write(path(name), text).unwrap();
     }
     // A draft: the fixture's entities are unreviewed.
-    let model = oer_register_model::RegisterModel::load(&path("device.toml")).unwrap();
-    let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+    let model = oer_tool_data_register_model::RegisterModel::load(&path("device.toml")).unwrap();
+    let memory = oer_tool_data_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
     let rust = model.render_layouts_rust(&memory).unwrap();
     let file = syn::parse_file(&rust).unwrap();
     let [syn::Item::Mod(layouts)] = file.items.as_slice() else {
@@ -187,8 +187,8 @@ fn a_layout_is_placed_only_in_ram_regions_of_the_memory_map() {
     ] {
         fs::write(path(name), text).unwrap();
     }
-    let model = oer_register_model::RegisterModel::load(&path("device.toml")).unwrap();
-    let evidence = oer_register_model::RegisterEvidenceSet {
+    let model = oer_tool_data_register_model::RegisterModel::load(&path("device.toml")).unwrap();
+    let evidence = oer_tool_data_register_model::RegisterEvidenceSet {
         sources: vec![],
         ranges: vec![],
     };
@@ -199,7 +199,8 @@ fn a_layout_is_placed_only_in_ram_regions_of_the_memory_map() {
         (MEMORY.replace("\"dma-window\"", "\"sram\""), false),
     ] {
         fs::write(path("memory.toml"), memory).unwrap();
-        let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+        let memory =
+            oer_tool_data_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
         let result = memory.validate(&model, &owned, &evidence);
         assert_eq!(result.is_ok(), valid, "{result:?}");
         if !valid {
@@ -226,12 +227,15 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
     ] {
         fs::write(path(name), text).unwrap();
     }
-    let model = oer_register_model::RegisterModel::load(&path("device.toml")).unwrap();
-    let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+    let model = oer_tool_data_register_model::RegisterModel::load(&path("device.toml")).unwrap();
+    let memory = oer_tool_data_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
     let (svd, _) = model.render_svd().unwrap();
-    let fragment =
-        oer_register_model::render_dma_linker_fragment(&svd, &memory, "RADIO.NEXT.ADDRESS_LOW")
-            .unwrap();
+    let fragment = oer_tool_data_register_model::render_dma_linker_fragment(
+        &svd,
+        &memory,
+        "RADIO.NEXT.ADDRESS_LOW",
+    )
+    .unwrap();
     for line in [
         "DMA_WINDOW_ORIGIN = 0x30000000;",
         "DMA_WINDOW_LENGTH = 0x00080000;",
@@ -245,7 +249,7 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
         ("RADIO.NEXT.MISSING", "unknown field"),
         ("RADIO.NEXT", "PERIPHERAL.REGISTER.FIELD"),
     ] {
-        let error = oer_register_model::render_dma_linker_fragment(&svd, &memory, field)
+        let error = oer_tool_data_register_model::render_dma_linker_fragment(&svd, &memory, field)
             .unwrap_err()
             .to_string();
         assert!(error.contains(reason), "{field}: {error}");
@@ -256,10 +260,13 @@ fn the_linker_fragment_names_the_dma_window_and_the_address_width() {
         MEMORY.replace("\"dma-window\"", "\"sram\""),
     )
     .unwrap();
-    let memory = oer_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
-    let error =
-        oer_register_model::render_dma_linker_fragment(&svd, &memory, "RADIO.NEXT.ADDRESS_LOW")
-            .unwrap_err()
-            .to_string();
+    let memory = oer_tool_data_register_model::memory::Memory::load(&path("memory.toml")).unwrap();
+    let error = oer_tool_data_register_model::render_dma_linker_fragment(
+        &svd,
+        &memory,
+        "RADIO.NEXT.ADDRESS_LOW",
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("no RAM region dma-window"), "{error}");
 }

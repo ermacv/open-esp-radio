@@ -29,7 +29,7 @@ use core::{
 /// requiring the domain marker itself to implement `Copy` or `Ord`:
 ///
 /// ```
-/// use oer_time::{RadioDuration, RadioInstant};
+/// use oer_base_time::{RadioDuration, RadioInstant};
 ///
 /// enum Radio {}
 /// let earlier = RadioInstant::<Radio>::from_micros(10);
@@ -41,7 +41,7 @@ use core::{
 /// Different domains cannot be ordered:
 ///
 /// ```compile_fail,E0308
-/// use oer_time::RadioInstant;
+/// use oer_base_time::RadioInstant;
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
@@ -92,7 +92,7 @@ impl<D> RadioInstant<D> {
     /// Subtraction across radio domains is rejected:
     ///
     /// ```compile_fail,E0308
-    /// use oer_time::RadioInstant;
+    /// use oer_base_time::RadioInstant;
     ///
     /// enum FirstRadio {}
     /// enum SecondRadio {}
@@ -162,7 +162,7 @@ impl<D> fmt::Debug for RadioInstant<D> {
 /// unrepresentable results instead of wrapping or clamping.
 ///
 /// ```
-/// use oer_time::{RadioDuration, RadioInstant};
+/// use oer_base_time::{RadioDuration, RadioInstant};
 ///
 /// enum Radio {}
 /// let start = RadioInstant::<Radio>::from_micros(10);
@@ -173,7 +173,7 @@ impl<D> fmt::Debug for RadioInstant<D> {
 /// A span of one domain does not move an instant of another:
 ///
 /// ```compile_fail,E0308
-/// use oer_time::{RadioDuration, RadioInstant};
+/// use oer_base_time::{RadioDuration, RadioInstant};
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
@@ -184,7 +184,7 @@ impl<D> fmt::Debug for RadioInstant<D> {
 /// Nor do spans of two domains combine:
 ///
 /// ```compile_fail,E0308
-/// use oer_time::RadioDuration;
+/// use oer_base_time::RadioDuration;
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
@@ -396,7 +396,7 @@ pub enum WindowError {
 /// duration is a span of the same domain:
 ///
 /// ```compile_fail,E0308
-/// use oer_time::{RadioDuration, RadioInstant, RadioWindow};
+/// use oer_base_time::{RadioDuration, RadioInstant, RadioWindow};
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}

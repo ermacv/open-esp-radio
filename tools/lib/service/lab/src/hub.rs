@@ -15,7 +15,7 @@ use std::{
     process::Command,
 };
 
-use oer_stand_file::{Hub, Stand};
+use oer_tool_data_stand_file::{Hub, Stand};
 
 /// The sysfs USB device directory of this host.
 pub const SYSFS_USB_DEVICES: &str = "/sys/bus/usb/devices";

@@ -166,7 +166,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -223,7 +223,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -260,7 +260,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -324,7 +324,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -361,7 +361,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -380,7 +380,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -405,7 +405,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -494,7 +494,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
@@ -502,7 +502,7 @@ impl<
 > Configuring<C>
 {
     /// A pending publication's deadline bounds this FIFO barrier.
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_base_time::Instant> {
         self.core.next_deadline()
     }
     /// Service earlier publications without admitting any later command.
@@ -552,14 +552,14 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
 > GateOpenFailed<LowerMacCore<'core, 'slot, P, E, T, BUFFER_SIZE, Path, TICKETS>>
 {
     /// The next deadline of the prefix published before the failure.
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_base_time::Instant> {
         self.core.next_deadline()
     }
     /// Preserve each published attempt's own terminal outcome.

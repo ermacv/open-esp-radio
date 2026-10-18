@@ -33,18 +33,18 @@ pub use capabilities::{
 pub use channel::{
     AdvertisingChannel, AdvertisingChannels, ChannelError, DataChannel, TestChannel,
 };
+pub use oer_base_time::{NonZeroRadioDuration, RadioDuration, WindowError};
 pub use oer_radio_coex::CoexPriority;
-pub use oer_time::{NonZeroRadioDuration, RadioDuration, WindowError};
 
 /// The clock domain of the LE radio: its instants never mix with another
 /// radio's.
 pub enum LeRadio {}
 
 /// An instant on the LE radio's clock.
-pub type LeInstant = oer_time::RadioInstant<LeRadio>;
+pub type LeInstant = oer_base_time::RadioInstant<LeRadio>;
 
 /// A window reserved on the LE radio's clock.
-pub type LeWindow = oer_time::RadioWindow<LeRadio>;
+pub type LeWindow = oer_base_time::RadioWindow<LeRadio>;
 pub use outcome::{EventResult, ReceivedPdu, TestReport};
 pub use pdu::{AdvertisingPdu, DataPdu, DataPduKind, PduError, TestPayloadType};
 pub use request::{

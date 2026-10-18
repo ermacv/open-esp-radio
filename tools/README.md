@@ -6,8 +6,8 @@ libraries by layer. They run on the developer's machine, never on a chip.
 ```text
 tools/
   cli/<tool>/        a thin binary: main, argument parsing, a call into its service
-    registers/       `cargo registers` (oer-registers-cli)
-    fw/              `cargo fw` (oer-fw)
+    registers/       `cargo registers` (oer-tool-cli-registers)
+    fw/              `cargo fw` (oer-tool-cli-fw)
   lib/
     base/            process, durable, command-tree: no knowledge of chips or formats
     data/            one library per data format, its one reader:
@@ -41,7 +41,16 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 
 `lib/test/layers` reads the path dependencies of every `Cargo.toml` below
 `tools/` and `crates/` and checks these rules by folder; manifests carry no
-layer metadata. `cargo test -p oer-tools-layers` runs it.
+layer metadata. `cargo test -p oer-tool-test-layers` runs it.
+
+A package is named after its folder, with no `[lib] name` override, and the
+layer test checks it: `crates/a/b` is `oer-a-b` (`crates/esp32s31/ieee80211/driver`
+is `oer-esp32s31-ieee80211-driver`), `firmware/a/b` is `oer-firmware-a-b`
+(`firmware/apps/w1` is `oer-firmware-apps-w1`), and below `tools/` the name is
+`oer-tool-` and the path without the `lib/` level (`tools/lib/service/firmware`
+is `oer-tool-service-firmware`, `tools/cli/fw` is `oer-tool-cli-fw`). Code uses
+the same name with underscores. When a clearer name needs another folder, the
+folder moves.
 
 There is one workspace, the repository's root, with one `Cargo.lock`. Its
 `default-members` are every package but the chip-only ones of `firmware/`

@@ -7,7 +7,7 @@ the IEEE 802.15.4 levels it resolves, the timer programming sequence, clock
 conversion, event-to-timer mapping and software schedule state. It owns no
 register: each chip's radio domain keeps its own copy of the table as
 shared state, and a chip crate such as
-[`oer-esp32s31-coex`](../../esp32s31/radio/coex/README.md) binds the
+[`oer-esp32s31-radio-coex`](../../esp32s31/radio/coex/README.md) binds the
 `CoexTimerHardware` and `CoexClockHardware` ports to its HAL.
 `CoexTimerHardware::pti` reads the arbiter's table when a request is
 programmed, and a priority change goes through the arbiter's lease. The
@@ -58,7 +58,7 @@ signalled each notified radio; no runner exists now. A radio publishes its statu
 `set_status_bits` and `clear_status_bits`; in the former runtime Wi-Fi
 reacted to its phases, while Bluetooth LE did not wait for its own.
 
-On the ESP32-S31, `oer_esp32s31_coex::CoexDomainPorts` lends one arbiter
+On the ESP32-S31, `oer_esp32s31_radio_coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
 clock ports.
 

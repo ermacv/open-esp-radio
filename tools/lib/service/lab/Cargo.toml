@@ -1,5 +1,5 @@
 [package]
-name = "oer-lab"
+name = "oer-tool-service-lab"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "The stand: its file, its OpenWrt lab router and the SSH that reaches it"
 
 [dependencies]
-oer-stand-file = { path = "../../data/stand-file" }
-oer-process = { path = "../../base/process" }
+oer-tool-data-stand-file = { path = "../../data/stand-file" }
+oer-tool-base-process = { path = "../../base/process" }
 sha2 = "=0.10.9"
 
 [dev-dependencies]

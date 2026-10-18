@@ -58,12 +58,12 @@ enum Check {
         pac_src: PathBuf,
     },
 }
-fn run() -> oer_registers::Result<()> {
-    let _signals = oer_process::install_signal_handlers()?;
-    let ctx = oer_process::Checkout::discover("registers")?;
+fn run() -> oer_tool_service_registers::Result<()> {
+    let _signals = oer_tool_base_process::install_signal_handlers()?;
+    let ctx = oer_tool_base_process::Checkout::discover("registers")?;
     match Cli::parse().command {
         Command::InitModel { request, directory } => {
-            let count = oer_registers::initialize_model(&request, &directory)?;
+            let count = oer_tool_service_registers::initialize_model(&request, &directory)?;
             println!("initialized {count} unreviewed peripherals");
         }
         Command::ImportSvd {
@@ -72,23 +72,24 @@ fn run() -> oer_registers::Result<()> {
             chip,
             address_space,
         } => {
-            let count = oer_registers::import_svd(&source, &directory, &chip, &address_space)?;
+            let count =
+                oer_tool_service_registers::import_svd(&source, &directory, &chip, &address_space)?;
             println!("imported {count} unreviewed peripherals; original XML retained");
         }
         Command::Validate { manifest } => {
-            oer_registers::Publication::load(&manifest)?;
+            oer_tool_service_registers::Publication::load(&manifest)?;
             println!("register publication inputs valid");
         }
         Command::Generate { manifest, check } => {
-            oer_registers::Publication::load(&manifest)?.generate(check)?;
+            oer_tool_service_registers::Publication::load(&manifest)?.generate(check)?;
             println!(
                 "register outputs {}",
                 if check { "verified" } else { "written" }
             );
         }
         Command::Check(Check::PacTransactions { directory }) => {
-            let listed = oer_process::capture(
-                oer_process::git::command(&ctx.root)
+            let listed = oer_tool_base_process::capture(
+                oer_tool_base_process::git::command(&ctx.root)
                     .args(["ls-files", "--"])
                     .arg(&directory),
             )?;
@@ -96,14 +97,14 @@ fn run() -> oer_registers::Result<()> {
                 .lines()
                 .map(str::to_owned)
                 .collect();
-            oer_registers::checks::pac_transactions::check(&ctx.root, &files)?;
+            oer_tool_service_registers::checks::pac_transactions::check(&ctx.root, &files)?;
         }
         Command::Check(Check::SharedWords {
             chip,
             esp_hal_src,
             pac_src,
         }) => {
-            let shared = oer_registers::checks::shared_words::check(
+            let shared = oer_tool_service_registers::checks::shared_words::check(
                 &ctx.root,
                 &chip,
                 &esp_hal_src,
@@ -115,10 +116,11 @@ fn run() -> oer_registers::Result<()> {
     Ok(())
 }
 fn main() -> std::process::ExitCode {
-    if oer_command_tree::requested() {
+    if oer_tool_base_command_tree::requested() {
         use clap::CommandFactory as _;
-        let tree = oer_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
-        println!("{}", oer_command_tree::json(&tree));
+        let tree =
+            oer_tool_base_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
+        println!("{}", oer_tool_base_command_tree::json(&tree));
         return std::process::ExitCode::SUCCESS;
     }
     match run() {

@@ -6,7 +6,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, Timer};
+use oer_base_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, Timer};
 
 use super::{EmbassyClock, driver_micros, image_micros, now_micros};
 

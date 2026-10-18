@@ -1,6 +1,6 @@
 #![no_std]
 use oer_ieee80211_sta::join::association::StaAssociationRuntime;
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub fn receive(runtime: StaAssociationRuntime, frame: &[u8], now: Instant) {
     let _terminal = runtime.observe_management_frame(frame, now);

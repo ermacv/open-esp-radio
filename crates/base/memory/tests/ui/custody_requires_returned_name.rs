@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::{CustodyDomain, IndexedCustody, Quarantine, RetainedName};
+use oer_base_memory::{CustodyDomain, IndexedCustody, Quarantine, RetainedName};
 
 #[cfg(not(ui_reject))]
 pub fn finish<T: Quarantine, D: CustodyDomain<N>, const N: usize>(

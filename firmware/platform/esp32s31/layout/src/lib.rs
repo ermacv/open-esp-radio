@@ -5,7 +5,7 @@
 //!
 //! The chip-neutral contract (the [`Layout`] type, the stage-two header, the
 //! zeroed sections and the shared linker scripts) is
-//! `oer-espressif-staged-layout`; this crate states the board's map once, for
+//! `oer-firmware-platform-espressif-staged-layout`; this crate states the board's map once, for
 //! the bootstrap, the board, and the build scripts of every image. With the
 //! `build` feature, [`build`] links a binary with the shared scripts and this
 //! chip's ROM script (`firmware/platform/esp32s31/linker`).
@@ -13,7 +13,7 @@
 //! Sizes describe this board's fitted memories and the staged-boot contract;
 //! they are not universal ESP32-S31 capabilities.
 
-use oer_espressif_staged_layout::{Layout, Region};
+use oer_firmware_platform_espressif_staged_layout::{Layout, Region};
 
 /// The board's staged-boot layout.
 pub const LAYOUT: Layout = Layout {
@@ -67,11 +67,19 @@ pub mod build {
 
     /// Link binary `bin` as a stage-two runtime of this board.
     pub fn configure_runtime(bin: &str) {
-        oer_espressif_staged_layout::build::configure_runtime(bin, &super::LAYOUT, &linker_dir());
+        oer_firmware_platform_espressif_staged_layout::build::configure_runtime(
+            bin,
+            &super::LAYOUT,
+            &linker_dir(),
+        );
     }
 
     /// Link binary `bin` as this board's Flash-resident bootstrap.
     pub fn configure_bootstrap(bin: &str) {
-        oer_espressif_staged_layout::build::configure_bootstrap(bin, &super::LAYOUT, &linker_dir());
+        oer_firmware_platform_espressif_staged_layout::build::configure_bootstrap(
+            bin,
+            &super::LAYOUT,
+            &linker_dir(),
+        );
     }
 }

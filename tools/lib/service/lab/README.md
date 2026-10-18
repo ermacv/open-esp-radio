@@ -1,4 +1,4 @@
-# `oer-lab`
+# `oer-tool-service-lab`
 
 The stand, for the host tools that use it (`cargo fw` today): the owner's
 stand file, the OpenWrt lab router that serves the stand's access point,
@@ -52,7 +52,7 @@ channel = 6                  # 1 to 13
 ```
 
 A board's hub port is not written in the file: it is found on the host
-(`oer_lab::hub`). The board's USB location in sysfs names its hub and port
+(`oer_tool_service_lab::hub`). The board's USB location in sysfs names its hub and port
 (`3-8.3.4.4` is port 4 of hub `3-8.3.4`), and `uhubctl` confirms that the hub
 switches power per port and has that port. A port is switched off only when
 the one device below it is the board itself (no hub, nothing behind it, and
@@ -145,13 +145,13 @@ A second run against a router already in the profile sends the same
 scripts; nothing changes and the checks pass the same.
 
 One process at a time drives the router: `cargo fw` holds an exclusive lock
-`$XDG_RUNTIME_DIR/oer-fw/router-<hash of the target>.lock` for the whole
+`$XDG_RUNTIME_DIR/oer-tool-cli-fw/router-<hash of the target>.lock` for the whole
 `run w1` or `router`, and a second holder is refused, naming the first.
 
 ## Stand notes
 
 Carried from the predecessor stand (2026-09 to 2026-10). Not yet used by
-`oer-lab`; kept for the fixtures that return.
+`oer-tool-service-lab`; kept for the fixtures that return.
 
 ### Hub port power without sudo
 

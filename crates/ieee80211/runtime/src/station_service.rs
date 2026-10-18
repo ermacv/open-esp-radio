@@ -97,6 +97,7 @@ use oer_ieee80211_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
+use oer_base_time::{Instant, Timer};
 use oer_ieee80211_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice,
     NoReservation, RetiredArbiter, RetuneRefused,
@@ -125,7 +126,6 @@ use oer_radio_port::Slot;
 use oer_radio_port::{
     Disabled, Enabled, Ended, EventEnd, FailStopped, Failed, Owner, PoisonedOwner, PortBackend,
 };
-use oer_time::{Instant, Timer};
 
 /// A backend the station's service drives: its phase, settings and events
 /// as the lower-MAC contract's, and the two buffer classes the service

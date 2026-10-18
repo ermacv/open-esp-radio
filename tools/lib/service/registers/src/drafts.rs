@@ -1,6 +1,6 @@
 //! Exclusive draft creation; the manifest is the last published file.
 use crate::*;
-use oer_register_model::{ModelDraft, ModelInit};
+use oer_tool_data_register_model::{ModelDraft, ModelInit};
 use std::io::Write;
 
 /// Create a native unreviewed model in a new directory from an explicit TOML request.
@@ -21,7 +21,7 @@ pub fn import_svd(source: &Path, directory: &Path, chip: &str, space: &str) -> R
 }
 
 fn write(draft: ModelDraft, directory: &Path, source_name: &str, source: &str) -> Result<usize> {
-    oer_process::check_cancelled()?;
+    oer_tool_base_process::check_cancelled()?;
     fs::create_dir(directory)?;
     let result = (|| {
         for (name, text) in [
@@ -29,7 +29,7 @@ fn write(draft: ModelDraft, directory: &Path, source_name: &str, source: &str) -
             ("peripherals.toml", &draft.fragment),
             ("device.toml", &draft.manifest),
         ] {
-            oer_process::check_cancelled()?;
+            oer_tool_base_process::check_cancelled()?;
             let mut file = fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)

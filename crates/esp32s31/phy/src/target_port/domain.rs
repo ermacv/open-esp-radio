@@ -133,7 +133,7 @@ impl PhyDomainRegisterFailure {
 /// A fresh registration epoch begins on `registers` before the first edge;
 /// the returned epoch is the one the completed state must describe.
 pub(super) async fn execute_registration<P, R, D, O>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_base_time::Timer,
     transition: &mut PhyRegisterTransition,
     platform: &mut P,
     registers: &mut R,
@@ -177,7 +177,7 @@ impl PhyDomain {
         reason = "fail-stop error retains the allocation-free PHY transition"
     )]
     pub async fn register<P, R, D, O>(
-        timer: &impl oer_time::Timer,
+        timer: &impl oer_base_time::Timer,
         platform: &mut P,
         registers: &mut R,
         config: PhyRegisterConfig,

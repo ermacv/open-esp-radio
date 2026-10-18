@@ -193,7 +193,7 @@ impl<T> Drop for ZeroedOnce<T> {
 /// assembly by address.
 ///
 /// ```ignore
-/// oer_memory::zeroed_static! {
+/// oer_base_memory::zeroed_static! {
 ///     /// Placement: packet payloads live in the PSRAM tier.
 ///     static POOL: ZeroedStatic<Storage> = zeroed in ".psram.bss.pool";
 /// }

@@ -1,5 +1,5 @@
 [package]
-name = "oer-register-model"
+name = "oer-tool-data-register-model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ publish = false
 description = "Versioned editable register model and clean CMSIS-SVD materialization"
 
 [dependencies]
-oer-register-bindings = { path = "../register-bindings" }
-oer-register-contracts = { path = "../register-contracts" }
-oer-register-review = { path = "../register-review" }
+oer-tool-data-register-bindings = { path = "../register-bindings" }
+oer-tool-data-register-contracts = { path = "../register-contracts" }
+oer-tool-data-register-review = { path = "../register-review" }
 serde = { version = "=1.0.229", features = ["derive"] }
 svd-encoder = "=0.14.7"
 svd-parser = { version = "=0.14.9", features = ["expand"] }

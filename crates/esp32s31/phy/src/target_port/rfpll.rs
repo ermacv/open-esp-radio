@@ -277,7 +277,7 @@ pub async fn track<D: PhyShortDelay>(
 /// failure; the inner one is the transition's own fail-closed outcome.
 #[cfg(test)]
 pub async fn program<D: PhyShortDelay>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_base_time::Timer,
     registers: &mut impl SharedPhyAccess,
     request: crate::analog::rfpll::RfpllFrequencyRequest,
 ) -> Result<

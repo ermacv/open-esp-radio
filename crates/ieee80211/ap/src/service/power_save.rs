@@ -115,7 +115,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn observe_power_save(
         &mut self,
         observation: ApPowerSaveObservation,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<ApPowerSaveAction, ApServiceError> {
         match observation {
             ApPowerSaveObservation::Sleeping { peer } | ApPowerSaveObservation::Active { peer } => {
@@ -172,7 +172,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         binding: ApPeerBinding,
         requested: ApPeerPowerState,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<ApPowerSaveAction, ApServiceError> {
         let inactive_timeout = self.inactive_timeout.duration();
         let (peer, changed, buffered_frames) = {
@@ -210,10 +210,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         binding: ApPeerBinding,
         requested: ApPeerPowerState,
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<ApPowerSaveAction, ApServiceError> {
         let inactive_timeout = self.inactive_timeout.duration();
-        let refresh_margin = oer_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
+        let refresh_margin = oer_base_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
         let (peer, changed, buffered_frames) = {
             let existing = self
                 .bound_peer_mut(binding)

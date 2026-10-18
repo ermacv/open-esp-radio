@@ -1,11 +1,11 @@
 //! `cargo fw`: build, flash and run the staged images of `firmware/apps` on
 //! the stand's boards (`tools/lib/service/firmware/README.md`). This binary
-//! parses the command line and calls the `oer-firmware` service.
+//! parses the command line and calls the `oer-tool-service-firmware` service.
 
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_firmware as fw;
+use oer_tool_service_firmware as fw;
 
 #[derive(Parser)]
 #[command(about = "Build, flash and run staged firmware images on the stand's boards")]
@@ -75,9 +75,9 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
 }
 
 fn main() -> ExitCode {
-    if oer_command_tree::requested() {
-        let tree = oer_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
-        println!("{}", oer_command_tree::json(&tree));
+    if oer_tool_base_command_tree::requested() {
+        let tree = oer_tool_base_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
+        println!("{}", oer_tool_base_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }
     let cli = Cli::parse();

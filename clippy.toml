@@ -1,7 +1,7 @@
 disallowed-methods = [
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     # esp-hal's `regs()` reaches a block without its singleton; these blocks
-    # pass to the radio HAL at the handoff (oer-esp32s31-radio-esp-hal).
+    # pass to the radio HAL at the handoff (oer-adapters-esp-hal-radio).
     { path = "esp_hal::peripherals::IEEE802154::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
     { path = "esp_hal::peripherals::MODEM_SYSCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },
     { path = "esp_hal::peripherals::MODEM_LPCON::regs", reason = "radio blocks belong to our HAL after the handoff (docs/decisions.md)" },

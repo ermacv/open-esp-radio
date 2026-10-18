@@ -27,10 +27,10 @@ use oer_ieee80211_mac::{
 };
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
-use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
-use oer_memory::{
+use oer_base_memory::{
     DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
 };
+use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 
 use super::*;
 use crate::ordinary_tx::{WifiTxPowerPair, WifiTxResources};
@@ -422,12 +422,12 @@ impl WifiTxPowerProfile for Power {
     }
 }
 
-type Timer = oer_time_virtual::SkipClock;
+type Timer = oer_base_time_virtual::SkipClock;
 
 /// The instant `micros` past the test clock's start.
-fn at(micros: u64) -> oer_time::Instant {
-    oer_time_virtual::START
-        .checked_add(oer_time::Duration::from_micros(micros))
+fn at(micros: u64) -> oer_base_time::Instant {
+    oer_base_time_virtual::START
+        .checked_add(oer_base_time::Duration::from_micros(micros))
         .unwrap()
 }
 
@@ -842,7 +842,7 @@ fn core(resources: CoreResources<'_>) -> Core<'_> {
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),
-                publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+                publication_timeout: oer_base_time::Duration::from_micros(TIMEOUT),
                 tsf_epoch: 1,
             },
             &RadioNine,
@@ -1326,7 +1326,7 @@ fn a_hardware_timeout_ends_the_publication_with_an_unknown_result() {
         let settle = core.next_deadline().unwrap();
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_base_time::Instant::from_micros(settle.as_micros()));
         core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
             .unwrap();
         assert_eq!(events.completions.len(), 1);
@@ -2236,7 +2236,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
 
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_base_time::Instant::from_micros(settle.as_micros()));
         assert_eq!(
             service(&mut core, &mut hardware, WifiTxWake::Deadline),
             [Voice]
@@ -2247,7 +2247,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
         assert_eq!(settle, at(32));
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_base_time::Instant::from_micros(settle.as_micros()));
         assert_eq!(
             service(&mut core, &mut hardware, WifiTxWake::Deadline),
             [Video]
@@ -2627,7 +2627,7 @@ fn publish_ampdu<'core>(
         buffer,
         plan,
         core.now(),
-        oer_time::Duration::from_micros(TIMEOUT),
+        oer_base_time::Duration::from_micros(TIMEOUT),
     )
     .unwrap())
 }
@@ -2776,7 +2776,7 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
             buffer,
             plan,
             core.now(),
-            oer_time::Duration::from_micros(TIMEOUT),
+            oer_base_time::Duration::from_micros(TIMEOUT),
         )
         .unwrap();
         assert_eq!(hardware.he.len(), 1);
@@ -3278,7 +3278,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                 buffer,
                 plan,
                 core.now(),
-                oer_time::Duration::from_micros(TIMEOUT),
+                oer_base_time::Duration::from_micros(TIMEOUT),
             )
             .unwrap();
             let mut events = Events::default();
@@ -3535,7 +3535,7 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),
-                publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+                publication_timeout: oer_base_time::Duration::from_micros(TIMEOUT),
                 tsf_epoch: 1,
             },
             &RadioNine,

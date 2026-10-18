@@ -10,7 +10,7 @@
 
 use core::num::NonZeroU64;
 
-use oer_bluetooth_radio::{
+use oer_bluetooth_le_radio::{
     EventResult, LeInstant, LeRadio, LeWindow, NonZeroRadioDuration, OutsideEpoch, RadioDuration,
     RadioTiming, TestChannel, TestPayloadType, TestPhy, TestReceive, TestReport, TestTransmit,
     TxPower,

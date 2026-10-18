@@ -1,6 +1,6 @@
 # Sparse reviewed knowledge
 
-`oer-register-review` owns the generic, human-sized facts that survive
+`oer-tool-data-register-review` owns the generic, human-sized facts that survive
 regeneration of binary-analysis observations and vendor artifact updates.
 
 The crate deliberately does not know about specific chips, register names, ABI

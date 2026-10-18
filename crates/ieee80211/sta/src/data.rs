@@ -363,7 +363,7 @@ pub struct DataCounters {
 /// ```compile_fail,E0061
 /// use oer_ieee80211_lower_mac::Ieee80211Capabilities;
 /// use oer_ieee80211_sta::data::{StaData, StaDataTokens};
-/// use oer_time::Instant;
+/// use oer_base_time::Instant;
 /// fn poll<D: StaDataTokens, K: Ieee80211Capabilities>(data: &mut StaData<'_, D, K>) {
 ///     drop(data.poll_action(Instant::from_micros(1)));
 /// }

@@ -10,20 +10,20 @@
 //! interrupts are enabled, that the matrix still agrees with the table.
 //!
 //! ```compile_fail,E0277
-//! # oer_interrupt_table::__fake_matrix!();
+//! # oer_exec_interrupt_table::__fake_matrix!();
 //! # let mut matrix = FakeMatrix::new(Core::Zero);
 //! // Not a token of the table: no source to enable.
 //! struct Elsewhere;
-//! let _ = oer_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &Elsewhere);
+//! let _ = oer_exec_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &Elsewhere);
 //! ```
 //!
 //! ```compile_fail,E0271
-//! # oer_interrupt_table::__fake_matrix!();
+//! # oer_exec_interrupt_table::__fake_matrix!();
 //! # let mut matrix = FakeMatrix::new(Core::Zero);
 //! # let tokens = Interrupts::take().unwrap();
 //! // A token of another chip's table names another matrix's source.
 //! struct OtherMatrix;
-//! # impl oer_interrupt_table::Matrix for OtherMatrix {
+//! # impl oer_exec_interrupt_table::Matrix for OtherMatrix {
 //! #     type Source = u8; type Level = u8; type Core = u8;
 //! #     fn current_core(&self) -> u8 { 0 }
 //! #     fn route(&mut self, _: u8, _: u8) {}
@@ -31,11 +31,11 @@
 //! #     fn routed(&self, _: u8, _: u8) -> Option<u8> { None }
 //! #     fn slot(&self, _: u8) -> usize { 0 }
 //! # }
-//! let _ = oer_interrupt_table::enable(&mut OtherMatrix, &[], &tokens.timer);
+//! let _ = oer_exec_interrupt_table::enable(&mut OtherMatrix, &[], &tokens.timer);
 //! ```
 //!
 //! ```compile_fail,E0382
-//! # oer_interrupt_table::__fake_matrix!();
+//! # oer_exec_interrupt_table::__fake_matrix!();
 //! // A token is unique: it is neither `Copy` nor `Clone`.
 //! let tokens = Interrupts::take().unwrap();
 //! let first = tokens.timer;
@@ -45,10 +45,10 @@
 //! The same fake matrix enables a token of its own table:
 //!
 //! ```
-//! # oer_interrupt_table::__fake_matrix!();
+//! # oer_exec_interrupt_table::__fake_matrix!();
 //! # let mut matrix = FakeMatrix::new(Core::Zero);
 //! let tokens = Interrupts::take().unwrap();
-//! oer_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &tokens.timer).unwrap();
+//! oer_exec_interrupt_table::enable(&mut matrix, INTERRUPT_TABLE, &tokens.timer).unwrap();
 //! ```
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

@@ -1177,14 +1177,14 @@ pub trait LowerMacBackend: PortBackend {
     /// Longest current publication: PPDU plus response wait or hardware
     /// timeout. Gate/key/disable barriers never wait for the remaining plan.
     /// Composition passes this constant to the channel arbiter.
-    const PUBLICATION_BOUND: oer_time::Duration;
+    const PUBLICATION_BOUND: oer_base_time::Duration;
 
     /// Maximum admission-to-terminal time of a GTK mutation, including
     /// queued publications and the finite DMA/ISR/software RX cut. The driver
     /// owns a completion wake and a deadline wake. Expiry poisons with all
     /// resources retained; it never returns a usable mutation permission.
     /// Disable must finish or poison within this same bound under continuous RX.
-    const GROUP_COMMAND_BOUND: oer_time::Duration;
+    const GROUP_COMMAND_BOUND: oer_base_time::Duration;
 }
 
 /// The disabled-only settings of a lower-MAC port.

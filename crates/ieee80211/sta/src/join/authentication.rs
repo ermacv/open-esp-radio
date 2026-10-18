@@ -16,7 +16,7 @@ pub const STA_AUTHENTICATION_ATTEMPT_LIMIT: u16 = 3;
 pub struct StaAuthenticationAttempt {
     pub ordinal: u16,
     pub sequence_number: SequenceNumber,
-    pub response_timeout: oer_time::Duration,
+    pub response_timeout: oer_base_time::Duration,
 }
 
 /// Protocol-level reason why one Authentication attempt ended.

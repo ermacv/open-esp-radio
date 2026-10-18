@@ -8,8 +8,8 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
+use oer_base_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
 use oer_esp32s31_ieee80211_mac::rx::{RxRingError, pool::RxStageTransactionError};
-use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
 
 use super::frontier::RxFrontierError;
 

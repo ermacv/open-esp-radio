@@ -9,7 +9,7 @@ use oer_esp32s31_ieee80211_mac::rx::pool::RxStageTransactionError;
 /// ordinary credit, so a one-slot pool or queue requires explicit zero reserve.
 ///
 /// ```ignore-riscv32
-/// use oer_esp32s31_ieee80211::rx::transaction::CreditPolicy;
+/// use oer_esp32s31_ieee80211_driver::rx::transaction::CreditPolicy;
 /// assert_eq!(CreditPolicy::new(1).validate(2, 2).unwrap().critical_reserved_credits(), 1);
 /// assert!(CreditPolicy::new(1).validate(32, 1).is_err());
 /// assert_eq!(CreditPolicy::new(0).validate(32, 1).unwrap().critical_reserved_credits(), 0);

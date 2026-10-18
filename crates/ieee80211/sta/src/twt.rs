@@ -8,6 +8,7 @@
 //! 2^64 is refused ([`IndividualTwtWakePlanError::BeyondTsfRange`]). Chip code must separately prove that it can install the accepted
 //! agreement before any TWT Setup frame is published.
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::tsf::{TsfDuration, TsfInstant};
 use oer_ieee80211_mac::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
@@ -15,7 +16,6 @@ use oer_ieee80211_mac::twt::{
     IndividualTwtSetup, IndividualTwtSetupCommand, IndividualTwtTeardown, TwtWakeDurationUnit,
     TwtWireError,
 };
-use oer_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IndividualTwtRequesterConfigError {

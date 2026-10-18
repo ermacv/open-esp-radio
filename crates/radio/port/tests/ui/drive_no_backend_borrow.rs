@@ -4,7 +4,7 @@ use oer_radio_port::{
     Call, ClockError, Detached, DriverExit, EnableResult, EventsLost, InstallParts, Mint, Poisoned,
     PortBackend, PortPhase, PortResult, Retire, Retired,
 };
-use oer_time::RadioInstant;
+use oer_base_time::RadioInstant;
 pub struct Backend;
 pub struct Phase;
 impl PortPhase for Phase {

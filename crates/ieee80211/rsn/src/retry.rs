@@ -1,7 +1,7 @@
 //! Event-driven WPA2 retransmission state without sleeps or timer polling.
 
 use crate::state::{RsnTransmit, RsnTxMessage};
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RsnRetryConfig {

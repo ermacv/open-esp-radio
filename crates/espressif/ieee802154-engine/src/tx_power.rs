@@ -139,9 +139,9 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
 
 impl Ieee802154TxPowerLevels<'static> {
     /// The levels as the port publishes them.
-    pub const fn portable(self) -> oer_ieee802154::TransmitPowerLevels {
+    pub const fn portable(self) -> oer_ieee802154_mac::TransmitPowerLevels {
         // Both validations accept a non-empty, non-decreasing sequence.
-        match oer_ieee802154::TransmitPowerLevels::new(self.levels_dbm) {
+        match oer_ieee802154_mac::TransmitPowerLevels::new(self.levels_dbm) {
             Ok(levels) => levels,
             Err(_) => unreachable!(),
         }

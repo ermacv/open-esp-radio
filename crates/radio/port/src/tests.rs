@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use oer_time::{Duration, Instant, RadioDuration, RadioInstant};
+use oer_base_time::{Duration, Instant, RadioDuration, RadioInstant};
 
 #[test]
 fn the_monotonic_clock_counts_microseconds_of_the_image_clock() {

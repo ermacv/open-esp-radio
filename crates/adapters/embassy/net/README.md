@@ -1,6 +1,6 @@
 # Embassy network adapter (owned packets)
 
-`oer-embassy-net-owned` is the owned-packet boundary between the Wi-Fi
+`oer-adapters-embassy-net` is the owned-packet boundary between the Wi-Fi
 datapath and the Embassy/Xarxa network stack (`docs/network.md`).
 
 ## Known defects

@@ -6,7 +6,7 @@ runner's provisional constants (`IMMEDIATE_CONTINUATIONS`,
 `ACTOR_STEP_BOUND`) and checks that the stand's access point is heard.
 
 The radio system brings Wi-Fi up as in W0, on the configured channel. The
-receive runner (`oer-esp32s31-ieee80211::rx::receive`) binds its arena on the
+receive runner (`oer-esp32s31-ieee80211-driver::rx::receive`) binds its arena on the
 radio executor (P2), polled in the handler of `FROM_CPU` line 2; the MAC and
 WDEVPWR interrupts and the radio doorbell (`FROM_CPU` line 3) run the
 interrupt line at P3. Staged frames reach the application (thread mode, P1)

@@ -61,10 +61,10 @@ and a new generator keeps these rules:
 - At the transmit SFD (`ot_radio_transmit_sfd_done`), with a nonzero CSL
   period, the CSL IE of the frame or enhanced ACK going out gets the period
   and the phase from the radio clock at that moment to the next sample time
-  (`oer_ieee802154::mac::csl`); with a zero period nothing is written. A
+  (`oer_ieee802154_mac::mac::csl`); with a zero period nothing is written. A
   transmitted frame's Time IE gets the time-sync sequence and the network
   time (the radio clock plus the network time offset,
-  `oer_ieee802154::mac::time_sync`); an enhanced ACK never carries one.
+  `oer_ieee802154_mac::mac::time_sync`); an enhanced ACK never carries one.
 - A retransmission keeps its frame counter and key index, except that a CSL
   receiver takes a new frame counter on every retry: the CSL IE changes
   with each attempt.

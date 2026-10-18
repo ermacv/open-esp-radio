@@ -1,5 +1,5 @@
 [package]
-name = "oer-chip-profile"
+name = "oer-tool-data-chip-profile"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

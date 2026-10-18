@@ -124,14 +124,14 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
     assert_eq!(
-        service.authenticate_open(PEER, oer_time::Instant::from_micros(0)),
+        service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0)),
         ApMlmeAction::AuthenticationResponse {
             peer: PEER,
             status: AP_STATUS_SUCCESS,
         }
     );
     assert_eq!(
-        service.authenticate_open(OTHER, oer_time::Instant::from_micros(0)),
+        service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(0)),
         ApMlmeAction::AuthenticationResponse {
             peer: OTHER,
             status: AP_STATUS_SUCCESS,
@@ -139,7 +139,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
     );
     let third = [0x02, 0, 0, 0, 0, 4];
     assert_eq!(
-        service.authenticate_open(third, oer_time::Instant::from_micros(0)),
+        service.authenticate_open(third, oer_base_time::Instant::from_micros(0)),
         ApMlmeAction::AuthenticationResponse {
             peer: third,
             status: AP_STATUS_TOO_MANY_STATIONS,
@@ -155,8 +155,8 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
 fn qos_sequence_spaces_are_independent_for_each_peer_and_tid() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(0));
 
     assert_eq!(
         service.next_qos_sequence(PEER, 0),
@@ -189,12 +189,12 @@ fn qos_sequence_spaces_are_independent_for_each_peer_and_tid() {
 fn peer_binding_rejects_a_reused_slot_generation() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     let first = service.bind_peer(PEER).unwrap();
     assert_eq!(service.bound_peer_status(first).unwrap().address, PEER);
 
     service.remove_peer(PEER).unwrap();
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(1));
     let second = service.bind_peer(OTHER).unwrap();
     assert_eq!(service.bound_peer_status(first), None);
     assert_eq!(service.bound_peer_status(second).unwrap().address, OTHER);
@@ -220,19 +220,19 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         malformed_elements: false,
     };
 
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_open(
             PEER,
             open_security,
             LEGACY_CAPABILITIES,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     service
         .observe_power_save(
             ApPowerSaveObservation::Sleeping { peer: PEER },
-            oer_time::Instant::from_micros(2),
+            oer_base_time::Instant::from_micros(2),
         )
         .unwrap();
     let first = service.admit_downlink(PEER).unwrap();
@@ -244,13 +244,13 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         .unwrap();
 
     service.remove_peer(PEER).unwrap();
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(3));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(3));
     service
         .associate_open(
             PEER,
             open_security,
             LEGACY_CAPABILITIES,
-            oer_time::Instant::from_micros(4),
+            oer_base_time::Instant::from_micros(4),
         )
         .unwrap();
     let second = service.admit_downlink(PEER).unwrap();
@@ -287,7 +287,7 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
         AccessPointInactiveTimeout::new(10).unwrap(),
         storage.lend(),
     );
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_open(
             PEER,
@@ -301,7 +301,7 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
                 malformed_elements: false,
             },
             LEGACY_CAPABILITIES,
-            oer_time::Instant::from_micros(1_000),
+            oer_base_time::Instant::from_micros(1_000),
         )
         .unwrap();
     let binding = service.bind_peer(PEER).unwrap();
@@ -312,7 +312,7 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
             .observe_bound_power_state(
                 binding,
                 ApPeerPowerState::Active,
-                oer_time::Instant::from_micros(2_000)
+                oer_base_time::Instant::from_micros(2_000)
             )
             .unwrap(),
         ApPowerSaveAction::None,
@@ -320,7 +320,7 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
     assert_eq!(service.status_revision(), initial_revision);
     assert_eq!(
         service.peer_status(PEER).unwrap().deadline,
-        oer_time::Instant::from_micros(10_002_000)
+        oer_base_time::Instant::from_micros(10_002_000)
     );
 
     assert_eq!(
@@ -328,7 +328,7 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
             .observe_bound_power_state(
                 binding,
                 ApPeerPowerState::Sleeping,
-                oer_time::Instant::from_micros(3_000)
+                oer_base_time::Instant::from_micros(3_000)
             )
             .unwrap(),
         ApPowerSaveAction::StateChanged {
@@ -340,16 +340,16 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
     assert_eq!(service.status_revision(), initial_revision.wrapping_add(1));
     assert_eq!(
         service.peer_status(PEER).unwrap().deadline,
-        oer_time::Instant::from_micros(10_003_000)
+        oer_base_time::Instant::from_micros(10_003_000)
     );
 
     service.remove_peer(PEER).unwrap();
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(4_000));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(4_000));
     assert_eq!(
         service.observe_bound_power_state(
             binding,
             ApPeerPowerState::Active,
-            oer_time::Instant::from_micros(5_000)
+            oer_base_time::Instant::from_micros(5_000)
         ),
         Err(ApServiceError::UnknownPeer),
         "a recycled table slot cannot inherit the old peer's PM update"
@@ -365,7 +365,7 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
         AccessPointInactiveTimeout::new(10).unwrap(),
         storage.lend(),
     );
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_open(
             PEER,
@@ -379,7 +379,7 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
                 malformed_elements: false,
             },
             LEGACY_CAPABILITIES,
-            oer_time::Instant::from_micros(1_000),
+            oer_base_time::Instant::from_micros(1_000),
         )
         .unwrap();
     let binding = service.bind_peer(PEER).unwrap();
@@ -390,7 +390,7 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
             .observe_bound_data_power_state(
                 binding,
                 ApPeerPowerState::Active,
-                oer_time::Instant::from_micros(2_000)
+                oer_base_time::Instant::from_micros(2_000)
             )
             .unwrap(),
         ApPowerSaveAction::None,
@@ -402,11 +402,11 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
     );
 
     service
-        .observe_bound_data_activity(binding, oer_time::Instant::from_micros(5_001_000))
+        .observe_bound_data_activity(binding, oer_base_time::Instant::from_micros(5_001_000))
         .unwrap();
     assert_eq!(
         service.peer_status(PEER).unwrap().deadline,
-        oer_time::Instant::from_micros(15_001_000),
+        oer_base_time::Instant::from_micros(15_001_000),
         "the half-timeout guard refreshes before expiry"
     );
 
@@ -416,7 +416,7 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
             .observe_bound_data_power_state(
                 binding,
                 ApPeerPowerState::Sleeping,
-                oer_time::Instant::from_micros(5_002_000)
+                oer_base_time::Instant::from_micros(5_002_000)
             )
             .unwrap(),
         ApPowerSaveAction::StateChanged {
@@ -428,14 +428,15 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
     assert_eq!(service.status_revision(), revision.wrapping_add(1));
     assert_eq!(
         service.peer_status(PEER).unwrap().deadline,
-        oer_time::Instant::from_micros(15_002_000),
+        oer_base_time::Instant::from_micros(15_002_000),
         "a PM transition is never delayed by activity coalescing"
     );
 
     service.remove_peer(PEER).unwrap();
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(6_000_000));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(6_000_000));
     assert_eq!(
-        service.observe_bound_data_activity(binding, oer_time::Instant::from_micros(6_001_000)),
+        service
+            .observe_bound_data_activity(binding, oer_base_time::Instant::from_micros(6_001_000)),
         Err(ApServiceError::UnknownPeer),
         "coalescing must not weaken the slot-generation fence"
     );
@@ -462,17 +463,17 @@ fn inactivity_timeout_is_bounded_and_defaults_to_vendor_policy() {
 fn authenticated_peer_expires_at_the_recovered_fifteen_second_frontier() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(1_000));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(1_000));
     assert_eq!(
         service.next_peer_deadline(),
-        Some(oer_time::Instant::from_micros(15_001_000))
+        Some(oer_base_time::Instant::from_micros(15_001_000))
     );
     assert_eq!(
-        service.begin_due_peer_close(oer_time::Instant::from_micros(15_000_999)),
+        service.begin_due_peer_close(oer_base_time::Instant::from_micros(15_000_999)),
         None
     );
     assert_eq!(
-        service.begin_due_peer_close(oer_time::Instant::from_micros(15_001_000)),
+        service.begin_due_peer_close(oer_base_time::Instant::from_micros(15_001_000)),
         Some(ApPeerClose {
             peer: PEER,
             kind: ApPeerCloseKind::AuthenticationTimeout,
@@ -502,7 +503,7 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
         AccessPointInactiveTimeout::new(10).unwrap(),
         storage.lend(),
     );
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_rsn(
             PEER,
@@ -510,27 +511,27 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
             ht_capabilities(),
             [7; 32],
             9,
-            oer_time::Instant::from_micros(2_000),
+            oer_base_time::Instant::from_micros(2_000),
         )
         .unwrap();
     assert_eq!(
         service.next_peer_deadline(),
-        Some(oer_time::Instant::from_micros(10_002_000))
+        Some(oer_base_time::Instant::from_micros(10_002_000))
     );
     let binding = service.bind_peer(PEER).expect("associated peer binding");
     service
-        .observe_bound_activity(binding, oer_time::Instant::from_micros(5_000_000))
+        .observe_bound_activity(binding, oer_base_time::Instant::from_micros(5_000_000))
         .unwrap();
     assert_eq!(
         service.next_peer_deadline(),
-        Some(oer_time::Instant::from_micros(15_000_000))
+        Some(oer_base_time::Instant::from_micros(15_000_000))
     );
     assert_eq!(
-        service.begin_due_peer_close(oer_time::Instant::from_micros(14_999_999)),
+        service.begin_due_peer_close(oer_base_time::Instant::from_micros(14_999_999)),
         None
     );
     assert_eq!(
-        service.begin_due_peer_close(oer_time::Instant::from_micros(15_000_000)),
+        service.begin_due_peer_close(oer_base_time::Instant::from_micros(15_000_000)),
         Some(ApPeerClose {
             peer: PEER,
             kind: ApPeerCloseKind::InactivityTimeout,
@@ -545,7 +546,7 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
 fn association_owns_a_bounded_wpa2_state() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     assert_eq!(
         service
             .associate_rsn(
@@ -554,7 +555,7 @@ fn association_owns_a_bounded_wpa2_state() {
                 ht_capabilities(),
                 [7; 32],
                 9,
-                oer_time::Instant::from_micros(1),
+                oer_base_time::Instant::from_micros(1),
             )
             .unwrap(),
         ApMlmeAction::AssociationResponse {
@@ -590,7 +591,7 @@ fn association_owns_a_bounded_wpa2_state() {
 fn association_rejects_a_peer_without_a_common_legacy_rate() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     assert_eq!(
         service
             .associate_rsn(
@@ -604,7 +605,7 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
                 },
                 [7; 32],
                 9,
-                oer_time::Instant::from_micros(1),
+                oer_base_time::Instant::from_micros(1),
             )
             .unwrap(),
         ApMlmeAction::AssociationResponse {
@@ -626,7 +627,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     // Supplicants may add their own RSN capabilities. Message 3 must not
     // reflect those bytes back: it authenticates the AP's beacon RSN IE.
     service
@@ -636,7 +637,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     let (message1, message1_context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
@@ -646,14 +647,18 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     );
     assert!(!message1.retransmission());
     service
-        .observe_wpa2_transmit(message1_context, true, oer_time::Instant::from_micros(10))
+        .observe_wpa2_transmit(
+            message1_context,
+            true,
+            oer_base_time::Instant::from_micros(10),
+        )
         .unwrap();
     assert_eq!(
         service.next_wpa2_retry_deadline(),
-        Some(oer_time::Instant::from_micros(1_000_010))
+        Some(oer_base_time::Instant::from_micros(1_000_010))
     );
     let ApWpa2RetryProgress::Transmit(retried_message1) = service
-        .take_due_wpa2_retry::<512>(oer_time::Instant::from_micros(1_000_010))
+        .take_due_wpa2_retry::<512>(oer_base_time::Instant::from_micros(1_000_010))
         .unwrap()
     else {
         panic!("Message 1 response timeout must retransmit")
@@ -709,15 +714,15 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         .observe_wpa2_transmit(
             message3_context,
             true,
-            oer_time::Instant::from_micros(2_000_000),
+            oer_base_time::Instant::from_micros(2_000_000),
         )
         .unwrap();
     assert_eq!(
         service.next_wpa2_retry_deadline(),
-        Some(oer_time::Instant::from_micros(2_100_000))
+        Some(oer_base_time::Instant::from_micros(2_100_000))
     );
     let ApWpa2RetryProgress::Transmit(retried_message3) = service
-        .take_due_wpa2_retry::<512>(oer_time::Instant::from_micros(2_100_000))
+        .take_due_wpa2_retry::<512>(oer_base_time::Instant::from_micros(2_100_000))
         .unwrap()
     else {
         panic!("Message 3 response timeout must retransmit")
@@ -743,7 +748,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     assert_eq!(service.next_wpa2_retry_deadline(), None);
     assert!(service.pending_ptk(PEER).is_ok());
     service
-        .authorize(PEER, oer_time::Instant::from_micros(2))
+        .authorize(PEER, oer_base_time::Instant::from_micros(2))
         .unwrap();
     assert_eq!(
         service.peer_status(PEER).unwrap().phase,
@@ -762,7 +767,7 @@ fn message2_must_echo_the_exact_association_rsn() {
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_rsn(
             PEER,
@@ -770,7 +775,7 @@ fn message2_must_echo_the_exact_association_rsn() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
 
@@ -791,7 +796,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_rsn(
             PEER,
@@ -799,7 +804,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     let original_deadline = service.peer_status(PEER).unwrap().deadline;
@@ -901,7 +906,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
 
     let mut rejected_storage = AccessPointPeerStorage::new();
     let mut rejected = service(&mut rejected_storage);
-    rejected.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    rejected.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     rejected
         .associate_rsn(
             PEER,
@@ -909,7 +914,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     assert!(matches!(
@@ -921,7 +926,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
 
     let mut accepted_storage = AccessPointPeerStorage::new();
     let mut accepted = service(&mut accepted_storage);
-    accepted.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    accepted.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     accepted
         .associate_rsn(
             PEER,
@@ -929,7 +934,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     assert!(matches!(
@@ -947,7 +952,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
 fn exhausted_pairwise_update_count_closes_the_peer() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     service
         .associate_rsn(
             PEER,
@@ -955,25 +960,25 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
             ht_capabilities(),
             [7; 32],
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     let (_message1, context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_time::Instant::from_micros(0))
+        .observe_wpa2_transmit(context, true, oer_base_time::Instant::from_micros(0))
         .unwrap();
 
     for deadline in [1_000_000, 2_000_000, 3_000_000] {
         assert!(matches!(
             service
-                .take_due_wpa2_retry::<512>(oer_time::Instant::from_micros(deadline))
+                .take_due_wpa2_retry::<512>(oer_base_time::Instant::from_micros(deadline))
                 .unwrap(),
             ApWpa2RetryProgress::Transmit(frame) if *frame.frame().peer() == PEER
         ));
     }
     assert!(matches!(
         service
-            .take_due_wpa2_retry::<512>(oer_time::Instant::from_micros(4_000_000))
+            .take_due_wpa2_retry::<512>(oer_base_time::Instant::from_micros(4_000_000))
             .unwrap(),
         ApWpa2RetryProgress::Close(ApPeerClose {
             peer: PEER,
@@ -992,7 +997,7 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
 fn invalid_rsn_does_not_open_the_controlled_port() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     assert_eq!(
         service.associate_rsn(
             PEER,
@@ -1000,7 +1005,7 @@ fn invalid_rsn_does_not_open_the_controlled_port() {
             LEGACY_CAPABILITIES,
             [7; 32],
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         ),
         Ok(ApMlmeAction::AssociationResponse {
             peer: PEER,
@@ -1048,7 +1053,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
     for suffix in 1..=15_u8 {
         let peer = [0x02, 0, 0, 0, 1, suffix];
         assert_eq!(
-            service.authenticate_open(peer, oer_time::Instant::from_micros(0)),
+            service.authenticate_open(peer, oer_base_time::Instant::from_micros(0)),
             ApMlmeAction::AuthenticationResponse {
                 peer,
                 status: AP_STATUS_SUCCESS,
@@ -1066,7 +1071,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                     ht_capabilities(),
                     [suffix; 32],
                     u64::from(suffix),
-                    oer_time::Instant::from_micros(1),
+                    oer_base_time::Instant::from_micros(1),
                 )
                 .unwrap(),
             ApMlmeAction::AssociationResponse {
@@ -1079,7 +1084,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
     assert_eq!(service.associated_count(), 15);
     let overflow = [0x02, 0, 0, 0, 2, 1];
     assert_eq!(
-        service.authenticate_open(overflow, oer_time::Instant::from_micros(0)),
+        service.authenticate_open(overflow, oer_base_time::Instant::from_micros(0)),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
             status: AP_STATUS_TOO_MANY_STATIONS,
@@ -1088,7 +1093,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
     let released = [0x02, 0, 0, 0, 1, 7];
     service.remove_peer(released).unwrap();
     assert_eq!(
-        service.authenticate_open(overflow, oer_time::Instant::from_micros(0)),
+        service.authenticate_open(overflow, oer_base_time::Instant::from_micros(0)),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
             status: AP_STATUS_SUCCESS,
@@ -1113,7 +1118,7 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
     // BlockAck holes. A WPA3 station keeps its own PMK and PMKID, and the
     // storage holds the ten-entry PMKSA cache. The bounded table still uses
     // no dynamic allocation. Each peer's WPA2 retry keeps its two intervals
-    // as `oer_time::Duration` (8 bytes more per peer than microsecond `u32`s).
+    // as `oer_base_time::Duration` (8 bytes more per peer than microsecond `u32`s).
     // Each peer's TX Block Ack originator keeps, beside its session, its
     // negotiation's deadline, the next attempt's due time, its attempts,
     // retry interval and Dialog Token policy: the per-peer price of offers
@@ -1131,7 +1136,7 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
 fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(1));
     service
         .associate_rsn(
             PEER,
@@ -1139,12 +1144,12 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             ht_capabilities(),
             [7; 32],
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     service.checked_peer_mut(PEER).unwrap().phase = ApPeerPhase::Authorized;
 
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(1));
     service
         .associate_rsn(
             OTHER,
@@ -1152,7 +1157,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             LEGACY_CAPABILITIES,
             [8; 32],
             10,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     service.checked_peer_mut(OTHER).unwrap().phase = ApPeerPhase::Authorized;
@@ -1270,7 +1275,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
 fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(1));
     service
         .associate_rsn(
             PEER,
@@ -1278,7 +1283,7 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
             ht_capabilities(),
             [7; 32],
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     service.checked_peer_mut(PEER).unwrap().phase = ApPeerPhase::Authorized;
@@ -1324,12 +1329,12 @@ fn offer(
             peer,
             TxBlockAckRetry {
                 attempts: 1,
-                interval: oer_time::Duration::ZERO,
+                interval: oer_base_time::Duration::ZERO,
             },
         )
         .unwrap();
     service
-        .take_tx_block_ack_offer(peer, oer_time::Instant::from_micros(micros))
+        .take_tx_block_ack_offer(peer, oer_base_time::Instant::from_micros(micros))
         .unwrap()
 }
 
@@ -1337,7 +1342,7 @@ fn offer(
 fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_remain() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(1));
     service
         .associate_rsn(
             PEER,
@@ -1345,18 +1350,18 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
             ht_capabilities(),
             [7; 32],
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     // Before authorization the peer is offered nothing.
     let retry = TxBlockAckRetry {
         attempts: 3,
-        interval: oer_time::Duration::from_millis(1_000),
+        interval: oer_base_time::Duration::from_millis(1_000),
     };
     assert_eq!(service.queue_tx_block_ack(PEER, retry), Ok(false));
     service.checked_peer_mut(PEER).unwrap().phase = ApPeerPhase::Authorized;
     assert_eq!(service.queue_tx_block_ack(PEER, retry), Ok(true));
-    let at = |micros| oer_time::Instant::from_micros(micros);
+    let at = |micros| oer_base_time::Instant::from_micros(micros);
 
     // The first request goes and is not answered.
     let first = service
@@ -1426,17 +1431,17 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         malformed_elements: false,
     };
     // An authenticated 11b station is not yet a BSS member.
-    service.authenticate_open(OTHER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(OTHER, oer_base_time::Instant::from_micros(0));
     assert_eq!(service.bss_protection(true), ApBssProtection::default());
 
     // A 20-MHz-only, non-greenfield HT peer in a 40-MHz BSS.
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(1));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(1));
     service
         .associate_open(
             PEER,
             open,
             ht_capabilities(),
-            oer_time::Instant::from_micros(2),
+            oer_base_time::Instant::from_micros(2),
         )
         .unwrap();
     let ht_only = HtOperationProtection {
@@ -1468,7 +1473,7 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
                 ht: None,
                 qos_supported: false,
             },
-            oer_time::Instant::from_micros(3),
+            oer_base_time::Instant::from_micros(3),
         )
         .unwrap();
     let mixed = service.bss_protection(true);
@@ -1552,7 +1557,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             PEER,
             Pmk::from_bytes(SAE_PMK),
             SAE_PMKID,
-            oer_time::Instant::from_micros(0)
+            oer_base_time::Instant::from_micros(0)
         ),
         Ok(AP_STATUS_SUCCESS)
     );
@@ -1563,14 +1568,14 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             ht_capabilities(),
             ANONCE,
             9,
-            oer_time::Instant::from_micros(1),
+            oer_base_time::Instant::from_micros(1),
         )
         .unwrap();
     assert_eq!(association_status(action), AP_STATUS_SUCCESS);
     let message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let (_frame, context) = message1.into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_time::Instant::from_micros(2))
+        .observe_wpa2_transmit(context, true, oer_base_time::Instant::from_micros(2))
         .unwrap();
 
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
@@ -1611,7 +1616,11 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     .unwrap();
     assert_eq!(keys.igtk.unwrap().key(), &[0x66; 16]);
     service
-        .observe_wpa2_transmit(message3_context, true, oer_time::Instant::from_micros(3))
+        .observe_wpa2_transmit(
+            message3_context,
+            true,
+            oer_base_time::Instant::from_micros(3),
+        )
         .unwrap();
 }
 
@@ -1630,14 +1639,14 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
                         ht_capabilities(),
                         [7; 32],
                         9,
-                        oer_time::Instant::from_micros(1),
+                        oer_base_time::Instant::from_micros(1),
                     )
                     .unwrap(),
             )
         };
 
     // Open System authentication without a cached association.
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     assert_eq!(
         associate(&mut service, &SAE_STATION_RSN),
         AP_STATUS_INVALID_PMKID
@@ -1653,10 +1662,10 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
             PEER,
             Pmk::from_bytes(SAE_PMK),
             SAE_PMKID,
-            oer_time::Instant::from_micros(0),
+            oer_base_time::Instant::from_micros(0),
         )
         .unwrap();
-    service.authenticate_open(PEER, oer_time::Instant::from_micros(0));
+    service.authenticate_open(PEER, oer_base_time::Instant::from_micros(0));
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid([0x11; 16])),
         AP_STATUS_INVALID_PMKID
@@ -1676,7 +1685,7 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
             PEER,
             Pmk::from_bytes(SAE_PMK),
             SAE_PMKID,
-            oer_time::Instant::from_micros(0),
+            oer_base_time::Instant::from_micros(0),
         )
         .unwrap();
     assert!(!service.matches_association_security(association_security(&WPA2_RSN)));
@@ -1692,7 +1701,7 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
                     ht_capabilities(),
                     [7; 32],
                     9,
-                    oer_time::Instant::from_micros(1),
+                    oer_base_time::Instant::from_micros(1),
                 )
                 .unwrap()
         ),
@@ -1706,7 +1715,7 @@ fn begin_management_handshake(
     service: &mut AccessPointService<'_, oer_ieee80211_mac::security::spp::Association>,
     peer: [u8; 6],
 ) -> (Ptk, ApEapolTransmit<512>) {
-    let now = oer_time::Instant::from_micros(1);
+    let now = oer_base_time::Instant::from_micros(1);
     service
         .authenticate_sae(peer, Pmk::from_bytes(SAE_PMK), SAE_PMKID, now)
         .unwrap();
@@ -1762,7 +1771,7 @@ fn authorize_management_peer(
     peer: [u8; 6],
 ) {
     let (ptk, _) = begin_management_handshake(service, peer);
-    let now = oer_time::Instant::from_micros(1);
+    let now = oer_base_time::Instant::from_micros(1);
     let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_mac::security::rsn::Akm::Sae, AP, 10)
         .unwrap()
         .authenticate(&ptk);
@@ -1844,7 +1853,7 @@ fn management_replay_and_policy_rejections_leave_activity_unchanged() {
     );
     // Repeated authorization of the same key cannot reopen its replay state.
     service
-        .authorize(PEER, oer_time::Instant::from_micros(1))
+        .authorize(PEER, oer_base_time::Instant::from_micros(1))
         .unwrap();
     assert_eq!(
         service.receive_management(PEER, Kind::Action, &query, proof(7)),
@@ -1927,7 +1936,11 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         Err(oer_ieee80211_rsn::bip::BipError::Replay)
     );
     service
-        .observe_wpa2_transmit(message3_context, true, oer_time::Instant::from_micros(10))
+        .observe_wpa2_transmit(
+            message3_context,
+            true,
+            oer_base_time::Instant::from_micros(10),
+        )
         .unwrap();
     // Group TX can advance while Message 4 is missing; a retransmitted M3
     // must retain its original authenticated bytes, including the IPN.
@@ -2007,11 +2020,11 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 ht_capabilities(),
                 [7; 32],
                 9,
-                oer_time::Instant::EPOCH,
+                oer_base_time::Instant::EPOCH,
             ),
             Err(ApServiceError::UnknownPeer)
         );
-        service.authenticate_open(PEER, oer_time::Instant::EPOCH);
+        service.authenticate_open(PEER, oer_base_time::Instant::EPOCH);
         let action = service
             .associate_rsn(
                 PEER,
@@ -2019,7 +2032,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 ht_capabilities(),
                 [7; 32],
                 9,
-                oer_time::Instant::EPOCH,
+                oer_base_time::Instant::EPOCH,
             )
             .unwrap();
         if capability == SppCapability::Required {
@@ -2053,7 +2066,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                     ht_capabilities(),
                     [7; 32],
                     9,
-                    oer_time::Instant::EPOCH,
+                    oer_base_time::Instant::EPOCH,
                 ),
                 Err(ApServiceError::WrongPeerPhase)
             );

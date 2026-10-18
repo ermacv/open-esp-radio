@@ -3,13 +3,13 @@
 //!
 //! A PHY wait is either a short minimum settle, which completes inside the
 //! exclusive hardware transaction through a [`PhyShortDelay`], or a wait on
-//! the caller's [`oer_time::Timer`]: scheduling backoff, long settles and
+//! the caller's [`oer_base_time::Timer`]: scheduling backoff, long settles and
 //! readiness retries. [`delay`] chooses between them; [`delay_observed`] also
 //! reports the wait against the same start and deadline.
 
 use core::{future::Future, pin::pin, task::Poll};
 
-use oer_time::{Duration, Timer};
+use oer_base_time::{Duration, Timer};
 
 pub mod tx;
 

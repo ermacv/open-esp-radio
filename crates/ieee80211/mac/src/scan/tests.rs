@@ -3,7 +3,7 @@ use super::{
     best_matching_ssid, he_default_packet_extension_duration,
     he_extended_range_single_user_disabled, parse_management,
 };
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 #[test]
 fn a_zero_bssid_cannot_enter_the_scan_table() {

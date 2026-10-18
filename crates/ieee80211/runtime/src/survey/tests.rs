@@ -1,8 +1,8 @@
 use super::{GAP_LOG_CAPACITY, Gap, MinMax, Survey, missed_beacons};
 use core::num::NonZeroU64;
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{Channel, ChannelWidth, RxEvidence, RxMeta};
 use oer_ieee80211_mac::address::{Bssid, IndividualAddress};
-use oer_time::Instant;
 use std::vec::Vec;
 
 const STAND: [u8; 6] = [2, 0, 0, 0, 0, 1];

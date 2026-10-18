@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_memory::StableDmaRange;
+use oer_base_memory::StableDmaRange;
 
 use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
 use crate::{WifiRadioRegisters, device_fence, svd};

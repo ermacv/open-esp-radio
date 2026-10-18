@@ -3,7 +3,7 @@ use esp_hal::{
     peripherals::Interrupt,
     system::Cpu,
 };
-use oer_interrupt_table::{Adopted, Binding, Entry, Matrix, MatrixError, Table};
+use oer_exec_interrupt_table::{Adopted, Binding, Entry, Matrix, MatrixError, Table};
 
 /// The chip's interrupt matrix, as esp-hal drives it.
 pub struct EspHalMatrix;
@@ -100,7 +100,7 @@ pub fn table() -> &'static Table<EspHalMatrix> {
 ///
 /// # Errors
 ///
-/// [`oer_interrupt_table::Error::WrongCore`] on another core.
+/// [`oer_exec_interrupt_table::Error::WrongCore`] on another core.
 ///
 /// # Panics
 ///
@@ -109,7 +109,7 @@ pub fn enable<E>(token: &E) -> Result<(), Error>
 where
     E: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    oer_interrupt_table::enable(&mut EspHalMatrix, table(), token)
+    oer_exec_interrupt_table::enable(&mut EspHalMatrix, table(), token)
 }
 
 /// Silence the token's source on its table core.
@@ -117,11 +117,11 @@ pub fn disable<E>(token: &E)
 where
     E: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    oer_interrupt_table::disable(&mut EspHalMatrix, token);
+    oer_exec_interrupt_table::disable(&mut EspHalMatrix, token);
 }
 
-/// A source's token with its type erased ([`oer_interrupt_table::Route`]).
-pub type Route = oer_interrupt_table::MatrixRoute<EspHalMatrix>;
+/// A source's token with its type erased ([`oer_exec_interrupt_table::Route`]).
+pub type Route = oer_exec_interrupt_table::MatrixRoute<EspHalMatrix>;
 
 /// [`enable`] by a route.
 ///
@@ -133,12 +133,12 @@ pub type Route = oer_interrupt_table::MatrixRoute<EspHalMatrix>;
 ///
 /// Before [`adopt`].
 pub fn enable_route(route: &Route) -> Result<(), Error> {
-    oer_interrupt_table::enable_route(&mut EspHalMatrix, table(), route)
+    oer_exec_interrupt_table::enable_route(&mut EspHalMatrix, table(), route)
 }
 
 /// [`disable`] by a route.
 pub fn disable_route(route: &Route) {
-    oer_interrupt_table::disable_route(&mut EspHalMatrix, route);
+    oer_exec_interrupt_table::disable_route(&mut EspHalMatrix, route);
 }
 
 /// Silence the current hart's sources and check every vector slot.
@@ -147,7 +147,7 @@ pub fn disable_route(route: &Route) {
 ///
 /// Before [`adopt`], or when the matrix disagrees with the table.
 pub fn install_current_hart() {
-    if let Err(error) = oer_interrupt_table::install(&mut EspHalMatrix, table()) {
+    if let Err(error) = oer_exec_interrupt_table::install(&mut EspHalMatrix, table()) {
         panic!("the interrupt matrix disagrees with the image's table: {error:?}");
     }
 }
@@ -160,7 +160,7 @@ pub fn install_current_hart() {
 /// Before [`adopt`], when the matrix disagrees with the table, or when a
 /// driver's required source has no entry or, on its table core, no route.
 pub fn verify_current_hart() {
-    if let Err(error) = oer_interrupt_table::verify(&EspHalMatrix, table()) {
+    if let Err(error) = oer_exec_interrupt_table::verify(&EspHalMatrix, table()) {
         panic!("the interrupt matrix disagrees with the image's table: {error:?}");
     }
     let required = esp_hal::interrupt::required_routes().map(|number| {
@@ -169,7 +169,8 @@ pub fn verify_current_hart() {
             .and_then(|number| Interrupt::try_from(number).ok())
             .unwrap_or_else(|| panic!("esp-hal required source {number}, which the PAC lacks"))
     });
-    if let Err(error) = oer_interrupt_table::verify_required(&EspHalMatrix, table(), required) {
+    if let Err(error) = oer_exec_interrupt_table::verify_required(&EspHalMatrix, table(), required)
+    {
         panic!("an esp-hal driver's source is not routed by the image's table: {error:?}");
     }
 }

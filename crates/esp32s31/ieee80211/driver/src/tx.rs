@@ -68,9 +68,9 @@ impl WifiTxPowerProfile for PhyTxTargetPowerProfile {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ControlTxConfig {
     /// Executor watchdog for each hardware publication.
-    pub completion_timeout: oer_time::Duration,
+    pub completion_timeout: oer_base_time::Duration,
     /// Cooperative polling interval before the MAC IRQ owner is installed.
-    pub poll_interval: oer_time::Duration,
+    pub poll_interval: oer_base_time::Duration,
 }
 
 /// Resources whose ownership must stay together for every ordinary TX phase.

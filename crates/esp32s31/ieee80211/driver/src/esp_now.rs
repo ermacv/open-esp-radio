@@ -332,7 +332,7 @@ pub fn start_esp_now_v1_encrypted<P, E, T, const BUFFER_SIZE: usize>(
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
 {
     if prepared.home_channel() != active_channel {
         return Err(EspNowCryptoError::ChannelMismatch {
@@ -367,7 +367,7 @@ where
     H: TxHardware,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
 {
     if prepared.transmit_channel() != active_channel {
         return Err(EspNowTxError::ChannelMismatch {
@@ -418,7 +418,7 @@ where
     H: TxHardware,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
 {
     if prepared.transmit_channel() != active_channel {
         return Err(EspNowTxError::ChannelMismatch {
@@ -538,7 +538,7 @@ where
     H: TxHardware,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
 {
     let publication_limit = if broadcast {
         1
@@ -556,7 +556,7 @@ where
                     access_category: WmmAccessCategory::Voice,
                     initial_rate,
                     publication_limit,
-                    publication_timeout: oer_time::Duration::from_micros(
+                    publication_timeout: oer_base_time::Duration::from_micros(
                         config.publication_timeout,
                     ),
                 },

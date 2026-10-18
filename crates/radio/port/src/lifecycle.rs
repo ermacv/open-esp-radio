@@ -41,7 +41,7 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
-use oer_time::RadioInstant;
+use oer_base_time::RadioInstant;
 use scopeguard::{ScopeGuard, guard};
 
 use crate::{ClockError, EventEnd, EventsLost, Mint, Poisoned, PoolSet, PortResult, branded};

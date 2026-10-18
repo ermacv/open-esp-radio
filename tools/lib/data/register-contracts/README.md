@@ -1,6 +1,6 @@
 # Reviewed knowledge contracts
 
-`oer-register-contracts` owns semantic subjects, artifact/occurrence identities,
+`oer-tool-data-register-contracts` owns semantic subjects, artifact/occurrence identities,
 evidence classification and applicability. It depends on serialization and hashing,
 not a binary analyzer, execution model or register generator. Review and register
 publication share these values without acquiring execution capabilities.

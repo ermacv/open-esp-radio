@@ -109,7 +109,7 @@ pub enum RsnHandshakeError<BackendError, UnwrapError> {
     UnexpectedAction,
     Timeout {
         wait: RsnStaResponseWait,
-        elapsed: oer_time::Duration,
+        elapsed: oer_base_time::Duration,
         completed_frames: u32,
     },
 }

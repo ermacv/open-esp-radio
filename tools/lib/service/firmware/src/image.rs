@@ -9,14 +9,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use oer_chip_profile::Chip;
+use oer_tool_data_chip_profile::Chip;
 
 use crate::{Result, encode, pack, placement, w1};
 
 /// The chip every image of `firmware/apps` is built for.
 pub const CHIP: &str = "esp32s31";
 /// The bootstrap package that embeds a runtime.
-pub const BOOTSTRAP: &str = "oer-esp32s31-platform-bootstrap";
+pub const BOOTSTRAP: &str = "oer-firmware-platform-esp32s31-bootstrap";
 /// The file that lists an image's segments.
 pub const SEGMENTS: &str = "segments.toml";
 
@@ -215,7 +215,8 @@ pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manif
         packed.bytes.len(),
         packed.header.payload_crc32
     );
-    let warnings = placement::check_elf(&runtime, oer_esp32s31_platform_layout::LAYOUT.sram)?;
+    let warnings =
+        placement::check_elf(&runtime, oer_firmware_platform_esp32s31_layout::LAYOUT.sram)?;
     std::fs::write(output.join("placement.txt"), warnings.join("\n"))?;
     for warning in &warnings {
         eprintln!("warning: placement: {warning}");
@@ -290,10 +291,10 @@ pub fn segments(root: &Path, image: &str) -> Result<(Manifest, Vec<encode::Segme
 mod tests {
     #[test]
     fn an_image_with_test_support_is_named() {
-        let tree = "oer-esp32s31-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
+        let tree = "oer-firmware-apps-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-base-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
         assert_eq!(
             super::test_support_packages(tree),
-            ["oer-esp32s31-hal v0.1.0", "oer-memory v0.1.0"]
+            ["oer-base-memory v0.1.0", "oer-esp32s31-hal v0.1.0"]
         );
         assert!(super::test_support_packages("a v1|derive\n").is_empty());
     }
@@ -304,7 +305,7 @@ mod tests {
     fn only_w1s_runtime_build_gets_its_parameters() {
         let config = w1::Config {
             channel: 11,
-            bssid: oer_lab::mac::Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
+            bssid: oer_tool_service_lab::mac::Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
             ssid: w1::Ssid::new(b"Lab").unwrap(),
         };
         assert_eq!(

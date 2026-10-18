@@ -16,14 +16,14 @@ default = []
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
-oer-memory = { path = "../../../base/memory" }
+oer-base-memory = { path = "../../../base/memory" }
 oer-esp32s31-hal = { path = "../../hal" }
 pin-project = "1.1.13"
 vcell = "0.1.3"
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
-oer-ui-cases = { path = "../../../base/ui-cases" }
+oer-base-ui-cases = { path = "../../../base/ui-cases" }
 
 [lints]
 workspace = true

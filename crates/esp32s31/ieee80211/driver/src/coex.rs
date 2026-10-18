@@ -9,7 +9,7 @@
 //! `pm_start` and `pm_on_coex_start`, and `libnet80211.a[ieee80211_scan.o]::
 //! scan_next_channel` and `scan_op_end`.
 
-use oer_esp32s31_coex::wifi_status;
+use oer_esp32s31_radio_coex::wifi_status;
 
 /// Schedule interval, in the schedule's 100 µs unit, while Wi-Fi is idle.
 const IDLE_INTERVAL: u32 = 1_000;

@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-radio"
+name = "oer-bluetooth-le-radio"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ description = "Allocation-free hardware-independent Bluetooth LE radio values"
 
 [dependencies]
 oer-radio-coex = { path = "../../../radio/coex" }
-oer-time = { path = "../../../base/time" }
+oer-base-time = { path = "../../../base/time" }
 
 [lints]
 workspace = true

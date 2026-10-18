@@ -8,7 +8,7 @@
 
 use alloc::vec::Vec;
 use embassy_futures::select::{Either, select};
-use oer_time::{Duration, Timer};
+use oer_base_time::{Duration, Timer};
 
 /// The mutation whose terminal establishes the cut.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,8 +52,8 @@ pub struct Trace {
 /// One admission-to-completion measurement on the backend's monotonic clock.
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
-    pub admitted_at: oer_time::Instant,
-    pub completed_at: oer_time::Instant,
+    pub admitted_at: oer_base_time::Instant,
+    pub completed_at: oer_base_time::Instant,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -328,8 +328,8 @@ mod tests {
                 original,
                 submitted_slot: 2,
                 timing: Timing {
-                    admitted_at: oer_time::Instant::from_micros(100),
-                    completed_at: oer_time::Instant::from_micros(completed_at),
+                    admitted_at: oer_base_time::Instant::from_micros(100),
+                    completed_at: oer_base_time::Instant::from_micros(completed_at),
                 },
                 events: alloc::vec![
                     Event::OldRx,
@@ -367,7 +367,7 @@ mod tests {
                 core::future::pending().await
             }
         }
-        let timer = oer_time_virtual::SkipClock::new();
+        let timer = oer_base_time_virtual::SkipClock::new();
         let mut harness = Never;
         let mut check = core::pin::pin!(check(&mut harness, &timer));
         assert_eq!(
@@ -392,8 +392,8 @@ mod tests {
             let mut trace = ProgressTrace {
                 admitted,
                 timing: Timing {
-                    admitted_at: oer_time::Instant::EPOCH,
-                    completed_at: oer_time::Instant::from_micros(10),
+                    admitted_at: oer_base_time::Instant::EPOCH,
+                    completed_at: oer_base_time::Instant::from_micros(10),
                 },
                 events: Vec::new(),
                 retained: alloc::vec![admitted],
@@ -481,8 +481,8 @@ mod tests {
                 original,
                 submitted_slot: 2,
                 timing: Timing {
-                    admitted_at: oer_time::Instant::EPOCH,
-                    completed_at: oer_time::Instant::from_micros(1),
+                    admitted_at: oer_base_time::Instant::EPOCH,
+                    completed_at: oer_base_time::Instant::from_micros(1),
                 },
                 events: alloc::vec![
                     Event::OldRx,

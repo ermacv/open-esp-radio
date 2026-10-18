@@ -122,7 +122,7 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     /// Start RX using the production DMA storage bound to this ring.
     pub async fn start_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
-        timer: &impl oer_time::Timer,
+        timer: &impl oer_base_time::Timer,
         hardware: &mut M,
         storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError>
@@ -326,7 +326,7 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     #[allow(clippy::result_large_err)]
     pub async fn try_into_live_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         mut self,
-        timer: &impl oer_time::Timer,
+        timer: &impl oer_base_time::Timer,
         hardware: &mut M,
         storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<

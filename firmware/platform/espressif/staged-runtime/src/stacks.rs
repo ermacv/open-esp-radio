@@ -56,7 +56,7 @@ pub fn interrupted_stack_pointer() -> Option<usize> {
 
 /// Aligned bytes at the bottom of each interrupt stack whose stores trap.
 const IRQ_STACK_GUARD_BYTES: usize =
-    oer_espressif_staged_layout::interrupts::IRQ_STACK_GUARD_BYTES as usize;
+    oer_firmware_platform_espressif_staged_layout::interrupts::IRQ_STACK_GUARD_BYTES as usize;
 /// Debug trigger of the interrupt-stack guard. ESP-HAL owns trigger 0 (task
 /// stack guard) and trigger 1 (trap-section guard).
 const IRQ_STACK_GUARD_TRIGGER: usize = 2;
@@ -110,7 +110,7 @@ pub fn cpu0_task_stack_bytes() -> usize {
 /// The first installation must precede the hart's first IRQ admission.
 /// Reinstallation preserves the original paint. Installation also silences
 /// every source of this hart in the image's interrupt table and checks every
-/// vector slot against it (`oer_espressif_interrupt_table_esp_hal`).
+/// vector slot against it (`oer_exec_esp_hal_irq`).
 pub unsafe fn install_current_hart_interrupt_stack() {
     let hart: usize;
     unsafe { asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack)) };
@@ -150,7 +150,7 @@ pub unsafe fn install_current_hart_interrupt_stack() {
             options(nostack),
         )
     };
-    oer_espressif_interrupt_table_esp_hal::install_current_hart();
+    oer_exec_esp_hal_irq::install_current_hart();
 }
 
 /// Panic unless the current hart's active MTVT holds the runtime's entries in

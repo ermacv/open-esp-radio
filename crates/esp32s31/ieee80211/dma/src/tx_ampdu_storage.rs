@@ -2,15 +2,15 @@
 //!
 //! Internally buffered aggregates retain their static arena directly.
 //! External zero-copy aggregates receive prepare/start authority only through
-//! an owner which also retains every referenced [`StableDmaBacking`](oer_memory::StableDmaBacking) lease.
+//! an owner which also retains every referenced [`StableDmaBacking`](oer_base_memory::StableDmaBacking) lease.
 
 use crate::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
 use oer_esp32s31_hal::dma_address;
 
+use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use oer_esp32s31_hal::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::MacTxQueueDetached;
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
@@ -533,14 +533,14 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
 /// The descriptor arena remains in static chip storage while `B` may be a
 /// movable lease object whose underlying allocation is stable. Moving this
 /// owner is safe: descriptor addresses never point at the lease object, only
-/// at the allocation guaranteed by its unsafe [`StableDmaBacking`](oer_memory::StableDmaBacking) contract.
+/// at the allocation guaranteed by its unsafe [`StableDmaBacking`](oer_base_memory::StableDmaBacking) contract.
 ///
 /// The arena never automatically destroys a retained lease. Only the active
 /// owner can release one after cancellation or proven detach. If that owner
 /// is forgotten, destroying this arena leaks its leases and their allocations;
 /// it cannot free memory still visible to DMA. No destructor is required for
 /// this safety property, including the arena's own destructor.
-/// The [`StableDmaBacking`](oer_memory::StableDmaBacking) contract requires the allocation and its exclusive
+/// The [`StableDmaBacking`](oer_base_memory::StableDmaBacking) contract requires the allocation and its exclusive
 /// reservation to survive a leaked lease; an ordinary borrowed backing is not
 /// sufficient. CPU-only metadata may still have a shorter lifetime because no
 /// forgotten owner accesses or destroys it.
@@ -862,7 +862,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
 
     /// Retain one stable allocation and issue its non-forgeable identity.
     ///
-    /// [`StableDmaBacking`](oer_memory::StableDmaBacking) guarantees that the accepted allocation remains at
+    /// [`StableDmaBacking`](oer_base_memory::StableDmaBacking) guarantees that the accepted allocation remains at
     /// one address until the owner releases it, and remains allocated and
     /// exclusively reserved if the owner is quarantined or forgotten.
     pub fn push_backing(&mut self, backing: B) -> Result<RetainedDmaBacking, AmpduDmaStorageError> {

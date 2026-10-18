@@ -21,8 +21,8 @@
 //! espressif/esp32-wifi-lib `af55a0ca`; each method names the function it
 //! follows.
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::tsf::TsfInstant;
-use oer_time::{Duration, Instant};
 
 /// Beacon receive window requested at each TBTT (`g_pm_cfg[20]`).
 pub const BEACON_WINDOW_MICROS: u32 = 25_000;

@@ -10,7 +10,7 @@ description = "IEEE 802.15.4 MAC driver engine of the Espressif chips, ported fr
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false }
 oer-espressif-coex = { path = "../coex" }
-oer-ieee802154 = { path = "../../ieee802154/mac" }
+oer-ieee802154-mac = { path = "../../ieee802154/mac" }
 
 [lints]
 workspace = true

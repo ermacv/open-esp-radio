@@ -25,8 +25,8 @@
 //! ends); the ring prepared from that arena has the same base
 //! (`w1.exhaust ring_base=`).
 
-use oer_esp32s31_ieee80211::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
 use oer_esp32s31_ieee80211_dma::descriptor::{DESCRIPTOR_BYTES, RxDescriptor};
+use oer_esp32s31_ieee80211_driver::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
 
 use crate::{
     irq::{COUNT, SLOTS},

@@ -24,13 +24,13 @@ pub(crate) fn format(source: &str, edition: &str) -> Result<String> {
     input.seek(SeekFrom::Start(0))?;
     let mut output = tempfile::tempfile()?;
     let mut errors = tempfile::tempfile()?;
-    let mut command = oer_process::command("rustfmt");
+    let mut command = oer_tool_base_process::command("rustfmt");
     command
         .args(["--edition", edition, "--style-edition", edition])
         .stdin(Stdio::from(input))
         .stdout(Stdio::from(output.try_clone()?))
         .stderr(Stdio::from(errors.try_clone()?));
-    let mut child = oer_process::owned::Child::spawn(&mut command)?;
+    let mut child = oer_tool_base_process::owned::Child::spawn(&mut command)?;
     let status = child.wait_timeout(Some(Duration::from_secs(60)))?;
     if !status.success() {
         errors.seek(SeekFrom::Start(0))?;
@@ -47,7 +47,7 @@ pub(crate) fn format(source: &str, edition: &str) -> Result<String> {
     Ok(text)
 }
 pub(crate) fn publish(outputs: &[(&PathBuf, String)], check: bool) -> Result<()> {
-    oer_process::check_cancelled()?;
+    oer_tool_base_process::check_cancelled()?;
     if check {
         let mismatches: Vec<_> = outputs
             .iter()
@@ -82,7 +82,7 @@ pub(crate) fn publish(outputs: &[(&PathBuf, String)], check: bool) -> Result<()>
         temporary.as_file().sync_all()?;
         pending.push((path, temporary));
     }
-    oer_process::check_cancelled()?;
+    oer_tool_base_process::check_cancelled()?;
     for (index, (path, temporary)) in pending.into_iter().enumerate() {
         temporary
             .persist(path)

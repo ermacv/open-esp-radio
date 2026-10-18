@@ -14,6 +14,7 @@
 //! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 //! `components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c`.
 
+use oer_base_time::{Duration, Instant};
 use oer_ieee80211_mac::address::{Bssid, OwnAddress};
 use oer_ieee80211_mac::security::SaePwe;
 use oer_ieee80211_mac::station::{
@@ -25,7 +26,6 @@ use oer_ieee80211_rsn::sae::{
     SAE_COMMIT_LEN, SAE_PMKID_LEN, SaeCommit, SaeCommitValues, SaeError, SaeKeys,
     anti_clogging_token,
 };
-use oer_time::{Duration, Instant};
 
 pub const STA_SAE_COMMIT_TIMEOUT: Duration = Duration::from_secs(4);
 pub const STA_SAE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(2);

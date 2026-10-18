@@ -23,7 +23,7 @@ const fn preclose_i2c_failure(error: PhyTargetPortError) -> PhyRfCloseTemperatur
 }
 
 pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_base_time::Timer,
     platform: &mut P,
     registers: &mut impl SharedPhyAccess,
     state: &mut PhyState,
@@ -113,7 +113,7 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay>(
 
 #[cfg(target_arch = "riscv32")]
 async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_base_time::Timer,
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     operation: oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation,
 ) -> Result<(), PhyTargetPortError> {
@@ -355,7 +355,7 @@ fn restore_wake_pbus_boundaries(
 /// and baseband mode have all returned to their operational values.
 #[cfg(target_arch = "riscv32")]
 pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
-    timer: &impl oer_time::Timer,
+    timer: &impl oer_base_time::Timer,
     registers: &mut impl PhyInitializationAccess,
     state: &PhyState,
 ) -> Result<(), PhyTargetPortError> {

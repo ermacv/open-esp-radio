@@ -9,8 +9,11 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use esp_hal::interrupt::software::SoftwareInterrupt;
+use oer_adapters_embassy_time::EmbassyClock;
+use oer_base_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
 use oer_esp32s31_hal::owner::{MacInterruptSetup, RadioRuntimeOwner};
-use oer_esp32s31_ieee80211::{
+use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
+use oer_esp32s31_ieee80211_driver::{
     irq::{
         RadioDoorbell, WifiIrqLine, WifiIrqRoutes, run_doorbell, service_mac_line,
         service_power_line,
@@ -24,17 +27,14 @@ use oer_esp32s31_ieee80211::{
         upper::{FrameReceiver, QueueSink, RxFrameEnds},
     },
 };
-use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_ieee80211_mac::{
     init::MAC_COLD_RX_INTERRUPT_MASK,
     irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
 };
-use oer_espressif_executor_embassy::{
+use oer_exec_executor::{
     Doorbell, SameLevel,
     poll_timing::{CycleSource, Mcycle},
 };
-use oer_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
-use oer_time_embassy::EmbassyClock;
 
 use crate::{
     DoorbellToken, WifiMacToken, WifiPwrToken,
@@ -61,7 +61,7 @@ oer_esp32s31_hal::dma_static! {
     static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
 }
 
-oer_memory::zeroed_static! {
+oer_base_memory::zeroed_static! {
     /// Placement: the line the three P3 handlers run, in critical SRAM.
     static RX_LINE: HandlerCell<WifiIrqLine<Epoch>> = zeroed in ".critical.bss.wifi_rx_line";
 }
@@ -108,14 +108,14 @@ pub fn doorbell() {
     if rung != 0 {
         measure::raise(&RING_TO_DOORBELL_MAX, Mcycle.now().wrapping_sub(rung));
     }
-    let _ran = run_doorbell(&RX_LINE, oer_espressif_executor_embassy::acknowledge::<3>);
+    let _ran = run_doorbell(&RX_LINE, oer_exec_executor::acknowledge::<3>);
 }
 
 /// The radio executor's software interrupt (P2): each run's cycles.
 #[esp_hal::ram]
 pub fn radio_executor() {
     let start = Mcycle.now();
-    oer_espressif_executor_embassy::interrupt_handler::<2>();
+    oer_exec_executor::interrupt_handler::<2>();
     measure::record(&measure::SWI2, Mcycle.now().wrapping_sub(start));
 }
 
@@ -127,7 +127,7 @@ impl ImageDoorbell {
     pub fn new(
         interrupt: SoftwareInterrupt<'static, 3>,
         token: DoorbellToken,
-    ) -> Result<Self, oer_espressif_interrupt_table_esp_hal::Error> {
+    ) -> Result<Self, oer_exec_esp_hal_irq::Error> {
         Doorbell::<3>::new(interrupt, token, BELL).map(Self)
     }
 }
@@ -151,8 +151,8 @@ pub struct ImageRoutes {
 impl WifiIrqRoutes for ImageRoutes {
     fn enable(&mut self) {
         for routed in [
-            oer_espressif_interrupt_table_esp_hal::enable(&self.power),
-            oer_espressif_interrupt_table_esp_hal::enable(&self.mac),
+            oer_exec_esp_hal_irq::enable(&self.power),
+            oer_exec_esp_hal_irq::enable(&self.mac),
         ] {
             if routed.is_err() {
                 ROUTE_ERRORS.fetch_add(1, Ordering::Relaxed);
@@ -161,8 +161,8 @@ impl WifiIrqRoutes for ImageRoutes {
     }
 
     fn silence(&mut self) {
-        oer_espressif_interrupt_table_esp_hal::disable(&self.mac);
-        oer_espressif_interrupt_table_esp_hal::disable(&self.power);
+        oer_exec_esp_hal_irq::disable(&self.mac);
+        oer_exec_esp_hal_irq::disable(&self.power);
     }
 }
 

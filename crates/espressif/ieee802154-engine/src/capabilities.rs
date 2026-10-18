@@ -7,7 +7,7 @@
 //! without `CSMA_CA` and `TRANSMIT_RETRIES`, which belong above the port. No
 //! port backend publishes them now.
 
-use oer_ieee802154::{
+use oer_ieee802154_mac::{
     CcaThresholdCapability, CslCapability, Ieee802154Capabilities, RadioCapabilities,
     TransmitPowerCapability, TransmitPowerLevels,
 };

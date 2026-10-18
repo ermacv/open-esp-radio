@@ -1,5 +1,5 @@
 //! The image's interrupt table: [`interrupt_table!`](crate::interrupt_table)
-//! declares it; `oer_espressif_interrupt_table_esp_hal` drives the chip's
+//! declares it; `oer_exec_esp_hal_irq` drives the chip's
 //! matrix by it, and its owners enable and disable their sources there.
 
 /// Declare the image's interrupt table, once per image, and hand its
@@ -7,7 +7,7 @@
 /// [`adopt`](crate::adopt):
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::interrupt_table! {
+/// oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
 ///     /// The Embassy time driver's alarm.
 ///     timer: TimerToken = TG0_T0_LEVEL => crate::time::on_alarm, Priority1, ProCpu;
 /// }

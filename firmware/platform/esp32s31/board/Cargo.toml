@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-platform-board"
+name = "oer-firmware-platform-esp32s31-board"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-oer-esp32s31-platform-layout.workspace = true
+oer-firmware-platform-esp32s31-layout.workspace = true
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unstable"] }
 
 [lints]

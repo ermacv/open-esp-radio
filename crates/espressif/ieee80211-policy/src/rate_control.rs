@@ -14,6 +14,7 @@
 use core::num::{NonZeroU16, NonZeroU32};
 
 use crate::rate_schedule::{RateScheduleKind, RateScheduleRef, schedule_state};
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{BlockAckSnr, LinkMetric, SnrSample};
 use oer_ieee80211_mac::{
     channel::WifiChannelWidth,
@@ -24,7 +25,6 @@ use oer_ieee80211_mac::{
 use oer_ieee80211_upper_mac::rate_control::{
     AmpduUnavailable, BlockAckTally, MpduOutcome, NegotiatedLegacyRates, RateControl, RatePeer,
 };
-use oer_time::Instant;
 
 /// Instruction-evidenced fields of one 12-byte rate schedule record.
 ///

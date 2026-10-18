@@ -7,7 +7,7 @@
 //! packet is read; a packet that mode forbids fails the procedure, which then
 //! requires the connection to terminate.
 
-use oer_bluetooth_ll::security::{
+use oer_bluetooth_le_ll::security::{
     LePeripheralEncryptedReceive as Received, LePeripheralEncryptionProcedure as Procedure,
     LePeripheralEncryptionProcedureError as Error, LePeripheralEncryptionRandom,
     LePeripheralEncryptionReceiveMode as Mode,

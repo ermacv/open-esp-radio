@@ -19,7 +19,7 @@
 use crate::address::{Bssid, IndividualAddress};
 use crate::ht::{HtPeerCapabilities, ht_peer_capabilities};
 use crate::security::LinkProtection;
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub const SCAN_RECORD_CAPACITY: usize = 32;
 pub const RSN_IE_CAPACITY: usize = 64;

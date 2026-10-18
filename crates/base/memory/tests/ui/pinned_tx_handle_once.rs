@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::PinnedDmaTxPoolHandle;
+use oer_base_memory::PinnedDmaTxPoolHandle;
 
 type Handle = PinnedDmaTxPoolHandle<32, 8, 4, 1>;
 

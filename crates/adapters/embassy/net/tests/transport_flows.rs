@@ -1,7 +1,7 @@
 //! Real packet owners through publication, nested selection and readiness.
 
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use oer_embassy_net_owned::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_adapters_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
 use oer_ieee80211_datapath::DestinationTxQueues;
 use std::{
     sync::{

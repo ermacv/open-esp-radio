@@ -11,14 +11,14 @@
 //!   `descriptor_aliases_an_exhausted_list`).
 
 use object::{Object as _, ObjectSection as _, ObjectSymbol as _, read::elf::ElfFile32};
-use oer_espressif_staged_layout::Region;
+use oer_firmware_platform_espressif_staged_layout::Region;
 
 use crate::Result;
 
 /// The interrupt table's exported slice: a pointer and a length.
 pub const TABLE_SYMBOL: &str = "__OER_INTERRUPT_TABLE";
 /// Bytes of one table entry and the handler word's offset in it
-/// (`oer-espressif-staged-layout`'s `interrupts`).
+/// (`oer-firmware-platform-espressif-staged-layout`'s `interrupts`).
 pub const ENTRY_BYTES: u32 = 12;
 pub const HANDLER_OFFSET: u32 = 8;
 /// The panic entry's symbol, under its mangled path.

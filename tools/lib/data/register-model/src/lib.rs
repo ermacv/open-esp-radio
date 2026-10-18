@@ -9,8 +9,8 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use oer_register_contracts::SemanticEntityId;
-use oer_register_review::{AssertionValue, EffectiveAssertion, ReviewKnowledge};
+use oer_tool_data_register_contracts::SemanticEntityId;
+use oer_tool_data_register_review::{AssertionValue, EffectiveAssertion, ReviewKnowledge};
 use serde::{Deserialize, Serialize};
 use svd_rs::{
     Access, AddressBlockUsage, Device, FieldInfo, MaybeArray, ModifiedWriteValues, Peripheral,
@@ -197,15 +197,15 @@ pub struct ReviewAnnotation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<oer_register_contracts::FactProvenance>,
+    pub provenance: Option<oer_tool_data_register_contracts::FactProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accuracy: Option<oer_register_contracts::FactAccuracy>,
+    pub accuracy: Option<oer_tool_data_register_contracts::FactAccuracy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completeness: Option<oer_register_contracts::FactCompleteness>,
+    pub completeness: Option<oer_tool_data_register_contracts::FactCompleteness>,
     /// Origin of a register or field name. An opaque name, and only an opaque
     /// name, ends in [`OPAQUE_SUFFIX`]; a vendor name cites its source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub naming: Option<oer_register_contracts::NameOrigin>,
+    pub naming: Option<oer_tool_data_register_contracts::NameOrigin>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1901,7 +1901,7 @@ fn validate_naming(
     annotation: Option<&ReviewAnnotation>,
     opaque_name: &str,
 ) -> Result<()> {
-    use oer_register_contracts::NameOrigin;
+    use oer_tool_data_register_contracts::NameOrigin;
 
     let leaf = entity.rsplit('.').next().unwrap_or(entity);
     if let Some(word) = UNESTABLISHED_WORDS
@@ -1973,7 +1973,7 @@ fn mark_name_origins(device: &mut Device, review: &[ReviewAnnotation]) {
 fn mark_child_name_origins(
     parent: &str,
     children: &mut [RegisterCluster],
-    naming: &BTreeMap<&str, oer_register_contracts::NameOrigin>,
+    naming: &BTreeMap<&str, oer_tool_data_register_contracts::NameOrigin>,
 ) {
     for child in children {
         match child {
@@ -1995,9 +1995,9 @@ fn mark_child_name_origins(
 
 fn mark_description(
     description: &mut Option<String>,
-    naming: Option<&oer_register_contracts::NameOrigin>,
+    naming: Option<&oer_tool_data_register_contracts::NameOrigin>,
 ) {
-    use oer_register_contracts::NameOrigin;
+    use oer_tool_data_register_contracts::NameOrigin;
 
     let marker = match naming {
         Some(NameOrigin::Opaque) => "Opaque: meaning not established.",
@@ -2012,9 +2012,9 @@ fn mark_description(
 
 fn review_annotation_is_assertion(annotation: &ReviewAnnotation) -> bool {
     !annotation.sources.is_empty()
-        && annotation
-            .provenance
-            .is_some_and(|provenance| provenance != oer_register_contracts::FactProvenance::Hint)
+        && annotation.provenance.is_some_and(|provenance| {
+            provenance != oer_tool_data_register_contracts::FactProvenance::Hint
+        })
         && annotation.accuracy.is_some()
         && annotation.completeness.is_some()
 }
@@ -2365,7 +2365,7 @@ fn count_fields(children: &[RegisterCluster]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_register_review::ReviewPack;
+    use oer_tool_data_register_review::ReviewPack;
 
     fn parse_rendered_model(model: &RegisterModel) -> (Device, SvdExportSummary) {
         let (svd, summary) = model.render_svd().unwrap();
@@ -2655,7 +2655,7 @@ locator = "function"
         );
         assert!(model.reviewed_register_facts().iter().all(|assertion| {
             assertion.metadata.classification.provenance
-                == oer_register_contracts::FactProvenance::Reviewed
+                == oer_tool_data_register_contracts::FactProvenance::Reviewed
                 && assertion.metadata.evidence.len() == 1
         }));
         assert_eq!(
@@ -2699,9 +2699,9 @@ locator = "function"
         model.review = vec![ReviewAnnotation {
             entity: "RADIO.STATUS%s".to_owned(),
             sources: vec!["fixture-array".to_owned()],
-            provenance: Some(oer_register_contracts::FactProvenance::Reviewed),
-            accuracy: Some(oer_register_contracts::FactAccuracy::Exact),
-            completeness: Some(oer_register_contracts::FactCompleteness::Complete),
+            provenance: Some(oer_tool_data_register_contracts::FactProvenance::Reviewed),
+            accuracy: Some(oer_tool_data_register_contracts::FactAccuracy::Exact),
+            completeness: Some(oer_tool_data_register_contracts::FactCompleteness::Complete),
             naming: None,
         }];
 
@@ -2778,9 +2778,9 @@ locator = "manual"
         assert!(error.to_string().contains("explicit applicability context"));
 
         let selected = knowledge
-            .select_for(&oer_register_contracts::ApplicabilityContext {
+            .select_for(&oer_tool_data_register_contracts::ApplicabilityContext {
                 chip_revisions: vec!["rev0".to_owned()],
-                ..oer_register_contracts::ApplicabilityContext::default()
+                ..oer_tool_data_register_contracts::ApplicabilityContext::default()
             })
             .unwrap();
         model.apply_review_knowledge(&selected).unwrap();
@@ -2888,7 +2888,7 @@ locator = "identity"
         assert_eq!(annotation.sources, ["fixture"]);
         assert_eq!(
             annotation.provenance,
-            Some(oer_register_contracts::FactProvenance::Reviewed)
+            Some(oer_tool_data_register_contracts::FactProvenance::Reviewed)
         );
     }
 
@@ -3608,7 +3608,7 @@ locator = "identity"
 
     #[test]
     fn published_descriptions_carry_a_non_vendor_name_origin() {
-        use oer_register_contracts::NameOrigin;
+        use oer_tool_data_register_contracts::NameOrigin;
 
         let mut description = Some("Written by the calibration path.".to_owned());
         mark_description(&mut description, Some(&NameOrigin::Opaque));

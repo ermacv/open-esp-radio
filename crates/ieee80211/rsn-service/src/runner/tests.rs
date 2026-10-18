@@ -12,8 +12,8 @@ use oer_ieee80211_rsn::{
 };
 
 use super::*;
+use oer_base_time::Clock;
 use oer_ieee80211_mac::station::StaSequenceCounter;
-use oer_time::Clock;
 
 /// Receive polls before each response timeout wins.
 const MESSAGE1_POLLS: u32 =
@@ -205,7 +205,7 @@ impl RsnHandshakeBackend for Backend {
 
 #[derive(Debug, Default)]
 struct TestTimer {
-    clock: oer_time_virtual::SkipClock,
+    clock: oer_base_time_virtual::SkipClock,
     waits: Cell<u32>,
 }
 
@@ -213,7 +213,7 @@ impl TestTimer {
     /// Microseconds since the clock's start.
     fn elapsed(&self) -> u64 {
         self.now()
-            .saturating_duration_since(oer_time_virtual::START)
+            .saturating_duration_since(oer_base_time_virtual::START)
             .as_micros()
     }
 }
@@ -496,14 +496,14 @@ fn message1_on_exact_deadline_is_serviced_before_timeout() {
 #[test]
 fn cancelling_an_unpolled_wait_does_not_count_or_advance_it() {
     let timer = TestTimer::default();
-    let deadline = oer_time_virtual::START
+    let deadline = oer_base_time_virtual::START
         .checked_add(Duration::from_micros(1_000))
         .unwrap();
     let wait = timer.wait_until(deadline);
-    assert_eq!(timer.now(), oer_time_virtual::START);
+    assert_eq!(timer.now(), oer_base_time_virtual::START);
     assert_eq!(timer.waits.get(), 0);
     drop(wait);
-    assert_eq!(timer.now(), oer_time_virtual::START);
+    assert_eq!(timer.now(), oer_base_time_virtual::START);
     assert_eq!(timer.waits.get(), 0);
     embassy_futures::block_on(timer.wait_until(deadline));
     assert_eq!(timer.now(), deadline);

@@ -161,10 +161,10 @@ publish = false
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
 esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
 static_cell = "2.1.1"
-oer-espressif-staged-layout = { path = "firmware/platform/espressif/staged-layout" }
-oer-espressif-interrupt-table-esp-hal = { path = "crates/exec/esp-hal-irq" }
-oer-esp32s31-platform-layout = { path = "firmware/platform/esp32s31/layout" }
-oer-esp32s31-soc-esp-hal = { path = "crates/adapters/esp-hal/soc", features = ["esp32s31"] }
+oer-firmware-platform-espressif-staged-layout = { path = "firmware/platform/espressif/staged-layout" }
+oer-exec-esp-hal-irq = { path = "crates/exec/esp-hal-irq" }
+oer-firmware-platform-esp32s31-layout = { path = "firmware/platform/esp32s31/layout" }
+oer-adapters-esp-hal-soc = { path = "crates/adapters/esp-hal/soc", features = ["esp32s31"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

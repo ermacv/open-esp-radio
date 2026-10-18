@@ -8,7 +8,7 @@
 //! [`adopt_psram_mapping`], inside the staged runtime's `adopt`, which the
 //! image calls itself: the board does not link the runtime.
 
-use oer_esp32s31_platform_layout::LAYOUT;
+use oer_firmware_platform_esp32s31_layout::LAYOUT;
 
 use esp_hal::{
     peripherals::PSRAM,
@@ -44,7 +44,7 @@ pub fn initialize_psram(peripheral: PSRAM<'static>) -> Psram {
 ///
 /// ```ignore
 /// unsafe {
-///     oer_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+///     oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
 ///         board::adopt_psram_mapping(peripherals.PSRAM)
 ///     })
 /// }

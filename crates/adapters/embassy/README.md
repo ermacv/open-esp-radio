@@ -7,7 +7,7 @@ holds no Bluetooth runtime.
 | Location | Responsibility |
 | --- | --- |
 | `net/` | Owned-packet boundary between the Embassy/Xarxa network stack and the radio |
-| `time/` | `EmbassyClock`, the `oer_time` clock over Embassy time |
+| `time/` | `EmbassyClock`, the `oer_base_time` clock over Embassy time |
 
 An adapter can retain state required by its external contract.
 
@@ -15,7 +15,7 @@ An adapter can retain state required by its external contract.
 executor wake-up and timer-queue ABI (`src/{executor,time_driver}.rs`);
 applications supply interrupt and timer capabilities. It has no radio policy
 or PHY initialization. Image time is [`time`](time/)'s `EmbassyClock`, which
-chip PHY and the runtimes take as an `oer_time::Timer`; chip PHY remains
+chip PHY and the runtimes take as an `oer_base_time::Timer`; chip PHY remains
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles

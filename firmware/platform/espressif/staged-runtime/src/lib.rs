@@ -16,11 +16,10 @@ pub mod panic;
 pub mod stacks;
 
 #[doc(hidden)]
-pub use oer_interrupt_table as __interrupt_table;
+pub use oer_exec_interrupt_table as __interrupt_table;
 
 /// The image's interrupt table as [`interrupt_table!`] declares it.
-pub type InterruptTable =
-    oer_interrupt_table::Table<oer_espressif_interrupt_table_esp_hal::EspHalMatrix>;
+pub type InterruptTable = oer_exec_interrupt_table::Table<oer_exec_esp_hal_irq::EspHalMatrix>;
 
 /// Adopt the bootstrap's PSRAM mapping with `adopt_mapping` and install the
 /// stage-two interrupt context: the image's interrupt table, esp-hal's
@@ -40,7 +39,7 @@ pub unsafe fn adopt<T>(
     interrupt_table: &'static InterruptTable,
     adopt_mapping: impl FnOnce() -> T,
 ) -> T {
-    oer_espressif_interrupt_table_esp_hal::adopt(interrupt_table);
+    oer_exec_esp_hal_irq::adopt(interrupt_table);
     let mapping = adopt_mapping();
     // SAFETY: the caller keeps interrupts disabled on the only running hart,
     // and no driver relies on the bootloader's interrupt mappings yet.
@@ -73,7 +72,7 @@ pub unsafe fn adopt<T>(
 /// interrupt table ([`interrupts`]).
 pub unsafe fn enable_interrupts_after_handoff() {
     stacks::verify_current_hart_vectors();
-    oer_espressif_interrupt_table_esp_hal::verify_current_hart();
+    oer_exec_esp_hal_irq::verify_current_hart();
     // SAFETY: the caller guarantees that every handler this hart can dispatch
     // is bound; setting MIE touches no memory and leaves the stack unchanged.
     unsafe { core::arch::asm!("csrsi mstatus, 8", options(nomem, nostack)) };

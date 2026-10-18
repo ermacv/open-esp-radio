@@ -35,7 +35,9 @@ use crate::types::{
     Ieee802154RxAbortReasonObservation, Ieee802154TxAbortReason,
     Ieee802154TxAbortReasonObservation,
 };
-use oer_ieee802154::{FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending};
+use oer_ieee802154_mac::{
+    FrameAddress, FrameType, FrameVersion, PendingTable, PhrFrame, ack_pending,
+};
 
 mod buffers;
 mod statistics;

@@ -11,12 +11,12 @@ use core::{
     task::{Context, Poll},
 };
 
-oer_memory::zeroed_static! {
+oer_base_memory::zeroed_static! {
     /// Channel zero's waker. `AtomicWaker` has no guaranteed zero
     /// representation, so the zeroed cell holds it uninitialized until the
     /// first poll writes it; the interrupt, enabled only after that poll
     /// registered a waker, reads it without waiting.
-    static CHANNEL0_WAKER: oer_memory::zeroed::ZeroedOnce<AtomicWaker> =
+    static CHANNEL0_WAKER: oer_base_memory::zeroed::ZeroedOnce<AtomicWaker> =
         zeroed in ".flash.critical.bss.axi_gdma_mem2mem";
 }
 

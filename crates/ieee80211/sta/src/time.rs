@@ -1,6 +1,6 @@
 //! Deadlines of the station's state machines on the image's monotonic time.
 
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 /// The earlier of two optional deadlines.
 pub const fn earliest(left: Option<Instant>, right: Option<Instant>) -> Option<Instant> {

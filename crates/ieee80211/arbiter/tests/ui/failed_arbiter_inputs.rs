@@ -3,7 +3,7 @@ use oer_ieee80211_arbiter::{
     Arbiter, ArbiterEnd, ChannelRequest, FailedArbiter, LeaseId, LeasePlace, PendingRetune, UpstreamFact,
 };
 use oer_ieee80211_lower_mac::Ieee80211Capabilities;
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub fn start<'id, K: Ieee80211Capabilities>(mut arbiter: Arbiter<'id, K>) {
     let mut failed = arbiter.finish(ArbiterEnd::PortFailed);

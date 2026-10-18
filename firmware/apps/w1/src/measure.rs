@@ -17,20 +17,20 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
+use oer_adapters_esp_hal_radio::{ClockBackend, EspHal};
+use oer_base_memory::AffineSpscSender;
+use oer_base_time::{Clock, Duration, Timer};
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
-use oer_esp32s31_radio_esp_hal::{ClockBackend, EspHal};
 use oer_esp32s31_radio_system::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
 };
-use oer_espressif_executor_embassy::{
+use oer_exec_executor::{
     poll_timing::{CycleHistogram, CycleSource, Mcycle},
     timer_observation::{Report, Window},
 };
-use oer_memory::AffineSpscSender;
-use oer_time::{Clock, Duration, Timer};
 
-use oer_time_embassy::EmbassyClock;
+use oer_adapters_embassy_time::EmbassyClock;
 
 /// The phases of one run, in order.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -389,7 +389,7 @@ impl<B: PhyDomain> PhyDomain for TickStamped<B> {
         self.0.close_rf(last).await
     }
 
-    fn tracking_deadline(&self) -> Option<oer_time::Instant> {
+    fn tracking_deadline(&self) -> Option<oer_base_time::Instant> {
         self.0.tracking_deadline()
     }
 
@@ -475,7 +475,7 @@ pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
 }
 
 /// The application's timer stress: a timer every 113 µs until `deadline`.
-pub async fn p1_stress(deadline: oer_time::Instant) {
+pub async fn p1_stress(deadline: oer_base_time::Instant) {
     while EmbassyClock.now() < deadline {
         wait_until(
             P1_COMPARATOR,
@@ -497,7 +497,7 @@ static WOKE_EARLY: [[AtomicU32; RECORDED_PHASES]; 2] =
 /// Wait until `deadline` on the executor of `comparator`, which is the
 /// caller's; count the wait, and count it early when it returned before
 /// the deadline.
-pub async fn wait_until(comparator: u8, deadline: oer_time::Instant) {
+pub async fn wait_until(comparator: u8, deadline: oer_base_time::Instant) {
     EmbassyClock.wait_until(deadline).await;
     let early = EmbassyClock.now() < deadline;
     let phase = phase();

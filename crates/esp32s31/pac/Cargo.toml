@@ -14,7 +14,7 @@ test-support = ["oer-espressif-ieee802154-pac/test-support"]
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false }
 oer-espressif-ieee802154-pac = { path = "../../espressif/ieee802154-pac" }
-oer-memory = { path = "../../base/memory" }
+oer-base-memory = { path = "../../base/memory" }
 oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
 oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 vcell = "0.1.3"

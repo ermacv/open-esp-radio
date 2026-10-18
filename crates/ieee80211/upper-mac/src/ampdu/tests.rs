@@ -1,8 +1,8 @@
 use super::*;
 
 const POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::RadioDuration::from_micros(10_000),
-    aged_margin: oer_time::RadioDuration::from_micros(1_000),
+    lifetime: oer_base_time::RadioDuration::from_micros(10_000),
+    aged_margin: oer_base_time::RadioDuration::from_micros(1_000),
     retry_limit: 3,
     retain_single_mpdu: false,
 };
@@ -293,7 +293,7 @@ fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
             seq(0),
             1,
             AmpduRetryPolicy {
-                lifetime: oer_time::RadioDuration::from_micros(0),
+                lifetime: oer_base_time::RadioDuration::from_micros(0),
                 ..POLICY
             },
             oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(0)
@@ -370,7 +370,7 @@ fn compaction_respects_empty_arrays_and_the_last_mask_bit() {
 
 #[test]
 fn aging_threshold_is_exact_at_radio_epoch_boundaries() {
-    use oer_time::RadioDuration;
+    use oer_base_time::RadioDuration;
     let policy = AmpduRetryPolicy {
         lifetime: RadioDuration::from_micros(10),
         aged_margin: RadioDuration::from_micros(3),

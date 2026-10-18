@@ -19,7 +19,7 @@ use esp_hal::{
     peripherals::Interrupt,
     system::Cpu,
 };
-use oer_interrupt_table::Entry;
+use oer_exec_interrupt_table::Entry;
 
 use crate::executor::{SameLevel, software_interrupt, software_interrupt_source};
 
@@ -42,7 +42,7 @@ impl<const SWI: u8> Doorbell<SWI> {
         interrupt: SoftwareInterrupt<'static, SWI>,
         bell: Bell,
         level: SameLevel<Radio, Bell>,
-    ) -> Result<Self, oer_espressif_interrupt_table_esp_hal::Error>
+    ) -> Result<Self, oer_exec_esp_hal_irq::Error>
     where
         Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
         Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
@@ -55,7 +55,7 @@ impl<const SWI: u8> Doorbell<SWI> {
         };
         let _ = level;
         interrupt.reset();
-        oer_espressif_interrupt_table_esp_hal::enable(&bell)?;
+        oer_exec_esp_hal_irq::enable(&bell)?;
         Ok(Self { interrupt })
     }
 

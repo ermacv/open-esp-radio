@@ -48,8 +48,12 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
         .prepare_ring(&mut hardware, BASE, layout(storage))
         .unwrap();
     let mut rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_prepared(prepared);
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
+    block_on(rx.start_with_storage(
+        &oer_base_time_virtual::SkipClock::new(),
+        &mut hardware,
+        storage,
+    ))
+    .unwrap();
 
     // The walker reached the accepted terminal and stopped at NEXT=0. The
     // descriptor writeback can become visible after the RX-success edge which
@@ -76,8 +80,12 @@ fn owner_round_trips_a_live_ring_between_phases() {
     let mut hardware = RxWalkerModel::default();
     let mut rx =
         ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
+    block_on(rx.start_with_storage(
+        &oer_base_time_virtual::SkipClock::new(),
+        &mut hardware,
+        storage,
+    ))
+    .unwrap();
     assert_eq!(rx.phase(), RxFrontierPhase::Live);
 
     let mut moved = rx.take().unwrap();
@@ -96,7 +104,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     let rx =
         ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
     let live = block_on(rx.try_into_live_with_storage(
-        &oer_time_virtual::SkipClock::new(),
+        &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
         storage,
     ))
@@ -109,7 +117,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     };
     let mut already_live = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted);
     block_on(already_live.start_with_storage(
-        &oer_time_virtual::SkipClock::new(),
+        &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
         storage,
     ))
@@ -125,7 +133,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     let disable_count = hardware.operation_count(RxWalkerOperation::Stop);
     let reload_count = hardware.operation_count(RxWalkerOperation::RequestReload);
     let live = block_on(already_live.try_into_live_with_storage(
-        &oer_time_virtual::SkipClock::new(),
+        &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
         storage,
     ))
@@ -151,7 +159,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     let mut vacant = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted);
     let retained = vacant.take().expect("test retains the exact halted owner");
     let failure = block_on(vacant.try_into_live_with_storage(
-        &oer_time_virtual::SkipClock::new(),
+        &oer_base_time_virtual::SkipClock::new(),
         &mut hardware,
         storage,
     ))
@@ -179,14 +187,14 @@ fn the_walker_starts_only_after_its_settle_on_the_caller_timer() {
         pin::pin,
         task::{Context, Poll, Waker},
     };
-    use oer_time::{Duration, Instant};
+    use oer_base_time::{Duration, Instant};
 
     let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = RxWalkerModel::default();
     let mut rx =
         ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
-    let clock: oer_time_virtual::VirtualClock =
-        oer_time_virtual::VirtualClock::starting_at(Instant::from_micros(100));
+    let clock: oer_base_time_virtual::VirtualClock =
+        oer_base_time_virtual::VirtualClock::starting_at(Instant::from_micros(100));
     let mut context = Context::from_waker(Waker::noop());
     {
         let mut start = pin!(rx.start_with_storage(&clock, &mut hardware, storage));

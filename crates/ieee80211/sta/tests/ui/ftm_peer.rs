@@ -1,7 +1,7 @@
 #![no_std]
 use oer_ieee80211_mac::address::IndividualAddress;
 use oer_ieee80211_sta::ftm::{FtmRefusal, FtmRequester, FtmSession};
-use oer_time::Instant;
+use oer_base_time::Instant;
 
 pub fn start<const N: usize>(
     requester: FtmRequester<N>,

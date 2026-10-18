@@ -45,7 +45,7 @@ pub struct WifiRuntimeTransitionReport {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211::runtime::WifiStopped;
+/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
 /// use oer_ieee80211_mac::channel::WifiChannel;
 /// fn channel(stopped: &WifiStopped<()>) -> WifiChannel {
 ///     stopped.current_channel()
@@ -60,7 +60,7 @@ pub struct WifiRuntimeTransitionReport {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211::runtime::WifiStopped;
+/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
 /// use oer_esp32s31_radio_client::{Member, Tracked, wifi::Wifi};
 /// fn membership(stopped: &WifiStopped<()>) -> &Member<Wifi, Tracked> {
 ///     &stopped.member
@@ -77,7 +77,7 @@ pub struct WifiRuntimeTransitionReport {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211::runtime::WifiStopped;
+/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
 /// use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 /// async fn leave(stopped: WifiStopped<()>, cell: MembershipCell<Wifi>) {
 ///     let _ = stopped.release(cell).await;

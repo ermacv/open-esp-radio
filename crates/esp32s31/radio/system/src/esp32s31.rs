@@ -85,7 +85,7 @@ pub struct Esp32s31Radio<C, T, O> {
 impl<C, T, O> Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     O: PhyTargetObserver + Clone,
 {
     /// The backend over the split radio domain and Wi-Fi's coexistence
@@ -114,7 +114,7 @@ where
         }
     }
 
-    fn micros_since(&self, start: oer_time::Instant) -> u64 {
+    fn micros_since(&self, start: oer_base_time::Instant) -> u64 {
         self.timer
             .now()
             .saturating_duration_since(start)
@@ -189,7 +189,7 @@ where
 impl<C, T, O> PhyDomain for Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     O: PhyTargetObserver + Clone,
 {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
@@ -250,14 +250,14 @@ where
         }
     }
 
-    fn tracking_deadline(&self) -> Option<oer_time::Instant> {
+    fn tracking_deadline(&self) -> Option<oer_base_time::Instant> {
         let micros = self
             .radio
             .attachment()
             .client_snapshot()?
             .next_tracking_deadline_micros()
             .ok()??;
-        Some(oer_time::Instant::from_micros(micros))
+        Some(oer_base_time::Instant::from_micros(micros))
     }
 
     async fn track_tick(&mut self) -> Result<(), Fault> {
@@ -278,7 +278,7 @@ where
 impl<C, T, O> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O>
 where
     C: PlatformClockProvider,
-    T: oer_time::Timer,
+    T: oer_base_time::Timer,
     O: PhyTargetObserver + Clone,
 {
     async fn enter(

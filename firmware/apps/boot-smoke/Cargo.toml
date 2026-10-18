@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-boot-smoke"
+name = "oer-firmware-apps-boot-smoke"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ build = "build.rs"
 
 [dependencies]
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
-oer-esp32s31-platform-board = { path = "../../platform/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-firmware-platform-esp32s31-board = { path = "../../platform/esp32s31/board" }
+oer-firmware-platform-espressif-staged-runtime = { path = "../../platform/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
 
 [build-dependencies]
-oer-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+oer-firmware-platform-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

@@ -34,7 +34,7 @@ const BUSY: u8 = 3;
 ///
 /// ```compile_fail,E0277
 /// extern crate std;
-/// use oer_memory::HandlerCell;
+/// use oer_base_memory::HandlerCell;
 /// // `Rc` cannot leave the context that made it.
 /// static CELL: HandlerCell<std::rc::Rc<()>> = HandlerCell::new();
 /// ```

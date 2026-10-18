@@ -35,7 +35,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn take_tx_block_ack_offer(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<Option<AddbaRequest>, ApServiceError> {
         if self.link_protection() == LinkProtection::Open {
             return Ok(None);
@@ -65,7 +65,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn tx_block_ack_offer_failed(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_base_time::Instant,
     ) -> Result<(), ApServiceError> {
         self.checked_peer_mut(peer)?
             .tx_block_ack
@@ -119,7 +119,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// End at most one negotiation whose response is overdue at `now`,
     /// queueing its next attempt after the retry interval while attempts
     /// remain; its peer.
-    pub fn expire_tx_block_ack(&mut self, now: oer_time::Instant) -> Option<[u8; 6]> {
+    pub fn expire_tx_block_ack(&mut self, now: oer_base_time::Instant) -> Option<[u8; 6]> {
         self.storage_mut()
             .peers
             .iter_mut()
@@ -128,7 +128,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     /// The earliest deadline of a negotiation's response.
-    pub fn next_tx_block_ack_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_tx_block_ack_deadline(&self) -> Option<oer_base_time::Instant> {
         self.storage()
             .peers
             .iter()

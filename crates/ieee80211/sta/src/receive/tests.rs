@@ -1,9 +1,9 @@
 use super::{Management, Received, classify, observe_scan};
+use oer_base_time::Instant;
 use oer_ieee80211_lower_mac::{Channel, ChannelWidth, RxEvidence, RxMeta};
 use oer_ieee80211_mac::fuzz::{FULL, QUICK, inputs};
 use oer_ieee80211_mac::receive::RxDropReason;
 use oer_ieee80211_mac::scan::{ScanObservation, ScanTable};
-use oer_time::Instant;
 use std::vec::Vec;
 
 const BSSID: [u8; 6] = [2, 2, 3, 4, 5, 6];

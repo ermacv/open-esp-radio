@@ -126,13 +126,13 @@ use oer_ieee80211_lower_mac::association::{
 use oer_ieee80211_mac::ccmp::Ccmp128Key;
 use oer_ieee80211_mac::ccmp::GroupKeyId;
 
+use oer_base_time::RadioInstant;
 use oer_ieee80211_mac::phy::{HeMcs, HtMcs, PhyRate};
 use oer_radio_port::{
     Abandon, Call, ClockError, Detach, Detached, DriverExit, DriverLoan, EnableResult, EventEnd,
     InstallParts, Installed, PoisonState, PortBackend, PortPhase, Quarantine, Retire, Retired,
 };
 use oer_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
-use oer_time::RadioInstant;
 
 use oer_ieee80211_lower_mac::{
     AccessPoint, AccessPointPhase, BandSet, BssColor, Channel, CheckedAggregate, CheckedPoolSource,
@@ -1744,7 +1744,7 @@ impl ModelAir {
     }
     /// Set model time from the test's monotonic virtual clock. A held result
     /// becomes a hardware timeout at the backend's publication bound.
-    pub fn set_time(&self, now: oer_time::Instant) {
+    pub fn set_time(&self, now: oer_base_time::Instant) {
         self.now_micros.set(now.as_micros());
         self.wake_driver();
     }
@@ -2603,8 +2603,8 @@ pub const MODEL_TX_QUEUE_DEPTH: core::num::NonZeroU8 = match core::num::NonZeroU
 impl<C: Ieee80211Capabilities, X: ModelContext> LowerMacBackend for ModelBackend<C, X> {
     type Caps = C;
     const TX_QUEUE_DEPTH: core::num::NonZeroU8 = MODEL_TX_QUEUE_DEPTH;
-    const PUBLICATION_BOUND: oer_time::Duration = MODEL_PUBLICATION_BOUND;
-    const GROUP_COMMAND_BOUND: oer_time::Duration = MODEL_GROUP_COMMAND_BOUND;
+    const PUBLICATION_BOUND: oer_base_time::Duration = MODEL_PUBLICATION_BOUND;
+    const GROUP_COMMAND_BOUND: oer_base_time::Duration = MODEL_GROUP_COMMAND_BOUND;
 }
 
 /// The driver retains the unique open place throughout the closing barrier.
@@ -3054,9 +3054,11 @@ impl<'id, X: ModelContext> Driver<'id, X> {
 
 /// Synthetic model latency, in model time; hardware backends declare their
 /// own PPDU + response/timeout bound. It does not scale with retry-plan length.
-pub const MODEL_PUBLICATION_BOUND: oer_time::Duration = oer_time::Duration::from_millis(1);
+pub const MODEL_PUBLICATION_BOUND: oer_base_time::Duration =
+    oer_base_time::Duration::from_millis(1);
 /// Synthetic admission-to-GTK-terminal bound, driven by `ModelAir::set_time`.
-pub const MODEL_GROUP_COMMAND_BOUND: oer_time::Duration = oer_time::Duration::from_millis(2);
+pub const MODEL_GROUP_COMMAND_BOUND: oer_base_time::Duration =
+    oer_base_time::Duration::from_millis(2);
 
 struct TxQueue<'id, X: ModelContext> {
     waiting: VecDeque<Work<'id, X>>,

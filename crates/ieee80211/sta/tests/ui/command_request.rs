@@ -4,7 +4,7 @@ use oer_ieee80211_sta::machine::{StaRequest, StaTokens, Station};
 
 pub fn submit<T: StaTokens, K: Ieee80211Capabilities>(
     station: &mut Station<'_, T, K>,
-    now: oer_time::Instant,
+    now: oer_base_time::Instant,
     request: StaRequest,
 ) {
     let result = station.command(now, request);

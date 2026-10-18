@@ -6,7 +6,7 @@ use esp_hal::{
     peripherals::Interrupt,
     system::Cpu,
 };
-use oer_interrupt_table::Entry;
+use oer_exec_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = 4;
@@ -26,7 +26,7 @@ struct WorkPending([AtomicBool; SOFTWARE_INTERRUPT_COUNT]);
 // `bool` (its documented guarantee), so zero bytes are `false` flags.
 unsafe impl bytemuck::Zeroable for WorkPending {}
 
-oer_memory::zeroed_static! {
+oer_base_memory::zeroed_static! {
     /// Placement: the board linker owns this exported wake-state section.
     #[used]
     static EMBASSY_WORK_PENDING: WorkPending =
@@ -197,7 +197,7 @@ impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
 /// #     ($token:ident = $source:ident, $level:ident, $core:ident) => {
 /// #         struct $token;
 /// #         // SAFETY: a doctest's stand-in for a table token.
-/// #         unsafe impl oer_interrupt_table::Entry for $token {
+/// #         unsafe impl oer_exec_interrupt_table::Entry for $token {
 /// #             type Source = Interrupt;
 /// #             type Level = Priority;
 /// #             type Core = Cpu;
@@ -209,7 +209,7 @@ impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
 /// # }
 /// # token!(MacToken = MODEM_WIFI_MAC, Priority3, ProCpu);
 /// # token!(DoorbellToken = FROM_CPU_INTR3, Priority3, ProCpu);
-/// use oer_espressif_executor_embassy::SameLevel;
+/// use oer_exec_executor::SameLevel;
 /// // The MAC interrupt and the doorbell, both at Priority3 on ProCpu.
 /// const BELL: SameLevel<MacToken, DoorbellToken> = SameLevel::new();
 /// ```
@@ -285,7 +285,7 @@ impl<const SWI: u8> Executor<SWI> {
         };
         let current_core = Cpu::current() as usize;
         software_interrupt(SWI, false);
-        if let Err(error) = oer_espressif_interrupt_table_esp_hal::enable(&wake) {
+        if let Err(error) = oer_exec_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         EMBASSY_EXECUTOR_CORE[SWI as usize]
@@ -371,7 +371,7 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         EMBASSY_EXECUTORS_MODE[SWI as usize].store(true, Ordering::Release);
         EMBASSY_EXECUTORS[SWI as usize].store(inner.id(), Ordering::Release);
         software_interrupt(SWI, false);
-        if let Err(error) = oer_espressif_interrupt_table_esp_hal::enable(&wake) {
+        if let Err(error) = oer_exec_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
         inner.spawner().make_send()

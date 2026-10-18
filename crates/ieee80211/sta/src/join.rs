@@ -17,4 +17,4 @@ pub(crate) mod test_support;
 /// ieee80211_sta_new_state`, ordinary non-mesh auth branch `.L350` and
 /// association branch `.L356`, both arm their software timer with immediate
 /// `0x3e8`.
-pub const STA_RESPONSE_TIMEOUT: oer_time::Duration = oer_time::Duration::from_secs(1);
+pub const STA_RESPONSE_TIMEOUT: oer_base_time::Duration = oer_base_time::Duration::from_secs(1);

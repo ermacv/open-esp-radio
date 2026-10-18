@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::{CustodyDomain, Drained, IndexedCustody, Quarantine};
+use oer_base_memory::{CustodyDomain, Drained, IndexedCustody, Quarantine};
 
 // The ordinary end needs the binding's own stop proof; no other value can
 // stand in for "hardware stopped".

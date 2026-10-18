@@ -89,7 +89,7 @@ impl Work for DuringPublication {
         let before_result = held_snapshot(phase);
         let mut just_before_timeout = None;
         if matches!(self.0, Barrier::GateTimeout) {
-            air.set_time(oer_time::Instant::from_micros(
+            air.set_time(oer_base_time::Instant::from_micros(
                 MODEL_PUBLICATION_BOUND.as_micros() - 1,
             ));
             for _ in 0..3 {
@@ -97,7 +97,7 @@ impl Work for DuringPublication {
             }
             assert!(phase.held.events.is_empty());
             just_before_timeout = Some(held_snapshot(phase));
-            air.set_time(oer_time::Instant::from_micros(
+            air.set_time(oer_base_time::Instant::from_micros(
                 MODEL_PUBLICATION_BOUND.as_micros(),
             ));
         } else {

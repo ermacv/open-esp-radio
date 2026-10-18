@@ -21,7 +21,7 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Hardware-qualified open-STA compatibility window for the first EAPOL-Key

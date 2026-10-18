@@ -14,7 +14,7 @@
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 use embassy_sync::blocking_mutex::raw::RawMutex;
-use oer_memory::{ExternalRxAdoption, ExternalRxHandoffPool};
+use oer_base_memory::{ExternalRxAdoption, ExternalRxHandoffPool};
 use xarxa_driver::config::{PACKET_BUF_ALIGN, PACKET_BUF_SIZE};
 use xarxa_driver::{ExternalPacketOrigin, PacketBuf};
 

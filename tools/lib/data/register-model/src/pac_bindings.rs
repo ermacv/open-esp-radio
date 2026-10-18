@@ -2,7 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oer_register_bindings::{BindingIndex, FieldBinding, RegisterBinding, SCHEMA, ScopeBinding};
+use oer_tool_data_register_bindings::{
+    BindingIndex, FieldBinding, RegisterBinding, SCHEMA, ScopeBinding,
+};
 use svd_rs::{Access, MaybeArray, RegisterCluster, RegisterProperties};
 
 use crate::{Error, Result};
@@ -509,7 +511,7 @@ mod tests {
     #[test]
     fn a_publication_without_a_pac_names_no_crate() {
         let output = generate_binding_index(SIMPLE_SVD, None).unwrap();
-        let index = oer_register_bindings::BindingIndex::parse(&output).unwrap();
+        let index = oer_tool_data_register_bindings::BindingIndex::parse(&output).unwrap();
         assert_eq!(index.crate_name, None);
         assert_eq!(index.registers.len(), 1);
     }

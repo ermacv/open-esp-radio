@@ -7,8 +7,8 @@
 //! the ports its drivers wait on. This crate owns those drivers: the
 //! four-way-handshake runner with its absolute response deadlines, the
 //! key-install runner with its rollback ordering, and the asynchronous
-//! key-data unwrap around the supplicant. Time enters through the `oer-time`
-//! [`Timer`](oer_time::Timer) port.
+//! key-data unwrap around the supplicant. Time enters through the `oer-base-time`
+//! [`Timer`](oer_base_time::Timer) port.
 
 #[cfg(test)]
 extern crate std;

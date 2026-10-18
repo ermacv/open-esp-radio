@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oer_register_model::SharedPeripheral;
+use oer_tool_data_register_model::SharedPeripheral;
 use quote::{ToTokens, format_ident, quote};
 
 use crate::Result;

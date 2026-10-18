@@ -34,7 +34,7 @@ use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::kdf::kdf_sha256;
-use oer_time::{Duration, Instant};
+use oer_base_time::{Duration, Instant};
 
 /// The only SAE group the station offers: NIST P-256.
 pub const SAE_GROUP_P256: u16 = 19;

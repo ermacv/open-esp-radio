@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::{PinnedDmaTxNetworkLease, PinnedDmaTxPool};
+use oer_base_memory::{PinnedDmaTxNetworkLease, PinnedDmaTxPool};
 
 type Pool = PinnedDmaTxPool<32, 8, 4, 1>;
 

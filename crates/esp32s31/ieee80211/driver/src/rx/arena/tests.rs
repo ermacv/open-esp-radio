@@ -7,7 +7,7 @@ use oer_esp32s31_ieee80211_dma::{
 };
 use oer_esp32s31_ieee80211_mac::irq::model::{MacInterruptModel, PowerInterruptModel};
 
-use oer_time_virtual::VirtualClock;
+use oer_base_time_virtual::VirtualClock;
 
 use super::*;
 use crate::rx::{
@@ -68,8 +68,8 @@ fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
     assert!(parts.control.stop_requested());
 
     // The line lands in the arena's own slot.
-    let cell: &'static oer_memory::HandlerCell<WifiIrqLine<HostEpoch>> =
-        Box::leak(Box::new(oer_memory::HandlerCell::new()));
+    let cell: &'static oer_base_memory::HandlerCell<WifiIrqLine<HostEpoch>> =
+        Box::leak(Box::new(oer_base_memory::HandlerCell::new()));
     let epoch = ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new());
     let Ok(installed) = parts.line.install(epoch, cell) else {
         panic!("an empty cell takes the line");

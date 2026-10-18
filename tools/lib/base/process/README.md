@@ -1,6 +1,6 @@
 # Host process ownership
 
-`oer-process` supplies the process lifecycle shared by repository commands and
+`oer-tool-base-process` supplies the process lifecycle shared by repository commands and
 other host tools. It owns direct commands and their ordinary Unix process-group
 descendants. Callers own workload policy, arguments, evidence and resource limits.
 
@@ -110,5 +110,5 @@ own lifecycle owner. Integration tests use real processes to exercise signals,
 pipe capacity, deadlines, daemon cleanup and inaccessible lifetime holders.
 
 ```console
-cargo test -p oer-process
+cargo test -p oer-tool-base-process
 ```

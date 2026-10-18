@@ -1,6 +1,6 @@
 # Espressif staged-boot layout
 
-`oer-espressif-staged-layout` is the chip-neutral contract of the staged
+`oer-firmware-platform-espressif-staged-layout` is the chip-neutral contract of the staged
 boot: the `Layout` type each chip's platform (`platform/<chip>/layout`)
 states its address map with, the stage-two image header and checksum, the
 input sections the boot zeroes, and the linker binding. It is a `no_std`

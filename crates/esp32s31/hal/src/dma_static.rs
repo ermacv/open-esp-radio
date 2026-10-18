@@ -8,7 +8,7 @@
 //! A placed static is claimed once as a [`Placed`]: the proof a storage needs
 //! before it publishes its own addresses to DMA hardware.
 
-use oer_memory::{
+use oer_base_memory::{
     DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
     PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
     StableDmaRegion, TaggedStableDmaBacking,

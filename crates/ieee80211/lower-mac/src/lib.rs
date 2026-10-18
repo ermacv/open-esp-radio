@@ -86,17 +86,18 @@ pub enum Ieee80211Radio {}
 pub enum ConnectionEpochKind {}
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock.
-pub type Ieee80211Instant = oer_time::RadioInstant<Ieee80211Radio>;
+pub type Ieee80211Instant = oer_base_time::RadioInstant<Ieee80211Radio>;
 
 /// A span of the port's radio clock.
-pub type Ieee80211Duration = oer_time::RadioDuration<Ieee80211Radio>;
+pub type Ieee80211Duration = oer_base_time::RadioDuration<Ieee80211Radio>;
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock with the generation
 /// of its relation to the monotonic clock.
 pub type Ieee80211Stamp = oer_radio_port::RadioStamp<Ieee80211Radio>;
 
 /// A generation of the port's radio-clock relation to monotonic time.
-pub type Ieee80211ClockGeneration = oer_radio_port::Generation<Ieee80211Instant, oer_time::Instant>;
+pub type Ieee80211ClockGeneration =
+    oer_radio_port::Generation<Ieee80211Instant, oer_base_time::Instant>;
 
 /// A paired reading of the IEEE 802.11 lower-MAC port's clock and the
 /// monotonic clock.

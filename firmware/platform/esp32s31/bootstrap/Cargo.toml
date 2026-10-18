@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-platform-bootstrap"
+name = "oer-firmware-platform-esp32s31-bootstrap"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,16 +8,16 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
-oer-esp32s31-platform-layout.workspace = true
-oer-espressif-staged-bootstrap = { path = "../../espressif/staged-bootstrap", features = ["esp32s31"] }
+oer-firmware-platform-esp32s31-layout.workspace = true
+oer-firmware-platform-espressif-staged-bootstrap = { path = "../../espressif/staged-bootstrap", features = ["esp32s31"] }
 esp-bootloader-esp-idf = { workspace = true, features = ["embedded-storage", "esp32s31"] }
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
-oer-esp32s31-platform-board = { path = "../board" }
-oer-esp32s31-soc-esp-hal.workspace = true
+oer-firmware-platform-esp32s31-board = { path = "../board" }
+oer-adapters-esp-hal-soc.workspace = true
 static_cell.workspace = true
 
 [build-dependencies]
-oer-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+oer-firmware-platform-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

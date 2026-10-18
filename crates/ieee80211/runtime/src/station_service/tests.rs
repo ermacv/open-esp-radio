@@ -10,6 +10,8 @@ use core::task::{Poll, Waker};
 use oer_ieee80211_sta::machine::StaCommand;
 
 use embassy_futures::join::join;
+use oer_base_time::Duration;
+use oer_base_time_virtual::VirtualClock;
 use oer_espressif_ieee80211_policy::{
     rate_control::EspressifRateControl, rate_selection::EspressifRateSelection,
 };
@@ -26,8 +28,6 @@ use oer_ieee80211_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_sta::machine::{GroupCapacity, StaConfig, StaSecurity, StationResources};
 use oer_ieee80211_upper_mac::rate_control::RateControl;
 use oer_radio_port::{Ended, PortBody, run_port};
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -1694,7 +1694,7 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
 /// none lost.
 #[test]
 fn beside_an_access_point_msdus_survive_an_absence() {
-    use oer_time::Clock as _;
+    use oer_base_time::Clock as _;
     let mut config = config(StaSecurity::Open);
     config
         .0

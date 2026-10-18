@@ -1,10 +1,10 @@
+use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::{
     bluetooth::{ClockedOwner, TaskOwner},
     domain::{BtbbError, RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::{ProtocolPartitions, RadioHardware},
 };
-use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::concurrent::ConcurrentAcquire;
@@ -106,7 +106,7 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
 fn enter_client(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     client: oer_esp32s31_hal::domain::RadioClient,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }
@@ -115,7 +115,7 @@ fn enter_client(
 fn join_bluetooth_prepared(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     task: &TaskOwner,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_base_time::Clock,
 ) -> Result<(BluetoothPhyMembership, ConcurrentAcquire), BluetoothPhyClientError> {
     let ready = crate::concurrent::PhyReady::for_test(radio);
     join_bluetooth(ready, task, clock)

@@ -1,7 +1,7 @@
 //! Force a producer handoff between radio queue operations without timing races.
 
 use embassy_sync::blocking_mutex::raw::{NoopRawMutex, RawMutex};
-use oer_embassy_net_owned::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_adapters_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,

@@ -7,7 +7,7 @@ use crate::{tx_power::*, types::*};
 use std::{boxed::Box, vec, vec::Vec};
 
 use crate::pib::{AutoPendingMode, Ieee802154MultipanIndex, Ieee802154PibDefaults};
-use oer_ieee802154::FrameAddress;
+use oer_ieee802154_mac::FrameAddress;
 
 use super::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,

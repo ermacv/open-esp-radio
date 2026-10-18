@@ -8,10 +8,10 @@
 use core::fmt::Write as _;
 
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
-use oer_esp32s31_platform_board as board;
-use oer_espressif_staged_runtime::panic;
+use oer_firmware_platform_esp32s31_board as board;
+use oer_firmware_platform_espressif_staged_runtime::panic;
 
-oer_espressif_staged_runtime::interrupt_table! {}
+oer_firmware_platform_espressif_staged_runtime::interrupt_table! {}
 
 #[unsafe(no_mangle)]
 extern "C" fn runtime_main() -> ! {
@@ -22,7 +22,7 @@ extern "C" fn runtime_main() -> ! {
     // with interrupts disabled and the bootstrap's mapping intact, which
     // nothing has reset or remapped; this image never enables interrupts.
     let _psram = unsafe {
-        oer_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+        oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
             board::adopt_psram_mapping(peripherals.PSRAM)
         })
     };

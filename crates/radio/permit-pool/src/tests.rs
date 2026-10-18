@@ -14,6 +14,7 @@ use std::{
     task::Wake,
 };
 
+use oer_base_time::RadioInstant;
 use oer_radio_port::{
     Call, ClockError, Detached, Disabled, DriverExit, EnableResult, Ended, InstallParts, Installed,
     Owner, PhaseParts, PortBackend, PortBody, PortPhase, Retire, Retired, run_port,
@@ -21,7 +22,6 @@ use oer_radio_port::{
 use oer_radio_port::{
     EventsLost, Line, Mint, Permit, PermitPool, Poisoned, PortResult, Seat, conformance,
 };
-use oer_time::RadioInstant;
 
 use super::FifoPermitPool;
 

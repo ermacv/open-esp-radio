@@ -1,6 +1,8 @@
 //! Source-only publication from one validated reviewed model. No binary-analysis authority.
-use oer_register_contracts::ApplicabilityContext;
-use oer_register_model::{PacApiPack, RegisterEvidenceSet, RegisterLintPack, RegisterModel};
+use oer_tool_data_register_contracts::ApplicabilityContext;
+use oer_tool_data_register_model::{
+    PacApiPack, RegisterEvidenceSet, RegisterLintPack, RegisterModel,
+};
 use serde::Deserialize;
 use std::{
     collections::BTreeSet,
@@ -105,7 +107,7 @@ impl ChipSources {
 
     /// The owned MMIO ranges of the memory map, by name, as `start..end`.
     pub fn owned_mmio(&self) -> Result<Vec<(String, u64, u64)>> {
-        let memory = oer_register_model::memory::Memory::load(&self.memory)?;
+        let memory = oer_tool_data_register_model::memory::Memory::load(&self.memory)?;
         let ownership: Ownership = toml_edit::de::from_str(&fs::read_to_string(&self.ownership)?)?;
         ownership
             .owned_ranges
@@ -157,7 +159,7 @@ pub struct ChipPublication {
     model: RegisterModel,
     api: Option<PacApiPack>,
     /// The memory map, which supplies the RAM regions layouts name.
-    memory: oer_register_model::memory::Memory,
+    memory: oer_tool_data_register_model::memory::Memory,
     outputs: Outputs,
 }
 impl ChipPublication {
@@ -182,7 +184,7 @@ impl ChipPublication {
             return Err("publication chip differs from register model".into());
         }
         let paths = |items: &[PathBuf]| items.iter().map(|p| base.join(p)).collect::<Vec<_>>();
-        let review = oer_register_review::ReviewKnowledge::load_all(&paths(&m.reviewed))?
+        let review = oer_tool_data_register_review::ReviewKnowledge::load_all(&paths(&m.reviewed))?
             .select_for(&context)?;
         model.apply_review_knowledge(&review)?;
         if m.api.is_some() != m.outputs.pac.is_some() {
@@ -235,7 +237,7 @@ impl ChipPublication {
             )
             .into());
         }
-        let memory = oer_register_model::memory::Memory::load(&base.join(&m.memory))?;
+        let memory = oer_tool_data_register_model::memory::Memory::load(&base.join(&m.memory))?;
         let ownership: Ownership =
             toml_edit::de::from_str(&fs::read_to_string(base.join(&m.ownership))?)?;
         if ownership.schema != 1 || ownership.owned_ranges.is_empty() {
@@ -253,7 +255,7 @@ impl ChipPublication {
             {
                 return Err("unsupported PAC target or edition".into());
             }
-            oer_register_model::validate_pac_crate_name(&pac.crate_name)?;
+            oer_tool_data_register_model::validate_pac_crate_name(&pac.crate_name)?;
         }
         let mut input_paths: BTreeSet<_> = model.loaded_inputs().keys().cloned().collect();
         for p in m
@@ -298,7 +300,7 @@ impl ChipPublication {
     pub fn generate(&self, check: bool) -> Result<()> {
         let (svd, _) = self.model.render_svd()?;
         let pac = self.outputs.pac.as_ref();
-        let bindings = oer_register_model::generate_binding_index(
+        let bindings = oer_tool_data_register_model::generate_binding_index(
             &svd,
             pac.map(|pac| pac.crate_name.as_str()),
         )?;
@@ -308,7 +310,7 @@ impl ChipPublication {
             outputs.extend([(&pac.raw, raw), (&pac.api, api)]);
         }
         if let Some(linker) = &self.outputs.linker {
-            let fragment = oer_register_model::render_dma_linker_fragment(
+            let fragment = oer_tool_data_register_model::render_dma_linker_fragment(
                 &svd,
                 &self.memory,
                 &linker.address_low_field,
