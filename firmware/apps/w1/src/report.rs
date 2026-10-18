@@ -136,6 +136,139 @@ pub fn lag_fit(units: &[Lag]) -> Option<LagFit> {
     })
 }
 
+/// The stand beacons whose TSF and handoff the block lists.
+pub const TSF_PAIRS: usize = 64;
+
+/// One stand beacon: its TSF and its handoff, both µs, low 32 bits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TsfPair {
+    pub tsf: u32,
+    pub handoff: u32,
+}
+
+/// The first [`TSF_PAIRS`] beacons of the stand BSS the survey counted in
+/// the window (new TSF, no duplicate), with the stand's table index.
+pub struct TsfLog {
+    stand: Option<usize>,
+    pairs: heapless::Vec<TsfPair, TSF_PAIRS>,
+}
+
+impl TsfLog {
+    pub const fn new() -> Self {
+        Self {
+            stand: None,
+            pairs: heapless::Vec::new(),
+        }
+    }
+
+    /// The stand's beacons and duplicates before the survey takes a frame.
+    pub fn before(&self, survey: &Survey<BSS>) -> Option<(u32, u32)> {
+        let (_, tally) = survey.bss(self.stand?)?;
+        Some((tally.beacons, tally.duplicates))
+    }
+
+    /// After the survey took a frame handed off at `handoff`: a new stand
+    /// beacon (one more beacon, no more duplicates than `before`) is logged
+    /// with the TSF the survey's record now holds.
+    pub fn after(
+        &mut self,
+        survey: &Survey<BSS>,
+        stand: Bssid,
+        before: Option<(u32, u32)>,
+        handoff: oer_time::Instant,
+    ) {
+        if self.stand.is_none() {
+            self.stand = survey
+                .entries()
+                .position(|(record, _)| record.bssid == stand);
+        }
+        let Some((record, tally)) = self.stand.and_then(|index| survey.bss(index)) else {
+            return;
+        };
+        let (beacons, duplicates) = before.unwrap_or((0, 0));
+        if tally.beacons > beacons && tally.duplicates == duplicates {
+            let _full = self.pairs.push(TsfPair {
+                tsf: record.timestamp.as_micros() as u32,
+                handoff: handoff.as_micros() as u32,
+            });
+        }
+    }
+
+    pub fn pairs(&self) -> &[TsfPair] {
+        &self.pairs
+    }
+
+    /// The stand's survey index, once it was heard.
+    pub const fn stand(&self) -> Option<usize> {
+        self.stand
+    }
+}
+
+/// The handoff times of beacons against their TSF, the linear trend
+/// removed: least squares of handoff on TSF (integer arithmetic, both
+/// relative to the first pair, so a wrap is harmless), the residuals
+/// floored to µs and taken less the smallest one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TsfFit {
+    /// The lower median, the 90th percentile (rank ⌈0.9·n⌉) and the maximum
+    /// of residual − min residual.
+    pub median_us: u32,
+    pub p90_us: u32,
+    pub max_us: u32,
+    /// (slope − 1) · 10⁶, floored.
+    pub slope_ppm: i32,
+}
+
+/// The fit of `pairs`; `None` below two pairs or without a TSF spread.
+pub fn tsf_fit(pairs: &[TsfPair]) -> Option<TsfFit> {
+    let first = pairs.first()?;
+    let point = |pair: &TsfPair| {
+        (
+            i128::from(pair.tsf.wrapping_sub(first.tsf) as i32),
+            i128::from(pair.handoff.wrapping_sub(first.handoff) as i32),
+        )
+    };
+    let n = i128::try_from(pairs.len()).ok()?;
+    let (mut sx, mut sy, mut sxx, mut sxy) = (0_i128, 0_i128, 0_i128, 0_i128);
+    for (x, y) in pairs.iter().map(point) {
+        sx += x;
+        sy += y;
+        sxx += x * x;
+        sxy += x * y;
+    }
+    let dxx = n * sxx - sx * sx;
+    let dxy = n * sxy - sx * sy;
+    if n < 2 || dxx == 0 {
+        return None;
+    }
+    // residual = (n·dxx·y − (sy·dxx − dxy·sx) − n·dxy·x) / (n·dxx)
+    let denominator = n * dxx;
+    let intercept = sy * dxx - dxy * sx;
+    let mut residuals = heapless::Vec::<i128, TSF_PAIRS>::new();
+    for (x, y) in pairs.iter().map(point) {
+        let _full = residuals.push((n * dxx * y - intercept - n * dxy * x).div_euclid(denominator));
+    }
+    let floor = *residuals.iter().min()?;
+    let mut spread = heapless::Vec::<u32, TSF_PAIRS>::new();
+    for residual in &residuals {
+        let _full = spread.push(u32::try_from(residual - floor).unwrap_or(u32::MAX));
+    }
+    spread.sort_unstable();
+    let count = spread.len();
+    let p90_rank = (count * 9).div_ceil(10);
+    let slope_ppm = ((dxy - dxx) * 1_000_000).div_euclid(dxx);
+    Some(TsfFit {
+        median_us: *spread.get((count - 1) / 2)?,
+        p90_us: *spread.get(p90_rank.checked_sub(1)?)?,
+        max_us: *spread.last()?,
+        slope_ppm: i32::try_from(slope_ppm).unwrap_or(if slope_ppm < 0 {
+            i32::MIN
+        } else {
+            i32::MAX
+        }),
+    })
+}
+
 /// The executors by comparator: 0 is the radio executor's, 1 the
 /// application's.
 const COMPARATORS: [u8; 2] = [measure::P2_COMPARATOR, measure::P1_COMPARATOR];
@@ -167,6 +300,8 @@ pub struct Run<'a> {
     pub hold: Hold,
     /// The first window units' handoff lags.
     pub lags: &'a LagLog,
+    /// The first stand beacons' TSF and handoff.
+    pub tsf: &'a TsfLog,
     /// Frames the application's normalize admitted.
     pub admitted: u32,
     pub exit: WifiRxExit,
@@ -680,6 +815,26 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         OrDash(fit.map(|fit| fit.max_us)),
         fit.map_or(0, |fit| fit.next_arrival_matches),
     ))?;
+    for (index, pair) in run.tsf.pairs().iter().enumerate() {
+        block.line(format_args!(
+            "w1.tsf i={index} tsf={} handoff={}",
+            pair.tsf, pair.handoff
+        ))?;
+    }
+    let fit = tsf_fit(run.tsf.pairs());
+    block.line(format_args!(
+        "w1.tsffit n={} bss={} median_us={} p90_us={} max_us={} slope_ppm={}",
+        run.tsf.pairs().len(),
+        OrDash(
+            run.tsf
+                .stand()
+                .map(|index| u32::try_from(index).unwrap_or(u32::MAX))
+        ),
+        OrDash(fit.map(|fit| fit.median_us)),
+        OrDash(fit.map(|fit| fit.p90_us)),
+        OrDash(fit.map(|fit| fit.max_us)),
+        Signed(fit.map(|fit| fit.slope_ppm)),
+    ))?;
     let survey = run.survey.counters();
     block.line(format_args!(
         "w1.survey frames={} header_refusals={} data={} ignored_management={} table_full={} off_channel={}",
@@ -711,6 +866,18 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         }
     }
     Ok(())
+}
+
+/// A signed number, or `-`.
+struct Signed(Option<i32>);
+
+impl fmt::Display for Signed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(value) => write!(f, "{value}"),
+            None => f.write_str("-"),
+        }
+    }
 }
 
 /// `0x<hex>`, or `-`.

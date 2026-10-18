@@ -93,7 +93,11 @@ its holder when it refuses.
   are report-only: the host recomputes the fit (delay = lag − smallest lag;
   lower median, maximum, units handed off within `tolerance_us` after the
   next unit's stamp), prints it in the summary and treats an image fit it
-  does not reproduce as a disagreement.
+  does not reproduce as a disagreement. So are `w1.tsf` (at most 64 stand
+  beacons' TSF and handoff, `i=` in order) and `w1.tsffit`: the host
+  recomputes the least-squares fit of handoff on TSF (residual less the
+  smallest residual: lower median, p90, maximum; slope − 1 in ppm), checks
+  `bss=` against the stand's `w1.bss idx=` and `n=` against the pairs.
 - `monitor` opens the console without a reset: RTS is released before DTR.
 - `power-cycle` switches the board's hub port off and on with `uhubctl`, only
   when the stand file lists the port as switchable and not protected and the

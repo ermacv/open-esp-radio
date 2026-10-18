@@ -37,6 +37,8 @@ const MAX_TICKS: usize = 32;
 const MAX_BSS: usize = 64;
 /// The longest lag list the image prints.
 const MAX_LAGS: usize = 64;
+/// The longest TSF pair list the image prints.
+const MAX_TSF_PAIRS: usize = 64;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
@@ -220,6 +222,8 @@ enum Kind {
     Range {
         signed: bool,
     },
+    /// A decimal `i32`, or `-`.
+    SignedOrDash,
     /// A decimal number, or `<at_least>..<at_most>` when a histogram
     /// bucket holds the threshold.
     NumberOrRange,
@@ -544,6 +548,25 @@ const SPECS: &[Spec] = &[
         count: Count::Once,
     },
     Spec {
+        keyword: "w1.tsf",
+        keys: &[key("i", U64), key("tsf", U32), key("handoff", U32)],
+        open: false,
+        count: Count::AtMost(MAX_TSF_PAIRS),
+    },
+    Spec {
+        keyword: "w1.tsffit",
+        keys: &[
+            key("n", U64),
+            key("bss", U32_OR_DASH),
+            key("median_us", U32_OR_DASH),
+            key("p90_us", U32_OR_DASH),
+            key("max_us", U32_OR_DASH),
+            key("slope_ppm", Kind::SignedOrDash),
+        ],
+        open: false,
+        count: Count::Once,
+    },
+    Spec {
         keyword: "w1.survey",
         keys: numbers!(
             "frames",
@@ -610,6 +633,17 @@ impl Fields {
         self.number(key).map(Some)
     }
 
+    /// The signed number `key`, or `None` for `-`.
+    fn signed_or_dash(&self, key: &str) -> Result<Option<i64>, ReportError> {
+        let value = self.get(key)?;
+        if value == "-" {
+            return Ok(None);
+        }
+        signed(value)
+            .map(Some)
+            .ok_or_else(|| malformed(format!("{} {key}={value} is no number", self.keyword)))
+    }
+
     /// The token `key`.
     pub fn text(&self, key: &str) -> Result<&str, ReportError> {
         self.get(key)
@@ -663,6 +697,9 @@ fn validate(kind: Kind, value: &str) -> Result<String, String> {
         }
         Kind::Hex => hex(value),
         Kind::HexOrDash => value == "-" || hex(value),
+        Kind::SignedOrDash => {
+            value == "-" || signed(value).is_some_and(|number| i32::try_from(number).is_ok())
+        }
         Kind::Text => !value.is_empty(),
         Kind::Masked => {
             let octets = value.strip_prefix("xx:xx:xx:xx:").map(|rest| rest.split(':'));
@@ -805,6 +842,77 @@ pub fn lag_fit(lags: &[Lag], tolerance_us: u32) -> Option<LagFit> {
     })
 }
 
+/// One stand beacon: its TSF and its handoff, both µs, low 32 bits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TsfPair {
+    pub tsf: u32,
+    pub handoff: u32,
+}
+
+/// The handoff times of beacons against their TSF with the linear trend
+/// removed: least squares of handoff on TSF (integer arithmetic, both
+/// relative to the first pair), residuals floored to µs and taken less the
+/// smallest one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TsfFit {
+    /// The lower median, the 90th percentile (rank ⌈0.9·n⌉) and the maximum
+    /// of residual − min residual.
+    pub median_us: u32,
+    pub p90_us: u32,
+    pub max_us: u32,
+    /// (slope − 1) · 10⁶, floored.
+    pub slope_ppm: i32,
+}
+
+/// The fit of `pairs`; `None` below two pairs or without a TSF spread.
+pub fn tsf_fit(pairs: &[TsfPair]) -> Option<TsfFit> {
+    let first = pairs.first()?;
+    let point = |pair: &TsfPair| {
+        (
+            i128::from(pair.tsf.wrapping_sub(first.tsf) as i32),
+            i128::from(pair.handoff.wrapping_sub(first.handoff) as i32),
+        )
+    };
+    let n = i128::try_from(pairs.len()).ok()?;
+    let (mut sx, mut sy, mut sxx, mut sxy) = (0_i128, 0_i128, 0_i128, 0_i128);
+    for (x, y) in pairs.iter().map(point) {
+        sx += x;
+        sy += y;
+        sxx += x * x;
+        sxy += x * y;
+    }
+    let dxx = n * sxx - sx * sx;
+    let dxy = n * sxy - sx * sy;
+    if n < 2 || dxx == 0 {
+        return None;
+    }
+    let denominator = n * dxx;
+    let intercept = sy * dxx - dxy * sx;
+    let residuals = pairs
+        .iter()
+        .map(point)
+        .map(|(x, y)| (n * dxx * y - intercept - n * dxy * x).div_euclid(denominator))
+        .collect::<Vec<_>>();
+    let floor = *residuals.iter().min()?;
+    let mut spread = residuals
+        .iter()
+        .map(|residual| u32::try_from(residual - floor).unwrap_or(u32::MAX))
+        .collect::<Vec<_>>();
+    spread.sort_unstable();
+    let count = spread.len();
+    let slope_ppm = ((dxy - dxx) * 1_000_000).div_euclid(dxx);
+    Some(TsfFit {
+        median_us: *spread.get((count - 1) / 2)?,
+        p90_us: *spread.get((count * 9).div_ceil(10).checked_sub(1)?)?,
+        max_us: *spread.last()?,
+        slope_ppm: i32::try_from(slope_ppm).unwrap_or(if slope_ppm < 0 {
+            i32::MIN
+        } else {
+            i32::MAX
+        }),
+    })
+}
+
 /// One periodic PHY tracking tick, SYSTIMER µs, low 32 bits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Tick {
@@ -907,6 +1015,9 @@ pub struct Report {
     /// The first window units' lags, in order.
     pub lags: Vec<Lag>,
     pub lagfit: Fields,
+    /// The first stand beacons' TSF and handoff, in order.
+    pub tsf: Vec<TsfPair>,
+    pub tsffit: Fields,
     pub survey: Fields,
     pub verdict: Fields,
     /// One per gate, in [`GateName::ALL`] order.
@@ -1042,6 +1153,20 @@ impl Report {
         if lagfit.number("n")? != lags.len() as u64 {
             return Err(malformed("w1.lagfit n= is not the w1.lag count"));
         }
+        let mut tsf = Vec::new();
+        for (index, line) in all("w1.tsf").iter().enumerate() {
+            if line.number("i")? != index as u64 {
+                return Err(malformed(format!("w1.tsf i= is not {index}")));
+            }
+            tsf.push(TsfPair {
+                tsf: narrow(line.number("tsf")?)?,
+                handoff: narrow(line.number("handoff")?)?,
+            });
+        }
+        let tsffit = one("w1.tsffit");
+        if tsffit.number("n")? != tsf.len() as u64 {
+            return Err(malformed("w1.tsffit n= is not the w1.tsf count"));
+        }
         let mut gates = Vec::new();
         for name in GateName::ALL {
             let lines = all("w1.gate")
@@ -1104,6 +1229,8 @@ impl Report {
             wake: all("w1.wake"),
             lags,
             lagfit,
+            tsf,
+            tsffit,
             survey: one("w1.survey"),
             verdict: one("w1.verdict"),
             gates,
@@ -1456,6 +1583,36 @@ fn disagreements(
             "w1.lagfit median/max/next_arrival_matches {image_fit:?}, the host computes {host_fit:?}"
         ));
     }
+    let stand_index = report
+        .bss
+        .iter()
+        .find(|bss| bss.text("who").is_ok_and(|who| who == "stand"))
+        .map(|bss| bss.number("idx"))
+        .transpose()?;
+    let tsf_bss = report.tsffit.number_or_dash("bss")?;
+    if tsf_bss != stand_index {
+        problems.push(format!(
+            "w1.tsffit bss={tsf_bss:?}, the stand's index is {stand_index:?}"
+        ));
+    }
+    let tsf_fit = tsf_fit(&report.tsf);
+    let image_tsf = (
+        report.tsffit.number_or_dash("median_us")?,
+        report.tsffit.number_or_dash("p90_us")?,
+        report.tsffit.number_or_dash("max_us")?,
+        report.tsffit.signed_or_dash("slope_ppm")?,
+    );
+    let host_tsf = (
+        tsf_fit.map(|fit| u64::from(fit.median_us)),
+        tsf_fit.map(|fit| u64::from(fit.p90_us)),
+        tsf_fit.map(|fit| u64::from(fit.max_us)),
+        tsf_fit.map(|fit| i64::from(fit.slope_ppm)),
+    );
+    if image_tsf != host_tsf {
+        problems.push(format!(
+            "w1.tsffit median/p90/max/slope {image_tsf:?}, the host computes {host_tsf:?}"
+        ));
+    }
     let channel = report.config.number("channel")?;
     if channel != u64::from(expected.channel) {
         problems.push(format!(
@@ -1654,6 +1811,17 @@ fn summary(report: &Report, host: &Host, expected: &Config) -> Vec<String> {
         )),
         None => lines.push("no window unit: no handoff delay".to_owned()),
     }
+    match tsf_fit(&report.tsf) {
+        Some(fit) => lines.push(format!(
+            "stand beacon handoff against TSF over {} beacons, trend removed: median {} us, p90 {} us, max {} us above the earliest; slope {} ppm",
+            report.tsf.len(),
+            fit.median_us,
+            fit.p90_us,
+            fit.max_us,
+            fit.slope_ppm
+        )),
+        None => lines.push("fewer than two stand beacons: no TSF fit".to_owned()),
+    }
     lines
 }
 
@@ -1729,6 +1897,11 @@ mod tests {
             "w1.lag i=1 stamp=1001500 lag_us=151200 since_prev_us=1500 until_next_us=100900",
             "w1.lag i=2 stamp=1102400 lag_us=50000 since_prev_us=100900 until_next_us=-",
             "w1.lagfit n=3 median_us=1700 max_us=101200 next_arrival_matches=2 tolerance_us=2000",
+            "w1.tsf i=0 tsf=0 handoff=5000000",
+            "w1.tsf i=1 tsf=102400 handoff=5102410",
+            "w1.tsf i=2 tsf=204800 handoff=5205800",
+            "w1.tsf i=3 tsf=307200 handoff=5307200",
+            "w1.tsffit n=4 bss=0 median_us=208 p90_us=1099 max_us=1099 slope_ppm=966",
             "w1.survey frames=540 header_refusals=0 data=0 ignored_management=0 table_full=0 off_channel=0",
             "w1.verdict beacons=97 bi_us=102400 window_us=10000000 required=78",
             "w1.gate name=beacons result=pass",
@@ -2538,6 +2711,123 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("median 1700 us, max 101200 us; 2 handed off")),
             "{summary:?}"
+        );
+    }
+
+    fn pairs(points: &[(u32, u32)]) -> Vec<TsfPair> {
+        points
+            .iter()
+            .map(|&(tsf, handoff)| TsfPair { tsf, handoff })
+            .collect()
+    }
+
+    #[test]
+    fn the_tsf_fit_removes_the_trend_and_spreads_from_the_earliest() {
+        // On the line handoff = tsf + c every residual is zero.
+        let exact = pairs(&[(0, 100), (102_400, 102_500), (204_800, 204_900)]);
+        assert_eq!(
+            tsf_fit(&exact),
+            Some(TsfFit {
+                median_us: 0,
+                p90_us: 0,
+                max_us: 0,
+                slope_ppm: 0
+            })
+        );
+        // A clock 100 ppm fast, no jitter.
+        let fast = pairs(&[(0, 0), (1_000_000, 1_000_100), (2_000_000, 2_000_200)]);
+        assert_eq!(tsf_fit(&fast).unwrap().slope_ppm, 100);
+        assert_eq!(tsf_fit(&fast).unwrap().max_us, 0);
+        // One beacon 900 us late among ten on time: the spread shows it.
+        let mut late = (0..10_u32)
+            .map(|index| (index * 102_400, index * 102_400))
+            .collect::<Vec<_>>();
+        late[5].1 += 900;
+        let fit = tsf_fit(&pairs(&late)).unwrap();
+        assert!((800..=1_000).contains(&fit.max_us), "{fit:?}");
+        assert!(fit.median_us <= 100, "{fit:?}");
+        // The wrap of either clock is harmless.
+        let wrapped = pairs(&[(u32::MAX - 50, u32::MAX - 10), (51, 91), (153, 193)]);
+        assert_eq!(tsf_fit(&wrapped).unwrap().max_us, 0);
+        // Fewer than two pairs, or no TSF spread: no fit.
+        assert_eq!(tsf_fit(&pairs(&[(1, 2)])), None);
+        assert_eq!(tsf_fit(&pairs(&[(1, 2), (1, 9)])), None);
+        assert_eq!(tsf_fit(&[]), None);
+    }
+
+    #[test]
+    fn the_tsf_lines_are_strict_and_the_fit_is_recomputed() {
+        let report = Report::parse(&console(&body())).unwrap();
+        assert_eq!(
+            tsf_fit(&report.tsf),
+            Some(TsfFit {
+                median_us: 208,
+                p90_us: 1_099,
+                max_us: 1_099,
+                slope_ppm: 966
+            })
+        );
+        let summary = check(&console(&body()), PASS, &expected()).summary;
+        assert!(
+            summary.iter().any(|line| line.contains("over 4 beacons")),
+            "{summary:?}"
+        );
+        for (prefix, key, value) in [
+            ("w1.tsf i=1", "i", "3"),
+            ("w1.tsf i=1", "tsf", "-"),
+            ("w1.tsf i=1", "handoff", "4294967296"),
+            ("w1.tsffit", "n", "3"),
+            ("w1.tsffit", "slope_ppm", "2147483648"),
+            ("w1.tsffit", "slope_ppm", "1.5"),
+            ("w1.tsffit", "bss", "x"),
+        ] {
+            let mut lines = body();
+            set(&mut lines, prefix, key, value);
+            assert!(
+                matches!(
+                    Report::parse(&console(&lines)),
+                    Err(ReportError::Malformed(_))
+                ),
+                "{prefix} {key}={value}"
+            );
+        }
+        let mut missing = body();
+        missing.retain(|line| !line.starts_with("w1.tsffit"));
+        assert!(Report::parse(&console(&missing)).is_err());
+        // A fit, a slope or a BSS the host does not reproduce contradicts it.
+        for (key, value) in [
+            ("median_us", "999"),
+            ("p90_us", "-"),
+            ("slope_ppm", "-1"),
+            ("bss", "1"),
+            ("bss", "-"),
+        ] {
+            let mut lines = body();
+            set(&mut lines, "w1.tsffit", key, value);
+            assert_eq!(
+                check(&console(&lines), PASS, &expected())
+                    .outcome
+                    .exit_code(),
+                3,
+                "{key}={value}"
+            );
+        }
+        // Without the stand: no pair, no index, no fit.
+        let mut absent = body();
+        absent.retain(|line| !line.starts_with("w1.tsf ") && !line.contains("who=stand"));
+        set(&mut absent, "w1.tsffit", "n", "0");
+        for key in ["bss", "median_us", "p90_us", "max_us", "slope_ppm"] {
+            set(&mut absent, "w1.tsffit", key, "-");
+        }
+        let report = Report::parse(&console(&absent)).unwrap();
+        let host = recompute(&report, &expected()).unwrap();
+        let result = ImageResult::Fail {
+            reasons: host.reasons(),
+        };
+        let problems = disagreements(&report, &host, &result, &expected()).unwrap();
+        assert!(
+            !problems.iter().any(|problem| problem.contains("w1.tsffit")),
+            "{problems:?}"
         );
     }
 

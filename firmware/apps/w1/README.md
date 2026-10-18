@@ -56,6 +56,16 @@ delay and how many units were handed off 0 to 2000 µs after the next
 unit's stamp, both on the stamp clock: handed off only once the next unit
 arrived.
 
+The MAC stamp repeats across frames, so `w1.tsf` measures the handoff
+against the access point's own clock instead: the TSF and handoff (µs, low
+32 bits) of the first 64 beacons of the stand BSS (its survey index is
+`bss=`; no stand, no pair) that the survey counted in the window, each with
+a new TSF. `w1.tsffit` fits handoff on TSF by least squares in integer
+arithmetic (both relative to the first pair), floors each residual to µs
+and prints the lower median, the 90th percentile (rank ⌈0.9·n⌉) and the
+maximum of residual less the smallest residual, and `slope_ppm`, the slope
+less one in ppm (floored); `-` below two pairs.
+
 ```sh
 cargo fw run w1 --board s31-a --expect-bssid 02:00:00:00:F6:D0 --channel 6
 ```
