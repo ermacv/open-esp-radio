@@ -1,7 +1,8 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for the ESP32-S31: Wi-Fi, Bluetooth LE and
-IEEE 802.15.4, without vendor radio binaries. Owner decisions are in
+Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31 and ESP32-C5;
+ESP32-C6 later): Wi-Fi, Bluetooth (LE; BR/EDR later) and IEEE 802.15.4,
+without vendor radio binaries. Owner decisions are in
 [docs/decisions.md](docs/decisions.md), the system in
 [docs/architecture.md](docs/architecture.md).
 
@@ -50,7 +51,7 @@ IEEE 802.15.4, without vendor radio binaries. Owner decisions are in
 
 ## Where code goes
 
-Ask who knows the hardware: ESP32-S31 registers go to `crates/esp32s31/`,
+Ask who knows the hardware: a chip's registers go to `crates/<chip>/`,
 Espressif IP and vendor algorithms shared by their chips to
 `crates/espressif/`, portable protocol code to its protocol directory, and
 code without chip or protocol to `crates/base/`, `crates/radio/` or
@@ -66,7 +67,7 @@ dependency set, or an independent consumer; otherwise it is a module.
 | `crates/radio/` | the radio port lifecycle, permit pool, coexistence vocabulary |
 | `crates/ieee80211/`, `bluetooth/`, `ieee802154/` | portable protocols |
 | `crates/espressif/` | Espressif PACs, coexistence, 802.15.4 engine, analog bus, modem clock, Wi-Fi policy data |
-| `crates/esp32s31/` | PAC, HAL, PHY, Wi-Fi driver, radio coexistence |
+| `crates/<chip>/` | per chip (`esp32s31`, `esp32c5`): PAC, HAL, PHY, drivers, radio coexistence |
 | `crates/adapters/` | Embassy time and network, esp-hal SoC |
 | `firmware/` | the chip-target workspace: staged boot platform, images |
 | `registers/`, `tools/registers/` | the register model and its SVD/PAC generator |
