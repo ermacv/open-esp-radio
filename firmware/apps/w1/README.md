@@ -19,7 +19,7 @@ the survey (`oer-ieee80211-runtime::survey`).
 | first frame | at most 5 s for the first staged frame |
 | window | 10 s from the first frame: every frame to the survey |
 | stress | 5 s: a P2 timer every 37 µs, a P1 timer every 113 µs |
-| hold | every staging lease held (at most 3 s to collect), 1 s, release; frames counted for 2 s |
+| hold | two cycles (`forward`, then `reverse`): every staging lease held (at most 3 s to collect), 1 s, a staged release (one drop, 1.5 s dwell, the rest 10 ms apart); frames counted for 2 s |
 | stop | stop request, frames drained until the exit |
 
 After the exit the image prints a block from `OER-W1-BEGIN v=1` to
@@ -31,23 +31,66 @@ beacons in the window (N = beacons − duplicates, at least
 AP interface, and its stored SSID must be the stand's: heard with another
 SSID it fails `stand-mismatch`, not heard `stand-absent`, however many other
 BSSIDs carry the SSID), the applied channel, a clean exit, the walker's
-restart (every staging lease held, no unit received during the 1 s hold,
-frames after the release; `w1.hold`), at least 4096 free bytes of the
+restart (in the first cycle every staging lease held, no unit received
+during the 1 s hold, frames after the release; `w1.hold cycle=0`), the
+ownership experiment (`w1.own`, below), at least 4096 free bytes of the
 interrupt stack, no service error, no MAC or WDEVPWR entry without the line,
 and no timer wait of the image (P1, and P2's stress task) returning before
 its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`). A
 failure before the runner hands over its ends prints only
 `OER-RESULT: fail w1 <reason>`.
 
+The ownership experiment asks whether the walker writes into a buffer the
+application holds. Each cycle fingerprints every lease it takes: a CRC-32
+of the frame bytes the lease shows (`segment().buffer`, offset 0 to the
+frame's length, each byte read volatile), the length and the descriptor
+index, `(descriptor_address − ring_base) / 12` with `ring_base` the DMA
+address of descriptor 0 that the arena's bind laid out (the ring prepared
+from it has the same base, `w1.exhaust ring_base=`). At the end of the
+1 s hold, before any drop, every fingerprint is rechecked
+(`hold_mismatch=`). When the 32 leases cover the 32 descriptors once,
+the first lease taken stands for the recycle frontier and the last for
+the accepted tail: `forward` drops from the first lease taken in ring
+order (the tail's lease last), `reverse` from the last one against ring
+order (`first_drop=`, `-` when the leases did not cover the ring once:
+then they drop in the order they were taken, or its reverse). After the
+first drop the image takes no frame for 1.5 s (a frame the walker stages
+meanwhile stays queued, so no append to an empty list moves BASE), then
+rechecks the rest (`dwell_mismatch=`); every later lease is rechecked just
+before its own drop (`release_mismatch=`, the first drop's recheck
+included), 10 ms apart. `first_mismatch=` is the first changed lease's
+descriptor index (`x` unknown, `-` none). Then, for 2 s, the descriptor
+indices of the first 16 frames taken (`first_after_release=`, `x` outside
+the ring, `-` none), the pairs among them not consecutive in the ring
+(`order_breaks=`, recomputed by `cargo fw` from the list and the
+`arena=` size), and the chained and oversized drops from the first drop
+on (`chained=`, `oversized=`). The `ownership` gate fails, `foreign-write`,
+on any changed lease or chained drop in either cycle; otherwise a cycle
+short of 32 leases leaves it unexercised (`pool-not-exhausted`), as does
+one whose leases did not cover the ring (`ring-order`). The second cycle
+starts after the first one's 2 s of frames, once the ring has recovered.
+
+```text
+w1.own cycle=<0|1> order=forward|reverse held=<n> first_drop=<idx|-> hold_mismatch=<n> dwell_mismatch=<n> release_mismatch=<n> first_mismatch=<idx|x|-> first_after_release=<i,i,…|-> order_breaks=<n> chained=<n> oversized=<n>
+```
+
 Report-only: `w1.config ssid_matches=`, how many BSSIDs carry the stand's
-SSID (each `w1.bss` line says whether it does, `ssid_ok=`); `w1.exhaust`, the walker registers (NEXT with its unknown
+SSID (each `w1.bss` line says whether it does, `ssid_ok=`); `w1.exhaust`, one line per cycle (`cycle=`), the walker registers (NEXT with its unknown
 upper flag, LAST, BASE, the walker enable, the reload doorbell, the
 starvation counter) and the ring's view (base, recycle frontier, accepted
 tail, observed and completed descriptors, the list left from NEXT, a
 pending reload, released, detached and staged buffers) that the runner read
 when a lease returned to a full staging pool (every slot claimed or every
 buffer detached, as during the hold), before the capacity drain serviced
-anything, for the longest such stretch; `w1.reload`, how the ring
+anything: the latest snapshot at the end of the cycle's dwell, when its
+first drop took one (`snapshots=` is the run's count then). It also
+carries what the capacity drain's first service pass read when it
+completed a reload: `next_after_doorbell=`, NEXT right after the doorbell
+cleared, and `last_after_doorbell=`, LAST, which that read takes only
+when NEXT is zero (`-` without a reload in that pass); and
+`desc_hash_changed=`, whether a hash of every descriptor word changed
+between the first drain that left the pool full and the snapshot. One
+`w1.hold` line per cycle carries the hold's counters. `w1.reload`, how the ring
 recovered; per BSS the stamp and handoff spans of its stamped frames, whose
 ratio is the MAC stamp clock's rate; and `w1.lag`, the receive stamp and
 handoff lag (handoff low 32 bits less stamp) of the first 64 stamped units
@@ -71,8 +114,11 @@ maximum of residual less the smallest residual, and `slope_ppm`, the slope
 less one in ppm (floored); `-` below two pairs.
 
 ```sh
-cargo fw run w1 --board s31-a
+cargo fw run w1 --board s31-a --timeout 60s
 ```
+
+The two hold cycles take 10 to 16 s, which makes a run longer than the
+default 30 s timeout.
 
 `cargo fw run w1` first brings the stand router to the W1 profile (the
 stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;

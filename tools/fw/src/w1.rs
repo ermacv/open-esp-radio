@@ -44,6 +44,10 @@ const MAX_BSS: usize = 64;
 const MAX_LAGS: usize = 64;
 /// The longest TSF pair list the image prints.
 const MAX_TSF_PAIRS: usize = 64;
+/// The hold cycles of a run: `forward`, then `reverse`.
+const CYCLES: [(&str, &str); 2] = [("0", "forward"), ("1", "reverse")];
+/// The frames after a release whose descriptor index `w1.own` lists.
+const MAX_FIRST_AFTER: usize = 16;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
@@ -150,6 +154,11 @@ enum Kind {
     /// bucket holds the threshold.
     NumberOrRange,
     OneOf(&'static [&'static str]),
+    /// A descriptor index up to `u32::MAX`, `x` (unknown) or `-`.
+    IndexOrDash,
+    /// `-`, or up to [`MAX_FIRST_AFTER`] descriptor indices (each up to
+    /// `u32::MAX`, or `x`) joined by `,`.
+    IndexList,
 }
 
 const U8: Kind = Kind::Number(u8::MAX as u64);
@@ -158,6 +167,7 @@ const U32: Kind = Kind::Number(u32::MAX as u64);
 const U64: Kind = Kind::Number(u64::MAX);
 const U32_OR_DASH: Kind = Kind::NumberOrDash(u32::MAX as u64);
 const FLAG_OR_DASH: Kind = Kind::OneOf(&["0", "1", "-"]);
+const CYCLE: Kind = Kind::OneOf(&["0", "1"]);
 /// The phases of a run, as the image names them.
 const PHASES: &[&str] = &["bringup", "first_frame", "window", "stress", "hold", "stop"];
 
@@ -178,6 +188,7 @@ const fn key(name: &'static str, kind: Kind) -> Key {
 #[derive(Clone, Copy)]
 enum Count {
     Once,
+    Exactly(usize),
     AtMost(usize),
     Any,
 }
@@ -190,11 +201,12 @@ struct Spec {
     count: Count,
 }
 
-const GATE_NAMES: [&str; 8] = [
+const GATE_NAMES: [&str; 9] = [
     "beacons",
     "channel",
     "exit",
     "walker_restart",
+    "ownership",
     "irq_stack",
     "service_errors",
     "unserviced",
@@ -303,20 +315,22 @@ const SPECS: &[Spec] = &[
     },
     Spec {
         keyword: "w1.hold",
-        keys: numbers!(
-            "reached",
-            "slots",
-            "units",
-            "mac_irqs",
-            "stage_capacity_blocks",
-            "admission_blocks",
-        ),
+        keys: &[
+            key("cycle", CYCLE),
+            key("reached", U64),
+            key("slots", U64),
+            key("units", U64),
+            key("mac_irqs", U64),
+            key("stage_capacity_blocks", U64),
+            key("admission_blocks", U64),
+        ],
         open: false,
-        count: Count::Once,
+        count: Count::Exactly(CYCLES.len()),
     },
     Spec {
         keyword: "w1.exhaust",
         keys: &[
+            key("cycle", CYCLE),
             key("snapshots", U64),
             key("blocked_us", U32_OR_DASH),
             key("next_low", Kind::HexOrDash),
@@ -336,9 +350,31 @@ const SPECS: &[Spec] = &[
             key("released", U32_OR_DASH),
             key("detached", U32_OR_DASH),
             key("staged", U32_OR_DASH),
+            key("next_after_doorbell", Kind::HexOrDash),
+            key("last_after_doorbell", Kind::HexOrDash),
+            key("desc_hash_changed", FLAG_OR_DASH),
         ],
         open: false,
-        count: Count::Once,
+        count: Count::Exactly(CYCLES.len()),
+    },
+    Spec {
+        keyword: "w1.own",
+        keys: &[
+            key("cycle", CYCLE),
+            key("order", Kind::OneOf(&["forward", "reverse"])),
+            key("held", U64),
+            key("first_drop", U32_OR_DASH),
+            key("hold_mismatch", U32),
+            key("dwell_mismatch", U32),
+            key("release_mismatch", U32),
+            key("first_mismatch", Kind::IndexOrDash),
+            key("first_after_release", Kind::IndexList),
+            key("order_breaks", U32),
+            key("chained", U32),
+            key("oversized", U32),
+        ],
+        open: false,
+        count: Count::Exactly(CYCLES.len()),
     },
     Spec {
         keyword: "w1.prefix",
@@ -603,6 +639,11 @@ fn hex(text: &str) -> bool {
     })
 }
 
+/// A descriptor index up to `u32::MAX`, or `x`.
+fn index(text: &str) -> bool {
+    text == "x" || decimal(text).is_some_and(|number| number <= u64::from(u32::MAX))
+}
+
 fn signed(text: &str) -> Option<i64> {
     let (negative, digits) = match text.strip_prefix('-') {
         Some(digits) => (true, digits),
@@ -662,6 +703,11 @@ fn validate(kind: Kind, value: &str) -> Result<String, String> {
                 })
         }
         Kind::OneOf(values) => values.contains(&value),
+        Kind::IndexOrDash => value == "-" || index(value),
+        Kind::IndexList => {
+            value == "-"
+                || (value.split(',').count() <= MAX_FIRST_AFTER && value.split(',').all(index))
+        }
     };
     if valid {
         Ok(value.to_owned())
@@ -852,6 +898,7 @@ pub enum GateName {
     Channel,
     Exit,
     WalkerRestart,
+    Ownership,
     IrqStack,
     ServiceErrors,
     Unserviced,
@@ -859,11 +906,12 @@ pub enum GateName {
 }
 
 impl GateName {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Beacons,
         Self::Channel,
         Self::Exit,
         Self::WalkerRestart,
+        Self::Ownership,
         Self::IrqStack,
         Self::ServiceErrors,
         Self::Unserviced,
@@ -877,6 +925,7 @@ impl GateName {
             Self::Channel => "channel",
             Self::Exit => "exit",
             Self::WalkerRestart => "walker_restart",
+            Self::Ownership => "ownership",
             Self::IrqStack => "irq_stack",
             Self::ServiceErrors => "service_errors",
             Self::Unserviced => "unserviced",
@@ -924,8 +973,12 @@ pub struct Report {
     pub gaps_dropped: u64,
     pub ticks: Vec<Tick>,
     pub rx: Fields,
-    pub hold: Fields,
-    pub exhaust: Fields,
+    /// One per hold cycle, in cycle order.
+    pub hold: Vec<Fields>,
+    /// One per hold cycle, in cycle order.
+    pub exhaust: Vec<Fields>,
+    /// One per hold cycle, in cycle order.
+    pub own: Vec<Fields>,
     pub prefix: Fields,
     pub reload: Fields,
     pub continuation: Fields,
@@ -998,6 +1051,7 @@ impl Report {
                 .count();
             let fits = match spec.count {
                 Count::Once => found == 1,
+                Count::Exactly(count) => found == count,
                 Count::AtMost(most) => found <= most,
                 Count::Any => true,
             };
@@ -1007,6 +1061,7 @@ impl Report {
                     spec.keyword,
                     match spec.count {
                         Count::Once => "1".to_owned(),
+                        Count::Exactly(count) => count.to_string(),
                         Count::AtMost(most) => format!("at most {most}"),
                         Count::Any => "any".to_owned(),
                     }
@@ -1123,6 +1178,18 @@ impl Report {
                 reason,
             });
         }
+        for keyword in ["w1.hold", "w1.exhaust", "w1.own"] {
+            for (line, (cycle, order)) in all(keyword).iter().zip(CYCLES) {
+                if line.text("cycle")? != cycle {
+                    return Err(malformed(format!("{keyword} cycle= is not {cycle}")));
+                }
+                if keyword == "w1.own" && line.text("order")? != order {
+                    return Err(malformed(format!(
+                        "w1.own cycle={cycle} order= is not {order}"
+                    )));
+                }
+            }
+        }
         let bss = all("w1.bss");
         if bss
             .iter()
@@ -1139,8 +1206,9 @@ impl Report {
             gaps_dropped: one("w1.gaps").number("dropped")?,
             ticks,
             rx: one("w1.rx"),
-            hold: one("w1.hold"),
-            exhaust: one("w1.exhaust"),
+            hold: all("w1.hold"),
+            exhaust: all("w1.exhaust"),
+            own: all("w1.own"),
             prefix: one("w1.prefix"),
             reload: one("w1.reload"),
             continuation: one("w1.continuation"),
@@ -1290,14 +1358,18 @@ fn beacons_gate(report: &Report) -> Result<(HostGate, Option<BeaconFigures>), Re
     Ok((gate, Some(figures)))
 }
 
-/// The walker restart: every staging lease held (`w1.hold reached=` is
-/// `slots=`), nothing received while they were (the walker ran out), and
-/// frames after the release. How the ring recovered (`w1.reload`,
-/// `w1.exhaust`) is reported, not gated.
+/// The walker restart, from the first hold cycle (`w1.hold cycle=0`):
+/// every staging lease held (`reached=` is `slots=`), nothing received
+/// while they were (the walker ran out), and frames after the release. How
+/// the ring recovered (`w1.reload`, `w1.exhaust`) is reported, not gated.
 fn walker_restart_gate(report: &Report) -> Result<HostGate, ReportError> {
-    let reached = report.hold.number("reached")?;
-    let slots = report.hold.number("slots")?;
-    let held_units = report.hold.number("units")?;
+    let hold = report
+        .hold
+        .first()
+        .ok_or_else(|| malformed("no w1.hold cycle=0"))?;
+    let reached = hold.number("reached")?;
+    let slots = hold.number("slots")?;
+    let held_units = hold.number("units")?;
     let after = report.rx.number("frames_after_release")?;
     Ok(if reached < slots {
         HostGate {
@@ -1316,6 +1388,77 @@ fn walker_restart_gate(report: &Report) -> Result<HostGate, ReportError> {
             true,
         )
     })
+}
+
+/// The ownership experiment, both cycles (`w1.own`): a held lease whose
+/// bytes changed (any `*_mismatch=`) or a chained drop in a release window
+/// fails it, `foreign-write`; otherwise a cycle short of every staging
+/// slot (`held=` below `w1.hold slots=`) is unexercised,
+/// `pool-not-exhausted`, as is one whose leases did not cover the ring
+/// once (`first_drop=-`), `ring-order`.
+fn ownership_gate(report: &Report) -> Result<HostGate, ReportError> {
+    let mut written = false;
+    let mut short = false;
+    let mut unordered = false;
+    for (own, hold) in report.own.iter().zip(&report.hold) {
+        for key in [
+            "hold_mismatch",
+            "dwell_mismatch",
+            "release_mismatch",
+            "chained",
+        ] {
+            written |= own.number(key)? > 0;
+        }
+        short |= own.number("held")? < hold.number("slots")?;
+        unordered |= own.number_or_dash("first_drop")?.is_none();
+    }
+    let unexercised = |reason| HostGate {
+        name: GateName::Ownership,
+        result: GateResult::Unexercised,
+        reason: Some(reason),
+        bound_reason: true,
+    };
+    Ok(if written {
+        gate(GateName::Ownership, false, "foreign-write", true)
+    } else if short {
+        unexercised("pool-not-exhausted")
+    } else if unordered {
+        unexercised("ring-order")
+    } else {
+        gate(GateName::Ownership, true, "", true)
+    })
+}
+
+/// The ring's descriptor count, from `w1.config arena=<count>x<buffer>`.
+fn ring_count(report: &Report) -> Result<u64, ReportError> {
+    report
+        .config
+        .text("arena")?
+        .split_once('x')
+        .and_then(|(count, _)| decimal(count))
+        .filter(|&count| count > 0)
+        .ok_or_else(|| malformed("w1.config arena= is no <count>x<buffer>"))
+}
+
+/// The descriptor indices of a `first_after_release=` list (`None` for
+/// `x`); empty for `-`.
+fn indices(list: &str) -> Vec<Option<u64>> {
+    if list == "-" {
+        return Vec::new();
+    }
+    list.split(',').map(decimal).collect()
+}
+
+/// Consecutive frames whose descriptors are not consecutive in a ring of
+/// `count` (an unknown index breaks both of its pairs).
+fn order_breaks(indices: &[Option<u64>], count: u64) -> u64 {
+    indices
+        .windows(2)
+        .filter(|pair| match pair {
+            [Some(first), Some(second)] => *second != (first + 1) % count,
+            _ => true,
+        })
+        .count() as u64
 }
 
 /// No timer wait of the image returned before its deadline, on either
@@ -1354,6 +1497,7 @@ pub fn recompute(report: &Report, expected: &Config) -> Result<Host, ReportError
             false,
         ),
         walker_restart_gate(report)?,
+        ownership_gate(report)?,
         gate(
             GateName::IrqStack,
             report.stack.number("irq_free")? >= MIN_IRQ_STACK_FREE,
@@ -1541,6 +1685,17 @@ fn disagreements(
             "w1.tsffit median/p90/max/slope {image_tsf:?}, the host computes {host_tsf:?}"
         ));
     }
+    let count = ring_count(report)?;
+    for own in &report.own {
+        let image = own.number("order_breaks")?;
+        let host = order_breaks(&indices(own.text("first_after_release")?), count);
+        if image != host {
+            problems.push(format!(
+                "w1.own cycle={} order_breaks={image}, the host counts {host}",
+                own.text("cycle")?
+            ));
+        }
+    }
     let channel = report.config.number("channel")?;
     if channel != u64::from(expected.channel) {
         problems.push(format!(
@@ -1703,6 +1858,30 @@ fn summary(report: &Report, host: &Host, expected: &Config) -> Vec<String> {
                 .map_or_else(String::new, |reason| format!(" ({reason})")),
         ));
     }
+    for (own, exhaust) in report.own.iter().zip(&report.exhaust) {
+        let text = |fields: &Fields, key: &str| fields.text(key).unwrap_or("?").to_owned();
+        lines.push(format!(
+            "hold cycle {} {}: {} held, first drop {}; changed at hold/dwell/release {}/{}/{} (first {}); after the release {} ({} order breaks); chained {} oversized {}; snapshot recycle_start {} accepted_tail {} BASE {}, doorbell read NEXT {} LAST {}, descriptors changed {}",
+            text(own, "cycle"),
+            text(own, "order"),
+            text(own, "held"),
+            text(own, "first_drop"),
+            text(own, "hold_mismatch"),
+            text(own, "dwell_mismatch"),
+            text(own, "release_mismatch"),
+            text(own, "first_mismatch"),
+            text(own, "first_after_release"),
+            text(own, "order_breaks"),
+            text(own, "chained"),
+            text(own, "oversized"),
+            text(exhaust, "recycle_start"),
+            text(exhaust, "accepted_tail"),
+            text(exhaust, "base"),
+            text(exhaust, "next_after_doorbell"),
+            text(exhaust, "last_after_doorbell"),
+            text(exhaust, "desc_hash_changed"),
+        ));
+    }
     let offset = report
         .stand()
         .and_then(|stand| stand.range_min("lag_us").ok().flatten())
@@ -1824,8 +2003,12 @@ mod tests {
             "w1.gaps dropped=0",
             "w1.tick start=900000 end=900200 ok=1",
             "w1.rx units=500 bytes=90000 mac_irqs=480 power_irqs=3 unserviced_mac=0 unserviced_pwr=0 doorbell_unmasks=470 ignored_unmasks=0 chained=0 oversized=0 empty=0 too_long=0 overload=0 admission_blocks=0 stage_capacity_blocks=0 service_passes=480 service_errors=0 capacity_drains=1 frames_after_release=12",
-            "w1.hold reached=32 slots=32 units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0",
-            "w1.exhaust snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0 last_low=0x16fe0 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=32 reload_pending=0 released=1 detached=31 staged=31",
+            "w1.hold cycle=0 reached=32 slots=32 units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0",
+            "w1.hold cycle=1 reached=32 slots=32 units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0",
+            "w1.exhaust cycle=0 snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0 last_low=0x16fe0 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=32 reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=0x17030 last_after_doorbell=- desc_hash_changed=0",
+            "w1.exhaust cycle=1 snapshots=9 blocked_us=1000200 next_low=0x0 next_upper=0 last_low=0x17024 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=- reload_pending=0 released=1 detached=31 staged=31 next_after_doorbell=- last_after_doorbell=- desc_hash_changed=0",
+            "w1.own cycle=0 order=forward held=32 first_drop=4 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,6,7,8 order_breaks=0 chained=0 oversized=0",
+            "w1.own cycle=1 order=reverse held=32 first_drop=3 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,7,x,31,0 order_breaks=3 chained=0 oversized=1",
             "w1.prefix fcs=0 strict_rxend_refusable=0 strict_dump_refusable=0 admitted=500",
             "w1.reload max_attempts=3 limit=100001 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1",
             "w1.continuation stale_doorbell=2 longest_streak=1",
@@ -1851,6 +2034,7 @@ mod tests {
             "w1.gate name=channel result=pass",
             "w1.gate name=exit result=pass",
             "w1.gate name=walker_restart result=pass",
+            "w1.gate name=ownership result=pass",
             "w1.gate name=irq_stack result=pass",
             "w1.gate name=service_errors result=pass",
             "w1.gate name=unserviced result=pass",
@@ -2517,8 +2701,12 @@ mod tests {
     #[test]
     fn the_hold_exhaust_and_span_lines_parse_and_are_required() {
         let report = Report::parse(&console(&body())).unwrap();
-        assert_eq!(report.hold.number("reached"), Ok(32));
-        assert_eq!(report.exhaust.text("base"), Ok("0x2f017000"));
+        assert_eq!(report.hold.len(), 2);
+        assert_eq!(report.hold[0].number("reached"), Ok(32));
+        assert_eq!(report.exhaust[0].text("base"), Ok("0x2f017000"));
+        assert_eq!(report.exhaust[0].text("next_after_doorbell"), Ok("0x17030"));
+        assert_eq!(report.exhaust[1].text("last_after_doorbell"), Ok("-"));
+        assert_eq!(report.own[1].text("order"), Ok("reverse"));
         assert_eq!(report.wake.len(), 1);
         assert_eq!(report.bss[0].number("stamp_span_us"), Ok(9_932_800));
         assert_eq!(report.bss[1].text("handoff_span_us"), Ok("-"));
@@ -2532,13 +2720,14 @@ mod tests {
             .split_whitespace()
             .map(|token| match token.split_once('=') {
                 Some(("snapshots", _)) => "snapshots=0".to_owned(),
+                Some(("cycle", _)) => token.to_owned(),
                 Some((name, _)) => format!("{name}=-"),
                 None => token.to_owned(),
             })
             .collect::<Vec<_>>()
             .join(" ");
         assert!(Report::parse(&console(&none)).is_ok());
-        for keyword in ["w1.hold", "w1.exhaust"] {
+        for keyword in ["w1.hold", "w1.exhaust", "w1.own"] {
             let mut missing = body();
             missing.retain(|line| !line.starts_with(keyword));
             assert!(Report::parse(&console(&missing)).is_err(), "{keyword}");
@@ -2557,6 +2746,217 @@ mod tests {
             *line = line.replace(" woke_early=0", "");
         }
         assert!(Report::parse(&console(&bare)).is_err());
+    }
+
+    /// Set `key=value` on the `keyword cycle=<cycle>` line.
+    fn set_cycle(body: &mut [String], keyword: &str, cycle: u8, key: &str, value: &str) {
+        set(body, &format!("{keyword} cycle={cycle} "), key, value);
+    }
+
+    #[test]
+    fn the_cycle_lines_come_once_per_cycle_in_order() {
+        // One line per cycle, cycle 0 first, forward then reverse.
+        for keyword in ["w1.hold", "w1.exhaust", "w1.own"] {
+            let mut swapped = body();
+            let first = swapped
+                .iter()
+                .position(|line| line.starts_with(&format!("{keyword} cycle=0 ")))
+                .unwrap();
+            swapped.swap(first, first + 1);
+            assert!(Report::parse(&console(&swapped)).is_err(), "{keyword}");
+            let mut single = body();
+            single.remove(first);
+            assert!(Report::parse(&console(&single)).is_err(), "{keyword}");
+        }
+        let mut reversed = body();
+        set_cycle(&mut reversed, "w1.own", 0, "order", "reverse");
+        assert!(Report::parse(&console(&reversed)).is_err());
+
+        let sixteen = (0..16).map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+        let mut full = body();
+        set_cycle(&mut full, "w1.own", 0, "first_after_release", &sixteen);
+        set_cycle(&mut full, "w1.own", 0, "order_breaks", "0");
+        assert!(Report::parse(&console(&full)).is_ok());
+        for (key, value) in [
+            ("first_after_release", format!("{sixteen},16")),
+            ("first_after_release", "4,,5".to_owned()),
+            ("first_after_release", "4,y".to_owned()),
+            ("first_after_release", "".to_owned()),
+            ("first_mismatch", "y".to_owned()),
+            ("first_mismatch", "-1".to_owned()),
+            ("first_drop", "x".to_owned()),
+            ("order", "sideways".to_owned()),
+            ("held", "-".to_owned()),
+            ("chained", "-".to_owned()),
+        ] {
+            let mut lines = body();
+            set_cycle(&mut lines, "w1.own", 1, key, &value);
+            assert!(
+                matches!(
+                    Report::parse(&console(&lines)),
+                    Err(ReportError::Malformed(_))
+                ),
+                "w1.own {key}={value}"
+            );
+        }
+        for (key, value) in [
+            ("next_after_doorbell", "17030"),
+            ("last_after_doorbell", "0x"),
+            ("desc_hash_changed", "2"),
+            ("cycle", "2"),
+        ] {
+            let mut lines = body();
+            set_cycle(&mut lines, "w1.exhaust", 1, key, value);
+            assert!(
+                Report::parse(&console(&lines)).is_err(),
+                "w1.exhaust {key}={value}"
+            );
+        }
+        let mut bare = body();
+        for line in bare
+            .iter_mut()
+            .filter(|line| line.starts_with("w1.exhaust"))
+        {
+            *line = line.replace(" desc_hash_changed=0", "");
+        }
+        assert!(Report::parse(&console(&bare)).is_err());
+    }
+
+    #[test]
+    fn the_ownership_gate() {
+        assert_eq!(
+            host_gate(&body(), GateName::Ownership).result,
+            GateResult::Pass
+        );
+        // Oversized drops are reported, not gated.
+        let mut oversized = body();
+        set_cycle(&mut oversized, "w1.own", 0, "oversized", "4");
+        assert_eq!(
+            host_gate(&oversized, GateName::Ownership).result,
+            GateResult::Pass
+        );
+        for cycle in [0, 1] {
+            for key in [
+                "hold_mismatch",
+                "dwell_mismatch",
+                "release_mismatch",
+                "chained",
+            ] {
+                let mut written = body();
+                set_cycle(&mut written, "w1.own", cycle, key, "1");
+                let gate = host_gate(&written, GateName::Ownership);
+                assert_eq!(
+                    (gate.result, gate.reason),
+                    (GateResult::Fail, Some("foreign-write")),
+                    "cycle {cycle} {key}"
+                );
+                // The image passing it is a contradiction.
+                assert_eq!(
+                    check(&console(&written), PASS, &expected())
+                        .outcome
+                        .exit_code(),
+                    3
+                );
+                set_gate(
+                    &mut written,
+                    "ownership",
+                    "result=fail reason=foreign-write",
+                );
+                let checked = check(
+                    &console(&written),
+                    "OER-RESULT: fail w1 ownership foreign-write",
+                    &expected(),
+                );
+                assert_eq!(
+                    checked.outcome,
+                    Outcome::Fail(vec!["ownership foreign-write".to_owned()])
+                );
+            }
+        }
+
+        let mut short = body();
+        set_cycle(&mut short, "w1.own", 1, "held", "31");
+        let gate = host_gate(&short, GateName::Ownership);
+        assert_eq!(
+            (gate.result, gate.reason),
+            (GateResult::Unexercised, Some("pool-not-exhausted"))
+        );
+        set_gate(
+            &mut short,
+            "ownership",
+            "result=unexercised reason=pool-not-exhausted",
+        );
+        assert_eq!(
+            check(
+                &console(&short),
+                "OER-RESULT: fail w1 ownership not exercised",
+                &expected()
+            )
+            .outcome,
+            Outcome::Fail(vec!["ownership not exercised".to_owned()])
+        );
+        let mut unordered = body();
+        set_cycle(&mut unordered, "w1.own", 0, "first_drop", "-");
+        let gate = host_gate(&unordered, GateName::Ownership);
+        assert_eq!(
+            (gate.result, gate.reason),
+            (GateResult::Unexercised, Some("ring-order"))
+        );
+        // A short hold outranks the ring order, a write outranks both.
+        set_cycle(&mut unordered, "w1.own", 1, "held", "0");
+        assert_eq!(
+            host_gate(&unordered, GateName::Ownership).reason,
+            Some("pool-not-exhausted")
+        );
+        set_cycle(&mut unordered, "w1.own", 1, "dwell_mismatch", "2");
+        assert_eq!(
+            host_gate(&unordered, GateName::Ownership).reason,
+            Some("foreign-write")
+        );
+
+        // The walker restart reads the first cycle only.
+        let mut second = body();
+        set_cycle(&mut second, "w1.hold", 1, "units", "3");
+        assert_eq!(
+            host_gate(&second, GateName::WalkerRestart).result,
+            GateResult::Pass
+        );
+        set_cycle(&mut second, "w1.hold", 0, "units", "3");
+        assert_eq!(
+            host_gate(&second, GateName::WalkerRestart).reason,
+            Some("received-while-held")
+        );
+    }
+
+    #[test]
+    fn the_order_breaks_are_recomputed_from_the_list() {
+        assert_eq!(order_breaks(&indices("-"), 32), 0);
+        assert_eq!(order_breaks(&indices("30,31,0,1"), 32), 0);
+        assert_eq!(order_breaks(&indices("4,5,7,x,31,0"), 32), 3);
+        assert_eq!(
+            check(&console(&body()), PASS, &expected()).outcome,
+            Outcome::Pass
+        );
+        let mut miscounted = body();
+        set_cycle(&mut miscounted, "w1.own", 1, "order_breaks", "2");
+        let Outcome::Contradiction(problems) =
+            check(&console(&miscounted), PASS, &expected()).outcome
+        else {
+            panic!("a miscount is a contradiction");
+        };
+        assert!(
+            problems
+                .iter()
+                .any(|problem| problem.contains("order_breaks=2")),
+            "{problems:?}"
+        );
+        // The ring size comes from the arena.
+        let mut arena = body();
+        set(&mut arena, "w1.config", "arena", "big");
+        assert!(matches!(
+            check(&console(&arena), PASS, &expected()).outcome,
+            Outcome::Unreadable(_)
+        ));
     }
 
     fn lags(lines: &[String]) -> Vec<Lag> {

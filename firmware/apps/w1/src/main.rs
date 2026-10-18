@@ -6,9 +6,10 @@
 //! arena on the radio executor (P2), receives with the MAC and WDEVPWR
 //! interrupts at P3 and hands staged frames to the application (P1), which
 //! feeds them to the survey for a 10 s window from the first frame. A timer
-//! stress phase, a hold of every staging lease (the walker exhausts and
-//! restarts) and the stop follow; after the exit the image prints its
-//! report block and verdict ([`report`]).
+//! stress phase, two hold cycles of every staging lease (the walker
+//! exhausts; a staged release restarts it while the ownership experiment
+//! rechecks the held buffers, [`own`]) and the stop follow; after the exit
+//! the image prints its report block and verdict ([`report`]).
 //!
 //! Nothing is transmitted. The stand's identity comes from the build
 //! (`OER_W1_CHANNEL`, `OER_W1_BSSID`, `OER_W1_SSID_HEX`): the BSSID of the
@@ -19,6 +20,7 @@
 
 mod irq;
 mod measure;
+mod own;
 mod report;
 
 use core::{convert::Infallible, fmt::Write as _};
@@ -32,7 +34,7 @@ use esp_hal::{
 use oer_esp32s31_hal::root::ProtocolPartitions;
 use oer_esp32s31_ieee80211::{
     runtime::{WifiRoleMaterialized, materialize_esp32s31_wifi_role},
-    rx::{returns::HeldRxFrame, upper::FrameReceiver},
+    rx::{counters::WifiRxCounters, returns::HeldRxFrame, upper::FrameReceiver},
     startup::{
         RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform,
         WifiMacStartConfig, start_esp32s31_radio,
@@ -71,6 +73,7 @@ use static_cell::StaticCell;
 use crate::{
     irq::{BUFFER, Bound, ImageDoorbell, ImageRoutes, P1Ends, SLOTS},
     measure::{Phase, TickStamped, TimedEspHal, TimerLine},
+    own::{CYCLES, Check, Cycle, Fingerprint, Order},
 };
 
 /// The stand W1 checks.
@@ -120,6 +123,10 @@ const STRESS: Duration = Duration::from_millis(5_000);
 const HOLD_FILL: Duration = Duration::from_millis(3_000);
 /// How long the full hold lasts.
 const HOLD: Duration = Duration::from_millis(1_000);
+/// How long the application takes no frame after the first drop.
+const DWELL: Duration = Duration::from_millis(1_500);
+/// The wait after each later drop.
+const RELEASE_STEP: Duration = Duration::from_millis(10);
 /// How long frames are counted after the release.
 const AFTER_RELEASE: Duration = Duration::from_millis(2_000);
 
@@ -386,6 +393,127 @@ async fn drain(receiver: &mut Receiver, channel: Channel, admitted: &mut u32) ->
     }
 }
 
+/// One hold cycle into `cycle`: take every staging lease (at most
+/// [`HOLD_FILL`]) and fingerprint each, hold them [`HOLD`] and recheck
+/// them, drop the first in `cycle.order`, dwell [`DWELL`] without taking a
+/// frame and recheck the rest, drop them one at a time [`RELEASE_STEP`]
+/// apart, each rechecked just before its drop, and take frames for
+/// [`AFTER_RELEASE`].
+async fn hold_cycle(
+    receiver: &mut Receiver,
+    counters: &'static WifiRxCounters,
+    ring_base: u32,
+    channel: Channel,
+    admitted: &mut u32,
+    cycle: &mut Cycle,
+) {
+    let mut leases = heapless::Vec::<(Held, Fingerprint), SLOTS>::new();
+    let deadline = after(HOLD_FILL);
+    while !leases.is_full() {
+        match select(
+            receiver.next(),
+            measure::wait_until(measure::P1_COMPARATOR, deadline),
+        )
+        .await
+        {
+            Either::First(held) => {
+                take(receiver, &held, None, channel, admitted);
+                let segment = held.segment();
+                let print = Fingerprint::of(segment.buffer, segment.descriptor_address, ring_base);
+                let _full = leases.push((held, print));
+            }
+            Either::Second(()) => break,
+        }
+    }
+    cycle.held = leases.len();
+    let before = counters.report();
+    measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
+    cycle.hold = report::Hold::between(leases.len(), &before, &counters.report());
+    for (held, print) in &leases {
+        if print.changed(held.segment().buffer) {
+            cycle.mismatch(Check::Hold, print.index);
+        }
+    }
+
+    // The release order: the ring's when the leases cover it, otherwise the
+    // order they were taken in (forward) or its reverse.
+    let mut indices = heapless::Vec::<Option<usize>, SLOTS>::new();
+    for (_, print) in &leases {
+        let _full = indices.push(print.index);
+    }
+    let ring = own::release_order(&indices, cycle.order);
+    let mut positions = heapless::Vec::<usize, SLOTS>::new();
+    for step in 0..leases.len() {
+        let position = match ring {
+            Some(ring) => ring.get(step).copied().unwrap_or(step),
+            None if cycle.order == Order::Forward => step,
+            None => leases.len() - 1 - step,
+        };
+        let _full = positions.push(position);
+    }
+    cycle.first_drop = ring
+        .and_then(|ring| ring.first().copied())
+        .and_then(|position| indices.get(position).copied().flatten());
+    let mut slots: [Option<(Held, Fingerprint)>; SLOTS] = [const { None }; SLOTS];
+    for (slot, lease) in slots.iter_mut().zip(leases) {
+        *slot = Some(lease);
+    }
+    let released = counters.report();
+    let mut steps = positions.iter();
+    // The first drop, then the dwell: no frame is taken, so the queue
+    // keeps what the walker stages meanwhile.
+    if let Some((held, print)) = steps
+        .next()
+        .and_then(|&position| slots.get_mut(position))
+        .and_then(Option::take)
+    {
+        if print.changed(held.segment().buffer) {
+            cycle.mismatch(Check::Release, print.index);
+        }
+        drop(held);
+    }
+    measure::wait_until(measure::P1_COMPARATOR, after(DWELL)).await;
+    let dwelt = counters.report();
+    cycle.snapshots = dwelt.exhaustion.snapshots;
+    if dwelt.exhaustion.snapshots != released.exhaustion.snapshots {
+        cycle.exhaust = dwelt.exhaustion.latest;
+    }
+    for (held, print) in slots.iter().flatten() {
+        if print.changed(held.segment().buffer) {
+            cycle.mismatch(Check::Dwell, print.index);
+        }
+    }
+    for &position in steps {
+        let Some((held, print)) = slots.get_mut(position).and_then(Option::take) else {
+            continue;
+        };
+        if print.changed(held.segment().buffer) {
+            cycle.mismatch(Check::Release, print.index);
+        }
+        drop(held);
+        measure::wait_until(measure::P1_COMPARATOR, after(RELEASE_STEP)).await;
+    }
+
+    let deadline = after(AFTER_RELEASE);
+    while let Either::First(held) = select(
+        receiver.next(),
+        measure::wait_until(measure::P1_COMPARATOR, deadline),
+    )
+    .await
+    {
+        take(receiver, &held, None, channel, admitted);
+        cycle.frames_after_release = cycle.frames_after_release.saturating_add(1);
+        let _full = cycle.first_after_release.push(own::descriptor_index(
+            held.segment().descriptor_address,
+            ring_base,
+        ));
+    }
+    cycle.order_breaks = own::order_breaks(&cycle.first_after_release);
+    let end = counters.report();
+    cycle.chained = end.chained_drops.wrapping_sub(released.chained_drops);
+    cycle.oversized = end.oversized_drops.wrapping_sub(released.oversized_drops);
+}
+
 fn after(duration: Duration) -> Instant {
     EmbassyClock.now().saturating_add(duration)
 }
@@ -462,6 +590,7 @@ async fn run(
         mut stop,
         mut receiver,
         counters,
+        ring_base,
     } = match bound {
         Bound::Ends(ends) => ends,
         Bound::Refused(error) => {
@@ -475,8 +604,7 @@ async fn run(
     let mut tsf = report::TsfLog::new();
     let mut admitted = 0_u32;
     let mut window_us = 0;
-    let mut frames_after_release = 0_u32;
-    let mut hold = report::Hold::default();
+    let mut cycles: [Cycle; CYCLES] = core::array::from_fn(|cycle| Cycle::new(Order::of(cycle)));
     let mut timers = heapless::Vec::<TimerLine, 4>::new();
     measure::enter(Phase::FirstFrame);
     let first = select(
@@ -541,38 +669,20 @@ async fn run(
             });
         }
 
-        // The hold: every staging lease held, the walker exhausts; the
-        // release restarts it.
+        // The holds: every staging lease held, the walker exhausts; the
+        // staged release restarts it. The second cycle starts after the
+        // first one's frames after the release: the ring has recovered.
         measure::enter(Phase::Hold);
-        let mut holding = heapless::Vec::<Held, SLOTS>::new();
-        let deadline = after(HOLD_FILL);
-        while !holding.is_full() {
-            match select(
-                receiver.next(),
-                measure::wait_until(measure::P1_COMPARATOR, deadline),
+        for cycle in &mut cycles {
+            hold_cycle(
+                &mut receiver,
+                counters,
+                ring_base,
+                rx_channel,
+                &mut admitted,
+                cycle,
             )
-            .await
-            {
-                Either::First(held) => {
-                    take(&receiver, &held, None, rx_channel, &mut admitted);
-                    let _full = holding.push(held);
-                }
-                Either::Second(()) => break,
-            }
-        }
-        let before = counters.report();
-        measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
-        hold = report::Hold::between(holding.len(), &before, &counters.report());
-        holding.clear();
-        let deadline = after(AFTER_RELEASE);
-        while let Either::First(held) = select(
-            receiver.next(),
-            measure::wait_until(measure::P1_COMPARATOR, deadline),
-        )
-        .await
-        {
-            take(&receiver, &held, None, rx_channel, &mut admitted);
-            frames_after_release = frames_after_release.saturating_add(1);
+            .await;
         }
     }
 
@@ -651,8 +761,7 @@ async fn run(
         rx,
         unserviced_mac: irq::UNSERVICED_MAC.load(core::sync::atomic::Ordering::Relaxed),
         unserviced_pwr: irq::UNSERVICED_PWR.load(core::sync::atomic::Ordering::Relaxed),
-        frames_after_release,
-        hold,
+        cycles: &cycles,
         lags: &lags,
         tsf: &tsf,
         admitted,

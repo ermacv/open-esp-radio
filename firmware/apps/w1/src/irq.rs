@@ -166,6 +166,8 @@ pub struct P1Ends {
     pub stop: ReceiveStopHandle<'static>,
     pub receiver: FrameReceiver<'static, SLOTS, BUFFER>,
     pub counters: &'static WifiRxCounters,
+    /// The DMA address of descriptor 0, as the bind laid the arena out.
+    pub ring_base: u32,
 }
 
 /// What the receive runner sends the application after its bind.
@@ -199,6 +201,7 @@ pub async fn rx_task(
         stop,
         receiver,
         counters,
+        ring_base: parts.descriptor_base(),
     }));
     let publisher = QueueSink::new(sender, &CLOCK);
     let admission = CountingAdmission::new(counters);
