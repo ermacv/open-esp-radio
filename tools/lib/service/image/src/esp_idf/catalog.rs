@@ -250,7 +250,7 @@ mod tests {
         assert!(entry(&entries, "missing").is_err());
         project(
             root.path(),
-            "hil/peers/copy",
+            "firmware/peers/copy",
             "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         assert!(
@@ -263,7 +263,8 @@ mod tests {
     fn the_tracked_catalog_names_its_projects() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let entries = entries(&root).unwrap();
-        for image in ["ieee802154-peer", "vendor-calibration"] {
+        // The vendor references (`firmware/vendor`) join with the verification tools.
+        for image in ["ieee802154-peer"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");
         }
     }

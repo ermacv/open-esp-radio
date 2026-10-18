@@ -63,7 +63,7 @@ mod tests {
         )
         .unwrap();
         for file in [
-            "tools/image/pipeline/Cargo.toml",
+            "tools/lib/service/image/Cargo.toml",
             "tools/image/pipeline/src/lib.rs",
             "tools/image/linker/src/main.rs",
             "tools/elf/src/lib.rs",

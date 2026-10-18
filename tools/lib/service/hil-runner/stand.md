@@ -362,7 +362,7 @@ cargo stand lease --board esp32c5 --flashed i-peer --application build/peer.bin 
 
 Tracked ESP-IDF firmware forms one catalog: every project with a
 `firmware.toml` beside its `CMakeLists.txt`, peers in `hil/peers/<project>/`,
-vendor references in `verification/<chip>/hil-vendor/<project>/`; each
+vendor references in `firmware/vendor/<chip>/<project>/`; each
 image is bundled with its own bootloader and partition table. `hold = "REASON"` in a
 manifest refuses every flash of that image, including a run's automatic peer
 restore, which then blocks its scenarios with the reason; `firmware list`

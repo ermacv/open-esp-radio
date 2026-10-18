@@ -102,7 +102,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         project(
             root.path(),
-            "hil/peers/held",
+            "firmware/peers/held",
             "image = \"held-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\nhold = \"wedges USB\"\n",
         );
         let entries = catalog::entries(root.path()).unwrap();

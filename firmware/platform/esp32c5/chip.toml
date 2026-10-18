@@ -6,7 +6,7 @@ id = "esp32c5"
 # The family whose shared code the chip uses (`platform = "family"` packages).
 family = "espressif"
 rust-target = "riscv32imac-unknown-none-elf"
-# The ROM loads the ESP-IDF bootloader, which loads platform/esp32c5/bootstrap;
+# The ROM loads the ESP-IDF bootloader, which loads firmware/platform/esp32c5/bootstrap;
 # the bootstrap stages the runtime into PSRAM.
 boot = "staged"
 espflash-chip = "esp32c5"
@@ -33,7 +33,7 @@ bootloader = 0x2000
 partition-table = 0x8000
 application = 0x10000
 otadata = 0xd000
-partitions = "platform/esp32c5/partitions/applications.csv"
+partitions = "firmware/platform/esp32c5/partitions/applications.csv"
 # The application image's header: the fastest settings an ESP image header
 # holds for the N16R8 module's 16-MiB quad flash, QIO at 80 MHz (ESP-IDF's
 # 120-MHz option also writes 80m and tunes at run time); the ROM reads the
@@ -48,7 +48,7 @@ bootloader-mode = "dio"
 start = "power-on"
 
 # The staged-boot address map as host tools check images against it: the
-# firmware's own copy is platform/esp32c5/layout (LAYOUT), which the linker
+# firmware's own copy is firmware/platform/esp32c5/layout (LAYOUT), which the linker
 # scripts read. One MMU window (0x42000000..0x44000000) serves flash and
 # PSRAM: the bootstrap's flash pages in its lower half, the module's 8-MiB
 # PSRAM at the fixed start of its upper half.
@@ -65,8 +65,8 @@ runtime-psram = { origin = 0x43010000, length = 0x007f0000 }
 task-stacks = "psram"
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
-# (platform/espressif/staged-runtime) installs these vectors and the stack;
-# the chip-neutral symbols are platform/espressif/staged-layout
+# (firmware/platform/espressif/staged-runtime) installs these vectors and the stack;
+# the chip-neutral symbols are firmware/platform/espressif/staged-layout
 # (interrupts.rs). One hart, no inter-processor call.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
@@ -105,12 +105,12 @@ contexts = [
 # The mask ROM the stack analyses read: the pinned ROM ELF of the revision
 # the profile describes (verification/esp32c5/artifacts.toml) and the
 # reviewed function summaries of the ROM the images link
-# (platform/esp32c5/linker/rom/esp32c5-eco2.x).
+# (firmware/platform/esp32c5/linker/rom/esp32c5-eco2.x).
 [rom]
 elf = "rom-rev100"
-summaries = "platform/esp32c5/linker/rom/functions.toml"
+summaries = "firmware/platform/esp32c5/linker/rom/functions.toml"
 
-# The staged runtime's placement contract (platform/espressif/linker/runtime):
+# The staged runtime's placement contract (firmware/platform/espressif/linker/runtime):
 # code, data and the CPU0 task stack in PSRAM; interrupt entries, vector
 # tables, the interrupt stack, critical and DMA data in SRAM.
 [placement]
@@ -137,7 +137,7 @@ stack-swap = [
 ]
 
 # The staged boot's host contract: the stage-two header the image pipeline
-# packs (platform/espressif/staged-layout stage_two.rs) and the input sections
+# packs (firmware/platform/espressif/staged-layout stage_two.rs) and the input sections
 # the runtime linker script zeroes (zeroed.rs), which the image linker refuses
 # initialized bytes in.
 [staged]

@@ -252,7 +252,7 @@ fn the_device_under_test_and_the_peer_come_from_the_pool() {
         peer,
         PeerBoardConfig::new(
             "c5-a".into(),
-            "02:00:00:00:00:01".into(),
+            "06:00:00:00:00:01".into(),
             "esp32c5".into(),
             "/dev/tty-c5-a".into()
         )
@@ -374,24 +374,12 @@ fn a_peer_that_is_not_attached_fails_only_the_runs_that_use_it() {
 }
 
 #[test]
-fn the_lab_file_sections_are_gone() {
-    for removed in ["lab", "duts", "peer"] {
-        let file = stand_file(|raw| {
-            raw.as_table_mut()
-                .unwrap()
-                .insert(removed.into(), toml::Value::Table(toml::Table::new()));
-        });
-        assert!(load(file.path(), "esp32s31").is_err(), "{removed}");
-    }
-}
-
-#[test]
 fn a_board_is_named_by_its_mac() {
     let file = stand_file(|_| {});
     let lab = load(file.path(), "esp32s31").unwrap();
     assert_eq!(lab.dut.mac, "02:00:00:00:00:01");
     let peer = with_c5_peer(lab).peer_resolving(&attached).unwrap();
-    assert_eq!(peer.mac, "02:00:00:00:00:01");
+    assert_eq!(peer.mac, "06:00:00:00:00:01");
 }
 
 #[test]

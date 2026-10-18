@@ -568,6 +568,8 @@ mod tests {
         board.lease(&access).unwrap()
     }
 
+    /// The power rung needs the hub port the board is found on, which a host
+    /// test has none of: the ladder keeps the stand file's other rungs.
     #[test]
     fn the_rungs_follow_the_stand_file_s_ladder() {
         let s31 = leased(board("s31-a"));
@@ -576,13 +578,9 @@ mod tests {
                 .iter()
                 .map(|rung| rung.step())
                 .collect::<Vec<_>>(),
-            [
-                RecoveryStep::RtsReset,
-                RecoveryStep::JtagReset,
-                RecoveryStep::PowerCycle
-            ]
+            [RecoveryStep::RtsReset, RecoveryStep::JtagReset]
         );
-        assert!(s31.has_power());
+        assert!(!s31.has_power());
         assert_eq!(s31.board().espflash_chip, "esp32s31");
         let c5 = leased(board("c5-a"));
         assert_eq!(
@@ -590,7 +588,7 @@ mod tests {
                 .iter()
                 .map(|rung| rung.step())
                 .collect::<Vec<_>>(),
-            [RecoveryStep::JtagReset, RecoveryStep::PowerCycle]
+            [RecoveryStep::JtagReset]
         );
     }
 

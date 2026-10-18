@@ -290,7 +290,7 @@ fn attached_port(board: &oer_tool_data_stand_file::Board) -> Result<PathBuf> {
 
 /// The chip a peer catalog image (`hil/peers/*/firmware.toml`) targets.
 pub fn peer_image_chip(root: &Path, image: &str) -> Result<String> {
-    let mut manifests = fs::read_dir(root.join("hil/peers"))?
+    let mut manifests = fs::read_dir(root.join("firmware/peers"))?
         .filter_map(|entry| entry.ok().map(|entry| entry.path().join("firmware.toml")))
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();

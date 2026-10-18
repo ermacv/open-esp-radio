@@ -49,7 +49,7 @@ reset = ["usb-jtag-rts", "jtag", "power"]
 
 [[board]]
 id = "c5-a"
-usb-serial = "02:00:00:00:00:02"
+usb-serial = "06:00:00:00:00:01"
 chip = "esp32c5"
 radios = ["wifi-2g4", "wifi-5g", "ble", "ieee802154"]
 roles = ["dut", "peer"]
