@@ -11,6 +11,7 @@ nothing here is built.
 | `esp32s31/notes/` | research notes on vendor Bluetooth LE and IEEE 802.15.4 behaviour, and platform notes (bring-up order, core 1 sampling) |
 | `esp32s31/bluetooth/` | facts from the unlicensed `esp32s31-bt-lib`, in place of code that was not carried |
 | `esp32s31/wifi/` | rules the Wi-Fi driver rebuild must keep, and predecessor facts it decides anew |
+| `esp32s31/acceptance/` | the predecessor's HIL scenarios with their numeric gates, as acceptance criteria for future slices |
 
 A value from a source without a license is a fact here and nothing more; see
 the [source policy](../docs/source-policy.md).

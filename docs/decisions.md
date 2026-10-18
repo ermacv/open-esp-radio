@@ -168,6 +168,13 @@ defaults, queue bounds) live in the code that applies them, not here.
   driver, and PTI values travel inside typed grants and notices. One transmit
   power policy, by board and country, covers all three radios.
 
+## 2026-10-18: acceptance
+
+- **Performance A/B:** 5 of 5 runs; a throughput regression above 5 % or a
+  p95 latency regression above 10 % blocks the change (owner, 2026-10-18).
+- **PHY calibration** matches the vendor when each field's difference stays
+  within the vendor's own spread for that field (owner, 2026-10-18).
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
