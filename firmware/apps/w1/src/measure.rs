@@ -29,6 +29,7 @@ use oer_espressif_executor_embassy::{
 };
 use oer_memory::AffineSpscSender;
 use oer_time::{Clock, Duration, Timer};
+
 use oer_time_embassy::EmbassyClock;
 
 /// The phases of one run, in order.
@@ -457,9 +458,11 @@ pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
     if phase() == Phase::Stress {
         let window = Window::begin();
         while phase() == Phase::Stress {
-            if EmbassyClock.wait_for(P2_STRESS_PERIOD).await.is_err() {
-                break;
-            }
+            wait_until(
+                P2_COMPARATOR,
+                EmbassyClock.now().saturating_add(P2_STRESS_PERIOD),
+            )
+            .await;
         }
         if let Some(window) = window {
             let _full = lines.try_send(TimerLine {
@@ -474,8 +477,51 @@ pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
 /// The application's timer stress: a timer every 113 µs until `deadline`.
 pub async fn p1_stress(deadline: oer_time::Instant) {
     while EmbassyClock.now() < deadline {
-        if EmbassyClock.wait_for(P1_STRESS_PERIOD).await.is_err() {
-            return;
-        }
+        wait_until(
+            P1_COMPARATOR,
+            EmbassyClock.now().saturating_add(P1_STRESS_PERIOD),
+        )
+        .await;
     }
+}
+
+/// Per executor (by its comparator) and phase: the image's timer waits.
+#[unsafe(link_section = ".critical.data.w1")]
+static WAITS: [[AtomicU32; RECORDED_PHASES]; 2] =
+    [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2];
+/// Per executor and phase: the waits that returned before their deadline.
+#[unsafe(link_section = ".critical.data.w1")]
+static WOKE_EARLY: [[AtomicU32; RECORDED_PHASES]; 2] =
+    [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2];
+
+/// Wait until `deadline` on the executor of `comparator`, which is the
+/// caller's; count the wait, and count it early when it returned before
+/// the deadline.
+pub async fn wait_until(comparator: u8, deadline: oer_time::Instant) {
+    EmbassyClock.wait_until(deadline).await;
+    let early = EmbassyClock.now() < deadline;
+    let phase = phase();
+    let cell = |table: &'static [[AtomicU32; RECORDED_PHASES]; 2]| {
+        table
+            .get(usize::from(comparator))
+            .and_then(|phases| phases.get(phase as usize))
+    };
+    if let Some(waits) = cell(&WAITS) {
+        waits.fetch_add(1, Ordering::Relaxed);
+    }
+    if early && let Some(woke_early) = cell(&WOKE_EARLY) {
+        woke_early.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// The waits of the executor of `comparator` in `phase`, and how many woke
+/// early.
+pub fn waits(comparator: u8, phase: Phase) -> (u32, u32) {
+    let load = |table: &[[AtomicU32; RECORDED_PHASES]; 2]| {
+        table
+            .get(usize::from(comparator))
+            .and_then(|phases| phases.get(phase as usize))
+            .map_or(0, |cell| cell.load(Ordering::Relaxed))
+    };
+    (load(&WAITS), load(&WOKE_EARLY))
 }

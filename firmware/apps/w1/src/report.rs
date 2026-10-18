@@ -10,7 +10,7 @@ use core::fmt::{self, Write};
 
 use oer_esp32s31_ieee80211::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
-    counters::WifiRxReport,
+    counters::{WifiRxExhaustion, WifiRxReport},
 };
 use oer_esp32s31_ieee80211_dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
 use oer_esp32s31_ieee80211_mac::init::MAC_COLD_RX_INTERRUPT_MASK;
@@ -30,6 +30,45 @@ pub const MIN_IRQ_STACK_FREE: usize = 4096;
 /// Microseconds per time unit.
 const TU_US: u64 = 1024;
 
+/// The hold: the leases held, and what the receive counters moved while
+/// every one of them was held.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Hold {
+    pub reached: usize,
+    pub units: u32,
+    pub mac_irqs: u32,
+    pub stage_capacity_blocks: u32,
+    pub admission_blocks: u32,
+}
+
+impl Hold {
+    /// `reached` leases held from `before` to `after`.
+    pub fn between(reached: usize, before: &WifiRxReport, after: &WifiRxReport) -> Self {
+        Self {
+            reached,
+            units: after.units.wrapping_sub(before.units),
+            mac_irqs: after.mac_irqs.wrapping_sub(before.mac_irqs),
+            stage_capacity_blocks: after
+                .stage_capacity_blocks
+                .wrapping_sub(before.stage_capacity_blocks),
+            admission_blocks: after.admission_blocks.wrapping_sub(before.admission_blocks),
+        }
+    }
+}
+
+/// The executors by comparator: 0 is the radio executor's, 1 the
+/// application's.
+const COMPARATORS: [u8; 2] = [measure::P2_COMPARATOR, measure::P1_COMPARATOR];
+/// The phases the image waits in.
+const WAIT_PHASES: [Phase; 6] = [
+    Phase::BringUp,
+    Phase::FirstFrame,
+    Phase::Window,
+    Phase::Stress,
+    Phase::Hold,
+    Phase::Stop,
+];
+
 /// Everything the block reports, captured after the exit.
 pub struct Run<'a> {
     pub channel: u8,
@@ -44,6 +83,8 @@ pub struct Run<'a> {
     pub unserviced_mac: u32,
     pub unserviced_pwr: u32,
     pub frames_after_release: u32,
+    /// The hold; all zero when no frame opened the window.
+    pub hold: Hold,
     /// Frames the application's normalize admitted.
     pub admitted: u32,
     pub exit: WifiRxExit,
@@ -138,16 +179,26 @@ fn check(pass: bool, reason: &'static str) -> Outcome {
     }
 }
 
+/// Whether any timer wait of the image returned before its deadline.
+fn woke_early() -> bool {
+    COMPARATORS.iter().any(|&comparator| {
+        WAIT_PHASES
+            .iter()
+            .any(|&phase| measure::waits(comparator, phase).1 > 0)
+    })
+}
+
 /// Every gate, in the block's order, and the beacon figures.
-pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 7]) {
+pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 8]) {
     let (verdict, beacons) = beacons(run);
-    let reload = &run.rx.reload;
-    let walker_restart = if reload.exhausted_republications == 0 {
+    // Every lease held, nothing received meanwhile (the walker ran out),
+    // frames after the release; how the ring recovered is report-only.
+    let walker_restart = if run.hold.reached < SLOTS {
         Outcome::Unexercised("pool-not-exhausted")
-    } else if run.frames_after_release == 0 {
-        Outcome::Fail("no-frames-after-release")
+    } else if run.hold.units > 0 {
+        Outcome::Fail("received-while-held")
     } else {
-        check(run.rx.capacity_drains >= 1, "no-capacity-drain")
+        check(run.frames_after_release > 0, "no-frames-after-release")
     };
     let gates = [
         Gate {
@@ -183,6 +234,10 @@ pub fn gates(run: &Run<'_>) -> (Verdict, [Gate; 7]) {
                 run.unserviced_mac.saturating_add(run.unserviced_pwr) == 0,
                 "unserviced-interrupts",
             ),
+        },
+        Gate {
+            name: "timer_wake",
+            outcome: check(!woke_early(), "woke-early"),
         },
     ];
     (verdict, gates)
@@ -324,7 +379,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             "other"
         };
         block.line(format_args!(
-            "w1.bss idx={index} who={who} bssid={} bi_tu={} ch={} beacons={} dup={} probe_rsp={} rssi={} no_rssi={} gaps_late={} max_gap_us={} missed={} lag_us={} ssid_len={}",
+            "w1.bss idx={index} who={who} bssid={} bi_tu={} ch={} beacons={} dup={} probe_rsp={} rssi={} no_rssi={} gaps_late={} max_gap_us={} missed={} lag_us={} ssid_len={} stamp_span_us={} handoff_span_us={}",
             Masked(record.bssid),
             record.beacon_interval_tu,
             record.channel,
@@ -338,6 +393,8 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             tally.missed_beacons,
             Range(tally.handoff_lag_us.map(|range| (range.min, range.max))),
             record.ssid_bytes().len(),
+            OrDash(tally.stamp_span_us()),
+            OrDash(tally.handoff_span_us()),
         ))?;
     }
     for gap in run.survey.gap_log() {
@@ -383,6 +440,12 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         rx.capacity_drains,
         run.frames_after_release,
     ))?;
+    let hold = &run.hold;
+    block.line(format_args!(
+        "w1.hold reached={} slots={SLOTS} units={} mac_irqs={} stage_capacity_blocks={} admission_blocks={}",
+        hold.reached, hold.units, hold.mac_irqs, hold.stage_capacity_blocks, hold.admission_blocks,
+    ))?;
+    exhaust(block, rx)?;
     let prefix = &rx.prefix;
     block.line(format_args!(
         "w1.prefix invalid={} chain={} bounds={} rx_failure={} mic_failure={} quarantined={} output_small={} metadata={} ignored={} unsupported={} strict_rxend_refusable={} strict_dump_refusable={} admitted={}",
@@ -482,7 +545,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     for timer in run.timers {
         let report = &timer.report;
         block.line(format_args!(
-            "w1.timer cmp={} phase={} early={} late_count={} late_max_us={} late_total_us={} missed={} unmatched={} coalesced={} overlapping={} armed_at_end={}",
+            "w1.timer cmp={} phase={} early={} late_count={} late_max_us={} late_total_us={} missed={} unmatched={} coalesced={} overlapping={} armed_at_end={} waits={} woke_early={}",
             timer.comparator,
             timer.phase.name(),
             report.early_interrupts,
@@ -494,7 +557,21 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             report.coalesced_interrupts,
             report.overlapping_interrupts,
             u8::from(report.armed_at_end),
+            measure::waits(timer.comparator, timer.phase).0,
+            measure::waits(timer.comparator, timer.phase).1,
         ))?;
+    }
+    for comparator in COMPARATORS {
+        for phase in WAIT_PHASES {
+            let (waits, early) = measure::waits(comparator, phase);
+            if waits == 0 {
+                continue;
+            }
+            block.line(format_args!(
+                "w1.wake cmp={comparator} phase={} waits={waits} woke_early={early}",
+                phase.name()
+            ))?;
+        }
     }
     let survey = run.survey.counters();
     block.line(format_args!(
@@ -527,6 +604,60 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         }
     }
     Ok(())
+}
+
+/// `0x<hex>`, or `-`.
+struct HexOrDash(Option<u32>);
+
+impl fmt::Display for HexOrDash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(value) => write!(f, "{value:#x}"),
+            None => f.write_str("-"),
+        }
+    }
+}
+
+/// `0`, `1`, or `-`.
+struct Flag(Option<bool>);
+
+impl fmt::Display for Flag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(set) => write!(f, "{}", u8::from(set)),
+            None => f.write_str("-"),
+        }
+    }
+}
+
+/// The walker and ring snapshot of the longest stage-capacity block that a
+/// returned lease ended; every value `-` without one.
+fn exhaust<W: Write>(block: &mut Block<'_, W>, rx: &WifiRxReport) -> fmt::Result {
+    let snapshot = rx.exhaustion.longest;
+    let take = |field: fn(&WifiRxExhaustion) -> Option<u32>| snapshot.as_ref().and_then(field);
+    let flag = |field: fn(&WifiRxExhaustion) -> bool| Flag(snapshot.as_ref().map(field));
+    block.line(format_args!(
+        "w1.exhaust snapshots={} blocked_us={} next_low={} next_upper={} last_low={} base={} walker={} doorbell={} buffer_full={} ring_base={} recycle_start={} accepted_tail={} observed={} completed={} remaining={} reload_pending={} released={} detached={} staged={}",
+        rx.exhaustion.snapshots,
+        OrDash(take(|s| Some(s.blocked_us))),
+        HexOrDash(take(|s| Some(s.next_low))),
+        flag(|s| s.next_upper),
+        HexOrDash(take(|s| Some(s.last_low))),
+        HexOrDash(take(|s| s.base)),
+        flag(|s| s.walker_enabled),
+        flag(|s| s.reload_doorbell),
+        OrDash(take(|s| s.buffer_full.map(u32::from))),
+        HexOrDash(take(|s| Some(s.ring_base))),
+        OrDash(take(|s| Some(s.recycle_start))),
+        OrDash(take(|s| Some(s.accepted_tail))),
+        OrDash(take(|s| Some(s.observed))),
+        OrDash(take(|s| Some(s.completed))),
+        OrDash(take(|s| s.remaining)),
+        flag(|s| s.reload_pending),
+        OrDash(take(|s| Some(s.released))),
+        OrDash(take(|s| Some(s.detached))),
+        OrDash(take(|s| Some(s.staged))),
+    ))
 }
 
 /// A gate's name in a verdict reason: `walker-restart`.

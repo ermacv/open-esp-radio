@@ -70,9 +70,14 @@ its holder when it refuses.
   against ⌊8·window_us / (10·bi_tu·1024)⌋; `stand-absent`,
   `stand-not-tracked`, `zero-interval` or `beacons`), `channel` (the applied
   channel is the configured one and `--channel`), `exit` (`StopRequested`,
-  `Halted`), `walker_restart` (`pool-not-exhausted` is unexercised,
-  `no-frames-after-release` a fail), `irq_stack` (4096 bytes free),
-  `service_errors` and `unserviced` (zero). It compares them with the
+  `Halted`), `walker_restart` (from `w1.hold`: a hold short of every
+  staging slot is unexercised, `pool-not-exhausted`; units received while
+  every lease was held fail it, `received-while-held`, as does
+  `no-frames-after-release`; how the ring recovered, `w1.reload` and the
+  walker snapshot `w1.exhaust`, is report-only), `irq_stack` (4096 bytes
+  free), `service_errors` and `unserviced` (zero) and `timer_wake` (no
+  timer wait of the image returned before its deadline, `woke_early=` of
+  every `w1.timer` and `w1.wake` line; `woke-early`). It compares them with the
   image's `w1.gate` lines, `w1.verdict` and the `OER-RESULT:` line, whose
   fail reasons each start with a gate's name (`walker-restart not
   exercised`), and the block's `channel=` and masked `stand=` with the flags,
@@ -80,7 +85,10 @@ its holder when it refuses.
   the timeout and 3 when the block is missing or malformed or the image and
   the host disagree on anything. A summary follows: the gates as both see
   them and the beacon gaps that overlap a PHY tracking tick (the stand's
-  smallest handoff lag maps the frame stamps onto the ticks' clock).
+  smallest handoff lag maps the frame stamps onto the ticks' clock). Each
+  `w1.bss` line also carries the stamp and handoff spans of its stamped
+  frames (`stamp_span_us=`, `handoff_span_us=`): their ratio is the MAC
+  stamp clock's rate.
 - `monitor` opens the console without a reset: RTS is released before DTR.
 - `power-cycle` switches the board's hub port off and on with `uhubctl`, only
   when the stand file lists the port as switchable and not protected and the

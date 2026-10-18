@@ -28,9 +28,23 @@ After the exit the image prints a block from `OER-W1-BEGIN v=1` to
 or `OER-RESULT: fail w1 <gate> <reason>[; …]`. The gates: the stand's
 beacons in the window (N = beacons − duplicates, at least
 ⌊8·window / (10·interval)⌋), the applied channel, a clean exit, the walker's
-restart after the hold, at least 4096 free bytes of the interrupt stack, no
-service error and no MAC or WDEVPWR entry without the line. A failure before
-the runner hands over its ends prints only `OER-RESULT: fail w1 <reason>`.
+restart (every staging lease held, no unit received during the 1 s hold,
+frames after the release; `w1.hold`), at least 4096 free bytes of the
+interrupt stack, no service error, no MAC or WDEVPWR entry without the line,
+and no timer wait of the image (P1, and P2's stress task) returning before
+its deadline (`waits=`/`woke_early=` in `w1.timer` and `w1.wake`). A
+failure before the runner hands over its ends prints only
+`OER-RESULT: fail w1 <reason>`.
+
+Report-only: `w1.exhaust`, the walker registers (NEXT with its unknown
+upper flag, LAST, BASE, the walker enable, the reload doorbell, the
+starvation counter) and the ring's view (base, recycle frontier, accepted
+tail, observed and completed descriptors, the list left from NEXT, a
+pending reload, released, detached and staged buffers) that the runner read
+when a returned lease ended its longest stage-capacity block, before the
+capacity drain serviced anything; `w1.reload`, how the ring recovered; and
+per BSS the stamp and handoff spans of its stamped frames, whose ratio is
+the MAC stamp clock's rate.
 
 ```sh
 cargo fw run w1 --board s31-a --expect-bssid 02:00:00:00:F6:D0 --channel 6

@@ -208,6 +208,8 @@ enum Kind {
     NumberOrDash(u64),
     /// `0x` and hex digits, up to `u32::MAX`.
     Hex,
+    /// [`Kind::Hex`], or `-`.
+    HexOrDash,
     /// Any token.
     Text,
     /// `xx:xx:xx:xx:HH:HH`.
@@ -226,6 +228,10 @@ const U8: Kind = Kind::Number(u8::MAX as u64);
 const U16: Kind = Kind::Number(u16::MAX as u64);
 const U32: Kind = Kind::Number(u32::MAX as u64);
 const U64: Kind = Kind::Number(u64::MAX);
+const U32_OR_DASH: Kind = Kind::NumberOrDash(u32::MAX as u64);
+const FLAG_OR_DASH: Kind = Kind::OneOf(&["0", "1", "-"]);
+/// The phases of a run, as the image names them.
+const PHASES: &[&str] = &["bringup", "first_frame", "window", "stress", "hold", "stop"];
 
 struct Key {
     name: &'static str,
@@ -256,7 +262,7 @@ struct Spec {
     count: Count,
 }
 
-const GATE_NAMES: [&str; 7] = [
+const GATE_NAMES: [&str; 8] = [
     "beacons",
     "channel",
     "exit",
@@ -264,6 +270,7 @@ const GATE_NAMES: [&str; 7] = [
     "irq_stack",
     "service_errors",
     "unserviced",
+    "timer_wake",
 ];
 
 macro_rules! numbers {
@@ -306,6 +313,8 @@ const SPECS: &[Spec] = &[
             key("missed", U32),
             key("lag_us", Kind::Range { signed: false }),
             key("ssid_len", U8),
+            key("stamp_span_us", U32_OR_DASH),
+            key("handoff_span_us", U32_OR_DASH),
         ],
         open: false,
         count: Count::AtMost(MAX_BSS),
@@ -359,6 +368,45 @@ const SPECS: &[Spec] = &[
             "capacity_drains",
             "frames_after_release",
         ),
+        open: false,
+        count: Count::Once,
+    },
+    Spec {
+        keyword: "w1.hold",
+        keys: numbers!(
+            "reached",
+            "slots",
+            "units",
+            "mac_irqs",
+            "stage_capacity_blocks",
+            "admission_blocks",
+        ),
+        open: false,
+        count: Count::Once,
+    },
+    Spec {
+        keyword: "w1.exhaust",
+        keys: &[
+            key("snapshots", U64),
+            key("blocked_us", U32_OR_DASH),
+            key("next_low", Kind::HexOrDash),
+            key("next_upper", FLAG_OR_DASH),
+            key("last_low", Kind::HexOrDash),
+            key("base", Kind::HexOrDash),
+            key("walker", FLAG_OR_DASH),
+            key("doorbell", FLAG_OR_DASH),
+            key("buffer_full", Kind::NumberOrDash(u16::MAX as u64)),
+            key("ring_base", Kind::HexOrDash),
+            key("recycle_start", U32_OR_DASH),
+            key("accepted_tail", U32_OR_DASH),
+            key("observed", U32_OR_DASH),
+            key("completed", U32_OR_DASH),
+            key("remaining", U32_OR_DASH),
+            key("reload_pending", FLAG_OR_DASH),
+            key("released", U32_OR_DASH),
+            key("detached", U32_OR_DASH),
+            key("staged", U32_OR_DASH),
+        ],
         open: false,
         count: Count::Once,
     },
@@ -452,6 +500,19 @@ const SPECS: &[Spec] = &[
             key("coalesced", U64),
             key("overlapping", U64),
             key("armed_at_end", U64),
+            key("waits", U64),
+            key("woke_early", U64),
+        ],
+        open: false,
+        count: Count::Any,
+    },
+    Spec {
+        keyword: "w1.wake",
+        keys: &[
+            key("cmp", Kind::OneOf(&["0", "1"])),
+            key("phase", Kind::OneOf(PHASES)),
+            key("waits", U64),
+            key("woke_early", U64),
         ],
         open: false,
         count: Count::Any,
@@ -549,6 +610,15 @@ fn decimal(text: &str) -> Option<u64> {
     text.parse().ok()
 }
 
+/// `0x` and hex digits, up to `u32::MAX`.
+fn hex(text: &str) -> bool {
+    text.strip_prefix("0x").is_some_and(|digits| {
+        !digits.is_empty()
+            && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+            && u32::from_str_radix(digits, 16).is_ok()
+    })
+}
+
 fn signed(text: &str) -> Option<i64> {
     let (negative, digits) = match text.strip_prefix('-') {
         Some(digits) => (true, digits),
@@ -565,11 +635,8 @@ fn validate(kind: Kind, value: &str) -> Result<String, String> {
         Kind::NumberOrDash(bound) => {
             value == "-" || decimal(value).is_some_and(|number| number <= bound)
         }
-        Kind::Hex => value.strip_prefix("0x").is_some_and(|digits| {
-            !digits.is_empty()
-                && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
-                && u32::from_str_radix(digits, 16).is_ok()
-        }),
+        Kind::Hex => hex(value),
+        Kind::HexOrDash => value == "-" || hex(value),
         Kind::Text => !value.is_empty(),
         Kind::Masked => {
             let octets = value.strip_prefix("xx:xx:xx:xx:").map(|rest| rest.split(':'));
@@ -680,10 +747,11 @@ pub enum GateName {
     IrqStack,
     ServiceErrors,
     Unserviced,
+    TimerWake,
 }
 
 impl GateName {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Beacons,
         Self::Channel,
         Self::Exit,
@@ -691,6 +759,7 @@ impl GateName {
         Self::IrqStack,
         Self::ServiceErrors,
         Self::Unserviced,
+        Self::TimerWake,
     ];
 
     /// The name in a `w1.gate` line.
@@ -703,6 +772,7 @@ impl GateName {
             Self::IrqStack => "irq_stack",
             Self::ServiceErrors => "service_errors",
             Self::Unserviced => "unserviced",
+            Self::TimerWake => "timer_wake",
         }
     }
 
@@ -746,6 +816,8 @@ pub struct Report {
     pub gaps_dropped: u64,
     pub ticks: Vec<Tick>,
     pub rx: Fields,
+    pub hold: Fields,
+    pub exhaust: Fields,
     pub prefix: Fields,
     pub reload: Fields,
     pub continuation: Fields,
@@ -755,6 +827,7 @@ pub struct Report {
     pub clock: Vec<Fields>,
     pub stack: Fields,
     pub timer: Vec<Fields>,
+    pub wake: Vec<Fields>,
     pub survey: Fields,
     pub verdict: Fields,
     /// One per gate, in [`GateName::ALL`] order.
@@ -899,6 +972,8 @@ impl Report {
             gaps_dropped: one("w1.gaps").number("dropped")?,
             ticks,
             rx: one("w1.rx"),
+            hold: one("w1.hold"),
+            exhaust: one("w1.exhaust"),
             prefix: one("w1.prefix"),
             reload: one("w1.reload"),
             continuation: one("w1.continuation"),
@@ -908,6 +983,7 @@ impl Report {
             clock: all("w1.clock"),
             stack: one("w1.stack"),
             timer: all("w1.timer"),
+            wake: all("w1.wake"),
             survey: one("w1.survey"),
             verdict: one("w1.verdict"),
             gates,
@@ -1039,32 +1115,42 @@ fn beacons_gate(report: &Report) -> Result<(HostGate, Option<BeaconFigures>), Re
     Ok((gate, Some(figures)))
 }
 
+/// The walker restart: every staging lease held (`w1.hold reached=` is
+/// `slots=`), nothing received while they were (the walker ran out), and
+/// frames after the release. How the ring recovered (`w1.reload`,
+/// `w1.exhaust`) is reported, not gated.
 fn walker_restart_gate(report: &Report) -> Result<HostGate, ReportError> {
-    let exhausted = report.reload.number("exhausted_republications")?;
-    let drains = report.rx.number("capacity_drains")?;
+    let reached = report.hold.number("reached")?;
+    let slots = report.hold.number("slots")?;
+    let held_units = report.hold.number("units")?;
     let after = report.rx.number("frames_after_release")?;
-    Ok(if exhausted == 0 {
+    Ok(if reached < slots {
         HostGate {
             name: GateName::WalkerRestart,
             result: GateResult::Unexercised,
             reason: Some("pool-not-exhausted"),
             bound_reason: true,
         }
-    } else if after == 0 {
-        gate(
-            GateName::WalkerRestart,
-            false,
-            "no-frames-after-release",
-            true,
-        )
+    } else if held_units > 0 {
+        gate(GateName::WalkerRestart, false, "received-while-held", true)
     } else {
         gate(
             GateName::WalkerRestart,
-            drains >= 1,
-            "no-capacity-drain",
-            false,
+            after > 0,
+            "no-frames-after-release",
+            true,
         )
     })
+}
+
+/// No timer wait of the image returned before its deadline, on either
+/// executor, in any phase (`w1.timer` and `w1.wake`).
+fn timer_wake_gate(report: &Report) -> Result<HostGate, ReportError> {
+    let mut early = 0_u64;
+    for line in report.timer.iter().chain(&report.wake) {
+        early = early.saturating_add(line.number("woke_early")?);
+    }
+    Ok(gate(GateName::TimerWake, early == 0, "woke-early", true))
 }
 
 /// Recompute every gate of `report`; the `channel` gate also requires the
@@ -1111,6 +1197,7 @@ pub fn recompute(report: &Report, expected: &Config) -> Result<Host, ReportError
             "unserviced-interrupts",
             false,
         ),
+        timer_wake_gate(report)?,
     ];
     Ok(Host {
         gates,
@@ -1463,13 +1550,15 @@ mod tests {
     fn body() -> Vec<String> {
         [
             "w1.config channel=6 applied_channel=6 stand=xx:xx:xx:xx:F6:D0 window_ms=10000 cpu_hz=160000000 arena=32x1664 slots=32 mask=0x19a879e0",
-            "w1.bss idx=0 who=stand bssid=xx:xx:xx:xx:F6:D0 bi_tu=100 ch=6 beacons=98 dup=1 probe_rsp=0 rssi=-61..-40 no_rssi=0 gaps_late=2 max_gap_us=310000 missed=2 lag_us=120..900 ssid_len=8",
-            "w1.bss idx=1 who=other bssid=xx:xx:xx:xx:12:34 bi_tu=100 ch=- beacons=40 dup=0 probe_rsp=1 rssi=- no_rssi=40 gaps_late=0 max_gap_us=0 missed=0 lag_us=- ssid_len=0",
+            "w1.bss idx=0 who=stand bssid=xx:xx:xx:xx:F6:D0 bi_tu=100 ch=6 beacons=98 dup=1 probe_rsp=0 rssi=-61..-40 no_rssi=0 gaps_late=2 max_gap_us=310000 missed=2 lag_us=120..900 ssid_len=8 stamp_span_us=9932800 handoff_span_us=9932810",
+            "w1.bss idx=1 who=other bssid=xx:xx:xx:xx:12:34 bi_tu=100 ch=- beacons=40 dup=0 probe_rsp=1 rssi=- no_rssi=40 gaps_late=0 max_gap_us=0 missed=0 lag_us=- ssid_len=0 stamp_span_us=- handoff_span_us=-",
             "w1.gap stamp=1000000 gap_us=204800 missed=1",
             "w1.gap stamp=4294967000 gap_us=307200 missed=-",
             "w1.gaps dropped=0",
             "w1.tick start=900000 end=900200 ok=1",
             "w1.rx units=500 bytes=90000 mac_irqs=480 power_irqs=3 unserviced_mac=0 unserviced_pwr=0 doorbell_unmasks=470 ignored_unmasks=0 chained=0 oversized=0 empty=0 too_long=0 overload=0 admission_blocks=0 stage_capacity_blocks=0 service_passes=480 service_errors=0 capacity_drains=1 frames_after_release=12",
+            "w1.hold reached=32 slots=32 units=0 mac_irqs=0 stage_capacity_blocks=1 admission_blocks=0",
+            "w1.exhaust snapshots=1 blocked_us=1000100 next_low=0x17000 next_upper=0 last_low=0x16fe0 base=0x2f017000 walker=1 doorbell=0 buffer_full=3 ring_base=0x2f017000 recycle_start=4 accepted_tail=3 observed=32 completed=0 remaining=32 reload_pending=0 released=1 detached=31 staged=31",
             "w1.prefix fcs=0 strict_rxend_refusable=0 strict_dump_refusable=0 admitted=500",
             "w1.reload max_attempts=3 limit=100001 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1",
             "w1.continuation stale_doorbell=2 longest_streak=1",
@@ -1478,7 +1567,8 @@ mod tests {
             "w1.p2 phase=window swi2_max_us=20 swi2_p99_us=8 actor_max_us=40 actor_p99_us=10 actor_over_bound=0 receive_max_us=30 receive_p99_us=9 mac_to_poll_max_us=50 ring_to_doorbell_max_us=12",
             "w1.clock op=acquire clock=WifiMac phase=window count=1 max_us=3",
             "w1.stack irq_bytes=32768 irq_free=20000 min_free=4096",
-            "w1.timer cmp=0 phase=stress early=0 late_count=1 late_max_us=4 late_total_us=4 missed=0 unmatched=0 coalesced=0 overlapping=0 armed_at_end=0",
+            "w1.timer cmp=0 phase=stress early=0 late_count=1 late_max_us=4 late_total_us=4 missed=0 unmatched=0 coalesced=0 overlapping=0 armed_at_end=0 waits=135000 woke_early=0",
+            "w1.wake cmp=1 phase=hold waits=3 woke_early=0",
             "w1.survey frames=540 header_refusals=0 data=0 ignored_management=0 table_full=0 off_channel=0",
             "w1.verdict beacons=97 bi_us=102400 window_us=10000000 required=78",
             "w1.gate name=beacons result=pass",
@@ -1488,6 +1578,7 @@ mod tests {
             "w1.gate name=irq_stack result=pass",
             "w1.gate name=service_errors result=pass",
             "w1.gate name=unserviced result=pass",
+            "w1.gate name=timer_wake result=pass",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -1759,6 +1850,19 @@ mod tests {
             ("w1.p2", "actor_over_bound", "2.."),
             ("w1.gate name=beacons", "result", "maybe"),
             ("w1.gate name=beacons", "name", "nothing"),
+            ("w1.hold", "reached", "-"),
+            ("w1.hold", "units", "x"),
+            ("w1.exhaust", "next_low", "17000"),
+            ("w1.exhaust", "base", "0x"),
+            ("w1.exhaust", "base", "0x100000000"),
+            ("w1.exhaust", "next_upper", "2"),
+            ("w1.exhaust", "buffer_full", "65536"),
+            ("w1.exhaust", "snapshots", "-"),
+            ("w1.wake", "phase", "report"),
+            ("w1.wake", "cmp", "2"),
+            ("w1.timer", "woke_early", "-1"),
+            ("w1.bss idx=0", "stamp_span_us", "4294967296"),
+            ("w1.bss idx=0", "handoff_span_us", "x"),
         ];
         for (prefix, key, value) in garbage {
             let mut lines = body();
@@ -1984,12 +2088,7 @@ mod tests {
     #[test]
     fn the_walker_restart_gate() {
         let mut unexercised = body();
-        set(
-            &mut unexercised,
-            "w1.reload",
-            "exhausted_republications",
-            "0",
-        );
+        set(&mut unexercised, "w1.hold", "reached", "31");
         let gate = host_gate(&unexercised, GateName::WalkerRestart);
         assert_eq!(
             (gate.result, gate.reason),
@@ -2018,18 +2117,152 @@ mod tests {
         );
         assert_eq!(checked.outcome.exit_code(), 3);
 
+        // Frames while every lease was held: the walker never ran out.
+        let mut received = body();
+        set(&mut received, "w1.hold", "units", "2");
+        let gate = host_gate(&received, GateName::WalkerRestart);
+        assert_eq!(
+            (gate.result, gate.reason),
+            (GateResult::Fail, Some("received-while-held"))
+        );
+        set_gate(
+            &mut received,
+            "walker_restart",
+            "result=fail reason=received-while-held",
+        );
+        assert_eq!(
+            check(
+                &console(&received),
+                "OER-RESULT: fail w1 walker-restart received-while-held",
+                &expected()
+            )
+            .outcome
+            .exit_code(),
+            1
+        );
+        // The reason is bound: another one contradicts the host.
+        set_gate(&mut received, "walker_restart", "result=fail reason=held");
+        assert_eq!(
+            check(
+                &console(&received),
+                "OER-RESULT: fail w1 walker-restart held",
+                &expected()
+            )
+            .outcome
+            .exit_code(),
+            3
+        );
+
         let mut silent = body();
         set(&mut silent, "w1.rx", "frames_after_release", "0");
         assert_eq!(
             host_gate(&silent, GateName::WalkerRestart).reason,
             Some("no-frames-after-release")
         );
-        let mut undrained = body();
-        set(&mut undrained, "w1.rx", "capacity_drains", "0");
+        // A hold that never reached the pool's size outranks both.
+        set(&mut silent, "w1.hold", "units", "5");
+        set(&mut silent, "w1.hold", "reached", "0");
         assert_eq!(
-            host_gate(&undrained, GateName::WalkerRestart).result,
-            GateResult::Fail
+            host_gate(&silent, GateName::WalkerRestart).result,
+            GateResult::Unexercised
         );
+
+        // The recovery path is report-only.
+        let mut recovered = body();
+        set(&mut recovered, "w1.reload", "exhausted_republications", "0");
+        set(&mut recovered, "w1.rx", "capacity_drains", "0");
+        set(&mut recovered, "w1.exhaust", "snapshots", "0");
+        assert_eq!(
+            host_gate(&recovered, GateName::WalkerRestart).result,
+            GateResult::Pass
+        );
+    }
+
+    #[test]
+    fn the_timer_wake_gate_fails_on_any_early_wake() {
+        assert_eq!(
+            host_gate(&body(), GateName::TimerWake).result,
+            GateResult::Pass
+        );
+        for prefix in ["w1.timer", "w1.wake"] {
+            let mut early = body();
+            set(&mut early, prefix, "woke_early", "1");
+            let gate = host_gate(&early, GateName::TimerWake);
+            assert_eq!(
+                (gate.result, gate.reason),
+                (GateResult::Fail, Some("woke-early")),
+                "{prefix}"
+            );
+            // The image passing it anyway is a contradiction.
+            assert_eq!(
+                check(&console(&early), PASS, &expected())
+                    .outcome
+                    .exit_code(),
+                3
+            );
+            set_gate(&mut early, "timer_wake", "result=fail reason=woke-early");
+            let checked = check(
+                &console(&early),
+                "OER-RESULT: fail w1 timer-wake woke-early",
+                &expected(),
+            );
+            assert_eq!(
+                checked.outcome,
+                Outcome::Fail(vec!["timer-wake woke-early".to_owned()])
+            );
+        }
+        // Without any timer or wake line nothing woke early.
+        let mut none = body();
+        none.retain(|line| !line.starts_with("w1.timer") && !line.starts_with("w1.wake"));
+        assert_eq!(
+            host_gate(&none, GateName::TimerWake).result,
+            GateResult::Pass
+        );
+    }
+
+    #[test]
+    fn the_hold_exhaust_and_span_lines_parse_and_are_required() {
+        let report = Report::parse(&console(&body())).unwrap();
+        assert_eq!(report.hold.number("reached"), Ok(32));
+        assert_eq!(report.exhaust.text("base"), Ok("0x2f017000"));
+        assert_eq!(report.wake.len(), 1);
+        assert_eq!(report.bss[0].number("stamp_span_us"), Ok(9_932_800));
+        assert_eq!(report.bss[1].text("handoff_span_us"), Ok("-"));
+        // A run without a snapshot prints every value as `-`.
+        let mut none = body();
+        let line = none
+            .iter_mut()
+            .find(|line| line.starts_with("w1.exhaust"))
+            .unwrap();
+        *line = line
+            .split_whitespace()
+            .map(|token| match token.split_once('=') {
+                Some(("snapshots", _)) => "snapshots=0".to_owned(),
+                Some((name, _)) => format!("{name}=-"),
+                None => token.to_owned(),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(Report::parse(&console(&none)).is_ok());
+        for keyword in ["w1.hold", "w1.exhaust"] {
+            let mut missing = body();
+            missing.retain(|line| !line.starts_with(keyword));
+            assert!(Report::parse(&console(&missing)).is_err(), "{keyword}");
+            let mut twice = body();
+            let line = twice
+                .iter()
+                .find(|line| line.starts_with(keyword))
+                .unwrap()
+                .clone();
+            twice.insert(1, line);
+            assert!(Report::parse(&console(&twice)).is_err(), "{keyword}");
+        }
+        // The timer lines need their wait counts.
+        let mut bare = body();
+        for line in bare.iter_mut().filter(|line| line.starts_with("w1.timer")) {
+            *line = line.replace(" woke_early=0", "");
+        }
+        assert!(Report::parse(&console(&bare)).is_err());
     }
 
     #[test]

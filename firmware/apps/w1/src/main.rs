@@ -62,7 +62,7 @@ use oer_ieee80211_mac::{
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_softmac::WifiMacAddress;
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver};
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_time::{Clock, Duration, Instant};
 use oer_time_embassy::EmbassyClock;
 use static_cell::StaticCell;
 
@@ -442,7 +442,7 @@ async fn run(
         if EmbassyClock.now() >= bind_deadline {
             return Err("no-bind");
         }
-        EmbassyClock.wait_until(after(BIND_POLL)).await;
+        measure::wait_until(measure::P1_COMPARATOR, after(BIND_POLL)).await;
     };
     let P1Ends {
         mut stop,
@@ -460,9 +460,14 @@ async fn run(
     let mut admitted = 0_u32;
     let mut window_us = 0;
     let mut frames_after_release = 0_u32;
+    let mut hold = report::Hold::default();
     let mut timers = heapless::Vec::<TimerLine, 4>::new();
     measure::enter(Phase::FirstFrame);
-    let first = select(receiver.next(), EmbassyClock.wait_until(after(FIRST_FRAME))).await;
+    let first = select(
+        receiver.next(),
+        measure::wait_until(measure::P1_COMPARATOR, after(FIRST_FRAME)),
+    )
+    .await;
     let heard = matches!(first, Either::First(_));
     if let Either::First(held) = first {
         // The window: every frame from the first one goes to the survey.
@@ -478,8 +483,11 @@ async fn run(
         );
         drop(held);
         let deadline = window_start.saturating_add(WINDOW);
-        while let Either::First(held) =
-            select(receiver.next(), EmbassyClock.wait_until(deadline)).await
+        while let Either::First(held) = select(
+            receiver.next(),
+            measure::wait_until(measure::P1_COMPARATOR, deadline),
+        )
+        .await
         {
             take(
                 &receiver,
@@ -523,7 +531,12 @@ async fn run(
         let mut holding = heapless::Vec::<Held, SLOTS>::new();
         let deadline = after(HOLD_FILL);
         while !holding.is_full() {
-            match select(receiver.next(), EmbassyClock.wait_until(deadline)).await {
+            match select(
+                receiver.next(),
+                measure::wait_until(measure::P1_COMPARATOR, deadline),
+            )
+            .await
+            {
                 Either::First(held) => {
                     take(&receiver, &held, None, rx_channel, &mut admitted);
                     let _full = holding.push(held);
@@ -531,11 +544,16 @@ async fn run(
                 Either::Second(()) => break,
             }
         }
-        EmbassyClock.wait_until(after(HOLD)).await;
+        let before = counters.report();
+        measure::wait_until(measure::P1_COMPARATOR, after(HOLD)).await;
+        hold = report::Hold::between(holding.len(), &before, &counters.report());
         holding.clear();
         let deadline = after(AFTER_RELEASE);
-        while let Either::First(held) =
-            select(receiver.next(), EmbassyClock.wait_until(deadline)).await
+        while let Either::First(held) = select(
+            receiver.next(),
+            measure::wait_until(measure::P1_COMPARATOR, deadline),
+        )
+        .await
         {
             take(&receiver, &held, None, rx_channel, &mut admitted);
             frames_after_release = frames_after_release.saturating_add(1);
@@ -617,6 +635,7 @@ async fn run(
         unserviced_mac: irq::UNSERVICED_MAC.load(core::sync::atomic::Ordering::Relaxed),
         unserviced_pwr: irq::UNSERVICED_PWR.load(core::sync::atomic::Ordering::Relaxed),
         frames_after_release,
+        hold,
         admitted,
         exit,
         ticks: &ticks,
