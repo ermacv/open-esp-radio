@@ -86,3 +86,8 @@ not possible, it goes to the owner as a question and is never kept silently.
 Work from such a source is clean-room: facts are extracted into `knowledge/`,
 and code is written from the specification, those facts and measurements, not
 from the vendor code.
+
+Using a pinned vendor library or ROM locally or in CI is a different matter
+and is allowed in any form, licensed or not: analysis, execution in
+emulation, linking into a comparison image. Neither the library nor a
+modified copy of it is ever published or presented as ours.

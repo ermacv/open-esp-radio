@@ -219,6 +219,12 @@ defaults, queue bounds) live in the code that applies them, not here.
   firmware contains no extra logic. Probes use stable public functions and
   methods. Every firmware image, probe images included, lives in the
   firmware directory (owner, 2026-10-18).
+- **Vendor libraries in local and CI work.** Pinned vendor static libraries and
+  ROMs, licensed or not, may be used in any form locally and in CI: analysed,
+  executed in emulation, linked into comparison images. They are never
+  published as our own, and no modified library is published; what the
+  repository keeps from an unlicensed source is still facts only
+  (owner, 2026-10-18).
 
 ## Earlier decisions still in force
 
