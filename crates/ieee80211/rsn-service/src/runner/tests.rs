@@ -209,6 +209,15 @@ struct TestTimer {
     waits: Cell<u32>,
 }
 
+impl TestTimer {
+    /// Microseconds since the clock's start.
+    fn elapsed(&self) -> u64 {
+        self.now()
+            .saturating_duration_since(oer_time_virtual::START)
+            .as_micros()
+    }
+}
+
 impl Clock for TestTimer {
     fn now(&self) -> Instant {
         self.clock.now()
@@ -403,7 +412,7 @@ fn message1_timeout_is_exact_and_stops_the_live_ring() {
             completed_frames: 0,
         })
     ));
-    assert_eq!(runner.timer.now().as_micros(), 3_000_000);
+    assert_eq!(runner.timer.elapsed(), 3_000_000);
     assert_eq!(runner.timer.waits.get(), MESSAGE1_POLLS);
     assert!(!runner.backend().receive_live);
     assert_eq!(runner.backend().stops, 1);
@@ -432,7 +441,7 @@ fn peer_message1_sends_m2_once_but_never_retries_it_on_local_timeout() {
     assert_eq!(runner.backend().transmissions, 1);
     assert_eq!(runner.backend().last_sequence, Some(seq(0x123)));
     assert_eq!(sequence.peek(), seq(0x124));
-    assert_eq!(runner.timer.now().as_micros(), 6_001_000);
+    assert_eq!(runner.timer.elapsed(), 6_001_000);
     assert_eq!(
         runner.timer.waits.get(),
         MESSAGE1_POLLS.min(1) + MESSAGE3_POLLS
@@ -459,7 +468,7 @@ fn repeated_peer_message1_is_the_only_message2_refresh_source() {
     ));
     assert_eq!(runner.backend().transmissions, 2);
     assert_eq!(sequence.peek(), seq(9));
-    assert_eq!(runner.timer.now().as_micros(), 6_001_000);
+    assert_eq!(runner.timer.elapsed(), 6_001_000);
 }
 
 #[test]
@@ -481,18 +490,20 @@ fn message1_on_exact_deadline_is_serviced_before_timeout() {
         })
     ));
     assert_eq!(runner.backend().transmissions, 1);
-    assert_eq!(runner.timer.now().as_micros(), 9_000_000);
+    assert_eq!(runner.timer.elapsed(), 9_000_000);
 }
 
 #[test]
 fn cancelling_an_unpolled_wait_does_not_count_or_advance_it() {
     let timer = TestTimer::default();
-    let deadline = Instant::from_micros(1_000);
+    let deadline = oer_time_virtual::START
+        .checked_add(Duration::from_micros(1_000))
+        .unwrap();
     let wait = timer.wait_until(deadline);
-    assert_eq!(timer.now(), Instant::EPOCH);
+    assert_eq!(timer.now(), oer_time_virtual::START);
     assert_eq!(timer.waits.get(), 0);
     drop(wait);
-    assert_eq!(timer.now(), Instant::EPOCH);
+    assert_eq!(timer.now(), oer_time_virtual::START);
     assert_eq!(timer.waits.get(), 0);
     embassy_futures::block_on(timer.wait_until(deadline));
     assert_eq!(timer.now(), deadline);

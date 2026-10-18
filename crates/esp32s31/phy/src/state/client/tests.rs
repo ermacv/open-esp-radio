@@ -177,9 +177,10 @@ fn exhaustive_release_preserves_unrelated_bits_and_reports_last_user() {
 
 #[test]
 fn strict_threshold_equality_does_not_request_but_greater_does() {
+    // The first acquisition tracks at 0.
     let state = complete_acquire_for_test(
         PhyClientState::new_empty(DEFAULT_PLL_TRACK_PERIOD_MICROS)
-            .acquire_at(RadioClient::Ieee802154, DEFAULT_PLL_TRACK_PERIOD_MICROS)
+            .acquire_at(RadioClient::Ieee802154, 0)
             .unwrap(),
     );
     let equal = state
@@ -208,7 +209,7 @@ fn bluetooth_and_ieee_share_timestamp_and_request_class() {
         state
             .snapshot()
             .previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 1
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 1)
     );
 
     let outcome = state
@@ -220,7 +221,7 @@ fn bluetooth_and_ieee_share_timestamp_and_request_class() {
             .owner()
             .snapshot()
             .previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 1
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 1)
     );
 }
 
@@ -266,11 +267,11 @@ fn one_due_class_refreshes_and_requests_all_active_classes() {
     let snapshot = evaluation.owner().snapshot();
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::Wifi),
-        2 * DEFAULT_PLL_TRACK_PERIOD_MICROS + 2
+        Some(2 * DEFAULT_PLL_TRACK_PERIOD_MICROS + 2)
     );
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        2 * DEFAULT_PLL_TRACK_PERIOD_MICROS + 2
+        Some(2 * DEFAULT_PLL_TRACK_PERIOD_MICROS + 2)
     );
 }
 
@@ -291,11 +292,11 @@ fn immediate_tracking_preserves_short_circuit_and_refresh_sample_order() {
     let snapshot = evaluation.owner().snapshot();
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::Wifi),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 2
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 2)
     );
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 3
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 3)
     );
 
     let state = state_for_mask(WIFI_BIT | IEEE802154_BIT, 0);
@@ -313,11 +314,11 @@ fn immediate_tracking_preserves_short_circuit_and_refresh_sample_order() {
     let snapshot = evaluation.owner().snapshot();
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::Wifi),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 2
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 2)
     );
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        DEFAULT_PLL_TRACK_PERIOD_MICROS + 3
+        Some(DEFAULT_PLL_TRACK_PERIOD_MICROS + 3)
     );
 }
 
@@ -333,7 +334,7 @@ fn periodic_callback_requests_active_classes_without_due_check() {
             .owner()
             .snapshot()
             .previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        1
+        Some(1)
     );
 }
 
@@ -345,10 +346,10 @@ fn periodic_tracking_samples_each_active_class_once_without_due_samples() {
 
     assert_eq!(clock.samples_consumed(), 2);
     let snapshot = evaluation.owner().snapshot();
-    assert_eq!(snapshot.previous_micros(PhyPllTrackClass::Wifi), 17);
+    assert_eq!(snapshot.previous_micros(PhyPllTrackClass::Wifi), Some(17));
     assert_eq!(
         snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
-        23
+        Some(23)
     );
 }
 
@@ -752,8 +753,8 @@ fn tracking_deadline_matches_strict_due_boundary_for_every_client_set() {
 #[test]
 fn tracking_deadline_excludes_released_classes_and_detects_overflow() {
     let mut owner = state_for_mask(VALID_CLIENT_BITS, 0);
-    owner.wifi_previous_micros = 100;
-    owner.bluetooth_ieee802154_previous_micros = 200;
+    owner.wifi_previous_micros = Some(100);
+    owner.bluetooth_ieee802154_previous_micros = Some(200);
     assert_eq!(
         owner.snapshot().next_tracking_deadline_micros(),
         Ok(Some(1_000_101))
@@ -768,7 +769,7 @@ fn tracking_deadline_excludes_released_classes_and_detects_overflow() {
         owner.snapshot().next_tracking_deadline_micros(),
         Ok(Some(1_000_201))
     );
-    owner.bluetooth_ieee802154_previous_micros = u64::MAX;
+    owner.bluetooth_ieee802154_previous_micros = Some(u64::MAX);
     assert_eq!(
         owner.snapshot().next_tracking_deadline_micros(),
         Err(PhyTrackTimeError::DeadlineOverflow {
@@ -796,5 +797,73 @@ fn only_the_minting_registration_describes_a_detached_client_set() {
     assert!(
         !PhyClientState::without_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS)
             .describes_epoch(None)
+    );
+}
+
+#[test]
+fn an_untracked_class_is_due_at_once_and_a_tracked_one_waits_the_period() {
+    let start = oer_time_virtual::START.as_micros();
+    let owner = PhyClientState::new_empty(DEFAULT_PLL_TRACK_PERIOD_MICROS);
+    assert_eq!(
+        owner.snapshot().previous_micros(PhyPllTrackClass::Wifi),
+        None
+    );
+    assert_eq!(
+        owner
+            .snapshot()
+            .previous_micros(PhyPllTrackClass::BluetoothIeee802154),
+        None
+    );
+
+    // Never tracked: the first acquisition requests tracking at once.
+    let outcome = owner
+        .acquire(RadioClient::Wifi, &VirtualClock::<8>::new())
+        .unwrap();
+    assert!(outcome.request().is_some_and(|request| request.wifi()));
+    let owner = complete_acquire_for_test(outcome);
+    let tracked = owner.snapshot();
+    assert_eq!(tracked.previous_micros(PhyPllTrackClass::Wifi), Some(start));
+    let deadline = start + DEFAULT_PLL_TRACK_PERIOD_MICROS + 1;
+    assert_eq!(tracked.next_tracking_deadline_micros(), Ok(Some(deadline)));
+
+    // Not due until `previous + period + 1`, then due.
+    let early = owner.evaluate_immediate_at(deadline - 1).unwrap();
+    assert!(early.request().is_none());
+    let owner = early
+        .into_owner()
+        .unwrap_or_else(|_| panic!("an early evaluation requested tracking"));
+    let due = owner.evaluate_immediate_at(deadline).unwrap();
+    assert!(due.request().is_some());
+    assert_eq!(
+        due.owner()
+            .snapshot()
+            .previous_micros(PhyPllTrackClass::Wifi),
+        Some(deadline)
+    );
+}
+
+#[test]
+fn an_untracked_active_class_has_a_deadline_due_now() {
+    let mut owner = state_for_mask(WIFI_BIT, 0);
+    owner.wifi_previous_micros = None;
+    let snapshot = owner.snapshot();
+    assert_eq!(snapshot.next_tracking_deadline_micros(), Ok(Some(0)));
+    assert!(matches!(
+        snapshot.tracking_schedule_at(0),
+        Ok(crate::tracking::schedule::Schedule::Due(_))
+    ));
+}
+
+#[test]
+fn a_new_registration_epoch_starts_untracked() {
+    use oer_esp32s31_hal::owner::PhyInitializationAccess;
+    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test().split(());
+    let epoch = radio.phy_hal().begin_registration_epoch();
+    let snapshot =
+        PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch).snapshot();
+    assert_eq!(snapshot.previous_micros(PhyPllTrackClass::Wifi), None);
+    assert_eq!(
+        snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
+        None
     );
 }

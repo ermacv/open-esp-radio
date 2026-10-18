@@ -9,14 +9,20 @@ use crate::{
         i2c::{PhyWifiI2cTrackingAction, PhyWifiI2cTrackingTransition},
     },
 };
+/// Clients acquired at 0, where these tests place time; each class's first
+/// acquisition is due at once and its tracking completes there.
 fn clients(active: &[RadioClient]) -> PhyClientSnapshot {
     let mut owner = PhyClientState::without_registration(1000);
+    let at_zero = oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
     for client in active {
-        owner = owner
-            .acquire(*client, &oer_time_virtual::VirtualClock::<8>::new())
+        owner = match owner
+            .acquire(*client, &at_zero)
             .unwrap_or_else(|_| panic!("acquire"))
             .into_owner()
-            .unwrap_or_else(|_| panic!("unexpected due work"));
+        {
+            Ok(owner) => owner,
+            Err(pending) => pending.complete_for_test(),
+        };
     }
     owner.snapshot()
 }

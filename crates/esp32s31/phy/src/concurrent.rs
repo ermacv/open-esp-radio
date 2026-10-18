@@ -265,6 +265,26 @@ impl ConcurrentPhy {
             slot: Slot::RfClosed(domain),
         }
     }
+
+    /// Complete the pending tracking as target hardware would, without
+    /// register access; `false` when none is pending.
+    #[cfg(test)]
+    pub(crate) fn complete_tracking_for_test(&mut self) -> bool {
+        match core::mem::take(&mut self.slot) {
+            Slot::Pending {
+                registered,
+                pending,
+            } => {
+                self.slot =
+                    Slot::Registered(PhyDomain::new(registered, pending.complete_for_test()));
+                true
+            }
+            other => {
+                self.slot = other;
+                false
+            }
+        }
+    }
 }
 
 /// Proof that the shared PHY domain is ready for a client to enter it:

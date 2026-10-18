@@ -148,15 +148,31 @@ impl Duration {
     }
 }
 
+/// How far past [`Instant::EPOCH`] a [`Clock`] starts: 2^31 µs, about
+/// 35.8 minutes.
+///
+/// Radio code meets 32-bit hardware counters at its boundary: the MAC local
+/// time, the TSF low word, the Bluetooth LE and IEEE 802.15.4 timers. A
+/// clock that started at zero would keep a truncated instant below 2^31 for
+/// the first ~35 minutes, so a wrap, a truncation or a signed-difference
+/// compare at that boundary would fail only in long runs. Starting at
+/// 2^31 µs sets bit 31 of the low word from the first read, so such code
+/// meets the wrap at once, in tests and on the bench alike.
+/// [`Instant::EPOCH`] stays the axis origin; a clock adds this offset to
+/// its own source.
+pub const CLOCK_EPOCH_OFFSET: Duration = Duration::from_micros(1 << 31);
+
 /// A deadline lies past the representable range of monotonic time.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TimeOverflow;
 
 /// Reads the image's monotonic time.
 ///
-/// Successive reads never decrease. The resolution is the clock's own; a
-/// clock states it where it is bound, and callers must not assume a read
-/// changes between two nearby calls.
+/// The image's clock and the default virtual clocks start
+/// [`CLOCK_EPOCH_OFFSET`] past [`Instant::EPOCH`]; a model clock may start
+/// where its test places it. Successive reads never decrease. The
+/// resolution is the clock's own; a clock states it where it is bound, and
+/// callers must not assume a read changes between two nearby calls.
 pub trait Clock {
     /// The current instant.
     fn now(&self) -> Instant;

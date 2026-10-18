@@ -11,7 +11,9 @@ use std::{sync::Arc, task::Wake};
 use embassy_futures::select::{Either, select};
 use oer_time::{Clock, Duration, Instant, TimeOverflow, Timer};
 
-use super::{SkipClock, VirtualClock};
+use oer_time::CLOCK_EPOCH_OFFSET;
+
+use super::{START, SkipClock, VirtualClock};
 
 #[derive(Default)]
 struct Wakes(AtomicUsize);
@@ -20,6 +22,11 @@ impl Wake for Wakes {
     fn wake(self: Arc<Self>) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
+}
+
+/// The instant `micros` past a default clock's start.
+fn at(micros: u64) -> Instant {
+    START.checked_add(Duration::from_micros(micros)).unwrap()
 }
 
 fn poll<F: Future>(future: Pin<&mut F>, waker: &Waker) -> Poll<F::Output> {
@@ -45,7 +52,7 @@ fn a_wait_ends_when_an_advance_reaches_its_deadline_and_wakes_its_task() {
     let waker = Waker::from(wakes.clone());
     let mut wait = pin!(clock.wait_for(Duration::from_millis(2)));
     assert_eq!(poll(wait.as_mut(), &waker), Poll::Pending);
-    assert_eq!(clock.next_deadline(), Some(Instant::from_micros(2_000)));
+    assert_eq!(clock.next_deadline(), Some(at(2_000)));
 
     clock.advance(Duration::from_millis(1)).unwrap();
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
@@ -67,18 +74,15 @@ fn a_reached_deadline_completes_at_once() {
 #[test]
 fn the_next_deadline_is_the_earliest_pending_one_and_time_jumps_to_it() {
     let clock: VirtualClock = VirtualClock::new();
-    let mut late = pin!(clock.wait_until(Instant::from_micros(900)));
-    let mut early = pin!(clock.wait_until(Instant::from_micros(300)));
+    let mut late = pin!(clock.wait_until(at(900)));
+    let mut early = pin!(clock.wait_until(at(300)));
     assert_eq!(poll(late.as_mut(), Waker::noop()), Poll::Pending);
     assert_eq!(poll(early.as_mut(), Waker::noop()), Poll::Pending);
 
-    assert_eq!(
-        clock.advance_to_next_deadline(),
-        Some(Instant::from_micros(300))
-    );
+    assert_eq!(clock.advance_to_next_deadline(), Some(at(300)));
     assert_eq!(poll(early.as_mut(), Waker::noop()), Poll::Ready(()));
     assert_eq!(poll(late.as_mut(), Waker::noop()), Poll::Pending);
-    assert_eq!(clock.next_deadline(), Some(Instant::from_micros(900)));
+    assert_eq!(clock.next_deadline(), Some(at(900)));
 }
 
 #[test]
@@ -98,8 +102,8 @@ fn clocks_keep_independent_times() {
     let first: VirtualClock = VirtualClock::new();
     let second: VirtualClock = VirtualClock::new();
     first.advance(Duration::from_secs(1)).unwrap();
-    assert_eq!(first.now(), Instant::from_micros(1_000_000));
-    assert_eq!(second.now(), Instant::EPOCH);
+    assert_eq!(first.now(), at(1_000_000));
+    assert_eq!(second.now(), START);
 }
 
 #[test]
@@ -108,8 +112,8 @@ fn more_waiters_than_slots_are_all_woken() {
     let first = Arc::new(Wakes::default());
     let second = Arc::new(Wakes::default());
     let (first_waker, second_waker) = (Waker::from(first.clone()), Waker::from(second.clone()));
-    let mut a = pin!(clock.wait_until(Instant::from_micros(10)));
-    let mut b = pin!(clock.wait_until(Instant::from_micros(10)));
+    let mut a = pin!(clock.wait_until(at(10)));
+    let mut b = pin!(clock.wait_until(at(10)));
     assert_eq!(poll(a.as_mut(), &first_waker), Poll::Pending);
     assert_eq!(poll(b.as_mut(), &second_waker), Poll::Pending);
     clock.advance(Duration::from_micros(10)).unwrap();
@@ -187,4 +191,18 @@ fn an_overflowing_skip_clock_wait_fails_without_changing_time() {
     let wait = pin!(clock.wait_for(Duration::from_micros(1)));
     assert_eq!(poll(wait, Waker::noop()), Poll::Ready(Err(TimeOverflow)));
     assert_eq!(clock.now(), Instant::from_micros(u64::MAX));
+}
+
+#[test]
+fn the_default_clocks_start_at_the_epoch_offset() {
+    let offset = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
+    assert_eq!(START, offset);
+    let virtual_clock: VirtualClock = VirtualClock::new();
+    assert_eq!(virtual_clock.now(), offset);
+    let default_clock: VirtualClock = VirtualClock::default();
+    assert_eq!(default_clock.now(), offset);
+    assert_eq!(SkipClock::new().now(), offset);
+    assert_eq!(SkipClock::default().now(), offset);
+    // The low word has bit 31 set from the first read.
+    assert_eq!(SkipClock::new().now().as_micros() as u32, 1 << 31);
 }

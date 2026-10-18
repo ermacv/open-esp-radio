@@ -29,7 +29,7 @@ fn deferring_demand_never_refreshes_the_source_scheduler() {
             .owner()
             .snapshot()
             .previous_micros(PhyPllTrackClass::Wifi),
-        deferred_until
+        Some(deferred_until)
     );
     assert!(
         started.into_owner().is_err(),

@@ -56,7 +56,9 @@ impl PhyClientSnapshot {
             (wifi, PhyPllTrackClass::Wifi),
             (shared, PhyPllTrackClass::BluetoothIeee802154),
         ] {
-            let previous_micros = self.previous_micros(class);
+            let Some(previous_micros) = self.previous_micros(class) else {
+                continue;
+            };
             if active && now_micros < previous_micros {
                 return Err(PhyTrackTimeError::TimeReversed {
                     class,

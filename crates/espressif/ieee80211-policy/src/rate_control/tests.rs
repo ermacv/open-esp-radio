@@ -342,6 +342,26 @@ fn ampdu_owner_accepts_checked_counts_without_a_post_mutation_error() {
 }
 
 #[test]
+fn the_vendor_word_wraps_from_the_clock_start() {
+    use oer_time::{CLOCK_EPOCH_OFFSET, Duration};
+    // A clock starts at the epoch offset: the vendor word has bit 31 set
+    // from the first read and wraps 2^31 us later.
+    let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
+    assert_eq!(vendor_micros(start), 1 << 31);
+    let before = start
+        .checked_add(Duration::from_micros((1 << 31) - 4))
+        .unwrap();
+    let after = before.checked_add(Duration::from_micros(10)).unwrap();
+    assert_eq!(vendor_micros(before), u32::MAX - 3);
+    assert_eq!(vendor_micros(after), 6);
+    // Across the wrap the span reads as the vendor body's: one short.
+    assert_eq!(
+        vendor_duration(vendor_micros(after), vendor_micros(before)),
+        9
+    );
+}
+
+#[test]
 fn ampdu_initial_rate_uses_the_vendor_index_eight_floor() {
     let association = StaRateControlAssociation::new(StaRateControlAssociationInput {
         phy: StaRateControlPhy::He,

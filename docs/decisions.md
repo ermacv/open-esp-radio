@@ -180,6 +180,12 @@ defaults, queue bounds) live in the code that applies them, not here.
 - **PHY calibration** matches the vendor when each field's difference stays
   within the vendor's own spread for that field (owner, 2026-10-18).
 
+## 2026-10-18: portable time
+
+- **Clock epoch offset.** Portable time starts at 2^31 µs: clocks offset
+  their epoch so code at the boundary with 32-bit hardware counters meets
+  the wrap at once (owner, 2026-10-18).
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.

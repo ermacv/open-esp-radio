@@ -36,7 +36,9 @@ fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
     let domain = &mut radio;
     let (membership, acquired) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
         .unwrap_or_else(|error| panic!("join failed: {error:?}"));
-    assert_eq!(acquired, ConcurrentAcquire::Settled);
+    // The first acquisition is due at once; its tracking completes.
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(domain.attachment_mut().complete_tracking_for_test());
     assert!(
         domain
             .attachment()
@@ -67,8 +69,10 @@ fn an_unregistered_domain_admits_no_wifi_client() {
 fn a_suspended_wifi_leaves_the_domain_and_resumes_as_a_client() {
     let (mut radio, clocked) = registered();
     let domain = &mut radio;
-    let (membership, _) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
+    let (membership, acquired) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
         .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(domain.attachment_mut().complete_tracking_for_test());
     let (suspended, last) = suspend_wifi(domain, clocked.clocks_on(), membership)
         .unwrap_or_else(|failure| panic!("suspend failed: {failure:?}"));
     assert!(last, "Wi-Fi was the only client");
@@ -101,8 +105,10 @@ fn a_suspended_wifi_leaves_the_domain_and_resumes_as_a_client() {
 fn a_rejected_resume_returns_the_suspended_client() {
     let (mut radio, clocked) = registered();
     let domain = &mut radio;
-    let (membership, _) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
+    let (membership, acquired) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
         .unwrap_or_else(|error| panic!("join failed: {error:?}"));
+    assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
+    assert!(domain.attachment_mut().complete_tracking_for_test());
     let (suspended, _) = suspend_wifi(domain, clocked.clocks_on(), membership)
         .unwrap_or_else(|failure| panic!("suspend failed: {failure:?}"));
     // Another membership holds the client bit, so the resume is rejected.
