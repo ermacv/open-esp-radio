@@ -1102,7 +1102,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         .take_completed_unit(&mut live, 1)
         .unwrap()
         .expect("completed unit")
-        .detach_single()
+        .detach_single(&mut mmio)
         .unwrap();
     let pool = oer_esp32s31_ieee80211_mac::rx::pool::RxStagePool::<1, 256>::new();
     let frame = pool.stage_detached_unit(detached, 256).unwrap();

@@ -31,7 +31,7 @@ pub struct RxDmaBinding<'storage> {
     reserved_address: u32,
     /// The table, for a model walker that follows its links.
     #[cfg(any(test, feature = "test-support"))]
-    table: ModelTable<'storage>,
+    table: RxWalkerTable<'storage>,
     range: StableDmaRange<'storage>,
     arena: &'storage RxArenaWords,
 }
@@ -221,12 +221,48 @@ impl RxDmaCursorObservation<'_> {
     }
 }
 
-/// The descriptors a model walker resolves LAST against.
+/// The descriptors a model walker resolves its cursors against: the ring
+/// at `descriptor_base` and the reserved descriptor right after it (test
+/// support only).
 #[cfg(any(test, feature = "test-support"))]
-struct ModelTable<'storage> {
+#[derive(Clone, Copy)]
+pub struct RxWalkerTable<'storage> {
     descriptor_base: u32,
     ring: &'storage [crate::descriptor::Descriptor],
     reserved: &'storage crate::descriptor::Descriptor,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl<'storage> RxWalkerTable<'storage> {
+    pub(crate) const fn new(
+        descriptor_base: u32,
+        ring: &'storage [crate::descriptor::Descriptor],
+        reserved: &'storage crate::descriptor::Descriptor,
+    ) -> Self {
+        Self {
+            descriptor_base,
+            ring,
+            reserved,
+        }
+    }
+
+    /// The descriptor at the low address bits `low`, which the walker's
+    /// LAST/NEXT registers report, when it belongs to this table.
+    pub fn descriptor_at_low(&self, low: u32) -> Option<&'storage crate::descriptor::Descriptor> {
+        const LOW_MASK: u32 = 0x000f_ffff;
+        let reserved_offset = u32::try_from(self.ring.len())
+            .ok()?
+            .checked_mul(DESCRIPTOR_BYTES)?;
+        if low == self.descriptor_base.wrapping_add(reserved_offset) & LOW_MASK {
+            return Some(self.reserved);
+        }
+        let offset = low.checked_sub(self.descriptor_base & LOW_MASK)?;
+        if offset % DESCRIPTOR_BYTES != 0 {
+            return None;
+        }
+        self.ring
+            .get(usize::try_from(offset / DESCRIPTOR_BYTES).ok()?)
+    }
 }
 
 impl<'storage> RxDmaBinding<'storage> {
@@ -259,11 +295,7 @@ impl<'storage> RxDmaBinding<'storage> {
         Some(Self {
             reserved_address,
             #[cfg(any(test, feature = "test-support"))]
-            table: ModelTable {
-                descriptor_base,
-                ring: table.ring(),
-                reserved: table.reserved(),
-            },
+            table: RxWalkerTable::new(descriptor_base, table.ring(), table.reserved()),
             range,
             arena,
         })
@@ -282,17 +314,7 @@ impl<'storage> RxDmaBinding<'storage> {
         &self,
         low: u32,
     ) -> Option<&'storage crate::descriptor::Descriptor> {
-        const LOW_MASK: u32 = 0x000f_ffff;
-        if low == self.reserved_address & LOW_MASK {
-            return Some(self.table.reserved);
-        }
-        let offset = low.checked_sub(self.table.descriptor_base & LOW_MASK)?;
-        if offset % DESCRIPTOR_BYTES != 0 {
-            return None;
-        }
-        self.table
-            .ring
-            .get(usize::try_from(offset / DESCRIPTOR_BYTES).ok()?)
+        self.table.descriptor_at_low(low)
     }
 
     fn range(&self) -> &StableDmaRange<'storage> {

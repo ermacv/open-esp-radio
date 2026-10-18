@@ -18,7 +18,7 @@ use std::{boxed::Box, vec::Vec};
 
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_dma::{
-    descriptor::{LENGTH_SHIFT, OWNER, RX_DONE},
+    descriptor::{DESCRIPTOR_BYTES, LENGTH_SHIFT, OWNER, RX_DONE},
     rx_dma::{
         RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled, RxDmaWalkerEnabled,
         RxDmaWalkerStopped,
@@ -1934,4 +1934,31 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
             drain_polls: 6,
         }
     );
+}
+
+#[test]
+fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
+    let held: &'static Held = leak(RefCell::new(Vec::new()));
+    let mut harness =
+        harness_with(|counters| (HoldingSink { held }, CountingAdmission::new(counters))).started();
+    harness.frame(200);
+    harness.settle();
+    assert_eq!(held.borrow().len(), 1);
+    // The held lease's descriptor carries the owner bit clear.
+    let index = harness.next + COUNT - 1;
+    let word0 = harness.rx.descriptors()[index % COUNT].word0();
+    assert_eq!(word0 & OWNER, 0);
+    assert_eq!(word0 & RX_DONE, RX_DONE);
+    // A frame completes and the walker reports NEXT on that barrier:
+    // impossible by construction, so the drain fails closed.
+    harness.complete_unit(&[100]);
+    harness.host.walker.borrow_mut().next_descriptor_low =
+        (harness.base + (index % COUNT) as u32 * DESCRIPTOR_BYTES) & 0x000f_ffff;
+    harness.rx_event();
+    harness.settle();
+    let report = harness.report();
+    assert_eq!(report.reload.walker_on_detached, 1);
+    assert_eq!(report.service_errors, 1);
+    assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    held.borrow_mut().clear();
 }

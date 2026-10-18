@@ -172,6 +172,7 @@ struct ReloadCounters {
     base_writes: AtomicU32,
     reserved_landings: AtomicU32,
     reserved_late_landings: AtomicU32,
+    walker_on_detached: AtomicU32,
 }
 
 const fn encode_optional(value: Option<u32>) -> u32 {
@@ -198,6 +199,7 @@ impl ReloadCounters {
             base_writes: AtomicU32::new(0),
             reserved_landings: AtomicU32::new(0),
             reserved_late_landings: AtomicU32::new(0),
+            walker_on_detached: AtomicU32::new(0),
         }
     }
 
@@ -213,6 +215,7 @@ impl ReloadCounters {
             base_writes,
             reserved_landings,
             reserved_late_landings,
+            walker_on_detached,
         } = evidence;
         let store = |counter: &AtomicU32, value| counter.store(value, Ordering::Relaxed);
         store(&self.max_reload_attempts, max_reload_attempts);
@@ -228,6 +231,7 @@ impl ReloadCounters {
         store(&self.base_writes, base_writes);
         store(&self.reserved_landings, reserved_landings);
         store(&self.reserved_late_landings, reserved_late_landings);
+        store(&self.walker_on_detached, walker_on_detached);
     }
 
     fn report(&self) -> RxReloadEvidence {
@@ -243,6 +247,7 @@ impl ReloadCounters {
             base_writes: load(&self.base_writes),
             reserved_landings: load(&self.reserved_landings),
             reserved_late_landings: load(&self.reserved_late_landings),
+            walker_on_detached: load(&self.walker_on_detached),
         }
     }
 }

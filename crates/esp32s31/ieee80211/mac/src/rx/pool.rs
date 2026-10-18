@@ -17,6 +17,7 @@ use crate::rx::{
     view_normalized_rx_frame,
 };
 use oer_esp32s31_ieee80211_dma::{
+    rx_dma::RxDma,
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
 };
@@ -90,6 +91,9 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
     /// prefix and follow the caller's frozen-LAST discard/reclaim path. A
     /// valid unit remains detached until its final network token is dropped;
     /// the ring owner later rearms only the contiguous released prefix.
+    /// `hardware` fences the detach: the descriptor's owner bit is clear
+    /// before the frame is returned
+    /// ([`RxDmaCompletedUnit::detach_single`]).
     #[inline(never)]
     pub fn stage_dma_unit_deferred_bounded<
         'pool,
@@ -100,6 +104,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         const BUFFER_SIZE: usize,
         const STORAGE_SIZE: usize,
         S: oer_esp32s31_ieee80211_dma::space::DmaSpace,
+        H: RxDma,
     >(
         &'pool self,
         completed: RxDmaCompletedUnit<
@@ -112,6 +117,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
             S,
         >,
         maximum_length: usize,
+        hardware: &mut H,
     ) -> Result<RxDmaDeferredStageUnitOutcome<'pool, SLOTS, CAPACITY>, RxStageTransactionError>
     where
         'storage: 'static,
@@ -132,7 +138,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         }
 
         let detached = completed
-            .detach_single()
+            .detach_single(hardware)
             .map_err(RxStageTransactionError::Ring)?;
         self.stage_detached_unit(detached, maximum_length)
             .map(RxDmaDeferredStageUnitOutcome::Staged)

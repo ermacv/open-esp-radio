@@ -155,3 +155,86 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     assert!(ring.topology_snapshot().valid);
     assert!(ring.try_stop(&mut hardware).is_ok());
 }
+
+type Storage = RxDmaStorage<COUNT, BUFFER, { BUFFER + 4 }, HostDma>;
+
+/// A publisher which, at the moment a frame becomes visible above the
+/// radio, reads its descriptor's word0.
+struct WordAtPublish {
+    storage: &'static Storage,
+    base: u32,
+    seen: RefCell<Vec<u32>>,
+}
+
+impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
+    const DEPTH: usize = SLOTS;
+
+    fn free_capacity(&self) -> usize {
+        SLOTS
+    }
+
+    fn preview(&self, unit: CompletedUnit, _: [u8; 24]) -> Preview {
+        self.unclassified_preview(unit)
+    }
+
+    fn unclassified_preview(&self, unit: CompletedUnit) -> Preview {
+        Unreached.unclassified_preview(unit)
+    }
+
+    fn try_send(
+        &self,
+        frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
+    ) -> Result<(), NetworkRxFrame<'pool, SLOTS, CAPACITY>> {
+        let offset = frame.segment().descriptor_address - self.base;
+        let index = (offset / oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES) as usize;
+        self.seen
+            .borrow_mut()
+            .push(self.storage.descriptors()[index].word0());
+        Ok(())
+    }
+}
+
+#[test]
+fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
+    let storage: &'static Storage = Box::leak(Box::new(Storage::new()));
+    let buffers = Box::leak(Box::new([0; COUNT]));
+    let base = storage.dma_layout(buffers).unwrap();
+    let mut hardware = RxWalkerModel::new();
+    let mut ring = storage
+        .prepare_ring(&mut hardware, base, buffers)
+        .unwrap()
+        .try_start(&mut hardware)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    let completed = BUFFER as u32 | (40 << LENGTH_SHIFT) | RX_DONE | OWNER;
+    storage.descriptors()[0].write_word0(completed);
+    hardware.set_cursor(base, 0, Some(1));
+
+    let pool = RxStagePool::<SLOTS, CAPACITY>::new();
+    let recorder = Recorder::default();
+    let publisher = WordAtPublish {
+        storage,
+        base,
+        seen: RefCell::new(Vec::new()),
+    };
+    let (mut descriptors, mut units, mut bytes) = (0, 0, 0);
+    service(
+        &mut ring,
+        storage,
+        &pool,
+        &publisher,
+        &recorder,
+        Counters {
+            descriptors: &mut descriptors,
+            units: &mut units,
+            bytes: &mut bytes,
+        },
+        &mut hardware,
+        &recorder,
+    )
+    .expect("one frame is staged");
+    assert_eq!((units, bytes), (1, 40));
+    assert_eq!(*publisher.seen.borrow(), [completed & !OWNER]);
+    assert_eq!(ring.reload_evidence().walker_on_detached, 0);
+    assert!(ring.try_stop(&mut hardware).is_ok());
+}
