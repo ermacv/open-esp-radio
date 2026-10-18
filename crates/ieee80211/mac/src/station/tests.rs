@@ -42,45 +42,45 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
         6,
         -40,
     );
-    record.ssid[..4].copy_from_slice(b"test");
-    record.ssid_len = 4;
+    record.set_ssid(b"test").unwrap();
     record.bssid =
         crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap()).unwrap();
     record.channel = 6;
     record.privacy = true;
     record.rsn = true;
     record.rsn_ie_count = 1;
-    record.supported_rates[..4].copy_from_slice(&[0x82, 0x84, 0x8b, 0x96]);
-    record.supported_rates_len = 4;
+    record
+        .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
+        .unwrap();
+    let mut rsn_ie = [0; crate::scan::RSN_IE_CAPACITY];
     let mut offset = 2;
-    record.rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
+    rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
     offset += 2;
-    record.rsn_ie[offset..offset + 4].copy_from_slice(&[0, 0x0f, 0xac, 4]);
+    rsn_ie[offset..offset + 4].copy_from_slice(&[0, 0x0f, 0xac, 4]);
     offset += 4;
-    record.rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
+    rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
     offset += 2;
-    record.rsn_ie[offset..offset + 4].copy_from_slice(&[0, 0x0f, 0xac, 4]);
+    rsn_ie[offset..offset + 4].copy_from_slice(&[0, 0x0f, 0xac, 4]);
     offset += 4;
-    record.rsn_ie[offset..offset + 2].copy_from_slice(&(akms.len() as u16).to_le_bytes());
+    rsn_ie[offset..offset + 2].copy_from_slice(&(akms.len() as u16).to_le_bytes());
     offset += 2;
     for akm in akms {
-        record.rsn_ie[offset..offset + 4].copy_from_slice(akm);
+        rsn_ie[offset..offset + 4].copy_from_slice(akm);
         offset += 4;
     }
-    record.rsn_ie[offset..offset + 2].copy_from_slice(&capabilities.to_le_bytes());
+    rsn_ie[offset..offset + 2].copy_from_slice(&capabilities.to_le_bytes());
     offset += 2;
-    record.rsn_ie[0] = 48;
-    record.rsn_ie[1] = (offset - 2) as u8;
-    record.rsn_ie_len = offset as u8;
+    rsn_ie[0] = 48;
+    rsn_ie[1] = (offset - 2) as u8;
+    record.set_rsn_ie(&rsn_ie[..offset]).unwrap();
     record
 }
 
 fn append_rsn_tail(record: &mut ScanRecord, tail: &[u8]) {
-    let offset = usize::from(record.rsn_ie_len);
-    let end = offset + tail.len();
-    record.rsn_ie[offset..end].copy_from_slice(tail);
-    record.rsn_ie[1] = (end - 2) as u8;
-    record.rsn_ie_len = end as u8;
+    let mut rsn_ie = record.rsn_ie_bytes().to_vec();
+    rsn_ie.extend_from_slice(tail);
+    rsn_ie[1] = (rsn_ie.len() - 2) as u8;
+    record.set_rsn_ie(&rsn_ie).unwrap();
 }
 
 #[test]
@@ -397,8 +397,7 @@ fn a_resumed_sae_association_lists_its_pmkid_before_the_rsnxe() {
 #[test]
 fn the_access_point_rsnxe_selects_hash_to_element() {
     let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0xc0);
-    record.rsnxe[..3].copy_from_slice(&[244, 1, 0x20]);
-    record.rsnxe_len = 3;
+    record.set_rsnxe(&[244, 1, 0x20]).unwrap();
     assert_eq!(
         select_association_rsn(&record, StaSecurityPolicy::Wpa3Personal)
             .unwrap()
@@ -568,7 +567,7 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
 #[test]
 fn association_encoder_uses_the_explicit_local_profile() {
     let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    record.ht_capability_ie_present = true;
+    record.set_ht_capability_ie(Some([0; crate::scan::HT_CAPABILITY_IE_LEN]));
     let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
     capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
     capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];
@@ -1050,18 +1049,12 @@ fn association_response_retains_complete_wmm_parameters() {
 
 #[test]
 fn open_ap_needs_no_security_ie() {
-    let record = ScanRecord {
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
-        supported_rates: [0x82; 8],
-        supported_rates_len: 1,
-        ..ScanRecord::new(
-            crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-                .unwrap(),
-            6,
-            -40,
-        )
-    };
+    let mut record = ScanRecord::new(
+        crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap()).unwrap(),
+        6,
+        -40,
+    );
+    record.set_supported_rates(&[0x82]).unwrap();
     assert!(
         select_association_rsn(&record, StaSecurityPolicy::Open)
             .unwrap()

@@ -187,8 +187,8 @@ impl AssociationRequest<'_> {
             ));
         }
 
-        let rates_len = usize::from(self.access_point.supported_rates_len)
-            + usize::from(self.access_point.extended_supported_rates_len);
+        let rates_len = self.access_point.supported_rates_bytes().len()
+            + self.access_point.extended_supported_rates_bytes().len();
         if rates_len == 0 {
             return Err(AssociationRequestError::Frame(
                 StationFrameError::NoSupportedRates,
@@ -204,7 +204,7 @@ impl AssociationRequest<'_> {
         let selected_rsn = self.security;
         let (ht_capability, he_capability, power_capability, he_ul_mu_power) = match self.phy {
             PhyMode::Legacy => (None, None, None, None),
-            PhyMode::Ht20 if self.access_point.ht_capability_ie_present => {
+            PhyMode::Ht20 if self.access_point.ht_capability_ie_bytes().is_some() => {
                 (Some(&capabilities.ht20), None, None, None)
             }
             PhyMode::Ht20 => {
@@ -217,7 +217,7 @@ impl AssociationRequest<'_> {
                 return Err(AssociationRequestError::Ht40UnsupportedByAccessPoint);
             }
             PhyMode::He20
-                if self.access_point.ht_capability_ie_present
+                if self.access_point.ht_capability_ie_bytes().is_some()
                     && parse_he20_capabilities(self.access_point.he_capability_ie_bytes())
                         .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
                     && parse_he20_operation(self.access_point.he_operation_ie_bytes()).is_ok() =>

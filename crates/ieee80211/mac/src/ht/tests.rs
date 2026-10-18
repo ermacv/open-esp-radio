@@ -173,13 +173,20 @@ fn ht_peer_capabilities_never_panics_on_received_bytes_full() {
 }
 
 #[test]
-fn a_peer_without_receive_mcs_is_refused_and_the_highest_is_its_top_bit() {
+fn a_zero_receive_mcs_bitmap_is_refused() {
     // `highest_rx_mcs` expects a nonzero MCS bitmap: the parser, its only
     // constructor, refuses a zero one.
     let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
     let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
+    assert!(ht_peer_capabilities(&record).is_some());
     record[5] = 0;
     assert_eq!(ht_peer_capabilities(&record), None);
+}
+
+#[test]
+fn the_highest_receive_mcs_is_the_top_bit_of_the_bitmap() {
+    let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz20).unwrap();
+    let mut record = ht_capability_ie(TEST_HT_CAPABILITIES, channel);
     for (bitmap, highest) in [(0x01, 0), (0x0f, 3), (0x10, 4), (0x80, 7)] {
         record[5] = bitmap;
         assert_eq!(

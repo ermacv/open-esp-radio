@@ -29,7 +29,7 @@ fn a_peer_without_ht_is_legacy_whatever_the_preference() {
 mod associated_peer {
     use oer_ieee80211_mac::{
         protection::{ErpProtection, HtProtectionMode},
-        scan::ScanRecord,
+        scan::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, ScanRecord},
         station::AssociationResponse,
     };
     use oer_ieee80211_upper_mac::{BasicRates, HePacketPadding};
@@ -51,15 +51,16 @@ mod associated_peer {
             6,
             -40,
         );
-        access_point.supported_rates[..4].copy_from_slice(&[0x82, 0x84, 0x8b, 0x96]);
-        access_point.supported_rates_len = 4;
-        access_point.ht_capability_ie_present = true;
-        access_point.ht_capability_ie[4] = 0x17;
-        access_point.he_capability_ie[..HE20_MCS9_CAPABILITY.len()]
-            .copy_from_slice(&HE20_MCS9_CAPABILITY);
-        access_point.he_capability_ie_len = HE20_MCS9_CAPABILITY.len() as u8;
-        access_point.he_operation_ie[..HE20_OPERATION.len()].copy_from_slice(&HE20_OPERATION);
-        access_point.he_operation_ie_len = HE20_OPERATION.len() as u8;
+        access_point
+            .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
+            .unwrap();
+        let mut ht_capability = [0; HT_CAPABILITY_IE_LEN];
+        ht_capability[4] = 0x17;
+        access_point.set_ht_capability_ie(Some(ht_capability));
+        access_point
+            .set_he_capability_ie(&HE20_MCS9_CAPABILITY)
+            .unwrap();
+        access_point.set_he_operation_ie(&HE20_OPERATION).unwrap();
         access_point
     }
 
@@ -131,14 +132,17 @@ mod associated_peer {
             -40,
         );
         access_point.capability_info = 0x0421;
-        access_point.supported_rates = [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24];
-        access_point.supported_rates_len = 8;
-        access_point.extended_supported_rates[..4].copy_from_slice(&[0x30, 0x48, 0x60, 0x6c]);
-        access_point.extended_supported_rates_len = 4;
+        access_point
+            .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24])
+            .unwrap();
+        access_point
+            .set_extended_supported_rates(&[0x30, 0x48, 0x60, 0x6c])
+            .unwrap();
         access_point.erp_information = Some(0x07);
-        access_point.ht_operation_ie[..2].copy_from_slice(&[61, 22]);
-        access_point.ht_operation_ie[4] = 0x03;
-        access_point.ht_operation_ie_present = true;
+        let mut ht_operation = [0; HT_OPERATION_IE_LEN];
+        ht_operation[..2].copy_from_slice(&[61, 22]);
+        ht_operation[4] = 0x03;
+        access_point.set_ht_operation_ie(Some(ht_operation));
         let peer = StaAssociatedPeer::derive(
             &access_point,
             &response(0),

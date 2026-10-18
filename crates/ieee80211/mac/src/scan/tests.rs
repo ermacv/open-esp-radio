@@ -1,6 +1,7 @@
 use super::{
-    HtSecondaryChannel, ScanObservation, ScanRecord, ScanTable, best_matching_ssid,
-    he_default_packet_extension_duration, he_extended_range_single_user_disabled, parse_management,
+    HtSecondaryChannel, ScanObservation, ScanRecord, ScanRecordError, ScanTable,
+    best_matching_ssid, he_default_packet_extension_duration,
+    he_extended_range_single_user_disabled, parse_management,
 };
 use oer_time::Instant;
 
@@ -156,53 +157,54 @@ fn retains_erp_use_protection_without_confusing_the_element_header() {
 
 #[test]
 fn ht40_geometry_requires_matching_capability_and_operation() {
-    let mut record = ScanRecord {
-        channel: 6,
-        ht_capability_ie_present: true,
-        ht_operation_ie_present: true,
-        ..ScanRecord::new(
-            crate::address::Bssid::new(
-                crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
-            )
-            .unwrap(),
-            6,
-            -40,
+    let mut record = ScanRecord::new(
+        crate::address::Bssid::new(
+            crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
-    };
-    record.ht_capability_ie[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
-    record.ht_operation_ie[0..4].copy_from_slice(&[61, 22, 6, 0x05]);
+        .unwrap(),
+        6,
+        -40,
+    );
+    let mut capability = [0; super::HT_CAPABILITY_IE_LEN];
+    capability[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
+    let mut operation = [0; super::HT_OPERATION_IE_LEN];
+    operation[0..4].copy_from_slice(&[61, 22, 6, 0x05]);
+    record.set_ht_capability_ie(Some(capability));
+    record.set_ht_operation_ie(Some(operation));
     assert_eq!(
         record.ht40_secondary_channel(),
         Some(HtSecondaryChannel::Above)
     );
 
-    record.ht_operation_ie[3] = 0x07;
+    operation[3] = 0x07;
+    record.set_ht_operation_ie(Some(operation));
     assert_eq!(
         record.ht40_secondary_channel(),
         Some(HtSecondaryChannel::Below)
     );
-    record.ht_capability_ie[2] = 0;
+    capability[2] = 0;
+    record.set_ht_capability_ie(Some(capability));
     assert_eq!(record.ht40_secondary_channel(), None);
 }
 
 #[test]
 fn ht_short_guard_intervals_are_read_from_capability_info() {
-    let mut record = ScanRecord {
-        ht_capability_ie_present: true,
-        ..ScanRecord::new(
-            crate::address::Bssid::new(
-                crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
-            )
-            .unwrap(),
-            6,
-            -40,
+    let mut record = ScanRecord::new(
+        crate::address::Bssid::new(
+            crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
-    };
-    record.ht_capability_ie[0..4].copy_from_slice(&[45, 26, 1 << 5, 0]);
+        .unwrap(),
+        6,
+        -40,
+    );
+    let mut capability = [0; super::HT_CAPABILITY_IE_LEN];
+    capability[0..4].copy_from_slice(&[45, 26, 1 << 5, 0]);
+    record.set_ht_capability_ie(Some(capability));
     assert!(record.supports_ht_short_guard_interval_20mhz());
     assert!(!record.supports_ht_short_guard_interval_40mhz());
 
-    record.ht_capability_ie[2] = 1 << 6;
+    capability[2] = 1 << 6;
+    record.set_ht_capability_ie(Some(capability));
     assert!(!record.supports_ht_short_guard_interval_20mhz());
     assert!(record.supports_ht_short_guard_interval_40mhz());
 }
@@ -247,14 +249,32 @@ fn weaker_latest_beacon_replaces_stale_ht_protection() {
         table.observe_management(&frame, 11, -30, None),
         ScanObservation::Inserted { index: 0 }
     );
-    assert_eq!(table.records().next().unwrap().ht_operation_ie[4] & 0x03, 1);
+    assert_eq!(
+        table
+            .records()
+            .next()
+            .unwrap()
+            .ht_operation_ie_bytes()
+            .unwrap()[4]
+            & 0x03,
+        1
+    );
 
     frame[49] = 0;
     assert_eq!(
         table.observe_management(&frame, 11, -60, None),
         ScanObservation::Updated { index: 0 }
     );
-    assert_eq!(table.records().next().unwrap().ht_operation_ie[4] & 0x03, 0);
+    assert_eq!(
+        table
+            .records()
+            .next()
+            .unwrap()
+            .ht_operation_ie_bytes()
+            .unwrap()[4]
+            & 0x03,
+        0
+    );
     assert_eq!(table.records().next().unwrap().rssi, -60);
 }
 
@@ -297,8 +317,7 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
         .zip(&mut records)
         .map(|((rssi, channel), record)| (record, rssi, channel))
     {
-        record.ssid[..4].copy_from_slice(b"test");
-        record.ssid_len = 4;
+        record.set_ssid(b"test").unwrap();
         record.rssi = rssi;
         record.channel = channel;
     }
@@ -497,10 +516,49 @@ fn an_oversized_element_marks_the_record_truncated_and_keeps_the_stored_one() {
 }
 
 #[test]
-fn a_stored_length_beyond_its_buffer_reads_the_whole_buffer() {
-    // The record's fields are public; a caller-set length longer than the
-    // buffer cannot name more bytes than the record holds.
-    let mut record = ScanRecord::new(
+fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
+    type Setter = fn(&mut ScanRecord, &[u8]) -> Result<(), ScanRecordError>;
+    type Getter = fn(&ScanRecord) -> &[u8];
+    let setters: [(Setter, Getter, usize); 8] = [
+        (ScanRecord::set_ssid, ScanRecord::ssid_bytes, 32),
+        (
+            ScanRecord::set_supported_rates,
+            ScanRecord::supported_rates_bytes,
+            8,
+        ),
+        (
+            ScanRecord::set_extended_supported_rates,
+            ScanRecord::extended_supported_rates_bytes,
+            super::EXTENDED_RATES_CAPACITY,
+        ),
+        (
+            ScanRecord::set_he_capability_ie,
+            ScanRecord::he_capability_ie_bytes,
+            super::HE_CAPABILITY_IE_CAPACITY,
+        ),
+        (
+            ScanRecord::set_he_operation_ie,
+            ScanRecord::he_operation_ie_bytes,
+            super::HE_OPERATION_IE_CAPACITY,
+        ),
+        (
+            ScanRecord::set_wmm_ie,
+            ScanRecord::wmm_ie_bytes,
+            super::WMM_IE_CAPACITY,
+        ),
+        (
+            ScanRecord::set_rsn_ie,
+            ScanRecord::rsn_ie_bytes,
+            super::RSN_IE_CAPACITY,
+        ),
+        (
+            ScanRecord::set_rsnxe,
+            ScanRecord::rsnxe_bytes,
+            super::RSNXE_CAPACITY,
+        ),
+    ];
+    let value = [0xa5_u8; 300];
+    let empty = ScanRecord::new(
         crate::address::Bssid::new(
             crate::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
@@ -508,31 +566,28 @@ fn a_stored_length_beyond_its_buffer_reads_the_whole_buffer() {
         6,
         -40,
     );
-    record.ssid_len = u8::MAX;
-    record.supported_rates_len = u8::MAX;
-    record.extended_supported_rates_len = u8::MAX;
-    record.he_capability_ie_len = u8::MAX;
-    record.he_operation_ie_len = u8::MAX;
-    record.wmm_ie_len = u8::MAX;
-    record.rsn_ie_len = u8::MAX;
-    record.rsnxe_len = u8::MAX;
-    assert_eq!(record.ssid_bytes().len(), 32);
-    assert_eq!(record.supported_rates_bytes().len(), 8);
-    assert_eq!(
-        record.extended_supported_rates_bytes().len(),
-        super::EXTENDED_RATES_CAPACITY
-    );
-    assert_eq!(
-        record.he_capability_ie_bytes().len(),
-        super::HE_CAPABILITY_IE_CAPACITY
-    );
-    assert_eq!(
-        record.he_operation_ie_bytes().len(),
-        super::HE_OPERATION_IE_CAPACITY
-    );
-    assert_eq!(record.wmm_ie_bytes().len(), super::WMM_IE_CAPACITY);
-    assert_eq!(record.rsn_ie_bytes().len(), super::RSN_IE_CAPACITY);
-    assert_eq!(record.rsnxe_bytes().len(), super::RSNXE_CAPACITY);
+    for (set, get, capacity) in setters {
+        let mut record = empty;
+        // A value that fills the buffer is held whole.
+        assert_eq!(set(&mut record, &value[..capacity]), Ok(()));
+        assert_eq!(get(&record), &value[..capacity]);
+        let full = record;
+        // One byte more, or more than a `u8` length, is refused, never
+        // truncated, and the record keeps what it held.
+        for length in [capacity + 1, 256, value.len()] {
+            assert_eq!(
+                set(&mut record, &value[..length]),
+                Err(ScanRecordError::TooLong { length, capacity })
+            );
+            assert_eq!(record, full);
+        }
+        // A shorter value replaces the longer one whole.
+        assert_eq!(set(&mut record, &value[..1]), Ok(()));
+        assert_eq!(get(&record), &value[..1]);
+        // An empty value leaves no byte of the earlier ones behind.
+        assert_eq!(set(&mut record, &[]), Ok(()));
+        assert_eq!(record, empty);
+    }
 }
 
 #[test]

@@ -48,7 +48,7 @@ pub fn select_association_phy(
                 .is_ok();
     select_phy(
         preference,
-        access_point.ht_capability_ie_present,
+        access_point.ht_capability_ie_bytes().is_some(),
         ht40_capable && access_point.ht40_secondary_channel().is_some(),
         he20_available,
     )

@@ -68,11 +68,22 @@ pub fn he_extended_range_single_user_disabled(he_operation_ie: &[u8]) -> Option<
     }
 }
 
+/// A value offered to a [`ScanRecord`] setter that its buffer cannot hold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanRecordError {
+    /// The value has `length` bytes; the record holds at most `capacity`.
+    TooLong { length: usize, capacity: usize },
+}
+
 /// One bounded, owned observation from a beacon or probe response.
+///
+/// Each element buffer and the length that names its bytes are private:
+/// only [`parse_management`] and the checked setters write them, so a stored
+/// length never exceeds its buffer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanRecord {
-    pub ssid: [u8; 32],
-    pub ssid_len: u8,
+    ssid: [u8; 32],
+    ssid_len: u8,
     /// Individual infrastructure BSS address, validated while parsing.
     pub bssid: Bssid,
     pub channel: u8,
@@ -92,27 +103,25 @@ pub struct ScanRecord {
     /// for the frame.
     pub received_at: Option<Instant>,
     pub beacon_interval_tu: u16,
-    pub supported_rates: [u8; 8],
-    pub supported_rates_len: u8,
-    pub extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
-    pub extended_supported_rates_len: u8,
+    supported_rates: [u8; 8],
+    supported_rates_len: u8,
+    extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
+    extended_supported_rates_len: u8,
     /// One-byte ERP Information payload.  In particular, bit one is the
     /// infrastructure BSS Use Protection policy.
     pub erp_information: Option<u8>,
-    pub ht_capability_ie: [u8; HT_CAPABILITY_IE_LEN],
-    pub ht_capability_ie_present: bool,
-    pub ht_operation_ie: [u8; HT_OPERATION_IE_LEN],
-    pub ht_operation_ie_present: bool,
-    pub he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
-    pub he_capability_ie_len: u8,
-    pub he_operation_ie: [u8; HE_OPERATION_IE_CAPACITY],
-    pub he_operation_ie_len: u8,
-    pub wmm_ie: [u8; WMM_IE_CAPACITY],
-    pub wmm_ie_len: u8,
-    pub rsn_ie: [u8; RSN_IE_CAPACITY],
-    pub rsn_ie_len: u8,
-    pub rsnxe: [u8; RSNXE_CAPACITY],
-    pub rsnxe_len: u8,
+    ht_capability_ie: Option<[u8; HT_CAPABILITY_IE_LEN]>,
+    ht_operation_ie: Option<[u8; HT_OPERATION_IE_LEN]>,
+    he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
+    he_capability_ie_len: u8,
+    he_operation_ie: [u8; HE_OPERATION_IE_CAPACITY],
+    he_operation_ie_len: u8,
+    wmm_ie: [u8; WMM_IE_CAPACITY],
+    wmm_ie_len: u8,
+    rsn_ie: [u8; RSN_IE_CAPACITY],
+    rsn_ie_len: u8,
+    rsnxe: [u8; RSNXE_CAPACITY],
+    rsnxe_len: u8,
 }
 
 impl ScanRecord {
@@ -139,10 +148,8 @@ impl ScanRecord {
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
             extended_supported_rates_len: 0,
             erp_information: None,
-            ht_capability_ie: [0; HT_CAPABILITY_IE_LEN],
-            ht_capability_ie_present: false,
-            ht_operation_ie: [0; HT_OPERATION_IE_LEN],
-            ht_operation_ie_present: false,
+            ht_capability_ie: None,
+            ht_operation_ie: None,
             he_capability_ie: [0; HE_CAPABILITY_IE_CAPACITY],
             he_capability_ie_len: 0,
             he_operation_ie: [0; HE_OPERATION_IE_CAPACITY],
@@ -157,7 +164,7 @@ impl ScanRecord {
     }
 
     pub fn ssid_bytes(&self) -> &[u8] {
-        stored(&self.ssid, self.ssid_len)
+        front(&self.ssid, self.ssid_len)
     }
 
     /// Whether this observation matches one exact requested security mode.
@@ -188,11 +195,11 @@ impl ScanRecord {
     }
 
     pub fn supported_rates_bytes(&self) -> &[u8] {
-        stored(&self.supported_rates, self.supported_rates_len)
+        front(&self.supported_rates, self.supported_rates_len)
     }
 
     pub fn extended_supported_rates_bytes(&self) -> &[u8] {
-        stored(
+        front(
             &self.extended_supported_rates,
             self.extended_supported_rates_len,
         )
@@ -203,8 +210,7 @@ impl ScanRecord {
     }
 
     pub fn ht_capability_ie_bytes(&self) -> Option<&[u8; HT_CAPABILITY_IE_LEN]> {
-        self.ht_capability_ie_present
-            .then_some(&self.ht_capability_ie)
+        self.ht_capability_ie.as_ref()
     }
 
     /// Parse the retained HT IE into peer receive capabilities.
@@ -219,8 +225,7 @@ impl ScanRecord {
     }
 
     pub fn ht_operation_ie_bytes(&self) -> Option<&[u8; HT_OPERATION_IE_LEN]> {
-        self.ht_operation_ie_present
-            .then_some(&self.ht_operation_ie)
+        self.ht_operation_ie.as_ref()
     }
 
     /// Whether the AP advertises reception with a 400 ns guard interval on a
@@ -269,15 +274,15 @@ impl ScanRecord {
     }
 
     pub fn he_capability_ie_bytes(&self) -> &[u8] {
-        stored(&self.he_capability_ie, self.he_capability_ie_len)
+        front(&self.he_capability_ie, self.he_capability_ie_len)
     }
 
     pub fn he_operation_ie_bytes(&self) -> &[u8] {
-        stored(&self.he_operation_ie, self.he_operation_ie_len)
+        front(&self.he_operation_ie, self.he_operation_ie_len)
     }
 
     pub fn wmm_ie_bytes(&self) -> &[u8] {
-        stored(&self.wmm_ie, self.wmm_ie_len)
+        front(&self.wmm_ie, self.wmm_ie_len)
     }
 
     pub fn wmm_parameters(&self) -> Option<crate::extensions::wmm::WmmParameterSet> {
@@ -285,11 +290,77 @@ impl ScanRecord {
     }
 
     pub fn rsn_ie_bytes(&self) -> &[u8] {
-        stored(&self.rsn_ie, self.rsn_ie_len)
+        front(&self.rsn_ie, self.rsn_ie_len)
     }
 
     pub fn rsnxe_bytes(&self) -> &[u8] {
-        stored(&self.rsnxe, self.rsnxe_len)
+        front(&self.rsnxe, self.rsnxe_len)
+    }
+
+    /// Store the SSID `ssid`; an empty one is a hidden SSID.
+    pub fn set_ssid(&mut self, ssid: &[u8]) -> Result<(), ScanRecordError> {
+        replace(&mut self.ssid, &mut self.ssid_len, ssid)
+    }
+
+    /// Store the Supported Rates element's value.
+    pub fn set_supported_rates(&mut self, rates: &[u8]) -> Result<(), ScanRecordError> {
+        replace(
+            &mut self.supported_rates,
+            &mut self.supported_rates_len,
+            rates,
+        )
+    }
+
+    /// Store the Extended Supported Rates element's value.
+    pub fn set_extended_supported_rates(&mut self, rates: &[u8]) -> Result<(), ScanRecordError> {
+        replace(
+            &mut self.extended_supported_rates,
+            &mut self.extended_supported_rates_len,
+            rates,
+        )
+    }
+
+    /// Store the complete HT Capabilities element, or `None` for its absence.
+    pub const fn set_ht_capability_ie(&mut self, element: Option<[u8; HT_CAPABILITY_IE_LEN]>) {
+        self.ht_capability_ie = element;
+    }
+
+    /// Store the complete HT Operation element, or `None` for its absence.
+    pub const fn set_ht_operation_ie(&mut self, element: Option<[u8; HT_OPERATION_IE_LEN]>) {
+        self.ht_operation_ie = element;
+    }
+
+    /// Store the complete HE Capabilities element; empty for its absence.
+    pub fn set_he_capability_ie(&mut self, element: &[u8]) -> Result<(), ScanRecordError> {
+        replace(
+            &mut self.he_capability_ie,
+            &mut self.he_capability_ie_len,
+            element,
+        )
+    }
+
+    /// Store the complete HE Operation element; empty for its absence.
+    pub fn set_he_operation_ie(&mut self, element: &[u8]) -> Result<(), ScanRecordError> {
+        replace(
+            &mut self.he_operation_ie,
+            &mut self.he_operation_ie_len,
+            element,
+        )
+    }
+
+    /// Store the complete WMM element; empty for its absence.
+    pub fn set_wmm_ie(&mut self, element: &[u8]) -> Result<(), ScanRecordError> {
+        replace(&mut self.wmm_ie, &mut self.wmm_ie_len, element)
+    }
+
+    /// Store the complete RSN element; empty for its absence.
+    pub fn set_rsn_ie(&mut self, element: &[u8]) -> Result<(), ScanRecordError> {
+        replace(&mut self.rsn_ie, &mut self.rsn_ie_len, element)
+    }
+
+    /// Store the complete RSN Extension element; empty for its absence.
+    pub fn set_rsnxe(&mut self, element: &[u8]) -> Result<(), ScanRecordError> {
+        replace(&mut self.rsnxe, &mut self.rsnxe_len, element)
     }
 }
 
@@ -536,8 +607,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
             }
             (45, _) => {
                 if let Some(element) = exact_element(element_header, value) {
-                    record.ht_capability_ie = element;
-                    record.ht_capability_ie_present = true;
+                    record.ht_capability_ie = Some(element);
                 }
             }
             (48, _) => {
@@ -561,8 +631,7 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
             }
             (61, _) => {
                 if let Some(element) = exact_element(element_header, value) {
-                    record.ht_operation_ie = element;
-                    record.ht_operation_ie_present = true;
+                    record.ht_operation_ie = Some(element);
                 }
             }
             (244, _) => match store_element(&mut record.rsnxe, element_header, value) {
@@ -597,14 +666,34 @@ pub fn parse_management(frame: &[u8], fallback_channel: u8, rssi: i8) -> Option<
     Some(record)
 }
 
-/// The first `length` bytes of a record buffer.
-///
-/// The record's fields are public, so a caller can store a length beyond
-/// the buffer; the bytes the record holds are then the whole buffer.
-fn stored<const N: usize>(buffer: &[u8; N], length: u8) -> &[u8] {
-    buffer
-        .split_at_checked(usize::from(length))
-        .map_or(buffer.as_slice(), |(bytes, _)| bytes)
+/// The first `length` bytes of a record buffer: the bytes it holds.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "only the parser and the checked setters set the length, never past the buffer"
+)]
+fn front<const N: usize>(buffer: &[u8; N], length: u8) -> &[u8] {
+    &buffer.as_slice()[..usize::from(length)]
+}
+
+/// Replace the bytes a record buffer holds by `value` and zero the rest, or
+/// refuse a value longer than the buffer and change nothing.
+fn replace<const N: usize>(
+    buffer: &mut [u8; N],
+    length: &mut u8,
+    value: &[u8],
+) -> Result<(), ScanRecordError> {
+    let too_long = ScanRecordError::TooLong {
+        length: value.len(),
+        capacity: N,
+    };
+    // Every record buffer is shorter than 256 bytes, so a value that fits
+    // its buffer has a `u8` length.
+    let (front, rest) = buffer.split_at_mut_checked(value.len()).ok_or(too_long)?;
+    let value_length = u8::try_from(value.len()).map_err(|_| too_long)?;
+    front.copy_from_slice(value);
+    rest.fill(0);
+    *length = value_length;
+    Ok(())
 }
 
 /// Copy an element's value to the front of `buffer`: its length, or `None`

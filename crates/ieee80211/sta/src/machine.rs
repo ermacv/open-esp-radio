@@ -5101,7 +5101,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     ) -> State<T, K> {
         let bssid = join.access_point.bssid;
         let channel = join.channel;
-        let qos = join.access_point.wmm_ie_len > 0;
+        let qos = !join.access_point.wmm_ie_bytes().is_empty();
         let pmk = match key {
             AssociationKey::Protected(pmk) => pmk,
             AssociationKey::Open => {
