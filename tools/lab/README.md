@@ -262,3 +262,8 @@ interface without a channel.
   `wpa_passphrase` needs a terminal even with piped input.
 - Before signalling a stored PID on the router, check that it still
   belongs to `wpa_supplicant`.
+
+### Linux Bluetooth peer
+
+[linux-bluetooth.md](linux-bluetooth.md): adapter ownership, DTM,
+connection and pairing quirks of a Linux host as the BLE peer.
