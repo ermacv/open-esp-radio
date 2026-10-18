@@ -33,16 +33,15 @@ For each scenario they give:
 
 - The gates were set by the predecessor's agents in its scenario files,
   except these, whose status is:
-  - A/B comparison against a predecessor build: 5 of 5 passes, a throughput
-    regression above 5 % blocks, a p95 latency increase above 10 % blocks,
-    CPU load is compared — owner criterion (predecessor), confirmation
-    pending;
+  - A/B comparison against a predecessor build: 5 of 5 runs; a throughput
+    regression above 5 % or a p95 latency regression above 10 % blocks —
+    owner criterion (confirmed 2026-10-18);
   - secure GATT: connection loss at most 20 % over at least 45 attempts —
-    owner criterion (predecessor), confirmation pending;
-  - GATT trace: 10 repetitions — owner criterion (predecessor), confirmation
-    pending;
-  - PHY calibration tolerance (the vendor's own boot-to-boot spread) —
-    agent-recorded, confirmation pending;
+    owner criterion (confirmed 2026-10-18);
+  - GATT trace: 10 repetitions — owner criterion (confirmed 2026-10-18);
+  - PHY calibration tolerance: a field matches when its difference stays
+    within the vendor's own spread for that field — owner criterion
+    (confirmed 2026-10-18);
   - GATT and secure GATT 10 of 10 — open.
 - The runner, receipts and qualification procedure are not carried; only what
   each scenario proves and its gate.
