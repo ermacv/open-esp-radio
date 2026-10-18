@@ -40,6 +40,8 @@ without vendor radio binaries. Owner decisions are in
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
   `registers/*/published/*`, `knowledge/*/vendor/facts/**`) are never read
   whole or edited by hand: grep them by path, regenerate them.
+  `firmware/platform/*/linker/dma-window.x` is small and may be read, but it
+  is regenerated, never edited.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -70,7 +72,9 @@ dependency set, or an independent consumer; otherwise it is a module.
 | `crates/<chip>/` | per chip (`esp32s31`, `esp32c5`): PAC, HAL, PHY, drivers, radio coexistence |
 | `crates/adapters/` | Embassy time and network, esp-hal SoC |
 | `firmware/` | the chip-target workspace: staged boot platform, images |
-| `registers/`, `tools/registers/` | the register model and its SVD/PAC generator |
+| `registers/` | the register model, its evidence and the published SVD and bindings |
+| `tools/cli/<tool>/` | one thin binary per host tool (`cargo registers`, `cargo fw`, …) |
+| `tools/lib/{base,data,analysis,service}/` | host libraries by layer; dependencies only downward (`tools/README.md`) |
 | `knowledge/` | recovered facts and research notes (data, not code) |
 
 ## Work

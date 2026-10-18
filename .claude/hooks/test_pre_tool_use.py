@@ -35,6 +35,7 @@ class Edits(unittest.TestCase):
             ("Edit", "registers/esp32s31/published/platform.bindings.toml", "cargo registers generate"),
             ("Edit", "/w/knowledge/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
             ("Write", "knowledge/esp32s31/vendor/facts/names/libble_app.toml", "re-deriving"),
+            ("Edit", "/w/firmware/platform/esp32s31/linker/dma-window.x", "cargo registers generate"),
         ]:
             self.assert_blocked(tool, path, command)
 
@@ -45,6 +46,7 @@ class Edits(unittest.TestCase):
             "/w/knowledge/esp32s31/vendor/facts/names/README.md",
             "/w/knowledge/esp32s31/vendor/artifacts.toml",
             "/w/.claude/hooks/pre_tool_use.py",
+            "/w/firmware/platform/espressif/linker/runtime/sections.x",
         ]:
             self.assertEqual(run("Edit", file_path=path), (0, ""), path)
 
