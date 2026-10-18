@@ -171,3 +171,17 @@ walker H1 shows.
 - **The vendor race.** A settle that reads NEXT = 0 with LAST short of the
   new tail rings the doorbell once more instead of writing BASE; NEXT still
   zero after that contradicts H1 and fails closed.
+- **The second layer: the owner bit.** R keeps the walker out of software's
+  descriptors by construction; the owner bit (word0 bit 31, `OWNER`) stops
+  it should that construction ever fail (SOURCE:
+  HIL_W1_OWNER_BIT_2026_10_18, "Owner bit"). When a buffer leaves the ring
+  into a lease, its descriptor's word0 is rewritten to its completed image
+  with bit 31 clear (`RX_DONE`, length and size kept) and fenced, before the
+  lease is handed out; the descriptor at LAST too, since a doorbell with
+  NEXT = 0 still follows `LAST.next`. The rearm sets the bit again. A NEXT
+  that names a detached descriptor (observed, bit 31 clear) means the
+  walker stopped on that barrier: the reload settle after a doorbell and
+  each drain's frozen LAST/NEXT read check for it, count it
+  (`walker_on_detached`) and fail closed. The W1 image checks every held
+  lease's descriptor for bit 31 clear (`w1.own owner_clear=`) and gates
+  both.
