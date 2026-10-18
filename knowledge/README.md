@@ -16,6 +16,8 @@ nothing here is built.
 | `esp32c5/vendor/coverage.toml` | ESP32-C5 vendor code paths the predecessor's comparison never reached, in the ESP32-S31 format |
 | `esp32c5/vendor/facts/` | machine-written registry of ESP32-C5 function fingerprints (never edited by hand) |
 | `esp32c5/notes/` | ESP32-C5 pin relations, silicon observations and errata links |
+| `esp32s31/phy/` | facts about the vendor PHY code from the predecessor's vendor comparison |
+| `espressif/wifi/` | vendor Wi-Fi algorithms shared by Espressif chips (`libpp`) |
 
 A value from a source without a license is a fact here and nothing more; see
 the [source policy](../docs/source-policy.md).
