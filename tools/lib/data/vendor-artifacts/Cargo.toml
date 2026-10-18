@@ -1,0 +1,22 @@
+[package]
+name = "oer-vendor-artifacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The pinned vendor artifacts of a chip: the host-wide store, fetching into it and verifying against the pins"
+
+[dependencies]
+oer-process = { path = "../process" }
+oer-durable = { path = "../durable" }
+oer-chip-profile = { path = "../chip-profile" }
+oer-vendor-pins = { path = "../vendor-pins" }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

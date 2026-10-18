@@ -1,0 +1,26 @@
+[package]
+name = "oer-vendor-provenance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Vendor function provenance: the SOURCE citation grammar, the one relocation-normalized fingerprint of vendor RV32 functions, the provenance registry and its check, and archive revision diffs"
+readme = "README.md"
+
+[dependencies]
+oer-elf = { path = "../elf" }
+oer-markers = { path = "../markers" }
+oer-register-model = { path = "../registers/model" }
+oer-repo = { path = "../repo" }
+oer-vendor-artifacts = { path = "../vendor-artifacts" }
+sha2 = "=0.10.9"
+toml = "=1.1.4"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

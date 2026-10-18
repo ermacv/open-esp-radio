@@ -1,0 +1,25 @@
+[package]
+name = "blobray-linker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Linux adapters of Blobray's in-process linking: external ELF linkers"
+
+[dependencies]
+oer-process = { path = "../../../process" }
+blobray-application = { path = "../application" }
+blobray-domain = { path = "../domain" }
+oer-riscv-model = { path = "../../../riscv/model" }
+sha2 = "=0.10.9"
+libc = "=0.2.189"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
+
+[lints]
+workspace = true
+

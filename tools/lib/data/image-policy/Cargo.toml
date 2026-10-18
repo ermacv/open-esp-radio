@@ -1,0 +1,20 @@
+[package]
+name = "oer-image-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The stack policy of an image family: the stacks a check bounds, the compiler move limit and the runtime reserves"
+
+[dependencies]
+oer-toolchain = { path = "../../toolchain" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "1.1"
+
+[dev-dependencies]
+
+[lints]
+workspace = true
+

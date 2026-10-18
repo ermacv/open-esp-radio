@@ -1,0 +1,20 @@
+[package]
+name = "oer-esp32s31-probe-bluetooth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Isolated ESP32-S31 Bluetooth production comparison probes"
+
+[dependencies]
+oer-probe-macros = { path = "../../../../harness/macros" }
+oer-esp32s31-bluetooth.workspace = true
+oer-esp32s31-phy = { workspace = true, features = ["validation-probes"] }
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[lints]
+workspace = true
+

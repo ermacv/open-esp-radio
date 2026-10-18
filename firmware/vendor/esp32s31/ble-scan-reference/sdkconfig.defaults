@@ -1,0 +1,20 @@
+CONFIG_IDF_TARGET="esp32s31"
+# The vendor BLE Controller alone, reached over VHCI in RAM.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_CONTROLLER_ONLY=y
+CONFIG_BT_LE_HCI_INTERFACE_USE_RAM=y
+# Only protocol lines reach the host; driver and boot logs stay quiet.
+CONFIG_LOG_DEFAULT_LEVEL_ERROR=y
+CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y
+# The stand's S31 carries 16 MB of flash; the bootloader this image writes
+# must describe it, or the HIL images the other owners flash do not boot.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# The HIL flash layout: the application occupies ota_0 of the shared table.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../platform/esp32s31/partitions/applications.csv"
+# The digest depends only on the sources.
+CONFIG_APP_REPRODUCIBLE_BUILD=y
+# The stand reaches the device through its USB Serial/JTAG port, which
+# carries the console in both directions.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y

@@ -1,0 +1,19 @@
+[package]
+name = "oer-riscv-decode"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "RV32 instruction decoding over rv-asm with the F, Zicsr, Zba, Zbb, Zbs, Zcb and Zcmp forms it lacks"
+
+[dependencies]
+rv-asm = "=0.2.1"
+
+[dev-dependencies]
+oer-toolchain = { path = "../../toolchain" }
+
+[lints]
+workspace = true
+

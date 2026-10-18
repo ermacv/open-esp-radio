@@ -1,0 +1,29 @@
+[package]
+name = "oer-image"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the flash contents encoded at build time and the checks a caller requests"
+
+[dependencies]
+oer-esp-idf = { path = "../../esp-idf" }
+oer-image-encode = { path = "../encode" }
+oer-image-policy = { path = "../policy" }
+oer-chip-profile = { path = "../../chip-profile" }
+oer-durable = { path = "../../durable" }
+oer-image-bundle = { path = "../bundle" }
+oer-process = { path = "../../process" }
+oer-toolchain = { path = "../../toolchain" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "=3.27.0"
+toml = "1.1"
+
+[dev-dependencies]
+
+[lints]
+workspace = true
+

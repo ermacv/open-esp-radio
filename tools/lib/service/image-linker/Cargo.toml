@@ -1,0 +1,21 @@
+[package]
+name = "oer-image-linker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The image linker: checks the link inputs, then runs rust-lld unchanged"
+
+[dependencies]
+oer-process = { path = "../../process" }
+oer-elf = { path = "../../elf" }
+
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
+
+[lints]
+workspace = true
+

@@ -1,0 +1,20 @@
+[package]
+name = "oer-probe-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Rust frontend for verification probe declarations"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+oer-probe-codegen = { path = "../codegen" }
+syn = { version = "=2.0.119", features = ["full"] }
+
+[lints]
+workspace = true
+

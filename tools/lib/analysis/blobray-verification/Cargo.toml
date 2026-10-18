@@ -1,0 +1,17 @@
+[package]
+name = "blobray-verification"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Concrete observation comparison without execution authority"
+
+[dependencies]
+blobray-domain = { path = "../domain" }
+oer-riscv-model = { path = "../../../riscv/model" }
+
+[lints]
+workspace = true
+

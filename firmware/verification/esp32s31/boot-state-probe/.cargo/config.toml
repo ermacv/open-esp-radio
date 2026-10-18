@@ -1,0 +1,7 @@
+# The probe's target and runner. Its build script adds the esp-hal linker
+# script; no Rust flags live here.
+[build]
+target = "riscv32imafc-unknown-none-elf"
+
+[target.riscv32imafc-unknown-none-elf]
+runner = "espflash flash --chip esp32s31 --monitor"

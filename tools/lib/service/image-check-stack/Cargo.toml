@@ -1,0 +1,28 @@
+[package]
+name = "oer-image-check-stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The stack check of an image: task and bootstrap stacks bounded from their roots with the pinned ROM, and the frame coverage review"
+
+[dependencies]
+oer-chip-profile = { path = "../../../chip-profile" }
+oer-elf = { path = "../../../elf" }
+oer-image-policy = { path = "../../policy" }
+oer-riscv-model = { path = "../../../riscv/model" }
+oer-riscv-program = { path = "../../../riscv/program" }
+oer-riscv-stack = { path = "../../../riscv/stack" }
+oer-vendor-artifacts = { path = "../../../vendor-artifacts" }
+rustc-demangle = "=0.1.28"
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "1.1"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

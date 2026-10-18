@@ -1,0 +1,22 @@
+[package]
+name = "oer-image-bundle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The image bundle format: bundle.json, its files and the segments a flash writes"
+
+[dependencies]
+oer-chip-profile = { path = "../../chip-profile" }
+oer-durable = { path = "../../durable" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

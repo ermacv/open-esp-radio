@@ -1,0 +1,19 @@
+[package]
+name = "oer-check-phy-archive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The verification audit of the source-only PHY archive's compiled symbols"
+
+[dependencies]
+oer-elf = { path = "../elf" }
+oer-process = { path = "../process" }
+oer-toolchain = { path = "../toolchain" }
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

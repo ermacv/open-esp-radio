@@ -1,0 +1,8 @@
+# Firmware catalog entry: `cargo hil firmware flash ble-scan-vendor-reference --board esp32s31`.
+# The pinned vendor BLE Controller on the device under test runs a passive or
+# active legacy scan and reports the scanner's link state, scheduler item,
+# SCAN_REQ descriptor and BLE MAC registers through a line protocol, as the
+# reference for the open scanner's Controller memory.
+image = "ble-scan-vendor-reference"
+chip = "esp32s31"
+pins = "esp32s31"

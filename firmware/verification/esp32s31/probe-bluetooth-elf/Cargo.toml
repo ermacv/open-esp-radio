@@ -1,0 +1,20 @@
+[package]
+name = "oer-esp32s31-probe-bluetooth-elf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+description = "Linked ESP32-S31 Bluetooth production comparison probe image"
+
+[dependencies]
+critical-section = "1.2.0"
+oer-esp32s31-probe-bluetooth = { path = "../library" }
+
+[lints]
+workspace = true
+
+
+[build-dependencies]
+oer-probe-codegen = { path = "../../../../harness/codegen" }

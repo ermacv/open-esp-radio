@@ -1,0 +1,35 @@
+[package]
+name = "oer-esp32s31-probe-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Retained ESP32-S31 Rust entry points for compiled vendor verification"
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+oer-probe-macros = { path = "../../../../harness/macros" }
+embassy-futures.workspace = true
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"] }
+oer-esp32s31-coex.workspace = true
+oer-memory.workspace = true
+oer-esp32s31-hal.workspace = true
+oer-esp32s31-pac.workspace = true
+oer-esp32s31-phy = { workspace = true, features = ["validation-probes"] }
+oer-esp32s31-phy-relation = { path = "../../../../../hil/phy/esp32s31/relation", features = ["projection"] }
+oer-esp32s31-ieee80211-mac.workspace = true
+oer-esp32s31-ieee80211.workspace = true
+oer-esp32s31-ieee80211-dma.workspace = true
+oer-ieee80211-mac.workspace = true
+oer-ieee80211-softmac.workspace = true
+oer-esp32s31-radio-esp-hal.workspace = true
+oer-ieee80211-lower-mac = { path = "../../../../../crates/protocols/ieee80211/lower-mac" }
+oer-time = { path = "../../../../../crates/time" }
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[lints]
+workspace = true
+

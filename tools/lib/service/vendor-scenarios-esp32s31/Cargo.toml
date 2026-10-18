@@ -1,0 +1,32 @@
+[package]
+name = "oer-esp32s31-vendor-scenarios"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Typed ESP32-S31 vendor-comparison scenarios driven through the Blobray CLI"
+
+[dependencies]
+oer-elf = { path = "../../../tools/elf" }
+oer-durable = { path = "../../../tools/durable" }
+oer-process = { path = "../../../tools/process" }
+oer-vendor-evidence-shard = { path = "../../../qualification/evidence-shard" }
+oer-riscv-model = { path = "../../../tools/riscv/model" }
+blobray-application = { path = "../../../tools/blobray/crates/application" }
+blobray-domain = { path = "../../../tools/blobray/crates/domain" }
+oer-vendor-scenario-engine = { path = "../../harness/scenarios" }
+oer-esp32s31-phy-relation = { path = "../../../hil/phy/esp32s31/relation" }
+clap = { version = "=4.5.48", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+
+[dev-dependencies]
+oer-vendor-pins = { path = "../../../tools/vendor-pins" }
+oer-esp-idf = { path = "../../../tools/esp-idf" }
+oer-image = { path = "../../../tools/image/pipeline" }
+
+[lints]
+workspace = true
+

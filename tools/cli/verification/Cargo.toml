@@ -1,0 +1,39 @@
+[package]
+name = "oer-verification-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "`cargo verification`: vendor pins fetched, vendor diffs, provenance, typed scenarios, evidence shards, comparison probes and host stands"
+
+[[bin]]
+name = "verification"
+path = "src/main.rs"
+
+[dependencies]
+blobray-application = { path = "../../tools/blobray/crates/application" }
+blobray-domain = { path = "../../tools/blobray/crates/domain" }
+oer-chip-profile = { path = "../../tools/chip-profile" }
+oer-elf = { path = "../../tools/elf" }
+oer-register-model = { path = "../../tools/registers/model" }
+oer-riscv-lift = { path = "../../tools/riscv/lift" }
+oer-riscv-model = { path = "../../tools/riscv/model" }
+oer-command-tree = { path = "../../tools/command-tree", features = ["clap"] }
+oer-process = { path = "../../tools/process" }
+oer-repo = { path = "../../tools/repo" }
+oer-toolchain = { path = "../../tools/toolchain" }
+oer-vendor-artifacts = { path = "../../tools/vendor-artifacts" }
+oer-vendor-evidence = { path = "../evidence", features = ["producers"] }
+oer-vendor-provenance = { path = "../../tools/vendor-provenance" }
+clap = { version = "=4.5.48", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }
+
+[lints]
+workspace = true
+
