@@ -31,14 +31,33 @@ For each scenario they give:
 
 ## Notes
 
-- The gates were set by the predecessor's agents in its scenario files. The
-  owner set only these:
-  - the secure-GATT connection-loss bound;
-  - the PHY calibration rule (the vendor's own spread);
-  - for an A/B comparison against a predecessor build: 5 of 5 passes, a
-    throughput regression above 5 % blocks, a p95 latency increase above 10 %
-    blocks, and CPU load is compared.
+- The gates were set by the predecessor's agents in its scenario files,
+  except these, whose status is:
+  - A/B comparison against a predecessor build: 5 of 5 passes, a throughput
+    regression above 5 % blocks, a p95 latency increase above 10 % blocks,
+    CPU load is compared — owner criterion (predecessor), confirmation
+    pending;
+  - secure GATT: connection loss at most 20 % over at least 45 attempts —
+    owner criterion (predecessor), confirmation pending;
+  - GATT trace: 10 repetitions — owner criterion (predecessor), confirmation
+    pending;
+  - PHY calibration tolerance (the vendor's own boot-to-boot spread) —
+    agent-recorded, confirmation pending;
+  - GATT and secure GATT 10 of 10 — open.
 - The runner, receipts and qualification procedure are not carried; only what
   each scenario proves and its gate.
 - Diagnostic-image scenarios (probes, samplers, traces) are left out; see the
   end of [wifi.md](wifi.md).
+
+## Known gaps of the predecessor's scenarios
+
+New scenarios should not repeat these:
+
+- Station TCP floors were fixed (RX 18, TX 45 Mbit/s) and ignored the
+  offered load.
+- "Roundtrip" ran the same code as "monitor", so it proved nothing more.
+- The TX path required at least 8 s of traffic while scenarios allowed a 5 s
+  window.
+- PMF and WPA3 were verified only across a role restart, not on a first
+  connection.
+- `maximum_rx_silence_ms` was declared but never enforced.
