@@ -636,6 +636,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "defmt"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2953bfe4f93bbd20cc71198842756f77d161884c99ebbabc41d80231ded88d1"
+dependencies = [
+ "bitflags 1.3.2",
+ "defmt-macros",
+]
+
+[[package]]
+name = "defmt-macros"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bad9c72e7ca2137e0dc3813245a0d282fd6daad32fd800af018306a9169b5fe8"
+dependencies = [
+ "defmt-parser",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "defmt-parser"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
+dependencies = [
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "deku"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1038,7 +1069,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "esp-bootloader-esp-idf"
+version = "0.6.0"
+source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+dependencies = [
+ "document-features",
+ "embedded-storage",
+ "esp-config",
+ "esp-hal-procmacros",
+ "esp-metadata-generated",
+ "esp-rom-sys",
+ "esp-storage",
+ "jiff",
+ "sha2 0.11.1",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -1169,6 +1217,20 @@ dependencies = [
  "document-features",
  "esp-metadata-generated",
  "esp32c5",
+ "esp32s31",
+]
+
+[[package]]
+name = "esp-storage"
+version = "0.10.0"
+source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+dependencies = [
+ "document-features",
+ "esp-hal",
+ "esp-hal-procmacros",
+ "esp-metadata-generated",
+ "esp-rom-sys",
+ "esp-sync",
  "esp32s31",
 ]
 
@@ -1746,6 +1808,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "jiff"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ab1baf72f08796de0260609515130699b890ac25f30e610ad894bc5856cafdb"
+dependencies = [
+ "defmt",
+ "jiff-core",
+ "jiff-static",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
+]
+
+[[package]]
+name = "jiff-core"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
+dependencies = [
+ "defmt",
+ "log",
+]
+
+[[package]]
+name = "jiff-static"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "378268a1116ad67ae6228701118ac9f491d78fda38a40a1f1a9e1348de6f7212"
+dependencies = [
+ "jiff-core",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2044,6 +2143,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-boot-smoke"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-espressif-staged-runtime",
+]
+
+[[package]]
 name = "oer-esp32s31-coex"
 version = "0.1.0"
 dependencies = [
@@ -2156,6 +2265,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-platform-board"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-platform-layout",
+]
+
+[[package]]
+name = "oer-esp32s31-platform-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-esp32s31-soc-esp-hal",
+ "oer-espressif-staged-bootstrap",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-esp32s31-platform-layout"
 version = "0.1.0"
 dependencies = [
@@ -2184,6 +2314,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32s31-radio-root"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-esp32s31-radio-esp-hal",
+ "oer-espressif-staged-runtime",
+]
+
+[[package]]
 name = "oer-esp32s31-radio-system"
 version = "0.1.0"
 dependencies = [
@@ -2209,6 +2351,61 @@ dependencies = [
  "oer-espressif-interrupt-table-esp-hal",
  "oer-interrupt-table",
  "oer-memory",
+]
+
+[[package]]
+name = "oer-esp32s31-w0"
+version = "0.1.0"
+dependencies = [
+ "embassy-executor",
+ "esp-hal",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-esp-hal",
+ "oer-esp32s31-radio-system",
+ "oer-espressif-executor-embassy",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-mac",
+ "oer-ieee80211-softmac",
+ "oer-time",
+ "oer-time-embassy",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-esp32s31-w1"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "embassy-executor",
+ "embassy-futures",
+ "esp-hal",
+ "heapless 0.9.3",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-ieee80211",
+ "oer-esp32s31-ieee80211-dma",
+ "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-phy",
+ "oer-esp32s31-platform-board",
+ "oer-esp32s31-platform-layout",
+ "oer-esp32s31-radio-client",
+ "oer-esp32s31-radio-esp-hal",
+ "oer-esp32s31-radio-system",
+ "oer-espressif-executor-embassy",
+ "oer-espressif-interrupt-table-esp-hal",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-mac",
+ "oer-ieee80211-runtime",
+ "oer-ieee80211-softmac",
+ "oer-memory",
+ "oer-time",
+ "oer-time-embassy",
+ "static_cell",
 ]
 
 [[package]]
@@ -2291,8 +2488,26 @@ name = "oer-espressif-modem-clock"
 version = "0.1.0"
 
 [[package]]
+name = "oer-espressif-staged-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-espressif-staged-layout",
+]
+
+[[package]]
 name = "oer-espressif-staged-layout"
 version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-staged-runtime"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-espressif-interrupt-table-esp-hal",
+ "oer-espressif-staged-layout",
+ "oer-interrupt-table",
+]
 
 [[package]]
 name = "oer-firmware"
@@ -2743,6 +2958,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "postcard"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2948,7 +3172,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3402,7 +3626,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3709,7 +3933,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

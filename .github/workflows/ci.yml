@@ -26,7 +26,7 @@ jobs:
           # One JSON run: its errors fail the step, its warnings are only
           # counted per package.
           status=0
-          cargo clippy --workspace --all-targets --locked --message-format=json \
+          cargo clippy --all-targets --locked --message-format=json \
             > "$RUNNER_TEMP/clippy.json" || status=$?
           jq -rs '[.[] | select(.reason == "compiler-message") | .message.rendered]
             | unique | .[]' "$RUNNER_TEMP/clippy.json" || true
@@ -47,7 +47,8 @@ jobs:
             | awk -F '\t' '{ printf "%-40s %s\n", $1, $2 }' || true
           exit "$status"
       - name: Tests
-        run: cargo test --workspace --locked
+        # The default members: every package but the chip-only firmware ones.
+        run: cargo test --locked
       - name: Tests in the feature sets the workspace run does not build
         run: |
           # The workspace run unifies features: runtime is built without
@@ -80,33 +81,22 @@ jobs:
           cargo clippy --locked --target riscv32imafc-unknown-none-elf \
             -p oer-esp32s31-radio-esp-hal --features esp32s31
           : > "$RUNNER_TEMP/empty-runtime.bin"
-          cd firmware
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
-            cargo clippy --locked --target riscv32imafc-unknown-none-elf --workspace
-      - name: Firmware workspace
-        working-directory: firmware
+            cargo clippy --locked --target riscv32imafc-unknown-none-elf $(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.manifest_path | test("/firmware/(apps|platform)/")) | "-p " + .name')
+      - name: Firmware packages for the chip target
         run: |
           # The bootstrap embeds a packed stage-two runtime; an empty one
           # suffices to type-check it.
           : > "$RUNNER_TEMP/empty-runtime.bin"
           PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin" \
-            cargo check --locked --target riscv32imafc-unknown-none-elf --workspace
-      - name: Firmware host tests
-        # The host-built layout crates of the firmware workspace: the staged
-        # layout (its linker-script and zeroed-input tests) and the S31 image
-        # layout. The other firmware packages build only for the chip;
-        # staged-runtime's tests do not build on the host (tools/README.md).
-        working-directory: firmware
-        run: |
-          cargo test --locked --target x86_64-unknown-linux-gnu \
-            -p oer-espressif-staged-layout -p oer-esp32s31-platform-layout
+            cargo check --locked --target riscv32imafc-unknown-none-elf $(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.manifest_path | test("/firmware/(apps|platform)/")) | "-p " + .name')
       - name: Shared words with esp-hal
         # Every MMIO word the radio PAC and the pinned esp-hal both write has a
         # reviewed entry (registers/esp32s31/shared-words.toml). Cargo resolves
-        # the pinned esp-hal and PAC sources of the firmware workspace.
+        # the pinned esp-hal and PAC sources of the workspace.
         run: |
           meta="$RUNNER_TEMP/firmware-metadata.json"
-          cargo metadata --locked --format-version 1 --manifest-path firmware/Cargo.toml > "$meta"
+          cargo metadata --locked --format-version 1 > "$meta"
           source_of() {
             dirname "$(jq -er --arg name "$1" '.packages[] | select(.name == $name) | .manifest_path' "$meta")"
           }

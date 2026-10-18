@@ -29,8 +29,8 @@ Not affiliated with or endorsed by Espressif Systems.
 The toolchain is pinned in `rust-toolchain.toml`.
 
 ```console
-cargo test --workspace
-cargo clippy --workspace --all-targets
+cargo test
+cargo clippy --all-targets
 cargo check -p oer-esp32s31-hal --target riscv32imafc-unknown-none-elf
 ```
 

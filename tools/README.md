@@ -43,8 +43,9 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 `tools/` and `crates/` and checks these rules by folder; manifests carry no
 layer metadata. `cargo test -p oer-tools-layers` runs it.
 
-There is one workspace, the repository's root; `firmware/` is its own. The
-`cargo registers` and `cargo fw` aliases (`.cargo/config.toml`) run the CLIs.
-In the firmware workspace only `staged-layout` and the S31 `layout` build on
-the host; CI runs their tests (`staged-runtime`'s tests build only for the
-chip).
+There is one workspace, the repository's root, with one `Cargo.lock`. Its
+`default-members` are every package but the chip-only ones of `firmware/`
+(`staged-layout` and the S31 `layout` build on the host and are default
+members); the layer test checks that list. The images build with
+`--profile firmware` for the chip target (`cargo fw`). The `cargo registers`
+and `cargo fw` aliases (`.cargo/config.toml`) run the CLIs.

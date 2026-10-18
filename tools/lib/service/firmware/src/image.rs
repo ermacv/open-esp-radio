@@ -79,8 +79,8 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, O
     }
 }
 
-/// Build `package` of the firmware workspace for `target`, release, with
-/// `env` set or removed.
+/// Build `package`, a firmware member of the repository's workspace, for
+/// `target` with the `firmware` profile, with `env` set or removed.
 fn cargo_build(
     root: &Path,
     package: &str,
@@ -88,20 +88,17 @@ fn cargo_build(
     runtime: Option<&Path>,
     env: &[(&str, Option<String>)],
 ) -> Result<PathBuf> {
-    let workspace = root.join("firmware");
     let mut command = cargo();
-    command
-        .current_dir(&workspace)
-        .args([
-            "build",
-            "--release",
-            "--locked",
-            "--target",
-            target,
-            "-p",
-            package,
-        ])
-        .env("CARGO_TARGET_DIR", workspace.join("target"));
+    command.current_dir(root).args([
+        "build",
+        "--profile",
+        FIRMWARE_PROFILE,
+        "--locked",
+        "--target",
+        target,
+        "-p",
+        package,
+    ]);
     if let Some(runtime) = runtime {
         command.env("PSRAM_RUNTIME_BIN", runtime);
     }
@@ -117,12 +114,15 @@ fn cargo_build(
     if !status.success() {
         return Err(format!("cargo build -p {package} failed ({status})").into());
     }
-    Ok(workspace
+    Ok(root
         .join("target")
         .join(target)
-        .join("release")
+        .join(FIRMWARE_PROFILE)
         .join(package))
 }
+
+/// The Cargo profile of the staged images (the root `Cargo.toml`).
+const FIRMWARE_PROFILE: &str = "firmware";
 
 /// Write `bytes` to `path` unless it already holds them, so that an
 /// unchanged runtime keeps the timestamp Cargo compares and the bootstrap
@@ -164,7 +164,7 @@ fn test_support_packages(tree: &str) -> Vec<String> {
 /// Refuse an image whose dependencies enable [`TEST_SUPPORT`].
 fn refuse_test_support(root: &Path, package: &str, target: &str) -> Result<()> {
     let output = cargo()
-        .current_dir(root.join("firmware"))
+        .current_dir(root)
         .args([
             "tree", "--locked", "-p", package, "--target", target, "-e", "normal", "--prefix",
             "none", "--format", "{p}|{f}",

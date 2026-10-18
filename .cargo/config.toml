@@ -13,7 +13,7 @@ git-fetch-with-cli = true
 
 [env]
 # Cargo reads this file for every workspace below the repository root,
-# the firmware workspaces included.
+# the firmware members included.
 # Staged images keep esp-hal's PMP region setup off: its single
 # "read/write, no execute" TOR region from `_data_start` to `_noinit_end`
 # would span stage two's PSRAM code between SRAM data and PSRAM noinit, and

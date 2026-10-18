@@ -230,3 +230,53 @@ fn the_rules_refuse_what_the_readme_forbids() {
         assert_eq!(refusal(from, to), None, "{from} → {to}");
     }
 }
+
+/// The root manifest's `[workspace]` list `key`, repository-relative.
+fn workspace_list(root: &Path, key: &str) -> Vec<String> {
+    let text = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let manifest: toml::Table = toml::from_str(&text).unwrap();
+    manifest["workspace"][key]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn every_host_package_is_a_default_member_and_no_chip_only_one_is() {
+    let root = root();
+    let members = workspace_list(&root, "members");
+    let defaults = workspace_list(&root, "default-members");
+    // A host package is anything outside firmware/, and the image layout
+    // crates the firmware tool reads; the rest of firmware/ builds only for
+    // the chip, so a host `cargo test` must not build it.
+    let host = |member: &str| !member.starts_with("firmware/") || IMAGE_LAYOUT.contains(&member);
+    let missing = members
+        .iter()
+        .filter(|member| host(member) && !defaults.contains(member))
+        .map(|member| format!("{member} is a host package missing from default-members"))
+        .chain(
+            defaults
+                .iter()
+                .filter(|member| !host(member))
+                .map(|member| format!("{member} builds only for the chip but is a default member")),
+        )
+        .chain(
+            defaults
+                .iter()
+                .filter(|member| !members.contains(member))
+                .map(|member| format!("{member} is a default member but no member")),
+        )
+        .collect::<Vec<_>>();
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+    // Every package directory below crates/ and tools/ is a member.
+    let mut found = Vec::new();
+    packages(&root, "tools", &mut found);
+    packages(&root, "crates", &mut found);
+    let unlisted = found
+        .iter()
+        .filter(|package| !members.contains(package))
+        .collect::<Vec<_>>();
+    assert!(unlisted.is_empty(), "not workspace members: {unlisted:?}");
+}
