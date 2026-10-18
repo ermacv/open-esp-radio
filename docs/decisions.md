@@ -194,6 +194,16 @@ defaults, queue bounds) live in the code that applies them, not here.
   their epoch so code at the boundary with 32-bit hardware counters meets
   the wrap at once (owner, 2026-10-18).
 
+## 2026-10-18: stand runs
+
+- **Manual, not mandatory.** Stand and HIL runs are started by hand when they
+  answer a real question; no change requires one, no evidence is collected
+  beyond a line in the pull request, and A/B runs only for a change that
+  claims or risks performance. Automatic gates are considered only after the
+  contracts stabilize. The stand tooling (boards, fixtures, power, runner,
+  arbiter and a local status page in the browser) is built now, for manual
+  use (owner, 2026-10-18).
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
