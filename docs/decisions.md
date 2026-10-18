@@ -358,6 +358,9 @@ decision holds and the code is changed in the port's fix pass.
   host programs. Chip knowledge (tables, constants, pure functions) is
   portable and separate from hardware access. The dependency rules have no
   exceptions. Only `cargo fw` builds images; other programs take artifacts.
+- **Protocol layers:** each radio protocol has `wire` (over-the-air formats),
+  `port` (the backend contract) and its cores; a backend depends on `port`
+  and `wire` only. Wi-Fi splits at W2/W3, BLE and 802.15.4 in their blocks.
 
 ## Earlier decisions still in force
 
