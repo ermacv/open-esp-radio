@@ -157,6 +157,10 @@ struct HostRadio {
 }
 
 impl RxDma for HostRadio {
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        self.host.walker.borrow_mut().descriptor_base_register()
+    }
+
     fn last_descriptor_low(&mut self) -> u32 {
         self.host.walker.borrow_mut().last_descriptor_low()
     }
@@ -1298,6 +1302,72 @@ fn teardown_quarantines_when_p1_never_drains() {
     );
     // The frames stay queued with their leases.
     assert!(poll_next(&mut frames).is_some());
+}
+
+#[test]
+fn a_return_after_a_block_snapshots_the_exhausted_walker_before_its_drain() {
+    let (mut harness, held, holding, _) = returning_harness();
+    for _ in 0..COUNT {
+        harness.complete_unit(&[64]);
+    }
+    harness
+        .host
+        .walker
+        .borrow_mut()
+        .set_cursor(harness.base, COUNT - 1, None);
+    harness.rx_event();
+    for _ in 0..4 {
+        harness.settle();
+    }
+    assert!(harness.report().stage_capacity_blocks >= 1);
+    assert_eq!(harness.report().exhaustion.snapshots, 0);
+    let last_low = harness.host.walker.borrow().last_descriptor_low;
+
+    // A second of hold, then the release.
+    let release_at =
+        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(1_000));
+    harness.clock.advance_to(release_at);
+    harness.host.walker.borrow_mut().clear_operations();
+    holding.set(false);
+    held.borrow_mut().clear();
+    harness.poll_once();
+    let exhaustion = harness.report().exhaustion;
+    assert_eq!(exhaustion.snapshots, 1);
+    let snapshot = exhaustion.longest.expect("the release took a snapshot");
+    assert!(snapshot.blocked_us >= 1_000_000);
+    assert_eq!((snapshot.next_low, snapshot.next_upper), (0, false));
+    assert_eq!(snapshot.last_low, last_low);
+    assert_eq!(snapshot.base, Some(harness.base));
+    assert!(snapshot.walker_enabled);
+    assert!(!snapshot.reload_doorbell);
+    assert_eq!(snapshot.ring_base, harness.base);
+    // NEXT = 0: nothing is left of the accepted list.
+    assert_eq!(snapshot.remaining, Some(0));
+    // Every lease came back before the runner ran.
+    assert_eq!(snapshot.staged, 0);
+    // The snapshot only read: its first operations are the five reads,
+    // and the drain then republished the list as before.
+    let operations = harness.host.walker.borrow().operations().to_vec();
+    assert_eq!(
+        operations.get(..2),
+        Some(
+            &[
+                RxWalkerOperation::ObserveNext,
+                RxWalkerOperation::ObserveLast
+            ][..]
+        )
+    );
+    assert!(
+        operations.contains(&RxWalkerOperation::WriteDescriptorBase(harness.base)),
+        "{operations:?}"
+    );
+
+    // A wake without a block before it takes no snapshot.
+    harness.host.walker.borrow_mut().next_descriptor_low = harness.base & 0x000f_ffff;
+    harness.settle();
+    harness.frame(150);
+    harness.settle();
+    assert_eq!(harness.report().exhaustion.snapshots, 1);
 }
 
 #[test]

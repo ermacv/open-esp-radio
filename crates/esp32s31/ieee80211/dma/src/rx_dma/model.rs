@@ -164,6 +164,10 @@ impl RxDma for RxWalkerModel {
         self.buffer_full_count
     }
 
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        Some(self.descriptor_base)
+    }
+
     fn last_descriptor_low(&mut self) -> u32 {
         self.record(RxWalkerOperation::ObserveLast);
         self.last_descriptor_low
@@ -292,6 +296,10 @@ mod tests {
             .unwrap();
         assert!(walker.walker_enabled);
         assert_eq!(walker.descriptor_base, base);
+        // The diagnostic read reports the written base and logs nothing.
+        let logged = walker.operations().len();
+        assert_eq!(walker.descriptor_base_register(), Some(base));
+        assert_eq!(walker.operations().len(), logged);
         assert_eq!(walker.next_descriptor_low, base & CURSOR_LOW_MASK);
         assert_eq!(
             walker.operation_count(RxWalkerOperation::WriteDescriptorBase(base)),

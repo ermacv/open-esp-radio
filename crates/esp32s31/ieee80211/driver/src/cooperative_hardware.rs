@@ -455,6 +455,10 @@ impl RxDma for CooperativeRadioHardware<'_> {
         RxDma::buffer_full_count(&mut self.wifi_mac_hal())
     }
 
+    fn descriptor_base_register(&mut self) -> Option<u32> {
+        RxDma::descriptor_base_register(&mut self.wifi_mac_hal())
+    }
+
     fn last_descriptor_low(&mut self) -> u32 {
         RxDma::last_descriptor_low(&mut self.wifi_mac_hal())
     }

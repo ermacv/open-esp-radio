@@ -18,7 +18,9 @@
 //!   [`CONTINUATION_WAIT`] timer wait. A pass blocked on staging capacity
 //!   stays masked and waits for the capacity fact, which the upper layer
 //!   posts when it returns a lease ([`super::returns`]): the walker may be
-//!   exhausted then, with no RX interrupt to come.
+//!   exhausted then, with no RX interrupt to come. Before that capacity
+//!   drain the runner reads the walker registers and the ring's view into
+//!   the counters' exhaustion snapshot (report-only).
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
 //!   silence the routes; close promiscuous receive and request the MAC
@@ -56,7 +58,7 @@ use oer_time::{Duration, Instant, Timer};
 use super::{
     arena::WifiRxParts,
     control::{ReceiveRunnerControl, WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
-    counters::WifiRxCounters,
+    counters::{WifiRxCounters, WifiRxExhaustion},
     frontier::{ReceiveFrontier, RxFrontierPhase},
     transaction::{Admission, Counters, Publisher, service},
 };
@@ -169,6 +171,7 @@ where
         publisher,
         admission,
         totals: [0; 3],
+        blocked_since: None,
     };
 
     let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
@@ -252,6 +255,9 @@ struct Receiver<
     admission: &'r M,
     /// The service's cumulative descriptors, units and bytes.
     totals: [u64; 3],
+    /// When the last drain ended blocked on staging capacity, until the
+    /// next wake.
+    blocked_since: Option<Instant>,
 }
 
 impl<
@@ -295,8 +301,12 @@ where
             let Some(capacity) = wake else {
                 return WifiRxCause::StopRequested;
             };
+            let blocked_since = self.blocked_since.take();
             if capacity {
                 self.counters.capacity_drain();
+                if let Some(since) = blocked_since {
+                    self.observe_exhaustion(ring, since);
+                }
             }
             if let Err(cause) = self.drain(ring).await {
                 return cause;
@@ -331,6 +341,7 @@ where
                 }
                 DatapathRxProgress::StageCapacityBlocked => {
                     self.counters.stage_capacity_block();
+                    self.blocked_since = Some(self.timer.now());
                     return Ok(());
                 }
                 // A released buffer is rearmed before any unmask, so a burst
@@ -349,6 +360,41 @@ where
                 }
             }
         }
+    }
+
+    /// Read the walker registers and the ring's view after a stage-capacity
+    /// block that began at `since`, before the capacity drain services
+    /// anything. Only reads: no register is written and no descriptor
+    /// changes hands.
+    fn observe_exhaustion(&mut self, ring: &RxRingLive<'static, COUNT>, since: Instant) {
+        let blocked = self.timer.now().saturating_duration_since(since);
+        let next = self.hardware.next_descriptor();
+        let last_low = self.hardware.last_descriptor_low();
+        let base = self.hardware.descriptor_base_register();
+        let walker_enabled = self.hardware.walker_enabled();
+        let reload_doorbell = RxDma::reload_pending(self.hardware);
+        let buffer_full = self.hardware.buffer_full_count();
+        let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
+        self.counters.exhaustion(WifiRxExhaustion {
+            blocked_us: u32::try_from(blocked.as_micros()).unwrap_or(u32::MAX),
+            next_low: next.address_low(),
+            next_upper: next.has_unknown_upper_state(),
+            last_low,
+            base,
+            walker_enabled,
+            reload_doorbell,
+            buffer_full,
+            ring_base: ring.descriptor_base(),
+            recycle_start: narrow(ring.recycle_start().get()),
+            accepted_tail: narrow(ring.accepted_tail().get()),
+            observed: ring.observed_mask().count_ones(),
+            completed: narrow(ring.completed_frontier_len()),
+            remaining: ring.accepted_list_remaining_from_next(next).map(narrow),
+            reload_pending: ring.reload_pending(),
+            released: narrow(self.rx.released_buffer_count()),
+            detached: narrow(self.rx.detached_buffer_count()),
+            staged: self.stage.claimed_slots(),
+        });
     }
 
     fn service_once(
