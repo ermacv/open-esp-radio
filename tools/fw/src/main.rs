@@ -12,6 +12,7 @@ mod placement;
 mod port;
 mod power;
 mod stand;
+mod w1;
 
 use std::{
     io::Write as _,
@@ -20,7 +21,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use clap::{CommandFactory as _, Parser, Subcommand};
+use clap::{Args, CommandFactory as _, Parser, Subcommand};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -39,10 +40,70 @@ struct Cli {
     command: Command,
 }
 
+/// Image w1's parameters, which no other image takes.
+#[derive(Args, Clone, Copy)]
+struct W1Args {
+    /// Image w1: the stand AP's BSSID it must hear, or OER_W1_EXPECT_BSSID.
+    /// Only its last two octets are ever shown.
+    #[arg(long, value_name = "MAC", value_parser = BssidParser)]
+    expect_bssid: Option<w1::Bssid>,
+    /// Image w1: the 2.4 GHz channel 1 to 13 it listens on, or
+    /// OER_W1_CHANNEL.
+    #[arg(long, value_parser = w1::parse_channel)]
+    channel: Option<u8>,
+}
+
+impl W1Args {
+    /// The parameters of `image` from these flags or the environment.
+    fn params(self, image: &str, required: bool) -> Result<Option<w1::Config>> {
+        let env =
+            |name: &str| std::env::var_os(name).map(|value| value.to_string_lossy().into_owned());
+        Ok(w1::params(
+            image,
+            self.expect_bssid,
+            self.channel,
+            &env,
+            required,
+        )?)
+    }
+}
+
+/// [`w1::parse_bssid`] for clap, whose own error would repeat the value.
+#[derive(Clone, Copy)]
+struct BssidParser;
+
+impl clap::builder::TypedValueParser for BssidParser {
+    type Value = w1::Bssid;
+
+    fn parse_ref(
+        &self,
+        command: &clap::Command,
+        argument: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> std::result::Result<w1::Bssid, clap::Error> {
+        let name = argument.map_or_else(|| "--expect-bssid".to_owned(), ToString::to_string);
+        value
+            .to_str()
+            .ok_or_else(|| "the BSSID is no text".to_owned())
+            .and_then(w1::parse_bssid)
+            .map_err(|reason| {
+                clap::Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("invalid value for '{name}': {reason}\n"),
+                )
+                .with_cmd(command)
+            })
+    }
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Build an image of firmware/apps into target/fw/<image>/.
-    Build { image: String },
+    Build {
+        image: String,
+        #[command(flatten)]
+        w1: W1Args,
+    },
     /// Write a built image into a board's flash and reset it.
     Flash {
         image: String,
@@ -51,7 +112,8 @@ enum Command {
         board: String,
     },
     /// Build and flash an image, then read the board's console until its
-    /// `OER-RESULT:` line: exit 0 on pass, 1 on fail, 2 on a timeout.
+    /// `OER-RESULT:` line: exit 0 on pass, 1 on fail, 2 on a timeout and,
+    /// for w1, 3 on a missing, malformed or contradicted report.
     Run {
         image: String,
         #[arg(long)]
@@ -59,6 +121,8 @@ enum Command {
         /// How long to wait for the result, such as `30s` or `2m`.
         #[arg(long, default_value = "30s", value_parser = parse_duration)]
         timeout: Duration,
+        #[command(flatten)]
+        w1: W1Args,
     },
     /// Print a board's console without resetting it.
     Monitor {
@@ -223,9 +287,22 @@ fn timestamp(time: SystemTime) -> String {
     )
 }
 
-fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
+fn run(
+    root: &Path,
+    image: &str,
+    selector: &str,
+    timeout: Duration,
+    w1: Option<w1::Config>,
+) -> Result<ExitCode> {
     let (_stand, board) = board(selector)?;
-    image::build(root, image)?;
+    if let Some(config) = &w1 {
+        eprintln!(
+            "fw: {image} expects {} on channel {}",
+            config.expect.masked(),
+            config.channel
+        );
+    }
+    image::build(root, image, w1.as_ref())?;
     let _lock = lock::acquire(&board.mac)?;
     write_image(root, image, &board, flash::After::StayInStub)?;
     let run = root
@@ -244,6 +321,8 @@ fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<Ex
     );
     let lines = port::lines(serial);
     let deadline = Instant::now() + timeout;
+    // Image w1's console, for its report block.
+    let mut console = Vec::new();
     let verdict = loop {
         let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
             break None;
@@ -254,7 +333,10 @@ fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<Ex
                 println!("{text}");
                 writeln!(log, "{text}")?;
                 if let Some(verdict) = verdict(&text) {
-                    break Some(verdict);
+                    break Some((verdict, text.into_owned()));
+                }
+                if w1.is_some() {
+                    console.push(text.into_owned());
                 }
             }
             Ok(None) => break None,
@@ -264,13 +346,38 @@ fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<Ex
     drop(lines);
     eprintln!("fw: log {}", log_path.display());
     Ok(match verdict {
-        Some(Verdict::Pass) => ExitCode::SUCCESS,
-        Some(Verdict::Fail) => ExitCode::from(1),
+        Some((_, result)) if let Some(config) = &w1 => {
+            ExitCode::from(check_w1(&console, &result, config))
+        }
+        Some((Verdict::Pass, _)) => ExitCode::SUCCESS,
+        Some((Verdict::Fail, _)) => ExitCode::from(1),
         None => {
             eprintln!("fw: no {RESULT_MARKER}line within {}s", timeout.as_secs());
             ExitCode::from(2)
         }
     })
+}
+
+/// Check image w1's report against its `result` line and print the host's
+/// summary; the exit code.
+fn check_w1(console: &[String], result: &str, config: &w1::Config) -> u8 {
+    let checked = w1::check(console, result, config);
+    for line in &checked.summary {
+        eprintln!("fw: w1 {line}");
+    }
+    match &checked.outcome {
+        w1::Outcome::Pass => eprintln!("fw: w1 pass: the host agrees with every gate"),
+        w1::Outcome::Fail(reasons) => {
+            eprintln!("fw: w1 fail, the host agrees: {}", reasons.join("; "));
+        }
+        w1::Outcome::Contradiction(problems) => {
+            for problem in problems {
+                eprintln!("fw: w1 contradiction: {problem}");
+            }
+        }
+        w1::Outcome::Unreadable(error) => eprintln!("fw: w1 {error}"),
+    }
+    checked.outcome.exit_code()
 }
 
 fn monitor(selector: &str) -> Result<()> {
@@ -361,8 +468,16 @@ fn main() -> ExitCode {
     let result = (|| -> Result<ExitCode> {
         let root = root()?;
         match cli.command {
-            Command::Build { image } => {
-                let (manifest, _) = image::build(&root, &image)?;
+            Command::Build { image, w1 } => {
+                let params = w1.params(&image, false)?;
+                if let Some(config) = &params {
+                    eprintln!(
+                        "fw: {image} expects {} on channel {}",
+                        config.expect.masked(),
+                        config.channel
+                    );
+                }
+                let (manifest, _) = image::build(&root, &image, params.as_ref())?;
                 for segment in &manifest.segments {
                     eprintln!(
                         "fw:   {:<16} {:#08x} {}",
@@ -383,7 +498,11 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
-            } => return run(&root, &image, &board, timeout),
+                w1,
+            } => {
+                let params = w1.params(&image, true)?;
+                return run(&root, &image, &board, timeout, params);
+            }
             Command::Monitor { board } => monitor(&board)?,
             Command::Boards => list_boards()?,
             Command::PowerCycle { board } => power_cycle(&board)?,
@@ -409,6 +528,56 @@ mod tests {
         );
         assert_eq!(verdict("OER-RESULT: maybe"), None);
         assert_eq!(verdict("OER_BOOT bootstrap=INIT"), None);
+    }
+
+    fn parse(line: &str) -> std::result::Result<Cli, clap::Error> {
+        Cli::try_parse_from(line.split(' '))
+    }
+
+    fn run_params(line: &str) -> Result<Option<w1::Config>> {
+        match parse(line)?.command {
+            Command::Run { image, w1, .. } => w1.params(&image, true),
+            Command::Build { image, w1 } => w1.params(&image, false),
+            _ => Err("no build or run".into()),
+        }
+    }
+
+    #[test]
+    fn w1_flags_are_validated() {
+        let config =
+            run_params("fw run w1 --board b1 --expect-bssid 02:00:00:00:f6:d0 --channel 6")
+                .unwrap()
+                .unwrap();
+        assert_eq!(config.channel, 6);
+        assert_eq!(config.expect.masked(), "xx:xx:xx:xx:F6:D0");
+        for channel in ["0", "14"] {
+            let line = format!(
+                "fw run w1 --board b1 --expect-bssid 02:00:00:00:F6:D0 --channel {channel}"
+            );
+            assert!(parse(&line).is_err(), "{channel}");
+        }
+        // clap refuses a bad BSSID without repeating it.
+        for bssid in ["03:AB:CD:EF:F6:D0", "02:AB:CD:EF:F6", "00:00:00:00:00:00"] {
+            let error = parse(&format!("fw build w1 --expect-bssid {bssid} --channel 6"))
+                .err()
+                .unwrap()
+                .to_string();
+            assert!(error.contains("--expect-bssid"), "{error}");
+            assert!(
+                !error.contains("AB:CD") && !error.contains(bssid),
+                "{error}"
+            );
+        }
+        // Another image refuses them; w1's run needs both, its build both or
+        // neither.
+        assert!(run_params("fw run w0 --board b1 --channel 6").is_err());
+        assert!(run_params("fw build boot-smoke --expect-bssid 02:00:00:00:F6:D0").is_err());
+        assert!(run_params("fw run w0 --board b1").unwrap().is_none());
+        if std::env::var_os(w1::ENV_BSSID).is_none() && std::env::var_os(w1::ENV_CHANNEL).is_none()
+        {
+            assert!(run_params("fw run w1 --board b1 --channel 6").is_err());
+            assert!(run_params("fw build w1").unwrap().is_none());
+        }
     }
 
     #[test]

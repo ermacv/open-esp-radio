@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, chip::Chip, encode, pack, placement};
+use crate::{Result, chip::Chip, encode, pack, placement, w1};
 
 /// The chip every image of `firmware/apps` is built for.
 pub const CHIP: &str = "esp32s31";
@@ -62,12 +62,28 @@ fn cargo() -> Command {
     Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
 }
 
-/// Build `package` of the firmware workspace for `target`, release.
+/// The image parameters' variables a cargo build of `image`'s runtime sets
+/// (`Some`) or removes (`None`): only `w1`'s runtime gets them, so a value
+/// left in the caller's environment reaches no other build.
+pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, Option<String>)> {
+    match w1.filter(|_| image == w1::IMAGE) {
+        Some(config) => config
+            .runtime_env()
+            .into_iter()
+            .map(|(name, value)| (name, Some(value)))
+            .collect(),
+        None => vec![(w1::ENV_CHANNEL, None), (w1::ENV_BSSID, None)],
+    }
+}
+
+/// Build `package` of the firmware workspace for `target`, release, with
+/// `env` set or removed.
 fn cargo_build(
     root: &Path,
     package: &str,
     target: &str,
     runtime: Option<&Path>,
+    env: &[(&str, Option<String>)],
 ) -> Result<PathBuf> {
     let workspace = root.join("firmware");
     let mut command = cargo();
@@ -85,6 +101,12 @@ fn cargo_build(
         .env("CARGO_TARGET_DIR", workspace.join("target"));
     if let Some(runtime) = runtime {
         command.env("PSRAM_RUNTIME_BIN", runtime);
+    }
+    for (name, value) in env {
+        match value {
+            Some(value) => command.env(name, value),
+            None => command.env_remove(name),
+        };
     }
     let status = command
         .status()
@@ -112,15 +134,22 @@ fn replace_if_changed(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Build `image` and return its segments and placement warnings.
-pub fn build(root: &Path, image: &str) -> Result<(Manifest, Vec<String>)> {
+/// Build `image`, with `w1`'s parameters for image `w1`, and return its
+/// segments and placement warnings.
+pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manifest, Vec<String>)> {
     let chip = Chip::load(root, CHIP)?;
     let package = package(root, image)?;
     let output = output(root, image);
     std::fs::create_dir_all(&output)?;
 
     eprintln!("fw: building the runtime {package}");
-    let runtime_elf = cargo_build(root, &package, &chip.rust_target, None)?;
+    let runtime_elf = cargo_build(
+        root,
+        &package,
+        &chip.rust_target,
+        None,
+        &runtime_env(image, w1),
+    )?;
     let runtime = std::fs::read(&runtime_elf)
         .map_err(|error| format!("{}: {error}", runtime_elf.display()))?;
     std::fs::write(output.join("runtime.elf"), &runtime)?;
@@ -139,7 +168,13 @@ pub fn build(root: &Path, image: &str) -> Result<(Manifest, Vec<String>)> {
     }
 
     eprintln!("fw: building the bootstrap");
-    let bootstrap_elf = cargo_build(root, BOOTSTRAP, &chip.rust_target, Some(&runtime_bin))?;
+    let bootstrap_elf = cargo_build(
+        root,
+        BOOTSTRAP,
+        &chip.rust_target,
+        Some(&runtime_bin),
+        &runtime_env(BOOTSTRAP, None),
+    )?;
     let bootstrap = std::fs::read(&bootstrap_elf)
         .map_err(|error| format!("{}: {error}", bootstrap_elf.display()))?;
     std::fs::write(output.join("bootstrap.elf"), &bootstrap)?;
@@ -195,4 +230,29 @@ pub fn segments(root: &Path, image: &str) -> Result<(Manifest, Vec<encode::Segme
         return Err(format!("{}: the OTA selection must be written last", path.display()).into());
     }
     Ok((manifest, segments))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_w1s_runtime_build_gets_its_parameters() {
+        let config = w1::Config {
+            channel: 11,
+            expect: w1::Bssid::new([0x02, 0, 0, 0, 0xF6, 0xD0]),
+        };
+        assert_eq!(
+            runtime_env("w1", Some(&config)),
+            [
+                (w1::ENV_CHANNEL, Some("11".to_owned())),
+                (w1::ENV_BSSID, Some("02:00:00:00:F6:D0".to_owned())),
+            ]
+        );
+        let removed = [(w1::ENV_CHANNEL, None), (w1::ENV_BSSID, None)];
+        // The unconfigured w1, another image and the bootstrap remove them.
+        assert_eq!(runtime_env("w1", None), removed);
+        assert_eq!(runtime_env("w0", Some(&config)), removed);
+        assert_eq!(runtime_env(BOOTSTRAP, None), removed);
+    }
 }
