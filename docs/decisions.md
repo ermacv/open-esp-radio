@@ -322,10 +322,10 @@ decision holds and the code is changed in the port's fix pass.
 ## 2026-10-18: package names
 
 - **A package is named after its directory**, not after the predecessor's
-  names: `crates/<path>` is `oer-<path>`, `firmware/<path>` is
-  `oer-firmware-<path>`, a tool is `oer-tool-<path below tools/ without
-  lib/>`, with no `[lib] name`. A clearer name moves the directory; the
-  layers test checks the rule.
+  names, with no `[lib] name`; a clearer name moves the directory and the
+  layers test checks the rule. Since 2026-10-19 a library is `oer-` and its
+  path below its root (`portable/`, `chips/`, `host/`), and an executable
+  keeps its root (`oer-firmware-<path>`, `oer-tool-<tool>`).
 
 ## 2026-10-18: the stand file
 
@@ -349,6 +349,15 @@ decision holds and the code is changed in the port's fix pass.
 - **Every package builds.** The workspace `exclude` list is gone.
 - **Production stays clean** by proof, not by a gate: the change that adds or
   moves hooks shows the ESP32-S31 images byte-identical to `main`.
+
+## 2026-10-19: repository layout
+
+- **Libraries by what they touch, executables apart**
+  ([repository-layout.md](repository-layout.md)): `portable/`, `chips/`,
+  `host/` for libraries; `firmware/` for chip images; `tools/<tool>/` for
+  host programs. Chip knowledge (tables, constants, pure functions) is
+  portable and separate from hardware access. The dependency rules have no
+  exceptions. Only `cargo fw` builds images; other programs take artifacts.
 
 ## Earlier decisions still in force
 
