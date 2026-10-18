@@ -453,3 +453,16 @@ kind = "mmio"
 start = 0x2081801C
 end-exclusive = 0x20900000
 permissions = "rw"
+
+# The internal SRAM the radio DMA engines reach: `SOC_DMA_LOW`..`SOC_DMA_HIGH`
+# of ESP-IDF's `components/soc/esp32s31/include/soc/soc.h` at
+# 7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe. PSRAM lies outside it. Memory
+# layouts the hardware walks name it in their `placement`.
+# SOURCE: ESP-IDF soc.h SOC_DMA_LOW/SOC_DMA_HIGH (Apache-2.0).
+[[regions]]
+name = "dma-window"
+address-space = "cpu"
+kind = "ram"
+start = 0x2F000000
+end-exclusive = 0x2F080000
+permissions = "rw"
