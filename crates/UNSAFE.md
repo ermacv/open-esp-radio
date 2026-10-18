@@ -107,6 +107,16 @@ non-empty custody store is the quarantine path only: `Quarantine` is an
 unsafe trait whose method erases key material in place and releases, moves
 and awaits nothing, so DMA leases stay reserved until reset.
 
+`HandlerCell` hands one `&'static mut T` from the context that installs it
+to an interrupt handler. Its state (`EMPTY`, `INSTALLING`, `READY`, `BUSY`)
+admits one reference at a time: `install` consumes the reference and
+publishes its pointer with a Release store of `READY`; `with` creates the
+only `&mut T` after its Acquire exchange from `READY` to `BUSY` and returns
+the state to `READY` once that borrow ended. A call that does not find
+`READY` gets `None` without waiting, so the cell is not a lock and a nested
+call cannot alias. It is `Sync` only for `T: Send` and never reclaims its
+value.
+
 ## PAC dependency authority
 
 Direct dependencies on the semantic radio PAC are restricted independently
