@@ -662,7 +662,7 @@ pub enum Ieee802154OperationEventEnableObservation {
 /// Semantic readback of the receive-abort-enable field owned by a polled
 /// ED/CCA operation.
 ///
-/// The observation has no conversion to [`Ieee802154RxAbortEnableState`], so
+/// The observation has no conversion to [`IRxAbortEnableState`], so
 /// unexpected hardware state cannot accidentally become a writable image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Ieee802154OperationRxAbortEnableObservation {

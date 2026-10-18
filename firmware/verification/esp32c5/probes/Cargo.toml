@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["radio/elf", "radio/library"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# A mutable call inside `debug_assert!` disappears from optimized firmware.
+debug_assert_with_mut_call = "deny"
+# The repository `clippy.toml` lists methods radio code must not call.
+disallowed_methods = "deny"
+
+[workspace.dependencies]
+oer-esp32c5-hal = { path = "../../../crates/hardware/esp32c5/hal" }
+oer-esp32c5-pac = { path = "../../../crates/hardware/esp32c5/pac", features = ["validation-probes"] }
+oer-radio-analog = { path = "../../../crates/hardware/radio/analog" }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+debug = true
+panic = "abort"
+strip = false

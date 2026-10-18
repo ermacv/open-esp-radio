@@ -28,7 +28,7 @@ fn transmit_security_error_uses_the_public_ll_reasons() {
     }
 }
 
-/// `ieee802154_ll_is_current_rx_frame` is `rx_state > RECEIVE_SFD`.
+/// `i_ll_is_current_rx_frame` is `rx_state > RECEIVE_SFD`.
 #[test]
 fn a_frame_is_in_progress_only_after_the_sfd_state() {
     for state in 0..=Ieee802154RxStateCode::MAX {

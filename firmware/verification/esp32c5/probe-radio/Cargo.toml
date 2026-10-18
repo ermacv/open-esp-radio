@@ -1,0 +1,21 @@
+[package]
+name = "oer-esp32c5-probe-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Retained ESP32-C5 Rust entry points for compiled vendor verification"
+
+[dependencies]
+oer-probe-macros = { path = "../../../../harness/macros" }
+oer-esp32c5-hal.workspace = true
+oer-esp32c5-pac.workspace = true
+oer-radio-analog.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[lints]
+workspace = true
+

@@ -119,7 +119,7 @@ impl Ieee802154StateSnapshot {
     }
 }
 
-/// Energy-detection sample reduction (`ieee802154_ll_ed_sample_mode_t`).
+/// Energy-detection sample reduction (`i_ll_ed_sample_mode_t`).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Ieee802154EdSampleMode {
     /// Report the maximum sample.
@@ -175,7 +175,7 @@ impl Ieee802154TxAbortEnableSet {
     }
 }
 
-/// Transmit-security failure (`ieee802154_ll_tx_security_failed_reason_t`).
+/// Transmit-security failure (`i_ll_tx_security_failed_reason_t`).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Ieee802154TxSecurityError {
     /// `IEEE802154_TX_SEC_FRAME_CTRL_NOT_SET`.
@@ -217,7 +217,7 @@ impl Ieee802154TxSecurityErrorObservation {
     }
 }
 
-/// Complete `TX_STATUS` observation (`ieee802154_ll_get_tx_status`).
+/// Complete `TX_STATUS` observation (`i_ll_get_tx_status`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ieee802154TxStatus {
     state: Ieee802154TxStateCode,
@@ -250,7 +250,7 @@ impl Ieee802154TxStatus {
         self.abort_reason
     }
 
-    /// `ieee802154_ll_get_tx_security_failed_reason`.
+    /// `i_ll_get_tx_security_failed_reason`.
     pub const fn security_error(&self) -> Ieee802154TxSecurityErrorObservation {
         self.security_error
     }

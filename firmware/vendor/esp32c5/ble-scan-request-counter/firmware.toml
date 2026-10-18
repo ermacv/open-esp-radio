@@ -1,0 +1,8 @@
+# Firmware catalog entry: `cargo hil firmware flash ble-scan-request-counter --board esp32c5`.
+# The pinned vendor BLE Controller on the ESP32-C5 advertises a scannable
+# legacy set with scan-request notification and counts the SCAN_REQ PDUs it
+# receives per scanner address, so an active scanner's transmissions are
+# observed on the air.
+image = "ble-scan-request-counter"
+chip = "esp32c5"
+pins = "esp32c5"

@@ -1,0 +1,19 @@
+[package]
+name = "oer-esp32c5-probe-radio-elf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+description = "Linked ESP32-C5 Rust probe image for compiled vendor verification"
+
+[dependencies]
+oer-esp32c5-probe-radio = { path = "../library" }
+
+[lints]
+workspace = true
+
+
+[build-dependencies]
+oer-probe-codegen = { path = "../../../../harness/codegen" }

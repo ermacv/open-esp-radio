@@ -1,0 +1,17 @@
+[package]
+name = "oer-esp32c5-vendor-scenarios-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The ESP32-C5 vendor-scenario binary: the chip's verdict library behind the shared scenario command line"
+
+[dependencies]
+oer-esp32c5-vendor-scenarios = { path = ".." }
+oer-vendor-scenario-cli = { path = "../../../harness/cli" }
+
+[lints]
+workspace = true
+

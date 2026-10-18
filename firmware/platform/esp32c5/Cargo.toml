@@ -1,0 +1,35 @@
+# The ESP32-C5 platform of the staged boot: the board's layout, its PSRAM and
+# the Flash bootstrap, over the shared crates of platform/espressif.
+[workspace]
+resolver = "3"
+members = ["board", "bootstrap", "layout"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/the predecessor repository"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# A mutable call inside `debug_assert!` disappears from optimized firmware.
+debug_assert_with_mut_call = "deny"
+# The repository `clippy.toml` lists methods radio code must not call.
+disallowed_methods = "deny"
+
+[workspace.dependencies]
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+esp-bootloader-esp-idf = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false }
+oer-esp32c5-platform-layout = { path = "layout" }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+debug = true
+panic = "abort"
+strip = false
