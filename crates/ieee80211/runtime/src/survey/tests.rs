@@ -342,3 +342,19 @@ fn the_survey_never_panics_on_received_bytes() {
 fn the_survey_never_panics_on_received_bytes_full() {
     survey_never_panics(oer_ieee80211_mac::fuzz::FULL);
 }
+
+#[test]
+fn a_beacon_of_another_protocol_version_is_a_header_refusal_not_a_record() {
+    let mut survey = Survey::<1>::new(bssid(STAND));
+    let mut versioned = beacon(STAND, 0);
+    // Protocol version 1 in the low two bits of the frame control field.
+    versioned[0] |= 0b01;
+    survey.take(at(0), &versioned, &heard(-40), None, at(0));
+    let counters = survey.counters();
+    assert_eq!(counters.frames, 1);
+    assert_eq!(counters.header_refusals, 1);
+    assert!(survey.bss(0).is_none());
+    // The same beacon at version 0 is recorded.
+    survey.take(at(0), &beacon(STAND, 0), &heard(-40), None, at(0));
+    assert!(survey.bss(0).is_some());
+}
