@@ -1,6 +1,6 @@
 # Memory the hardware reads and writes
 
-Status: proposed (2026-10-18), for the owner's review.
+Status: approved by the owner (2026-10-18).
 
 Some hardware state is not in registers but in RAM: structures whose format
 the silicon defines and which the CPU and the hardware hand to each other.
@@ -153,8 +153,8 @@ placement check, unchanged, reading the region bounds from the model.
 1. Pilot: the Wi-Fi DMA descriptor and the RX control prefix, both proven on
    hardware by W1. The tool learns the layout kind, `memory.toml` the RAM
    regions; `descriptor.rs` and `prefix.rs` switch to the generated types; all
-   their tests keep passing. Between W2's first and second pull requests, so
-   W2's TX structures start on the new kind.
+   their tests keep passing. During the predecessor port, before the
+   ESP32-C5 HAL and W2's TX structures, so both start on the new kind.
 2. W2: the TX descriptor words and the A-MPDU descriptors; the offset-named
    fields become `_OPAQUE` fields with their evidence until their meaning is
    known.

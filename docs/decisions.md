@@ -116,6 +116,13 @@ tree is a selection of a predecessor repository, without its history.
 - **Owner bit.** Detached RX descriptors carry owner bit 31 clear: the
   walker stops on one instead of writing it (owner, 2026-10-18).
 
+## 2026-10-18: hardware-shared memory
+
+- **Memory the hardware reads and writes** (DMA descriptors, the RX control
+  prefix, TX descriptor words, BLE exchange memory) is described in the
+  register model as memory layouts with generated PAC accessors; the handover
+  protocol stays in the HAL ([hardware memory](hardware-memory.md)).
+
 ## 2026-10-18: decisions recovered from the predecessor
 
 Owner decisions that the predecessor recorded only in its issue comments,
