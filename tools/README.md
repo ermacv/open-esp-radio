@@ -8,16 +8,25 @@ tools/
   cli/<tool>/        a thin binary: main, argument parsing, a call into its service
     registers/       `cargo registers` (oer-tool-cli-registers)
     fw/              `cargo fw` (oer-tool-cli-fw)
+    blobray/         `blobray`: binary analysis of images and vendor libraries
+    pins/            `cargo pins` (oer-tool-cli-pins): fetch the vendor pins
   lib/
-    base/            process, durable, command-tree: no knowledge of chips or formats
+    base/            process, durable, command-tree, toolchain: no knowledge of
+                     chips or formats
     data/            one library per data format, its one reader:
                      register-model, register-contracts, register-review,
-                     register-bindings, chip-profile (chip.toml), stand-file
-    analysis/        none yet: analyses of images and binaries (wave 3), which
-                     know no chip and no format
+                     register-bindings, chip-profile (chip.toml), stand-file,
+                     vendor-pins and vendor-artifacts (artifacts.toml and the
+                     store), image-policy, markers (`SOURCE:` blocks)
+    analysis/        analyses of images and binaries, which know no chip:
+                     elf, riscv-* (decode, lift, model, program, analysis,
+                     stack) and the Blobray engine (blobray-*)
     service/         what a tool does:
                      registers (validation and generation), firmware (images
-                     on the stand's boards), lab (the stand: hubs, router, SSH)
+                     on the stand's boards), lab (the stand: hubs, router, SSH),
+                     image-check-* (stack, interrupt stacks, placement),
+                     image-linker (the post-link input check), vendor-provenance
+                     (the `SOURCE:` registry) and symbol-lineage
     test/layers/     the test that checks the rules below
 ```
 
@@ -28,9 +37,13 @@ Dependencies go only down: `cli → service → analysis, data → base`.
 - A CLI depends on its service and on `data` and `base`, never on another
   CLI.
 - A service depends on `analysis`, `data` and `base`, and on another service
-  only along this order: `firmware → lab`. There is no reverse edge.
-- `analysis` depends only on `base` and external crates; `data` on other
-  `data` libraries and `base`.
+  only along these edges: `firmware → lab`, `firmware → image-check-stack`,
+  `firmware → image-check-interrupts`, `image-check-interrupts →
+  image-check-stack`, `symbol-lineage → vendor-provenance`, `registers → vendor-provenance`. There
+  is no
+  reverse edge.
+- `analysis` depends on other `analysis` libraries, `base` and external
+  crates; `data` on other `data` libraries and `base`.
 - `tools/` uses only the portable crates of `crates/` (`base`, `radio` and the
   protocols), never a chip crate. Only `lib/service/firmware` uses
   `firmware/`, and only its host-built image layout

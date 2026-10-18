@@ -12,5 +12,8 @@ description = "The chip facts an image build reads from firmware/platform/<chip>
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 
+[dev-dependencies]
+tempfile = "=3.27.0"
+
 [lints]
 workspace = true

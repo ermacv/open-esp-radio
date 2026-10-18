@@ -39,6 +39,16 @@ The build warns, and never fails, when the runtime places an interrupt table
 handler, the panic entry or hook, or a `.dma.*` or `.critical.*` section
 outside internal SRAM (`placement.txt`).
 
+Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
+moves above the stack policy's `max_move_bytes` warned (`-W
+large-assignments`), and through the image linker
+(`tools/lib/service/image-linker`), which refuses bytes in an input section
+the boot zeroes. The stack checks then bound the runtime's task and
+interrupt stacks and the bootstrap's stack under
+`firmware/platform/esp32s31/stack.toml` (`runtime-stack.txt`,
+`interrupt-stack.txt`, `bootstrap-stack.txt`). They report and do not fail
+the build yet: a failed check prints as a warning.
+
 ## Boards
 
 Boards and hubs come from the owner's stand file,

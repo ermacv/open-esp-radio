@@ -1,0 +1,23 @@
+[package]
+name = "oer-tool-analysis-blobray-artifacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Filesystem-independent ELF and archive inventory for Blobray"
+
+[dependencies]
+oer-tool-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tool-analysis-elf = { path = "../elf" }
+oer-tool-analysis-riscv-model = { path = "../riscv-model" }
+oer-tool-analysis-riscv-program = { path = "../riscv-program" }
+object = { version = "=0.39.1", default-features = false, features = ["archive", "elf", "read", "std"] }
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }
+
+[lints]
+workspace = true
+

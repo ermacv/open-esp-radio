@@ -5,6 +5,7 @@ mod boards;
 mod command;
 mod encode;
 mod flash;
+mod gates;
 mod image;
 mod lock;
 mod pack;

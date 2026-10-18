@@ -1,0 +1,181 @@
+[
+  {
+    "flags": [
+      "--format"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray"
+    ],
+    "subcommands": [
+      "audit-targets",
+      "register-accesses",
+      "function-records",
+      "field-accesses",
+      "callers",
+      "mmio-diff",
+      "symbols",
+      "strings",
+      "call-arguments"
+    ]
+  },
+  {
+    "flags": [
+      "--artifact",
+      "--forbid",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "audit-targets"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--range",
+      "--address",
+      "--function",
+      "--group-by",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "register-accesses"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--function",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "function-records"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--offset",
+      "--width",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "field-accesses"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--symbol",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "callers"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--old",
+      "--new",
+      "--range",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "mmio-diff"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--match",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "symbols"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--object",
+      "--min-length",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "strings"
+    ],
+    "subcommands": []
+  },
+  {
+    "flags": [
+      "--input",
+      "--symbol",
+      "--abi",
+      "--call-returns",
+      "--read-only",
+      "--working-memory-mib",
+      "--timeout-secs",
+      "--max-work-units"
+    ],
+    "forwards": false,
+    "path": [
+      "blobray",
+      "call-arguments"
+    ],
+    "subcommands": []
+  }
+]

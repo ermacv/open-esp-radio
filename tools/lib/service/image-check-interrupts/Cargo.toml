@@ -1,0 +1,23 @@
+[package]
+name = "oer-tool-service-image-check-interrupts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The interrupt-stack check of an image: each hart's worst-case interrupt stack against the chip's interrupt contract"
+
+[dependencies]
+oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
+oer-tool-analysis-elf = { path = "../../analysis/elf" }
+oer-tool-service-image-check-stack = { path = "../image-check-stack" }
+oer-tool-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-tool-analysis-riscv-program = { path = "../../analysis/riscv-program" }
+oer-tool-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true
+

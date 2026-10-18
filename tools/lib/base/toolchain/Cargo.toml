@@ -1,0 +1,20 @@
+[package]
+name = "oer-tool-base-toolchain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The host tools repository builds run: their lookup, recorded versions and the image compiler setup"
+
+[dependencies]
+oer-tool-base-durable = { path = "../../base/durable" }
+oer-tool-base-process = { path = "../../base/process" }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

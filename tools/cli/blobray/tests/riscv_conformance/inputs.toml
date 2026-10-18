@@ -1,0 +1,47 @@
+# The single pin of the inputs of the RISC-V executor conformance test
+# (`cli/tests/riscv_conformance.rs`): fetch both at these revisions and point
+# the test at them as its documentation says.
+schema = 1
+
+# The official architectural tests and their test environment. `revision` is
+# the commit the tag names; the checkout must resolve to it.
+[arch-test]
+repository = "https://github.com/riscv-non-isa/riscv-arch-test"
+tag = "3.10.0"
+revision = "fc32e41d49480fd99ba0a192dfff9c3319b44873"
+
+# The RV32 suites of `riscv-test-suite/rv32i_m/` whose instructions the
+# executor implements, each with the instruction set it is assembled for.
+# Only these are fetched. The C suite also holds the Zcb tests, some of which
+# need Zbb or M. Zcmp has neither architectural tests nor a Sail
+# model.
+[[arch-test.suite]]
+name = "I"
+march = "rv32i"
+
+[[arch-test.suite]]
+name = "M"
+march = "rv32im"
+
+[[arch-test.suite]]
+name = "A"
+march = "rv32ia"
+
+[[arch-test.suite]]
+name = "B"
+march = "rv32i_zba_zbb_zbs"
+
+[[arch-test.suite]]
+name = "C"
+march = "rv32imc_zbb_zcb"
+
+[[arch-test.suite]]
+name = "Zifencei"
+march = "rv32i_zifencei"
+
+# The Sail RISC-V formal model, whose signature for the same ELF is the
+# reference. `binary` names the simulator inside the release archive.
+[sail]
+url = "https://github.com/riscv/sail-riscv/releases/download/0.14.1/sail-riscv-Linux-x86_64.tar.gz"
+sha256 = "de45a89748ca67a8a522b3ac0924c303b5609a16bb50d759bbd08c4d440df0eb"
+binary = "sail-riscv-Linux-x86_64/bin/sail_riscv_sim"

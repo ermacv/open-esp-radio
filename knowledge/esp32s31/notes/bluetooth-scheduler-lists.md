@@ -36,7 +36,7 @@ moved. The open contracts at the end of this page remain hardware questions.
 Every behavioral statement below comes from the current-revision instruction
 body. Names come from the initial archive and are carried through every
 intermediate archive revision by the predecessor repository's
-`oer-symbol-lineage` tool: a name
+`oer-tool-service-symbol-lineage` tool: a name
 crosses revision `5e37d4d`, which introduced generated names, on its unchanged
 source name or on an identical relocation-normalized body, and later revisions
 keep generated names stable; the pinned `libble_app.a` renamed the scheduler
