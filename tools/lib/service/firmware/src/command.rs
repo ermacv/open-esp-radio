@@ -10,7 +10,7 @@ use std::{
 use oer_tool_data_stand_file as stand;
 use oer_tool_service_lab::{router, ssh};
 
-use crate::{Result, boards, flash, image, lock, port, power, w1};
+use crate::{Result, flash, image, lock, port, power, w1};
 
 /// The chips whose boards this tool resets and writes. Another chip's board
 /// is only listed: its reset lines may mean something else (an ESP32-C5's

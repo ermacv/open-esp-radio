@@ -22,5 +22,5 @@ fn runner_identity_comes_from_executable_and_embedded_build() {
     );
     let embedded: serde_json::Value = serde_json::from_str(crate::RUNNER_BUILD).unwrap();
     assert_eq!(observer["build"], embedded);
-    assert!(observer["build"]["inputs"]["hil/host/link/src/reboot.rs"].is_string());
+    assert!(observer["build"]["inputs"]["tools/lib/service/hil-link/src/reboot.rs"].is_string());
 }

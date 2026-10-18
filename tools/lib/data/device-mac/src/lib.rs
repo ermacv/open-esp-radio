@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A board's canonical MAC: `xx:xx:xx:xx:25:64`.
+/// A board's canonical MAC: `02:00:00:00:25:64`.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct DeviceId(String);
@@ -39,7 +39,7 @@ impl DeviceId {
         &self.0
     }
 
-    /// The MAC without separators, for file names: `3844BEAA2564`.
+    /// The MAC without separators, for file names: `020000002564`.
     pub fn compact(&self) -> String {
         self.0.replace(':', "")
     }
@@ -111,17 +111,17 @@ mod tests {
 
     #[test]
     fn macs_are_normalized_and_invalid_ones_refused() {
-        let id = DeviceId::parse("xx:xx:xx:xx:25:64").unwrap();
-        assert_eq!(id.as_str(), "xx:xx:xx:xx:25:64");
-        assert_eq!(DeviceId::parse("3844BEAA2564").unwrap(), id);
-        assert_eq!(DeviceId::parse("38-44-be-aa-25-64").unwrap(), id);
-        assert_eq!(id.compact(), "3844BEAA2564");
+        let id = DeviceId::parse("02:00:00:00:25:64").unwrap();
+        assert_eq!(id.as_str(), "02:00:00:00:25:64");
+        assert_eq!(DeviceId::parse("020000002564").unwrap(), id);
+        assert_eq!(DeviceId::parse("02-00-00-00-25-64").unwrap(), id);
+        assert_eq!(id.compact(), "020000002564");
         for invalid in ["", "38:44", "zz:44:be:aa:25:64", "/dev/ttyACM0"] {
             assert!(DeviceId::parse(invalid).is_err(), "{invalid}");
         }
         assert!(serde_json::from_str::<DeviceId>("\"38:44\"").is_err());
         assert_eq!(
-            serde_json::from_str::<DeviceId>("\"3844beaa2564\"").unwrap(),
+            serde_json::from_str::<DeviceId>("\"020000002564\"").unwrap(),
             id
         );
     }

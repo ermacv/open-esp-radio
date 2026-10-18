@@ -2,7 +2,7 @@
   "schema": 2,
   "captured_unix_millis": 1791582240043,
   "definition": {
-    "cell_id": "berlin-open-radio",
+    "cell_id": "example-lab",
     "device_id": "s31-a",
     "bluetooth_adapter": "hci0",
     "peer": "peer-1",

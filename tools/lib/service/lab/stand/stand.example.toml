@@ -5,7 +5,7 @@
 schema = 1
 
 [stand]
-id = "berlin-open-radio"
+id = "example-lab"
 # A run that uses the air holds all of it while it executes.
 air = "exclusive"
 

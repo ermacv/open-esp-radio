@@ -1552,8 +1552,7 @@ fn the_network_policy_grants_exactly_the_helper_s_operations() {
     // calls each through non-interactive sudo, so a new one the policy
     // misses stops every scenario that needs it.
     let helper = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../hil/host/linux-net/open-radio-net"),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../hil-linux-net/open-radio-net"),
     )
     .unwrap();
     let dispatch = helper.split("case \"$1\" in\n").nth(1).unwrap();

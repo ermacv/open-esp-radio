@@ -4,7 +4,7 @@
 //!   whose runs come back from the runner's receipt.
 //! - [`job`]: the arbiter job a launch runs as.
 //! - [`ab`]: two firmware variants on the same scenarios, compared with
-//!   [`oer_tool_analysis_hil_analysis::arms`].
+//!   [`oer_tool_service_hil_analysis::arms`].
 //! - [`revision`]: a revision's scenario set with the runner of its HIL
 //!   wire, its own when the wire differs from this checkout's.
 //! - [`bisect`]: the first commit at which a scenario stops passing.

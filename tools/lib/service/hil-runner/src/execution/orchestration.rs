@@ -1158,7 +1158,7 @@ fn start_run(
 fn finish_run(session: RunSession, results: Vec<ScenarioResult>) -> Result<()> {
     oer_tool_base_process::check_cancelled()?;
     let (suite, completion) =
-        session.finish(results, oer_tool_analysis_hil_analysis::report::views)?;
+        session.finish(results, oer_tool_service_hil_analysis::report::views)?;
     emit_json(&completion, false)?;
     // Cancellation of a derived history update occurs after the run was
     // sealed. Publish completion first, then preserve the CLI signal status.

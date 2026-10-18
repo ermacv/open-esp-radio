@@ -1,8 +1,0 @@
-schema = 5
-id = "bluetooth-scannable-advertising"
-description = "LE 1M ADV_SCAN_IND from the ESP Controller whose scan-response name a Linux active scanner must discover"
-role = "investigation"
-tags = ["bluetooth", "advertising", "air-exclusive"]
-
-[bluetooth]
-kind = "scannable-advertising"

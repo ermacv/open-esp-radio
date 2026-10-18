@@ -313,7 +313,7 @@ fn snapshot(store: &RunStore) -> Result<Value> {
     let status = arbiter.status()?;
     let jobs = arbiter.jobs().unfinished();
     let mut history = arbiter.history()?;
-    let mut runs = oer_tool_analysis_hil_analysis::dashboard::newest_runs(store, RECENT_RUNS);
+    let mut runs = oer_tool_service_hil_analysis::dashboard::newest_runs(store, RECENT_RUNS);
     link_runs(&mut runs, &status.holders, &history);
     history.reverse();
     history.truncate(RECENT_LEASES);
@@ -517,7 +517,7 @@ mod tests {
         run(&store, "2000-b");
         run(&store, "3000-c");
         std::fs::create_dir_all(store.runs().join("runs.before-shared-store")).unwrap();
-        let newest = oer_tool_analysis_hil_analysis::dashboard::newest_runs(&store, 2);
+        let newest = oer_tool_service_hil_analysis::dashboard::newest_runs(&store, 2);
         assert_eq!(
             newest
                 .iter()

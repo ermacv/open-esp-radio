@@ -38,7 +38,7 @@ repetition, the recorded failure, the measurements that missed their
 criteria (a criterion miss, unlike a fault), cleanup failures, host USB
 events of its boards, the artifact directory and the end of `uart.log`.
 Every view reads the bundles through the run bundle's typed reader and
-aggregates measurements through `oer-tool-analysis-hil-analysis`'s one `samples`, one value
+aggregates measurements through `oer-tool-service-hil-analysis`'s one `samples`, one value
 per repetition. A measurement is identified by scenario, name, unit,
 `semantics` (a version its producer bumps when the value's meaning changes
 under the same name) and `better`; values whose identity differs are never

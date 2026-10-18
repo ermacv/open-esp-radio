@@ -785,7 +785,7 @@ impl LabConfig {
             peer_chip: None,
             dut: DeviceConfig {
                 id: String::from("test-device"),
-                mac: String::from("xx:xx:xx:xx:00:FF"),
+                mac: String::from("02:00:00:00:00:FF"),
                 serial: PathBuf::from("/dev/ttyACM0"),
             },
             station: StationConfig {

@@ -2,7 +2,7 @@ use super::*;
 use std::path::PathBuf;
 
 fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 /// This checkout's first chip; a catalog image of it boots through its own

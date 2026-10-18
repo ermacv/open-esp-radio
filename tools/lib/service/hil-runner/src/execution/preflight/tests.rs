@@ -1,14 +1,16 @@
 use super::*;
 
 fn catalog() -> crate::scenario::Catalog {
-    crate::scenario::Catalog::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scenarios"))
-        .expect("load scenario catalog")
+    crate::scenario::Catalog::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/hil-scenarios"),
+    )
+    .expect("load scenario catalog")
 }
 
 /// The chip whose agent builds the panic-reset image (the full agent) and
 /// one whose agent does not.
 fn chips() -> (String, String) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let full =
         oer_tool_service_hil_image::chips_building(&root, &[ImageClass::SystemPanicReset]).unwrap();
     let partial = oer_tool_data_chip_profile::supported(&root)

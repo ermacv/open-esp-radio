@@ -14,8 +14,8 @@ Current status for hub 3-8.3.4 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports,
   Port 4: 0100 power
 Current status for hub 3-8.3 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
   Port 1: 0100 power
-  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:25:64]
-  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:F6:D0]
+  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:25:64]
+  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:F6:D0]
   Port 4: 0503 power highspeed enable connect [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
 Current status for hub 3-8 [0bda:5423 TerraMaster 4-Port USB 2.0 Hub, USB 2.10, 4 ports, ppps]
   Port 1: 0100 power
@@ -48,7 +48,7 @@ switchable = [1, 2, 3, 4]
 buttons = { 1 = 7, 2 = 8, 3 = 9, 4 = 10 }
 [[board]]
 id = "dut-a"
-usb-serial = "xx:xx:xx:xx:F6:D0"
+usb-serial = "02:00:00:00:F6:D0"
 chip = "chip-a"
 radios = ["wifi-2g4"]
 roles = ["dut"]
@@ -56,7 +56,7 @@ port = { hub = "rsh-mid", port = 3 }
 reset = ["power"]
 [[board]]
 id = "peer-a"
-usb-serial = "xx:xx:xx:xx:25:64"
+usb-serial = "02:00:00:00:25:64"
 chip = "chip-b"
 radios = ["ieee802154"]
 roles = ["peer"]
@@ -90,7 +90,7 @@ fn the_report_gives_each_port_its_power_and_device() {
             connected: true,
             device: Some((
                 "303a:1001".into(),
-                Some(oer_tool_data_stand_file::DeviceId::parse("xx:xx:xx:xx:25:64").unwrap())
+                Some(oer_tool_data_stand_file::DeviceId::parse("02:00:00:00:25:64").unwrap())
             )),
         }
     );
@@ -130,16 +130,16 @@ fn discovery_names_moved_missing_and_new_boards() {
     // middle hub's port 3; the peer's port is off.
     let report = REPORT
         .replace(
-            "  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:25:64]",
+            "  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:25:64]",
             "  Port 2: 0000 off",
         )
         .replace(
-            "  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:F6:D0]",
+            "  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:F6:D0]",
             "  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 40:4C:CA:00:00:01]",
         )
         .replace(
             "Current status for hub 3-8.3.4 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]\n  Port 1: 0100 power",
-            "Current status for hub 3-8.3.4 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]\n  Port 1: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:F6:D0]",
+            "Current status for hub 3-8.3.4 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]\n  Port 1: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:F6:D0]",
         );
     let stand = stand(STAND);
     let findings = discover(&stand, &power::parse(&report));
@@ -177,7 +177,7 @@ fn discovery_names_moved_missing_and_new_boards() {
 #[test]
 fn an_empty_powered_port_points_at_its_button() {
     let report = REPORT.replace(
-        "  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:25:64]",
+        "  Port 2: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:25:64]",
         "  Port 2: 0100 power",
     );
     let stand = stand(STAND);

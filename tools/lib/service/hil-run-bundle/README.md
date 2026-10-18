@@ -27,7 +27,7 @@ fails there and needs a schema bump, with those documents moved to the new
 schema's directory and brought to the new shape. A new optional field that
 defaults when absent needs none.
 
-The JUnit and HTML views a run seals are rendered by `oer-tool-analysis-hil-analysis`,
+The JUnit and HTML views a run seals are rendered by `oer-tool-service-hil-analysis`,
 which the runner hands `RunSession::finish`. The bundle depends on no
 stand, board or image builder code.
 

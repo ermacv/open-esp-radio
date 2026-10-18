@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use super::*;
 
 fn catalog() -> Catalog {
-    Catalog::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scenarios"))
+    Catalog::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/hil-scenarios"))
         .expect("load scenario catalog")
 }
 
@@ -512,7 +512,7 @@ fn the_then_command_joins_the_lease_and_names_the_run() {
 #[test]
 fn a_run_takes_the_named_chip_or_the_only_one_that_builds_its_images() {
     let catalog = catalog();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let panic = catalog.get("system-panic-reset").unwrap();
     let watchdog = catalog.get("system-watchdog").unwrap();
     let building = |classes: &[ImageClass]| {

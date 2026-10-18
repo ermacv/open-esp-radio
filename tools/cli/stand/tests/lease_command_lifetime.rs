@@ -170,7 +170,7 @@ fn lease_shutdown_stops_escaped_writers_before_releasing_every_board() {
             lease
                 .args([
                     "--root",
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/../.."),
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/../../.."),
                     "--owner",
                     "lifetime-test",
                     "lease",

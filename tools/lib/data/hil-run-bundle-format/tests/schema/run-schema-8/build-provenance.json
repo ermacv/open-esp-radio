@@ -37,14 +37,14 @@
   "files": [
     {
       "name": "bootstrap-lock",
-      "path": "platform/esp32s31/Cargo.lock",
+      "path": "firmware/platform/esp32s31/Cargo.lock",
       "archive_path": "firmware/system-watchdog/bootstrap-Cargo.lock",
       "size_bytes": 39223,
       "sha256": "13e1d4118a5604720e1243cba3d31230d522cecdd164777b013878ce5a1c7061"
     },
     {
       "name": "chip-profile",
-      "path": "platform/esp32s31/chip.toml",
+      "path": "firmware/platform/esp32s31/chip.toml",
       "archive_path": null,
       "size_bytes": 11747,
       "sha256": "4e78496d49b23e26c8cf97f0e091816a3ff51ef984540e780500ce9642b77e86"

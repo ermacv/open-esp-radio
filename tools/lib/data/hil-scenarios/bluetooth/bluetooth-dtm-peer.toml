@@ -1,9 +1,0 @@
-schema = 5
-id = "bluetooth-dtm-peer"
-description = "LE Direct Test Mode against the ESP32-C5 vendor-Controller peer: ESP32-S31 receives LE 1M, 2M and Coded S=8/S=2 and transmits LE 1M and 2M on RF channel 19, with an idle-transmitter silence control on each receiver"
-role = "qualification"
-tags = ["bluetooth", "dtm", "peer", "air-exclusive"]
-
-[bluetooth]
-kind = "dtm-peer"
-minimum_packets = 100

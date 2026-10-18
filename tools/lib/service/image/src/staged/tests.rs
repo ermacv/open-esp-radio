@@ -2,7 +2,7 @@ use super::*;
 use crate::bundle::{BootFiles, around};
 
 fn repository() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 /// Every chip whose profile names a flash map for its images.

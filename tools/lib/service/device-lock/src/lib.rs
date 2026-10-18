@@ -479,17 +479,17 @@ mod tests {
     fn every_spelling_of_a_mac_is_one_lock_and_one_owning_guard() {
         let directory = tempfile::tempdir().unwrap();
         let first = owned(
-            DeviceAccess::try_acquire_in(directory.path(), &id("xx:xx:xx:xx:25:64"), "first")
+            DeviceAccess::try_acquire_in(directory.path(), &id("02:00:00:00:25:64"), "first")
                 .unwrap()
                 .unwrap(),
         );
         let second = owned(
-            DeviceAccess::try_acquire_in(directory.path(), &id("3844BEAA2564"), "second")
+            DeviceAccess::try_acquire_in(directory.path(), &id("020000002564"), "second")
                 .unwrap()
                 .unwrap(),
         );
         assert_eq!(first.path(), second.path());
-        assert_eq!(first.path(), directory.path().join("3844BEAA2564.lock"));
+        assert_eq!(first.path(), directory.path().join("020000002564.lock"));
         // The second acquisition shares the live guard instead of holding
         // nothing.
         assert!(Arc::ptr_eq(&first.owned, &second.owned));

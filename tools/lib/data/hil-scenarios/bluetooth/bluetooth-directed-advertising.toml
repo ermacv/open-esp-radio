@@ -1,8 +1,0 @@
-schema = 5
-id = "bluetooth-directed-advertising"
-description = "LE 1M ADV_DIRECT_IND: high duty cycle times out after 1.28 s, and low duty cycle lets the addressed Linux adapter connect"
-role = "investigation"
-tags = ["bluetooth", "advertising", "air-exclusive"]
-
-[bluetooth]
-kind = "directed-advertising"

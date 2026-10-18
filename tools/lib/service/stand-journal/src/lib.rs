@@ -368,7 +368,7 @@ mod tests {
             unix: 5,
             owner: "wifi".into(),
             checkout: Some("/src/wifi".into()),
-            device: Some("xx:xx:xx:xx:F6:D0".into()),
+            device: Some("02:00:00:00:F6:D0".into()),
             kind: BoardEventKind::Flashed {
                 image: "system-watchdog".into(),
                 application_sha256: "0123456789abcdef".into(),
@@ -393,7 +393,7 @@ mod tests {
             ..event.clone()
         };
         let peer = BoardEvent {
-            device: Some("xx:xx:xx:xx:25:64".into()),
+            device: Some("02:00:00:00:25:64".into()),
             unix: 6,
             ..event.clone()
         };
@@ -421,12 +421,12 @@ mod tests {
         let stand = oer_tool_data_stand_file::Stand::parse(
             "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
-             [[board]]\nid = \"peer-a\"\nusb-serial = \"xx:xx:xx:xx:25:64\"\nchip = \"chip-b\"\n\
+             [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n",
         )
         .unwrap();
         assert_eq!(
-            device_label(Some("xx:xx:xx:xx:25:64"), Some(&stand)),
+            device_label(Some("02:00:00:00:25:64"), Some(&stand)),
             "peer-a (chip-b)"
         );
         assert_eq!(device_label(Some("AA"), Some(&stand)), "AA");
@@ -441,7 +441,7 @@ mod tests {
     fn a_flash_is_journaled_by_record_flash_alone() {
         let directory = tempfile::tempdir().unwrap();
         let arbiter = Journal::at(directory.path().join("board.jsonl"));
-        let mac = oer_tool_data_device_mac::DeviceId::parse("xx:xx:xx:xx:25:64").unwrap();
+        let mac = oer_tool_data_device_mac::DeviceId::parse("02:00:00:00:25:64").unwrap();
         let image = ImageIdentity {
             name: "ieee802154-peer".into(),
             sha256: sha('a'),
@@ -470,7 +470,7 @@ mod tests {
         assert!(arbiter.record_flash("peer".into(), &mac, &bad).is_err());
         let latest = arbiter.latest_flash(&mac).unwrap().unwrap();
         assert_eq!(latest.owner, "peer");
-        assert_eq!(latest.device.as_deref(), Some("xx:xx:xx:xx:25:64"));
+        assert_eq!(latest.device.as_deref(), Some("02:00:00:00:25:64"));
         // An unreadable line fails the strict reader, not the history view.
         oer_tool_base_durable::jsonl::append(&arbiter.path, &serde_json::json!({"broken": true}))
             .unwrap();

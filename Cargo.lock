@@ -2247,13 +2247,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-bluetooth-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-trace",
-]
-
-[[package]]
 name = "oer-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
@@ -2444,22 +2437,8 @@ name = "oer-espressif-ieee802154-pac"
 version = "0.1.0"
 
 [[package]]
-name = "oer-espressif-ieee802154-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-trace",
-]
-
-[[package]]
 name = "oer-espressif-modem-clock"
 version = "0.1.0"
-
-[[package]]
-name = "oer-espressif-phy-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-trace",
-]
 
 [[package]]
 name = "oer-exec-esp-hal-irq"
@@ -2782,13 +2761,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-trace",
-]
-
-[[package]]
 name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
@@ -2916,24 +2888,6 @@ dependencies = [
  "addr2line",
  "gimli 0.34.0",
  "object 0.39.1",
-]
-
-[[package]]
-name = "oer-tool-analysis-hil-analysis"
-version = "0.1.0"
-dependencies = [
- "oer-tool-analysis-elf",
- "oer-tool-base-durable",
- "oer-tool-base-process",
- "oer-tool-data-hil-protocol",
- "oer-tool-data-hil-run-bundle-format",
- "oer-tool-data-hil-schema",
- "oer-tool-service-hil-run-bundle",
- "oer-tool-service-stats",
- "roxmltree",
- "serde",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]
@@ -3065,7 +3019,6 @@ name = "oer-tool-cli-hil"
 version = "0.1.0"
 dependencies = [
  "clap",
- "oer-tool-analysis-hil-analysis",
  "oer-tool-base-command-tree",
  "oer-tool-base-durable",
  "oer-tool-base-process",
@@ -3076,6 +3029,7 @@ dependencies = [
  "oer-tool-data-hil-schema",
  "oer-tool-service-device-peer-line",
  "oer-tool-service-esp-idf",
+ "oer-tool-service-hil-analysis",
  "oer-tool-service-hil-experiment",
  "oer-tool-service-hil-image",
  "oer-tool-service-hil-lab",
@@ -3249,10 +3203,6 @@ name = "oer-tool-data-hil-trace"
 version = "0.1.0"
 dependencies = [
  "oer-base-trace",
- "oer-bluetooth-trace",
- "oer-espressif-ieee802154-trace",
- "oer-espressif-phy-trace",
- "oer-ieee80211-trace",
 ]
 
 [[package]]
@@ -3425,6 +3375,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-service-hil-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tool-analysis-elf",
+ "oer-tool-base-durable",
+ "oer-tool-base-process",
+ "oer-tool-data-hil-protocol",
+ "oer-tool-data-hil-run-bundle-format",
+ "oer-tool-data-hil-schema",
+ "oer-tool-service-hil-run-bundle",
+ "oer-tool-service-stats",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-service-hil-executor"
 version = "0.1.0"
 dependencies = [
@@ -3443,12 +3411,12 @@ dependencies = [
 name = "oer-tool-service-hil-experiment"
 version = "0.1.0"
 dependencies = [
- "oer-tool-analysis-hil-analysis",
  "oer-tool-base-durable",
  "oer-tool-base-process",
  "oer-tool-data-hil-run-bundle-format",
  "oer-tool-data-hil-schema",
  "oer-tool-data-stand-file",
+ "oer-tool-service-hil-analysis",
  "oer-tool-service-hil-image",
  "oer-tool-service-hil-observer",
  "oer-tool-service-hil-run-bundle",
@@ -3630,7 +3598,6 @@ name = "oer-tool-service-hil-runner"
 version = "0.1.0"
 dependencies = [
  "clap",
- "oer-tool-analysis-hil-analysis",
  "oer-tool-base-command-tree",
  "oer-tool-base-durable",
  "oer-tool-base-process",
@@ -3643,6 +3610,7 @@ dependencies = [
  "oer-tool-data-hil-schema",
  "oer-tool-service-device-lock",
  "oer-tool-service-devices",
+ "oer-tool-service-hil-analysis",
  "oer-tool-service-hil-family-system",
  "oer-tool-service-hil-flash",
  "oer-tool-service-hil-image",

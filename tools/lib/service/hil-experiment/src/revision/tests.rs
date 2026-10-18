@@ -37,7 +37,7 @@ fn the_checked_out_tree_s_lock_selects_the_runner() {
 
 #[test]
 fn this_tree_names_its_wire_and_an_older_tree_none() {
-    let lock = messages_lock(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."));
+    let lock = messages_lock(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
     assert!(lock.is_some_and(|lock| lock.contains("\nframing ")));
     assert_eq!(messages_lock(tempfile::tempdir().unwrap().path()), None);
 }

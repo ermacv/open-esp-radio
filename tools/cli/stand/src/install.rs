@@ -199,14 +199,14 @@ mod tests {
 
     #[test]
     fn the_tool_is_rebuilt_from_the_path_packages_it_reaches() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let root = root.canonicalize().unwrap();
         let metadata = serde_json::json!({
             "packages": [
                 {"name": "oer-tool-cli-stand", "id": "x", "source": null,
-                 "manifest_path": root.join("stand/cli/Cargo.toml")},
+                 "manifest_path": root.join("tools/cli/stand/Cargo.toml")},
                 {"name": "oer-tool-service-stand-arbiter", "id": "a", "source": null,
-                 "manifest_path": root.join("stand/arbiter/Cargo.toml")},
+                 "manifest_path": root.join("tools/lib/service/stand-arbiter/Cargo.toml")},
                 {"name": "serde", "id": "s", "source": "registry+https://github.com/rust-lang/crates.io-index",
                  "manifest_path": "/registry/serde/Cargo.toml"},
                 {"name": "unrelated", "id": "u", "source": null,
@@ -219,7 +219,10 @@ mod tests {
         });
         let mut inputs = path_package_closure(&metadata, PACKAGE, &root).unwrap();
         inputs.sort();
-        assert_eq!(inputs, ["stand/arbiter", "stand/cli"]);
+        assert_eq!(
+            inputs,
+            ["tools/cli/stand", "tools/lib/service/stand-arbiter"]
+        );
     }
 
     #[test]

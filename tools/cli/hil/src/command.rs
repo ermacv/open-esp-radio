@@ -452,13 +452,13 @@ fn wait(args: &[OsString]) -> Result<std::process::ExitCode> {
     {
         return crate::jobs::wait_command(args);
     }
-    let run = oer_tool_analysis_hil_analysis::Run::open(
+    let run = oer_tool_service_hil_analysis::Run::open(
         &oer_tool_service_hil_run_bundle::RunStore::shared()?,
         text,
     )
     .map_err(|_| format!("{text} is neither a job nor a run"))?;
     Ok(std::process::ExitCode::from(
-        oer_tool_analysis_hil_analysis::runs::wait(run.directory(), |line| println!("{line}"))?,
+        oer_tool_service_hil_analysis::runs::wait(run.directory(), |line| println!("{line}"))?,
     ))
 }
 
@@ -475,11 +475,11 @@ fn perf(
     args: &[OsString],
 ) -> Result<std::process::ExitCode> {
     use clap::Parser as _;
-    use oer_tool_analysis_hil_analysis::perf;
+    use oer_tool_service_hil_analysis::perf;
     let store = oer_tool_service_hil_run_bundle::RunStore::shared()?;
     let now = oer_tool_base_durable::unix_millis();
     let find = |id: &str| -> Result<perf::RunSummary> {
-        perf::summary(&oer_tool_analysis_hil_analysis::Run::open(&store, id)?)
+        perf::summary(&oer_tool_service_hil_analysis::Run::open(&store, id)?)
     };
     let baselines = perf::baselines(&store)?;
     match PerfCli::try_parse_from(args)? {
@@ -532,7 +532,7 @@ fn runs(
     args: &[OsString],
 ) -> Result<std::process::ExitCode> {
     use clap::Parser as _;
-    use oer_tool_analysis_hil_analysis::{Run, retention, runs};
+    use oer_tool_service_hil_analysis::{Run, retention, runs};
     use oer_tool_service_hil_run_bundle::store::Note;
     use oer_tool_service_hil_run_bundle::store::Notes;
     use oer_tool_service_hil_run_bundle::store::Sidecar;
@@ -776,8 +776,8 @@ const RUN_STORE_BUDGET_GIB: u64 = 40;
 
 /// The captures source collection weighs: the host's capture store and what
 /// queued or running jobs hold.
-fn captures() -> Result<oer_tool_analysis_hil_analysis::runs::Captures> {
-    Ok(oer_tool_analysis_hil_analysis::runs::Captures {
+fn captures() -> Result<oer_tool_service_hil_analysis::runs::Captures> {
+    Ok(oer_tool_service_hil_analysis::runs::Captures {
         stores: vec![oer_tool_service_hil_image::source_snapshot_store()?],
         held: crate::sweep::held_by_jobs()?,
     })
@@ -797,9 +797,9 @@ fn prune_automatically(
         return Ok(());
     }
     std::fs::write(&marker, b"")?;
-    let pruned = oer_tool_analysis_hil_analysis::retention::prune(
+    let pruned = oer_tool_service_hil_analysis::retention::prune(
         store,
-        &oer_tool_analysis_hil_analysis::retention::Retention {
+        &oer_tool_service_hil_analysis::retention::Retention {
             keep_days: PRUNE_DAYS,
             keep_failed: PRUNE_KEEP_FAILED,
         },
@@ -1113,7 +1113,7 @@ fn profile(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
                 continue;
             }
             let report =
-                oer_tool_analysis_hil_analysis::profile::report(&path, elf.as_deref(), cli.top)?;
+                oer_tool_service_hil_analysis::profile::report(&path, elf.as_deref(), cli.top)?;
             let relative = path
                 .parent()
                 .unwrap_or(&path)

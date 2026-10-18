@@ -2,8 +2,8 @@
 //! builds.
 //!
 //! Every ESP-IDF project with a `firmware.toml` beside its `CMakeLists.txt`
-//! is an entry: peers in `hil/peers/<project>/` and vendor references in
-//! `verification/<chip>/hil-vendor/<project>/`. Each is an application that
+//! is an entry: peers in `firmware/peers/<project>/` and vendor references in
+//! `firmware/vendor/<chip>/<project>/`. Each is an application that
 //! its own ESP-IDF bootloader loads (`Boot::EspIdfBootloader`), the only
 //! images that do not boot staged. The manifest names the image (its name in
 //! the board journal), the target chip and the chip whose `artifacts.toml`
@@ -61,9 +61,9 @@ impl Entry {
 
 /// Every catalog entry below `root`, by image name.
 pub fn entries(root: &Path) -> Result<Vec<Entry>> {
-    let mut directories = subdirectories(&root.join("hil/peers"))?;
-    for chip in subdirectories(&root.join("verification"))? {
-        directories.extend(subdirectories(&chip.join("hil-vendor"))?);
+    let mut directories = subdirectories(&root.join("firmware/peers"))?;
+    for chip in subdirectories(&root.join("firmware/vendor"))? {
+        directories.extend(subdirectories(&chip)?);
     }
     let mut entries = Vec::new();
     for directory in directories {
@@ -217,15 +217,15 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         project(
             root.path(),
-            "hil/peers/chip-b-ieee802154",
+            "firmware/peers/chip-b-ieee802154",
             "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         project(
             root.path(),
-            "verification/chip-a/hil-vendor/calibration",
+            "firmware/vendor/chip-a/calibration",
             "image = \"vendor-calibration\"\nchip = \"chip-a\"\npins = \"chip-a\"\n",
         );
-        std::fs::create_dir_all(root.path().join("hil/peers/untracked")).unwrap();
+        std::fs::create_dir_all(root.path().join("firmware/peers/untracked")).unwrap();
         let entries = entries(root.path()).unwrap();
         assert_eq!(
             entries,
@@ -235,14 +235,14 @@ mod tests {
                     chip: "chip-b".into(),
                     pins: "chip-a".into(),
                     hold: None,
-                    directory: "hil/peers/chip-b-ieee802154".into(),
+                    directory: "firmware/peers/chip-b-ieee802154".into(),
                 },
                 Entry {
                     image: "vendor-calibration".into(),
                     chip: "chip-a".into(),
                     pins: "chip-a".into(),
                     hold: None,
-                    directory: "verification/chip-a/hil-vendor/calibration".into(),
+                    directory: "firmware/vendor/chip-a/calibration".into(),
                 },
             ]
         );
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn the_tracked_catalog_names_its_projects() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let entries = entries(&root).unwrap();
         for image in ["ieee802154-peer", "vendor-calibration"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");

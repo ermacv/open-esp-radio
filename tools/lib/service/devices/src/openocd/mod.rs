@@ -310,7 +310,7 @@ mod tests {
     fn every_file_is_verified_and_only_the_last_resets() {
         let arguments = openocd().program_arguments(
             "chip-b",
-            "xx:xx:xx:xx:25:64",
+            "02:00:00:00:25:64",
             &[(0x2000, "boot.bin".into()), (0x10000, "app.bin".into())],
         );
         assert_eq!(
@@ -321,7 +321,7 @@ mod tests {
                 "-f",
                 "board/chip-b-builtin.cfg",
                 "-c",
-                "adapter serial xx:xx:xx:xx:25:64",
+                "adapter serial 02:00:00:00:25:64",
                 "-c",
                 "program_esp boot.bin 0x2000 verify",
                 "-c",
@@ -333,14 +333,14 @@ mod tests {
     #[test]
     fn a_reset_names_the_board_by_its_mac_and_runs_it() {
         assert_eq!(
-            openocd().reset_arguments("chip-a", "xx:xx:xx:xx:F6:D0"),
+            openocd().reset_arguments("chip-a", "02:00:00:00:F6:D0"),
             [
                 "-s",
                 "/scripts",
                 "-f",
                 "board/chip-a-builtin.cfg",
                 "-c",
-                "adapter serial xx:xx:xx:xx:F6:D0",
+                "adapter serial 02:00:00:00:F6:D0",
                 "-c",
                 "init",
                 "-c",
@@ -364,7 +364,7 @@ mod tests {
                 (String::from("mcause"), 0x3000_0007)
             ]
         );
-        let arguments = openocd().register_arguments("chip-b", "xx:xx:xx:xx:25:64", &["pc"]);
+        let arguments = openocd().register_arguments("chip-b", "02:00:00:00:25:64", &["pc"]);
         assert_eq!(
             &arguments[..4],
             [
@@ -374,7 +374,7 @@ mod tests {
                 "gdb_port disabled; telnet_port disabled; tcl_port disabled"
             ]
         );
-        assert!(arguments.contains(&String::from("adapter serial xx:xx:xx:xx:25:64")));
+        assert!(arguments.contains(&String::from("adapter serial 02:00:00:00:25:64")));
         let commands = arguments.last().unwrap();
         // It reads without resetting and leaves the chip running.
         assert!(commands.contains("halt") && commands.ends_with("resume; shutdown"));
@@ -392,8 +392,8 @@ mod tests {
             parse_word("Error: Target not examined yet\n", 0x2070_1030),
             None
         );
-        let arguments = openocd().word_arguments("chip-b", "xx:xx:xx:xx:25:64", 0x600b_0410);
-        assert!(arguments.contains(&String::from("adapter serial xx:xx:xx:xx:25:64")));
+        let arguments = openocd().word_arguments("chip-b", "02:00:00:00:25:64", 0x600b_0410);
+        assert!(arguments.contains(&String::from("adapter serial 02:00:00:00:25:64")));
         let commands = arguments.last().unwrap();
         assert!(commands.contains("mdw 0x600b0410"), "{commands}");
         assert!(commands.ends_with("resume; shutdown") && !commands.contains("reset"));

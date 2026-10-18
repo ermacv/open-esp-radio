@@ -6,7 +6,7 @@ const REPORT: &str =
 Current status for hub 3-8.3 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
   Port 1: 0100 power
   Port 2: 0000 off
-  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit xx:xx:xx:xx:F6:D0]
+  Port 3: 0103 power enable connect [303a:1001 Espressif USB JTAG/serial debug unit 02:00:00:00:F6:D0]
   Port 4: 0103 power enable connect [046d:c52b Logitech USB Receiver]
 ";
 
@@ -29,7 +29,7 @@ fn an_espressif_port_reports_its_mac_and_another_device_none() {
         board.device,
         Some((
             String::from("303a:1001"),
-            Some(oer_tool_data_device_mac::DeviceId::parse("xx:xx:xx:xx:F6:D0").unwrap())
+            Some(oer_tool_data_device_mac::DeviceId::parse("02:00:00:00:F6:D0").unwrap())
         ))
     );
     let other = hub.ports.iter().find(|port| port.port == 4).unwrap();
@@ -99,7 +99,7 @@ fn a_power_loss_also_needs_a_power_on_reset() {
 
 #[test]
 fn the_reset_cause_is_the_profile_field_of_the_platform_publication() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     for (chip, power_on_word) in [("esp32s31", 0x03), ("esp32c5", 0x21)] {
         let profile = oer_tool_data_chip_profile::Profile::load(&root, chip).unwrap();
         let field =

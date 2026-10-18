@@ -1,6 +1,6 @@
 //! The `cargo hil` command line: argument parsing and calls into the stand
 //! libraries (leases, owners, jobs), the ESP-IDF firmware catalog,
-//! the run store's analyses (`oer-tool-analysis-hil-analysis`), experiments and the
+//! the run store's analyses (`oer-tool-service-hil-analysis`), experiments and the
 //! launch of the runner (`oer-tool-service-hil-experiment`) and the evidence archive
 //! (`oer-hil-evidence-archive`).
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

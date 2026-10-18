@@ -20,7 +20,7 @@ Separate Cargo packages bound the privilege and radio-family scopes:
 | `image/` (`oer-tool-service-hil-image`) | none | The image builder: firmware construction from the live tree or a frozen source snapshot, placement and stack audits, and the firmware and build records it hands to evidence |
 | `evidence-archive/` (`oer-hil-evidence-archive`) | none | The evidence archive ( Q7): content-addressed versions of the runs qualification cites, their manifest and the pin `evidence/archive.toml` in `qualification/`, deterministic packing from a run store, bounded verified extraction into a copy laid out as a run store, and publication and download through a release transport (`cargo hil archive`) |
 | `run-bundle/` (`oer-tool-service-hil-run-bundle`) | none | The run bundle: its typed documents, the one writer and its seal, the one typed reader (`RunBundle`) every consumer uses, integrity verification, the run store with its sidecars (`RunStore`), the run receipt, build provenance and the content-addressed object store, offline verification against the image builder's recipe, and the experiment and laboratory records a run keeps |
-| `analysis/` (`oer-tool-analysis-hil-analysis`) | none | Analyses of run bundles: the one measurement aggregation and comparison, run queries, retention, performance baselines, A/B arm comparison, the dashboard's runs and the JUnit/HTML views a run seals |
+| `analysis/` (`oer-tool-service-hil-analysis`) | none | Analyses of run bundles: the one measurement aggregation and comparison, run queries, retention, performance baselines, A/B arm comparison, the dashboard's runs and the JUnit/HTML views a run seals |
 | `experiment/` (`oer-tool-service-hil-experiment`) | none | `launch_run`, the one way a run is launched (its runs come from the runner's receipt), the job a launch runs as, revision runs (a revision's scenario set with the runner of its HIL wire), A/B experiments and bisection |
 | `scenario/` (`oer-tool-service-hil-scenario`) | none | The family-independent scenario envelope, catalog and campaign plan, with the laboratory requirements, Wi-Fi link vocabulary and target settings a scenario declares |
 | `image-class/` (`oer-tool-data-hil-image-class`) | none | Image classes, their build features and the image keys each class serves, the check of a device's reported keys against them, and where a chip's HIL images are built from (`agent`: the agent's workspace, package and manifest, the bootstrap) |
@@ -101,7 +101,7 @@ claim an earlier physical action:
 | 4. Flash | The flash operation (`oer-tool-service-hil-flash`) writes the bundle around that archived application under the run's lock of the board, through board I/O's one writer, journals it and starts it as the chip profile says. The workload never flashes a different build-tree copy. |
 | 5. Repetitions | `fixture::prepared` owns peer/host preparation; `session` owns serial reset, raw `uart.bin`, decoded protocol and target-health state; a workload owns its child processes and typed observations. Primary failures remain distinct from infrastructure failures. |
 | 6. Cleanup and attachment indexing | Each repetition enters a cleanup scope before fixture preparation. Cleanup/restoration finishes before attachments and `result.json` are collected. `cleanup.json` preserves every attempted restoration and its failure independently of the workload result. |
-| 7. Suite and seal | After all scenario results, `RunSession::finish` writes `suite.json`, the JUnit and HTML views `oer-tool-analysis-hil-analysis` renders, and the final event/manifest, then writes `integrity.json`. |
+| 7. Suite and seal | After all scenario results, `RunSession::finish` writes `suite.json`, the JUnit and HTML views `oer-tool-service-hil-analysis` renders, and the final event/manifest, then writes `integrity.json`. |
 
 SIGINT/SIGTERM wakes owned protocol and process waits. Ordinary unwinding
 finalizes captures, restores fixtures where possible, marks the run
@@ -412,8 +412,8 @@ The host packages own these roles:
   builder code: the image builder hands it firmware records and implements
   `verify::FirmwareRecipe`, which verification checks build records against,
   the runner hands `RunSession::finish` the renderer of its HTML/JUnit views
-  (`oer-tool-analysis-hil-analysis`), and a run reports its interruption through a
-  callback its caller publishes. `oer-tool-analysis-hil-analysis` reads bundles for every
+  (`oer-tool-service-hil-analysis`), and a run reports its interruption through a
+  callback its caller publishes. `oer-tool-service-hil-analysis` reads bundles for every
   query, statistic and view; `oer-tool-service-hil-experiment` launches every run. `oer-tool-service-hil-source-snapshot` captures and verifies the sources
   builds and runs are made from, and `oer-tool-base-durable` provides atomic files,
   digests and timestamps to every producer.

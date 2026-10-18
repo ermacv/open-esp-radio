@@ -1,6 +1,6 @@
 use super::*;
 
-const MAC: &str = "xx:xx:xx:xx:25:64";
+const MAC: &str = "02:00:00:00:25:64";
 
 fn access(directory: &Path) -> DeviceAccess {
     DeviceAccess::try_acquire_in(

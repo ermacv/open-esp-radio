@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn the_repository_directory_is_this_package() {
-    assert!(env!("CARGO_MANIFEST_DIR").ends_with("tools/image/pipeline"));
+    assert!(env!("CARGO_MANIFEST_DIR").ends_with("tools/lib/service/image"));
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn an_application_selects_its_features_alone() {
 
 #[test]
 fn every_chip_with_images_names_its_flash_map() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     for chip in oer_tool_data_chip_profile::supported(&root).unwrap() {
         let profile = profile(&root, &chip).unwrap();
         let flash = profile.flash.unwrap();
@@ -80,7 +80,7 @@ impl Checks for Requested {
 
 /// An empty bundle in `directory` of the first chip with a flash map.
 fn empty_bundle(directory: &Path) -> oer_tool_service_image_bundle::ImageBundle {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let chip = oer_tool_data_chip_profile::supported(&root)
         .unwrap()
         .remove(0);
@@ -170,7 +170,7 @@ fn a_requested_check_with_missing_data_or_no_result_fails_the_build() {
 #[test]
 fn a_type_check_refuses_requested_checks() {
     let directory = tempfile::tempdir().unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let chip = oer_tool_data_chip_profile::supported(&root)
         .unwrap()
         .remove(0);

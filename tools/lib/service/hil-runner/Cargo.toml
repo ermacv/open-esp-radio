@@ -22,7 +22,7 @@ oer-tool-service-hil-image = { path = "../hil-image" }
 oer-tool-service-image = { path = "../image" }
 oer-tool-data-chip-profile = { path = "../../data/chip-profile" }
 oer-tool-service-hil-run-bundle = { path = "../hil-run-bundle" }
-oer-tool-analysis-hil-analysis = { path = "../../analysis/hil-analysis" }
+oer-tool-service-hil-analysis = { path = "../hil-analysis" }
 oer-tool-service-hil-scenario = { path = "../hil-scenario" }
 oer-tool-service-hil-source-snapshot = { path = "../hil-source-snapshot" }
 oer-tool-base-durable = { path = "../../base/durable" }

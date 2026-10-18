@@ -579,9 +579,9 @@ fn include_untracked_archives_only_files_inside_its_scopes_and_records_why() {
         manifest["sources"][0]["untracked"],
         serde_json::json!([
             {"path": "crates/driver/src/new.rs", "by": "image-package"},
-            {"path": "tools/lib/service/hil-runner/src/new.rs", "by": "hil-host"},
-            {"path": "tools/lib/data/hil-scenarios/new.toml", "by": "hil-host"},
             {"path": "notes.txt", "by": "source-include"},
+            {"path": "tools/lib/data/hil-scenarios/new.toml", "by": "hil-host"},
+            {"path": "tools/lib/service/hil-runner/src/new.rs", "by": "hil-host"},
         ])
     );
 }

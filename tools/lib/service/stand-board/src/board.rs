@@ -548,7 +548,7 @@ mod tests {
     }
 
     fn board(id: &str) -> Board {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let stand = stand();
         Board::new(
             &root,
@@ -596,7 +596,7 @@ mod tests {
 
     #[test]
     fn a_bundle_of_another_chip_is_refused_before_the_port_is_touched() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let profile = oer_tool_data_chip_profile::Profile::load(&root, "esp32c5").unwrap();
         let directory = tempfile::tempdir().unwrap();
         let bundle = oer_tool_service_image_bundle::ImageBundle::new(
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn a_board_without_power_cannot_be_power_cycled() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let mut stand = stand();
         stand.boards[1].reset = vec![ResetStep::Jtag];
         let c5 = leased(Board::new(&root, &stand, &stand.boards[1], "/dev/absent".into()).unwrap());

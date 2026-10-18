@@ -19,9 +19,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_tool_analysis_hil_analysis::Run;
 use oer_tool_base_process::git::Worktree;
 use oer_tool_data_hil_schema::run::{FailureKind, Outcome};
+use oer_tool_service_hil_analysis::Run;
 use serde::{Deserialize, Serialize};
 
 use crate::{

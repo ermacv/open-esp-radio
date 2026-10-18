@@ -103,7 +103,7 @@ mod tests {
     use crate::QuarantineTrigger;
     use oer_tool_service_devices::reset::RecoveryStep;
 
-    const MAC: &str = "xx:xx:xx:xx:F6:D0";
+    const MAC: &str = "02:00:00:00:F6:D0";
 
     fn recovered(unix: u64, hardware: bool) -> BoardEvent {
         BoardEvent {

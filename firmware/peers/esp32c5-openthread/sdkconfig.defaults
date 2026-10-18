@@ -1,0 +1,22 @@
+CONFIG_IDF_TARGET="esp32c5"
+# Only protocol lines reach the host; driver and boot logs stay quiet.
+CONFIG_LOG_DEFAULT_LEVEL_ERROR=y
+CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y
+# The stand reaches the peer through its USB Serial/JTAG port, which carries
+# the console in both directions.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# Equal sources give an equal image, so the board journal identifies it.
+CONFIG_APP_REPRODUCIBLE_BUILD=y
+# A full Thread device on the native radio; the application drives the
+# OpenThread API itself, without its CLI, console or lwIP glue.
+CONFIG_IEEE802154_ENABLED=y
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_FTD=y
+CONFIG_OPENTHREAD_CLI=n
+CONFIG_OPENTHREAD_CONSOLE_ENABLE=n
+CONFIG_OPENTHREAD_PLATFORM_NETIF=n
+CONFIG_OPENTHREAD_TASK_SIZE=10240
+CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
+CONFIG_MBEDTLS_KEY_EXCHANGE_ECJPAKE=y
+CONFIG_MBEDTLS_ECJPAKE_C=y

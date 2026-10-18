@@ -1,0 +1,36 @@
+schema = 5
+
+# Every linked function without a compiler frame record (`-Z emit-stack-sizes`)
+# needs exactly one review there: assembly, vector data or compiler runtime.
+coverage_policy = "../espressif/stack-coverage.toml"
+
+# Reject implicit copies/moves large enough to hide owner graphs or buffers in
+# compiler temporaries. The lint is enforced while building the final fat-LTO
+# selected runtime image.
+max_move_bytes = 4096
+
+# Each stack is bounded from the function that runs on it from its top, as
+# platform/esp32s31/stack.toml states.
+
+# `_runtime_start` switches to the top of this stack (`_runtime_stack_bootstrap`)
+# and tail-calls `runtime_main`, which runs the executor for good.
+[cpu0_task_stack]
+root = "runtime_main"
+bottom_symbol = "__runtime_cpu0_task_stack_bottom"
+top_symbol = "__runtime_cpu0_task_stack_top"
+minimum_free_bytes = 16384
+
+# The dedicated SRAM interrupt stack is bounded by the interrupt-stack gate
+# against the platform interrupt contract's margin. This is runtime painting's
+# engineering reserve, not a qualified nesting bound.
+[interrupt_stacks]
+minimum_free_bytes = 4096
+
+# The bootstrap runs on the linker script's `_stack_end`..`_stack_start` from
+# riscv-rt's `_start_rust`, which calls `hal_main` and then the bootstrap's
+# `main`.
+[bootstrap_stack]
+root = "_start_rust"
+bottom_symbol = "_stack_end"
+top_symbol = "_stack_start"
+minimum_free_bytes = 4096

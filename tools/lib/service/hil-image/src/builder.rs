@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn the_builder_is_the_dependency_closure_of_the_image_pipeline_and_its_linker() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let files = closure(
             &root,
             &[

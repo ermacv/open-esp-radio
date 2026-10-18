@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn an_archive_without_its_bootstrap_elf_cannot_be_replayed() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let directory = tempfile::tempdir().unwrap();
         let application = directory.path().join("application.bin");
         std::fs::write(&application, b"application").unwrap();

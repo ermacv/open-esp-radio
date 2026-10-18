@@ -4,7 +4,7 @@ use oer_tool_data_chip_profile::Start;
 
 use super::*;
 
-const MAC: &str = "xx:xx:xx:xx:25:64";
+const MAC: &str = "02:00:00:00:25:64";
 
 /// A leased board that records what the operation asks of it, keeps the
 /// receipt its write would publish, and what the journal held when it was
@@ -65,7 +65,7 @@ impl Target for Fake<'_> {
 }
 
 fn bundle(directory: &Path) -> ImageBundle {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     // A chip whose written image starts by power-on reset.
     let profile = oer_tool_data_chip_profile::Profile::all(&root)
         .unwrap()

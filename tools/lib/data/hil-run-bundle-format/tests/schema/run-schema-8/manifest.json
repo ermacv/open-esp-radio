@@ -38,9 +38,9 @@
     ]
   },
   "cell": {
-    "cell_id": "berlin-open-radio",
+    "cell_id": "example-lab",
     "device_id": "s31-a",
-    "serial_device": "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_30:ED:A0:F3:F6:D0-if00"
+    "serial_device": "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_02:00:00:00:F6:D0-if00"
   },
   "lab_provenance_path": "lab-provenance.json",
   "firmware": [

@@ -1,9 +1,0 @@
-schema = 5
-id = "bluetooth-trouble-gatt"
-description = "Shared standalone Trouble application: discover, read/write and gracefully disconnect/reconnect three times on one Host/Controller epoch; plaintext, not secure GATT qualification"
-role = "investigation"
-repetitions = 3
-tags = ["bluetooth", "peripheral", "gatt", "trouble", "lifecycle", "air-exclusive"]
-
-[bluetooth]
-kind = "gatt"

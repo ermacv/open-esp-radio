@@ -20,7 +20,7 @@
       "oer-tool-service-hil-run-bundle",
       "oer-tool-data-hil-run-bundle-format",
       "oer-tool-data-hil-schema",
-      "oer-tool-analysis-hil-analysis",
+      "oer-tool-service-hil-analysis",
       "oer-tool-service-hil-image",
       "oer-tool-service-image",
       "oer-tool-service-image-check-interrupts",

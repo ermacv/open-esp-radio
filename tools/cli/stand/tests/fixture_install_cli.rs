@@ -20,7 +20,7 @@ fn dry_run(arguments: &[&str]) -> std::process::Output {
     command
         .args([
             "--root",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/../.."),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../.."),
             "fixture",
         ])
         .args(arguments)

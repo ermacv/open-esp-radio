@@ -1,0 +1,24 @@
+# Reviewed facts about functions of the ROM that `esp32c5-eco2.x` links the
+# images against and that the stack analysis (`tools/riscv/stack`) cannot
+# bound from their machine code alone: each one's frame (bytes below its entry
+# `sp`) and the functions it calls or jumps to.
+#
+# The analysis checks each address against the symbol of the pinned ROM ELF
+# (`esp32c5_rev100_rom.elf`, artifact `rom-rev100`) and requires a summary to
+# agree with the machine code wherever the analysis bounds the function
+# itself. `cargo verification check provenance` keeps each cited function's
+# code fingerprint, so a changed ROM fails until reviewed.
+
+# SOURCE(esp32c5): rev100 ROM `memset` (newlib's RISC-V assembly, the same
+# sequence as the ESP32-S31 rev0 ROM's) never writes `sp` and calls nothing.
+# Its two computed transfers stay inside it: `jr 0xa(a3)` enters its unrolled
+# byte-store sequence at 15 - (length & 15) stores from its end (the length is
+# below 16 on every path to it: `li t1, 15` with `bgeu t1, a2`, or `andi a2,
+# a2, 15`), and the `jalr` that keeps `ra` in `t0` enters the same sequence for
+# the 1-15 bytes before a 16-byte boundary (`andi a5, a4, 15`, nonzero) and
+# returns through `ra`.
+[[function]]
+name = "memset"
+address = 0x40038610
+frame = 0
+calls = []

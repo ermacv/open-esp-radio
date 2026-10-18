@@ -100,17 +100,19 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
 /// The fixture line `key` of the stage-two packing fixture the bootstrap's
 /// contract (`oer-firmware-platform-espressif-staged-layout`) checks too.
 fn fixture(key: &str) -> String {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    std::fs::read_to_string(root.join("platform/espressif/staged-layout/fixtures/stage-two.txt"))
-        .unwrap()
-        .lines()
-        .find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(' ')?.to_owned()))
-        .unwrap()
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    std::fs::read_to_string(
+        root.join("firmware/platform/espressif/staged-layout/fixtures/stage-two.txt"),
+    )
+    .unwrap()
+    .lines()
+    .find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(' ')?.to_owned()))
+    .unwrap()
 }
 
 #[test]
 fn every_staged_chip_packs_the_shared_fixture_as_the_bootstrap_checks_it() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let hex = fixture("unpacked");
     let unpacked = (0..hex.len())
         .step_by(2)

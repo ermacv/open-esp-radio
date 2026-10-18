@@ -35,7 +35,7 @@ fn removed_images_are_rejected_by_both_decoders() {
 /// (`full`), the staged agent, or does not, the application agent.
 fn agent(full: bool) -> oer_tool_data_chip_profile::Profile {
     oer_tool_data_chip_profile::Profile::all(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."),
     )
     .unwrap()
     .into_iter()
@@ -73,7 +73,7 @@ fn cargo_tree_lines_name_their_packages() {
 
 #[test]
 fn the_application_chip_builds_the_boot_smoke_and_system_watchdog_images() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let chip = agent(false).id;
     assert!(serves(&root, &chip, ImageClass::BootSmoke).unwrap());
     assert!(serves(&root, &chip, ImageClass::SystemWatchdog).unwrap());
@@ -82,7 +82,7 @@ fn the_application_chip_builds_the_boot_smoke_and_system_watchdog_images() {
 
 #[test]
 fn each_chip_s_spec_takes_its_agent_policy() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let placement = || PathBuf::from("/out");
     let staged_chip = agent(true);
     let application_chip = agent(false);

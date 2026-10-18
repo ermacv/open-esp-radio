@@ -119,11 +119,11 @@ mod tests {
         ] {
             std::fs::write(directory.path().join(name), "").unwrap();
         }
-        let link = by_id(directory.path(), "xx:xx:xx:xx:25:64").unwrap();
-        assert!(link.to_string_lossy().contains("xx:xx:xx:xx:25:64"));
+        let link = by_id(directory.path(), "02:00:00:00:25:64").unwrap();
+        assert!(link.to_string_lossy().contains("02:00:00:00:25:64"));
         assert_eq!(by_id(directory.path(), "AA:AA:AA:AA:AA:AA"), None);
         assert_eq!(
-            by_id(&directory.path().join("absent"), "xx:xx:xx:xx:25:64"),
+            by_id(&directory.path().join("absent"), "02:00:00:00:25:64"),
             None
         );
     }

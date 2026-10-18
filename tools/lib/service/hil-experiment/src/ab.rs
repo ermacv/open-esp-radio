@@ -30,7 +30,7 @@
 //! Every run is launched through [`crate::launch::launch_run`] as a job of
 //! its own and records no evidence. The report compares, per metric, the
 //! two arms' run means paired by measured round, after checking that every
-//! run belongs to this one experiment ([`oer_tool_analysis_hil_analysis::arms`]), and is
+//! run belongs to this one experiment ([`oer_tool_service_hil_analysis::arms`]), and is
 //! written to `ab-report.json`.
 
 use std::{
@@ -39,10 +39,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_tool_analysis_hil_analysis::{
-    Run,
-    arms::{self, MeasurementComparison, ValidatedExperiment},
-};
 use oer_tool_base_process::git::Worktree;
 use oer_tool_data_hil_run_bundle_format::experiment::Arm;
 use oer_tool_data_hil_run_bundle_format::experiment::DependencyOverride;
@@ -54,6 +50,10 @@ use oer_tool_data_hil_run_bundle_format::experiment::Variant;
 use oer_tool_data_hil_schema::dependency::Dependency;
 use oer_tool_data_hil_schema::image::FeatureDelta;
 use oer_tool_data_hil_schema::run::Outcome;
+use oer_tool_service_hil_analysis::{
+    Run,
+    arms::{self, MeasurementComparison, ValidatedExperiment},
+};
 use oer_tool_service_hil_run_bundle::RunId;
 use oer_tool_service_hil_run_bundle::RunStore;
 use serde::Serialize;

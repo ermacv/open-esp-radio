@@ -11,7 +11,7 @@ description = "HIL experiments: the one run launch, A/B comparisons and bisectio
 [dependencies]
 oer-tool-data-hil-run-bundle-format = { path = "../../data/hil-run-bundle-format" }
 oer-tool-base-durable = { path = "../../base/durable" }
-oer-tool-analysis-hil-analysis = { path = "../../analysis/hil-analysis" }
+oer-tool-service-hil-analysis = { path = "../hil-analysis" }
 oer-tool-service-stand-arbiter = { path = "../stand-arbiter" }
 oer-tool-service-hil-image = { path = "../hil-image" }
 oer-tool-service-hil-observer = { path = "../hil-observer" }

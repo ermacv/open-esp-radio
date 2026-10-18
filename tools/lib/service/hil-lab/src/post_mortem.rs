@@ -352,7 +352,7 @@ mod tests {
         };
         let access = oer_tool_service_device_lock::DeviceAccess::try_acquire_in(
             directory.path(),
-            &oer_tool_service_device_lock::DeviceId::parse("xx:xx:xx:xx:25:64").unwrap(),
+            &oer_tool_service_device_lock::DeviceId::parse("02:00:00:00:25:64").unwrap(),
             "test",
         )
         .unwrap()

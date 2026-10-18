@@ -20,7 +20,7 @@ oer-tool-base-command-tree = { path = "../../lib/base/command-tree", features = 
 oer-tool-service-stand-arbiter = { path = "../../lib/service/stand-arbiter" }
 oer-tool-service-stand-board = { path = "../../lib/service/stand-board" }
 oer-tool-service-hil-run-bundle = { path = "../../lib/service/hil-run-bundle" }
-oer-tool-analysis-hil-analysis = { path = "../../lib/analysis/hil-analysis" }
+oer-tool-service-hil-analysis = { path = "../../lib/service/hil-analysis" }
 oer-tool-service-hil-experiment = { path = "../../lib/service/hil-experiment" }
 oer-tool-service-image = { path = "../../lib/service/image" }
 oer-tool-service-image-check-interrupts = { path = "../../lib/service/image-check-interrupts" }

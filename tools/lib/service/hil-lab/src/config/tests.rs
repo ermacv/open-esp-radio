@@ -25,7 +25,7 @@ fn stand_file(edit: impl FnOnce(&mut toml::Value)) -> tempfile::NamedTempFile {
 /// A second esp32s31 board on the bottom hub.
 fn second_s31(raw: &mut toml::Value) {
     let board: toml::Value = toml::from_str(
-        "id = \"s31-b\"\nusb-serial = \"xx:xx:xx:xx:00:02\"\nchip = \"esp32s31\"\n\
+        "id = \"s31-b\"\nusb-serial = \"02:00:00:00:00:02\"\nchip = \"esp32s31\"\n\
          radios = [\"wifi-2g4\"]\nroles = [\"dut\", \"peer\"]\n\
          port = { hub = \"rsh-bottom\", port = 1 }\nreset = [\"power\"]\n",
     )
@@ -241,7 +241,7 @@ fn the_device_under_test_and_the_peer_come_from_the_pool() {
     let lab = load(file.path(), "esp32s31").unwrap();
     assert_eq!((lab.dut.id.as_str(), lab.chip()), ("s31-a", "esp32s31"));
     assert_eq!(lab.dut.serial, std::path::PathBuf::from("/dev/tty-s31-a"));
-    assert_eq!(lab.cell_id(), "berlin-open-radio");
+    assert_eq!(lab.cell_id(), "example-lab");
     assert!(
         lab.peer_resolving(&attached).is_err(),
         "a run without peer images has no peer"
@@ -252,7 +252,7 @@ fn the_device_under_test_and_the_peer_come_from_the_pool() {
         peer,
         PeerBoardConfig::new(
             "c5-a".into(),
-            "xx:xx:xx:xx:00:01".into(),
+            "02:00:00:00:00:01".into(),
             "esp32c5".into(),
             "/dev/tty-c5-a".into()
         )
@@ -301,7 +301,7 @@ fn a_run_names_its_device_under_test_when_the_pool_has_several() {
 fn a_run_names_its_peer_when_the_pool_has_several_of_its_chip() {
     let file = stand_file(|raw| {
         let board: toml::Value = toml::from_str(
-            "id = \"c5-b\"\nusb-serial = \"xx:xx:xx:xx:00:02\"\nchip = \"esp32c5\"\n\
+            "id = \"c5-b\"\nusb-serial = \"02:00:00:00:00:02\"\nchip = \"esp32c5\"\n\
              radios = [\"ieee802154\"]\nroles = [\"peer\"]\n\
              port = { hub = \"rsh-bottom\", port = 1 }\nreset = [\"power\"]\n",
         )
@@ -389,9 +389,9 @@ fn the_lab_file_sections_are_gone() {
 fn a_board_is_named_by_its_mac() {
     let file = stand_file(|_| {});
     let lab = load(file.path(), "esp32s31").unwrap();
-    assert_eq!(lab.dut.mac, "xx:xx:xx:xx:00:01");
+    assert_eq!(lab.dut.mac, "02:00:00:00:00:01");
     let peer = with_c5_peer(lab).peer_resolving(&attached).unwrap();
-    assert_eq!(peer.mac, "xx:xx:xx:xx:00:01");
+    assert_eq!(peer.mac, "02:00:00:00:00:01");
 }
 
 #[test]

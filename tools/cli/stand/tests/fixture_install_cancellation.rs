@@ -53,7 +53,7 @@ fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
     command
         .args([
             "--root",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/../.."),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../.."),
             "fixture",
             "install",
         ])

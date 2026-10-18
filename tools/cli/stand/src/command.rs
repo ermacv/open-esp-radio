@@ -733,7 +733,7 @@ mod tests {
 
     const TEST_STAND: &str = "schema = 1\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
-             [[board]]\nid = \"peer-a\"\nusb-serial = \"xx:xx:xx:xx:25:64\"\nchip = \"chip-b\"\n\
+             [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
              radios = [\"ble\"]\nroles = [\"peer\"]\nport = { hub = \"h\", port = 1 }\nreset = [\"jtag\"]\n";
 
     #[test]
@@ -777,7 +777,7 @@ mod tests {
             "--sha256",
             &"AB".repeat(32),
             "--device",
-            "xx:xx:xx:xx:25:64",
+            "02:00:00:00:25:64",
             "--",
             "idf.py",
             "flash",
@@ -805,7 +805,7 @@ mod tests {
             .record(&arbiter, "802154".into(), "test".into())
             .unwrap();
         let events = arbiter.journal().events().unwrap();
-        assert_eq!(events[0].device.as_deref(), Some("xx:xx:xx:xx:25:64"));
+        assert_eq!(events[0].device.as_deref(), Some("02:00:00:00:25:64"));
         assert_eq!(events[0].owner, "802154");
         assert!(matches!(
             &events[0].kind,
@@ -837,7 +837,7 @@ mod tests {
         assert!(lease_claims(&["chip-b".into()], None, true, &devices).is_err());
         assert_eq!(
             lease_claims(&["chip-b".into()], None, false, &devices).unwrap(),
-            [Claim::board("xx:xx:xx:xx:25:64"), Claim::shared(AIR)]
+            [Claim::board("02:00:00:00:25:64"), Claim::shared(AIR)]
         );
         assert_eq!(
             lease_claims(&[], Some(AirArg(Some(Mode::Exclusive))), false, &devices).unwrap(),
@@ -846,7 +846,7 @@ mod tests {
         assert!(lease_claims(&["s3".into()], None, false, &devices).is_err());
         assert_eq!(
             lease_claims(&["chip-b".into()], Some(AirArg(None)), false, &devices).unwrap(),
-            [Claim::board("xx:xx:xx:xx:25:64")]
+            [Claim::board("02:00:00:00:25:64")]
         );
         assert!(lease_claims(&[], Some(AirArg(None)), false, &devices).is_err());
     }
