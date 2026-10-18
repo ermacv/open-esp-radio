@@ -1,0 +1,28 @@
+[package]
+name = "blobray-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Blobray operations over captured executables inside the calling process"
+
+[dependencies]
+rustc-demangle = "=0.1.28"
+oer-riscv-program = { path = "../riscv-program" }
+oer-riscv-analysis = { path = "../riscv-analysis" }
+blobray-verification = { path = "../blobray-verification" }
+blobray-analysis = { path = "../blobray-analysis" }
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-model = { path = "../riscv-model" }
+blobray-artifacts = { path = "../blobray-artifacts" }
+
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

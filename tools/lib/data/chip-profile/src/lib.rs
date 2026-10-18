@@ -89,3 +89,8 @@ mod tests {
         assert!(root.join(&chip.flash.partitions).is_file());
     }
 }
+
+/// The whole chip profile of `firmware/platform/<chip>/chip.toml`, as the
+/// image checks read it.
+pub mod profile;
+pub use profile::*;

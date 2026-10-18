@@ -1,0 +1,19 @@
+[package]
+name = "blobray-backend-riscv"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Concrete RV32 execution over the shared decoding and lifting"
+
+[dependencies]
+blobray-domain = { path = "../blobray-domain" }
+oer-riscv-decode = { path = "../riscv-decode" }
+oer-riscv-lift = { path = "../riscv-lift" }
+oer-riscv-model = { path = "../riscv-model" }
+
+[lints]
+workspace = true
+
