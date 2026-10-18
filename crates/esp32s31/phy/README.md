@@ -352,9 +352,10 @@ A grant-protect interval is the time the request was programmed, not an observat
 
 What the runs show:
 - **RFPLL.** The correction, the branch an ordinary tick runs most often, holds the air under 1 ms.
-- **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to 11–18 ms: interrupts compete with its polled measurements.
+- **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
 - **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
 - **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
+- **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from an earlier configuration of the predecessor tracking-hold scenario; its later form ran HT40 at 60 Mbit/s, and the scenario no longer exists, so those rows cannot be re-run as recorded.
 - **Spread.** Run-to-run spread under traffic is larger than the effect of the traffic rate. The figures are observed maxima of these runs, not a guaranteed bound.
 
 Against the protocols' tolerances:
@@ -362,7 +363,7 @@ Against the protocols' tolerances:
 | Protocol | Tolerance | Against the observed hold |
 | --- | --- | --- |
 | Wi-Fi | An ordinary attempt aborts after the 250 ms publication watchdog (`TX_COMPLETION_TIMEOUT`); beacons come every ~102 ms | The whole tick is 8× below the watchdog; a tick misses at most one beacon; a frame received during it is retried by its sender |
-| Bluetooth LE | The supervision timeout is at least 100 ms | A tick misses at most a few connection events (four at a 7.5 ms interval); the link survives |
+| Bluetooth LE | The supervision timeout is at least 100 ms | A tick misses at most a few connection events (up to five at a 7.5 ms interval: a 30.1 ms window can cover events at 0, 7.5, 15, 22.5 and 30 ms); the link survives |
 | IEEE 802.15.4 | A sender's MAC retries span about 10–15 ms: 4 attempts, an 864 µs ACK wait, CSMA-CA backoff | A calibration bracket (6–18 ms) is of the same order: a frame that arrives during one can exhaust its sender's retries. The RFPLL correction (< 1 ms) cannot |
 
 The IEEE 802.15.4 row is the open risk: a calibration branch runs when a temperature reference has drifted past its threshold, not on every tick, and higher layers (OpenThread) retry above the MAC. A direct delivery measurement with a numbered peer stream is still open.
