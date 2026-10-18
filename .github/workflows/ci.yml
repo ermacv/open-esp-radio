@@ -97,3 +97,4 @@ jobs:
         run: |
           cargo fw build boot-smoke
           cargo fw build radio-root
+          cargo fw build w0
