@@ -4,7 +4,8 @@
 //! `keyword key=value …` line each, values without spaces; `cargo fw`
 //! recomputes every gate from the block's other lines (`tools/fw/src/w1.rs`
 //! holds its spec). BSSIDs are masked to their last two octets, SSIDs are
-//! printed only as their length.
+//! printed only as their length and, per BSS, whether the stored SSID is the
+//! stand's (`ssid_ok=`).
 
 use core::fmt::{self, Write};
 
@@ -287,6 +288,8 @@ pub struct Run<'a> {
     pub channel: u8,
     pub applied_channel: u8,
     pub stand: Bssid,
+    /// The stand's SSID, which its beacons must carry.
+    pub ssid: &'a [u8],
     pub window_ms: u32,
     pub cpu_hz: u32,
     pub survey: &'a Survey<BSS>,
@@ -336,13 +339,27 @@ pub struct Verdict {
     pub required: Option<u64>,
 }
 
-/// The stand's survey entry: its table index and tally.
-fn stand<'a>(run: &Run<'a>) -> Option<(usize, u16, &'a BssTally)> {
+/// The stand's survey entry: its beacon interval, whether its stored SSID
+/// is the stand's, and its tally.
+fn stand<'a>(run: &Run<'a>) -> Option<(u16, bool, &'a BssTally)> {
     run.survey
         .entries()
-        .enumerate()
-        .find(|(_, (record, _))| record.bssid == run.stand)
-        .map(|(index, (record, tally))| (index, record.beacon_interval_tu, tally))
+        .find(|(record, _)| record.bssid == run.stand)
+        .map(|(record, tally)| {
+            (
+                record.beacon_interval_tu,
+                record.ssid_bytes() == run.ssid,
+                tally,
+            )
+        })
+}
+
+/// The BSSs whose stored SSID is the stand's.
+fn ssid_matches(run: &Run<'_>) -> usize {
+    run.survey
+        .entries()
+        .filter(|(record, _)| record.ssid_bytes() == run.ssid)
+        .count()
 }
 
 /// ⌊8·window_us / (10·bi_us)⌋, 80 % of the expected beacons; `None` at a
@@ -357,18 +374,22 @@ pub fn required_beacons(window_us: u64, bi_us: u64) -> Option<u64> {
 
 /// The beacon figures and the `beacons` gate.
 fn beacons(run: &Run<'_>) -> (Verdict, Outcome) {
-    let Some((_, bi_tu, tally)) = stand(run) else {
+    let unidentified = Verdict {
+        window_us: run.window_us,
+        ..Verdict::default()
+    };
+    let Some((bi_tu, ssid_ok, tally)) = stand(run) else {
         let reason = if run.survey.counters().table_full > 0 {
             "stand-not-tracked"
         } else {
             "stand-absent"
         };
-        let verdict = Verdict {
-            window_us: run.window_us,
-            ..Verdict::default()
-        };
-        return (verdict, Outcome::Fail(reason));
+        return (unidentified, Outcome::Fail(reason));
     };
+    // The stand BSSID heard without the stand's SSID is another network.
+    if !ssid_ok {
+        return (unidentified, Outcome::Fail("stand-mismatch"));
+    }
     let beacons = u64::from(tally.beacons.saturating_sub(tally.duplicates));
     let bi_us = u64::from(bi_tu) * TU_US;
     let required = required_beacons(run.window_us, bi_us);
@@ -582,10 +603,11 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     let (verdict, gates) = gates(run);
     let hz = run.cpu_hz;
     block.line(format_args!(
-        "w1.config channel={} applied_channel={} stand={} window_ms={} cpu_hz={hz} arena={COUNT}x{BUFFER} slots={SLOTS} mask={:#010x}",
+        "w1.config channel={} applied_channel={} stand={} ssid_matches={} window_ms={} cpu_hz={hz} arena={COUNT}x{BUFFER} slots={SLOTS} mask={:#010x}",
         run.channel,
         run.applied_channel,
         Masked(run.stand),
+        ssid_matches(run),
         run.window_ms,
         MAC_COLD_RX_INTERRUPT_MASK.bits(),
     ))?;
@@ -596,7 +618,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             "other"
         };
         block.line(format_args!(
-            "w1.bss idx={index} who={who} bssid={} bi_tu={} ch={} beacons={} dup={} probe_rsp={} rssi={} no_rssi={} gaps_late={} max_gap_us={} missed={} lag_us={} ssid_len={} stamp_span_us={} handoff_span_us={}",
+            "w1.bss idx={index} who={who} bssid={} bi_tu={} ch={} beacons={} dup={} probe_rsp={} rssi={} no_rssi={} gaps_late={} max_gap_us={} missed={} lag_us={} ssid_len={} ssid_ok={} stamp_span_us={} handoff_span_us={}",
             Masked(record.bssid),
             record.beacon_interval_tu,
             record.channel,
@@ -610,6 +632,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
             tally.missed_beacons,
             Range(tally.handoff_lag_us.map(|range| (range.min, range.max))),
             record.ssid_bytes().len(),
+            u8::from(record.ssid_bytes() == run.ssid),
             OrDash(tally.stamp_span_us()),
             OrDash(tally.handoff_span_us()),
         ))?;

@@ -11,7 +11,6 @@ mod pack;
 mod placement;
 mod port;
 mod power;
-mod stand;
 mod w1;
 
 use std::{
@@ -21,7 +20,8 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use clap::{Args, CommandFactory as _, Parser, Subcommand};
+use clap::{CommandFactory as _, Parser, Subcommand};
+use oer_lab::{router, ssh, stand};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -40,70 +40,13 @@ struct Cli {
     command: Command,
 }
 
-/// Image w1's parameters, which no other image takes.
-#[derive(Args, Clone, Copy)]
-struct W1Args {
-    /// Image w1: the stand AP's BSSID it must hear, or OER_W1_EXPECT_BSSID.
-    /// Only its last two octets are ever shown.
-    #[arg(long, value_name = "MAC", value_parser = BssidParser)]
-    expect_bssid: Option<w1::Bssid>,
-    /// Image w1: the 2.4 GHz channel 1 to 13 it listens on, or
-    /// OER_W1_CHANNEL.
-    #[arg(long, value_parser = w1::parse_channel)]
-    channel: Option<u8>,
-}
-
-impl W1Args {
-    /// The parameters of `image` from these flags or the environment.
-    fn params(self, image: &str, required: bool) -> Result<Option<w1::Config>> {
-        let env =
-            |name: &str| std::env::var_os(name).map(|value| value.to_string_lossy().into_owned());
-        Ok(w1::params(
-            image,
-            self.expect_bssid,
-            self.channel,
-            &env,
-            required,
-        )?)
-    }
-}
-
-/// [`w1::parse_bssid`] for clap, whose own error would repeat the value.
-#[derive(Clone, Copy)]
-struct BssidParser;
-
-impl clap::builder::TypedValueParser for BssidParser {
-    type Value = w1::Bssid;
-
-    fn parse_ref(
-        &self,
-        command: &clap::Command,
-        argument: Option<&clap::Arg>,
-        value: &std::ffi::OsStr,
-    ) -> std::result::Result<w1::Bssid, clap::Error> {
-        let name = argument.map_or_else(|| "--expect-bssid".to_owned(), ToString::to_string);
-        value
-            .to_str()
-            .ok_or_else(|| "the BSSID is no text".to_owned())
-            .and_then(w1::parse_bssid)
-            .map_err(|reason| {
-                clap::Error::raw(
-                    clap::error::ErrorKind::ValueValidation,
-                    format!("invalid value for '{name}': {reason}\n"),
-                )
-                .with_cmd(command)
-            })
-    }
-}
-
 #[derive(Subcommand)]
 enum Command {
     /// Build an image of firmware/apps into target/fw/<image>/.
-    Build {
-        image: String,
-        #[command(flatten)]
-        w1: W1Args,
-    },
+    ///
+    /// Image w1 is built unconfigured here; `run w1` builds it for the
+    /// stand.
+    Build { image: String },
     /// Write a built image into a board's flash and reset it.
     Flash {
         image: String,
@@ -113,7 +56,8 @@ enum Command {
     },
     /// Build and flash an image, then read the board's console until its
     /// `OER-RESULT:` line: exit 0 on pass, 1 on fail, 2 on a timeout and,
-    /// for w1, 3 on a missing, malformed or contradicted report.
+    /// for w1, 3 on a missing, malformed or contradicted report. For w1 the
+    /// stand router is first brought to the W1 profile over SSH.
     Run {
         image: String,
         #[arg(long)]
@@ -121,14 +65,15 @@ enum Command {
         /// How long to wait for the result, such as `30s` or `2m`.
         #[arg(long, default_value = "30s", value_parser = parse_duration)]
         timeout: Duration,
-        #[command(flatten)]
-        w1: W1Args,
     },
     /// Print a board's console without resetting it.
     Monitor {
         #[arg(long)]
         board: String,
     },
+    /// Bring the stand router to W1's profile and verify it, without a
+    /// board; print the stand AP's masked BSSID and channel.
+    Router,
     /// List the attached boards and their stand ids.
     Boards,
     /// Switch a board's hub port off and on again.
@@ -287,21 +232,57 @@ fn timestamp(time: SystemTime) -> String {
     )
 }
 
-fn run(
-    root: &Path,
-    image: &str,
-    selector: &str,
-    timeout: Duration,
-    w1: Option<w1::Config>,
-) -> Result<ExitCode> {
-    let (_stand, board) = board(selector)?;
-    if let Some(config) = &w1 {
-        eprintln!(
-            "fw: {image} expects {} on channel {}",
-            config.expect.masked(),
-            config.channel
-        );
+/// Image w1's stand: `remote` brings the stand router to the W1 profile and
+/// reads its AP; the configuration and the lines that may be shown.
+fn w1_stand(
+    router: &stand::Router<'_>,
+    remote: &mut dyn router::Remote,
+) -> Result<(w1::Config, Vec<String>)> {
+    let profile = router::Profile::new(
+        router.radio,
+        router.ap_section,
+        router.wireless_interface.expose(),
+        router.channel,
+        router.ssid.expose(),
+    )?;
+    let mut shown = vec![format!(
+        "w1 brings the stand router to its profile: {}",
+        profile.describe()
+    )];
+    let applied = router::apply(remote, &profile)?;
+    shown.push(format!("w1 {}", applied.describe()));
+    let config = w1::Config {
+        channel: applied.channel,
+        bssid: applied.bssid,
+        ssid: w1::Ssid::new(router.ssid.expose().as_bytes())?,
+    };
+    Ok((config, shown))
+}
+
+/// The stand router of `stand`, locked and brought to W1's profile; the
+/// lock and image w1's configuration.
+fn w1_router(stand: &stand::Stand) -> Result<(oer_lab::lock::RouterLock, w1::Config)> {
+    let router = stand.router()?;
+    let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
+    let lock = oer_lab::lock::router(&lock::directory()?, router.ssh_target.expose())?;
+    let (config, shown) = w1_stand(&router, &mut ssh)?;
+    for line in shown {
+        eprintln!("fw: {line}");
     }
+    Ok((lock, config))
+}
+
+fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
+    let (stand, board) = board(selector)?;
+    // The router lock is held to the end of the run.
+    let (_router, w1) = if image == w1::IMAGE {
+        // The router is changed only for a board that is there.
+        tty(&board)?;
+        let (lock, config) = w1_router(&stand)?;
+        (Some(lock), Some(config))
+    } else {
+        (None, None)
+    };
     image::build(root, image, w1.as_ref())?;
     let _lock = lock::acquire(&board.mac)?;
     write_image(root, image, &board, flash::After::StayInStub)?;
@@ -468,16 +449,8 @@ fn main() -> ExitCode {
     let result = (|| -> Result<ExitCode> {
         let root = root()?;
         match cli.command {
-            Command::Build { image, w1 } => {
-                let params = w1.params(&image, false)?;
-                if let Some(config) = &params {
-                    eprintln!(
-                        "fw: {image} expects {} on channel {}",
-                        config.expect.masked(),
-                        config.channel
-                    );
-                }
-                let (manifest, _) = image::build(&root, &image, params.as_ref())?;
+            Command::Build { image } => {
+                let (manifest, _) = image::build(&root, &image, None)?;
                 for segment in &manifest.segments {
                     eprintln!(
                         "fw:   {:<16} {:#08x} {}",
@@ -498,12 +471,16 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
-                w1,
-            } => {
-                let params = w1.params(&image, true)?;
-                return run(&root, &image, &board, timeout, params);
-            }
+            } => return run(&root, &image, &board, timeout),
             Command::Monitor { board } => monitor(&board)?,
+            Command::Router => {
+                let stand = stand::Stand::load(&stand::path()?)?;
+                let (_lock, config) = w1_router(&stand)?;
+                println!(
+                    "router ready: the stand AP {} on channel {}",
+                    config.bssid, config.channel
+                );
+            }
             Command::Boards => list_boards()?,
             Command::PowerCycle { board } => power_cycle(&board)?,
         }
@@ -534,50 +511,167 @@ mod tests {
         Cli::try_parse_from(line.split(' '))
     }
 
-    fn run_params(line: &str) -> Result<Option<w1::Config>> {
-        match parse(line)?.command {
-            Command::Run { image, w1, .. } => w1.params(&image, true),
-            Command::Build { image, w1 } => w1.params(&image, false),
-            _ => Err("no build or run".into()),
+    #[test]
+    fn no_image_takes_stand_flags() {
+        for line in [
+            "fw build w1 --expect-bssid 02:00:00:00:F6:D0",
+            "fw build w1 --channel 6",
+            "fw run w1 --board b1 --channel 6",
+            "fw run w1 --board b1 --expect-bssid 02:00:00:00:F6:D0",
+        ] {
+            assert!(parse(line).is_err(), "{line}");
         }
+        assert!(matches!(
+            parse("fw build w1").unwrap().command,
+            Command::Build { .. }
+        ));
+        assert!(matches!(
+            parse("fw run w1 --board b1 --timeout 90s").unwrap().command,
+            Command::Run { .. }
+        ));
+        assert!(matches!(
+            parse("fw router").unwrap().command,
+            Command::Router
+        ));
+        assert!(parse("fw router --channel 6").is_err());
+    }
+
+    const STAND: &str = r#"
+schema = 1
+
+[station]
+ssid = "Made Up Lab Net"
+passphrase = "made-up-passphrase"
+
+[station_fixture]
+kind = "open-wrt"
+ssh_target = "made-up-router.lab"
+wireless_interface = "phy7-ap3"
+radio = "radio9"
+ap_section = "lab_ap"
+channel = 6
+
+[access_point]
+ssid = "made-up-ap-ssid"
+passphrase = "made-up-ap-passphrase"
+"#;
+
+    const SECRETS: [&str; 9] = [
+        "Made Up Lab Net",
+        "made-up-passphrase",
+        "made-up-router",
+        "phy7-ap3",
+        "made-up-ap",
+        "02:5E:C0:DE",
+        "02:5e:c0:de",
+        "5E:C0",
+        "4d61646520",
+    ];
+
+    /// A router answering every command as a W1-ready OpenWrt would, its
+    /// `iw` channel `channel`; or failing every command.
+    struct Router {
+        channel: u8,
+        fail: bool,
+    }
+
+    impl router::Remote for Router {
+        fn run(&mut self, script: &str) -> router::Result<String> {
+            if self.fail {
+                return Err("ssh could not reach the router or was refused (exit 255)".to_owned());
+            }
+            Ok(
+                if script.starts_with("changes=") || script.starts_with("uci set") {
+                    String::new()
+                } else if script.starts_with("config=") {
+                    // What the router's allowlist filter passes.
+                    "wireless.radio9=wifi-device\nwireless.radio9.band='2g'\nwireless.radio9.channel='6'\n\
+                 wireless.radio9.htmode='HT20'\nwireless.radio9.beacon_int='100'\n\
+                 wireless.radio9.disabled='0'\nwireless.lab_ap=wifi-iface\n\
+                 wireless.lab_ap.device='radio9'\nwireless.lab_ap.mode='ap'\n\
+                 wireless.lab_ap.ssid='Made Up Lab Net'\nwireless.lab_ap.disabled='0'\n\
+                 wireless.lab_ap.hidden='0'\n"
+                    .to_owned()
+                } else if script.starts_with("phy=") {
+                    "\t\t\t* 2437.0 MHz [6] (20.0 dBm)\n\t\t\t* 2462.0 MHz [11] (20.0 dBm)\n"
+                        .to_owned()
+                } else {
+                    format!(
+                        "\taddr 02:5e:c0:de:f6:d0\n\tssid Made Up Lab Net\n\ttype AP\n\
+                     \tchannel {} ({} MHz), width: 20 MHz, center1: {} MHz\n",
+                        self.channel,
+                        2407 + 5 * u32::from(self.channel),
+                        2407 + 5 * u32::from(self.channel)
+                    )
+                },
+            )
+        }
+        fn pause(&mut self, _: Duration) {}
     }
 
     #[test]
-    fn w1_flags_are_validated() {
-        let config =
-            run_params("fw run w1 --board b1 --expect-bssid 02:00:00:00:f6:d0 --channel 6")
-                .unwrap()
-                .unwrap();
+    fn the_stand_identity_comes_from_the_router_and_nothing_secret_is_shown() {
+        let stand = stand::Stand::parse(STAND).unwrap();
+        let router = stand.router().unwrap();
+        let (config, lines) = w1_stand(
+            &router,
+            &mut Router {
+                channel: 6,
+                fail: false,
+            },
+        )
+        .unwrap();
         assert_eq!(config.channel, 6);
-        assert_eq!(config.expect.masked(), "xx:xx:xx:xx:F6:D0");
-        for channel in ["0", "14"] {
-            let line = format!(
-                "fw run w1 --board b1 --expect-bssid 02:00:00:00:F6:D0 --channel {channel}"
-            );
-            assert!(parse(&line).is_err(), "{channel}");
+        assert_eq!(config.bssid.masked(), "xx:xx:xx:xx:F6:D0");
+        // The runtime build gets the whole identity.
+        assert_eq!(
+            image::runtime_env("w1", Some(&config)),
+            [
+                (w1::ENV_CHANNEL, Some("6".to_owned())),
+                (w1::ENV_BSSID, Some("02:5E:C0:DE:F6:D0".to_owned())),
+                (
+                    w1::ENV_SSID,
+                    Some("4d616465205570204c6162204e6574".to_owned())
+                ),
+            ]
+        );
+        // An AP on another channel than the profile's is refused; so is an
+        // unreachable router, without its name.
+        let wrong = w1_stand(
+            &router,
+            &mut Router {
+                channel: 11,
+                fail: false,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            wrong.to_string().contains("channel 11, the profile's is 6"),
+            "{wrong}"
+        );
+        let unreachable = w1_stand(
+            &router,
+            &mut Router {
+                channel: 6,
+                fail: true,
+            },
+        )
+        .unwrap_err();
+        let mut shown = lines;
+        shown.extend([
+            format!("{stand:?}"),
+            format!("{router:?}"),
+            format!("{config:?}"),
+            wrong.to_string(),
+            unreachable.to_string(),
+            format!("{:?}", ssh::Ssh::new(router.ssh_target.expose()).unwrap()),
+            router::plan().join("\n"),
+        ]);
+        let shown = shown.join("\n");
+        for secret in SECRETS {
+            assert!(!shown.contains(secret), "{secret}: {shown}");
         }
-        // clap refuses a bad BSSID without repeating it.
-        for bssid in ["03:AB:CD:EF:F6:D0", "02:AB:CD:EF:F6", "00:00:00:00:00:00"] {
-            let error = parse(&format!("fw build w1 --expect-bssid {bssid} --channel 6"))
-                .err()
-                .unwrap()
-                .to_string();
-            assert!(error.contains("--expect-bssid"), "{error}");
-            assert!(
-                !error.contains("AB:CD") && !error.contains(bssid),
-                "{error}"
-            );
-        }
-        // Another image refuses them; w1's run needs both, its build both or
-        // neither.
-        assert!(run_params("fw run w0 --board b1 --channel 6").is_err());
-        assert!(run_params("fw build boot-smoke --expect-bssid 02:00:00:00:F6:D0").is_err());
-        assert!(run_params("fw run w0 --board b1").unwrap().is_none());
-        if std::env::var_os(w1::ENV_BSSID).is_none() && std::env::var_os(w1::ENV_CHANNEL).is_none()
-        {
-            assert!(run_params("fw run w1 --board b1 --channel 6").is_err());
-            assert!(run_params("fw build w1").unwrap().is_none());
-        }
+        assert!(shown.contains("xx:xx:xx:xx:F6:D0"), "{shown}");
     }
 
     #[test]

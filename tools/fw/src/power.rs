@@ -11,7 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Result, boards::Attached, stand};
+use oer_lab::stand;
+
+use crate::{Result, boards::Attached};
 
 /// How long the port stays off.
 const OFF: Duration = Duration::from_secs(2);
@@ -114,7 +116,7 @@ usb2 = "3-8.3.4"
 switchable = [1, 2, 3, 4]
 [[board]]
 id = "s31-a"
-usb-serial = "30:ED:A0:F3:F6:D0"
+usb-serial = "02:00:00:00:01:D0"
 chip = "esp32s31"
 port = { hub = "mid", port = 3 }
 "#;
@@ -122,7 +124,7 @@ port = { hub = "mid", port = 3 }
     fn attached(location: &str) -> Attached {
         Attached {
             location: location.to_owned(),
-            mac: "30:ED:A0:F3:F6:D0".to_owned(),
+            mac: "02:00:00:00:01:D0".to_owned(),
             tty: None,
         }
     }

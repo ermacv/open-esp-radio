@@ -113,14 +113,14 @@ mod tests {
             root.path(),
             "3-8.3.4.4",
             (VENDOR, PRODUCT),
-            "30:ED:A0:F3:F6:D0",
+            "02:00:00:00:01:D0",
             Some("ttyACM1"),
         );
         device(
             root.path(),
             "3-8.3.2",
             (VENDOR, PRODUCT),
-            "38:44:BE:AA:25:64",
+            "02:00:00:00:02:64",
             None,
         );
         device(root.path(), "3-8.3", ("0bda", "5411"), "hub", None);
@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(boards.len(), 2);
         assert_eq!(boards[0].location, "3-8.3.2");
         assert_eq!(boards[0].tty, None);
-        assert_eq!(boards[1].mac, "30:ED:A0:F3:F6:D0");
+        assert_eq!(boards[1].mac, "02:00:00:00:01:D0");
         assert_eq!(boards[1].tty.as_deref(), Some(Path::new("/dev/ttyACM1")));
         assert_eq!(boards[1].hub_port(), Some(("3-8.3.4", 4)));
     }

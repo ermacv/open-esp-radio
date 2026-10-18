@@ -5,11 +5,10 @@ flash and runs them to a verdict.
 
 ```console
 cargo fw build <image>
-cargo fw build w1 [--expect-bssid <MAC> --channel <1..13>]
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout 30s]
-cargo fw run w1 --board <id|MAC> --expect-bssid <MAC> --channel <1..13> [--timeout 90s]
 cargo fw monitor --board <id|MAC>
+cargo fw router
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>
 ```
@@ -28,16 +27,13 @@ resources, the partition table, the QIO application in `ota_0` and the OTA
 selection of `ota_0`. Everything lands in `target/fw/<image>/`, listed by
 `segments.toml` in write order.
 
-Image `w1` takes the stand AP's BSSID and its channel: `--expect-bssid`
-(six hex octets separated by `:` or `-`, any case; a multicast or zero
-address is refused) and `--channel` (1 to 13), or, when a flag is absent, the
-variables `OER_W1_EXPECT_BSSID` and `OER_W1_CHANNEL`; a flag and its variable
-that disagree are refused. `run w1` needs both, `build w1` both or neither
-(neither builds the unconfigured image, which fails at once). No other image
-takes them. They reach only the runtime build of `w1`, as `OER_W1_CHANNEL`
-and `OER_W1_EXPECT_BSSID`; every other cargo build runs with both removed.
-The BSSID is never shown whole: messages, the lock file's command line and
-`Debug` show `xx:xx:xx:xx:F6:D0`, and clap's errors do not repeat it.
+`build w1` builds the unconfigured image (it prints
+`OER-RESULT: fail w1 unconfigured` when run; CI builds it so). Only
+`run w1` builds it for the stand, from the stand router (below): the BSSID
+and channel of the router's AP and the stand's SSID reach only the runtime
+build of `w1`, as `OER_W1_CHANNEL`, `OER_W1_BSSID` and `OER_W1_SSID_HEX`;
+every other cargo build runs with all three removed. No image takes a
+flag for them.
 
 The build warns, and never fails, when the runtime places an interrupt table
 handler, the panic entry or hook, or a `.dma.*` or `.critical.*` section
@@ -46,8 +42,10 @@ outside internal SRAM (`placement.txt`).
 ## Boards
 
 Boards and hubs come from the owner's stand file,
-`~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`); only `schema`,
-`[[hub]]` and `[[board]]` are read. Attached boards are found in sysfs as
+`~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
+which `oer-lab` reads ([tools/lab/README.md](../lab/README.md): its
+schema, what each command reads of it, which values are secret). Attached
+boards are found in sysfs as
 Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
 chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
 listed.
@@ -63,13 +61,17 @@ its holder when it refuses.
   opens the console and resets the chip into the image with an RTS pulse, then
   reads until `OER-RESULT: pass …` (exit 0), `OER-RESULT: fail …` (1) or the
   timeout (2). The console goes to `target/fw/runs/<time>-<image>/log.txt`.
-- `run w1` also reads the report block the image prints after its exit,
+- `run w1` first brings the stand router to the W1 profile and verifies it
+  (below), then builds the image for its AP. It also reads the report block the image prints after its exit,
   `OER-W1-BEGIN v=1` to `OER-W1-END lines=<n>` (one `keyword key=value …`
   line each, every value validated), and recomputes each gate from the
-  block's other lines: `beacons` (the stand's beacons less duplicates
-  against ⌊8·window_us / (10·bi_tu·1024)⌋; `stand-absent`,
-  `stand-not-tracked`, `zero-interval` or `beacons`), `channel` (the applied
-  channel is the configured one and `--channel`), `exit` (`StopRequested`,
+  block's other lines: `beacons` (the stand is the `w1.bss who=stand` line,
+  the router AP's BSSID; it must carry the stand's SSID, `ssid_ok=1`; its
+  beacons less duplicates against ⌊8·window_us / (10·bi_tu·1024)⌋;
+  `stand-absent`, `stand-not-tracked`, `stand-mismatch`, `zero-interval` or
+  `beacons`; other BSSIDs carrying the SSID never stand in for an absent
+  stand), `channel` (the applied channel is the configured one and the
+  router AP's), `exit` (`StopRequested`,
   `Halted`), `walker_restart` (from `w1.hold`: a hold short of every
   staging slot is unexercised, `pool-not-exhausted`; units received while
   every lease was held fail it, `received-while-held`, as does
@@ -80,8 +82,10 @@ its holder when it refuses.
   every `w1.timer` and `w1.wake` line; `woke-early`). It compares them with the
   image's `w1.gate` lines, `w1.verdict` and the `OER-RESULT:` line, whose
   fail reasons each start with a gate's name (`walker-restart not
-  exercised`), and the block's `channel=` and masked `stand=` with the flags,
-  which catches a stale build. Exit 0 when both pass, 1 when both fail, 2 on
+  exercised`), the block's `channel=` and masked `stand=` with the router
+  AP's channel and masked BSSID, which catches a stale build, and
+  `w1.config ssid_matches=` (report-only: how many BSSIDs carry the stand's
+  SSID) with the `w1.bss` lines that carry `ssid_ok=1`. Exit 0 when both pass, 1 when both fail, 2 on
   the timeout and 3 when the block is missing or malformed or the image and
   the host disagree on anything. A summary follows: the gates as both see
   them and the beacon gaps that overlap a PHY tracking tick (the stand's
@@ -103,3 +107,14 @@ its holder when it refuses.
   when the stand file lists the port as switchable and not protected and the
   board's USB location in sysfs is that very port; it then waits for the
   board to return.
+
+## The stand router
+
+Before every `run w1`, and on `cargo fw router` (without a board), the
+stand's OpenWrt lab router is brought to W1's profile and verified by
+`oer-lab` ([tools/lab/README.md](../lab/README.md) lists every script it
+runs there); the profile stays, the earlier settings are not restored. Both
+hold the router's lock, `$XDG_RUNTIME_DIR/oer-fw/router-<hash>.lock`, for
+the whole run. Only the masked BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers
+and UCI section names are printed; the SSID, the SSH target and the
+interface never are, in no message, lock file or `log.txt`.

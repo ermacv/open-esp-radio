@@ -1,0 +1,28 @@
+[package]
+name = "oer-lab"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The stand: its file, its OpenWrt lab router and the SSH that reaches it"
+
+[dependencies]
+oer-process = { path = "../lib/process" }
+serde = { version = "=1.0.229", features = ["derive"] }
+sha2 = "=0.10.9"
+toml = "=1.1.4"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "tool"
+platform = "host"
+host-layer = "foundation"
+host-app = "foundation"
+host-boundary = "library"

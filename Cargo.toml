@@ -50,6 +50,7 @@ members = [
     "crates/espressif/modem-clock",
     "crates/base/deadline",
     "tools/fw",
+    "tools/lab",
     "tools/lib/command-tree",
     "tools/lib/durable",
     "tools/lib/process",

@@ -80,6 +80,17 @@ tree is a selection of a predecessor repository, without its history.
 - **No predecessor references.** The predecessor repository is private; this
   repository does not link to it or name it.
 
+## 2026-10-18: the stand
+
+- **Stand core.** The stand core of the predecessor's hardware-in-the-loop
+  setup (the OpenWrt fixtures, the stand configuration, network and
+  traffic) moves to `tools/lab`; its runner, on-board agent, evidence and
+  archive do not. The stand router is a lab router: the tool brings it to
+  the slice's profile and does not restore it.
+- **W1 stand identity.** W1 identifies the stand's AP by the BSSID of the
+  stand router's AP interface, read after the profile is applied, and
+  checks the SSID from `[station]`.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
