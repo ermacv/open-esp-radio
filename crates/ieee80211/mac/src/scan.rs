@@ -410,6 +410,12 @@ impl<const N: usize> ScanTable<N> {
         self.records.iter().flatten()
     }
 
+    /// The observation at `index`, as a [`ScanObservation`] names it;
+    /// `None` for a vacant cell or an index past the table.
+    pub fn get(&self, index: usize) -> Option<&ScanRecord> {
+        self.records.get(index)?.as_ref()
+    }
+
     pub fn summary(&self) -> ScanSummary {
         ScanSummary {
             records: self.length,

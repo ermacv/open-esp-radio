@@ -51,6 +51,31 @@ fn vacant_scan_slots_never_appear_as_observations() {
 }
 
 #[test]
+fn get_returns_the_record_an_observation_names() {
+    let mut table = ScanTable::<2>::new();
+    let mut frame = [0_u8; 42];
+    frame[0] = 0x80;
+    frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+    frame[36..42].copy_from_slice(&[0, 4, b't', b'e', b's', b't']);
+    assert!(table.get(0).is_none());
+    let ScanObservation::Inserted { index } = table.observe_management(&frame, 6, -40, None) else {
+        panic!("the first observation is inserted");
+    };
+    frame[21] = 2;
+    let ScanObservation::Inserted { index: second } =
+        table.observe_management(&frame, 6, -50, None)
+    else {
+        panic!("a second BSSID is inserted");
+    };
+    assert_eq!(table.get(index).unwrap().bssid.get(), [2, 0, 0, 0, 0, 1]);
+    assert_eq!(table.get(second).unwrap().rssi, -50);
+    assert!(table.get(2).is_none());
+    assert!(table.get(usize::MAX).is_none());
+    table.clear();
+    assert!(table.get(index).is_none());
+}
+
+#[test]
 fn a_group_bssid_cannot_enter_the_scan_table() {
     let mut frame = [0_u8; 42];
     frame[0] = 0x80;
