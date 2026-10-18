@@ -1,0 +1,179 @@
+//! Hardware ownership, capabilities, and affine lifecycle transitions.
+
+use super::*;
+
+/// Physical owners used by one IEEE 802.15.4 task register set.
+///
+/// The MAC, its interrupt route and its ETM channels are the whole IEEE
+/// 802.15.4 authority. Its clocks and resets belong to the modem clock owner;
+/// the common PHY it depends on is not modelled by this crate yet.
+pub(crate) struct Ieee802154TaskPeripheralOwners {
+    pub(crate) ieee802154_mac: crate::ieee802154::ownership::TaskRegisters,
+    pub(crate) ieee802154_interrupt_route: svd::Ieee802154InterruptRoute,
+    pub(crate) etm: crate::modem::etm::Ieee802154EtmChannels,
+}
+
+/// Opaque IEEE 802.15.4 MAC and interrupt-route register partition.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct Ieee802154Partition {
+    peripherals: svd::peripheral_ownership::Ieee802154Peripherals,
+    etm: crate::modem::etm::Ieee802154EtmChannels,
+}
+
+/// Opaque Wi-Fi MAC register partition.
+///
+/// No driver owns it yet: it only reserves the reviewed Wi-Fi MAC register
+/// views so that no other partition can reach them.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct WifiMacPartition(#[allow(dead_code)] svd::peripheral_ownership::WifiMacPeripherals);
+
+/// Opaque Wi-Fi MAC and power interrupt bank partition.
+///
+/// No driver owns it yet: it only reserves the two interrupt banks.
+#[must_use = "dropping a radio partition permanently loses its register authority"]
+pub struct WifiInterruptPartition(
+    #[allow(dead_code)] svd::peripheral_ownership::WifiInterruptPeripherals,
+);
+
+/// Every reviewed ESP32-C5 radio register partition.
+///
+/// This is the sole production acquisition point.
+///
+/// ```compile_fail
+/// use oer_esp32c5_pac::RadioPartitions;
+///
+/// let partitions = RadioPartitions::take().unwrap();
+/// let _first = partitions.i;
+/// let _second = partitions.i;
+/// ```
+#[must_use = "dropping the radio partitions permanently loses the unique hardware capability"]
+pub struct RadioPartitions {
+    pub ieee802154: Ieee802154Partition,
+    pub modem_clock: crate::modem::clock::ModemClockRegisters,
+    pub phy_i2c: crate::phy::i2c::PhyI2cRegisters,
+    pub phy_radio: crate::phy::radio::PhyRadioRegisters,
+    pub wifi_mac: WifiMacPartition,
+    pub wifi_interrupts: WifiInterruptPartition,
+}
+
+impl RadioPartitions {
+    /// Acquire the generated radio singleton once.
+    pub fn take() -> Option<Self> {
+        svd::Peripherals::take().map(Self::from_peripherals)
+    }
+
+    /// Bind the generated singleton to the opaque partition owners.
+    pub(crate) fn from_peripherals(peripherals: svd::Peripherals) -> Self {
+        let svd::peripheral_ownership::PeripheralPartitions {
+            ieee802154,
+            modem_etm,
+            modem_clock,
+            phy_i2c,
+            phy_radio,
+            wifi_mac,
+            wifi_interrupts,
+        } = svd::peripheral_ownership::partition(peripherals);
+        Self {
+            ieee802154: Ieee802154Partition {
+                peripherals: ieee802154,
+                etm: crate::modem::etm::ieee802154_channels(modem_etm),
+            },
+            modem_clock: crate::modem::clock::ModemClockRegisters::new(modem_clock),
+            phy_i2c: crate::phy::i2c::PhyI2cRegisters::new(phy_i2c),
+            phy_radio: crate::phy::radio::PhyRadioRegisters::new(phy_radio),
+            wifi_mac: WifiMacPartition(wifi_mac),
+            wifi_interrupts: WifiInterruptPartition(wifi_interrupts),
+        }
+    }
+
+    /// Construct every partition inside one isolated validation image.
+    #[cfg(any(test, feature = "validation-probes"))]
+    #[doc(hidden)]
+    #[allow(
+        unsafe_code,
+        reason = "a host-test root is fictitious; each test needs its own fresh singleton"
+    )]
+    pub fn for_validation() -> Self {
+        // SAFETY: only host tests and validation probes build this root. In
+        // a host test it is fictitious: no real MMIO exists behind it, so the
+        // singleton need not be unique; a probe image takes it once.
+        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
+    }
+}
+
+#[inline]
+pub(crate) fn device_fence() {
+    svd::device_access::fence();
+}
+
+/// Ordinary task-side owner of the IEEE 802.15.4 MAC partition.
+#[must_use = "the IEEE 802.15.4 task owner must be reunited before release"]
+pub struct Ieee802154TaskRegisters {
+    pub(crate) peripherals: Ieee802154TaskPeripheralOwners,
+}
+
+impl Ieee802154TaskRegisters {
+    /// Assemble the task register set and split the MAC block into its
+    /// disjoint task and interrupt owners. This performs no MMIO.
+    pub fn new(partition: Ieee802154Partition) -> (Self, Ieee802154InterruptSetup) {
+        let Ieee802154Partition {
+            peripherals:
+                svd::peripheral_ownership::Ieee802154Peripherals {
+                    ieee802154_mac,
+                    ieee802154_interrupt_route,
+                },
+            etm,
+        } = partition;
+        let (task_mac, interrupt_mac) = crate::ieee802154::ownership::split(ieee802154_mac);
+        (
+            Self {
+                peripherals: Ieee802154TaskPeripheralOwners {
+                    ieee802154_mac: task_mac,
+                    ieee802154_interrupt_route,
+                    etm,
+                },
+            },
+            Ieee802154InterruptSetup {
+                registers: interrupt_mac,
+            },
+        )
+    }
+
+    /// Reunite the MAC block with its inactive interrupt owner and return the
+    /// partition. This performs no MMIO.
+    pub fn into_partition(self, interrupts: Ieee802154InterruptSetup) -> Ieee802154Partition {
+        let Ieee802154TaskPeripheralOwners {
+            ieee802154_mac: task_mac,
+            ieee802154_interrupt_route,
+            etm,
+        } = self.peripherals;
+        let ieee802154_mac = crate::ieee802154::ownership::reunite(task_mac, interrupts.registers);
+        Ieee802154Partition {
+            peripherals: svd::peripheral_ownership::Ieee802154Peripherals {
+                ieee802154_mac,
+                ieee802154_interrupt_route,
+            },
+            etm,
+        }
+    }
+
+    /// Order descriptor memory and MMIO at a hardware ownership boundary.
+    pub fn order_device_accesses(&mut self) {
+        device_fence();
+    }
+}
+
+/// Task-side setup token before one IEEE 802.15.4 hard-IRQ epoch.
+#[must_use = "the IEEE 802.15.4 interrupt setup must remain paired with its task owner"]
+pub struct Ieee802154InterruptSetup {
+    pub(crate) registers: crate::ieee802154::ownership::InterruptRegisters,
+}
+
+/// Disjoint IEEE 802.15.4 event/status capability for the hard ISR.
+#[must_use = "the IEEE 802.15.4 interrupt owner must be deactivated and reunited"]
+pub struct Ieee802154InterruptRegisters {
+    pub(crate) registers: crate::ieee802154::ownership::InterruptRegisters,
+}
+
+#[cfg(test)]
+pub(crate) mod test_support;

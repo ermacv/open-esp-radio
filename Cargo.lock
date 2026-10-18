@@ -1256,6 +1256,7 @@ dependencies = [
  "esp-metadata-generated",
  "esp-rom-sys",
  "esp-sync",
+ "esp32c5",
  "esp32s31",
 ]
 
@@ -2169,6 +2170,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-adapters-esp-hal-soc-esp32c5"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "esp-hal",
+ "oer-espressif-soc-deadline",
+]
+
+[[package]]
 name = "oer-base-deadline"
 version = "0.1.0"
 
@@ -2244,6 +2254,34 @@ version = "0.1.0"
 dependencies = [
  "oer-base-time",
  "oer-radio-coex",
+]
+
+[[package]]
+name = "oer-esp32c5-hal"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32c5-pac",
+ "oer-espressif-analog",
+ "oer-espressif-coex",
+ "oer-espressif-ieee802154-engine",
+ "oer-espressif-modem-clock",
+]
+
+[[package]]
+name = "oer-esp32c5-pac"
+version = "0.1.0"
+dependencies = [
+ "oer-esp32c5-pac-raw",
+ "oer-espressif-ieee802154-pac",
+]
+
+[[package]]
+name = "oer-esp32c5-pac-raw"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "oer-espressif-ieee80211-pac-raw",
+ "vcell",
 ]
 
 [[package]]
@@ -2441,6 +2479,10 @@ name = "oer-espressif-modem-clock"
 version = "0.1.0"
 
 [[package]]
+name = "oer-espressif-soc-deadline"
+version = "0.1.0"
+
+[[package]]
 name = "oer-exec-esp-hal-irq"
 version = "0.1.0"
 dependencies = [
@@ -2561,6 +2603,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-firmware-hil-esp32c5-agent"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-sync 0.8.0",
+ "embassy-time",
+ "esp-hal",
+ "oer-adapters-esp-hal-soc-esp32c5",
+ "oer-exec-esp-hal-irq",
+ "oer-exec-executor",
+ "oer-firmware-hil-agent",
+ "oer-firmware-platform-esp32c5-board",
+ "oer-firmware-platform-esp32c5-layout",
+ "oer-firmware-platform-espressif-staged-runtime",
+ "oer-tool-data-hil-image-keys",
+ "oer-tool-data-hil-protocol",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-firmware-hil-esp32s31-agent"
 version = "0.1.0"
 dependencies = [
@@ -2581,6 +2645,33 @@ dependencies = [
  "oer-tool-data-hil-image-keys",
  "oer-tool-data-hil-protocol",
  "static_cell",
+]
+
+[[package]]
+name = "oer-firmware-platform-esp32c5-board"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-firmware-platform-esp32c5-layout",
+ "oer-firmware-platform-espressif-staged-runtime",
+]
+
+[[package]]
+name = "oer-firmware-platform-esp32c5-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "oer-firmware-platform-esp32c5-board",
+ "oer-firmware-platform-esp32c5-layout",
+ "oer-firmware-platform-espressif-staged-bootstrap",
+]
+
+[[package]]
+name = "oer-firmware-platform-esp32c5-layout"
+version = "0.1.0"
+dependencies = [
+ "oer-firmware-platform-espressif-staged-layout",
 ]
 
 [[package]]

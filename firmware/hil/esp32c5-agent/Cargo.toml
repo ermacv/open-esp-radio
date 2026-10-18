@@ -1,0 +1,51 @@
+[package]
+name = "oer-firmware-hil-esp32c5-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# The minimal image that proves the esp32c5 staged boot: the bootstrap
+# stages this runtime into PSRAM, which starts Embassy and wakes once on its
+# timer.
+boot-smoke = []
+# The radio-free SoC image: the HIL protocol console, the SoC deadline
+# watchdog and the reset-retained post-mortem, for the `system-watchdog`
+# scenarios. A panic records the post-mortem through the platform's panic
+# entry before the reset.
+system-watchdog = [
+    "oer-firmware-platform-espressif-staged-runtime/panic-hook",
+    "dep:critical-section",
+    "dep:embassy-futures",
+    "dep:embassy-sync",
+    "dep:oer-adapters-esp-hal-soc-esp32c5",
+    "dep:oer-tool-data-hil-protocol",
+    "dep:oer-firmware-hil-agent",
+    "dep:oer-tool-data-hil-image-keys",
+]
+
+[dependencies]
+embassy-executor.workspace = true
+embassy-time.workspace = true
+esp-hal.workspace = true
+oer-firmware-platform-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }
+oer-firmware-platform-esp32c5-board.workspace = true
+oer-exec-executor = { workspace = true, features = ["esp32c5"] }
+oer-exec-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
+critical-section = { workspace = true, optional = true }
+embassy-futures = { workspace = true, optional = true }
+embassy-sync = { workspace = true, optional = true }
+oer-adapters-esp-hal-soc-esp32c5 = { workspace = true, optional = true }
+oer-tool-data-hil-protocol = { workspace = true, optional = true }
+oer-firmware-hil-agent = { workspace = true, optional = true }
+oer-tool-data-hil-image-keys = { workspace = true, optional = true }
+static_cell.workspace = true
+
+[build-dependencies]
+oer-firmware-platform-esp32c5-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+

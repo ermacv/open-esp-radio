@@ -33,7 +33,7 @@ bootloader = 0x2000
 partition-table = 0x8000
 application = 0x10000
 otadata = 0xd000
-partitions = "firmware/platform/esp32c5/partitions/applications.csv"
+partitions = "platform/esp32c5/partitions/applications.csv"
 # The application image's header: the fastest settings an ESP image header
 # holds for the N16R8 module's 16-MiB quad flash, QIO at 80 MHz (ESP-IDF's
 # 120-MHz option also writes 80m and tunes at run time); the ROM reads the
@@ -108,7 +108,7 @@ contexts = [
 # (platform/esp32c5/linker/rom/esp32c5-eco2.x).
 [rom]
 elf = "rom-rev100"
-summaries = "firmware/platform/esp32c5/linker/rom/functions.toml"
+summaries = "platform/esp32c5/linker/rom/functions.toml"
 
 # The staged runtime's placement contract (platform/espressif/linker/runtime):
 # code, data and the CPU0 task stack in PSRAM; interrupt entries, vector

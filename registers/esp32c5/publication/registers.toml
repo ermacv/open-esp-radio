@@ -1,12 +1,10 @@
-# The radio publication. No ESP32-C5 PAC crate exists yet, so it publishes
-# the SVD and the binding index only; `../policy/api.toml` (the PAC API
-# policy) is selected again, together with `[outputs.pac]`, by the change
-# that adds the PAC crates.
+# The radio publication: the SVD, the binding index and the ESP32-C5 PAC.
 schema = 1
 model = "../model/device.toml"
 reviewed = ["../model/reviewed.toml"]
 memory = "../model/memory.toml"
 ownership = "../policy/ownership.toml"
+api = "../policy/api.toml"
 lints = "../policy/lints.toml"
 evidence = [
     "../evidence/policy.toml",
@@ -26,3 +24,9 @@ artifact-lineages = ["esp32c5-radio"]
 svd = "../published/radio.svd"
 bindings = "../published/radio.bindings.toml"
 
+[outputs.pac]
+raw = "../../../crates/esp32c5/pac-raw/src/lib.rs"
+api = "../../../crates/esp32c5/pac/src/generated.rs"
+crate-name = "oer_esp32c5_pac_raw"
+target = "none"
+edition = "2024"

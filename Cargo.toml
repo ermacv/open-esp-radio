@@ -1,5 +1,14 @@
 [workspace]
 members = [
+    "crates/esp32c5/pac",
+    "crates/esp32c5/pac-raw",
+    "crates/esp32c5/hal",
+    "crates/adapters/esp-hal/soc-esp32c5",
+    "crates/espressif/soc-deadline",
+    "firmware/platform/esp32c5/board",
+    "firmware/platform/esp32c5/bootstrap",
+    "firmware/platform/esp32c5/layout",
+    "firmware/hil/esp32c5-agent",
     "tools/cli/hil",
     "tools/cli/stand",
     "tools/lib/data/device-mac",
@@ -161,6 +170,11 @@ members = [
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [
+    "crates/esp32c5/pac",
+    "crates/esp32c5/pac-raw",
+    "crates/esp32c5/hal",
+    "crates/adapters/esp-hal/soc-esp32c5",
+    "crates/espressif/soc-deadline",
     "tools/cli/hil",
     "tools/cli/stand",
     "tools/lib/data/device-mac",
@@ -334,9 +348,17 @@ embassy-executor = { version = "0.10.0", default-features = false }
 embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
 log = { version = "0.4.27", features = ["max_level_trace", "release_max_level_info"] }
-oer-exec-executor = { path = "crates/exec/executor", features = ["esp32s31"] }
+oer-exec-executor = { path = "crates/exec/executor" }
 oer-tool-data-hil-protocol = { path = "tools/lib/data/hil-protocol", default-features = false }
 oer-tool-data-hil-image-keys = { path = "tools/lib/data/hil-image-keys" }
+oer-firmware-hil-agent = { path = "firmware/hil/agent", default-features = false }
+oer-firmware-platform-espressif-staged-runtime = { path = "firmware/platform/espressif/staged-runtime" }
+# The ESP32-C5 platform's shared dependencies.
+oer-firmware-platform-esp32c5-layout = { path = "firmware/platform/esp32c5/layout" }
+oer-firmware-platform-esp32c5-board = { path = "firmware/platform/esp32c5/board" }
+oer-adapters-esp-hal-soc-esp32c5 = { path = "crates/adapters/esp-hal/soc-esp32c5" }
+embassy-futures = "0.1.2"
+critical-section = "1.2.0"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
