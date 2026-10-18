@@ -45,7 +45,8 @@ without vendor radio binaries. Owner decisions are in
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
-  ([docs/source-policy.md](docs/source-policy.md)).
+  ([docs/source-policy.md](docs/source-policy.md)); the predecessor's
+  Bluetooth LE code is the owner's exception, carried as it is.
 - **GitHub.** Act only in the owner's repositories; never write to upstream
   projects (fixes to esp-hal go to the owner's fork).
 - **Decisions.** Only the owner decides. Add a line to `docs/decisions.md` only
