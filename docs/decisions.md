@@ -115,6 +115,46 @@ tree is a selection of a predecessor repository, without its history.
 - **Owner bit.** Detached RX descriptors carry owner bit 31 clear: the
   walker stops on one instead of writing it (owner, 2026-10-18).
 
+## 2026-10-18: decisions recovered from the predecessor
+
+Owner decisions that the predecessor recorded only in its issue comments,
+confirmed by the owner again on this date. Policy values (intervals,
+defaults, queue bounds) live in the code that applies them, not here.
+
+- **Bluetooth Classic.** ACL first, later. One Bluetooth driver with LE and
+  BR/EDR phases, a generic HCI layer with LE as one sub-dispatcher, and one
+  air reservation for all of Bluetooth.
+- **Bluetooth LE scope.** In time, every controller capability the hardware
+  offers; multiple connections and the central role come first. The order of
+  features does not matter; working, architecturally clean code does.
+- **ESP-NOW and FTM** are clients of the lower-MAC port.
+- **Access point width.** The access point supports 40 MHz in 2.4 GHz under
+  the 20/40 coexistence rules; a station reports 20/40 OBSS as the standard
+  requires.
+- **Monitor** is a tap in the shared lower-MAC loop, not a role:
+  station → monitor → station stays within one installation.
+- **Behaviour on air needs the stand.** A claim about what the hardware puts
+  on air (for example, the Duration that reserves the medium) is used only
+  after a stand run confirms it; vendor evidence alone is not enough.
+- **Group key with one slot.** A new key of any ID replaces the single entry
+  atomically; frames under the old ID are dropped after the switch.
+- **Coexistence by operation.** Ports name what an operation is (beacon, ACK,
+  connection event, CSL slot, …); one coexistence owner maps (client, kind)
+  to a priority through the chip family's data table.
+- **Short hard windows.** Windows shorter than a grant are enforced by the
+  hardware priority (PTI) alone and reported as an information-only
+  blackout; rate selection ignores samples taken during an absence or a
+  blackout.
+- **Tracking ticks in free time.** A periodic PHY tracking tick starts only
+  if it overlaps no granted hard window and no announced retune or resume; a
+  tick is deferred by at most one tracking period, and every shift is
+  counted.
+- **No radio-system token at the lower-MAC port.** PHY membership stays
+  inside the backend.
+- **Priority and power ownership.** Each MAC's PTI registers belong to its own
+  driver, and PTI values travel inside typed grants and notices. One transmit
+  power policy, by board and country, covers all three radios.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
