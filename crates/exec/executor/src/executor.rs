@@ -87,17 +87,17 @@ fn as_running(swi: u8, poll: impl FnOnce()) {
 ///
 /// The software interrupts' registers are per interrupt: raising one writes
 /// only its own word, so any context may raise any of them without a lock.
-fn software_interrupt(swi: u8, raise: bool) {
+pub(crate) fn software_interrupt(swi: u8, raise: bool) {
     macro_rules! touch {
         ($number:literal, $peripheral:ident) => {{
             #[allow(
                 unsafe_code,
                 reason = "raising or resetting a software interrupt only writes its own register"
             )]
-            // SAFETY: the executor of this software interrupt consumed its
-            // peripheral token when it was installed; this value is only used
-            // for that executor's raise and reset, each one write of the
-            // interrupt's own register.
+            // SAFETY: the executor or the doorbell of this software
+            // interrupt consumed its peripheral token when it was made; this
+            // value is only used for that owner's raise and reset, each one
+            // write of the interrupt's own register.
             let interrupt = SoftwareInterrupt::<'static, $number>::new(unsafe {
                 esp_hal::peripherals::$peripheral::steal()
             });
@@ -175,6 +175,86 @@ impl<High, Mid, Low> Clone for LevelOrder<High, Mid, Low> {
 }
 
 impl<High, Mid, Low> Copy for LevelOrder<High, Mid, Low> {}
+
+/// Two entries at one level on one core, checked when the image is compiled:
+/// a radio interrupt (`Radio`, P3) and the [`Doorbell`](crate::Doorbell)
+/// (`Bell`) whose handler applies requests to that interrupt's registers.
+/// esp-hal runs all sources of one level on one core one after another, so
+/// neither handler preempts the other. The host tests of `level` cover the
+/// refusals: a `compile_fail` doctest proves nothing on the chip target,
+/// where every doctest that links fails on esp-hal's interrupt vector.
+///
+/// The doctest stands in table tokens for the image's (`Entry` is
+/// implemented here by hand, as only the table's macro may in an image):
+///
+/// ```no_run
+/// # #![no_std]
+/// # #![no_main]
+/// # #[panic_handler]
+/// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+/// # use esp_hal::{interrupt::Priority, peripherals::Interrupt, system::Cpu};
+/// # macro_rules! token {
+/// #     ($token:ident = $source:ident, $level:ident, $core:ident) => {
+/// #         struct $token;
+/// #         // SAFETY: a doctest's stand-in for a table token.
+/// #         unsafe impl oer_interrupt_table::Entry for $token {
+/// #             type Source = Interrupt;
+/// #             type Level = Priority;
+/// #             type Core = Cpu;
+/// #             const SOURCE: Interrupt = Interrupt::$source;
+/// #             const LEVEL: Priority = Priority::$level;
+/// #             const CORE: Cpu = Cpu::$core;
+/// #         }
+/// #     };
+/// # }
+/// # token!(MacToken = MODEM_WIFI_MAC, Priority3, ProCpu);
+/// # token!(DoorbellToken = FROM_CPU_INTR3, Priority3, ProCpu);
+/// use oer_espressif_executor_embassy::SameLevel;
+/// // The MAC interrupt and the doorbell, both at Priority3 on ProCpu.
+/// const BELL: SameLevel<MacToken, DoorbellToken> = SameLevel::new();
+/// ```
+pub struct SameLevel<Radio, Bell> {
+    _levels: PhantomData<Pair<Radio, Bell>>,
+}
+
+type Pair<Radio, Bell> = fn() -> (Radio, Bell);
+
+impl<Radio, Bell> SameLevel<Radio, Bell>
+where
+    Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+{
+    /// The two entries' common level and core, or a compile error.
+    pub const fn new() -> Self {
+        const {
+            crate::level::same_level(
+                (Radio::LEVEL as u8, Radio::CORE as u8),
+                (Bell::LEVEL as u8, Bell::CORE as u8),
+            )
+        }
+        Self {
+            _levels: PhantomData,
+        }
+    }
+}
+
+impl<Radio, Bell> Default for SameLevel<Radio, Bell>
+where
+    Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+    Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Radio, Bell> Clone for SameLevel<Radio, Bell> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<Radio, Bell> Copy for SameLevel<Radio, Bell> {}
 
 /// Scheduler-free thread-mode Embassy executor.
 ///
@@ -329,7 +409,7 @@ impl_executor_constructors!(2);
 impl_executor_constructors!(3);
 
 /// The peripheral interrupt source of software interrupt `SWI`.
-const fn software_interrupt_source(swi: u8) -> Interrupt {
+pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
     match swi {
         0 => Interrupt::FROM_CPU_INTR0,
         1 => Interrupt::FROM_CPU_INTR1,

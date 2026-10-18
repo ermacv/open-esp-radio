@@ -18,6 +18,11 @@
 //!   executor (P2). Starting it takes a `LevelOrder`, which checks when the
 //!   image compiles that the radio interrupts preempt it and it preempts the
 //!   application.
+//! - `Doorbell<SWI>` is a software interrupt at the radio interrupts' level
+//!   (P3, `FROM_CPU` line 3) that the radio executor rings to have a request
+//!   applied there; its handler starts with `acknowledge::<SWI>`. Making it
+//!   takes a `SameLevel`, which checks when the image compiles that it shares
+//!   the radio interrupt's level and core.
 //! - The time driver (`init`, `bind`) gives each executor its own timer
 //!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<N>`) only
 //!   acknowledges and pends; one executor writes the SYSTIMER registers. No
@@ -27,14 +32,22 @@
 #[cfg(any(feature = "chip", test))]
 mod deadline_cell;
 #[cfg(feature = "chip")]
+mod doorbell;
+#[cfg(feature = "chip")]
 mod executor;
+#[cfg(any(feature = "chip", test))]
+mod level;
 #[cfg(feature = "chip")]
 mod time_driver;
 #[cfg(any(feature = "chip", test))]
 mod timer_queue;
 
 #[cfg(feature = "chip")]
-pub use executor::{Executor, InterruptExecutor, LevelOrder, interrupt_handler, wake_handler};
+pub use doorbell::{Doorbell, acknowledge};
+#[cfg(feature = "chip")]
+pub use executor::{
+    Executor, InterruptExecutor, LevelOrder, SameLevel, interrupt_handler, wake_handler,
+};
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
 

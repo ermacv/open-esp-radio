@@ -56,6 +56,27 @@ static resources and owns the protocol lifecycles within the [documented
 capability boundaries](../esp32s31/FEATURES.md). No firmware depends on a
 second runtime owner hidden in a task or network handle.
 
+## Radio interrupt levels
+
+[`executor`](executor/src/lib.rs) (`oer-espressif-executor-embassy`) places
+the image's contexts on one core: the radio interrupts at P3 (the MAC and
+PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
+on `FROM_CPU` line 2) at P2, the application below it. `LevelOrder` checks
+when the image compiles that P3 preempts P2 and P2 the application.
+esp-hal runs all sources of one level on one core one after another, so the
+P3 handlers never preempt each other.
+
+The radio executor never writes the registers a P3 handler owns. It records
+a request in memory both sides see and rings the `Doorbell`, a software
+interrupt (`FROM_CPU` line 3) at the P3 level: `ring` fences, raises the
+interrupt and reads its register back. The doorbell's handler first resets
+the interrupt (`acknowledge`), then takes the requests, so a ring after the
+take is not lost. Making the doorbell consumes its software interrupt, so no
+executor can use the line, and takes a `SameLevel` of the radio interrupt's
+and the doorbell's table entries, which checks when the image compiles that
+both share one level and one core. The request protocol belongs to the
+driver whose handler applies it.
+
 Portable protocol policy cannot depend on this execution domain. The
 architecture audit follows transitive normal/build dependencies to enforce
 that boundary; portable packages cannot depend on these concrete ESP32-S31
