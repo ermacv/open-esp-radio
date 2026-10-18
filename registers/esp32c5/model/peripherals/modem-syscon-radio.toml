@@ -1,0 +1,140 @@
+schema = 2
+
+[[peripherals]]
+name = "MODEM_SYSCON_RADIO"
+description = """
+ESP32-C5 MODEM_SYSCON clock gates and resets at MODEM_BASE + 0x9C00 driven
+by the vendor modem clock devices of the IEEE 802.15.4 module (802154_MAC,
+BT_I154_COMMON_BB, ETM, BT_APB) and its MAC reset. Other fields remain absent
+and are preserved by every field transaction."""
+baseAddress = 0x600A9C00
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF"
+description = "Modem clock selectors and protocol clock gates."
+addressOffset = 0x04
+size = 32
+access = "read-write"
+resetValue = 0x00200002
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ETM_EN"
+description = "Enable the modem ETM clock."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZB_APB_EN"
+description = "Enable the IEEE 802.15.4 APB clock."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_ZBMAC_EN"
+description = "Enable the IEEE 802.15.4 MAC clock."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_MODEM_SEC_APB_EN"
+description = "Enable the modem-security APB clock."
+bitOffset = 28
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "MODEM_RST_CONF"
+description = "Modem protocol reset lines."
+addressOffset = 0x10
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "RST_ZBMAC_APB"
+description = "Hold the IEEE 802.15.4 APB interface in reset."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RST_ZBMAC"
+description = "Hold the IEEE 802.15.4 MAC in reset."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "CLK_CONF1"
+description = "Wi-Fi, front-end and Bluetooth clock gates."
+addressOffset = 0x14
+size = 32
+access = "read-write"
+resetValue = 0
+
+[[peripherals.registers.register.fields]]
+name = "CLK_BT_APB_EN"
+description = "Enable the Bluetooth APB clock."
+bitOffset = 16
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CLK_BTBB_EN"
+description = "Enable the baseband clock shared by Bluetooth LE and IEEE 802.15.4."
+bitOffset = 17
+bitWidth = 1
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ETM_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZB_APB_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_ZBMAC_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF.CLK_MODEM_SEC_APB_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC_APB"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.MODEM_RST_CONF.RST_ZBMAC"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BT_APB_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]
+
+[[review]]
+entity = "MODEM_SYSCON_RADIO.CLK_CONF1.CLK_BTBB_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_MODEM_SYSCON_STRUCT"]

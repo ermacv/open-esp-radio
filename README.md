@@ -1,7 +1,8 @@
 # open-esp-radio
 
-Source-only `no_std` radio stack in Rust for the Espressif ESP32-S31: Wi-Fi,
-Bluetooth LE and IEEE 802.15.4, without the vendor's radio binaries.
+Source-only `no_std` radio stack in Rust for the Espressif ESP32-S31 and
+ESP32-C5 (ESP32-C6 later): Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the
+vendor's radio binaries.
 
 **Status.** Rebuilding. The protocol crates, the register model, PAC, HAL,
 PHY and the Wi-Fi driver's DMA and MAC layers are in place and tested on the

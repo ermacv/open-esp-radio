@@ -1,0 +1,111 @@
+schema = 2
+
+[[peripherals]]
+name = "PCR_RADIO"
+description = """ESP32-C5 PCR fields the PHY drives: the SAR ADC and temperature-sensor clocks and one word the public header does not describe. Other fields remain absent and are preserved by every field transaction."""
+baseAddress = 0x60096000
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "SARADC_CONF"
+description = "SAR ADC clock and reset."
+addressOffset = 0x88
+size = 32
+access = "read-write"
+resetValue = 0x1
+
+[[peripherals.registers.register.fields]]
+name = "SARADC_CLK_EN"
+description = "Enable the SAR ADC clock."
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SARADC_REG_CLK_EN"
+description = "Enable the SAR ADC register clock."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "TSENS_CLK_CONF"
+description = "Temperature-sensor clock and reset."
+addressOffset = 0x90
+size = 32
+access = "read-write"
+resetValue = 0x0
+
+[[peripherals.registers.register.fields]]
+name = "TSENS_CLK_SEL"
+description = "Select the temperature-sensor clock source."
+bitOffset = 20
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSENS_CLK_EN"
+description = "Enable the temperature-sensor clock."
+bitOffset = 22
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TSENS_RST_EN"
+description = "Hold the temperature sensor in reset."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers]]
+[peripherals.registers.register]
+name = "WORD_014C_OPAQUE"
+description = "Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A."
+addressOffset = 0x14c
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_7_OPAQUE"
+description = "Low byte; meaning unknown."
+bitOffset = 0
+bitWidth = 8
+
+[[review]]
+entity = "PCR_RADIO.SARADC_CONF"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.SARADC_CONF.SARADC_CLK_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.SARADC_CONF.SARADC_REG_CLK_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.TSENS_CLK_CONF"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_CLK_SEL"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_CLK_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.TSENS_CLK_CONF.TSENS_RST_EN"
+naming = "vendor"
+sources = ["ESP_IDF_4D59230D_C5_PCR_TSENS"]
+
+[[review]]
+entity = "PCR_RADIO.WORD_014C_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "PCR_RADIO.WORD_014C_OPAQUE.BITS_0_7_OPAQUE"
+naming = "opaque"

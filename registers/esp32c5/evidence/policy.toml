@@ -1,0 +1,3 @@
+# Register review uses the closed provenance/accuracy/completeness enums from
+# the generic contracts crate; evidence catalogs only define source identity.
+schema = 1

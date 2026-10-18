@@ -1,0 +1,47 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_STA_BEACON_FILTER"
+description = "Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown."
+baseAddress = 0x600A42B4
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CONTROL"
+description = "hal_enable_sta_beacon_filter sets bits 2:0 after enabling the matching interrupt; hal_disable_sta_beacon_filter clears them before disabling that interrupt."
+addressOffset = 0x0
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "BITS_0_2_OPAQUE"
+bitOffset = 0
+bitWidth = 3
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 7
+
+[[review]]
+entity = "WIFI_MAC_STA_BEACON_FILTER"
+sources = [
+    "C5_BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL"
+naming = "descriptive"
+sources = [
+    "C5_BLOB_LIBPP_HAL_RUNTIME_MMIO_LEAVES",
+]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_MAC_STA_BEACON_FILTER.CONTROL.BITS_0_2_OPAQUE"
+naming = "opaque"

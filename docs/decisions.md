@@ -9,7 +9,10 @@ A later line that changes an earlier one says so.
 The owner and the architect session decided these point by point. The initial
 tree is a selection of a predecessor repository, without its history.
 
-- **Chip.** ESP32-S31 only; ESP32-C5 support is not carried.
+- **Chips.** ESP32-S31 and ESP32-C5 are research targets and peers on the
+  vendor SDK; ESP32-C6 follows later (owner, 2026-10-18). The ESP32-C5
+  register model, HAL, platform and peers are carried in the predecessor port
+  (owner, 2026-10-18).
 - **What came over.** PAC, HAL, PHY (whole), the Wi-Fi driver's `dma`, `mac`
   and driver crates (`LowerMacCore` as a draft), the radio coexistence
   binding, base crates, the radio port, all protocols (known defects in the
@@ -114,7 +117,7 @@ tree is a selection of a predecessor repository, without its history.
   the log. The ESP-IDF reference peers return with the second radio block.
   The rest (verification harness, image and device tooling, the stand
   arbiter, repository tooling, the Bluetooth driver, the old Wi-Fi execution
-  form, ESP32-C5 crates, the facade) stays out.
+  form, the facade) stays out.
 
 ## 2026-10-18: the RX descriptor walker
 

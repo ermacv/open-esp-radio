@@ -1,0 +1,4573 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device schemaVersion="1.3" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd">
+  <vendor>Espressif</vendor>
+  <vendorID>ESP</vendorID>
+  <name>ESP32C5_RADIO</name>
+  <series>ESP32-C5</series>
+  <version>0.1</version>
+  <description>ESP32-C5 modem/radio registers owned by the radio drivers. This first stage
+    publishes the IEEE 802.15.4 MAC aperture, its interrupt route and
+    the modem ETM channels it programs, and the modem clock gates and
+    resets of its vendor clock devices, the analog register I2C master
+    the PHY drives, and Wi-Fi MAC register views derived from the reviewed
+    ESP32-S31 model. Unknown fields are omitted.</description>
+  <licenseText>MIT OR Apache-2.0</licenseText>
+  <addressUnitBits>8</addressUnitBits>
+  <width>32</width>
+  <peripherals>
+    <peripheral>
+      <name>IEEE802154_MAC</name>
+      <description>Dedicated ESP32-C5 IEEE 802.15.4 MAC aperture at 0x600A3000. This
+        selective foundation publishes only register geometry exercised by
+        the pinned public common/chip LL accessors. The public struct and
+        register headers still carry TODO ZB-93 pending an authoritative
+        regdesc CSV, so untouched DTM, timing, debug-selector and modem-sleep
+        words remain deliberately absent and no reset values are claimed.</description>
+      <baseAddress>0x600A3000</baseAddress>
+      <registers>
+        <register>
+          <name>COMMAND</name>
+          <description>Write-only IEEE 802.15.4 MAC command opcode. The public common LL constrains commands to the listed values.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>OPCODE</name>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <useEnumeratedValues>true</useEnumeratedValues>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>TX_START</name>
+                  <value>65</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_START</name>
+                  <value>66</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CCA_TX_START</name>
+                  <value>67</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ED_START</name>
+                  <value>68</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>STOP</name>
+                  <value>69</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TEST_TX_START</name>
+                  <value>70</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TEST_RX_START</name>
+                  <value>71</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TEST_STOP</name>
+                  <value>72</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TIMER0_START</name>
+                  <value>76</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TIMER0_STOP</name>
+                  <value>77</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TIMER1_START</name>
+                  <value>78</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TIMER1_STOP</name>
+                  <value>79</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CONTROL</name>
+          <description>Project-assigned name. Selected MAC policy bits mutated by public common LL accessors. Unused control bits remain absent.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>AUTO_ACK_TX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ENHANCED_ACK_TX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>AUTO_ACK_RX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COORDINATOR</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PROMISCUOUS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PENDING_ENHANCED</name>
+              <description>Project-assigned name. Boolean pending-mode selector used by the current public LL. The wider public pending-mode enum is not encoded in this one-bit field.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MULTIPAN0_ENABLED</name>
+              <description>Project-assigned name. Enable public multipan context zero.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MULTIPAN1_ENABLED</name>
+              <description>Project-assigned name. Enable public multipan context one.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MULTIPAN2_ENABLED</name>
+              <description>Project-assigned name. Enable public multipan context two.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MULTIPAN3_ENABLED</name>
+              <description>Project-assigned name. Enable public multipan context three.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x10</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>MULTIPAN%s_SHORT_ADDRESS</name>
+          <description>Project-assigned name. Sixteen-bit short address for one public multipan context.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>ADDRESS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x10</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>MULTIPAN%s_PAN_ID</name>
+          <description>Project-assigned name. Sixteen-bit PAN identifier for one public multipan context.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>PAN_ID</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x10</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>MULTIPAN%s_EXTENDED_ADDRESS_LOW</name>
+          <description>Project-assigned name. Extended-address bytes zero through three packed little-endian by the public common LL.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>ADDRESS_WORD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x10</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>MULTIPAN%s_EXTENDED_ADDRESS_HIGH</name>
+          <description>Project-assigned name. Extended-address bytes four through seven packed little-endian by the public common LL.</description>
+          <addressOffset>0x14</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>ADDRESS_WORD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CHANNEL</name>
+          <description>Selected primary frequency code. Other multi-channel and frequency-hop controls declared by the struct are not used by the public common LL and remain absent.</description>
+          <addressOffset>0x48</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>FREQUENCY_CODE</name>
+              <description>Project-assigned name. Seven-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>7</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>127</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BIT_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Implemented read-write bit above the seven-bit frequency code; the public struct declares it reserved and no vendor accessor writes it.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_POWER</name>
+          <description>Five-bit transmit-power code written through a preserving bitfield update by the public common LL.</description>
+          <addressOffset>0x4C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>POWER_CODE</name>
+              <description>Project-assigned name. Raw five-bit hardware code; no dBm conversion is claimed at the register boundary.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ED_DURATION</name>
+          <description>Project-assigned name. Energy-detection duration field written by the public common LL. The adjacent delay field is not used there and remains absent.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>DURATION</name>
+              <description>Project-assigned name. Twenty-four-bit physical field. The current public setter accepts only a uint16_t and therefore exercises a strict subset of its declared range.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ED_CONFIG</name>
+          <description>Project-assigned name. Energy-detection and clear-channel-assessment configuration plus read-only result fields used by the public common LL. The pinned reg macros call bits 12:11 ED_SAMPLE_MODE and bit 13 DIS_ED_POWER_SEL, while the pinned struct/common LL operate them as ED_SAMPLE_RATE and ED_SAMPLE_MODE respectively; this model follows the operational struct/common-LL pair and leaves the naming conflict explicit.</description>
+          <addressOffset>0x54</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>CCA_THRESHOLD_CODE</name>
+              <description>Project-assigned name. Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>ED_SAMPLE_RATE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <useEnumeratedValues>true</useEnumeratedValues>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>ONE_PER_US</name>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TWO_PER_US</name>
+                  <value>1</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>FOUR_PER_US</name>
+                  <value>2</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>EIGHT_PER_US</name>
+                  <value>3</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>ED_SAMPLE_MODE</name>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+              <writeConstraint>
+                <useEnumeratedValues>true</useEnumeratedValues>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>MAXIMUM</name>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>AVERAGE</name>
+                  <value>1</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>CCA_MODE</name>
+              <bitOffset>14</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <useEnumeratedValues>true</useEnumeratedValues>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>CARRIER</name>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ENERGY_DETECTION</name>
+                  <value>1</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CARRIER_OR_ENERGY_DETECTION</name>
+                  <value>2</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CARRIER_AND_ENERGY_DETECTION</name>
+                  <value>3</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>ED_RSS_CODE</name>
+              <description>Project-assigned name. Eight-bit result returned as int8_t by the public common LL.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>CCA_BUSY</name>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ACK_TIMEOUT</name>
+          <description>Sixteen-bit acknowledgment timeout read and written by the public common LL. Units are not assigned by this register model.</description>
+          <addressOffset>0x5C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TIMEOUT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>EVENT_ENABLE</name>
+          <description>Project-assigned name. Individual event enables mutated by the public common LL. Bits seven and thirteen remain physically observable but have no assigned vendor event semantics.</description>
+          <addressOffset>0x60</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ACK_TX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ACK_RX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ABORT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_ABORT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ED_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Physically present event-enable bit without an assigned public vendor event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER0_OVERFLOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER1_OVERFLOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLOCK_COUNT_MATCH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_SFD_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_SFD_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>EVENT_STATUS</name>
+          <description>Project-assigned name. Individual event status bits read by the public LL. The target-reviewed overlay assigns the read-write W1C contract for the applicable ESP32-C5 revision; bit seven has no assigned vendor event semantics.</description>
+          <addressOffset>0x64</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>TX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ACK_TX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ACK_RX_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ABORT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_ABORT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ED_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Physically present event-status bit without an assigned public vendor event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER0_OVERFLOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMER1_OVERFLOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLOCK_COUNT_MATCH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_SFD_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_SFD_DONE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_ABORT_ENABLE</name>
+          <description>Project-assigned name. Low thirty-one receive-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.</description>
+          <addressOffset>0x68</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>EVENTS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>31</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>2147483647</maximum>
+                </range>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>NONE</name>
+                  <description>Mask every receive-abort reason.</description>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RUNTIME_BASELINE</name>
+                  <description>Reviewed receive-abort baseline used by the runtime ISR.</description>
+                  <value>163840</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ED_OPERATION_REASONS</name>
+                  <description>Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation.</description>
+                  <value>58720256</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>PENDING_CONFIG</name>
+          <description>Project-assigned name. Selected outgoing acknowledgment frame-pending bit. The untouched timeout field remains absent.</description>
+          <addressOffset>0x6C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>FRAME_PENDING</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>COEX_PTI</name>
+          <description>Selected coexistence priority fields. The public disable-coexistence helper writes value three to each through two preserving field updates. Other antenna and RF controls remain absent.</description>
+          <addressOffset>0x70</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TXRX_PTI</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>15</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>ACK_PTI</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>15</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_ABORT_ENABLE</name>
+          <description>Project-assigned name. Low thirty-one transmit-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.</description>
+          <addressOffset>0x78</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>EVENTS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>31</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>2147483647</maximum>
+                </range>
+              </writeConstraint>
+              <enumeratedValues>
+                <usage>write</usage>
+                <enumeratedValue>
+                  <name>NONE</name>
+                  <description>Mask every transmit-abort reason.</description>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RUNTIME_BASELINE</name>
+                  <description>Reviewed transmit-abort baseline used by the runtime ISR.</description>
+                  <value>25591808</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ENHANCED_ACK_NOTIFY</name>
+          <description>Project-assigned name. Write-only enhanced-ack generation-done notification word. The public common LL writes the complete value one; trigger/clear behavior is not inferred.</description>
+          <addressOffset>0x7C</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>NOTIFY_IMAGE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_STATUS</name>
+          <description>Receive status snapshot returned whole by the public common LL; selected subfields are independently named by the struct and accessor set.</description>
+          <addressOffset>0x80</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>FILTER_FAIL_REASON</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>ABORT_REASON</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>5</bitWidth>
+              <enumeratedValues>
+                <usage>read</usage>
+                <enumeratedValue>
+                  <name>RX_STOP</name>
+                  <value>1</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>SFD_TIMEOUT</name>
+                  <value>2</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CRC_ERROR</name>
+                  <value>3</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>INVALID_LENGTH</name>
+                  <value>4</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>FILTER_FAIL</name>
+                  <value>5</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>NO_RSS</name>
+                  <value>6</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>COEX_BREAK</name>
+                  <value>7</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>UNEXPECTED_ACK</name>
+                  <value>8</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_RESTART</name>
+                  <value>9</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_ACK_TIMEOUT</name>
+                  <value>16</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_ACK_STOP</name>
+                  <value>17</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_ACK_COEX_BREAK</name>
+                  <value>18</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ENHANCED_ACK_SECURITY_ERROR</name>
+                  <value>19</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ED_ABORT</name>
+                  <value>24</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ED_STOP</name>
+                  <value>25</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ED_COEX_REJECT</name>
+                  <value>26</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Three-bit receive state. The public LL only establishes that value one is RECEIVE_SFD and tests for later states with a greater-than comparison.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>PREAMBLE_MATCH</name>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SFD_MATCH</name>
+              <bitOffset>21</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_STATUS</name>
+          <description>Transmit status snapshot returned whole by the public common LL; abort and security-error subfields have public finite reason enums.</description>
+          <addressOffset>0x84</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>ABORT_REASON</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>5</bitWidth>
+              <enumeratedValues>
+                <usage>read</usage>
+                <enumeratedValue>
+                  <name>RX_ACK_STOP</name>
+                  <value>1</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_SFD_TIMEOUT</name>
+                  <value>2</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_CRC_ERROR</name>
+                  <value>3</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_INVALID_LENGTH</name>
+                  <value>4</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_FILTER_FAIL</name>
+                  <value>5</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_NO_RSS</name>
+                  <value>6</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_COEX_BREAK</name>
+                  <value>7</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_TYPE_NOT_ACK</name>
+                  <value>8</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_RESTART</name>
+                  <value>9</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RX_ACK_TIMEOUT</name>
+                  <value>16</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_STOP</name>
+                  <value>17</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_COEX_BREAK</name>
+                  <value>18</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>TX_SECURITY_ERROR</name>
+                  <value>19</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CCA_FAILED</name>
+                  <value>24</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>CCA_BUSY</name>
+                  <value>25</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>SECURITY_ERROR</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>4</bitWidth>
+              <enumeratedValues>
+                <usage>read</usage>
+                <enumeratedValue>
+                  <name>FRAME_CONTROL_NOT_SET</name>
+                  <value>1</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>RESERVED_SECURITY_LEVEL</name>
+                  <value>2</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>HEADER_PARSE</name>
+                  <value>3</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>PAYLOAD_ERROR</name>
+                  <value>4</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>FRAME_COUNTER_SUPPRESSION</name>
+                  <value>5</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TIMER0_THRESHOLD</name>
+          <description>Project-assigned name. Complete timer-zero threshold word written by the public common LL.</description>
+          <addressOffset>0xA8</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>THRESHOLD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TIMER0_VALUE</name>
+          <description>Project-assigned name. Complete timer-zero value word read by the public common LL.</description>
+          <addressOffset>0xAC</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TIMER1_THRESHOLD</name>
+          <description>Project-assigned name. Complete timer-one threshold word written by the public common LL.</description>
+          <addressOffset>0xB0</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>THRESHOLD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TIMER1_VALUE</name>
+          <description>Project-assigned name. Complete timer-one value word read by the public common LL.</description>
+          <addressOffset>0xB4</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_DMA_ADDRESS</name>
+          <description>Project-assigned name. Complete transmit frame-buffer address written by the public common LL. Address validity and buffer lifetime remain HAL responsibilities.</description>
+          <addressOffset>0xD0</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>ADDRESS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_DMA_ADDRESS</name>
+          <description>Project-assigned name. Complete receive frame-buffer address written by the public common LL. Address validity and buffer lifetime remain HAL responsibilities.</description>
+          <addressOffset>0xE0</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>ADDRESS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TXON_DELAY</name>
+          <description>Transmit-on delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 40 is reviewed; Physical units remain outside the PAC.</description>
+          <addressOffset>0x104</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TXON_DELAY</name>
+              <description>Ten-bit preserving field written with literal 40 by ieee802154_txon_delay_set.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>10</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1023</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TXOFF_DELAY</name>
+          <description>Transmit-off delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 0 is reviewed; Physical units remain outside the PAC.</description>
+          <addressOffset>0x10C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TXOFF_DELAY</name>
+              <description>Six-bit preserving field cleared to 0 by ieee802154_txon_delay_set.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>63</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RXON_DELAY</name>
+          <description>Receive-on delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 50 is reviewed; Physical units remain outside the PAC.</description>
+          <addressOffset>0x110</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>RXON_DELAY</name>
+              <description>Eleven-bit preserving field written with literal 50 by ieee802154_txon_delay_set.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>11</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>2047</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TXRX_SWITCH_DELAY</name>
+          <description>Transmit/receive turnaround delay written by the pinned ESP32-C5 IEEE 802.15.4 MAC initializer. The literal value 122 is reviewed; Physical units remain outside the PAC.</description>
+          <addressOffset>0x114</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TXRX_SWITCH_DELAY</name>
+              <description>Ten-bit preserving field written with literal 122 by ieee802154_txon_delay_set.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>10</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1023</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SECURITY_CONTROL</name>
+          <description>Project-assigned name. Transmit-security enable and payload-offset fields used by the public common LL.</description>
+          <addressOffset>0x128</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TX_ENABLE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PAYLOAD_OFFSET</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>7</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SECURITY_ADDRESS_LOW</name>
+          <description>Project-assigned name. Security extended-address bytes zero through three packed little-endian by the public common LL.</description>
+          <addressOffset>0x12C</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>ADDRESS_WORD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SECURITY_ADDRESS_HIGH</name>
+          <description>Project-assigned name. Security extended-address bytes four through seven packed little-endian by the public common LL.</description>
+          <addressOffset>0x130</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>ADDRESS_WORD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x4</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>SECURITY_KEY%s</name>
+          <description>Project-assigned name. One little-endian four-byte word of the sixteen-byte transmit-security key written by the public common LL. Key lifecycle and zeroization remain HAL obligations.</description>
+          <addressOffset>0x134</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>KEY_WORD</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SFD_TIMEOUT_COUNTER</name>
+          <description>Project-assigned name. Read-only diagnostic counter read by the common LL; the upper half is reserved.</description>
+          <addressOffset>0x144</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>SFD_TIMEOUT_COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CRC_ERROR_COUNTER</name>
+          <description>Project-assigned name. Read-only diagnostic counter read by the common LL; the upper half is reserved.</description>
+          <addressOffset>0x148</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>CRC_ERROR_COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ED_ABORT_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x14C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CCA_FAIL_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x150</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_FILTER_FAIL_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x154</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>NO_RSS_DETECT_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x158</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_ABORT_COEX_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x15C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_RESTART_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x160</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_ACK_ABORT_COEX_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x164</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ED_SCAN_BREAK_COEX_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x168</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_ACK_ABORT_COEX_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x16C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_ACK_TIMEOUT_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x170</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_BREAK_COEX_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x174</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_SECURITY_ERROR_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x178</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CCA_BUSY_COUNTER</name>
+          <description>Project-assigned name.</description>
+          <addressOffset>0x17C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COUNT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>DIAGNOSTIC_COUNTER_CLEAR</name>
+          <description>Project-assigned name. Write-only clear bitmap for the seventeen named diagnostic counters. The public common LL writes a complete caller-supplied image; no self-clearing timing is inferred.</description>
+          <addressOffset>0x180</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>ED_SCAN_BREAK_COEX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CCA_BUSY</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CCA_FAIL</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ED_ABORT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_SECURITY_ERROR</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_BREAK_COEX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_ACK_ABORT_COEX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_TIMEOUT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_RESTART</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_ABORT_COEX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ABORT_COEX</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>NO_RSS_DETECT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_FILTER_FAIL</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CRC_ERROR</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SFD_TIMEOUT</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>IEEE802154_INTERRUPT_ROUTE</name>
+      <description>The CPU interrupt-matrix word for ESP32-C5 modem source 12 (ZB_MAC). This
+source-specific view is retained with the IEEE 802.15.4 owner and publishes
+only the generated field readers needed to prove that a polled or validation
+transaction starts with the CPU route detached.</description>
+      <baseAddress>0x60010030</baseAddress>
+      <registers>
+        <register>
+          <name>CORE0_ROUTE</name>
+          <description>Project-assigned name. Destination and security routing for ZB_MAC.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>MAP</name>
+              <description>Project-assigned name. CPU-interrupt destination selected for the peripheral source.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+            </field>
+            <field>
+              <name>BITS_6_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>PASS_IN_SEC</name>
+              <description>Project-assigned name. Secure-world pass-through selection for the peripheral source.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_9_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Bits the vendor declares reserved, retained solely so reset-state observation cannot erase an unexpected nonzero value.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>23</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>MODEM_ETM</name>
+      <description>ESP32-C5 modem event-task matrix at MODEM_BASE + 0x8800. The public
+IEEE 802.15.4 driver names the channel-enable, set and clear words and the
+per-channel event/task pair at an eight-byte stride from 0x18, and programs
+channels zero and one. Other channels and identifiers remain absent and no
+reset values are claimed.</description>
+      <baseAddress>0x600A8800</baseAddress>
+      <registers>
+        <register>
+          <name>CHANNEL_ENABLE</name>
+          <description>Project-assigned name. Channel-enable status word. The IEEE 802.15.4 driver reads it to decide whether a channel must be disabled.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>CH0</name>
+              <description>Project-assigned name. Enabled state of channel 0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CH1</name>
+              <description>Project-assigned name. Enabled state of channel 1.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CHANNEL_ENABLE_SET</name>
+          <description>Project-assigned name. Channel-enable set word. The IEEE 802.15.4 driver reads it and writes it back with the selected channel bit added; the effect of writing other bits is not reviewed.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>CH0</name>
+              <description>Project-assigned name. Enable request of channel 0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CH1</name>
+              <description>Project-assigned name. Enable request of channel 1.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CHANNEL_ENABLE_CLEAR</name>
+          <description>Project-assigned name. Channel-enable clear word. The IEEE 802.15.4 driver reads it and writes it back with the selected channel bit added, only when that channel is enabled.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>CH0</name>
+              <description>Project-assigned name. Disable request of channel 0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CH1</name>
+              <description>Project-assigned name. Disable request of channel 1.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>2</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-1</dimIndex>
+          <name>CH%s_EVENT</name>
+          <description>Project-assigned name. Complete event identifier monitored by the selected channel.</description>
+          <addressOffset>0x18</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>ID</name>
+              <description>Project-assigned name. Event identifier written as a complete word.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <enumeratedValues>
+                <usage>read-write</usage>
+                <enumeratedValue>
+                  <name>IEEE802154_TIMER1_OVERFLOW</name>
+                  <value>58</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>IEEE802154_TIMER0_OVERFLOW</name>
+                  <value>59</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>2</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-1</dimIndex>
+          <name>CH%s_TASK</name>
+          <description>Project-assigned name. Complete task identifier triggered when the selected channel's event occurs.</description>
+          <addressOffset>0x1C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>ID</name>
+              <description>Project-assigned name. Task identifier written as a complete word.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <enumeratedValues>
+                <usage>read-write</usage>
+                <enumeratedValue>
+                  <name>IEEE802154_ED_TRIG_TX</name>
+                  <value>65</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>IEEE802154_RX_START</name>
+                  <value>66</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>IEEE802154_TX_START</name>
+                  <value>69</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>MODEM_SYSCON_RADIO</name>
+      <description>ESP32-C5 MODEM_SYSCON clock gates and resets at MODEM_BASE + 0x9C00 driven
+by the vendor modem clock devices of the IEEE 802.15.4 module (802154_MAC,
+BT_I154_COMMON_BB, ETM, BT_APB) and its MAC reset. Other fields remain absent
+and are preserved by every field transaction.</description>
+      <baseAddress>0x600A9C00</baseAddress>
+      <registers>
+        <register>
+          <name>CLK_CONF</name>
+          <description>Modem clock selectors and protocol clock gates.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00200002</resetValue>
+          <fields>
+            <field>
+              <name>CLK_ETM_EN</name>
+              <description>Enable the modem ETM clock.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_ZB_APB_EN</name>
+              <description>Enable the IEEE 802.15.4 APB clock.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_ZBMAC_EN</name>
+              <description>Enable the IEEE 802.15.4 MAC clock.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_MODEM_SEC_APB_EN</name>
+              <description>Enable the modem-security APB clock.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>MODEM_RST_CONF</name>
+          <description>Modem protocol reset lines.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>RST_ZBMAC_APB</name>
+              <description>Hold the IEEE 802.15.4 APB interface in reset.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RST_ZBMAC</name>
+              <description>Hold the IEEE 802.15.4 MAC in reset.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CLK_CONF1</name>
+          <description>Wi-Fi, front-end and Bluetooth clock gates.</description>
+          <addressOffset>0x14</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>CLK_BT_APB_EN</name>
+              <description>Enable the Bluetooth APB clock.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_BTBB_EN</name>
+              <description>Enable the baseband clock shared by Bluetooth LE and IEEE 802.15.4.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>MODEM_LPCON_SHARED_CLOCK</name>
+      <description>ESP32-C5 MODEM_LPCON clock gate at MODEM_BASE + 0xF000 driven by the vendor
+COEXIST modem clock device, and the power-state map of the analog I2C master
+clock. Other fields remain absent and are preserved by every field
+transaction.</description>
+      <baseAddress>0x600AF000</baseAddress>
+      <registers>
+        <register>
+          <name>CLK_CONF</name>
+          <description>Low-power modem clock gates.</description>
+          <addressOffset>0x18</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>CLK_COEX_EN</name>
+              <description>Enable the coexistence clock.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLK_I2C_MST_EN</name>
+              <description>Enable the analog register I2C master clock; the platform keeps its reference count.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CLK_CONF_POWER_ST</name>
+          <description>PMU power states in which each low-power modem clock domain runs.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>CLK_I2C_MST_ST_MAP</name>
+              <description>PMU power states in which the analog register I2C master clock runs, one bit
+per state (SLEEP, MODEM, ACTIVE). On ESP32-C5 v1.0 the MODEM bit must stay
+clear: it survives the HP-system reset of a USB Serial/JTAG RTS pulse, after
+which the ROM boots into UART/SDIO download (docs/hardware-errata.md,
+ESP32-C5 rev 1.0 USB Serial/JTAG reset erratum).</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>I2C_ANA_MST</name>
+      <description>ESP32-C5 analog register I2C master at MODEM_BASE + 0xF800: the two command
+hosts, the read-mask word and the host-selection field that the libphy
+analog-register leaves drive. Other fields remain absent and are preserved by
+every field transaction.</description>
+      <baseAddress>0x600AF800</baseAddress>
+      <registers>
+        <register>
+          <name>I2C0_CTRL</name>
+          <description>Host-0 analog-register command word.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SLAVE_ADDR</name>
+              <description>Project-assigned name. Analog block code.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>SLAVE_REG_ADDR</name>
+              <description>Project-assigned name. Register address inside the analog block.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>DATA</name>
+              <description>Project-assigned name. Byte written, or the byte read once the command completes.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>READ_WRITE</name>
+              <description>Project-assigned name. Set for a write command, clear for a read command.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BUSY</name>
+              <description>Project-assigned name. Set while the host executes a command.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>START_OR_RESET</name>
+              <description>Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>I2C1_CTRL</name>
+          <description>Host-1 analog-register command word.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>SLAVE_ADDR</name>
+              <description>Project-assigned name. Analog block code.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>SLAVE_REG_ADDR</name>
+              <description>Project-assigned name. Register address inside the analog block.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>DATA</name>
+              <description>Project-assigned name. Byte written, or the byte read once the command completes.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>READ_WRITE</name>
+              <description>Project-assigned name. Set for a write command, clear for a read command.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BUSY</name>
+              <description>Project-assigned name. Set while the host executes a command.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+              <access>read-only</access>
+            </field>
+            <field>
+              <name>START_OR_RESET</name>
+              <description>Project-assigned name. Set by every libphy command publication, above the public 25-bit control field.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ANA_CONF1</name>
+          <description>Analog block read-mask word, published complete before every read.</description>
+          <addressOffset>0x1C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x0000002D</resetValue>
+          <fields>
+            <field>
+              <name>READ_MASK_COMPLEMENT_LOW</name>
+              <description>Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>24</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>16777215</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>READ_MASK_COMPLEMENT_HIGH</name>
+              <description>Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>255</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ANA_CONF2</name>
+          <description>Analog block host-selection word.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000004</resetValue>
+          <fields>
+            <field>
+              <name>PHY_HOST_MAP</name>
+              <description>Project-assigned name. Host-selection field that libphy[phy_i2c.o]::phy_get_i2c_hostid_ replaces on every analog-register access while preserving the other bits.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>13</bitWidth>
+              <enumeratedValues>
+                <enumeratedValue>
+                  <name>REVIEWED_RADIO_MAP</name>
+                  <value>6593</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>PARALLEL_INITIALIZATION_MAP</name>
+                  <value>518</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>I2C0_CTRL1</name>
+          <description>Host-0 bus timing.</description>
+          <addressOffset>0x24</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000042</resetValue>
+          <fields>
+            <field>
+              <name>SCL_PULSE_DURATION</name>
+              <description>Project-assigned name. SCL pulse duration.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>63</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>SDA_SIDE_GUARD</name>
+              <description>SDA side guard.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>5</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>31</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>I2C1_CTRL1</name>
+          <description>Host-1 bus timing.</description>
+          <addressOffset>0x28</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000042</resetValue>
+          <fields>
+            <field>
+              <name>SCL_PULSE_DURATION</name>
+              <description>Project-assigned name. SCL pulse duration.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>63</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>SDA_SIDE_GUARD</name>
+              <description>SDA side guard.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>5</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>31</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>HW_I2C_CTRL</name>
+          <description>Hardware-host bus timing.</description>
+          <addressOffset>0x2C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000042</resetValue>
+          <fields>
+            <field>
+              <name>SCL_PULSE_DURATION</name>
+              <description>Project-assigned name. SCL pulse duration.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>6</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>63</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>SDA_SIDE_GUARD</name>
+              <description>SDA side guard.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>5</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>31</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>ANA_CONF0</name>
+          <description>Analog I2C master control used by PHY register mode and BBPLL calibration.</description>
+          <addressOffset>0x18</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x0000E408</resetValue>
+          <fields>
+            <field>
+              <name>BBPLL_CAL_MODE</name>
+              <description>Project-assigned name. Two-bit BBPLL calibration mode.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>PHY_REGISTER_ENABLE</name>
+              <description>Project-assigned name. PHY register access enable.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PHY_REGISTER_MODE</name>
+              <description>Project-assigned name. Two-bit PHY register mode.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>PMU_RADIO</name>
+      <description>ESP32-C5 PMU fields that the PHY drives: the analog I2C power and reset
+controls of the RF blocks and the immediate BB I2C power tie. Other fields
+remain absent and are preserved by every field transaction.</description>
+      <baseAddress>0x600B0000</baseAddress>
+      <registers>
+        <register>
+          <name>IMM_HP_CK_POWER</name>
+          <description>Immediate HP clock and analog power ties.</description>
+          <addressOffset>0xCC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>TIE_HIGH_XPD_BB_I2C</name>
+              <description>Tie the BB analog I2C power high; ESP-IDF declares the field write-trigger.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RF_PWC</name>
+          <description>Analog I2C power and reset of the RF blocks.</description>
+          <addressOffset>0x158</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x08000000</resetValue>
+          <fields>
+            <field>
+              <name>XPD_CKGEN5G</name>
+              <description>Power the 5 GHz clock generator.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_TC5G_I2C</name>
+              <description>Power the analog I2C of the 5 GHz transceiver.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_RX5G_I2C</name>
+              <description>Power the analog I2C of the 5 GHz receiver.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>PERIF_I2C_RSTB</name>
+              <description>Release the peripheral analog I2C from reset when set.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_PERIF_I2C</name>
+              <description>Power the peripheral analog I2C.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_TXRF_I2C</name>
+              <description>Power the analog I2C of the RF transmitter.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_RFRX_PBUS</name>
+              <description>Power the RF receiver PBus.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_CKGEN_I2C</name>
+              <description>Power the analog I2C of the clock generator.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>XPD_PLL_I2C</name>
+              <description>Power the analog I2C of the PLL.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>PHY_BASEBAND_CONFIG</name>
+      <description>ESP32-C5 PHY baseband configuration words recovered from complete pinned
+libphy leaves. Operation-derived fields keep UNKNOWN where no public
+documentation establishes their electrical meaning.</description>
+      <baseAddress>0x600A0000</baseAddress>
+      <registers>
+        <register>
+          <name>ADC_RATE_AND_FRONT_END_CONTROL</name>
+          <description>Project-assigned name. Word whose bits 1:0 libphy[phy_i2c.o]::phy_adc_rate_set replaces with its rate bit and whose bits 3:2 libphy[phy_i2c.o]::phy_dac_rate_set clears.</description>
+          <addressOffset>0x448</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_0_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit 0, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_1_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit 1, set to the ADC rate bit by libphy[phy_i2c.o]::phy_adc_rate_set.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_2_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit 2, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_3_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit 3, cleared by libphy[phy_i2c.o]::phy_dac_rate_set.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>FE_CLOCK_GATE</name>
+          <description>Project-assigned name. Front-end clock-gate word; libphy[phy_init.o]::phy_open_fe_bb_clk writes 0x1E7.</description>
+          <addressOffset>0x400</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Complete front-end clock-gate image; individual gate meanings are unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TABLE_MEMORY_INDEX_SOURCE</name>
+          <description>Project-assigned name. Word whose bits 31:24 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0xB4.</description>
+          <addressOffset>0x408</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BASE_INDEX</name>
+              <description>Project-assigned name. Base index byte.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>FRONT_END_AND_TONE_STOP_CONTROL</name>
+          <description>Project-assigned name. Word whose bit 2 libphy[phy_reg.o]::phy_fe_reg_init sets.</description>
+          <addressOffset>0x40C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_2_OPAQUE</name>
+              <description>Opaque: meaning not established. Front-end initialization enable; meaning unknown.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_DCO_CONTROL</name>
+          <description>Project-assigned name. Word whose bits 23:22 phy_iq_swap_set clears.</description>
+          <addressOffset>0x434</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_22_23_OPAQUE</name>
+              <description>Opaque: meaning not established. Two-bit calibration control; meaning unknown.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>IQ_CORRECTION_CONTROL</name>
+          <description>Project-assigned name. Word whose bits 31:29 libphy[phy_reg.o]::phy_fe_reg_init sets.</description>
+          <addressOffset>0x438</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>RX_IQ_CORRECTION_MODE_LOW</name>
+              <description>Project-assigned name. RX IQ correction mode, low bit.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_IQ_CORRECTION_MODE_HIGH</name>
+              <description>Project-assigned name. RX IQ correction mode, high bit.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Front-end initialization bit; meaning unknown.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_IQ_SCALE</name>
+          <description>Project-assigned name. Word whose bits 15:8 and 7:0 libphy[phy_reg.o]::phy_fe_reg_init clears and phy_rxiq_scale_set replaces.</description>
+          <addressOffset>0x43C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Low RX IQ scale byte.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_15_OPAQUE</name>
+              <description>Opaque: meaning not established. High RX IQ scale byte.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>FRONT_END_CLEAR_CONTROL</name>
+          <description>Project-assigned name. Word whose bit 8 libphy[phy_reg.o]::phy_fe_reg_init clears.</description>
+          <addressOffset>0x444</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_8_OPAQUE</name>
+              <description>Opaque: meaning not established. Front-end initialization clear bit; meaning unknown.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>FE_BB_CLOCK_CONTROL</name>
+          <description>Project-assigned name. Word whose bits 1:0 libphy[phy_init.o]::phy_open_fe_bb_clk sets.</description>
+          <addressOffset>0x800</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_1_OPAQUE</name>
+              <description>Opaque: meaning not established. Two-bit front-end and baseband clock enable; individual meanings unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>POWER_DETECTOR_CONTROL</name>
+          <description>Project-assigned name. Power-detector control word.</description>
+          <addressOffset>0x808</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_4_11_OPAQUE</name>
+              <description>Opaque: meaning not established. Byte libphy[phy_pwdet.o]::phy_pwdet_reg_init replaces with 0x50.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_20_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Three-bit mode libphy[phy_pwdet.o]::phy_pwdet_reg_init sets to 2 and libphy[phy_pwdet.o]::phy_pwdet_sar2_init to 6.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>POWER_DETECTOR_SAR_CONTROL_STATUS</name>
+          <description>Project-assigned name. Power-detector SAR control word.</description>
+          <addressOffset>0x80C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_9_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit libphy[phy_pwdet.o]::phy_pwdet_sar2_init clears.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_12_13_OPAQUE</name>
+              <description>Opaque: meaning not established. Two bits libphy[phy_pwdet.o]::phy_pwdet_sar2_init sets.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0810_OPAQUE</name>
+          <description>Opaque: meaning not established. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init writes 0x0F0F0FFF.</description>
+          <addressOffset>0x810</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Complete image; meaning unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0814_OPAQUE</name>
+          <description>Opaque: meaning not established. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init writes 0x00FF0F64.</description>
+          <addressOffset>0x814</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Complete image; meaning unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>POWER_DETECTOR_REFERENCE</name>
+          <description>Project-assigned name. Word libphy[phy_pwdet.o]::phy_pwdet_reg_init and libphy[phy_pwdet.o]::phy_pwdet_sar2_init write 0xAAAA.</description>
+          <addressOffset>0x818</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Complete image; the low halfword is the power-detector reference code.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TX_PA_CONTROL_1</name>
+          <description>Project-assigned name. Word whose bits 15:8 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0x96.</description>
+          <addressOffset>0x870</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>PA_ON_BT_DELAY</name>
+              <description>Project-assigned name. PA-on delay byte.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0888_OPAQUE</name>
+          <description>Opaque: meaning not established. Word whose bit 29 libphy[phy_reg.o]::phy_fe_reg_init sets when phy_param byte 0x2A (set for a channel of at least 3001 MHz) is set and clears otherwise.</description>
+          <addressOffset>0x888</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_29_OPAQUE</name>
+              <description>Opaque: meaning not established. Band-dependent bit that libphy[phy_reg.o]::phy_fe_reg_init sets in the 5 GHz band; meaning unknown.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0894_OPAQUE</name>
+          <description>Opaque: meaning not established. Word whose bit 22 libphy[phy_reg.o]::phy_fe_reg_init sets.</description>
+          <addressOffset>0x894</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Front-end initialization enable; meaning unknown.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>DAC_SCALE</name>
+          <description>Project-assigned name. Word whose bits 23:16 and then 15:8 phy_dac_scale_set replaces with 0xFF or 0.</description>
+          <addressOffset>0xC04</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_8_15_OPAQUE</name>
+              <description>Opaque: meaning not established. Second DAC scale byte.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+            <field>
+              <name>BITS_16_23_OPAQUE</name>
+              <description>Opaque: meaning not established. First DAC scale byte.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0C08_OPAQUE</name>
+          <description>Opaque: meaning not established. Word whose bit 25 phy_iq_swap_set clears when phy_param byte 0x2A is set, and whose bits 26:25 it sets otherwise.</description>
+          <addressOffset>0xC08</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_25_OPAQUE</name>
+              <description>Opaque: meaning not established. First bit; meaning unknown.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_26_OPAQUE</name>
+              <description>Opaque: meaning not established. Second bit; meaning unknown.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>IQ_CORRECTION_AUX</name>
+          <description>Project-assigned name. Word whose bits 14:13 libphy[phy_reg.o]::phy_fe_reg_init sets.</description>
+          <addressOffset>0xC0C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TX_IQ_CORRECTION_MODE_LOW</name>
+              <description>Project-assigned name. TX IQ correction mode, low bit.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_IQ_CORRECTION_MODE_HIGH</name>
+              <description>Project-assigned name. TX IQ correction mode, high bit.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_0C20_OPAQUE</name>
+          <description>Opaque: meaning not established. Word whose bits 7:0 libphy[phy_reg.o]::phy_fe_reg_init replaces with 0x57.</description>
+          <addressOffset>0xC20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Low byte; meaning unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>BB_CLOCK_GATE</name>
+          <description>Project-assigned name. Baseband clock-gate word; libphy[phy_init.o]::phy_open_fe_bb_clk writes all ones.</description>
+          <addressOffset>0x7C80</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STATE</name>
+              <description>Project-assigned name. Complete baseband clock-gate image; individual gate meanings are unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_7920_OPAQUE</name>
+          <description>Opaque: meaning not established. Word whose bits 15:12 phy_rxevm_init_cfg clears.</description>
+          <addressOffset>0x7920</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_12_15_OPAQUE</name>
+              <description>Opaque: meaning not established. Four bits phy_rxevm_init_cfg clears; meaning unknown.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_EVM_CONTROL</name>
+          <description>Project-assigned name. RX EVM measurement control.</description>
+          <addressOffset>0x7A34</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_0_OPAQUE</name>
+              <description>Opaque: meaning not established. Set with bit 2 when phy_rxevm_init_cfg enables the measurement.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_1_OPAQUE</name>
+              <description>Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_2_OPAQUE</name>
+              <description>Opaque: meaning not established. Set with bit 0 when phy_rxevm_init_cfg enables the measurement.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_EVM_CONFIG</name>
+          <description>Project-assigned name. RX EVM measurement configuration.</description>
+          <addressOffset>0x7A38</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_2_6_OPAQUE</name>
+              <description>Opaque: meaning not established. Five bits phy_rxevm_init_cfg sets to 0x18.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>SECOND_PARAMETER</name>
+              <description>Project-assigned name. The second argument of phy_rxevm_init_cfg.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>7</bitWidth>
+            </field>
+            <field>
+              <name>THIRD_PARAMETER</name>
+              <description>Project-assigned name. The third argument of phy_rxevm_init_cfg.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>7</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_EVM_MEMORY_RESET</name>
+          <description>Project-assigned name. Word whose bit 8 phy_rxevm_reset_mem pulses.</description>
+          <addressOffset>0x7C50</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_8_OPAQUE</name>
+              <description>Opaque: meaning not established. Pulsed by phy_rxevm_reset_mem.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>LP_AON_RADIO</name>
+      <description>ESP32-C5 LP_AON field the PHY's power-detector SAR initialization drives. Other fields remain absent and are preserved by every field transaction.</description>
+      <baseAddress>0x600B1000</baseAddress>
+      <registers>
+        <register>
+          <name>SAR_CCT</name>
+          <description>SAR control word.</description>
+          <addressOffset>0x54</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>SAR2_PWDET_CCT</name>
+              <description>Three-bit SAR2 power-detector capacitor code.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>APB_SARADC_RADIO</name>
+      <description>ESP32-C5 APB_SARADC field the PHY's power-detector initialization drives. Other fields remain absent and are preserved by every field transaction.</description>
+      <baseAddress>0x6000E000</baseAddress>
+      <registers>
+        <register>
+          <name>CTRL</name>
+          <description>SAR ADC control word.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x40038240</resetValue>
+          <fields>
+            <field>
+              <name>SARADC2_PWDET_DRV</name>
+              <description>Drive SAR ADC2 from the power detector.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TSENS_CTRL</name>
+          <description>Temperature-sensor control.</description>
+          <addressOffset>0x58</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00018080</resetValue>
+          <fields>
+            <field>
+              <name>TSENS_PU</name>
+              <description>Power up the temperature sensor.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TSENS_CTRL2</name>
+          <description>Temperature-sensor control 2.</description>
+          <addressOffset>0x5C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00004002</resetValue>
+          <fields>
+            <field>
+              <name>TSENS_CLK_SEL</name>
+              <description>Select the temperature-sensor clock.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>PCR_RADIO</name>
+      <description>ESP32-C5 PCR fields the PHY drives: the SAR ADC and temperature-sensor clocks and one word the public header does not describe. Other fields remain absent and are preserved by every field transaction.</description>
+      <baseAddress>0x60096000</baseAddress>
+      <registers>
+        <register>
+          <name>SARADC_CONF</name>
+          <description>SAR ADC clock and reset.</description>
+          <addressOffset>0x88</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000001</resetValue>
+          <fields>
+            <field>
+              <name>SARADC_CLK_EN</name>
+              <description>Enable the SAR ADC clock.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SARADC_REG_CLK_EN</name>
+              <description>Enable the SAR ADC register clock.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TSENS_CLK_CONF</name>
+          <description>Temperature-sensor clock and reset.</description>
+          <addressOffset>0x90</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <resetValue>0x00000000</resetValue>
+          <fields>
+            <field>
+              <name>TSENS_CLK_SEL</name>
+              <description>Select the temperature-sensor clock source.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSENS_CLK_EN</name>
+              <description>Enable the temperature-sensor clock.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSENS_RST_EN</name>
+              <description>Hold the temperature sensor in reset.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>WORD_014C_OPAQUE</name>
+          <description>Opaque: meaning not established. Word between PCR_SAR_CLK_DIV and PCR_BS_CONF that the public header does not describe; phy_rf_init replaces its low byte with 0x0A.</description>
+          <addressOffset>0x14C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_7_OPAQUE</name>
+              <description>Opaque: meaning not established. Low byte; meaning unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>8</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_AUX_TSF_CONTROL</name>
+      <description>SoftAP, NAN and broadcast-TWT TSF control words. Complete public leaves prove their addresses and exact enable/mode masks; unrelated bits and hardware transition rules remain unnamed.</description>
+      <baseAddress>0x600AD860</baseAddress>
+      <registers>
+        <register>
+          <name>SOFTAP_CONTROL</name>
+          <description>Project-assigned name. Complete hal_disable_softap_tsf clears bits 31:30. Generic TSF enable/disable leaves independently identify bit 31 as the domain enable; bit 30 remains unknown.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BIT_30_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_ENABLE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>NAN_CONTROL</name>
+          <description>Project-assigned name. Complete NAN enable/disable leaves use the same two-stage gate and mode transaction as station TSF at this distinct word.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TSF_MODE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>TSF_ENABLE_LOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_ENABLE_HIGH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>BTWT_CONTROL</name>
+          <description>Project-assigned name. Complete hal_enable_sta_btwt_tsf enables or disables the broadcast-TWT TSF domain using the same gate and mode masks as station TSF.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TSF_MODE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>TSF_ENABLE_LOW</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_ENABLE_HIGH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_BSSID_POLICY</name>
+      <description>Per-interface BSSID address and policy words used by scan and associated-STA receive filtering.</description>
+      <baseAddress>0x600A4000</baseAddress>
+      <registers>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>BSSID_LOW%s</name>
+          <description>Project-assigned name. BSSID bytes 0..3 for interfaces 0..3; hal_mac_set_bssid publishes a complete full-word store.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BYTES_0_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>BSSID_HIGH%s</name>
+          <description>Project-assigned name. Canonical high BSSID, association identity and interface policy word for interfaces 0..3. Complete dbg_read_rx_misc independently decodes every field; the HE association leaf updates the MMSS/AID fields of interface zero rather than defining a second register identity.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BSSID_HIGH</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>ASSOCIATION_ID</name>
+              <description>Project-assigned name. Eleven-bit AID printed by dbg_read_rx_misc.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>11</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>2047</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>MINIMUM_MPDU_START_SPACING</name>
+              <description>Project-assigned name. Three-bit MMSS value printed by dbg_read_rx_misc.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>3</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>7</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>INTERFACE_IS_SOFT_AP</name>
+              <description>Project-assigned name. Cleared for interface zero by the associated-STA policy-five transaction.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ADDRESS_CHECK_ENABLE</name>
+              <description>Project-assigned name. MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_INTERRUPT</name>
+      <description>Wi-Fi MAC interrupt mask, masked status and write-to-clear aperture.
+        The two complete hal_mac leaves independently prove the status and
+        clear addresses. The recovered common FIQ and cold initializer prove
+        the event-bit mapping and mask transaction used by the open ISR.</description>
+      <baseAddress>0x600A4C40</baseAddress>
+      <registers>
+        <register>
+          <name>ENABLE</name>
+          <description>Project-assigned name. Complete hal_init first publishes 0x19a879e0 here before its remaining tail. Complete hal_enable_mac independently publishes its argument after clearing the shared MAC disable gates. The common FIQ samples it with each interrupt status snapshot.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_4_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>RX_ASSOCIATED_AUXILIARY_5</name>
+              <description>Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_6_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_COMPLETE</name>
+              <description>Project-assigned name. Enable for the TX-complete event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BSS_COLOR_COLLISION</name>
+              <description>Project-assigned name. Enable for the HE BSS-color collision event.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_9_10_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WATCHDOG</name>
+              <description>Project-assigned name. Enable for the MAC watchdog event.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_12_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_13_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_SUCCESS</name>
+              <description>Project-assigned name. Enable for successful receive completion.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_BEACON_FILTER</name>
+              <description>Project-assigned name. Enable for the station beacon-filter event; the complete disable leaf clears this bit after disabling the filter hardware.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_16_18_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>TX_TIMEOUT</name>
+              <description>Project-assigned name. Enable for the hardware TX queue timeout/abort event.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_20_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_21_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>21</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bit whose event identity remains unknown.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_23_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ASSOCIATED_AUXILIARY_24</name>
+              <description>Project-assigned name. Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_25_26_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>BIT_27_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_28_OPAQUE</name>
+              <description>Opaque: meaning not established. Unknown event enabled by the complete cold receive mask.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_29_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Interrupt-enable bits whose event identities remain unknown.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RAW</name>
+          <description>Project-assigned name. Unmasked WDEV interrupt snapshot read by print_isr_regs. Complete hal_disable_mac writes zero after masking ENABLE.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>EVENTS</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>STATUS</name>
+          <description>Project-assigned name. Masked MAC event snapshot read by the complete hal_mac_interrupt_get_event leaf. Its bit geometry matches the complete ENABLE event bank; only independently recovered event identities are named semantically.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>BITS_0_4_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>5</bitWidth>
+            </field>
+            <field>
+              <name>RX_ASSOCIATED_AUXILIARY_5</name>
+              <description>Project-assigned name. Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_6_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_COMPLETE</name>
+              <description>Project-assigned name. At least one hardware TX queue completed.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BSS_COLOR_COLLISION</name>
+              <description>Project-assigned name. HE BSS-color collision event.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_9_10_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>WATCHDOG</name>
+              <description>Project-assigned name. MAC watchdog event cleared by the complete dedicated leaf.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_12_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>12</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_13_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>13</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_SUCCESS</name>
+              <description>Project-assigned name. Successfully received frame is ready for the RX completion path.</description>
+              <bitOffset>14</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_BEACON_FILTER</name>
+              <description>Project-assigned name. Masked station beacon-filter event. The paired ENABLE field identity is recovered from the complete disable leaf; no task-side dispatch is claimed here.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_16_18_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+            <field>
+              <name>TX_TIMEOUT</name>
+              <description>Project-assigned name. Hardware TX queue timeout/abort event.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_20_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit whose identity remains unknown.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_21_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>21</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit whose identity remains unknown.</description>
+              <bitOffset>22</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_23_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ASSOCIATED_AUXILIARY_24</name>
+              <description>Project-assigned name. Enabled by the cold MAC mask 0x19a879e0 and observed asserted with RX_SUCCESS throughout sustained HE20 receive traffic. Complete libpp[wdev.o]::wDev_ProcessFiq acknowledges this bit as part of the full STATUS image but does not dispatch independent work for it. Its hardware meaning and independent transition rules remain unknown; software must not treat it as RX ownership or work multiplicity.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_25_26_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>2</bitWidth>
+            </field>
+            <field>
+              <name>BIT_27_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_28_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bit enabled by the complete cold receive mask; its event identity remains unknown.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_29_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>3</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CLEAR</name>
+          <description>Project-assigned name. Full event snapshot written by the complete clear leaf to acknowledge pending MAC events.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>EVENTS</name>
+              <description>Project-assigned name. Ones acknowledge the corresponding event bits.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_POWER_INTERRUPT</name>
+      <description>WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR.</description>
+      <baseAddress>0x600AD8B0</baseAddress>
+      <registers>
+        <register>
+          <name>ENABLE</name>
+          <description>Project-assigned name. WDEVPWR_ENABLE diagnostic snapshot and writable event mask. Complete guarded TSF-timer leaves independently identify bits 7 through 4, and complete TBTT interrupt leaves bits 3 through 0.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TBTT_3</name>
+              <description>Project-assigned name. Enable the TSF-3 TBTT event.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_2</name>
+              <description>Project-assigned name. Enable the TSF-2 TBTT event.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_1</name>
+              <description>Project-assigned name. Enable the TSF-1 TBTT event.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_0</name>
+              <description>Project-assigned name. Enable the TSF-0 TBTT event. TSF 0 is the station TSF.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_3</name>
+              <description>Project-assigned name. Enable the guarded TSF timer-three event.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_2</name>
+              <description>Project-assigned name. Enable the guarded TSF timer-two event.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_1</name>
+              <description>Project-assigned name. Enable the guarded TSF timer-one event.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_0</name>
+              <description>Project-assigned name. Enable the guarded TSF timer-zero event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Enable bits whose event identities remain unknown.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>16777215</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RAW</name>
+          <description>Project-assigned name. WDEVPWR_RAW diagnostic snapshot with the same event geometry as ENABLE, STATUS and CLEAR.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>TBTT_3</name>
+              <description>Project-assigned name. Raw TSF-3 TBTT event.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_2</name>
+              <description>Project-assigned name. Raw TSF-2 TBTT event.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_1</name>
+              <description>Project-assigned name. Raw TSF-1 TBTT event.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_0</name>
+              <description>Project-assigned name. Raw TSF-0 TBTT event. TSF 0 is the station TSF.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_3</name>
+              <description>Project-assigned name. Raw guarded TSF timer-three event.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_2</name>
+              <description>Project-assigned name. Raw guarded TSF timer-two event.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_1</name>
+              <description>Project-assigned name. Raw guarded TSF timer-one event.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_0</name>
+              <description>Project-assigned name. Raw guarded TSF timer-zero event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Raw event bits whose identities remain unknown.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>STATUS</name>
+          <description>Project-assigned name. Masked WDEVPWR event image returned by complete hal_pwr_interrupt_get_event, with TSF timer causes identified by the guarded timer leaves.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>TBTT_3</name>
+              <description>Project-assigned name. Masked TSF-3 TBTT event.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_2</name>
+              <description>Project-assigned name. Masked TSF-2 TBTT event.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_1</name>
+              <description>Project-assigned name. Masked TSF-1 TBTT event.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_0</name>
+              <description>Project-assigned name. Masked TSF-0 TBTT event. TSF 0 is the station TSF.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_3</name>
+              <description>Project-assigned name. Masked guarded TSF timer-three event.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_2</name>
+              <description>Project-assigned name. Masked guarded TSF timer-two event.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_1</name>
+              <description>Project-assigned name. Masked guarded TSF timer-one event.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_0</name>
+              <description>Project-assigned name. Masked guarded TSF timer-zero event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Masked event bits whose identities remain unknown.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>CLEAR</name>
+          <description>Project-assigned name. Write-one-to-clear event bank used by complete hal_pwr_interrupt_clr_event. Complete guarded TSF-timer leaves independently identify bits 7 through 4.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>TBTT_3</name>
+              <description>Project-assigned name. Acknowledge the TSF-3 TBTT event.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_2</name>
+              <description>Project-assigned name. Acknowledge the TSF-2 TBTT event.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_1</name>
+              <description>Project-assigned name. Acknowledge the TSF-1 TBTT event.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TBTT_0</name>
+              <description>Project-assigned name. Acknowledge the TSF-0 TBTT event. TSF 0 is the station TSF.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_3</name>
+              <description>Project-assigned name. Acknowledge the guarded TSF timer-three event.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_2</name>
+              <description>Project-assigned name. Acknowledge the guarded TSF timer-two event.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_1</name>
+              <description>Project-assigned name. Acknowledge the guarded TSF timer-one event.</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TSF_TIMER_0</name>
+              <description>Project-assigned name. Acknowledge the guarded TSF timer-zero event.</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_8_31_OPAQUE</name>
+              <description>Opaque: meaning not established. Acknowledge event bits whose identities remain unknown.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>24</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>16777215</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_RTC_TIMER_UPDATE</name>
+      <description>Complete enabled path of hal_timer_update_by_rtc, reached from complete hal_init with enable one and the OS-adapter slow-clock calibration value.</description>
+      <baseAddress>0x600AD830</baseAddress>
+      <registers>
+        <register>
+          <name>CONTROL</name>
+          <description>Project-assigned name. Enabled hal_timer_update_by_rtc sets bit 27. hal_set_sta_tsf_wakeup sets or clears bit 21 together with the STA TSF wakeup bit at 0x600ad858.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STA_TSF_WAKEUP_ENABLE</name>
+              <description>Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit in the same branch as STA_TSF_CONTROL.STA_TSF_WAKEUP_ENABLE.</description>
+              <bitOffset>21</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BIT_27_OPAQUE</name>
+              <description>Opaque: meaning not established. Set when the leaf's enable argument is nonzero.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SOC_WAKEUP_CLEAR</name>
+          <description>Project-assigned name. Complete libpp[hal_tsf.o]::hal_tsf_clear_soc_wakeup_request sets bit 30. Complete modem-power leaves independently expose status bits and clear pulses in this shared word; hardware transition behavior is not inferred.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BEACON_FILTER_FORCE_SYNC_LIMIT</name>
+              <description>Project-assigned name. The dedicated setter replaces bits 9:0.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>10</bitWidth>
+            </field>
+            <field>
+              <name>BEACON_FILTER_FORCE_SYNC_ENABLE</name>
+              <description>Project-assigned name. Dedicated enable/disable leaves set or clear bit 10.</description>
+              <bitOffset>10</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BEACON_FILTER_FORCE_DUMP_LIMIT</name>
+              <description>Project-assigned name. The dedicated setter replaces bits 17:11.</description>
+              <bitOffset>11</bitOffset>
+              <bitWidth>7</bitWidth>
+            </field>
+            <field>
+              <name>BEACON_FILTER_FORCE_DUMP_ENABLE</name>
+              <description>Project-assigned name. Dedicated enable/disable leaves set or clear bit 21.</description>
+              <bitOffset>21</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLEAR_BEACON_SLEEP_COUNTER</name>
+              <description>Project-assigned name. Dedicated clear leaf sets bit 28.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLEAR_BEACON_MISS_COUNTER</name>
+              <description>Project-assigned name. Dedicated clear leaf sets bit 29.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLEAR_REQUEST</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CLEAR_BEACON_INFO</name>
+              <description>Project-assigned name. Dedicated clear leaf sets bit 31.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>MODEM_SLEEP_LIMIT_CONTROL</name>
+          <description>Project-assigned name. Complete no-call setters prove two bounded modem counters and their independent limit-exceeded wake gates. Units and hardware transition behavior remain unknown.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BEACON_MISS_LIMIT</name>
+              <description>Project-assigned name. Low four argument bits published by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_limit.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>15</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BEACON_MISS_LIMIT_WAKEUP_ENABLE</name>
+              <description>Project-assigned name. Dedicated enable/disable leaves set or clear bit four.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>MODEM_STATE_SLEEP_LIMIT</name>
+              <description>Project-assigned name. Low ten argument bits published in bits 14:5 by libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_sleep_limit.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>10</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1023</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>MODEM_STATE_SLEEP_LIMIT_WAKEUP_ENABLE</name>
+              <description>Project-assigned name. Dedicated enable/disable leaves set or clear bit fifteen.</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>STA_LIGHT_SLEEP_WAKE_AHEAD</name>
+          <description>Project-assigned name. Complete hal_set_sta_light_sleep_wake_ahead_time replaces the high sixteen bits. Complete hal_set_sta_tbtt independently publishes its fifth argument to the same field.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>TIME</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TBTT_RF_CONTROL_WAIT_CYCLES</name>
+          <description>Project-assigned name. Complete libpp[hal_tsf.o]::tsf_hal_set_tbtt_rf_ctrl_wait_cycles replaces the low twenty-four bits; units and hardware transition behavior remain unknown.</description>
+          <addressOffset>0x14</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>WAIT_CYCLES</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>24</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>RX_BEACON_TIME_LOW</name>
+          <description>Project-assigned name. Complete hal_set_rx_beacon_time and libpp[hal_pwr.o]::pwr_hal_set_mac_modem_beacon_miss_timeout independently replace the same low sixteen bits. The mode-dependent hardware interpretation is not inferred.</description>
+          <addressOffset>0x24</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>STA_TSF_CONTROL</name>
+          <description>Project-assigned name. Shared STA TSF scheduler, TBTT and modem-state wakeup control word used by hal_enable_sta_tsf, hal_disable_sta_tsf, hal_enable_sta_tbtt, hal_disable_sta_tbtt, hal_set_sta_tbtt_ahead_time, hal_set_sta_tsf_wakeup, and the wakeup-protect enable/disable leaves.</description>
+          <addressOffset>0x28</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>STA_TBTT_AHEAD_TIME</name>
+              <description>Project-assigned name. hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>STA_TSF_MODE</name>
+              <description>Project-assigned name. hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <useEnumeratedValues>true</useEnumeratedValues>
+              </writeConstraint>
+              <enumeratedValues>
+                <name>StaTsfMode</name>
+                <usage>read-write</usage>
+                <enumeratedValue>
+                  <name>DISABLED</name>
+                  <value>0</value>
+                </enumeratedValue>
+                <enumeratedValue>
+                  <name>ENABLED</name>
+                  <value>1</value>
+                </enumeratedValue>
+              </enumeratedValues>
+            </field>
+            <field>
+              <name>MODEM_STATE_WAKEUP_PROTECT_ENABLE</name>
+              <description>Project-assigned name. libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_enable sets this bit and the corresponding disable leaf clears it.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_TBTT_ENABLE</name>
+              <description>Project-assigned name. hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_TSF_ENABLE_LOW</name>
+              <description>Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_TSF_WAKEUP_ENABLE</name>
+              <description>Project-assigned name. hal_set_sta_tsf_wakeup sets or clears this bit together with WIFI_MAC_RTC_TIMER_UPDATE.CONTROL.STA_TSF_WAKEUP_ENABLE.</description>
+              <bitOffset>29</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>STA_TSF_ENABLE_HIGH</name>
+              <description>Project-assigned name. hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.</description>
+              <bitOffset>31</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>STA_TBTT_INTERVAL</name>
+          <description>Project-assigned name. Complete hal_set_sta_tbtt_interval replaces bits 25:0 with its 32-bit argument shifted right by ten and preserves bits 31:26. Complete hal_set_sta_tbtt performs the same update from its third argument, and libpp[hal_tsf.o]::tsf_hal_get_tbtt_interval reads the interval back as this field shifted left by ten.</description>
+          <addressOffset>0x2C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>INTERVAL_TSF_BITS_35_10</name>
+              <description>Project-assigned name. The TBTT interval in station TSF units of 1024 µs.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>26</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>67108863</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SLOW_CLOCK_CALIBRATION</name>
+          <description>Project-assigned name. Enabled hal_timer_update_by_rtc replaces bits 17:0 with the low eighteen bits returned by g_wifi_osi_funcs._slowclk_cal_get.</description>
+          <addressOffset>0x48</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Any eighteen-bit value returned by the OS-adapter calibration callback is published without interpretation.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>18</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>262143</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_STA_BEACON_FILTER</name>
+      <description>Station beacon-filter control word recovered from the complete enable and disable leaves. The three low bits are toggled together; individual hardware meanings remain unknown.</description>
+      <baseAddress>0x600A42B4</baseAddress>
+      <registers>
+        <register>
+          <name>CONTROL</name>
+          <description>Project-assigned name. hal_enable_sta_beacon_filter sets bits 2:0 after enabling the matching interrupt; hal_disable_sta_beacon_filter clears them before disabling that interrupt.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_2_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>3</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>7</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_STA_TSF_LOAD</name>
+      <description>Shared station TSF load and coherent snapshot transaction.</description>
+      <baseAddress>0x600AD814</baseAddress>
+      <registers>
+        <register>
+          <name>CONTROL</name>
+          <description>Project-assigned name. Complete hal_set_sta_tsf asserts bit four after writing both station TSF value words; the SoftAP path of complete hal_mac_tsf_reset asserts bit five after clearing both shared TSF value words; complete libpp[hal_tsf.o]::hal_get_sta_tsf sets then clears bit zero around its snapshot reads.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>SNAPSHOT_STATION_TSF</name>
+              <description>Project-assigned name. Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LOAD_STATION_TSF</name>
+              <description>Project-assigned name. Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LOAD_SOFTAP_TSF</name>
+              <description>Project-assigned name. SoftAP TSF load request asserted after the two zero-value writes by the arg0=0 path of complete hal_mac_tsf_reset.</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>LOAD_STATION_TBTT_TARGET</name>
+              <description>Project-assigned name. Complete hal_set_sta_tbtt and the index-0 TBTT start-time leaf set this bit after writing the station TBTT target.</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>VALUE_LOW</name>
+          <description>Project-assigned name. Low 32 bits written first by complete hal_set_sta_tsf.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>VALUE_HIGH</name>
+          <description>Project-assigned name. High 32 bits written second by complete hal_set_sta_tsf.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SNAPSHOT_LOW</name>
+          <description>Project-assigned name. Coherently latched low 32 bits conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>SNAPSHOT_HIGH</name>
+          <description>Project-assigned name. Coherently latched high 32 bits conditionally read by complete libpp[hal_tsf.o]::hal_get_sta_tsf.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>TSF_DEVIATION_CONTROL</name>
+          <description>Project-assigned name. Complete ROM leaves independently replace the TSF deviation value and set two synchronization controls; omitted bits remain semantically unknown.</description>
+          <addressOffset>0x14</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>DEVIATION</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+            </field>
+            <field>
+              <name>RX_BEACON_ABORT_SYNC_ENABLE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>DEVIATION_SYNC_ENABLE</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_TX_COMMON</name>
+      <description>Shared Wi-Fi CCA, timeout and completion state used by MAC transmit queues and the PHY-owned Wi-Fi CCA gate.</description>
+      <baseAddress>0x600A4C5C</baseAddress>
+      <registers>
+        <register>
+          <name>CCA_CONTROL</name>
+          <description>Project-assigned name. Global Wi-Fi TX CCA control; complete PHY enable/disable leaves update the high two fields through separate fresh reads.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BITS_0_27_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>28</bitWidth>
+            </field>
+            <field>
+              <name>PHY_AUX_FORCE</name>
+              <description>Project-assigned name. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero in their second fresh-read edge.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>FORCE</name>
+              <description>Project-assigned name. Value three suppresses CCA while invalidating a timed-out queue. Complete libphy[phy_reg.o]::phy_disable_cca writes encoding two and complete libphy[phy_reg.o]::phy_enable_cca writes zero.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>QUEUE_STATE_CLEAR</name>
+          <description>Project-assigned name. Queue collision/timeout state acknowledgement.</description>
+          <addressOffset>0x50</addressOffset>
+          <size>0x20</size>
+          <access>write-only</access>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>COLLISION_QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_4_15_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>12</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_20_31_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>12</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>QUEUE_STATE</name>
+          <description>Project-assigned name. Per-queue timeout and trigger-flow state. The complete trigger-flow HAL getter returns the entire high byte; the complete completion dispatcher then right-shifts it by the completed queue number and tests bit zero.</description>
+          <addressOffset>0x54</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>COLLISION_QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COLLISION_QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_4_15_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>12</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TIMEOUT_QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_20_23_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+            <field>
+              <name>TRIGGER_FLOW_QUEUE_0</name>
+              <description>Project-assigned name. Queue zero is participating in the hardware Trigger-based transmit flow.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TRIGGER_FLOW_QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TRIGGER_FLOW_QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TRIGGER_FLOW_QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_28_31_OPAQUE</name>
+              <description>Opaque: meaning not established. The complete HAL returns four additional high bitmap bits whose bounded ordinary-queue meaning remains unresolved.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>4</bitWidth>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>COMPLETE_CLEAR</name>
+          <description>Project-assigned name. Preserved-image acknowledgement for ordinary queue completion bits.</description>
+          <addressOffset>0x58</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <modifiedWriteValues>oneToClear</modifiedWriteValues>
+          <fields>
+            <field>
+              <name>QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_4_31_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>28</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>268435455</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <name>COMPLETE_STATE</name>
+          <description>Project-assigned name. Low four bits report completed ordinary queues 0..3.</description>
+          <addressOffset>0x5C</addressOffset>
+          <size>0x20</size>
+          <access>read-only</access>
+          <fields>
+            <field>
+              <name>QUEUE_0</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_1</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_2</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>QUEUE_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+    <peripheral>
+      <name>WIFI_MAC_INTERFACE_ADDRESS</name>
+      <description>Four interface-address pairs consumed by MAC receive filtering.</description>
+      <baseAddress>0x600A405C</baseAddress>
+      <registers>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>ADDRESS_LOW%s</name>
+          <description>Project-assigned name. Interface MAC bytes 0..3 in little-endian order, published by the first full-word store.</description>
+          <addressOffset>0x0</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BYTES_0_3</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>4</dim>
+          <dimIncrement>0x8</dimIncrement>
+          <dimIndex>0-3</dimIndex>
+          <name>ADDRESS_HIGH%s</name>
+          <description>Project-assigned name. Interface MAC bytes 4..5 are published as a full-word store before a separate fresh-read RMW sets receive-policy enable bit 16.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>BYTES_4_5</name>
+              <description>Project-assigned name.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>RX_POLICY_ENABLE</name>
+              <description>Project-assigned name. Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_17_31_OPAQUE</name>
+              <description>Opaque: meaning not established.</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>15</bitWidth>
+            </field>
+          </fields>
+        </register>
+      </registers>
+    </peripheral>
+  </peripherals>
+</device>
