@@ -599,10 +599,17 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
     );
     mmio.last_descriptor_low = base & ADDRESS_LOW_MASK;
     mmio.next_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
-    assert!(live.take_completed(0).is_some());
+    // An upper owner keeps descriptor zero's buffer, so its rearm fails
+    // inside the recycle transaction, after every descriptor check passed.
+    let detached = storage
+        .take_completed_unit(&mut live, 1)
+        .unwrap()
+        .expect("completed unit")
+        .detach_single()
+        .expect("single descriptor detaches");
 
     assert_eq!(
-        live.recycle_completed_prefix::<1, _, _>(&mut mmio, |_| Err(RxRingError::Size)),
+        storage.recycle_completed_prefix::<1, _>(&mut live, &mut mmio),
         Ok(None),
     );
     storage.descriptors()[1].write_word0(
@@ -610,10 +617,11 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
     );
     mmio.last_descriptor_low = (base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert_eq!(
-        live.recycle_completed_prefix::<1, _, _>(&mut mmio, |_| Err(RxRingError::Size)),
-        Err(RxRingError::Size),
+        storage.recycle_completed_prefix::<1, _>(&mut live, &mut mmio),
+        Err(RxRingError::Busy),
     );
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    drop(detached);
 }
 
 #[test]
@@ -645,7 +653,7 @@ fn completed_descriptor_metadata_is_validated_before_payload_transfer() {
             2 => next_address = 0,
             _ => unreachable!(),
         }
-        descriptor.publish(word0, buffer_address, next_address);
+        descriptor.inject_corrupt_words(word0, buffer_address, next_address);
 
         assert!(matches!(
             storage.take_completed(&mut live, 0),
@@ -1103,4 +1111,149 @@ fn zeroed_arena_is_the_reusable_identity_bound_arena_new_builds() {
             (new.word0(), new.buffer_address(), new.next_address())
         );
     }
+}
+
+/// The host space moved to the DMA window's low end, where the first
+/// descriptor's low address bits are zero.
+enum AtWindowStart {}
+
+impl crate::space::DmaSpace for AtWindowStart {
+    fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
+        HostDma::address(arena, field)
+            .map(|address| address - crate::space::HOST_ARENA_BASE + crate::descriptor::DMA_LOW)
+    }
+}
+
+#[test]
+fn a_descriptor_base_that_reads_as_an_exhausted_list_is_refused() {
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, AtWindowStart>::new()));
+    let mut buffers = [0; 2];
+    let base = storage.dma_layout(&mut buffers).unwrap();
+    assert_eq!(base, crate::descriptor::DMA_LOW);
+    let mut mmio = MockRxDma::default();
+    assert!(matches!(
+        storage.prepare_ring(&mut mmio, base, &buffers),
+        Err(RxRingError::Address)
+    ));
+}
+
+fn live_host_arena<const COUNT: usize>() -> (
+    &'static RxDmaStorage<COUNT, 16, 20, HostDma>,
+    &'static [u32; COUNT],
+    MockRxDma,
+    RxRingLive<'static, COUNT>,
+) {
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
+    let buffers = Box::leak(Box::new([0; COUNT]));
+    let base = storage.dma_layout(buffers).unwrap();
+    let mut mmio = MockRxDma::default();
+    let live = storage
+        .prepare_ring(&mut mmio, base, buffers)
+        .expect("prepared owner")
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    (storage, buffers, mmio, live)
+}
+
+#[test]
+fn host_dma_port_writes_only_inside_one_ring_buffer() {
+    const COUNT: usize = 2;
+    let (storage, buffers, mut mmio, mut live) = live_host_arena::<COUNT>();
+    let base = live.descriptor_base();
+
+    // A write inside a buffer lands there, where the CPU reads the
+    // completed descriptor's segment.
+    storage
+        .dma_write(&live, buffers[1] + 4, &[1, 2, 3, 4])
+        .unwrap();
+    let mut read = [0; 4];
+    storage.dma_read(&live, buffers[1] + 4, &mut read).unwrap();
+    assert_eq!(read, [1, 2, 3, 4]);
+    storage.descriptors()[1].write_word0(
+        16 | (8 << crate::descriptor::LENGTH_SHIFT)
+            | crate::descriptor::BIT_30
+            | crate::descriptor::BIT_31,
+    );
+    let completed = storage
+        .take_completed(&mut live, 1)
+        .unwrap()
+        .expect("completed descriptor");
+    assert_eq!(completed.segment().buffer[4..8], [1, 2, 3, 4]);
+
+    let buffer_bytes = |live: &RxRingLive<'_, COUNT>| {
+        buffers.map(|address| {
+            let mut bytes = [0; 20];
+            storage.dma_read(live, address, &mut bytes).unwrap();
+            bytes
+        })
+    };
+    let descriptor_words = || {
+        storage.descriptors().each_ref().map(|descriptor| {
+            (
+                descriptor.word0(),
+                descriptor.buffer_address(),
+                descriptor.next_address(),
+            )
+        })
+    };
+    let (bytes_before, words_before) = (buffer_bytes(&live), descriptor_words());
+
+    // Outside every buffer: below the arena, the descriptor array, and the
+    // words after the last buffer.
+    for address in [
+        crate::space::HOST_ARENA_BASE - 4,
+        base,
+        base + crate::descriptor::DESCRIPTOR_BYTES,
+        buffers[COUNT - 1] + 20,
+    ] {
+        assert_eq!(
+            storage.dma_write(&live, address, &[0xff; 4]),
+            Err(HostDmaAccessError::OutsideBuffers),
+            "address {address:#x}"
+        );
+    }
+    // Crossing the end of buffer zero into buffer one.
+    assert_eq!(
+        storage.dma_write(&live, buffers[0] + 18, &[0xff; 4]),
+        Err(HostDmaAccessError::OutsideBuffers)
+    );
+    assert_eq!(buffer_bytes(&live), bytes_before);
+    assert_eq!(descriptor_words(), words_before);
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn host_dma_port_refuses_a_foreign_ring_and_a_detached_buffer() {
+    const COUNT: usize = 2;
+    let (storage, buffers, mut mmio, mut live) = live_host_arena::<COUNT>();
+    let (_, _, mut other_mmio, other) = live_host_arena::<COUNT>();
+    assert_eq!(
+        storage.dma_write(&other, buffers[0], &[0xff]),
+        Err(HostDmaAccessError::ForeignRing)
+    );
+
+    storage.descriptors()[0].write_word0(
+        16 | (8 << crate::descriptor::LENGTH_SHIFT)
+            | crate::descriptor::BIT_30
+            | crate::descriptor::BIT_31,
+    );
+    let detached = storage
+        .take_completed_unit(&mut live, 1)
+        .unwrap()
+        .expect("completed unit")
+        .detach_single()
+        .expect("single descriptor detaches");
+    assert_eq!(
+        storage.dma_write(&live, buffers[0], &[0xff]),
+        Err(HostDmaAccessError::NotInRing)
+    );
+    let mut read = [0; 1];
+    assert_eq!(
+        storage.dma_read(&live, buffers[0], &mut read),
+        Err(HostDmaAccessError::NotInRing)
+    );
+    drop(detached);
+    assert!(live.try_stop(&mut mmio).is_ok());
+    assert!(other.try_stop(&mut other_mmio).is_ok());
 }

@@ -3,10 +3,6 @@
 use oer_esp32s31_ieee80211_dma::descriptor::{
     BIT_31, descriptor_address_valid, length as descriptor_length, rx_done, size as descriptor_size,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub use oer_esp32s31_ieee80211_dma::rx_ring::{build_cold_ring, disable_receive, rearm_descriptor};
-#[cfg(any(test, feature = "test-support"))]
-pub use oer_esp32s31_ieee80211_dma::rx_ring::{enable_receive, publish_cold_ring};
 pub use oer_esp32s31_ieee80211_dma::{
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,

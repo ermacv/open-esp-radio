@@ -155,7 +155,12 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         } else {
             S::address(storage, storage.buffers.as_ptr()).ok_or(AmpduDmaStorageError::Address)?
         };
-        Self::pin_static_inner(storage, descriptor_base, buffer_base)
+        Self::pin_static_inner(
+            storage,
+            descriptor_base,
+            buffer_base,
+            external_region_address::<S>,
+        )
     }
 
     #[allow(
@@ -166,6 +171,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         storage: &'static mut Self,
         descriptor_base: u32,
         buffer_base: u32,
+        external_region: fn(&[u8]) -> Option<u32>,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
         let descriptor_count = u8::try_from(SLOTS).map_err(|_| AmpduDmaStorageError::Count)?;
         if descriptor_count == 0 || !descriptor_address_valid(descriptor_base) {
@@ -213,9 +219,19 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
                 buffer_stride,
                 buffer_capacity,
                 buffer_range,
+                external_region,
             },
         })
     }
+}
+
+/// The DMA address of an external region's first byte in space `S`.
+///
+/// A retained lease is not a field of the arena, so its region is its own
+/// arena: on the chip that is the region's address, in a host model the
+/// synthetic start of the DMA window.
+fn external_region_address<S: DmaSpace>(region: &[u8]) -> Option<u32> {
+    S::address(region, region.as_ptr())
 }
 
 impl<const SLOTS: usize, const BUFFER_SIZE: usize> Default for AmpduDmaStorage<SLOTS, BUFFER_SIZE> {
@@ -233,6 +249,9 @@ pub struct AmpduDmaBinding {
     buffer_stride: u32,
     buffer_capacity: u32,
     buffer_range: Option<StableDmaRange<'static>>,
+    /// The space this arena was bound in, applied to the external regions
+    /// its retained leases publish.
+    external_region: fn(&[u8]) -> Option<u32>,
 }
 
 impl AmpduDmaBinding {
@@ -555,6 +574,9 @@ struct RetainedDmaBackingIdentity {
     generation: u64,
     address: usize,
     len: usize,
+    /// DMA address of the region's first byte, `None` when the region has
+    /// none in the arena's space.
+    dma_address: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -874,6 +896,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             return Err(AmpduDmaStorageError::Busy);
         }
         let descriptor_head = self.descriptor_head();
+        let external_region = self.dma().binding.external_region;
         let generation = self.next_lease_generation()?;
         self.retention_mut().backings[index] = Some(ManuallyDrop::new(backing));
         // Count the lease before borrowing its region. If a backing's unsafe
@@ -896,6 +919,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             generation,
             address: bytes.as_ptr().addr(),
             len: bytes.len(),
+            dma_address: external_region(bytes),
         };
         identities[index] = Some(identity);
         Ok((
@@ -966,7 +990,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             .checked_add(capacity)
             .filter(|end| *end <= identity.len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        let buffer_address = external_dma_address(address, buffer_capacity)?;
+        let buffer_address = external_dma_address(identity, offset, buffer_capacity)?;
         let word0 = tx_owned_word(buffer_capacity, transfer_length)
             .ok_or(AmpduDmaStorageError::InvalidLength)?;
         let slot = self
@@ -1111,7 +1135,8 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                 .checked_add(capacity)
                 .filter(|end| *end <= identity.len)
                 .ok_or(AmpduDmaStorageError::Address)?;
-            buffer_addresses[index] = external_dma_address(entry.address, entry.buffer_capacity)?;
+            buffer_addresses[index] =
+                external_dma_address(identity, offset, entry.buffer_capacity)?;
             descriptor_addresses[index] = self
                 .dma()
                 .binding
@@ -1238,29 +1263,29 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Drop
     }
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
-fn external_dma_address(address: usize, capacity: u32) -> Result<u32, AmpduDmaStorageError> {
-    let address = u32::try_from(address).map_err(|_| AmpduDmaStorageError::Address)?;
+/// The DMA address `offset` bytes into a retained region, admitted only when
+/// `capacity` bytes from there lie in a range the TX DMA reader can fetch.
+fn external_dma_address(
+    identity: RetainedDmaBackingIdentity,
+    offset: usize,
+    capacity: u32,
+) -> Result<u32, AmpduDmaStorageError> {
+    let address = identity
+        .dma_address
+        .zip(u32::try_from(offset).ok())
+        .and_then(|(base, offset)| base.checked_add(offset))
+        .ok_or(AmpduDmaStorageError::Address)?;
     external_tx_buffer_range_valid(address, capacity)
         .then_some(address)
         .ok_or(AmpduDmaStorageError::Address)
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
 const fn external_tx_buffer_range_valid(address: u32, size: u32) -> bool {
     dma_range_valid(address, size) || psram_tx_buffer_range_valid(address, size)
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
 const fn psram_tx_buffer_range_valid(_address: u32, _size: u32) -> bool {
     false
-}
-
-#[cfg(any(test, feature = "test-support"))]
-fn external_dma_address(address: usize, _capacity: u32) -> Result<u32, AmpduDmaStorageError> {
-    // Native models have no asynchronous DMA actor. Truncation supplies only
-    // a model descriptor image for host state-machine tests.
-    Ok(address as u32)
 }
 
 pub struct RetainedAmpduDmaPublication<

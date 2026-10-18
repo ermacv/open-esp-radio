@@ -92,7 +92,6 @@ pub enum HtAmpduTxError {
     },
     InvalidStorageGeometry {
         slots: usize,
-        buffer_size: usize,
     },
     TxProgramUnavailable {
         format: HtAmpduTxFormat,
@@ -220,37 +219,20 @@ impl HtAmpduTxCompletion {
     }
 }
 
-#[cfg(any(test, feature = "test-support"))]
-#[repr(C, align(16))]
-struct HtAmpduDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
-
-#[cfg(any(test, feature = "test-support"))]
-impl<const BUFFER_SIZE: usize> HtAmpduDmaBuffer<BUFFER_SIZE> {
-    const fn new() -> Self {
-        Self([0; BUFFER_SIZE])
-    }
-}
-
 /// Pinned A-MPDU protocol state and bounded frame-formatting workspace.
 ///
 /// This type records aggregate layout, completion state and retained frame
 /// metadata. It cannot publish a descriptor chain or start hardware by itself:
 /// production submission requires [`HtAmpduTxResources`], which couples this
-/// state to the lower DMA crate's descriptor/backing owner. Explicit models also
-/// retain fixed formatter buffers for oracle tests; those buffers and their
-/// upper-only APIs require `test-support` or unit-test compilation on every target.
+/// state to the lower DMA crate's descriptor/backing owner.
 ///
 /// SOURCE\[HIL_OPEN_HT_AMPDU_DIRECT_2026_07_29]: ESP32-S31 rev0,
 /// psram-code-psram-data, open PHY/MAC, HT40 MCS7 SGI. Four observed
 /// two-MPDU submissions from this pool each returned a BlockAck bitmap ending
 /// in `0x000f`, with no aggregate hardware timeout.
 #[pin_project]
-pub struct HtAmpduTxStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
-    #[cfg(any(test, feature = "test-support"))]
-    buffers: [HtAmpduDmaBuffer<BUFFER_SIZE>; SLOTS],
-    /// Stable backing allocation selected for each committed MPDU.
-    ///
-    /// Ordinary commits point into `buffers`; cache-TX commits point into a
+pub struct HtAmpduTxStorage<const SLOTS: usize> {
+    /// Stable backing allocation selected for each committed MPDU: a
     /// separately pinned lease retained by the safe runtime wrapper.
     buffer_addresses: [usize; SLOTS],
     frame_lengths: [u16; SLOTS],
@@ -284,18 +266,9 @@ pub struct HtAmpduTxStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
     _pin: PhantomPinned,
 }
 
-// Production metadata size must not scale with the host-only formatter
-// capacity. This is a compile-time target-layout assertion, not a runtime
-// diagnostic.
-#[cfg(not(any(test, feature = "test-support")))]
-const _: [(); core::mem::size_of::<HtAmpduTxStorage<8, 0>>()] =
-    [(); core::mem::size_of::<HtAmpduTxStorage<8, 4096>>()];
-
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFER_SIZE> {
+impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     pub const fn new() -> Self {
         Self {
-            #[cfg(any(test, feature = "test-support"))]
-            buffers: [const { HtAmpduDmaBuffer::new() }; SLOTS],
             buffer_addresses: [0; SLOTS],
             frame_lengths: [0; SLOTS],
             hardware_mic_lengths: [0; SLOTS],
@@ -409,14 +382,8 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
         if *storage.state != TxSlotState::Free {
             return Err(HtAmpduTxError::NotFree(*storage.state));
         }
-        if SLOTS < 2
-            || SLOTS > TX_AMPDU_SLOT_CAPACITY
-            || (BUFFER_SIZE != 0 && BUFFER_SIZE <= TX_AMPDU_METADATA_SIZE + TX_FCS_SIZE as usize)
-        {
-            return Err(HtAmpduTxError::InvalidStorageGeometry {
-                slots: SLOTS,
-                buffer_size: BUFFER_SIZE,
-            });
+        if !(2..=TX_AMPDU_SLOT_CAPACITY).contains(&SLOTS) {
+            return Err(HtAmpduTxError::InvalidStorageGeometry { slots: SLOTS });
         }
         let generation = (*storage.generation_cursor)
             .checked_add(1)
@@ -433,38 +400,9 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxStorage<SLOTS, BUFFE
         *storage.state = TxSlotState::Reserved;
         Ok(*storage.active)
     }
-
-    /// Return the payload area for the next MPDU while software owns it.
-    ///
-    /// The eight-byte S31 TX metadata prefix remains private and is published
-    /// by [`commit_frame`](Self::commit_frame).
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn next_frame_buffer(
-        self: Pin<&mut Self>,
-        cookie: TxCookie,
-    ) -> Result<&mut [u8], HtAmpduTxError> {
-        let storage = self.project();
-        if *storage.state != TxSlotState::Reserved || *storage.active != cookie {
-            return Err(HtAmpduTxError::Stale);
-        }
-        let index = usize::from(*storage.count);
-        if index >= SLOTS {
-            return Err(HtAmpduTxError::SlotCapacity);
-        }
-        if BUFFER_SIZE <= TX_AMPDU_METADATA_SIZE {
-            return Err(HtAmpduTxError::InvalidStorageGeometry {
-                slots: SLOTS,
-                buffer_size: BUFFER_SIZE,
-            });
-        }
-        let buffer = &mut storage.buffers[index].0;
-        Ok(&mut buffer[TX_AMPDU_METADATA_SIZE..])
-    }
 }
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> Default
-    for HtAmpduTxStorage<SLOTS, BUFFER_SIZE>
-{
+impl<const SLOTS: usize> Default for HtAmpduTxStorage<SLOTS> {
     fn default() -> Self {
         Self::new()
     }

@@ -3,7 +3,8 @@
 //! The register sequence is recovered from `libpp.a[hal_mac.o]::hal_init`,
 //! `mac_txrx_init`, `mac_rxbuf_init`, and `mac_last_rxbuf_init`. It deliberately
 //! stops before publishing an RX descriptor base: ownership of the DMA ring
-//! remains with the DMA ring `publish_cold_ring` operation.
+//! remains with the DMA storage, whose `RxDmaStorage::prepare_ring` publishes
+//! the cold ring.
 
 use oer_esp32s31_hal::types::MacDelaySlot;
 

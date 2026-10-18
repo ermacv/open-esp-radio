@@ -36,16 +36,14 @@ use super::{
 /// [`AmpduDmaStorage`] is the only layer allowed to publish raw descriptors.
 /// Keeping them in one handoff value prevents reconnect/teardown code from
 /// accidentally restoring one half without the other.
-pub struct HtAmpduTxResources<'storage, const SLOTS: usize, const BUFFER_SIZE: usize> {
-    metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>,
+pub struct HtAmpduTxResources<'storage, const SLOTS: usize> {
+    metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS>>,
     dma: PinnedAmpduDmaStorage<SLOTS, 0>,
 }
 
-impl<'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
-    HtAmpduTxResources<'storage, SLOTS, BUFFER_SIZE>
-{
+impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
     pub fn new(
-        metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>,
+        metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS>>,
         dma: PinnedAmpduDmaStorage<SLOTS, 0>,
     ) -> Result<Self, HtAmpduTxError> {
         if metadata.state() != TxSlotState::Free {
@@ -60,7 +58,7 @@ impl<'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// Supply a deterministic descriptor address for host state-machine tests.
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model(
-        metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>,
+        metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS>>,
     ) -> Result<Self, HtAmpduTxError> {
         let dma = Box::leak(Box::new(AmpduDmaStorage::<SLOTS, 0>::new()));
         Self::new(
@@ -70,20 +68,18 @@ impl<'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 }
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> Deref
-    for HtAmpduTxResources<'_, SLOTS, BUFFER_SIZE>
-{
-    type Target = HtAmpduTxStorage<SLOTS, BUFFER_SIZE>;
+impl<const SLOTS: usize> Deref for HtAmpduTxResources<'_, SLOTS> {
+    type Target = HtAmpduTxStorage<SLOTS>;
 
     fn deref(&self) -> &Self::Target {
         self.metadata.as_ref().get_ref()
     }
 }
 
-impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxResources<'static, SLOTS, BUFFER_SIZE> {
+impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
     /// Bind both statically allocated target arenas at their final addresses.
     pub fn pin_static(
-        metadata: &'static mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>,
+        metadata: &'static mut HtAmpduTxStorage<SLOTS>,
         dma: &'static mut AmpduDmaStorage<SLOTS, 0>,
     ) -> Result<Self, HtAmpduTxError> {
         Self::new(
@@ -99,16 +95,14 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxResources<'static, S
 /// network allocation while hardware can still follow its descriptor. Safe
 /// callers append owned [`StableDmaBacking`] leases; release is admitted only
 /// after the underlying storage has returned to [`TxSlotState::Free`].
-pub struct RetainedDmaAmpduTx<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize> {
-    storage: Option<Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>>,
+pub struct RetainedDmaAmpduTx<'storage, B: 'storage, const SLOTS: usize> {
+    storage: Option<Pin<&'storage mut HtAmpduTxStorage<SLOTS>>>,
     dma: Option<RetainedAmpduDma<'storage, B, SLOTS, 0>>,
 }
 
-impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
-    RetainedDmaAmpduTx<'storage, B, SLOTS, BUFFER_SIZE>
-{
+impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, SLOTS> {
     pub fn new(
-        resources: HtAmpduTxResources<'storage, SLOTS, BUFFER_SIZE>,
+        resources: HtAmpduTxResources<'storage, SLOTS>,
         retention: &'storage mut RetainedAmpduDmaStorage<B, SLOTS>,
     ) -> Self {
         let HtAmpduTxResources { metadata, dma } = resources;
@@ -120,7 +114,7 @@ impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
 
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model(
-        storage: Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>,
+        storage: Pin<&'storage mut HtAmpduTxStorage<SLOTS>>,
         retention: &'storage mut RetainedAmpduDmaStorage<B, SLOTS>,
     ) -> Result<Self, HtAmpduTxError> {
         Ok(Self::new(
@@ -129,7 +123,7 @@ impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
         ))
     }
 
-    pub fn as_ref(&self) -> Pin<&HtAmpduTxStorage<SLOTS, BUFFER_SIZE>> {
+    pub fn as_ref(&self) -> Pin<&HtAmpduTxStorage<SLOTS>> {
         self.storage
             .as_ref()
             .expect("retained DMA owner keeps storage until teardown")
@@ -141,7 +135,7 @@ impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
         core::ptr::from_ref(self.as_ref().get_ref()).addr()
     }
 
-    fn metadata_mut(&mut self) -> Pin<&mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>> {
+    fn metadata_mut(&mut self) -> Pin<&mut HtAmpduTxStorage<SLOTS>> {
         self.storage
             .as_mut()
             .expect("retained DMA owner keeps storage until teardown")
@@ -204,7 +198,7 @@ impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
         mut self,
     ) -> Result<
         (
-            HtAmpduTxResources<'storage, SLOTS, BUFFER_SIZE>,
+            HtAmpduTxResources<'storage, SLOTS>,
             &'storage mut RetainedAmpduDmaStorage<B, SLOTS>,
         ),
         Self,
@@ -269,9 +263,7 @@ impl<'storage, B: 'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 }
 
-impl<B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
-    RetainedDmaAmpduTx<'_, B, SLOTS, BUFFER_SIZE>
-{
+impl<B: StableDmaBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     /// Observe one hardware completion and apply it to the matching retry
     /// state only after both descriptor owners have detached.
     ///
@@ -467,6 +459,10 @@ impl<B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 
     /// Commit one HE frame under the exact TXOP policy and retain its backing.
+    ///
+    /// It does not yet carry the MSDU length or the hardware HE-Control bit,
+    /// so a Trigger-based HE A-MPDU fails with `TriggerMsduLengthUnavailable`:
+    /// see `knowledge/esp32s31/wifi/he-tb-ampdu.md`.
     pub fn commit_he(
         &mut self,
         cookie: TxCookie,
@@ -784,19 +780,15 @@ impl<B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 }
 
-impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Deref
-    for RetainedDmaAmpduTx<'_, B, SLOTS, BUFFER_SIZE>
-{
-    type Target = HtAmpduTxStorage<SLOTS, BUFFER_SIZE>;
+impl<B, const SLOTS: usize> Deref for RetainedDmaAmpduTx<'_, B, SLOTS> {
+    type Target = HtAmpduTxStorage<SLOTS>;
 
     fn deref(&self) -> &Self::Target {
         self.as_ref().get_ref()
     }
 }
 
-impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Drop
-    for RetainedDmaAmpduTx<'_, B, SLOTS, BUFFER_SIZE>
-{
+impl<B, const SLOTS: usize> Drop for RetainedDmaAmpduTx<'_, B, SLOTS> {
     fn drop(&mut self) {
         if self.storage.is_none() || self.dma.is_none() {
             return;

@@ -813,3 +813,105 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
     let observed = unsafe { dma_address.read() };
     assert_eq!(observed, 0x5d);
 }
+
+/// A space whose arenas end 64 bytes before the top of the DMA window.
+enum WindowTail {}
+
+impl crate::space::DmaSpace for WindowTail {
+    fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
+        let arena: *const Arena = arena;
+        let offset = u32::try_from(field.addr().checked_sub(arena.addr())?).ok()?;
+        (crate::descriptor::DMA_HIGH - 64).checked_add(offset)
+    }
+}
+
+#[test]
+fn external_chain_publishes_each_lease_at_its_address_in_the_arena_space() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let first = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let second = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let first_address = owner
+        .reserved_backing_mut(&first)
+        .unwrap()
+        .bytes
+        .as_ptr()
+        .addr()
+        + 8;
+    let second_address = owner
+        .reserved_backing_mut(&second)
+        .unwrap()
+        .bytes
+        .as_ptr()
+        .addr()
+        + 16;
+    let entries = [
+        first.external_descriptor(first_address, 64, 40).unwrap(),
+        second.external_descriptor(second_address, 64, 48).unwrap(),
+    ];
+    owner
+        .publish_external_chain(&entries)
+        .unwrap()
+        .commit(|_| {});
+
+    // A host lease is its own arena: its first byte is the window base.
+    assert_eq!(
+        owner.dma().descriptor_buffer_address(0),
+        Some(HOST_ARENA_BASE + 8)
+    );
+    assert_eq!(
+        owner.dma().descriptor_buffer_address(1),
+        Some(HOST_ARENA_BASE + 16)
+    );
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    owner.release_detached().unwrap();
+    assert_eq!(drops.get(), 2);
+}
+
+#[test]
+fn external_lease_beyond_the_dma_window_is_rejected_before_publication() {
+    let drops = Rc::new(Cell::new(0));
+    let dma = AmpduDmaStorage::<2, 0>::pin_static::<WindowTail>(Box::leak(Box::new(
+        AmpduDmaStorage::new(),
+    )))
+    .unwrap();
+    let retention = Box::leak(Box::new(RetainedAmpduDmaStorage::new()));
+    let mut owner = RetainedAmpduDma::<TestBacking, 2, 0>::new(dma, retention);
+    owner.begin().unwrap();
+    let backing = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let start = owner
+        .reserved_backing_mut(&backing)
+        .unwrap()
+        .bytes
+        .as_ptr()
+        .addr();
+
+    // Inside the 128-byte lease, but its last eight bytes lie past the
+    // window the TX DMA reader can fetch.
+    let beyond = backing.external_descriptor(start + 8, 64, 40).unwrap();
+    assert!(matches!(
+        owner.publish_external_chain(&[beyond]),
+        Err(AmpduDmaStorageError::Address)
+    ));
+    assert_eq!(owner.dma().descriptor_word0(0), Some(0));
+    assert_eq!(
+        owner.commit_backing_descriptor(&backing, start + 8, 64, 40),
+        Err(AmpduDmaStorageError::Address)
+    );
+
+    // The same lease ending exactly at the window top is admitted.
+    let inside = backing.external_descriptor(start, 64, 40).unwrap();
+    owner
+        .publish_external_chain(&[inside])
+        .unwrap()
+        .commit(|_| {});
+    assert_eq!(
+        owner.dma().descriptor_buffer_address(0),
+        Some(crate::descriptor::DMA_HIGH - 64)
+    );
+    owner.quarantine();
+}

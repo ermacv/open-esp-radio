@@ -113,7 +113,7 @@ impl AmpduBacking for NoAmpdu {
 
 /// The aggregate owner behind one lent buffer. The port publishes only
 /// referenced subframes, so its formatter workspace is empty.
-pub type Esp32s31AmpduOwner<'slot, B, const SLOTS: usize> = RetainedDmaAmpduTx<'slot, B, SLOTS, 0>;
+pub type Esp32s31AmpduOwner<'slot, B, const SLOTS: usize> = RetainedDmaAmpduTx<'slot, B, SLOTS>;
 
 struct Subframe<B> {
     backing: B,

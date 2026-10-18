@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
-    let mut storage = core::pin::pin!(HtAmpduTxStorage::<2, 0>::new());
+    let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
     let pool: PinnedDmaTxPoolHandle<256, 0, 0, 1> = PinnedDmaTxPool::pin_static(
         std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
     );

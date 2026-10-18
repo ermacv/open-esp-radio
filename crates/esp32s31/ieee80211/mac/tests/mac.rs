@@ -31,13 +31,12 @@ use oer_esp32s31_ieee80211_mac::{
     rx::{
         HeBandwidth, HeGuardIntervalAndLtf, HeMuBandwidth, HeMuSignal, HeSuSignal,
         HeTriggerBasedSignal, HtDuplicateRxClassification, INGRESS_STRICT_DUMP,
-        INGRESS_STRICT_RXEND, RX_BUFFER_SENTINEL, RxBasebandFormat, RxDma, RxDmaBinding,
-        RxDmaCursorObservation, RxDmaWalkerStopped, RxError, RxHe20MuSigBUsersError,
+        INGRESS_STRICT_RXEND, RX_BUFFER_SENTINEL, RxBasebandFormat, RxDma, RxDmaArenaState,
+        RxDmaBinding, RxDmaCursorObservation, RxDmaWalkerStopped, RxError, RxHe20MuSigBUsersError,
         RxIngressConfig, RxPhyInfo, RxReloadObservation, RxRingError, RxRingLive, RxRingStopped,
-        RxSegment, build_cold_ring, decode_normalized_rx_metadata, decode_rx_he_mu_sig_b,
-        decode_rx_local_timestamp, decode_rx_phy_info, disable_receive, enable_receive,
-        extract_ccmp_data, extract_control, extract_data, extract_management, first_segment_layout,
-        prepare_recycled_buffer, publish_cold_ring, rearm_descriptor, view_normalized_rx_frame,
+        RxSegment, decode_normalized_rx_metadata, decode_rx_he_mu_sig_b, decode_rx_local_timestamp,
+        decode_rx_phy_info, extract_ccmp_data, extract_control, extract_data, extract_management,
+        first_segment_layout, prepare_recycled_buffer, view_normalized_rx_frame,
     },
     tx::{
         AmpduTxConfig, HeAmpduTxConfig, HeBccDcmMcs, HeEdcaTxopLimit, HeFecCoding, HeLdpcDcmMcs,

@@ -67,10 +67,11 @@ impl Descriptor {
         self.word0.set(word0);
     }
 
-    /// Model a complete descriptor publication without a hardware actor.
+    /// Fault model: memory corruption or a foreign write overwrites all three
+    /// descriptor words. It bypasses none of the product's checks.
     #[cfg(any(test, feature = "test-support"))]
     #[inline]
-    pub fn publish(&self, word0: u32, buffer_address: u32, next_address: u32) {
+    pub fn inject_corrupt_words(&self, word0: u32, buffer_address: u32, next_address: u32) {
         self.publish_owned(word0, buffer_address, next_address);
     }
 

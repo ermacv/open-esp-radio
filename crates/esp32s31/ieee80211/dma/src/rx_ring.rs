@@ -37,6 +37,22 @@ fn rx_buffer_address_snapshot<const COUNT: usize>(
 }
 
 const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+
+/// Whether a descriptor of the ring at `descriptor_base` has a zero low
+/// address. The walker's NEXT register reports only the low 20 address bits,
+/// and a zero NEXT means the list is exhausted
+/// ([`RxDmaNextDescriptor::is_zero`](crate::rx_dma::RxDmaNextDescriptor::is_zero),
+/// read by [`RxRingLive::accepted_list_remaining_from_next`] and the
+/// exhausted-list reclaim): such a descriptor could not be told apart from
+/// the end of the list, whatever the linker's layout.
+fn descriptor_aliases_an_exhausted_list<const COUNT: usize>(descriptor_base: u32) -> bool {
+    (0..COUNT as u32).any(|index| {
+        index
+            .checked_mul(DESCRIPTOR_BYTES)
+            .and_then(|offset| descriptor_base.checked_add(offset))
+            .is_none_or(|address| address & RX_DESCRIPTOR_ADDRESS_LOW_MASK == 0)
+    })
+}
 const RX_EXHAUSTED_REPUBLICATION_ACCEPTED: u32 = 0x8000_0000;
 /// Exact maximum number of `APPEND_DESCRIPTOR_RELOAD` observations recovered
 /// from `wDev_AppendRxBlocks`.
@@ -460,7 +476,7 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
     retained_next_low: u32,
     retained_last_low: u32,
     binding: RxDmaBinding<'a>,
-    arena: Option<&'a RxArenaWords>,
+    arena: &'a RxArenaWords,
 }
 
 /// Sole software owner of one running S31 RX descriptor frontier.
@@ -474,6 +490,12 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 /// therefore never releases memory still visible to DMA, but it also does not
 /// stop the walker. Normal role owners must consume it through [`Self::try_stop`];
 /// an abandoned token poisons the arena until radio reset.
+///
+/// The token stays on its core: it is not `Sync`.
+/// ```compile_fail,E0277
+/// fn shared<T: Sync>() {}
+/// shared::<oer_esp32s31_ieee80211_dma::rx_ring::RxRingLive<'static, 2>>();
+/// ```
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [Descriptor; COUNT],
     descriptor_base: u32,
@@ -490,7 +512,7 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     completion_release_probe_pending: bool,
     exhausted_republication_head_low: Option<u32>,
     binding: RxDmaBinding<'a>,
-    arena: Option<&'a RxArenaWords>,
+    arena: &'a RxArenaWords,
     requires_stop: bool,
 }
 
@@ -505,7 +527,7 @@ pub struct RxRingHalted<'a, const COUNT: usize> {
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
-    arena: Option<&'a RxArenaWords>,
+    arena: &'a RxArenaWords,
 }
 
 impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
@@ -548,7 +570,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         if u32::from(self.buffer_size) != buffer_size {
             return Err((self, RxRingError::Size));
         }
-        let lifecycle = self.arena.map(RxArenaWords::lifecycle);
+        let lifecycle = self.arena.lifecycle();
         let buffer_addresses = self.buffer_addresses;
         match RxRingStopped::prepare_inner(
             mmio,
@@ -561,9 +583,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         ) {
             Ok(stopped) => Ok(stopped),
             Err(error) => {
-                if mmio.walker_enabled()
-                    && let Some(lifecycle) = lifecycle
-                {
+                if mmio.walker_enabled() {
                     // Preparation failed without proving that the walker is
                     // stopped. The returned token preserves arena ownership
                     // for reset diagnostics, but must never authorize another
@@ -573,25 +593,6 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
                 Err((self, error))
             }
         }
-    }
-
-    /// Raw/model rebuild with caller-provided buffer preparation.
-    ///
-    /// Production code must use `RxDmaStorage::prepare_halted`, which binds
-    /// every descriptor to the matching arena buffer and restores its guard
-    /// words before publication.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn prepare<M, F>(
-        self,
-        mmio: &mut M,
-        buffer_size: u32,
-        prepare_buffer: F,
-    ) -> Result<RxRingStopped<'a, COUNT>, (Self, RxRingError)>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        self.prepare_owned(mmio, buffer_size, prepare_buffer)
     }
 }
 
@@ -626,30 +627,11 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// qualified by HIL_OPEN_RX_LIVE_APPEND_2026_07_27. A retained nonzero
     /// NEXT cursor is authoritative because WALKER_ENABLE does not clear it;
     /// the rebuilt zero-terminated list is rotated to that exact descriptor.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn prepare<M, F>(
-        mmio: &mut M,
-        descriptors: &'a [Descriptor; COUNT],
-        descriptor_base: u32,
-        buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
-        buffer_size: u32,
-        prepare_buffer: F,
-    ) -> Result<Self, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        Self::prepare_inner(
-            mmio,
-            descriptors,
-            descriptor_base,
-            buffer_addresses,
-            buffer_size,
-            prepare_buffer,
-            None,
-        )
-    }
-
+    ///
+    /// Only the storage arena calls this, through
+    /// [`RxDmaStorage::prepare_ring`](crate::rx_storage::RxDmaStorage::prepare_ring)
+    /// and [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted),
+    /// which bind every descriptor to its arena buffer.
     pub(crate) fn prepare_inner<M, F>(
         mmio: &mut M,
         descriptors: &'a [Descriptor; COUNT],
@@ -657,13 +639,16 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
         buffer_size: u32,
         mut prepare_buffer: F,
-        arena: Option<&'a RxArenaWords>,
+        arena: &'a RxArenaWords,
     ) -> Result<Self, RxRingError>
     where
         M: RxDma,
         F: FnMut(usize) -> Result<(), RxRingError>,
     {
         validate_live_ring_geometry::<COUNT>()?;
+        if descriptor_aliases_an_exhausted_list::<COUNT>(descriptor_base) {
+            return Err(RxRingError::Address);
+        }
         let buffer_size_u16 = u16::try_from(buffer_size).map_err(|_| RxRingError::Size)?;
         if rx_armed_word(buffer_size).is_none() {
             return Err(RxRingError::Size);
@@ -710,7 +695,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             initial_start,
         )?;
         let head = descriptor_address(descriptor_base, initial_start.get())?;
-        publish_cold_ring_inner(mmio, &binding, head, false)?;
+        publish_cold_ring_inner(mmio, &binding, head)?;
 
         Ok(Self {
             descriptors,
@@ -771,38 +756,30 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         self,
         mmio: &mut M,
     ) -> Result<RxRingLive<'a, COUNT>, (Self, RxRingError)> {
-        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
-            match RxDmaArenaState::load(lifecycle) {
-                RxDmaArenaState::Prepared => {}
-                RxDmaArenaState::ResetRequired => {
-                    return Err((self, RxRingError::ResetRequired));
-                }
-                RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                    return Err((self, RxRingError::Busy));
-                }
+        match RxDmaArenaState::load(self.arena.lifecycle()) {
+            RxDmaArenaState::Prepared => {}
+            RxDmaArenaState::ResetRequired => {
+                return Err((self, RxRingError::ResetRequired));
+            }
+            RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
+                return Err((self, RxRingError::Busy));
             }
         }
         if !self.topology_snapshot().valid {
             return Err((self, RxRingError::Corrupt));
         }
         if let Err(error) = enable_receive_inner(mmio, &self.binding) {
-            if mmio.walker_enabled()
-                && let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
-            {
+            if mmio.walker_enabled() {
                 // A failed start which nevertheless observes WALKER_ENABLE
                 // cannot return an honestly stopped capability. Keep the
                 // static backing quarantined; the returned value exists only
                 // to preserve diagnostics/ownership until radio reset.
-                RxDmaArenaState::ResetRequired.store(lifecycle);
+                RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
             }
             return Err((self, error));
         }
-        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
-            RxDmaArenaState::Live.store(lifecycle);
-        }
-        if let Some(arena) = self.arena {
-            arena.reset_evidence();
-        }
+        RxDmaArenaState::Live.store(self.arena.lifecycle());
+        self.arena.reset_evidence();
         Ok(RxRingLive {
             descriptors: self.descriptors,
             descriptor_base: self.descriptor_base,
@@ -846,10 +823,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// table before it installs this exact arena-local lifecycle capability.
     /// The capability then travels through stopped/live/halted typestates, so
     /// pointer identity is a constant-time proof of the same binding during a
-    /// live epoch. Raw validation rings carry no lifecycle and deliberately
-    /// fall back to complete address validation.
+    /// live epoch. A ring of another arena fails this identity check and
+    /// falls back to complete address validation.
     pub(crate) fn belongs_to_arena(&self, arena: &RxArenaWords) -> bool {
-        self.arena.is_some_and(|bound| core::ptr::eq(bound, arena))
+        core::ptr::eq(self.arena, arena)
     }
 
     /// Observe one live descriptor without transferring its ownership.
@@ -874,10 +851,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         )
     }
 
-    /// The reload-repair evidence of this live epoch; none for a ring
-    /// without an arena.
+    /// The reload-repair evidence of this live epoch.
     pub fn reload_repair_evidence(&self) -> RxReloadRepairEvidence {
-        self.arena.map(RxArenaWords::evidence).unwrap_or_default()
+        self.arena.evidence()
     }
 
     fn record_reload_repair_observation(
@@ -886,9 +862,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         last_descriptor_low: Option<u32>,
         repair_head: Option<u32>,
     ) {
-        let Some(arena) = self.arena else {
-            return;
-        };
+        let arena = self.arena;
         increment_saturating(&arena.observations);
         if next_descriptor.address_low() == 0 && next_descriptor.has_unknown_upper_state() {
             increment_saturating(&arena.unknown_upper_with_zero_address);
@@ -911,9 +885,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// no longer be proven. The live token may still be retained for reset
     /// diagnostics, but no later stop observation can make this arena reusable.
     pub fn require_reset(&mut self) {
-        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
-            RxDmaArenaState::ResetRequired.store(lifecycle);
-        }
+        RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
     }
 
     /// Stop the DMA walker and consume the live frontier authority.
@@ -939,9 +911,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             buffer_size: self.buffer_size,
             arena: self.arena,
         };
-        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
-            && RxDmaArenaState::load(lifecycle) != RxDmaArenaState::ResetRequired
-        {
+        let lifecycle = self.arena.lifecycle();
+        if RxDmaArenaState::load(lifecycle) != RxDmaArenaState::ResetRequired {
             // The halted token still owns the arena. Only that exact token may
             // rebuild the next epoch; a new root prepare must remain blocked.
             RxDmaArenaState::Prepared.store(lifecycle);
@@ -1364,15 +1335,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         Ok(None)
     }
 
-    /// Raw/model completion transfer without a storage-bound buffer owner.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn take_completed_unit(
-        &mut self,
-        descriptor_limit: usize,
-    ) -> Result<Option<RxCompletedUnit>, RxRingError> {
-        self.take_completed_unit_owned(descriptor_limit, |_| true)
-    }
-
     crate::place_rx_hot_path! {
     /// Takes one newly completed descriptor exactly once for this ring epoch.
     ///
@@ -1403,12 +1365,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             next_descriptor_address: descriptor.next_address(),
         })
     }}
-
-    /// Raw/model descriptor transfer without a storage-bound buffer owner.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn take_completed(&mut self, index: usize) -> Option<RxCompletedDescriptor> {
-        self.take_completed_owned(index)
-    }
 
     pub(crate) fn validate_completed_descriptor(&self, index: usize) -> Result<bool, RxRingError> {
         let descriptor = self.descriptors.get(index).ok_or(RxRingError::Count)?;
@@ -1475,59 +1431,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         )
     }}
 
-    /// Raw/model half-ring recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn recycle_completed_half<M, F>(
-        &mut self,
-        mmio: &mut M,
-        prepare_buffer: F,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        self.recycle_completed_half_owned(mmio, prepare_buffer)
-    }
-
-    crate::place_rx_hot_path! {
-    /// Rearm and append one fixed-size, contiguous group of completed slots.
-    ///
-    /// The complete ROM `wDev_AppendRxBlocks` contract accepts an arbitrary
-    /// zero-terminated `head..tail` chain; a half-ring is not a hardware
-    /// requirement. Smaller groups let a task replenish the walker before a
-    /// peer's next A-MPDU consumes every remaining descriptor. `BATCH` must
-    /// divide the ring so `recycle_start` visits each slot exactly once.
-    ///
-    /// The caller must still drive [`Self::poll_pending_reload`] after each
-    /// successful append. This deliberately preserves the ROM doorbell/base
-    /// repair ordering without hiding a wait in this finite operation.
-    #[inline(never)]
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn recycle_completed_batch<const BATCH: usize, M, F>(
-        &mut self,
-        mmio: &mut M,
-        prepare_buffer: F,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        if BATCH == 0 || BATCH > COUNT || !COUNT.is_multiple_of(BATCH) {
-            return Err(RxRingError::Count);
-        }
-        self.recycle_completed_group(
-            mmio,
-            BATCH,
-            RxRecycleGroupShape::EveryDescriptorTerminal,
-            prepare_buffer,
-        )
-    }}
-
     crate::place_rx_hot_path! {
     /// Rearm the longest currently completed prefix, up to `MAX_BATCH`.
     ///
-    /// Unlike the fixed-size raw/model batch operation, this does not wait for a
-    /// fixed-size group. It is the closer ownership model for the complete
+    /// Unlike the half-ring operation, this does not wait for a fixed-size
+    /// group. It is the closer ownership model for the complete
     /// vendor receive path:
     ///
     /// - `wDev_ProcessFiq` posts PP event `0x19`;
@@ -1581,20 +1489,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             prepare_buffer,
         )
     }}
-
-    /// Raw/model prefix recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn recycle_completed_prefix<const MAX_BATCH: usize, M, F>(
-        &mut self,
-        mmio: &mut M,
-        prepare_buffer: F,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        self.recycle_completed_prefix_owned::<MAX_BATCH, _, _>(mmio, prepare_buffer)
-    }
 
     /// Rearm and append one observed RX unit, preserving a multi-descriptor
     /// unit's `not-done .. done` completion shape until all of its bytes have
@@ -1679,21 +1573,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         )
     }
 
-    /// Raw/model unit recycle with caller-provided buffer preparation.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn recycle_completed_unit<M, F>(
-        &mut self,
-        mmio: &mut M,
-        descriptor_count: usize,
-        prepare_buffer: F,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
-    where
-        M: RxDma,
-        F: FnMut(usize) -> Result<(), RxRingError>,
-    {
-        self.recycle_completed_unit_owned(mmio, descriptor_count, prepare_buffer)
-    }
-
     fn recycle_completed_group<M, F>(
         &mut self,
         mmio: &mut M,
@@ -1765,8 +1644,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             return Err(RxRingError::Corrupt);
         }
         // The frozen-LAST path validates its generation-specific cursor proof
-        // before entering this mutation routine. Raw/model paths still need a
-        // fresh ownership observation here.
+        // before entering this mutation routine. Every other path still needs
+        // a fresh ownership observation here.
         if !matches!(
             shape,
             RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast
@@ -2003,23 +1882,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         })
     }
 
-    /// Raw/model release proof from an explicitly supplied LAST snapshot.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn observe_completed_unit_link_release<M: RxDma>(
-        &mut self,
-        mmio: &mut M,
-        last_descriptor_low: u32,
-        descriptor_count: usize,
-    ) -> bool {
-        let next_descriptor_low = mmio.next_descriptor_low();
-        mmio.fence();
-        self.observe_completed_unit_link_release_from_snapshot(
-            last_descriptor_low,
-            next_descriptor_low,
-            descriptor_count,
-        )
-    }
-
     /// Whether a frozen vendor-style LAST snapshot releases the current unit.
     ///
     /// `wdevProcessRxSucDataAll` mutates and returns the descriptor equal to
@@ -2237,10 +2099,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
 impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
     fn drop(&mut self) {
-        if self.requires_stop
-            && let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
-        {
-            RxDmaArenaState::ResetRequired.store(lifecycle);
+        if self.requires_stop {
+            RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
         }
     }
 }
@@ -2498,42 +2358,10 @@ fn build_cold_ring_inner(
     Ok(())
 }
 
-/// Build a synthetic cold descriptor list for native models.
-///
-/// Ordinary target code must construct a ring through [`RxRingStopped`],
-/// which couples mutation to the arena lifecycle instead of accepting a bare
-/// descriptor slice.
-#[cfg(any(test, feature = "test-support"))]
-pub fn build_cold_ring(
-    descriptors: &[Descriptor],
-    descriptor_dma_base: u32,
-    buffer_addresses: &[u32],
-    buffer_size: u32,
-) -> Result<(), RxRingError> {
-    build_cold_ring_inner(
-        descriptors,
-        descriptor_dma_base,
-        buffer_addresses,
-        buffer_size,
-    )
-}
-
-/// Publish a synthetic cold ring in a native model with no DMA actor.
-#[cfg(any(test, feature = "test-support"))]
-pub fn publish_cold_ring<M: RxDma>(
-    mmio: &mut M,
-    descriptor_dma_base: u32,
-    enable_rx: bool,
-) -> Result<(), RxRingError> {
-    let binding = RxDmaBinding::raw_for_host_test(descriptor_dma_base);
-    publish_cold_ring_inner(mmio, &binding, descriptor_dma_base, enable_rx)
-}
-
 fn publish_cold_ring_inner<M: RxDma>(
     mmio: &mut M,
     binding: &RxDmaBinding<'_>,
     descriptor_dma_base: u32,
-    enable_rx: bool,
 ) -> Result<(), RxRingError> {
     if !descriptor_address_valid(descriptor_dma_base) {
         return Err(RxRingError::Address);
@@ -2541,25 +2369,17 @@ fn publish_cold_ring_inner<M: RxDma>(
     mmio.fence();
     mmio.configure_descriptor_window(binding);
     mmio.write_descriptor_base(binding, descriptor_dma_base);
-    if enable_rx {
-        mmio.publish_walker_enable(binding);
-    }
     mmio.fence();
     Ok(())
 }
 
-/// Opens the RX walker in a native model after publishing a cold ring.
+/// Opens the RX walker after a cold ring was published.
 ///
 /// The vendor cold path keeps these operations separate:
 /// `wDev_AppendRxBlocks` publishes the first descriptor base, while the later
 /// `chip_enable` path calls `hal_mac_rx_enable`. Keeping this as a distinct
 /// operation preserves that ordering and gives the base register time to
 /// settle while the caller completes channel/MAC setup.
-#[cfg(any(test, feature = "test-support"))]
-pub fn enable_receive<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
-    enable_receive_inner(mmio, &RxDmaBinding::raw_for_host_test(0))
-}
-
 fn enable_receive_inner<M: RxDma>(
     mmio: &mut M,
     binding: &RxDmaBinding<'_>,
@@ -2577,37 +2397,6 @@ fn enable_receive_inner<M: RxDma>(
 fn disable_receive_inner<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
     mmio.try_with_walker_stopped(|_stopped| ())
         .ok_or(RxRingError::Busy)
-}
-
-/// Stop a synthetic/native walker or an explicit raw-DMA validation epoch.
-///
-/// Production target lifecycle code must consume [`RxRingLive::try_stop`], so
-/// the register edge and the Rust ownership state cannot diverge.
-#[cfg(any(test, feature = "test-support"))]
-pub fn disable_receive<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
-    disable_receive_inner(mmio)
-}
-
-/// Returns one CPU-owned completed descriptor to the cold/live ring.
-#[cfg(any(test, feature = "test-support"))]
-pub fn rearm_descriptor(
-    descriptor: &Descriptor,
-    expected_buffer_address: u32,
-    expected_next_address: u32,
-) -> Result<(), RxRingError> {
-    let word0 = descriptor.word0();
-    let capacity = descriptor_size(word0);
-    if descriptor.buffer_address() != expected_buffer_address
-        || descriptor.next_address() != expected_next_address
-        || !dma_range_valid(expected_buffer_address, capacity)
-    {
-        return Err(RxRingError::Corrupt);
-    }
-    if !rx_done(word0) {
-        return Err(RxRingError::Busy);
-    }
-    descriptor.write_word0(rx_rearm_word(word0).ok_or(RxRingError::Size)?);
-    Ok(())
 }
 
 #[cfg(test)]

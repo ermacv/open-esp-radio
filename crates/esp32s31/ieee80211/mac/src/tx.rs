@@ -3529,23 +3529,6 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         Ok(())
     }
 
-    /// Publishes the software owner immediately before the future management
-    /// TX layer performs its final q0 ENABLE|VALID write under MAC-IRQ
-    /// exclusion. Full q0 PPDU/rate configuration must precede this call; this
-    /// method intentionally performs no incomplete hardware submission.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn mark_hardware_owned(self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), TxError> {
-        let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Reserved || cookie != slot.active {
-            return Err(TxError::Stale);
-        }
-        slot.dma
-            .publication()
-            .map_err(map_dma_storage_error)?
-            .commit(|_| {});
-        Ok(())
-    }
-
     /// Decodes and acknowledges one q0 completion. Storage stays retained in
     /// `Completed`; it is not reusable until `detach_completed` closes q0.
     pub fn acknowledge_q0_completion<H: TxHardware>(

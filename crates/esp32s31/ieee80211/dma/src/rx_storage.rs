@@ -741,7 +741,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 // the validated address table binds `index` to this arena.
                 unsafe { self.prepare_stopped_buffer(index) }
             },
-            Some(&self.arena),
+            &self.arena,
         );
         if prepared.is_err() {
             // Preparation may have failed while disabling an unexpectedly
@@ -1285,6 +1285,11 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         Self::new()
     }
 }
+
+#[cfg(any(test, feature = "test-support"))]
+mod host_dma;
+#[cfg(any(test, feature = "test-support"))]
+pub use host_dma::HostDmaAccessError;
 
 #[cfg(test)]
 mod tests;
