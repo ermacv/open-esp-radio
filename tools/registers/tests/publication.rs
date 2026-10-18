@@ -1,18 +1,34 @@
 //! Repository publication checks exercise reviewed inputs, not generated addresses.
 use std::{fs, path::PathBuf};
-fn manifest() -> (tempfile::TempDir, PathBuf, String) {
+/// Every chip's publication directory, in name order.
+fn publications() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
-    // The first chip with a register publication.
-    let base = std::fs::read_dir(root.join("registers"))
+    let mut bases: Vec<_> = std::fs::read_dir(root.join("registers"))
         .unwrap()
         .map(|chip| chip.unwrap().path().join("publication"))
         .filter(|base| base.join("registers.toml").is_file())
-        .min()
+        .collect();
+    bases.sort();
+    bases
+}
+/// The first chip publication that selects a PAC API policy, its paths
+/// rewritten for a manifest in a temporary directory.
+fn manifest() -> (tempfile::TempDir, PathBuf, String) {
+    let (base, source) = publications()
+        .into_iter()
+        .map(|base| {
+            let source = fs::read_to_string(base.join("registers.toml")).unwrap();
+            (base, source)
+        })
+        .find(|(_, source)| {
+            source
+                .parse::<toml_edit::DocumentMut>()
+                .is_ok_and(|document| document.contains_key("api"))
+        })
         .unwrap();
-    let source = fs::read_to_string(base.join("registers.toml")).unwrap();
     // All relative inputs/outputs in this concrete composition start with ../.
     let source = source.replace("\"../", &format!("\"{}/../", base.display()));
     let dir = tempfile::tempdir().unwrap();
@@ -24,6 +40,21 @@ fn reviewed_inputs_validate_without_vendor_artifacts() {
     let (_dir, path, source) = manifest();
     fs::write(&path, source).unwrap();
     oer_register_tool::Publication::load(&path).unwrap();
+}
+#[test]
+fn every_chip_publication_validates() {
+    let bases = publications();
+    assert!(bases.len() > 1, "{bases:?}");
+    for base in bases {
+        for name in ["registers.toml", "platform.toml"] {
+            let manifest = base.join(name);
+            if manifest.is_file()
+                && let Err(error) = oer_register_tool::Publication::load(&manifest)
+            {
+                panic!("{}: {error}", manifest.display());
+            }
+        }
+    }
 }
 #[test]
 fn missing_evidence_wrong_applicability_and_output_alias_are_rejected() {
