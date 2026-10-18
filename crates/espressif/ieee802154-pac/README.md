@@ -1,6 +1,6 @@
 # Shared IEEE 802.15.4 MAC values and transactions
 
-`oer-espressif-i-pac` holds the parts of the typed IEEE 802.15.4 MAC surface
+`oer-espressif-ieee802154-pac` holds the parts of the typed IEEE 802.15.4 MAC surface
 that the ESP32-S31 and ESP32-C5 share: configuration values and commands, the
 event vocabulary with its enable and observation states, receive and transmit
 abort reasons, state observations, the public LL enable sets, and the ordered
@@ -21,6 +21,6 @@ a behavior, and sharing them would need a public generic API over chip
 associated types. They move here only when a third chip with this MAC
 appears or when lease ownership or ordering logic must change in both chips.
 
-The engine's `ILowLevel` in `oer-espressif-i-engine` remains the
+The engine's `Ieee802154LowLevel` in `oer-espressif-ieee802154-engine` remains the
 driver boundary: each chip HAL implements it over its chip PAC. This crate sits
 below the chip PACs and is not a driver interface.
