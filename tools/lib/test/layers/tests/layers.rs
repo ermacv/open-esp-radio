@@ -7,10 +7,11 @@ use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies allowed, each listed: a new edge is
 /// added here on purpose, in the change that needs it.
-const SERVICE_ORDER: [(&str, &str); 128] = [
+const SERVICE_ORDER: [(&str, &str); 129] = [
     ("devices", "device-lock"),
     ("devices", "image-bundle"),
     ("esp32s31-ieee802154-vendor-host", "vendor-evidence"),
+    ("firmware", "device-lock"),
     ("firmware", "image-check-interrupts"),
     ("firmware", "image-check-stack"),
     ("firmware", "lab"),
