@@ -6,6 +6,7 @@ nothing here is built.
 | Path | Contents |
 | --- | --- |
 | `esp32s31/vendor/artifacts.toml` | the pinned vendor libraries and ROM that facts are read from |
+| `esp32s31/vendor/coverage.toml` | vendor code paths the predecessor's comparisons never reached: the decision for each, its reason and the port item that covers it |
 | `esp32s31/vendor/facts/` | machine-written registries: function fingerprints and recovered names (never edited by hand) |
 | `esp32s31/notes/` | research notes on vendor Bluetooth LE and IEEE 802.15.4 behaviour |
 | `esp32s31/bluetooth/` | facts from the unlicensed `esp32s31-bt-lib`, in place of code that was not carried |
