@@ -16,7 +16,7 @@
 //!
 //! A lent [`Esp32s31AmpduBuffer`] is one idle aggregate owner together with
 //! the subframes the caller appended. Each subframe is a
-//! [`StableDmaBacking`] lease of the integrator's [`AmpduBackingSource`],
+//! [`PlacedBacking`] lease of the integrator's [`AmpduBackingSource`],
 //! the same retained-lease memory the station and access-point aggregate
 //! paths publish from: the MPDU is written after the eight-byte metadata
 //! prefix at the start of the lease's region, and `commit_ht` publishes it
@@ -36,6 +36,7 @@ use super::{FreeQueue, TxAdmission};
 use core::fmt;
 use oer_radio_port::{PoolPath, Root};
 
+use oer_esp32s31_hal::dma_static::{PlacedBacking, PlacedTxLease};
 use oer_esp32s31_ieee80211_mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
     HtRate, LegacyTxQueue, TxControlFrame, TxCookie,
@@ -46,7 +47,7 @@ use oer_esp32s31_ieee80211_mac::tx::{
     },
 };
 use oer_ieee80211_lower_mac::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
-use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking};
+use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 
 use crate::{
     ampdu_tx::{AmpduTxRoleAdapter, HtAmpduPublicationInputs, ht_ampdu_publication_config},
@@ -88,7 +89,7 @@ pub const fn esp32s31_ampdu_capabilities(slots: usize) -> AmpduCapabilities {
 pub trait AmpduBacking {
     /// One subframe's memory. Its region must start word-aligned, as every
     /// S31 TX descriptor buffer does.
-    type Backing: StableDmaBacking;
+    type Backing: PlacedBacking;
 }
 
 /// Stable DMA memory the core lends as aggregate subframes.
@@ -108,7 +109,7 @@ pub trait AmpduBackingSource: AmpduBacking {
 pub enum NoAmpdu {}
 
 impl AmpduBacking for NoAmpdu {
-    type Backing = PinnedDmaTxRadioLease<'static, 0, 0, 0>;
+    type Backing = PlacedTxLease<PinnedDmaTxRadioLease<'static, 0, 0, 0>>;
 }
 
 /// The aggregate owner behind one lent buffer. The port publishes only
@@ -551,7 +552,7 @@ pub fn service<'core, 'slot, B, H, const SLOTS: usize, Path: PoolPath>(
     now: oer_time::Instant,
 ) -> Result<AmpduProgress<'core, 'slot, B, SLOTS, Path>, AmpduFault<'core, 'slot, B, SLOTS, Path>>
 where
-    B: StableDmaBacking,
+    B: PlacedBacking,
     H: HtAmpduHardware,
 {
     match service_step(hardware, &mut published, wake, may_begin_timeout_abort, now) {
@@ -579,7 +580,7 @@ fn service_step<B, H, const SLOTS: usize, Path: PoolPath>(
     now: oer_time::Instant,
 ) -> Result<Option<AmpduOutcome>, HtAmpduTxError>
 where
-    B: StableDmaBacking,
+    B: PlacedBacking,
     H: HtAmpduHardware,
 {
     use oer_esp32s31_ieee80211_mac::irq::{EVENT_COLLISION, EVENT_TX_TIMEOUT};

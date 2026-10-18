@@ -1,17 +1,13 @@
 //! The two sources of a typed DMA address (`docs/hardware-memory.md`).
 //!
 //! The PAC's [`DmaWindowAddress`] and [`DmaRef`] constructors are `unsafe`
-//! and called only here, once per source:
+//! and called only here: an address inside storage placed in the DMA window
+//! ([`crate::dma_static`]), a descriptor table, a buffer arena or a placed
+//! pool's buffer that stays pinned while the hardware may read it.
 //!
-//! - **placed**: an address inside storage placed in the DMA window, a
-//!   descriptor table or a buffer arena that stays pinned for the DMA epoch;
-//! - **loaned**: a buffer lent to the hardware from outside, checked in the
-//!   window where the loan is made, that stays reserved until the hardware
-//!   is proven done with it.
-//!
-//! Until the linker proves placement, the storages derive placed addresses
-//! from what `DmaSpace` reported for their own statics and checked in the
-//! window when they were bound.
+//! A buffer lent to the hardware from outside the placed storage (a network
+//! stack's or a PSRAM buffer) has no source yet: it returns as a loan type,
+//! checked in the window where the loan is made, with the first such buffer.
 
 #![allow(
     clippy::disallowed_methods,
@@ -46,17 +42,4 @@ pub const unsafe fn placed_link<L: DmaLayout>(address: u32) -> Option<DmaRef<L>>
     }
     // SAFETY: the caller's promise is the constructors'.
     Some(unsafe { DmaRef::new_unchecked(DmaWindowAddress::new_unchecked(address)) })
-}
-
-/// The address of a buffer lent to the hardware.
-///
-/// # Safety
-///
-/// `address` is the start of a buffer the caller retains for the hardware,
-/// accepted by a window check when the buffer was lent, and released only
-/// after the hardware is proven done with it.
-#[allow(unsafe_code, reason = "the loaned source of typed DMA addresses")]
-pub const unsafe fn loaned(address: u32) -> DmaWindowAddress {
-    // SAFETY: the caller's promise is the constructor's.
-    unsafe { DmaWindowAddress::new_unchecked(address) }
 }

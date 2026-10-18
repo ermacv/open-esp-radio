@@ -8,7 +8,12 @@
 //! A placed static is claimed once as a [`Placed`]: the proof a storage needs
 //! before it publishes its own addresses to DMA hardware.
 
-use oer_memory::zeroed::{Zeroable, ZeroedStatic};
+use oer_memory::{
+    DmaIndexReturn, IndexedStableDmaLease, PinnedDmaTxNetworkLease, PinnedDmaTxPool,
+    PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
+    StableDmaRegion, TaggedStableDmaBacking,
+    zeroed::{Zeroable, ZeroedStatic},
+};
 
 /// The section prefix every DMA static uses.
 pub const DMA_BSS_PREFIX: &str = ".dma.bss.";
@@ -73,6 +78,144 @@ impl<T: 'static> Placed<T> {
     pub fn host(value: &'static mut T) -> Self {
         Self { value }
     }
+}
+
+/// A transmit pool placed in the DMA window ([`dma_static!`](crate::dma_static!)):
+/// the radio leases it issues are [`PlacedTxLease`]s, buffers the DMA
+/// hardware may read without a further address check.
+pub struct PlacedTxPool<
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    const QUEUE_DEPTH: usize,
+> {
+    handle: PinnedDmaTxPoolHandle<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>,
+}
+
+impl<
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    const QUEUE_DEPTH: usize,
+> PlacedTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>
+{
+    /// Pin the `placed` pool (coherent memory).
+    pub fn pin(
+        placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+    ) -> Self {
+        Self {
+            handle: PinnedDmaTxPool::pin_static(placed.into_inner()),
+        }
+    }
+
+    /// Pin the `placed` pool, which needs `prepare_for_dma_read` before a
+    /// DMA reader receives a buffer.
+    pub fn pin_with_dma_read_prepare(
+        placed: Placed<PinnedDmaTxPool<FRAME_CAPACITY, HEADROOM, TRAILER, QUEUE_DEPTH>>,
+        prepare_for_dma_read: fn(&mut [u8]),
+    ) -> Self {
+        Self {
+            handle: PinnedDmaTxPool::pin_static_with_dma_read_prepare(
+                placed.into_inner(),
+                prepare_for_dma_read,
+            ),
+        }
+    }
+
+    /// A free slot for a unique network writer
+    /// ([`PinnedDmaTxPoolHandle::claim_network`]).
+    pub fn claim_network(
+        &self,
+        index: u8,
+    ) -> PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER> {
+        self.handle.claim_network(index)
+    }
+
+    /// A published slot for the radio, as a placed buffer
+    /// ([`PinnedDmaTxPoolHandle::claim_radio`]).
+    pub fn claim_radio(
+        &self,
+        index: u8,
+    ) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>> {
+        PlacedTxLease(self.handle.claim_radio(index))
+    }
+
+    /// Slots held by a network, ready or radio stage.
+    pub fn claimed_slots(&self) -> usize {
+        self.handle.claimed_slots()
+    }
+}
+
+/// A buffer lease of a pool placed in the DMA window: only
+/// [`PlacedTxPool::claim_radio`] makes one on the chip.
+pub struct PlacedTxLease<L>(L);
+
+impl<L> PlacedTxLease<L> {
+    /// A host model's lease, as if placed: host builds have no DMA window.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn host(lease: L) -> Self {
+        Self(lease)
+    }
+
+    /// The lease.
+    pub fn into_inner(self) -> L {
+        self.0
+    }
+}
+
+impl<L> core::ops::Deref for PlacedTxLease<L> {
+    type Target = L;
+
+    fn deref(&self) -> &L {
+        &self.0
+    }
+}
+
+impl<L> core::ops::DerefMut for PlacedTxLease<L> {
+    fn deref_mut(&mut self) -> &mut L {
+        &mut self.0
+    }
+}
+
+#[allow(unsafe_code, reason = "the stability is the wrapped lease's")]
+// SAFETY: the wrapper adds no state; the wrapped lease's stability proof is
+// unchanged.
+unsafe impl<L: StableDmaBacking> StableDmaBacking for PlacedTxLease<L> {
+    fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
+        self.0.stable_dma_region()
+    }
+
+    fn prepare_for_dma_read(&mut self) {
+        self.0.prepare_for_dma_read();
+    }
+}
+
+impl<L: IndexedStableDmaLease> IndexedStableDmaLease for PlacedTxLease<L> {
+    fn release_index(self) -> u8 {
+        self.0.release_index()
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A stable DMA backing whose bytes lie in the DMA window: a
+/// [`PlacedTxLease`], or a pool wrapper around one. Sealed: placement is the
+/// HAL's to prove, so DMA engines may publish its address unchecked.
+pub trait PlacedBacking: StableDmaBacking + sealed::Sealed {}
+
+impl<L> sealed::Sealed for PlacedTxLease<L> {}
+impl<L: StableDmaBacking> PlacedBacking for PlacedTxLease<L> {}
+impl<T, B: PlacedBacking> sealed::Sealed for TaggedStableDmaBacking<T, B> {}
+impl<T, B: PlacedBacking> PlacedBacking for TaggedStableDmaBacking<T, B> {}
+impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> sealed::Sealed
+    for ReturningStableDmaBacking<B, R>
+{
+}
+impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> PlacedBacking
+    for ReturningStableDmaBacking<B, R>
+{
 }
 
 /// Declare a zero-initialised static in the DMA window: a

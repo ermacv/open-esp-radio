@@ -160,6 +160,14 @@ run-time address checks and the firmware placement warning go with the HAL
 RX DMA engine (step 3); `cargo fw` refuses an image that enables
 `test-support`.
 
+A transmit pool is placed the same way: `PlacedTxPool::pin` takes a
+`Placed<PinnedDmaTxPool>`, and its radio leases are `PlacedTxLease`s. The
+sealed `PlacedBacking` marks them, and the pool's wrappers around them, as
+buffers in the DMA window; the A-MPDU retention takes only `PlacedBacking`s and
+publishes their addresses without a window check. A buffer lent from outside
+placed storage has no source yet; it returns as a loan type, checked once where
+the loan is made, with the first such buffer.
+
 ## Where registers, layouts and the protocol meet
 
 Approved by the owner (2026-10-18).

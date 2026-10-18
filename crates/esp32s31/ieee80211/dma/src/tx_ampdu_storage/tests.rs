@@ -6,6 +6,7 @@ use std::{boxed::Box, cell::Cell, rc::Rc};
 use super::*;
 
 use crate::space::{HOST_ARENA_BASE, HostDma};
+use oer_esp32s31_hal::dma_static::PlacedTxLease;
 
 /// The host address of every storage's first descriptor.
 const DESCRIPTOR_BASE: u32 = HOST_ARENA_BASE;
@@ -17,18 +18,18 @@ fn storage() -> PinnedAmpduDmaStorage<4, 256> {
     .unwrap()
 }
 
-struct TestBacking {
+struct TestBytes {
     bytes: Box<[u8; 128]>,
     drops: Rc<Cell<usize>>,
     region_calls: Option<Rc<Cell<usize>>>,
     prepare_calls: Option<Rc<Cell<usize>>>,
 }
 
-struct LargeTestBacking {
+struct LargeTestBytes {
     bytes: Box<[u8]>,
 }
 
-impl TestBacking {
+impl TestBytes {
     fn new(drops: Rc<Cell<usize>>) -> Self {
         Self {
             bytes: Box::new([0; 128]),
@@ -57,7 +58,7 @@ impl TestBacking {
     }
 }
 
-impl Drop for TestBacking {
+impl Drop for TestBytes {
     fn drop(&mut self) {
         self.drops.set(self.drops.get() + 1);
     }
@@ -70,12 +71,12 @@ impl Drop for TestBacking {
 // SAFETY: the boxed bytes never move or get released while this backing
 // exists, and the backing exposes no operation that frees them early.
 // Forgetting the backing leaks its Box, so the allocation survives indefinitely.
-unsafe impl StableDmaBacking for TestBacking {
+unsafe impl StableDmaBacking for TestBytes {
     fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
         if let Some(calls) = &self.region_calls {
             calls.set(calls.get() + 1);
         }
-        // SAFETY: moving `TestBacking` does not move its boxed allocation.
+        // SAFETY: moving `TestBytes` does not move its boxed allocation.
         unsafe { StableDmaRegion::new(&mut self.bytes[..]) }
     }
 
@@ -93,10 +94,35 @@ unsafe impl StableDmaBacking for TestBacking {
 // SAFETY: the boxed bytes never move or get released while this backing
 // exists, and the backing exposes no operation that frees them early.
 // Forgetting the backing leaks its Box, so the allocation survives indefinitely.
-unsafe impl StableDmaBacking for LargeTestBacking {
+unsafe impl StableDmaBacking for LargeTestBytes {
     fn stable_dma_region(&mut self) -> StableDmaRegion<'_> {
-        // SAFETY: moving `LargeTestBacking` does not move its boxed allocation.
+        // SAFETY: moving `LargeTestBytes` does not move its boxed allocation.
         unsafe { StableDmaRegion::new(&mut self.bytes) }
+    }
+}
+
+/// The host backings, as a placed pool's leases: A-MPDU takes only
+/// [`PlacedBacking`]s.
+type TestBacking = PlacedTxLease<TestBytes>;
+
+/// [`TestBytes`]' constructors, for a [`TestBacking`].
+trait HostBacking {
+    fn new(drops: Rc<Cell<usize>>) -> Self;
+    fn counting(drops: Rc<Cell<usize>>, region_calls: Rc<Cell<usize>>) -> Self;
+    fn observing_prepare(drops: Rc<Cell<usize>>, prepare_calls: Rc<Cell<usize>>) -> Self;
+}
+
+impl HostBacking for TestBacking {
+    fn new(drops: Rc<Cell<usize>>) -> Self {
+        PlacedTxLease::host(TestBytes::new(drops))
+    }
+
+    fn counting(drops: Rc<Cell<usize>>, region_calls: Rc<Cell<usize>>) -> Self {
+        PlacedTxLease::host(TestBytes::counting(drops, region_calls))
+    }
+
+    fn observing_prepare(drops: Rc<Cell<usize>>, prepare_calls: Rc<Cell<usize>>) -> Self {
+        PlacedTxLease::host(TestBytes::observing_prepare(drops, prepare_calls))
     }
 }
 
@@ -271,14 +297,14 @@ fn late_external_word_overflow_does_not_partially_publish_the_chain() {
     let mut owner = RetainedAmpduDma::new(descriptor_only_storage(), retention);
     owner.begin().unwrap();
     let first = owner
-        .push_backing(LargeTestBacking {
+        .push_backing(PlacedTxLease::host(LargeTestBytes {
             bytes: std::vec![0; 20_000].into_boxed_slice(),
-        })
+        }))
         .unwrap();
     let second = owner
-        .push_backing(LargeTestBacking {
+        .push_backing(PlacedTxLease::host(LargeTestBytes {
             bytes: std::vec![0; 20_000].into_boxed_slice(),
-        })
+        }))
         .unwrap();
     let first_address = owner
         .reserved_backing_mut(&first)
@@ -831,17 +857,6 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
     assert_eq!(observed, 0x5d);
 }
 
-/// A space whose arenas end 64 bytes before the top of the DMA window.
-enum WindowTail {}
-
-impl crate::space::DmaSpace for WindowTail {
-    fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
-        let arena: *const Arena = arena;
-        let offset = u32::try_from(field.addr().checked_sub(arena.addr())?).ok()?;
-        (oer_esp32s31_hal::layouts::DMA_WINDOW.end - 64).checked_add(offset)
-    }
-}
-
 #[test]
 fn external_chain_publishes_each_lease_at_its_address_in_the_arena_space() {
     let drops = Rc::new(Cell::new(0));
@@ -887,51 +902,4 @@ fn external_chain_publishes_each_lease_at_its_address_in_the_arena_space() {
         .unwrap();
     owner.release_detached().unwrap();
     assert_eq!(drops.get(), 2);
-}
-
-#[test]
-fn external_lease_beyond_the_dma_window_is_rejected_before_publication() {
-    let drops = Rc::new(Cell::new(0));
-    let dma = AmpduDmaStorage::<2, 0>::pin_static::<WindowTail>(Box::leak(Box::new(
-        AmpduDmaStorage::new(),
-    )))
-    .unwrap();
-    let retention = Box::leak(Box::new(RetainedAmpduDmaStorage::new()));
-    let mut owner = RetainedAmpduDma::<TestBacking, 2, 0>::new(dma, retention);
-    owner.begin().unwrap();
-    let backing = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
-    let start = owner
-        .reserved_backing_mut(&backing)
-        .unwrap()
-        .bytes
-        .as_ptr()
-        .addr();
-
-    // Inside the 128-byte lease, but its last eight bytes lie past the
-    // window the TX DMA reader can fetch.
-    let beyond = backing.external_descriptor(start + 8, 64, 40).unwrap();
-    assert!(matches!(
-        owner.publish_external_chain(&[beyond]),
-        Err(AmpduDmaStorageError::Address)
-    ));
-    assert_eq!(
-        owner.dma().descriptor_word0(0),
-        Some(WifiTxDmaDescriptorControl::ZERO)
-    );
-    assert_eq!(
-        owner.commit_backing_descriptor(&backing, start + 8, 64, 40),
-        Err(AmpduDmaStorageError::Address)
-    );
-
-    // The same lease ending exactly at the window top is admitted.
-    let inside = backing.external_descriptor(start, 64, 40).unwrap();
-    owner
-        .publish_external_chain(&[inside])
-        .unwrap()
-        .commit(|_| {});
-    assert_eq!(
-        owner.dma().descriptor_buffer_address(0),
-        Some(oer_esp32s31_hal::layouts::DMA_WINDOW.end - 64)
-    );
-    owner.quarantine();
 }

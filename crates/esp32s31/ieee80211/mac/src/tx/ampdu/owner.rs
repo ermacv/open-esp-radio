@@ -9,6 +9,7 @@ use oer_ieee80211_softmac::tx_cost::TxContention;
 
 use core::{ops::Deref, pin::Pin};
 
+use oer_esp32s31_hal::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
@@ -17,7 +18,6 @@ use oer_esp32s31_ieee80211_dma::tx_ampdu_storage::{
     RetainedAmpduDmaStorage,
 };
 use oer_ieee80211_upper_mac::ampdu::set_retry_bit;
-use oer_memory::StableDmaBacking;
 
 use crate::tx::{
     CompletionObservation, HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxSlotState,
@@ -93,7 +93,7 @@ impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
 ///
 /// Unlike a bare [`HtAmpduTxStorage`], this value cannot return or drop a
 /// network allocation while hardware can still follow its descriptor. Safe
-/// callers append owned [`StableDmaBacking`] leases; release is admitted only
+/// callers append owned [`PlacedBacking`] leases; release is admitted only
 /// after the underlying storage has returned to [`TxSlotState::Free`].
 pub struct RetainedDmaAmpduTx<'storage, B: 'storage, const SLOTS: usize> {
     storage: Option<Pin<&'storage mut HtAmpduTxStorage<SLOTS>>>,
@@ -263,7 +263,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
     }
 }
 
-impl<B: StableDmaBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
+impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     /// Observe one hardware completion and apply it to the matching retry
     /// state only after both descriptor owners have detached.
     ///
