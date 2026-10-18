@@ -344,6 +344,10 @@ resolver = "3"
 # Ported packages that do not build yet, each with why; they join the
 # workspace when what they need is there.
 exclude = [
+    # not building: its tests and probe feature need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
+    "crates/esp32s31/bluetooth/driver",
+    # not building: its tests need `oer-esp32s31-hal`'s `validation-probes`, which main does not have
+    "crates/esp32s31/bluetooth/memory",
     # not building: needs feature `validation-probes` of `oer-esp32s31-phy`, which main does not have
     "tools/lib/analysis/phy-relation-esp32s31",
     # not building: needs `oer-firmware-verification-esp32s31-probe-register`, which does not build

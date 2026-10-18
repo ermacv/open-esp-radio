@@ -35,6 +35,8 @@ use crate::{
 
 mod controller_time;
 mod diagnostic;
+mod scheduler_execution_lock;
+mod scheduler_execution_modify;
 mod scheduler_stop;
 mod shutdown;
 
