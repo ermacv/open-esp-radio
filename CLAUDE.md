@@ -8,13 +8,22 @@ IEEE 802.15.4, without vendor radio binaries. Owner decisions are in
 ## Rules
 
 - **Ask, never fall back.** When a choice changes a shared crate, drops data,
-  adds a fallback, leaves work unfinished or changes on-hardware behavior,
-  explain it, recommend an option and ask the owner. Never silently pick a
-  conservative reading, an older behavior or an approximation.
+  adds a fallback, leaves work unfinished, changes memory use or on-hardware
+  behavior, or departs from a contract shape already accepted, explain it,
+  recommend an option and ask before writing code. Never silently pick a
+  conservative reading, an older behavior or an approximation. Decide small,
+  local, reversible details (a name, a variant, a test shape) yourself and
+  state the choice in one line of the PR; batch the real questions.
+- **Keep your word.** Never drop silently what you said you would keep; a
+  departure from the plan you stated goes into the PR as your own decision.
+  Before calling something unused, grep its field and method accesses, not
+  only its type name.
 - **No compatibility layers.** Change an interface together with all its
   callers: no deprecated aliases, re-export shims or fallback paths.
 - **Tests.** Every behavioral change gets a focused regression test beside its
-  module (`#[cfg(test)]`) or in the crate's `tests/`.
+  module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
+  ownership, never generated register addresses, masks, shifts or layout
+  constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
@@ -65,11 +74,25 @@ dependency set, or an independent consumer; otherwise it is a module.
 
 ## Work
 
-- One branch and worktree per task, each with its own `target/`; never share
-  `CARGO_TARGET_DIR` between checkouts. Conventional Commit subjects
+- A branch per task; one worktree per session, reused: switch to the next
+  task's branch inside it (`git switch -c <branch> origin/main`), so its
+  `target/` stays warm. A new worktree starts its `target/` as a copy of a
+  warm one (`cp -a --reflink=auto <warm>/target <new>/`); never share
+  `CARGO_TARGET_DIR` between checkouts. Remove a worktree with `git worktree
+  remove` (never `--force`) once its branch is merged.
+- Preserve unrelated changes in a dirty tree. Conventional Commit subjects
   (`fix(esp32s31): …`).
 - For what you changed: `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets`, `cargo fmt`. Chip code also builds for
   `riscv32imafc-unknown-none-elf`.
-- `git push` the branch and open a draft PR (`gh pr create --draft`); the owner
-  reviews and merges.
+- Commands longer than about a minute (builds, CI watches, stand runs) run in
+  the background; wait for their completion, never block the conversation.
+- Judge a check only by its own exit code: never through a pipe such as
+  `| tail` (redirect to a file and print `exit=$?` instead).
+- Pass a list of paths or arguments as an array, not as one string variable.
+- Cite commit hashes as `git` prints them after the commit, never from memory.
+- The stand is shared: hardware runs hold the board's lock; never kill another
+  holder, wait for it. Stand runs need no extra approval; the owner's limits
+  on secrets, eFuse writes, protected boards and hub ports still apply.
+- `git push` the branch and open a pull request (`gh pr create`); the architect
+  session reviews it and merges it when CI is green.

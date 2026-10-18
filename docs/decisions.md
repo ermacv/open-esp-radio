@@ -91,6 +91,15 @@ tree is a selection of a predecessor repository, without its history.
   stand router's AP interface, read after the profile is applied, and
   checks the SSID from `[station]`.
 
+## 2026-10-18: how the work runs
+
+- **Review and merge.** A developer session opens a pull request and reports
+  it to the architect session; the architect reviews it and merges it when CI
+  is green, or returns it with remarks.
+- **Working rules.** The predecessor's working rules for agents return in
+  `CLAUDE.md` (Work); its process bureaucracy (evidence bundles, seals,
+  qualification, contract-change procedure, tracking-issue lists) does not.
+
 ## Earlier decisions still in force
 
 Made before the start; stated here because their records are not public.
@@ -113,6 +122,21 @@ Made before the start; stated here because their records are not public.
   attempt's retry plan (variant B); a protected MPDU is numbered at its first
   launch; DMA access only through its owner type, never alongside a
   quiescence proof.
+- **Vendor parity is not a goal.** Clean architecture with hard boundaries,
+  sans-IO protocols tested on the host and hardware offloads come first;
+  vendor code is evidence of hardware behaviour, not a design to copy. A
+  vendor algorithm may sit behind a seam as one policy but never shapes an
+  interface.
+- **PHY slicing.** Calibration and tracking are cut into bounded P2 steps:
+  delays and readiness polls become timer-woken waits. Each phase states the
+  per-step bound, the answer bound per request kind and the worst tracking
+  tick, provisional until measured. Slicing keeps calibration results within
+  the vendor spread. A section that cannot be sliced without leaving that
+  spread goes to the owner with evidence and the option of running it on a
+  core-1 executor; an agent never picks that option.
+- **No fixed rates.** No fixed data or control-frame rate, not even
+  temporarily: rate selection is its own portable machine built from the
+  vendor policy.
 - **Low-power clock** is a type (`LpClock<RcSlow | Xtal32k>`); the
   ESP32-S31-Function-CoreBoard-1 has no 32 kHz crystal.
 - **Brownout** policy is applied in the bootstrap, not in a radio constructor.
