@@ -56,12 +56,17 @@ pub fn interrupt_table(
             .ok_or_else(|| invalid(format!("{address:#010x} is not read-only data")))
     };
     let first = word(at)?;
+    let length = word(at + 4)?;
+    // An empty slice's pointer is the element type's dangling constant,
+    // which no relocation names; it is never read.
+    if length == 0 {
+        return Ok(Vec::new());
+    }
     if image.word(at) != Some(first) {
         return Err(invalid(format!(
             "`{symbol}`'s pointer at {at:#010x} has no relocation"
         )));
     }
-    let length = word(at + 4)?;
     let field = |entry: u32, field: Field| -> Result<u32> {
         let address = entry + field.offset;
         if address % 4 + field.size > 4 {

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use oer_tool_data_chip_profile::Chip;
 
-use crate::{Result, encode, pack, placement, w1};
+use crate::{Result, encode, gates, pack, placement, w1};
 
 /// The chip every image of `firmware/apps` is built for.
 pub const CHIP: &str = "esp32s31";
@@ -79,16 +79,58 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, O
     }
 }
 
+/// The compiler setup of every image of `profile`'s chip: the stack-size
+/// records the stack gate reads, the move limit of `policy`, and the image
+/// linker, which refuses bytes in an input section the boot zeroes.
+fn compiler<'a>(
+    root: &'a Path,
+    profile: &'a oer_tool_data_chip_profile::Profile,
+    policy: &oer_tool_data_image_policy::StackPolicy,
+) -> ImageCompiler<'a> {
+    ImageCompiler {
+        root,
+        linker_target: root.join("target/image-linker"),
+        rust_target: &profile.rust_target,
+        max_move_bytes: policy.max_move_bytes,
+        zeroed_inputs: profile.zeroed_inputs(),
+    }
+}
+
+/// [`oer_tool_base_toolchain::image::ImageCompiler`] with the linker's
+/// target directory owned.
+struct ImageCompiler<'a> {
+    root: &'a Path,
+    linker_target: PathBuf,
+    rust_target: &'a str,
+    max_move_bytes: u64,
+    zeroed_inputs: String,
+}
+
 /// Build `package`, a firmware member of the repository's workspace, for
-/// `target` with the `firmware` profile, with `env` set or removed.
+/// the chip target with the `firmware` profile and the image compiler
+/// setup, with `env` set or removed.
 fn cargo_build(
-    root: &Path,
+    compiler: &ImageCompiler<'_>,
     package: &str,
-    target: &str,
     runtime: Option<&Path>,
     env: &[(&str, Option<String>)],
 ) -> Result<PathBuf> {
+    let (root, target) = (compiler.root, compiler.rust_target);
     let mut command = cargo();
+    oer_tool_base_toolchain::image::configure(
+        &mut command,
+        &oer_tool_base_toolchain::image::ImageCompiler {
+            root,
+            linker_target: &compiler.linker_target,
+            rust_target: target,
+            max_move_bytes: compiler.max_move_bytes,
+            runtime_environment: Vec::new(),
+        },
+    )?;
+    command.env(
+        oer_tool_base_toolchain::image::ZEROED_INPUTS_ENV,
+        &compiler.zeroed_inputs,
+    );
     command.current_dir(root).args([
         "build",
         "--profile",
@@ -191,19 +233,16 @@ fn refuse_test_support(root: &Path, package: &str, target: &str) -> Result<()> {
 
 pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manifest, Vec<String>)> {
     let chip = Chip::load(root, CHIP)?;
+    let profile = oer_tool_data_chip_profile::Profile::load(root, CHIP)?;
+    let policy = gates::policy(root, &profile)?;
+    let compiler = compiler(root, &profile, &policy);
     let package = package(root, image)?;
     refuse_test_support(root, &package, &chip.rust_target)?;
     let output = output(root, image);
     std::fs::create_dir_all(&output)?;
 
     eprintln!("fw: building the runtime {package}");
-    let runtime_elf = cargo_build(
-        root,
-        &package,
-        &chip.rust_target,
-        None,
-        &runtime_env(image, w1),
-    )?;
+    let runtime_elf = cargo_build(&compiler, &package, None, &runtime_env(image, w1))?;
     let runtime = std::fs::read(&runtime_elf)
         .map_err(|error| format!("{}: {error}", runtime_elf.display()))?;
     std::fs::write(output.join("runtime.elf"), &runtime)?;
@@ -215,21 +254,33 @@ pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manif
         packed.bytes.len(),
         packed.header.payload_crc32
     );
-    let warnings =
+    let mut warnings =
         placement::check_elf(&runtime, oer_firmware_platform_esp32s31_layout::LAYOUT.sram)?;
     std::fs::write(output.join("placement.txt"), warnings.join("\n"))?;
     for warning in &warnings {
         eprintln!("warning: placement: {warning}");
     }
 
+    eprintln!("fw: checking the runtime's stacks");
+    let stacks = gates::runtime(root, &profile, &policy, &runtime_elf, &output)?;
+    for warning in &stacks {
+        eprintln!("warning: stack: {warning}");
+    }
+    warnings.extend(stacks);
+
     eprintln!("fw: building the bootstrap");
     let bootstrap_elf = cargo_build(
-        root,
+        &compiler,
         BOOTSTRAP,
-        &chip.rust_target,
         Some(&runtime_bin),
         &runtime_env(BOOTSTRAP, None),
     )?;
+    eprintln!("fw: checking the bootstrap's stack");
+    let stacks = gates::bootstrap(root, &profile, &policy, &bootstrap_elf, &output)?;
+    for warning in &stacks {
+        eprintln!("warning: stack: {warning}");
+    }
+    warnings.extend(stacks);
     let bootstrap = std::fs::read(&bootstrap_elf)
         .map_err(|error| format!("{}: {error}", bootstrap_elf.display()))?;
     std::fs::write(output.join("bootstrap.elf"), &bootstrap)?;

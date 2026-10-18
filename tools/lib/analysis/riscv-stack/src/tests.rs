@@ -1209,6 +1209,41 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
 }
 
 #[test]
+fn an_empty_table_needs_no_pointer_relocation() {
+    let elf = built(
+        TEXT,
+        &[Symbol {
+            name: "handler",
+            words: vec![SP_DOWN_16, SP_UP_16, RET],
+            frame: Some(16),
+        }],
+        &Rodata {
+            words: &[4, 0],
+            relocated: &[],
+            objects: &[("__OER_INTERRUPT_TABLE", 0, 8)],
+        },
+    );
+    assert_eq!(
+        interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).unwrap(),
+        []
+    );
+    // A table with entries still needs its pointer relocated.
+    let mut words = vec![RODATA + 8, 1];
+    words.extend(binding(25, 1, 0));
+    words.push(0);
+    let elf = built(
+        TEXT,
+        &[],
+        &Rodata {
+            words: &words,
+            relocated: &[],
+            objects: &[("__OER_INTERRUPT_TABLE", 0, 8), ("entries", 8, 12)],
+        },
+    );
+    assert!(interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &S31_TABLE).is_err());
+}
+
+#[test]
 fn a_corrupt_table_length_fails_on_the_table_not_the_budget() {
     let mut elf = table_image(&[(25, 1, 0, Some(TEXT))], true);
     let at = {

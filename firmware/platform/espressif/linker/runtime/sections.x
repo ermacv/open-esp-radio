@@ -263,9 +263,11 @@ SECTIONS
   _stack_start_cpu0 = _stack_start;
 
   /* Metadata that occupies no memory: debug information, the toolchain
-     comment and the RISC-V attributes. Named so that
+     comment, the RISC-V attributes and the compiler's frame records
+     (`-Z emit-stack-sizes`, which the stack gate reads). Named so that
      `--orphan-handling=error` refuses every other unplaced section. */
   .comment 0 (INFO) : { *(.comment) }
+  .stack_sizes 0 (INFO) : { *(.stack_sizes) }
   .riscv.attributes 0 (INFO) : { *(.riscv.attributes) }
   .debug_abbrev 0 : { *(.debug_abbrev) }
   .debug_aranges 0 : { *(.debug_aranges) }
