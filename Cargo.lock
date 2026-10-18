@@ -2207,7 +2207,6 @@ dependencies = [
  "embassy-time-driver",
  "embassy-time-queue-utils",
  "esp-hal",
- "esp-sync",
  "oer-espressif-interrupt-table-esp-hal",
  "oer-interrupt-table",
  "oer-memory",

@@ -1529,7 +1529,6 @@ name = "oer-esp32s31-w0"
 version = "0.1.0"
 dependencies = [
  "embassy-executor",
- "embassy-futures",
  "esp-hal",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211",
@@ -1569,7 +1568,6 @@ dependencies = [
  "embassy-time-driver",
  "embassy-time-queue-utils",
  "esp-hal",
- "esp-sync",
  "oer-espressif-interrupt-table-esp-hal",
  "oer-interrupt-table",
  "oer-memory",

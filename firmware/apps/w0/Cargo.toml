@@ -11,7 +11,6 @@ build = "build.rs"
 
 [dependencies]
 embassy-executor = { version = "0.10.0", default-features = false }
-embassy-futures = "0.1.2"
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 static_cell = { workspace = true }
 oer-esp32s31-platform-board = { path = "../../platform/esp32s31/board" }
