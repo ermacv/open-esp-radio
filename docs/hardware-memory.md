@@ -103,7 +103,7 @@ fields = [{ name = "ADDRESS", bits = "31:0", writer = "cpu", placement = ["dma-w
 name = "NEXT"
 offset = 8
 access = "shared"
-fields = [{ name = "ADDRESS", bits = "31:0", writer = "cpu", layout = "WIFI_DMA_DESCRIPTOR" }]
+fields = [{ name = "ADDRESS", bits = "31:0", writer = "cpu", points-to = "WIFI_DMA_DESCRIPTOR" }]
 ```
 
 Byte-oriented layouts (the RX control prefix) declare `[[layout.bytes]]`

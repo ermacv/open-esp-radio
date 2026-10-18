@@ -6,6 +6,7 @@
 //! PAC above the register leaf.
 
 use core::marker::PhantomData;
+use oer_esp32s31_hal::dma_address;
 
 use crate::{
     descriptor::DESCRIPTOR_BYTES,
@@ -14,7 +15,11 @@ use crate::{
 
 use oer_memory::StableDmaRange;
 
-use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
+use oer_esp32s31_hal::{
+    ieee80211::mac::WifiMacHal,
+    layouts::{DmaRef, WifiRxDmaDescriptor},
+    owner::RadioRuntimeOwner,
+};
 
 /// Unforgeable authority for mutating one validated RX descriptor walker.
 ///
@@ -29,6 +34,7 @@ use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
 /// doorbell.
 pub struct RxDmaBinding<'storage> {
     reserved_address: u32,
+    reserved_head: DmaRef<WifiRxDmaDescriptor>,
     /// The table, for a model walker that follows its links.
     #[cfg(any(test, feature = "test-support"))]
     table: RxWalkerTable<'storage>,
@@ -292,8 +298,13 @@ impl<'storage> RxDmaBinding<'storage> {
         // storage (`prepare_ring`). Native models have no asynchronous DMA
         // actor.
         let range = unsafe { StableDmaRange::from_owner(table, descriptor_base, range_len) }?;
+        // SAFETY: `descriptor_base` is the DMA address of `table`, whose last
+        // descriptor R lies `reserved_offset` bytes in (checked above); the
+        // binding retains the table borrow for the DMA epoch, as for `range`.
+        let reserved_head = unsafe { dma_address::placed_link(reserved_address) }?;
         Some(Self {
             reserved_address,
+            reserved_head,
             #[cfg(any(test, feature = "test-support"))]
             table: RxWalkerTable::new(descriptor_base, table.ring(), table.reserved()),
             range,
@@ -305,6 +316,11 @@ impl<'storage> RxDmaBinding<'storage> {
     /// `RX_DESCRIPTOR_BASE` is ever given.
     pub const fn reserved_address(&self) -> u32 {
         self.reserved_address
+    }
+
+    /// The reference `RX_DESCRIPTOR_BASE` is given: R.
+    pub const fn reserved_head(&self) -> DmaRef<WifiRxDmaDescriptor> {
+        self.reserved_head
     }
 
     /// The descriptor at the low address bits `low`, which the walker's
@@ -463,7 +479,7 @@ impl RxDma for WifiMacHal<'_> {
     }
 
     fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
-        self.write_rx_descriptor_base(binding.range(), binding.reserved_address());
+        self.write_rx_descriptor_base(binding.range(), binding.reserved_head());
     }
 
     fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {

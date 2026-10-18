@@ -6,6 +6,7 @@
 
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
+use oer_esp32s31_hal::dma_address;
 
 use crate::ring_index::RingIndex;
 
@@ -900,9 +901,21 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             initial_start,
         )?;
         let head = descriptor_address(descriptor_base, initial_start.get())?;
+        // SAFETY: `prepare_inner`'s only callers, `RxDmaStorage::prepare_ring`
+        // and `prepare_halted`, pass the DMA addresses of their own pinned
+        // descriptor table and buffers, which `validate_descriptor_base` and
+        // `validate_buffer_addresses` checked, and the window checks above
+        // accepted them.
+        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        let (reserved_buffer, head) = unsafe {
+            (
+                dma_address::placed(reserved_buffer_address),
+                dma_address::placed_link(head),
+            )
+        };
         table
             .reserved()
-            .publish_owned(armed_word, reserved_buffer_address, head);
+            .publish_owned(armed_word, reserved_buffer, head);
         publish_cold_ring_inner(mmio, &binding, arena)?;
 
         Ok(Self {
@@ -1197,7 +1210,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             increment_saturating(&self.arena.reserved_landings);
             self.rearm_reserved(word0, buffer)?;
         }
-        reserved.publish_next_address(0);
+        reserved.publish_next(None);
         self.reserved_left = true;
         Ok(continued)
     }
@@ -2105,9 +2118,19 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             let buffer_address = self
                 .bound_buffer_address(index.get())
                 .ok_or(RxRingError::Count)?;
+            // SAFETY: the live ring's descriptor base and buffer table are the
+            // ones `prepare_inner` took from its storage arena, validated there
+            // as that arena's pinned descriptors and buffers in the DMA window.
+            #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+            let (buffer, next) = unsafe {
+                (
+                    dma_address::placed(buffer_address),
+                    dma_address::placed_link(next),
+                )
+            };
             descriptor.publish_owned(
                 rx_rearm_word(descriptor.word0()).ok_or(RxRingError::Size)?,
-                buffer_address,
+                buffer,
                 next,
             );
         }
@@ -2116,7 +2139,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // This type is the sole publication authority. All descriptors in the
         // appended group were observed complete, rearmed and remain
         // unreachable until this old-tail link and the following doorbell.
-        accepted_tail.publish_next_address(head_address);
+        // SAFETY: as for the group above, `head_address` names a descriptor
+        // of the live ring's validated table.
+        #[allow(unsafe_code, reason = "a link to a descriptor of the validated table")]
+        let head = unsafe { dma_address::placed_link(head_address) };
+        accepted_tail.publish_next(head);
         mmio.fence();
         mmio.request_reload(&self.binding);
         mmio.fence();
@@ -2734,7 +2761,16 @@ fn relink_rotated_ring<const COUNT: usize>(
             0
         };
         let word0 = descriptors[index.get()].word0();
-        descriptors[index.get()].publish_owned(word0, buffer_addresses[index.get()], next);
+        // SAFETY: only `prepare_inner` calls this, with the validated
+        // descriptor base and buffer table of its storage arena.
+        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        let (buffer, next) = unsafe {
+            (
+                dma_address::placed(buffer_addresses[index.get()]),
+                dma_address::placed_link(next),
+            )
+        };
+        descriptors[index.get()].publish_owned(word0, buffer, next);
     }
     Ok(())
 }
@@ -2792,7 +2828,17 @@ fn build_cold_ring_inner(
         } else {
             0
         };
-        descriptor.publish_owned(word0, buffer_addresses[index], next);
+        // SAFETY: only `prepare_inner` calls this, with the validated
+        // descriptor base and buffer table of its storage arena, and the
+        // window checks above accepted every address.
+        #[allow(unsafe_code, reason = "typed addresses of the validated arena")]
+        let (buffer, next) = unsafe {
+            (
+                dma_address::placed(buffer_addresses[index]),
+                dma_address::placed_link(next),
+            )
+        };
+        descriptor.publish_owned(word0, buffer, next);
     }
     Ok(())
 }

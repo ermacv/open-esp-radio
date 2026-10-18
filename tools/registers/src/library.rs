@@ -107,6 +107,7 @@ impl LibraryPublication {
         if self.api.options.allow_clippy_empty_docs {
             raw.insert_str(0, "#![allow(clippy::empty_docs)]\n");
         }
+        oer_register_model::validate_pointer_writes(&[], &self.api)?;
         raw.push_str(&self.api.render_rust(&svd)?);
         let raw = host::format(&raw, &self.outputs.edition)?;
         let api = host::format(&self.api.render_facade_rust()?, &self.outputs.edition)?;

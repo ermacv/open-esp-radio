@@ -6,6 +6,7 @@
 
 use crate::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
+use oer_esp32s31_hal::dma_address;
 
 use oer_esp32s31_hal::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaRange};
@@ -396,11 +397,16 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
                 descriptor_addresses[index + 1]
             };
             let word0 = words[index].with_tx_last(next_address == 0);
-            self.storage.as_ref().get_ref().descriptors[index].publish_owned(
-                word0,
-                buffer_addresses[index],
-                next_address,
-            );
+            // SAFETY: the binding derived both addresses from the pinned
+            // static's validated descriptor and buffer bases.
+            #[allow(unsafe_code, reason = "typed addresses of the pinned aggregate")]
+            let (buffer, next) = unsafe {
+                (
+                    dma_address::placed(buffer_addresses[index]),
+                    dma_address::placed_link(next_address),
+                )
+            };
+            self.storage.as_ref().get_ref().descriptors[index].publish_owned(word0, buffer, next);
         }
         *self.storage.as_mut().project().published_count = entries.len();
 
@@ -512,7 +518,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
             .iter()
             .take(published_count)
         {
-            descriptor.publish_owned(WifiTxDmaDescriptorControl::ZERO, 0, 0);
+            descriptor.clear();
         }
         let storage = self.storage.as_mut().project();
         *storage.published_count = 0;
@@ -1158,11 +1164,18 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                 descriptor_addresses[index + 1]
             };
             let word0 = words[index].with_tx_last(next_address == 0);
-            self.dma().storage.as_ref().get_ref().descriptors[index].publish_owned(
-                word0,
-                buffer_addresses[index],
-                next_address,
-            );
+            // SAFETY: `external_dma_address` accepted each buffer in the DMA
+            // window inside a backing retained for this publication; the
+            // links name descriptors of the pinned static's validated base.
+            #[allow(unsafe_code, reason = "typed addresses of retained backings")]
+            let (buffer, next) = unsafe {
+                (
+                    dma_address::loaned(buffer_addresses[index]),
+                    dma_address::placed_link(next_address),
+                )
+            };
+            self.dma().storage.as_ref().get_ref().descriptors[index]
+                .publish_owned(word0, buffer, next);
         }
         *self.dma_mut().storage.as_mut().project().published_count = entries.len();
 
@@ -1216,11 +1229,19 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                     .ok_or(AmpduDmaStorageError::Address)?
             };
             let word0 = descriptor.word0.with_tx_last(next_address == 0);
-            self.dma().storage.as_ref().get_ref().descriptors[logical_index].publish_owned(
-                word0,
-                descriptor.buffer_address,
-                next_address,
-            );
+            // SAFETY: the retained descriptor image's buffer was accepted by
+            // `external_dma_address` when its backing was bound, and the
+            // backing is still retained; the link names a descriptor of the
+            // pinned static's validated base.
+            #[allow(unsafe_code, reason = "typed addresses of retained backings")]
+            let (buffer, next) = unsafe {
+                (
+                    dma_address::loaned(descriptor.buffer_address),
+                    dma_address::placed_link(next_address),
+                )
+            };
+            self.dma().storage.as_ref().get_ref().descriptors[logical_index]
+                .publish_owned(word0, buffer, next);
         }
         *self.dma_mut().storage.as_mut().project().published_count = count;
 

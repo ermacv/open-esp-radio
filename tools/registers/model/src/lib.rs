@@ -40,10 +40,10 @@ pub use pac_api::{
     BitwiseComposedDomain, BitwiseComposedDomainArgument, BitwiseComposedValueType, BoundedDomain,
     EnumDomain, EnumValue, FieldOrModify, FixedRegisterImage, FixedRegisterSequence,
     FixedRegisterSequenceStep, FixedRegisterWrite, FlagDomain, FlagValue, FullRegisterRead,
-    FullRegisterWrite, IndirectRegisterField, IndirectRegisterFieldDomain, InterruptSnapshot,
-    MaskedRegisterModify, OpaqueDomain, OwnershipPartition, PacApiExposure, PacApiOptions,
-    PacApiPack, PartitionImageRead, RegisterImageRead, RegisterImageWrite, W1cRegisterSnapshot,
-    ZeroBasedFieldWrite, ZeroRegisterWrite,
+    FullRegisterValue, FullRegisterWrite, IndirectRegisterField, IndirectRegisterFieldDomain,
+    InterruptSnapshot, MaskedRegisterModify, OpaqueDomain, OwnershipPartition, PacApiExposure,
+    PacApiOptions, PacApiPack, PartitionImageRead, RegisterImageRead, RegisterImageWrite,
+    W1cRegisterSnapshot, ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 pub use pac_bindings::{generate_binding_index, validate_pac_crate_name};
 pub use partition_image::PartitionRegister;
@@ -224,6 +224,26 @@ pub struct RegisterModel {
     reviewed_register_facts: Vec<EffectiveAssertion>,
     shared_peripherals: BTreeMap<String, SharedPeripheral>,
     layouts: Vec<MemoryLayout>,
+}
+
+/// Every pointer register write of `policy` points to one of `layouts` that
+/// a `DmaRef` may refer to; a publication without layouts has none.
+pub fn validate_pointer_writes(layouts: &[MemoryLayout], policy: &PacApiPack) -> Result<()> {
+    for operation in &policy.full_register_writes {
+        if let FullRegisterValue::PointsTo(target) = operation.value()?
+            && !layouts
+                .iter()
+                .any(|layout| layout.name == target && layout.is_dma_target())
+        {
+            return Err(Error::message(format!(
+                "PAC API full-register-write {:?} points to {target}, which is not a word layout \
+                 of this model placed in the {} region only",
+                operation.name,
+                layouts::DMA_REGION
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -594,6 +614,12 @@ impl RegisterModel {
     /// The model's memory layouts.
     pub fn layouts(&self) -> &[MemoryLayout] {
         &self.layouts
+    }
+
+    /// Every pointer register write of `policy` points to a layout of this
+    /// model that a `DmaRef` may refer to.
+    pub fn validate_pointer_writes(&self, policy: &PacApiPack) -> Result<()> {
+        validate_pointer_writes(&self.layouts, policy)
     }
 
     /// The `layouts` module of the PAC API: the layouts and the RAM regions

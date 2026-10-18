@@ -152,8 +152,19 @@ impl PacApiPack {
             if !operation.exposure.exposes_facade() {
                 continue;
             }
-            let domain = operation.domain.as_str();
-            let value = domain_value_expression(domain, &flag_or_enum_domains);
+            let (domain, value) = match operation.value()? {
+                crate::FullRegisterValue::Domain(domain) => (
+                    domain.to_owned(),
+                    domain_value_expression(domain, &flag_or_enum_domains).to_string(),
+                ),
+                crate::FullRegisterValue::PointsTo(layout) => (
+                    format!(
+                        "crate::layouts::DmaRef<crate::layouts::{}>",
+                        crate::layouts::camel(layout)
+                    ),
+                    "value.bits()".to_owned(),
+                ),
+            };
             output.push_str(&format!(
                 "/// Typed bridge for the reviewed `{}` complete-register transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, value: {}) {{\n    crate::svd::full_register_write::{}(registers, {});\n}}\n\n",
                 operation.name,

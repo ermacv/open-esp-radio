@@ -78,8 +78,11 @@ Each schema-1 file holds one `[layout]` with `name`, `description`, `size`,
 offset order) or `[[layout.bytes]]` (`access = "owned"`, ranges of one, two
 or four little-endian bytes). A word or range has `fields` with `bits`
 (`"N"` or `"HIGH:LOW"`), `writer` (`cpu` or `hardware`) and an optional
-`description`; a whole-word address field may name the `placement` of what
-it points at or the `layout` it links to. Fields do not overlap. A layout
+`description`; a whole-word address field names either the `placement` of
+the buffer it points at or, in `points-to`, the layout it links to. Typed
+addresses exist for the `dma-window` region only: such a field's placement,
+and the placement of the layout it points to, is `["dma-window"]`. Fields do
+not overlap. A layout
 that repeats another's geometry names it in `same-geometry-as`; the tool
 checks that size, alignment, placement, words and the bits of every field
 both name agree (the RX and TX DMA descriptors).
@@ -98,7 +101,17 @@ word layout a `#[repr(C, align(N))]` type of volatile cells with `zeroed`,
 and `write` of a value type, which has `from_bits`, `bits`, a getter per
 field and a `with_*` builder (`Option<Self>` when the value may not fit);
 per byte layout a decoder over `&[u8; N]` with a value type per range and a
-getter per field. No ordering, fence or ownership is generated.
+getter per field. When an address field exists it also gains the typed
+addresses of the DMA region: `DmaWindowAddress` for a buffer and
+`DmaRef<L>` for a layout placed there (the sealed `DmaLayout`), both with an
+`unsafe` constructor only `oer_esp32s31_hal::dma_address` calls. An address
+field's builder takes that type (`Option<DmaRef<L>>` for a link, `None` for
+none); its getter returns the word as read. No ordering, fence or ownership
+is generated.
+
+A complete-register write in the API policy takes either a `domain` or, for
+a register the hardware reads as a pointer, `points-to = "<LAYOUT>"`: its
+bridge then takes a `DmaRef` to that layout of the model.
 
 The schema-1 manifest selects model, sparse reviewed assertions, applicability,
 memory map, ownership policy, API/lint packs, evidence catalogs and output paths.

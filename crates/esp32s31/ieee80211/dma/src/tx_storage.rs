@@ -6,6 +6,7 @@
 //! capability instead of a bare descriptor address to the register boundary.
 
 use core::{marker::PhantomPinned, pin::Pin};
+use oer_esp32s31_hal::dma_address;
 
 use oer_esp32s31_hal::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
@@ -13,7 +14,7 @@ use pin_project::pin_project;
 
 use crate::space::DmaSpace;
 
-use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
+use oer_esp32s31_hal::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
 
 use crate::descriptor::{
     DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
@@ -114,11 +115,16 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
                 .ok_or(TxDmaStorageError::Address)?
         };
 
+        // SAFETY: the window check above accepted `buffer_address`, the DMA
+        // address of the same consumed static's buffer, retained permanently.
+        let buffer = unsafe { dma_address::placed(buffer_address) };
+
         Ok(PinnedTxDmaStorage {
             storage: Pin::static_mut(storage),
             binding: TxDmaBinding {
                 descriptor_address,
                 buffer_address,
+                buffer,
                 buffer_capacity: buffer_len,
                 descriptor_range,
                 buffer_range,
@@ -137,6 +143,7 @@ impl<const BUFFER_SIZE: usize> Default for TxDmaStorage<BUFFER_SIZE> {
 pub struct TxDmaBinding {
     descriptor_address: u32,
     buffer_address: u32,
+    buffer: DmaWindowAddress,
     buffer_capacity: u32,
     descriptor_range: StableDmaRange<'static>,
     buffer_range: StableDmaRange<'static>,
@@ -245,7 +252,7 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
             .descriptor
             .as_ref()
             .get_ref()
-            .publish_owned(word0, self.binding.buffer_address, 0);
+            .publish_owned(word0, self.binding.buffer, None);
         *storage.state = TxDmaState::Reserved;
         Ok(())
     }
@@ -317,11 +324,7 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         if *storage.state != expected {
             return Err(TxDmaStorageError::State);
         }
-        storage
-            .descriptor
-            .as_ref()
-            .get_ref()
-            .publish_owned(WifiTxDmaDescriptorControl::ZERO, 0, 0);
+        storage.descriptor.as_ref().get_ref().clear();
         *storage.state = TxDmaState::Free;
         Ok(())
     }

@@ -31,6 +31,11 @@ const MAX_LAYOUT_SIZE: u32 = 4096;
 /// The schema of a layout file.
 const LAYOUT_SCHEMA: u32 = 1;
 
+/// The RAM region whose addresses the PAC types: `DmaWindowAddress` for a
+/// buffer, `DmaRef<L>` for a layout placed there. An address field and the
+/// layout it points to name this region and no other.
+pub const DMA_REGION: &str = "dma-window";
+
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct LayoutFile {
@@ -84,7 +89,7 @@ struct FieldSource {
     #[serde(default)]
     placement: Vec<String>,
     #[serde(default)]
-    layout: Option<String>,
+    points_to: Option<String>,
 }
 
 /// How the CPU reaches a word or byte range.
@@ -164,10 +169,23 @@ pub struct LayoutField {
     /// RAM regions an address this field holds must lie in.
     pub placement: Vec<String>,
     /// The layout an address this field holds points at.
-    pub layout: Option<String>,
+    pub points_to: Option<String>,
+}
+
+impl MemoryLayout {
+    /// Whether a typed reference may point at this layout: a word layout
+    /// placed in the DMA region only.
+    pub fn is_dma_target(&self) -> bool {
+        self.kind == LayoutKind::Words && self.placement == [DMA_REGION]
+    }
 }
 
 impl LayoutField {
+    /// Whether this field holds an address: of a buffer or of a layout.
+    pub fn is_address(&self) -> bool {
+        !self.placement.is_empty() || self.points_to.is_some()
+    }
+
     fn mask(&self) -> u64 {
         ((1u64 << self.width) - 1) << self.low
     }
@@ -407,22 +425,28 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         )));
     }
     let width = high - low + 1;
-    if !source.placement.is_empty() || source.layout.is_some() {
+    if !source.placement.is_empty() || source.points_to.is_some() {
         if kind != LayoutKind::Words || width != 32 {
             return Err(Error::message(format!(
-                "{}: only a whole-word address field of a word layout has a placement or a layout",
+                "{}: only a whole-word address field of a word layout has a placement or points to a layout",
                 source.name
             )));
         }
-        if !source.placement.is_empty() && source.layout.is_some() {
+        if !source.placement.is_empty() && source.points_to.is_some() {
             return Err(Error::message(format!(
                 "{}: an address of a layout takes that layout's placement",
                 source.name
             )));
         }
+        if !source.placement.is_empty() && source.placement != [DMA_REGION] {
+            return Err(Error::message(format!(
+                "{}: a typed address lies in the {DMA_REGION} region only",
+                source.name
+            )));
+        }
     }
     validate_regions(&source.placement)?;
-    if let Some(layout) = &source.layout {
+    if let Some(layout) = &source.points_to {
         validate_name(layout)?;
     }
     Ok(LayoutField {
@@ -432,7 +456,7 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         writer: source.writer,
         description: source.description,
         placement: source.placement,
-        layout: source.layout,
+        points_to: source.points_to,
     })
 }
 
@@ -521,13 +545,26 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
         }
         for unit in &layout.units {
             for field in &unit.fields {
-                if let Some(target) = &field.layout
-                    && names.get(target.as_str()) != Some(&LayoutKind::Words)
-                {
-                    return Err(Error::message(format!(
-                        "{}.{}.{} links to {target}, which is not a word layout of this model",
-                        layout.name, unit.name, field.name
-                    )));
+                let Some(target) = &field.points_to else {
+                    continue;
+                };
+                let target_layout = layouts.iter().find(|candidate| {
+                    &candidate.name == target && candidate.kind == LayoutKind::Words
+                });
+                match target_layout {
+                    None => {
+                        return Err(Error::message(format!(
+                            "{}.{}.{} points to {target}, which is not a word layout of this model",
+                            layout.name, unit.name, field.name
+                        )));
+                    }
+                    Some(target_layout) if !target_layout.is_dma_target() => {
+                        return Err(Error::message(format!(
+                            "{}.{}.{} points to {target}, which is not placed in the {DMA_REGION} region only",
+                            layout.name, unit.name, field.name
+                        )));
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -669,7 +706,7 @@ fn snake(name: &str) -> String {
 }
 
 /// `UPPER_SNAKE` to `UpperCamel`.
-fn camel(name: &str) -> String {
+pub(crate) fn camel(name: &str) -> String {
     name.split('_')
         .map(|word| {
             let mut chars = word.chars();
@@ -767,6 +804,14 @@ pub(crate) fn render(
             region_constant(region)
         );
     }
+    let addressed = layouts
+        .iter()
+        .flat_map(|layout| &layout.units)
+        .flat_map(|unit| &unit.fields)
+        .any(LayoutField::is_address);
+    if addressed {
+        render_addresses(&mut output, layouts);
+    }
     for layout in layouts {
         match layout.kind {
             LayoutKind::Words => render_words(&mut output, layout),
@@ -775,6 +820,73 @@ pub(crate) fn render(
     }
     output.push_str("}\n");
     Ok(output)
+}
+
+/// The typed addresses of the DMA region: a buffer address and a reference
+/// to a layout placed there. Their constructors are `unsafe`: the caller
+/// promises an address inside a static the HAL placed in the region.
+fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
+    let region = region_constant(DMA_REGION);
+    let _ = writeln!(
+        output,
+        "/// An address inside [`{region}`] whose memory stays reserved for the\n\
+         /// hardware while it may read the address, as the hardware reads it.\n\
+         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n\
+         pub struct DmaWindowAddress(u32);\n\n\
+         impl DmaWindowAddress {{\n\
+         /// The address `address`.\n\
+         ///\n\
+         /// # Safety\n\
+         ///\n\
+         /// `address` lies inside [`{region}`], in a static placed there or a\n\
+         /// buffer lent to the hardware, which stays reserved for as long as\n\
+         /// the hardware may read the address.\n\
+         #[allow(unsafe_code, reason = \"the caller promises a placed address\")]\n\
+         pub const unsafe fn new_unchecked(address: u32) -> Self {{\nSelf(address)\n}}\n\n\
+         /// The address as the hardware reads it.\n\
+         pub const fn get(self) -> u32 {{\nself.0\n}}\n\
+         }}\n\n\
+         mod sealed {{\npub trait Sealed {{}}\n}}\n\n\
+         /// A layout placed in [`{region}`] only, which a [`DmaRef`] may point at.\n\
+         pub trait DmaLayout: sealed::Sealed {{}}\n\n\
+         /// The address of an `L` inside [`{region}`].\n\
+         pub struct DmaRef<L: DmaLayout> {{\n\
+         address: DmaWindowAddress,\n\
+         layout: core::marker::PhantomData<fn() -> L>,\n\
+         }}\n\n\
+         impl<L: DmaLayout> DmaRef<L> {{\n\
+         /// The reference to the `L` at `address`.\n\
+         ///\n\
+         /// # Safety\n\
+         ///\n\
+         /// An `L`, aligned as `L` requires, lies at `address` for as long as\n\
+         /// the hardware may follow the reference.\n\
+         #[allow(unsafe_code, reason = \"the caller promises a placed layout\")]\n\
+         pub const unsafe fn new_unchecked(address: DmaWindowAddress) -> Self {{\n\
+         Self {{ address, layout: core::marker::PhantomData }}\n\
+         }}\n\n\
+         /// The referenced address.\n\
+         pub const fn address(self) -> DmaWindowAddress {{\nself.address\n}}\n\n\
+         /// The address as the hardware reads it.\n\
+         pub const fn bits(self) -> u32 {{\nself.address.0\n}}\n\
+         }}\n\n\
+         impl<L: DmaLayout> Clone for DmaRef<L> {{\nfn clone(&self) -> Self {{\n*self\n}}\n}}\n\n\
+         impl<L: DmaLayout> Copy for DmaRef<L> {{}}\n\n\
+         impl<L: DmaLayout> PartialEq for DmaRef<L> {{\nfn eq(&self, other: &Self) -> bool {{\nself.address == other.address\n}}\n}}\n\n\
+         impl<L: DmaLayout> Eq for DmaRef<L> {{}}\n\n\
+         impl<L: DmaLayout> core::fmt::Debug for DmaRef<L> {{\n\
+         fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{\n\
+         formatter.debug_tuple(\"DmaRef\").field(&self.address).finish()\n\
+         }}\n\
+         }}\n"
+    );
+    for layout in layouts.iter().filter(|layout| layout.is_dma_target()) {
+        let ty = camel(&layout.name);
+        let _ = writeln!(
+            output,
+            "impl sealed::Sealed for {ty} {{}}\nimpl DmaLayout for {ty} {{}}\n"
+        );
+    }
 }
 
 fn placement_list(regions: &[String]) -> String {
@@ -957,7 +1069,7 @@ fn render_field(
                 .join(", ")
         );
     }
-    if let Some(target) = &field.layout {
+    if let Some(target) = &field.points_to {
         let _ = write!(doc, " The address of a [`{}`], or zero.", camel(target));
     }
     if let Some(line) = sources_line(&layout.review, &entity) {
@@ -982,6 +1094,29 @@ fn render_field(
                 field.name
             );
         }
+        return;
+    }
+    if field.is_address() {
+        let _ = writeln!(
+            output,
+            "    pub const fn {name}(self) -> u32 {{ self.0 }}\n"
+        );
+        if !builders {
+            return;
+        }
+        let (parameter, image) = match &field.points_to {
+            Some(target) => (
+                format!("Option<DmaRef<{}>>", camel(target)),
+                "match value { Some(reference) => reference.bits(), None => 0 }",
+            ),
+            None => ("DmaWindowAddress".to_owned(), "value.get()"),
+        };
+        let _ = writeln!(
+            output,
+            "    /// This value with `{}` set to `value`.\n\
+             pub const fn with_{name}(self, value: {parameter}) -> Self {{ Self({image}) }}\n",
+            field.name
+        );
         return;
     }
     let field_type = storage(field.width);

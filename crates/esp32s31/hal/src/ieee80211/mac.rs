@@ -721,8 +721,12 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().configure_mac_rx_descriptor_window(range);
     }
 
-    pub fn write_rx_descriptor_base(&mut self, range: &StableDmaRange<'_>, address: u32) {
-        self.pac_mut().write_mac_rx_descriptor_base(range, address);
+    pub fn write_rx_descriptor_base(
+        &mut self,
+        range: &StableDmaRange<'_>,
+        head: crate::layouts::DmaRef<crate::layouts::WifiRxDmaDescriptor>,
+    ) {
+        self.pac_mut().write_mac_rx_descriptor_base(range, head);
     }
 
     pub fn publish_rx_walker_enable(&mut self, range: &StableDmaRange<'_>) {

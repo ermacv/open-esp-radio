@@ -72,6 +72,14 @@ drops. A slot is adopted again only after that release returned, because the
 radio must first claim the slot the release freed. Preserve the proof at the
 smallest operation; a safe state machine in an audited crate remains safe.
 
+`esp32s31-hal` has one module that makes typed DMA addresses,
+`dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
+`DmaRef` constructors of the PAC's generated `layouts` (clippy
+`disallowed-methods` refuses them elsewhere). Its `placed`/`placed_link`
+take an address of storage the caller keeps pinned in the DMA window, its
+`loaned` the start of a buffer lent to the hardware; each call site names the
+check that accepted the address.
+
 `esp32s31-radio-client` has one unsafe module, `cell`: the one-request slot
 between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
 `WORKING`, `ANSWERED`) admits exactly one accessor to each payload place, a

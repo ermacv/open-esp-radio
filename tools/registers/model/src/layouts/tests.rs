@@ -87,7 +87,7 @@ writer = "hardware"
 name = "NEXT"
 offset = 4
 access = "shared"
-fields = [{ name = "ADDRESS", bits = "31:0", writer = "cpu", layout = "NODE" }]
+fields = [{ name = "ADDRESS", bits = "31:0", writer = "cpu", points-to = "NODE" }]
 
 [[review]]
 entity = "NODE"
@@ -259,7 +259,7 @@ fn a_reviewed_word_layout_and_byte_layout_load() {
             ("OWNER", 31, 1)
         ]
     );
-    assert_eq!(node.units[1].fields[0].layout.as_deref(), Some("NODE"));
+    assert_eq!(node.units[1].fields[0].points_to.as_deref(), Some("NODE"));
     assert_eq!(prefix.kind, LayoutKind::Bytes);
     assert_eq!(prefix.units[1].size, 2);
 }
@@ -314,8 +314,15 @@ fn malformed_layouts_are_rejected_with_their_reason() {
             "shared",
         ),
         (
-            node_with("layout = \"NODE\"", "layout = \"OTHER\""),
+            node_with("points-to = \"NODE\"", "points-to = \"OTHER\""),
             "not a word layout",
+        ),
+        (
+            node_with(
+                "placement = [\"dma-window\"]\n",
+                "placement = [\"dma-window\", \"sram\"]\n",
+            ),
+            "dma-window region only",
         ),
         (
             node_with(
@@ -326,8 +333,8 @@ fn malformed_layouts_are_rejected_with_their_reason() {
         ),
         (
             node_with(
-                "layout = \"NODE\"",
-                "layout = \"NODE\", placement = [\"dma-window\"]",
+                "points-to = \"NODE\"",
+                "points-to = \"NODE\", placement = [\"dma-window\"]",
             ),
             "takes that layout's placement",
         ),
@@ -459,7 +466,13 @@ fn a_word_layout_renders_cells_values_and_its_placement() {
         "pub const fn length(self) -> u16",
         "pub const fn with_length(self, value: u16) -> Option<Self>",
         "pub const fn address(self) -> u32 { self.0 }",
-        "pub const fn with_address(self, value: u32) -> Self { Self(value) }",
+        "pub const fn with_address(self, value: Option<DmaRef<Node>>) -> Self { Self(match value { Some(reference) => reference.bits(), None => 0 }) }",
+        "pub struct DmaWindowAddress(u32);",
+        "pub const unsafe fn new_unchecked(address: u32) -> Self {",
+        "pub trait DmaLayout: sealed::Sealed {}",
+        "pub struct DmaRef<L: DmaLayout> {",
+        "pub const unsafe fn new_unchecked(address: DmaWindowAddress) -> Self {",
+        "impl DmaLayout for Node {}",
         "/// Opaque: meaning not established.",
         "/// Project-assigned name. 1: the walker may fill this node.",
         "/// SOURCE: fixture, stand.",

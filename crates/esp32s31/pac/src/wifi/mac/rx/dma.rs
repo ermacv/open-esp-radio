@@ -4,6 +4,7 @@
 
 use oer_memory::StableDmaRange;
 
+use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
 use crate::{WifiRadioRegisters, device_fence, svd};
 
 const RX_DESCRIPTOR_INTERNAL_SRAM_START: u32 = 0x2f00_0000;
@@ -73,11 +74,11 @@ pub(crate) fn read_next_descriptor(
 }
 
 #[inline(always)]
-pub(crate) fn write_descriptor_base(registers: &svd::WifiMacRxDma, address: u32) {
-    crate::generated::rx_descriptor_base(
-        registers,
-        crate::generated::MacRxDescriptorBaseAddress::new(address),
-    );
+pub(crate) fn write_descriptor_base(
+    registers: &svd::WifiMacRxDma,
+    head: DmaRef<WifiRxDmaDescriptor>,
+) {
+    crate::generated::rx_descriptor_base(registers, head);
 }
 
 #[inline(always)]
@@ -165,9 +166,13 @@ impl WifiRadioRegisters {
     }
 
     /// Publish a descriptor head contained by the retained DMA range.
-    pub fn write_mac_rx_descriptor_base(&mut self, binding: &StableDmaRange<'_>, address: u32) {
-        assert!(binding.contains(address, 1));
-        write_descriptor_base(&self.peripherals.wifi_mac.wifi_mac_rx_dma, address);
+    pub fn write_mac_rx_descriptor_base(
+        &mut self,
+        binding: &StableDmaRange<'_>,
+        head: DmaRef<WifiRxDmaDescriptor>,
+    ) {
+        assert!(binding.contains(head.bits(), 1));
+        write_descriptor_base(&self.peripherals.wifi_mac.wifi_mac_rx_dma, head);
     }
 
     /// Start the walker only while its descriptor backing authority is held.
