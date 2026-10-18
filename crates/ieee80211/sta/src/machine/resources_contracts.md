@@ -1,7 +1,8 @@
 A station needs at least one ticket and small buffer, checked at compile
 time; eight remains the maximum per pool. Open mode accepts zero group-key
 slots. The resources must match `StaTokens::GROUP_SLOTS`. The personal constructor
-also checks at compile time that this capacity is nonzero.
+takes a `GroupCapacity` proof, made in a `const` item, that this capacity is
+nonzero.
 
 No ticket:
 

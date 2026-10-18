@@ -23,7 +23,7 @@ use oer_ieee80211_mac::{
     station::{AssociationCapabilities, association::PhyMode},
 };
 use oer_ieee80211_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
-use oer_ieee80211_sta::machine::{StaConfig, StaSecurity, StationResources};
+use oer_ieee80211_sta::machine::{GroupCapacity, StaConfig, StaSecurity, StationResources};
 use oer_ieee80211_upper_mac::rate_control::RateControl;
 use oer_radio_port::{Ended, PortBody, run_port};
 use oer_time::Duration;
@@ -655,7 +655,7 @@ where
             let mut station = match security {
                 StaSecurity::Open => Station::new_open(config, resources),
                 StaSecurity::Personal { password, pmk } => {
-                    Station::new_personal(config, password, pmk, resources)
+                    Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
             };
             if self.refuse_initial_enable {
