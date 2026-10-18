@@ -180,3 +180,7 @@ Found in the predecessor's review of 2026-10-16 and still present.
   `withdraw_plan`. A refused or late plan does not cancel the lease. The
   preparation window is at least `CLAIM_LEAD` plus one service step. Scan
   visits are planned retunes too.
+
+## Planned and open (predecessor)
+
+- **→ `crates/ieee80211/arbiter/README.md` Known defects.** "Search absences keep a fixed phase to the access point's TBTT: every absence starts at TBTT + guard. An upstream with the same 100 TU beacon interval drifts by at most ±200 ppm (about 20 µs per interval), so a beacon that falls outside the 20 ms window can stay unseen for a very long time. Window phases must step across the gap between our TBTTs so that a bounded number of visits covers the whole interval; the bound is stated in rustdoc and tested. Arithmetic overflow in the search planning must be an explicit error, not `None`." (Verify the `None` part against the current arbiter before pasting.)

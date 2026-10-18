@@ -19,3 +19,7 @@ roles and runtimes; the concrete runtime polls these drivers.
 
 Runner tests use `oer-time-virtual::SkipClock`. Wait observations count
 polled waits; an unpolled losing branch leaves both time and counts alone.
+
+## Planned and open (predecessor)
+
+- Open work: `RsnHandshakeRunner` (and the join runner in the predecessor) still polls RX every `RX_POLL_INTERVAL` = 1 ms (`crates/ieee80211/rsn-service/src/runner.rs:201`); the planned replacement is an event-driven `wait_receive(until: Instant)`, ~1000 wake-ups/s during association otherwise. Scan dwell was to become a `Duration`. Suggest a "Known defects/open" line in `crates/ieee80211/rsn-service/README.md`.

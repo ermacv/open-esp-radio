@@ -67,3 +67,7 @@ Found in the predecessor's review of 2026-10-16 and still present.
   a misplaced doc on `restart_schedule`; `status_revision` is bumped per
   frame; no TX aggregation on an Open BSS; no GTK rekey; `Cargo.toml`
   still says "single-peer".
+
+## Planned and open (predecessor)
+
+- **AP PMF remaining work.** "Missing: automatic CSA announcements, AP-initiated SA Query, protected association comeback. The BIP IPN must survive AP stop/start and channel moves; a joining peer gets the current IPN; M3 keeps its captured IPN across retries. The predecessor's bound: 7,616 bytes of peer storage for 15 clients." Verify in `crates/ieee80211/ap`.
