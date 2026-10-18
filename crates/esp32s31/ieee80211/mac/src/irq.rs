@@ -2,6 +2,9 @@
 
 pub mod consumer;
 pub mod epoch;
+/// Host models of both interrupt banks, for epochs without MMIO.
+#[cfg(any(test, feature = "test-support"))]
+pub mod model;
 
 use oer_esp32s31_hal::{
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
@@ -11,51 +14,71 @@ use oer_esp32s31_hal::{
     },
 };
 
-/// Finite MAC interrupt capability used by the hard ISR.
+mod sealed {
+    /// Only this crate names the interrupt banks an epoch may own.
+    pub trait Sealed {}
+}
+
+/// One sampled MAC interrupt image, seen through its semantic observation.
 ///
-/// Production delegates both operations to generated PAC registers. Its
-/// associated snapshot is opaque and can only be acknowledged once. Tests
-/// model the same ordering with semantic observations and no MMIO identity.
-pub(crate) trait MacInterruptStatusSnapshot {
+/// Production samples are opaque and can be acknowledged only once; models
+/// use the observation itself.
+pub trait MacInterruptStatusSnapshot: sealed::Sealed {
     fn observation(&self) -> MacInterruptObservation;
 }
 
+impl sealed::Sealed for MacInterruptSnapshot {}
 impl MacInterruptStatusSnapshot for MacInterruptSnapshot {
     fn observation(&self) -> MacInterruptObservation {
         MacInterruptSnapshot::observation(self)
     }
 }
 
+impl sealed::Sealed for MacInterruptObservation {}
 impl MacInterruptStatusSnapshot for MacInterruptObservation {
     fn observation(&self) -> MacInterruptObservation {
         *self
     }
 }
 
-pub(crate) trait MacPowerInterruptStatusSnapshot {
+/// One sampled WDEVPWR image, seen through its semantic observation.
+pub trait MacPowerInterruptStatusSnapshot: sealed::Sealed {
     fn observation(&self) -> MacPowerInterruptObservation;
 }
 
+impl sealed::Sealed for MacPowerInterruptSnapshot {}
 impl MacPowerInterruptStatusSnapshot for MacPowerInterruptSnapshot {
     fn observation(&self) -> MacPowerInterruptObservation {
         MacPowerInterruptSnapshot::observation(self)
     }
 }
 
+impl sealed::Sealed for MacPowerInterruptObservation {}
 impl MacPowerInterruptStatusSnapshot for MacPowerInterruptObservation {
     fn observation(&self) -> MacPowerInterruptObservation {
         *self
     }
 }
 
-pub(crate) trait MacInterrupt {
+/// The MAC interrupt bank owned by one active epoch.
+///
+/// Production is the generated PAC capability; host tests use
+/// [`model::MacInterruptModel`] (feature `test-support`). The trait is
+/// sealed: no other bank can enter an epoch.
+pub trait MacInterrupt: sealed::Sealed {
     type Snapshot: MacInterruptStatusSnapshot;
 
     fn status(&mut self) -> Self::Snapshot;
+    /// Mask the RX delivery group and leave every other source as it is.
     fn mask_rx_delivery(&mut self);
+    /// Enable the RX delivery group and leave every other source as it is.
+    fn unmask_rx_delivery(&mut self);
+    /// Mask every source; a latched event stays latched.
+    fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
 }
 
+impl sealed::Sealed for MacInterruptRegisters {}
 impl MacInterrupt for MacInterruptRegisters {
     type Snapshot = MacInterruptSnapshot;
 
@@ -67,28 +90,44 @@ impl MacInterrupt for MacInterruptRegisters {
         self.mask_rx_delivery_interrupts();
     }
 
+    fn unmask_rx_delivery(&mut self) {
+        self.unmask_rx_delivery_interrupts();
+    }
+
+    fn mask_all(&mut self) {
+        self.mask_all_mac_interrupts();
+    }
+
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.acknowledge_mac_interrupts(snapshot);
     }
 }
 
-/// Finite WDEVPWR interrupt capability used by the hard ISR.
+/// The WDEVPWR interrupt bank owned by one active epoch.
 ///
 /// The PAC snapshot exposes the reviewed TSF-timer causes as named fields and
 /// groups every still-unknown cause as unhandled. Policy code never receives a
-/// register image or an unqualified hardware bit number.
-pub(crate) trait MacPowerInterrupt {
+/// register image or an unqualified hardware bit number. Sealed like
+/// [`MacInterrupt`]; host tests use [`model::PowerInterruptModel`].
+pub trait MacPowerInterrupt: sealed::Sealed {
     type Snapshot: MacPowerInterruptStatusSnapshot;
 
     fn status(&mut self) -> Self::Snapshot;
+    /// Mask every cause; a latched cause stays latched.
+    fn mask_all(&mut self);
     fn acknowledge(&mut self, snapshot: Self::Snapshot);
 }
 
+impl sealed::Sealed for MacPowerInterruptRegisters {}
 impl MacPowerInterrupt for MacPowerInterruptRegisters {
     type Snapshot = MacPowerInterruptSnapshot;
 
     fn status(&mut self) -> Self::Snapshot {
         self.power_interrupt_status()
+    }
+
+    fn mask_all(&mut self) {
+        self.mask_all_power_interrupts();
     }
 
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
@@ -203,14 +242,7 @@ pub const fn event_mask(causes: MacInterruptEvents) -> u32 {
 /// The caller publishes `snapshot.posted_events` after releasing the register
 /// borrow, so an executor waker can never reenter a live MMIO transaction.
 #[inline(always)]
-pub fn handle_mac_irq<M: epoch::RxDelivery>(
-    interrupt: &mut MacInterruptRegisters,
-) -> (IrqDisposition, IrqSnapshot) {
-    acknowledge_mac::<_, M>(interrupt)
-}
-
-#[inline(always)]
-fn acknowledge_mac<I: MacInterrupt, M: epoch::RxDelivery>(
+pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
     interrupt: &mut I,
 ) -> (IrqDisposition, IrqSnapshot) {
     let status = interrupt.status();
@@ -241,14 +273,7 @@ fn acknowledge_mac<I: MacInterrupt, M: epoch::RxDelivery>(
 
 /// Acknowledge one complete WDEVPWR snapshot before its causes are published.
 #[inline(always)]
-pub fn handle_power_irq(
-    interrupt: &mut MacPowerInterruptRegisters,
-) -> (PowerIrqDisposition, PowerIrqSnapshot) {
-    acknowledge_power(interrupt)
-}
-
-#[inline(always)]
-fn acknowledge_power<P: MacPowerInterrupt>(
+pub fn handle_power_irq<P: MacPowerInterrupt>(
     interrupt: &mut P,
 ) -> (PowerIrqDisposition, PowerIrqSnapshot) {
     let status = interrupt.status();

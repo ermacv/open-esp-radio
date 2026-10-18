@@ -16,6 +16,9 @@ use oer_esp32s31_hal::types::MacPowerInterruptObservation;
 use super::{EVENT_KNOWN_MASK, EVENT_RX_SUCCESS, IrqSnapshot, IrqWork, next_irq_work};
 
 const RX_CAPACITY: u32 = 1 << 4;
+/// Both interrupt banks of the epoch were masked. Not a hardware event: the
+/// owner of the interrupt line posts it once, after applying the mask.
+const MASKED: u32 = 1 << 5;
 
 /// One finite snapshot in vendor order: RX, TX completion, timeout, collision.
 /// Multiplicity stays in the descriptor/completion rings. Facts published
@@ -29,6 +32,11 @@ pub struct IrqBatch {
 impl IrqBatch {
     pub const fn rx_capacity_returned(&self) -> bool {
         self.pending & RX_CAPACITY != 0
+    }
+
+    /// Whether the interrupt line masked both banks since the last batch.
+    pub const fn masked(&self) -> bool {
+        self.pending & MASKED != 0
     }
 
     pub const fn is_empty(&self) -> bool {
@@ -221,6 +229,12 @@ impl IrqPublisher<'_> {
     /// A returned staging credit wakes the same finite driver step.
     pub fn notify_rx_capacity(&self) {
         self.storage.post(RX_CAPACITY).wake();
+    }
+
+    /// Report that both interrupt banks are masked. A repeated report before
+    /// the consumer takes its batch coalesces and wakes no one again.
+    pub fn notify_masked(&self) {
+        self.storage.post(MASKED).wake();
     }
 
     /// Begin the diagnostic interval before reading the MAC status. Finishing
