@@ -78,6 +78,8 @@ fragments = [
     "peripherals/wifi-mac-power-interrupt.toml",
     "peripherals/wifi-mac-cold-handshake.toml",
     "peripherals/wifi-mac-rx-dma.toml",
+    "peripherals/wifi-mac-block-ack.toml",
+    "peripherals/wifi-mac-csi-dump.toml",
     "peripherals/phy-fecoex-recovered.toml",
     "peripherals/phy-fedata-recovered.toml",
     "peripherals/phy-adc-dump-recovered.toml",

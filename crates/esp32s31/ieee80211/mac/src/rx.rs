@@ -1,7 +1,6 @@
 //! RX descriptor metadata decoding and bounded raw MPDU extraction.
 
-use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
-pub use oer_esp32s31_ieee80211_dma::{
+pub use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
         RxDmaWalkerEnabled, RxDmaWalkerStopped,
@@ -14,6 +13,22 @@ pub use oer_esp32s31_ieee80211_dma::{
         RxRingTopologySnapshot, RxSegment, prepare_recycled_buffer,
     },
 };
+use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
+
+/// The MAC's receive-buffer starvation counter (`RX_STATISTICS.BUFFER_FULL`),
+/// sampled at RX service boundaries for telemetry. It never participates in
+/// descriptor ownership, and it is a MAC statistics register, not one of the
+/// RX DMA engine's.
+pub trait RxBufferFullCounter {
+    /// The counter, or `None` where the hardware has none.
+    fn buffer_full_count(&mut self) -> Option<u16>;
+}
+
+impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
+    fn buffer_full_count(&mut self) -> Option<u16> {
+        Some(self.rx_buffer_full_count())
+    }
+}
 
 use oer_ieee80211_mac::ccmp::CcmpHeader;
 use oer_ieee80211_mac::he::{
@@ -873,7 +888,7 @@ fn copy_frame(
     copied == length
 }
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn extract_mpdu_allowing_consumed_trailer(
     segments: &[RxSegment<'_>],
@@ -1074,7 +1089,7 @@ pub fn extract_data(
     })
 }
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 /// Extracts one unfragmented CCMP data MPDU after hardware MIC verification.
 ///
 /// Unlike [`extract_data`], this entry requires the Protected bit. A returned
@@ -1103,7 +1118,7 @@ pub fn extract_ccmp_data(
     )
 }}
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 /// Validate and borrow one contiguous CCMP MPDU from independently owned RX
 /// storage.
 ///
@@ -1119,7 +1134,7 @@ pub fn view_ccmp_data<'frame>(
     view_ccmp_data_with_fragment_admission(segment, config, CcmpFragmentAdmission::Unfragmented)
 }}
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 /// Validate and borrow one fragmented CCMP MPDU after hardware MIC success.
 ///
 /// This is deliberately distinct from [`view_ccmp_data`]: callers cannot
@@ -1139,7 +1154,7 @@ enum CcmpFragmentAdmission {
     Fragmented,
 }
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn view_ccmp_data_with_fragment_admission<'frame>(
     segment: &RxSegment<'frame>,
@@ -1186,7 +1201,7 @@ fn view_ccmp_data_with_fragment_admission<'frame>(
     Ok(RxCcmpDataView { mpdu, frame })
 }}
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn validate_ccmp_data(
     mpdu: &[u8],

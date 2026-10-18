@@ -86,17 +86,6 @@ fn a_tx_word_is_size_length_last_and_owned() {
 }
 
 #[test]
-fn the_dma_window_bounds_descriptors_and_buffers() {
-    assert!(descriptor_address_valid(DMA_WINDOW.start));
-    assert!(!descriptor_address_valid(DMA_WINDOW.start + 2));
-    assert!(!descriptor_address_valid(DMA_WINDOW.end - 8));
-    assert!(dma_range_valid(DMA_WINDOW.end - 8, 8));
-    assert!(!dma_range_valid(DMA_WINDOW.end - 8, 9));
-    assert!(!dma_range_valid(DMA_WINDOW.start - 4, 4));
-    assert!(!dma_range_valid(DMA_WINDOW.start, 0));
-}
-
-#[test]
 fn the_mpdu_length_bound_is_the_length_field_width() {
     let bound = u16::try_from(MAX_ENCODED_MPDU_LEN).unwrap_or(u16::MAX);
     assert!(rx(0).with_length(bound).is_some());

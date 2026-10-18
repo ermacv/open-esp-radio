@@ -1,9 +1,8 @@
 use crate::rx::storage::{ReceiveDmaStorage, walker_enable_settle};
-use oer_esp32s31_ieee80211_dma::space::DmaSpace;
+use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, space::DmaSpace};
 
 use oer_esp32s31_ieee80211_mac::rx::{
-    RxDescriptorSnapshot, RxDma, RxDmaBufferAddresses, RxRingError, RxRingHalted, RxRingLive,
-    RxRingStopped,
+    RxDescriptorSnapshot, RxDma, RxRingError, RxRingHalted, RxRingLive, RxRingStopped,
 };
 
 use super::{
@@ -16,16 +15,12 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
 {
     pub fn prepare_initial<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         hardware: &mut M,
-        storage: &'static ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
-        descriptor_base: u32,
-        buffer_addresses: &'storage RxDmaBufferAddresses<COUNT>,
+        storage: PlacedRxDma<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<Self, RxRingError> {
         if DMA_BUFFER_SIZE > u32::MAX as usize {
             return Err(RxRingError::Size);
         }
-        storage
-            .prepare_ring(hardware, descriptor_base, buffer_addresses)
-            .map(Self::from_prepared)
+        storage.prepare_ring(hardware).map(Self::from_prepared)
     }
 
     pub const fn from_halted(ring: RxRingHalted<'storage, COUNT>) -> Self {

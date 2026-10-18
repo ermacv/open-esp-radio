@@ -2,13 +2,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_base_memory::StableDmaRange;
-
 use crate::layouts::{DmaRef, WifiRxDmaDescriptor};
-use crate::{WifiRadioRegisters, device_fence, svd};
-
-const RX_DESCRIPTOR_INTERNAL_SRAM_START: u32 = 0x2f00_0000;
-const RX_DESCRIPTOR_INTERNAL_SRAM_END: u32 = 0x2f10_0000;
+use crate::{WifiRxDmaRegisters, device_fence, svd};
 
 /// Read-only hardware frontier of the MAC RX descriptor walker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -97,10 +92,10 @@ pub(crate) fn request_descriptor_reload(registers: &svd::WifiMacRxDma) {
         .modify(|_, writer| writer.append_descriptor_reload().set_bit());
 }
 
-impl WifiRadioRegisters {
+impl WifiRxDmaRegisters {
     /// Snapshot the complete published RX walker frontier without changing it.
     pub fn mac_rx_dma_snapshot(&self) -> MacRxDmaSnapshot {
-        let dma = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let dma = &self.peripherals.wifi_mac_rx_dma;
         let control = dma.rx_control().read();
         let next_descriptor = read_next_descriptor(dma);
         MacRxDmaSnapshot {
@@ -119,7 +114,7 @@ impl WifiRadioRegisters {
     /// `libpp.a[hal_mac.o]::mac_rxbuf_init`. Its final descriptor-base store
     /// is deliberately excluded because the RX ring owner publishes it later.
     pub fn initialize_mac_rx_buffer_prefix(&mut self) {
-        let dma = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let dma = &self.peripherals.wifi_mac_rx_dma;
         dma.word_0c68_opaque()
             .modify(|_, w| w.bits_0_19_opaque().set(0x000f_ffff));
         dma.word_0c6c_opaque()
@@ -131,16 +126,15 @@ impl WifiRadioRegisters {
     }
 
     pub fn mac_rx_last_descriptor_low(&self) -> u32 {
-        read_last_descriptor_low(&self.peripherals.wifi_mac.wifi_mac_rx_dma)
+        read_last_descriptor_low(&self.peripherals.wifi_mac_rx_dma)
     }
 
     pub fn mac_rx_next_descriptor(&self) -> MacRxNextDescriptorObservation {
-        read_next_descriptor(&self.peripherals.wifi_mac.wifi_mac_rx_dma)
+        read_next_descriptor(&self.peripherals.wifi_mac_rx_dma)
     }
 
     pub fn mac_rx_walker_enabled(&self) -> bool {
         self.peripherals
-            .wifi_mac
             .wifi_mac_rx_dma
             .rx_control()
             .read()
@@ -149,58 +143,63 @@ impl WifiRadioRegisters {
     }
 
     pub fn mac_rx_reload_pending(&self) -> bool {
-        descriptor_reload_pending(&self.peripherals.wifi_mac.wifi_mac_rx_dma)
+        descriptor_reload_pending(&self.peripherals.wifi_mac_rx_dma)
     }
 
-    /// Select the internal-SRAM address window carried by a retained descriptor range.
-    pub fn configure_mac_rx_descriptor_window(&mut self, binding: &StableDmaRange<'_>) {
-        assert!(
-            binding.start() >= RX_DESCRIPTOR_INTERNAL_SRAM_START
-                && binding.start() < RX_DESCRIPTOR_INTERNAL_SRAM_END
-        );
+    /// Select the internal-SRAM address window the descriptors lie in: the
+    /// DMA window the link places them in (`dma-window.x`).
+    pub fn configure_mac_rx_descriptor_window(&mut self) {
         self.peripherals
-            .wifi_mac
             .wifi_mac_rx_dma
             .rx_descriptor_high_window()
             .modify(|_, w| w.address_high().set(0x02f0));
     }
 
-    /// Publish a descriptor head contained by the retained DMA range.
-    pub fn write_mac_rx_descriptor_base(
-        &mut self,
-        binding: &StableDmaRange<'_>,
-        head: DmaRef<WifiRxDmaDescriptor>,
-    ) {
-        assert!(binding.contains(head.bits(), 1));
-        write_descriptor_base(&self.peripherals.wifi_mac.wifi_mac_rx_dma, head);
+    /// Publish a descriptor head: a placed descriptor, so inside the DMA
+    /// window by the link's proof.
+    pub fn write_mac_rx_descriptor_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>) {
+        write_descriptor_base(&self.peripherals.wifi_mac_rx_dma, head);
     }
 
-    /// Start the walker only while its descriptor backing authority is held.
-    pub fn publish_mac_rx_walker_enable(&mut self, _binding: &StableDmaRange<'_>) {
-        set_walker_enabled(&self.peripherals.wifi_mac.wifi_mac_rx_dma, true);
+    /// Start the walker.
+    pub fn publish_mac_rx_walker_enable(&mut self) {
+        set_walker_enabled(&self.peripherals.wifi_mac_rx_dma, true);
     }
 
     /// Ask the live walker to follow newly published descriptor links.
-    pub fn request_mac_rx_descriptor_reload(&mut self, _binding: &StableDmaRange<'_>) {
-        request_descriptor_reload(&self.peripherals.wifi_mac.wifi_mac_rx_dma);
+    pub fn request_mac_rx_descriptor_reload(&mut self) {
+        request_descriptor_reload(&self.peripherals.wifi_mac_rx_dma);
     }
 
-    /// Start and confirm the walker while descriptor authority is retained.
-    pub fn try_enable_mac_rx_walker(&mut self, _binding: &StableDmaRange<'_>) -> bool {
-        let control = self.peripherals.wifi_mac.wifi_mac_rx_dma.rx_control();
+    /// Start and confirm the walker.
+    pub fn try_enable_mac_rx_walker(&mut self) -> bool {
+        let control = self.peripherals.wifi_mac_rx_dma.rx_control();
         let previous = control.read();
         if previous.walker_enable().bit() {
             return false;
         }
-        set_walker_enabled(&self.peripherals.wifi_mac.wifi_mac_rx_dma, true);
+        set_walker_enabled(&self.peripherals.wifi_mac_rx_dma, true);
         device_fence();
         control.read().walker_enable().bit()
     }
 
     pub fn try_disable_mac_rx_walker(&mut self) -> bool {
-        let control = self.peripherals.wifi_mac.wifi_mac_rx_dma.rx_control();
-        set_walker_enabled(&self.peripherals.wifi_mac.wifi_mac_rx_dma, false);
+        let control = self.peripherals.wifi_mac_rx_dma.rx_control();
+        set_walker_enabled(&self.peripherals.wifi_mac_rx_dma, false);
         device_fence();
         !control.read().walker_enable().bit()
+    }
+}
+
+impl WifiRxDmaRegisters {
+    /// Order descriptor memory and MMIO at a hardware ownership boundary.
+    pub fn order_device_accesses(&mut self) {
+        device_fence();
+    }
+
+    /// The walker's control register, for a MAC initialization that writes
+    /// it in its own order.
+    pub(crate) fn rx_control(&self) -> &svd::wifi_mac_rx_dma::RxControl {
+        self.peripherals.wifi_mac_rx_dma.rx_control()
     }
 }

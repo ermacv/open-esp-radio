@@ -137,7 +137,11 @@ impl WifiRadioRegisters {
     ///
     /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_txrx_init`,
     /// offsets `0xee..0x16e`.
-    pub fn initialize_mac_txrx_suffix(&mut self, shared: &mut SharedRadioRegisters) {
+    pub fn initialize_mac_txrx_suffix(
+        &mut self,
+        shared: &mut SharedRadioRegisters,
+        rx_dma: &mut crate::WifiRxDmaRegisters,
+    ) {
         let callbacks = &self.peripherals.wifi_mac.wifi_mac_txrx_callbacks;
         callbacks
             .bb_rx_hang_control()
@@ -160,9 +164,7 @@ impl WifiRadioRegisters {
         init.gate_control()
             .modify(|_, w| w.bit_31_opaque().set_bit());
         init.aux_enable().modify(|_, w| w.bit_1_opaque().set_bit());
-        self.peripherals
-            .wifi_mac
-            .wifi_mac_rx_dma
+        rx_dma
             .rx_control()
             .modify(|_, w| w.walker_enable().clear_bit());
     }

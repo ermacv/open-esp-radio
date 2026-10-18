@@ -16,6 +16,7 @@ peripherals = [
     "WIFI_MAC_BEACON_IE_CRC",
     "WIFI_MAC_BEAMFORMING_FEEDBACK_TEST",
     "WIFI_MAC_BEAMFORMING_REPORT",
+    "WIFI_MAC_BLOCK_ACK",
     "WIFI_MAC_BSSID_POLICY",
     "WIFI_MAC_COEX_INIT",
     "WIFI_MAC_COEX_RUNTIME",
@@ -23,6 +24,7 @@ peripherals = [
     "WIFI_MAC_CONTROL",
     "WIFI_MAC_CORE_ENABLE",
     "WIFI_MAC_CRYPTO_CONTROL",
+    "WIFI_MAC_CSI_DUMP",
     "WIFI_MAC_DIAGNOSTIC_STATISTICS",
     "WIFI_MAC_HE_BUFFER_STATUS",
     "WIFI_MAC_HE_COLOR_COLLISION",
@@ -42,7 +44,6 @@ peripherals = [
     "WIFI_MAC_RX_BSSID_LIST",
     "WIFI_MAC_RX_CSI_CONTROL",
     "WIFI_MAC_RX_CUSTOM_TYPE",
-    "WIFI_MAC_RX_DMA",
     "WIFI_MAC_RX_END_STATE",
     "WIFI_MAC_RX_FILTER",
     "WIFI_MAC_RX_HANG_STATISTICS",
@@ -64,6 +65,12 @@ peripherals = [
     "WIFI_MAC_TX_QUEUE_VECTOR",
     "WIFI_MAC_TX_STATISTICS",
 ]
+
+[[ownership-partitions]]
+name = "WifiRxDmaPeripherals"
+member = "wifi_rx_dma"
+description = "The Wi-Fi MAC RX descriptor walker's registers, owned by the HAL's RX DMA engine alone."
+peripherals = ["WIFI_MAC_RX_DMA"]
 
 [[ownership-partitions]]
 name = "WifiInterruptPeripherals"
@@ -2834,42 +2841,42 @@ sources = ["BLOB_LIBPP_HAL_BF_CONFIG"]
 
 [[zero-based-field-writes]]
 name = "rx_block_ack_peer_head"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_PEER_HEAD"
 fields = ["PEER_ADDRESS_HEAD"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-based-field-writes]]
 name = "rx_block_ack_peer_tail_and_policy"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_PEER_TAIL_AND_POLICY"
 fields = ["PEER_ADDRESS_TAIL", "INTERFACE", "WINDOW"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-based-field-writes]]
 name = "rx_block_ack_active_control"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_CONTROL"
 fields = ["ENABLE", "TID", "WRITE", "VALID"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-based-field-writes]]
 name = "extra_softap_rx_block_ack_peer_head"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_HEAD"
 fields = ["PEER_ADDRESS_HEAD"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-based-field-writes]]
 name = "extra_softap_rx_block_ack_peer_tail_and_policy"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY"
 fields = ["PEER_ADDRESS_TAIL", "INTERFACE", "WINDOW"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-based-field-writes]]
 name = "extra_softap_rx_block_ack_active_control"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "EXTRA_SOFTAP_RX_BLOCK_ACK_CONTROL"
 fields = ["ENABLE", "INDEX", "TID", "WRITE", "VALID"]
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
@@ -3056,31 +3063,31 @@ sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
 
 [[zero-register-writes]]
 name = "clear_rx_block_ack_bitmap_low_load"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_BITMAP_LOW_LOAD"
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-register-writes]]
 name = "clear_rx_block_ack_bitmap_high_load"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_BITMAP_HIGH_LOAD"
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-register-writes]]
 name = "clear_rx_block_ack_entry_control"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_ENTRY%s_CONTROL"
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-register-writes]]
 name = "clear_extra_softap_rx_block_ack_bitmap_low"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_LOW"
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
 [[zero-register-writes]]
 name = "clear_extra_softap_rx_block_ack_bitmap_high"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "EXTRA_SOFTAP_RX_BLOCK_ACK_BITMAP_HIGH"
 sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
 
@@ -6532,7 +6539,7 @@ sources = ["BLOB_LIBBTDM_SCHEDULER_OPERATIONAL_GAPS", "BLOB_LIBBTDM_SCHEDULER_IN
 
 [[indexed-bit-set-modifies]]
 name = "request_rx_block_ack_entry_update"
-peripheral = "WIFI_MAC_RX_DMA"
+peripheral = "WIFI_MAC_BLOCK_ACK"
 register = "RX_BLOCK_ACK_AGREEMENT_UPDATE"
 field = "ORDINARY_ENTRY_UPDATE"
 domain = "MacRxBlockAckEntryIndex"

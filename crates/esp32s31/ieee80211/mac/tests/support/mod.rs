@@ -1,6 +1,12 @@
 use crate::*;
-use oer_esp32s31_ieee80211_dma::{
-    rx_ring::RxDmaBufferAddresses, rx_storage::RxDmaStorage, space::HostDma,
+use oer_esp32s31_hal::dma_static::Placed;
+pub(super) use oer_esp32s31_hal::ieee80211::dma::rx_dma::model::{
+    RxWalkerModel, RxWalkerOperation as Walker,
+};
+use oer_esp32s31_hal::ieee80211::dma::{
+    rx_ring::RxDmaBufferAddresses,
+    rx_storage::{PlacedRxDma, RxDmaStorage},
+    space::HostDma,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,15 +32,6 @@ pub(super) enum Operation {
     InitializeHeSuffix,
     SetWifiMacReset(bool),
     InitializeRxBufferPrefix,
-    ConfigureRxDescriptorWindow,
-    ObserveRxLastDescriptor,
-    ObserveRxNextDescriptor,
-    ObserveRxWalkerEnabled,
-    ObserveRxReloadPending,
-    PublishRxDescriptorBase(u32),
-    PublishRxWalkerEnable,
-    RequestRxReload,
-    StopRxWalker,
     ConfigureOpenPromiscuousReceive,
     ForceTxCca,
     DisableTxQueue(u8),
@@ -61,11 +58,6 @@ pub(super) struct MockMmio {
     pub(super) tx_queue_attached: [bool; 4],
     pub(super) tx_detach_fails: [bool; 4],
     pub(super) tx_control: [Option<oer_esp32s31_hal::types::MacTxControlFrame>; 4],
-    pub(super) rx_last_descriptor_low: u32,
-    pub(super) rx_next_descriptor_low: u32,
-    pub(super) rx_walker_enabled: bool,
-    pub(super) rx_reload_pending: bool,
-    pub(super) rx_descriptor_base: u32,
     pub(super) ccmp_valid: [bool; 25],
 }
 
@@ -90,30 +82,6 @@ impl MockMmio {
         self.tx_queue_attached[usize::from(queue)] = attached;
     }
 
-    pub(super) fn set_rx_last_descriptor_address(&mut self, address: u32) {
-        self.rx_last_descriptor_low = rx_descriptor_low(address);
-    }
-
-    pub(super) fn set_rx_next_descriptor_address(&mut self, address: u32) {
-        self.rx_next_descriptor_low = rx_descriptor_low(address);
-    }
-
-    pub(super) fn set_rx_next_descriptor_low(&mut self, address_low: u32) {
-        self.rx_next_descriptor_low = address_low;
-    }
-
-    pub(super) fn set_rx_walker_enabled(&mut self, enabled: bool) {
-        self.rx_walker_enabled = enabled;
-    }
-
-    pub(super) fn set_rx_reload_pending(&mut self, pending: bool) {
-        self.rx_reload_pending = pending;
-    }
-
-    pub(super) fn rx_descriptor_base(&self) -> u32 {
-        self.rx_descriptor_base
-    }
-
     pub(super) fn set_tx_completion(&mut self, queue: u8, completion: MacTxCompletionObservation) {
         self.tx_completions[usize::from(queue)] = Some(completion);
     }
@@ -132,109 +100,49 @@ impl MacResetHardware for MockMmio {
     }
 }
 
-impl RxDma for MockMmio {
-    fn last_descriptor_low(&mut self) -> u32 {
-        self.operations.push(Operation::ObserveRxLastDescriptor);
-        self.rx_last_descriptor_low
+/// A walker model that behaves as plain registers: a rung doorbell reads
+/// pending until the test clears it ([`RxWalkerFixture::set_rx_reload_pending`])
+/// and never moves NEXT, so the test plays every hardware cursor move.
+pub(super) fn mock_walker() -> RxWalkerModel {
+    let mut walker = RxWalkerModel::new();
+    walker.reload_latency = u32::MAX;
+    walker.lose_reloads = u32::MAX;
+    walker
+}
+
+/// The register images a test sets on the walker model.
+pub(super) trait RxWalkerFixture {
+    fn set_rx_last_descriptor_address(&mut self, address: u32);
+    fn set_rx_next_descriptor_address(&mut self, address: u32);
+    fn set_rx_next_descriptor_low(&mut self, address_low: u32);
+    fn set_rx_walker_enabled(&mut self, enabled: bool);
+    fn set_rx_reload_pending(&mut self, pending: bool);
+    fn rx_reload_pending(&self) -> bool;
+}
+
+impl RxWalkerFixture for RxWalkerModel {
+    fn set_rx_last_descriptor_address(&mut self, address: u32) {
+        self.last_descriptor_low = rx_descriptor_low(address);
     }
 
-    fn next_descriptor_low(&mut self) -> u32 {
-        self.operations.push(Operation::ObserveRxNextDescriptor);
-        self.rx_next_descriptor_low
+    fn set_rx_next_descriptor_address(&mut self, address: u32) {
+        self.next_descriptor_low = rx_descriptor_low(address);
     }
 
-    fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
-        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::for_host_test(
-            self.next_descriptor_low(),
-            false,
-        )
+    fn set_rx_next_descriptor_low(&mut self, address_low: u32) {
+        self.next_descriptor_low = address_low;
     }
 
-    fn with_ordered_cursor<R>(
-        &mut self,
-        observed: impl for<'confirmation> FnOnce(RxDmaCursorObservation<'confirmation>) -> R,
-    ) -> R {
-        let last = self.last_descriptor_low();
-        self.record_fence();
-        let next = self.next_descriptor_low();
-        self.record_fence();
-        observed(RxDmaCursorObservation::for_host_test(last, next))
+    fn set_rx_walker_enabled(&mut self, enabled: bool) {
+        self.walker_enabled = enabled;
     }
 
-    fn walker_enabled(&mut self) -> bool {
-        self.operations.push(Operation::ObserveRxWalkerEnabled);
-        self.rx_walker_enabled
+    fn set_rx_reload_pending(&mut self, pending: bool) {
+        self.reload_pending_observations = if pending { u32::MAX } else { 0 };
     }
 
-    fn reload_pending(&mut self) -> bool {
-        self.operations.push(Operation::ObserveRxReloadPending);
-        self.rx_reload_pending
-    }
-
-    fn try_with_reload_settled<R>(
-        &mut self,
-        settled: impl for<'confirmation> FnOnce(
-            oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled<'confirmation>,
-        ) -> R,
-    ) -> Option<R> {
-        (!self.reload_pending())
-            .then(|| settled(oer_esp32s31_ieee80211_mac::rx::RxDmaReloadSettled::for_host_test()))
-    }
-
-    fn configure_descriptor_window(&mut self, _: &RxDmaBinding) {
-        self.operations.push(Operation::ConfigureRxDescriptorWindow);
-    }
-
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding) {
-        let address = binding.reserved_address();
-        self.rx_descriptor_base = address;
-        self.operations
-            .push(Operation::PublishRxDescriptorBase(address));
-    }
-
-    fn publish_walker_enable(&mut self, _: &RxDmaBinding) {
-        self.rx_walker_enabled = true;
-        self.operations.push(Operation::PublishRxWalkerEnable);
-    }
-
-    fn request_reload(&mut self, _: &RxDmaBinding) {
-        self.rx_reload_pending = true;
-        self.operations.push(Operation::RequestRxReload);
-    }
-
-    fn try_with_walker_enabled<R>(
-        &mut self,
-        _: &RxDmaBinding,
-        enabled: impl for<'confirmation> FnOnce(
-            oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled<'confirmation>,
-        ) -> R,
-    ) -> Option<R> {
-        self.operations.push(Operation::ObserveRxWalkerEnabled);
-        if self.rx_walker_enabled {
-            return None;
-        }
-        self.rx_walker_enabled = true;
-        self.operations.push(Operation::PublishRxWalkerEnable);
-        self.record_fence();
-        self.operations.push(Operation::ObserveRxWalkerEnabled);
-        self.rx_walker_enabled
-            .then(|| enabled(oer_esp32s31_ieee80211_mac::rx::RxDmaWalkerEnabled::for_host_test()))
-    }
-
-    fn try_with_walker_stopped<R>(
-        &mut self,
-        binding: &RxDmaBinding,
-        stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
-    ) -> Option<R> {
-        self.rx_walker_enabled = false;
-        self.operations.push(Operation::StopRxWalker);
-        self.record_fence();
-        self.operations.push(Operation::ObserveRxWalkerEnabled);
-        (!self.rx_walker_enabled).then(|| stopped(RxDmaWalkerStopped::for_host_test(binding)))
-    }
-
-    fn fence(&mut self) {
-        self.record_fence();
+    fn rx_reload_pending(&self) -> bool {
+        self.reload_pending_observations != 0
     }
 }
 
@@ -251,7 +159,7 @@ pub(super) const fn rx_descriptor_low(address: u32) -> u32 {
 /// terminal-complete descriptor releases it.
 pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
     live: &mut RxRingLive<'_, COUNT>,
-    mmio: &mut MockMmio,
+    mmio: &mut RxWalkerModel,
     descriptors: &[RxDescriptor; COUNT],
     descriptor_base: u32,
     last_descriptor_address: u32,
@@ -273,6 +181,7 @@ pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
 /// One leaked RX DMA arena in the host address space and the layout it
 /// published.
 pub(super) struct HostRxArena<const COUNT: usize, const BUFFER: usize, const STORAGE: usize> {
+    placed: PlacedRxDma<COUNT, BUFFER, STORAGE, HostDma>,
     pub(super) storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>,
     pub(super) base: u32,
     pub(super) buffers: &'static RxDmaBufferAddresses<COUNT>,
@@ -288,13 +197,13 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         for index in 0..COUNT {
             storage.buffer_mut(index).unwrap().fill(STALE_PAYLOAD);
         }
-        let storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma> = Box::leak(storage);
-        let mut buffers = [0; COUNT];
-        let base = storage.dma_layout(&mut buffers).unwrap();
+        let placed = RxDmaStorage::place(Placed::host(Box::leak(storage))).unwrap();
+        let storage = placed.storage();
         Self {
+            placed,
             storage,
-            base,
-            buffers: Box::leak(Box::new(buffers)),
+            base: placed.descriptor_base(),
+            buffers: storage.buffer_addresses(),
         }
     }
 
@@ -308,12 +217,12 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
 
     pub(super) fn prepare(
         &self,
-        mmio: &mut MockMmio,
+        mmio: &mut RxWalkerModel,
     ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
-        self.storage.prepare_ring(mmio, self.base, self.buffers)
+        self.placed.prepare_ring(mmio)
     }
 
-    pub(super) fn start(&self, mmio: &mut MockMmio) -> RxRingLive<'static, COUNT> {
+    pub(super) fn start(&self, mmio: &mut RxWalkerModel) -> RxRingLive<'static, COUNT> {
         self.prepare(mmio)
             .unwrap()
             .try_start(mmio)

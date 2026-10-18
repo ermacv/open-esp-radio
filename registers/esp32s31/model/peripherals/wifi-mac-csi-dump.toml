@@ -1,0 +1,137 @@
+schema = 2
+
+[[peripherals]]
+name = "WIFI_MAC_CSI_DUMP"
+description = """
+The CSI dump configuration word beside the RX descriptor walker, at the same base."""
+baseAddress = 0x20104000
+
+[[peripherals.registers]]
+
+[peripherals.registers.register]
+name = "CSI_DUMP_CONFIG"
+description = "Complete esp_test_get_csi_dump_cfg reads every described field at 0x2010411c. Complete esp_test_set_csi_dump_cfg performs independent fresh-read RMW updates. Its BEAMFORMED update has a pinned vendor quirk: cfg[8] controls whether bit 11 is updated, but cfg[1] (MU) supplies the value. This SVD exposes the physical bit and does not reproduce that software bug."
+addressOffset = 0x11C
+size = 32
+access = "read-write"
+
+[[peripherals.registers.register.fields]]
+name = "FORCE_LLTF"
+bitOffset = 0
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "MU"
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SU"
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "VHT"
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HT40"
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "HT20"
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "LEGACY"
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STBC_MODE"
+bitOffset = 9
+bitWidth = 2
+
+[[peripherals.registers.register.fields]]
+name = "BEAMFORMED"
+description = "Physical CSI-dump beamformed selector. The pinned vendor setter accidentally writes the MU argument when this field is selected; callers of the generated PAC write the actual bit directly."
+bitOffset = 11
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "STANDALONE"
+bitOffset = 12
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "DCM"
+bitOffset = 13
+bitWidth = 1
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.BEAMFORMED"
+naming = "descriptive"
+sources = ["BLOB_LIBPP_TEST_HAL_CSI"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "complete"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.FORCE_LLTF"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.MU"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.SU"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.VHT"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.HT40"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.HT20"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.LEGACY"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.STBC_MODE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.STANDALONE"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP.CSI_DUMP_CONFIG.DCM"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_MAC_CSI_DUMP"
+sources = [
+    "BLOB_LIBPP_TEST_HAL_CSI",
+]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"

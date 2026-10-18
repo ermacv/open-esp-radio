@@ -25,7 +25,7 @@
 //! ends); the ring prepared from that arena has the same base
 //! (`w1.exhaust ring_base=`).
 
-use oer_esp32s31_ieee80211_dma::descriptor::{DESCRIPTOR_BYTES, RxDescriptor};
+use oer_esp32s31_hal::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, RxDescriptor};
 use oer_esp32s31_ieee80211_driver::rx::counters::{WifiRxDrainEnd, WifiRxExhaustion, WifiRxReport};
 
 use crate::{
@@ -119,7 +119,7 @@ pub fn descriptor_index(address: u32, ring_base: u32) -> Option<usize> {
 
 /// The address bits a walker cursor register holds: `RX_LAST_DESCRIPTOR`
 /// and `RX_NEXT_DESCRIPTOR` carry a descriptor's low 20 address bits
-/// (`oer-esp32s31-ieee80211-dma`'s `RX_DESCRIPTOR_ADDRESS_LOW_MASK`).
+/// (`oer-esp32s31-hal`'s `RX_DESCRIPTOR_ADDRESS_LOW_MASK`).
 const CURSOR_ADDRESS_BITS: u32 = 0x000f_ffff;
 
 /// The ring index of the descriptor whose low address a cursor register

@@ -20,7 +20,7 @@ use oer_esp32s31_hal::types::{
     MacLegacyTxProgram, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
     MacTxQueueDetached,
 };
-use oer_esp32s31_ieee80211_dma::tx_ampdu_storage::{AmpduDmaStorage, RetainedAmpduDmaStorage};
+use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{AmpduDmaStorage, RetainedAmpduDmaStorage};
 use oer_esp32s31_ieee80211_mac::tx::ampdu::{
     AmpduFrameLayout, AmpduFrameSize, AmpduRepublication, HtAmpduFrameRequest, HtAmpduHardware,
     HtAmpduTxResources, HtAmpduTxStorage, RetainedDmaAmpduTx, TX_AMPDU_METADATA_SIZE,

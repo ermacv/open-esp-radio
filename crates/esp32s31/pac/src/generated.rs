@@ -8540,7 +8540,7 @@ pub(crate) fn configure_phy_frequency_i2c_number_prefix(
 /// Typed bridge for the reviewed `request_rx_block_ack_entry_update` indexed bit-set transaction.
 #[inline]
 pub(crate) fn request_rx_block_ack_entry_update(
-    registers: &crate::svd::WifiMacRxDma,
+    registers: &crate::svd::WifiMacBlockAck,
     index: MacRxBlockAckEntryIndex,
 ) {
     crate::svd::indexed_bit_set_modify::request_rx_block_ack_entry_update(registers, index.get());

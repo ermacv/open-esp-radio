@@ -11,15 +11,15 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_adapters_embassy_time::EmbassyClock;
 use oer_base_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
+use oer_esp32s31_hal::ieee80211::dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_hal::owner::{MacInterruptSetup, RadioRuntimeOwner};
-use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_ieee80211_driver::{
     irq::{
         RadioDoorbell, WifiIrqLine, WifiIrqRoutes, run_doorbell, service_mac_line,
         service_power_line,
     },
     rx::{
-        arena::WifiRxArena,
+        arena::{WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
         counters::WifiRxCounters,
         receive::receive,
@@ -52,13 +52,15 @@ pub const SLOTS: usize = 32;
 
 type Epoch = ActiveEpoch<Moderated>;
 type Arena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS>;
+/// The arena and its RX DMA storage, placed together.
+type Static = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS>;
 /// The arena's DMA storage.
 pub type Storage = RxDmaStorage<COUNT, BUFFER, STORAGE>;
 
 oer_esp32s31_hal::dma_static! {
     /// Placement: the receive epoch's arena, descriptors and buffers in the
     /// DMA window.
-    static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
+    static RX_ARENA: Static = zeroed in ".dma.bss.wifi_rx";
 }
 
 oer_base_memory::zeroed_static! {
@@ -222,8 +224,10 @@ pub async fn rx_task(
     let activate = move || {
         InactiveEpoch::new(interrupt_setup).activate_rx_moderated(MAC_COLD_RX_INTERRUPT_MASK)
     };
+    let (mut mac, rx_dma) = registers.split_rx_dma();
     let receiving = receive(
-        &mut registers,
+        &mut mac,
+        rx_dma,
         activate,
         parts,
         &RX_LINE,

@@ -52,10 +52,9 @@ descriptor or buffer address derives from a pointer as a `u32`, which does not
 fit on a 64-bit host, so the arenas carry a DMA address space
 (`dma/src/space.rs`): `ChipDma`, the product's, takes the field's own address;
 `HostDma` (test support only) places the arena at `HOST_ARENA_BASE` and gives
-each field its offset there. The range and alignment checks are the same in
-both spaces. RX arenas carry the space as a type parameter; TX and A-MPDU
-storages take it where the binding is built (`pin_static::<S>`), and the
-A-MPDU binding maps external lease regions through the same space.
+each field its offset there. RX arenas carry the space as a type parameter; TX
+and A-MPDU storages take it where their placed binding is built (`pin::<S>`),
+and the A-MPDU binding maps external lease regions through the same space.
 
 Test support holds models of the hardware, never bypasses of the product's
 checks:
@@ -105,6 +104,5 @@ pointer wide. The HE-Control and Trigger MSDU-length facts the removed
 test-only A-MPDU write path held are in [he-tb-ampdu.md](he-tb-ampdu.md).
 
 An RX descriptor whose low 20 address bits are zero would read as an exhausted
-list in the walker's NEXT register; the ring refuses such a layout
-(`descriptor_aliases_an_exhausted_list`) and `cargo fw` warns about a DMA
-section placed there.
+list in the walker's NEXT register; the runtime link refuses DMA storage that
+holds such an address (the generated `dma-window.x`).

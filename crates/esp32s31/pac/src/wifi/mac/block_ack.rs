@@ -208,7 +208,7 @@ const fn rx_block_ack_register_index(hardware_index: MacRxBlockAckEntryIndex) ->
 impl WifiRadioRegisters {
     /// Sample the three words copied by `hal_mac_tx_get_blockack`.
     pub fn read_tx_block_ack_payload(&self, hardware_queue: u8) -> Option<TxBlockAckPayload> {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let (control, starting_sequence, bitmap_low, bitmap_high) = match hardware_queue {
             0 => {
                 let control = block.tx_block_ack_control_sequence_q0().read();
@@ -271,7 +271,7 @@ impl WifiRadioRegisters {
         starting_sequence: MacRxBlockAckStartingSequence,
         window: MacRxBlockAckWindow,
     ) {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let register_index = rx_block_ack_register_index(hardware_index);
         let peer_head = u32::from_le_bytes([peer[0], peer[1], peer[2], peer[3]]);
         let peer_tail = u16::from_le_bytes([peer[4], peer[5]]);
@@ -311,7 +311,7 @@ impl WifiRadioRegisters {
     ///
     /// SOURCE: complete `libpp[hal_ampdu.o]::hal_agreement_del_rx_ba`, size `0x72`.
     pub fn delete_rx_block_ack_entry(&mut self, hardware_index: MacRxBlockAckEntryIndex) {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let register_index = rx_block_ack_register_index(hardware_index);
         block
             .rx_block_ack_entry_control(register_index)
@@ -340,7 +340,7 @@ impl WifiRadioRegisters {
         starting_sequence: MacRxBlockAckStartingSequence,
         window: MacRxBlockAckWindow,
     ) {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let register_index = rx_block_ack_register_index(hardware_index);
 
         crate::svd::zero_register_write::clear_rx_block_ack_entry_control(block, register_index);
@@ -382,7 +382,7 @@ impl WifiRadioRegisters {
         starting_sequence: MacRxBlockAckStartingSequence,
         window: MacRxBlockAckWindow,
     ) -> bool {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let index = hardware_index.get() as u8;
         let peer_head = u32::from_le_bytes([peer[0], peer[1], peer[2], peer[3]]);
         let peer_tail = u16::from_le_bytes([peer[4], peer[5]]);
@@ -476,7 +476,7 @@ impl WifiRadioRegisters {
         starting_sequence: MacRxBlockAckStartingSequence,
         window: MacRxBlockAckWindow,
     ) {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let index = hardware_index.get() as u8;
 
         block
@@ -511,7 +511,7 @@ impl WifiRadioRegisters {
         &mut self,
         hardware_index: MacExtraSoftApRxBlockAckEntryIndex,
     ) -> ExtraSoftApRxBlockAckEntrySnapshot {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let index = hardware_index.get() as u8;
         block
             .extra_softap_rx_block_ack_control()
@@ -586,7 +586,7 @@ impl WifiRadioRegisters {
         &mut self,
         hardware_index: MacExtraSoftApRxBlockAckEntryIndex,
     ) {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let index = hardware_index.get() as u8;
 
         block
@@ -617,7 +617,7 @@ impl WifiRadioRegisters {
         &self,
         hardware_index: MacRxBlockAckEntryIndex,
     ) -> Option<RxBlockAckEntrySnapshot> {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let register_index = rx_block_ack_register_index(hardware_index);
         let control = block.rx_block_ack_entry_control(register_index).read();
         let peer_head = block
@@ -694,7 +694,7 @@ impl WifiRadioRegisters {
         &self,
         hardware_queue: u8,
     ) -> Option<TxBlockAckObservation> {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         let payload = self.read_tx_block_ack_payload(hardware_queue)?;
         let block_ack_received = match hardware_queue {
             0 => block
@@ -736,7 +736,7 @@ impl WifiRadioRegisters {
         &self,
         hardware_queue: u8,
     ) -> Option<TxBlockAckDiagnosticSnapshot> {
-        let block = &self.peripherals.wifi_mac.wifi_mac_rx_dma;
+        let block = &self.peripherals.wifi_mac.wifi_mac_block_ack;
         macro_rules! snapshot {
             ($control:ident, $bitmap_low:ident, $bitmap_high:ident, $address_high:ident, $address_low:ident, $information:ident) => {{
                 let control = block.$control().read();

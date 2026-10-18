@@ -15,7 +15,7 @@ use std::{
 
 use oer_base_time::Duration;
 use oer_base_time_virtual::VirtualClock;
-use oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word;
+use oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
 use oer_esp32s31_ieee80211_mac::irq::consumer::{IrqPublisher, IrqStorage};
 
 use super::*;

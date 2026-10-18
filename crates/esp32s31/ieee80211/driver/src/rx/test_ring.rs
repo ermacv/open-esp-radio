@@ -5,12 +5,13 @@
 
 use std::{boxed::Box, vec, vec::Vec};
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::dma_static::Placed;
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
 };
 use oer_esp32s31_ieee80211_mac::rx::{
-    PUBLIC_HEADER_SIZE, RxRingLive,
+    PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
     pool::{NetworkRxFrame, RxStagePool},
 };
 
@@ -20,6 +21,15 @@ use super::{
     transaction::{CompletedUnit, Counters, Preview, Publisher, service},
 };
 use crate::datapath::DatapathRxProgress;
+
+/// A MAC without the receive-buffer starvation counter.
+pub(crate) struct NoBufferFullCounter;
+
+impl RxBufferFullCounter for NoBufferFullCounter {
+    fn buffer_full_count(&mut self) -> Option<u16> {
+        None
+    }
+}
 
 pub(crate) const COUNT: usize = 16;
 pub(crate) const BUFFER: usize = 1_664;
@@ -39,13 +49,14 @@ pub(crate) struct Ring {
 
 impl Ring {
     pub(crate) fn new() -> Self {
-        let storage: &'static Storage = Box::leak(Box::new(Storage::new()));
-        let buffers = Box::leak(Box::new([0; COUNT]));
-        let base = storage.dma_layout(buffers).unwrap();
-        let buffers: &'static [u32; COUNT] = buffers;
+        let placed = RxDmaStorage::place(Placed::host(Box::leak(Box::new(Storage::new()))))
+            .expect("the host storage has a layout");
+        let storage: &'static Storage = placed.storage();
+        let buffers: &'static [u32; COUNT] = storage.buffer_addresses();
+        let base = placed.descriptor_base();
         let mut walker = RxWalkerModel::new();
-        let live = storage
-            .prepare_ring(&mut walker, base, buffers)
+        let live = placed
+            .prepare_ring(&mut walker)
             .unwrap()
             .try_start(&mut walker)
             .map_err(|(_, error)| error)
@@ -115,6 +126,7 @@ impl Ring {
                     bytes: &mut bytes,
                 },
                 &mut self.walker,
+                &mut NoBufferFullCounter,
                 (),
             )
             .expect("received input never faults the ring");

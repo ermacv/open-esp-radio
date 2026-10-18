@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::RxWalkerModel,
     rx_ring::RxDmaArenaState,
     space::{HOST_ARENA_BASE, HostDma},
@@ -18,20 +18,20 @@ use crate::rx::{
 };
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
-type HostArena = WifiRxArena<32, 1_664, 1_668, 32, HostDma, HostEpoch>;
+type HostStatic = WifiRxStatic<32, 1_664, 1_668, 32, HostDma, HostEpoch>;
 
 #[test]
-fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
-    let arena: &'static mut HostArena = Box::leak(Box::new(bytemuck::Zeroable::zeroed()));
-    let start = core::ptr::from_ref(&*arena).addr();
-    let end = start + core::mem::size_of::<HostArena>();
+fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
+    let placed: &'static mut HostStatic = Box::leak(Box::new(bytemuck::Zeroable::zeroed()));
+    let start = core::ptr::from_ref(&*placed).addr();
+    let end = start + core::mem::size_of::<HostStatic>();
 
     let (parts, mut stop, frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
-            .expect("a zeroed arena binds");
+        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(placed))
+            .expect("a zeroed static binds");
 
     let descriptors = parts.rx().descriptors().as_ptr().addr();
-    assert!(descriptors > start && descriptors < end);
+    assert!(descriptors >= start && descriptors < end);
     assert_eq!(parts.descriptor_base(), HOST_ARENA_BASE);
     assert_eq!(parts.rx().lifecycle_state(), RxDmaArenaState::Reusable);
     assert_eq!(parts.counters().report(), WifiRxReport::default());
@@ -49,18 +49,13 @@ fn arena_zero_bytes_bind_and_descriptors_do_not_start_the_arena() {
     assert!(!parts.control.stop_requested());
     assert!(!parts.irq.has_pending() && !parts.power.has_pending());
     // Every buffer address is laid out inside the arena's address space.
-    for (index, &address) in parts.buffer_addresses.iter().enumerate() {
+    for (index, &address) in parts.rx().buffer_addresses().iter().enumerate() {
         assert_ne!(address, 0, "buffer {index}");
     }
 
     // The zeroed descriptors and addresses make a ring.
     let mut walker = RxWalkerModel::new();
-    let frontier = ReceiveFrontier::<32, 1_664>::prepare_initial(
-        &mut walker,
-        parts.rx,
-        parts.descriptor_base,
-        parts.buffer_addresses,
-    );
+    let frontier = ReceiveFrontier::<32, 1_664>::prepare_initial(&mut walker, parts.rx);
     assert!(frontier.is_ok());
     assert_eq!(parts.rx().lifecycle_state(), RxDmaArenaState::Prepared);
 

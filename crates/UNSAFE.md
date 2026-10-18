@@ -56,7 +56,6 @@ packages. Prefixes below omit `oer-` only to keep the mapping readable.
 | `esp32s31-soc-esp-hal` | `adapters/esp-hal/soc/` |
 | `esp32s31-phy` | `esp32s31/phy/` |
 | `espressif-ieee802154-engine` | `espressif/ieee802154-engine/` |
-| `esp32s31-ieee80211-dma` | `esp32s31/ieee80211/dma/` |
 | `esp32s31-radio-client` | `esp32s31/radio/client/` |
 | `espressif-executor-embassy` | `exec/executor/` |
 | `espressif-interrupt-table-esp-hal` | `exec/esp-hal-irq/` |
@@ -92,9 +91,10 @@ between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
 Release store hands the place over and the other side's Acquire CAS takes it;
 the client posts only with the slot's token, which the answer returns.
 
-`esp32s31-ieee80211-dma` has one unsafe site that exists only under
-`test-support`: the host model of the DMA engine's memory port,
-`RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in `rx_storage/host_dma.rs`.
+The Wi-Fi DMA storage, `esp32s31-hal`'s `ieee80211::dma` module, has one
+unsafe site that exists only under `test-support`: the host model of the DMA
+engine's memory port, `RxDmaStorage<…, HostDma>::{dma_write, dma_read}` in
+`ieee80211/dma/rx_storage/host_dma.rs`.
 It copies bytes into or out of one buffer's `UnsafeCell` at a published
 `HostDma` address (a ring buffer or the reserved descriptor's buffer),
 refusing any range outside a single buffer and any buffer detached to an

@@ -250,6 +250,13 @@ impl RadioOwnerArena {
         &self,
         transaction: impl FnOnce(&WifiRadioRegisters) -> T,
     ) -> Result<T, RadioOwnerArenaError> {
+        self.try_with_owner(|owner| transaction(owner.pac()))
+    }
+
+    fn try_with_owner<T>(
+        &self,
+        transaction: impl FnOnce(&RadioRuntimeOwner) -> T,
+    ) -> Result<T, RadioOwnerArenaError> {
         match self.state() {
             RadioOwnerArenaState::Empty => {
                 return Err(RadioOwnerArenaError::MissingOwner);
@@ -264,7 +271,7 @@ impl RadioOwnerArena {
             .try_borrow()
             .map_err(|_| RadioOwnerArenaError::Borrowed)?;
         let owner = slot.as_ref().ok_or(RadioOwnerArenaError::MissingOwner)?;
-        Ok(transaction(owner.pac()))
+        Ok(transaction(owner))
     }
 
     /// Run one synchronous mutation only while the published lifecycle is
@@ -312,7 +319,7 @@ impl RadioOwnerArena {
     pub fn try_receive_dma_snapshot(
         &self,
     ) -> Result<crate::ieee80211::mac::MacRxDmaSnapshot, RadioOwnerArenaError> {
-        self.try_with_ref(|registers| registers.mac_rx_dma_snapshot())
+        self.try_with_owner(RadioRuntimeOwner::receive_dma_snapshot)
     }
 
     /// Apply the reviewed station-link receive policy as one serialized HAL

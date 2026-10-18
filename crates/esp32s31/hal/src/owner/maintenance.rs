@@ -6,7 +6,10 @@
 //! its RX descriptor epoch; they do not retire software DMA leases.
 
 use super::{MacInterruptSetup, RadioRuntimeOwner};
-use crate::ieee80211::mac::WifiMacHal;
+use crate::ieee80211::{
+    dma::rx_dma::{RxDma, WifiRxDmaEngine},
+    mac::WifiMacHal,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -29,7 +32,8 @@ impl RadioRuntimeOwner {
         interrupts: MacInterruptSetup,
     ) -> Result<(Self, MacInterruptSetup), AdmissionFailure> {
         confirm_stopped(self, interrupts, |registers| {
-            check_stopped(&mut registers.wifi_mac_hal())
+            let (mac, rx_dma) = registers.split_rx_dma();
+            check_stopped(&mut Stopped { mac, rx_dma })
         })
     }
 }
@@ -56,12 +60,18 @@ trait Observation {
     fn rx_walker_enabled(&mut self) -> bool;
 }
 
-impl Observation for WifiMacHal<'_> {
+/// The MAC and the RX DMA engine whose readbacks prove the stop.
+struct Stopped<'a> {
+    mac: WifiMacHal<'a>,
+    rx_dma: &'a mut WifiRxDmaEngine,
+}
+
+impl Observation for Stopped<'_> {
     fn mac_active(&mut self) -> u8 {
-        self.channel_active_state()
+        self.mac.channel_active_state()
     }
     fn rx_walker_enabled(&mut self) -> bool {
-        WifiMacHal::rx_walker_enabled(self)
+        self.rx_dma.walker_enabled()
     }
 }
 

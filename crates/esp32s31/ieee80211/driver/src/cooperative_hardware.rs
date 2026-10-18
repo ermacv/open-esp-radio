@@ -38,11 +38,7 @@ use oer_esp32s31_ieee80211_mac::{
         control::BeamformingReportHardware,
         low::{MacLowRateGateProbe, MacLowRateTransitionError},
     },
-    rx::{
-        RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaReloadSettled, RxDmaWalkerEnabled,
-        RxDmaWalkerStopped,
-        hardware::{self as rx_ampdu_hw, S31RxBlockAckAgreement, S31RxBlockAckAgreementError},
-    },
+    rx::hardware::{self as rx_ampdu_hw, S31RxBlockAckAgreement, S31RxBlockAckAgreementError},
     sta_ap_registers::StaApRegisterHardware,
     tx::{HardwareOwnedTxDma, PreparedTxDma, TxHardware, ampdu::HtAmpduHardware},
 };
@@ -447,86 +443,6 @@ impl HtAmpduHardware for CooperativeRadioHardware<'_> {
         reservation: MacHeTbLinkReservation,
     ) -> Option<MacHeTriggerTxQueueSnapshot> {
         HtAmpduHardware::he_trigger_based_queue_snapshot(&self.wifi_mac_hal(), reservation)
-    }
-}
-
-impl RxDma for CooperativeRadioHardware<'_> {
-    fn buffer_full_count(&mut self) -> Option<u16> {
-        RxDma::buffer_full_count(&mut self.wifi_mac_hal())
-    }
-
-    fn descriptor_base_register(&mut self) -> Option<u32> {
-        RxDma::descriptor_base_register(&mut self.wifi_mac_hal())
-    }
-
-    fn last_descriptor_low(&mut self) -> u32 {
-        RxDma::last_descriptor_low(&mut self.wifi_mac_hal())
-    }
-
-    fn next_descriptor_low(&mut self) -> u32 {
-        RxDma::next_descriptor_low(&mut self.wifi_mac_hal())
-    }
-
-    fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
-        RxDma::next_descriptor(&mut self.wifi_mac_hal())
-    }
-
-    fn with_ordered_cursor<R>(
-        &mut self,
-        observed: impl for<'confirmation> FnOnce(RxDmaCursorObservation<'confirmation>) -> R,
-    ) -> R {
-        RxDma::with_ordered_cursor(&mut self.wifi_mac_hal(), observed)
-    }
-
-    fn walker_enabled(&mut self) -> bool {
-        RxDma::walker_enabled(&mut self.wifi_mac_hal())
-    }
-
-    fn reload_pending(&mut self) -> bool {
-        RxDma::reload_pending(&mut self.wifi_mac_hal())
-    }
-
-    fn try_with_reload_settled<R>(
-        &mut self,
-        settled: impl for<'confirmation> FnOnce(RxDmaReloadSettled<'confirmation>) -> R,
-    ) -> Option<R> {
-        RxDma::try_with_reload_settled(&mut self.wifi_mac_hal(), settled)
-    }
-
-    fn configure_descriptor_window(&mut self, binding: &RxDmaBinding) {
-        RxDma::configure_descriptor_window(&mut self.wifi_mac_hal(), binding);
-    }
-
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding) {
-        RxDma::write_descriptor_base(&mut self.wifi_mac_hal(), binding);
-    }
-
-    fn publish_walker_enable(&mut self, binding: &RxDmaBinding) {
-        RxDma::publish_walker_enable(&mut self.wifi_mac_hal(), binding);
-    }
-
-    fn request_reload(&mut self, binding: &RxDmaBinding) {
-        RxDma::request_reload(&mut self.wifi_mac_hal(), binding);
-    }
-
-    fn try_with_walker_enabled<R>(
-        &mut self,
-        binding: &RxDmaBinding,
-        enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
-    ) -> Option<R> {
-        RxDma::try_with_walker_enabled(&mut self.wifi_mac_hal(), binding, enabled)
-    }
-
-    fn try_with_walker_stopped<R>(
-        &mut self,
-        binding: &RxDmaBinding,
-        stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
-    ) -> Option<R> {
-        RxDma::try_with_walker_stopped(&mut self.wifi_mac_hal(), binding, stopped)
-    }
-
-    fn fence(&mut self) {
-        RxDma::fence(&mut self.wifi_mac_hal());
     }
 }
 

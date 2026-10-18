@@ -32,10 +32,15 @@ unchanged aggregate, also without Retry bits, until the short-retry limit.
 Every arena is published by its DMA addresses in a [`DmaSpace`](src/space.rs):
 `ChipDma` on the chip, where a field's address is its DMA address, and the
 host models' `HostDma` (test support), where it is `HOST_ARENA_BASE` plus the
-field's offset in its arena. The RX arena carries its space and checks the
-published layout against it at every preparation; a TX storage takes its space
-when its binding is built (`pin_static::<S>`). The arena checks run the same
-code in both spaces. Test support supplies models of the hardware (the host
+field's offset in its arena. Every storage is placed
+([`Placed`](../../dma_static.rs)): the RX storage records its descriptor base
+and buffer addresses once when it is placed (`RxDmaStorage::place`), and only
+the resulting `PlacedRxDma` prepares a ring; a TX storage takes its space when
+its placed binding is built (`pin::<S>`). The link keeps every placed static in
+the DMA window and off an address with zero low DMA address bits
+(`dma-window.x`), so no published address is checked against the window at
+run time; what the walker reports back (NEXT, LAST) is resolved against the
+arena. The arena checks run the same code in both spaces. Test support supplies models of the hardware (the host
 space, the proofs a mock walker reports, and the shared register model of the
 RX walker, [`RxWalkerModel`](src/rx_dma/model.rs)), never bypasses of these
 checks. A walker stop proof names the arena whose binding it stopped; an RX

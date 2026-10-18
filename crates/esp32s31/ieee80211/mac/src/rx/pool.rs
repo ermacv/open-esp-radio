@@ -17,7 +17,7 @@ use crate::rx::{
     view_normalized_rx_frame,
 };
 use oer_base_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::RxDma,
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
@@ -83,7 +83,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         }
     }
 
-    oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+    oer_esp32s31_hal::place_rx_hot_path! {
     /// Transfer one completed single-descriptor DMA buffer to the upper RX
     /// owner without copying payload bytes.
     ///
@@ -103,7 +103,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         const COUNT: usize,
         const BUFFER_SIZE: usize,
         const STORAGE_SIZE: usize,
-        S: oer_esp32s31_ieee80211_dma::space::DmaSpace,
+        S: oer_esp32s31_hal::ieee80211::dma::space::DmaSpace,
         H: RxDma,
     >(
         &'pool self,
@@ -144,7 +144,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
             .map(RxDmaDeferredStageUnitOutcome::Staged)
     }}
 
-    oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+    oer_esp32s31_hal::place_rx_hot_path! {
     /// Admit an allocation detached from its completed descriptor.
     ///
     /// The descriptor remains observed while this affine allocation is owned

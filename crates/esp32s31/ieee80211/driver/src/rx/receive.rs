@@ -44,7 +44,7 @@ use core::{
 
 use oer_base_memory::HandlerCell;
 use oer_base_time::{Duration, Instant, Timer};
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
 use oer_esp32s31_ieee80211_mac::{
@@ -57,7 +57,7 @@ use oer_esp32s31_ieee80211_mac::{
         consumer::{IrqConsumer, PowerIrqConsumer},
         epoch::{ActiveEpoch, Moderated},
     },
-    rx::{RxDma, RxRingLive, pool::RxStagePool},
+    rx::{RxBufferFullCounter, RxDma, RxRingLive, pool::RxStagePool},
 };
 
 use super::{
@@ -92,7 +92,9 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 
 /// Run one receive epoch over `parts`; publish its exit and park.
 ///
-/// `hardware` is the task's radio owner (`RadioRuntimeOwner` on the chip).
+/// `hardware` is the task's MAC (the `WifiMacHal` of `RadioRuntimeOwner` on
+/// the chip) and `rx_dma` its RX DMA engine (`WifiRxDmaEngine`), the two
+/// halves `RadioRuntimeOwner::split_rx_dma` lends.
 /// `activate` activates the moderated interrupt epoch (on the chip
 /// `InactiveEpoch::activate_rx_moderated` with the image's mask); it runs
 /// while the routes are silent. `cell` is the image's static cell its MAC,
@@ -108,6 +110,7 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 )]
 pub async fn receive<
     H,
+    W,
     I,
     P,
     R,
@@ -122,6 +125,7 @@ pub async fn receive<
     S,
 >(
     hardware: &mut H,
+    rx_dma: &mut W,
     activate: impl FnOnce() -> ActiveEpoch<Moderated, I, P>,
     parts: WifiRxParts<
         'static,
@@ -140,7 +144,8 @@ pub async fn receive<
     admission: &M,
 ) -> Infallible
 where
-    H: RxDma + MacSnifferHardware + MacRuntimeStopHardware,
+    H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
+    W: RxDma,
     I: MacInterrupt,
     P: MacPowerInterrupt,
     R: WifiIrqRoutes,
@@ -152,8 +157,6 @@ where
 {
     let WifiRxParts {
         rx,
-        descriptor_base,
-        buffer_addresses,
         stage,
         irq,
         power,
@@ -166,7 +169,8 @@ where
     } = parts;
     let mut receiver = Receiver {
         hardware,
-        rx,
+        rx_dma,
+        rx: rx.storage(),
         stage,
         irq,
         power,
@@ -182,12 +186,8 @@ where
         full_since: None,
     };
 
-    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
-        receiver.hardware,
-        rx,
-        descriptor_base,
-        buffer_addresses,
-    ) {
+    let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(receiver.rx_dma, rx)
+    {
         Ok(frontier) => frontier,
         Err(error) => {
             return receiver
@@ -217,7 +217,7 @@ where
     receiver.routes.enable();
 
     let cause = match frontier
-        .start_with_storage(receiver.timer, receiver.hardware, rx)
+        .start_with_storage(receiver.timer, receiver.rx_dma, rx.storage())
         .await
     {
         Err(error) => WifiRxCause::Start(error),
@@ -237,6 +237,7 @@ where
 struct Receiver<
     'r,
     H,
+    W,
     R,
     D,
     T,
@@ -249,6 +250,7 @@ struct Receiver<
     S: DmaSpace,
 > {
     hardware: &'r mut H,
+    rx_dma: &'r mut W,
     rx: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
     stage: &'static RxStagePool<STAGE_SLOTS, BUFFER>,
     irq: IrqConsumer<'static>,
@@ -271,6 +273,7 @@ struct Receiver<
 
 impl<
     H,
+    W,
     R,
     D,
     T,
@@ -281,9 +284,10 @@ impl<
     const STORAGE: usize,
     const STAGE_SLOTS: usize,
     S,
-> Receiver<'_, H, R, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S>
+> Receiver<'_, H, W, R, D, T, E, M, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S>
 where
-    H: RxDma + MacSnifferHardware + MacRuntimeStopHardware,
+    H: MacSnifferHardware + MacRuntimeStopHardware + RxBufferFullCounter,
+    W: RxDma,
     R: WifiIrqRoutes,
     D: RadioDoorbell,
     T: Timer,
@@ -413,11 +417,11 @@ where
         (since, hash): (Instant, u32),
     ) -> WifiRxExhaustion {
         let blocked = self.timer.now().saturating_duration_since(since);
-        let next = self.hardware.next_descriptor();
-        let last_low = self.hardware.last_descriptor_low();
-        let base = self.hardware.descriptor_base_register();
-        let walker_enabled = self.hardware.walker_enabled();
-        let reload_doorbell = RxDma::reload_pending(self.hardware);
+        let next = self.rx_dma.next_descriptor();
+        let last_low = self.rx_dma.last_descriptor_low();
+        let base = self.rx_dma.descriptor_base_register();
+        let walker_enabled = self.rx_dma.walker_enabled();
+        let reload_doorbell = self.rx_dma.reload_pending();
         let buffer_full = self.hardware.buffer_full_count();
         let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
         WifiRxExhaustion {
@@ -449,8 +453,8 @@ where
     /// end of a drain. Only reads.
     fn record_drain_end(&mut self, ring: &RxRingLive<'static, COUNT>) {
         let narrow = |value: usize| u32::try_from(value).unwrap_or(u32::MAX);
-        let next = self.hardware.next_descriptor();
-        let last_low = self.hardware.last_descriptor_low();
+        let next = self.rx_dma.next_descriptor();
+        let last_low = self.rx_dma.last_descriptor_low();
         self.counters.drain_end(&WifiRxDrainEnd {
             released: narrow(self.rx.released_buffer_count()),
             detached: narrow(self.rx.detached_buffer_count()),
@@ -498,6 +502,7 @@ where
                 units,
                 bytes,
             },
+            self.rx_dma,
             self.hardware,
             (),
         );
@@ -560,7 +565,7 @@ where
                 end: WifiRxEnd::NotStarted,
             };
         }
-        match frontier.stop(self.hardware) {
+        match frontier.stop(self.rx_dma) {
             Ok(()) if fault => WifiRxExit {
                 cause,
                 end: WifiRxEnd::Quarantined {

@@ -5,20 +5,19 @@
 //! in the MAC backend. The split lets those safe upper layers pass an unforgeable memory
 //! capability instead of a bare descriptor address to the register boundary.
 
+use crate::dma_address;
+use crate::dma_static::Placed;
 use core::{marker::PhantomPinned, pin::Pin};
-use oer_esp32s31_hal::dma_address;
 
+use crate::types::MacTxQueueDetached;
 use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
-use oer_esp32s31_hal::types::MacTxQueueDetached;
 use pin_project::pin_project;
 
-use crate::space::DmaSpace;
+use crate::ieee80211::dma::space::DmaSpace;
 
-use oer_esp32s31_hal::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
+use crate::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
 
-use crate::descriptor::{
-    DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
-};
+use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, TxDescriptor, tx_owned_word};
 
 /// DMA-memory state independent of an EDCA queue or protocol cookie.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, bytemuck::Zeroable)]
@@ -46,9 +45,9 @@ struct TxDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 
 /// Final allocation containing one ordinary TX descriptor and source buffer.
 ///
-/// Construct this in static storage. The returned owner is movable; this
+/// Declare it with [`dma_static!`](crate::dma_static!) and consume the placed
+/// allocation through [`Self::pin`]. The returned owner is movable; this
 /// backing allocation is not.
-/// Consume the hardware allocation through [`Self::pin_static`].
 ///
 /// Its layout is fixed: the descriptor, then the 16-byte aligned buffer.
 #[pin_project]
@@ -74,11 +73,13 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
         }
     }
 
-    /// Consume the unique static hardware allocation and bind its DMA
-    /// addresses in space `S` to a movable owner, once.
-    pub fn pin_static<S: DmaSpace>(
-        storage: &'static mut Self,
+    /// Consume the placed hardware allocation and bind its DMA addresses in
+    /// space `S` to a movable owner, once. The link keeps the placed storage
+    /// in the DMA window, so its addresses need no window check.
+    pub fn pin<S: DmaSpace>(
+        placed: Placed<Self>,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
+        let storage = placed.into_inner();
         let descriptor_address = S::address(storage, core::ptr::addr_of!(storage.descriptor))
             .ok_or(TxDmaStorageError::Address)?;
         let buffer_address =
@@ -96,11 +97,6 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
         buffer_address: u32,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
         let buffer_len = u32::try_from(BUFFER_SIZE).map_err(|_| TxDmaStorageError::Address)?;
-        if !descriptor_address_valid(descriptor_address)
-            || !dma_range_valid(buffer_address, buffer_len)
-        {
-            return Err(TxDmaStorageError::Address);
-        }
 
         // SAFETY: `storage` is a consumed unique static allocation. The
         // returned owner retains it permanently, and its state machine is the
@@ -115,8 +111,9 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
                 .ok_or(TxDmaStorageError::Address)?
         };
 
-        // SAFETY: the window check above accepted `buffer_address`, the DMA
-        // address of the same consumed static's buffer, retained permanently.
+        // SAFETY: `buffer_address` is the DMA address of the placed static's
+        // buffer, which the link keeps in the DMA window and the owner
+        // retains permanently.
         let buffer = unsafe { dma_address::placed(buffer_address) };
 
         Ok(PinnedTxDmaStorage {

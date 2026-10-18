@@ -168,7 +168,7 @@ pub struct IrqPublisher<'irq> {
 }
 
 impl IrqPublisher<'_> {
-    oer_esp32s31_ieee80211_dma::place_irq_path! {
+    oer_esp32s31_hal::place_irq_path! {
     /// Publish one acknowledged hardware snapshot with one Release operation.
     #[inline(never)]
     pub fn publish(&self, events: u32) {
@@ -419,7 +419,7 @@ pub struct PowerIrqPublisher<'irq> {
 }
 
 impl PowerIrqPublisher<'_> {
-    oer_esp32s31_ieee80211_dma::place_irq_path! {
+    oer_esp32s31_hal::place_irq_path! {
     #[inline(never)]
     pub fn publish(&self, observation: MacPowerInterruptObservation) {
         self.publish_deferred(observation).wake();

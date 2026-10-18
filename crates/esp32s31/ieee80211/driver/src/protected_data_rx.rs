@@ -91,7 +91,7 @@ fn protected_data_view<'frame>(
     protected_data_view_body!(raw, data)
 }
 
-oer_esp32s31_ieee80211_dma::place_rx_hot_path! {
+oer_esp32s31_hal::place_rx_hot_path! {
 /// Decode the normalized metadata which every ordinary protected MPDU needs.
 ///
 /// Keep the original PSRAM function present for the cold fragment path so this

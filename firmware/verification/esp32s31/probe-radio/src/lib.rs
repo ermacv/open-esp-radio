@@ -1611,7 +1611,7 @@ unsafe impl<T> Sync for OrdinaryTxProbeCell<T> {}
 
 oer_base_memory::zeroed_static! {
     static ORDINARY_TX_DMA: OrdinaryTxProbeCell<
-        oer_esp32s31_ieee80211_dma::tx_storage::TxDmaStorage<ORDINARY_TX_PROBE_BUFFER_SIZE>,
+        oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage<ORDINARY_TX_PROBE_BUFFER_SIZE>,
     > = zeroed in ".dma.bss.ordinary_tx";
 }
 static ORDINARY_TX_SLOT: OrdinaryTxProbeCell<
@@ -1639,7 +1639,7 @@ fn initialize_ordinary_tx_probe() -> Result<OrdinaryTxProbeState, u32> {
 
     // SAFETY: initialization runs once in the single-threaded probe image;
     // the resulting DMA owner permanently consumes this static allocation.
-    let dma = oer_esp32s31_ieee80211_dma::tx_storage::TxDmaStorage::pin_static(unsafe {
+    let dma = oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage::pin_static(unsafe {
         &mut *ORDINARY_TX_DMA.0.get()
     })
     .map_err(|_| 10_u32)?;

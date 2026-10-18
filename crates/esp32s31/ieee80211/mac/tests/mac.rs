@@ -2,14 +2,14 @@ use oer_esp32s31_hal::types::MacDelaySlot;
 use std::{cell::RefCell, rc::Rc};
 
 use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_esp32s31_hal::ieee80211::dma::descriptor::{
+    DESCRIPTOR_BYTES, RxDescriptor, TxDescriptor, rx_armed_word, rx_landed_word, rx_rearm_word,
+    tx_owned_word,
+};
 use oer_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHtTxProgram, MacInterface, MacInterruptMask, MacKeyInstallOutcome,
     MacLegacyTxProgram, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
     MacTxQueueDetached,
-};
-use oer_esp32s31_ieee80211_dma::descriptor::{
-    DESCRIPTOR_BYTES, RxDescriptor, TxDescriptor, descriptor_address_valid, dma_range_valid,
-    rx_armed_word, rx_landed_word, rx_rearm_word, tx_owned_word,
 };
 use oer_esp32s31_ieee80211_mac::{
     crypto::{

@@ -17,30 +17,26 @@ use core::{
 use std::{boxed::Box, vec::Vec};
 
 use oer_base_time_virtual::VirtualClock;
-use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
-    rx_dma::{
-        RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled, RxDmaWalkerEnabled,
-        RxDmaWalkerStopped,
-        model::{RxWalkerModel, RxWalkerOperation},
-    },
+    rx_dma::model::{RxWalkerJournal, RxWalkerModel, RxWalkerOperation, SharedRxWalker},
     rx_ring::RxDmaArenaState,
     rx_storage::RxDmaStorage,
     space::HostDma,
 };
+use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
 use oer_esp32s31_ieee80211_mac::{
     irq::model::{
         MacInterruptModel, MacInterruptOperation, PowerInterruptModel, PowerInterruptOperation,
     },
-    rx::{RxDmaBinding, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
+    rx::{RxBufferFullCounter, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
 };
 
 use super::*;
 use crate::{
     irq::{run_doorbell, service_mac_line, service_power_line},
     rx::{
-        arena::WifiRxArena,
+        arena::{WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
         counters::{WifiRxContinuationReport, WifiRxReport, WifiRxTeardownReport},
         frontier::RxFrontierError,
@@ -59,7 +55,7 @@ const SLOTS: usize = 32;
 
 type HostEpoch = ActiveEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
 type HostLine = WifiIrqLine<HostEpoch>;
-type HostArena = WifiRxArena<COUNT, BUFFER, STORAGE, SLOTS, HostDma, HostEpoch>;
+type HostStatic = WifiRxStatic<COUNT, BUFFER, STORAGE, SLOTS, HostDma, HostEpoch>;
 type HostStorage = RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>;
 
 fn leak<T>(value: T) -> &'static mut T {
@@ -94,6 +90,13 @@ struct Host {
 }
 
 impl Host {
+    /// A leaked host whose walker reports to its event log.
+    fn leaked() -> &'static Self {
+        let host: &'static Self = leak(Self::new());
+        host.walker.borrow_mut().set_journal(host);
+        host
+    }
+
     fn new() -> Self {
         Self {
             walker: RefCell::new(RxWalkerModel::new()),
@@ -156,92 +159,19 @@ struct HostRadio {
     host: &'static Host,
 }
 
-impl RxDma for HostRadio {
-    fn descriptor_base_register(&mut self) -> Option<u32> {
-        self.host.walker.borrow_mut().descriptor_base_register()
+impl RxBufferFullCounter for HostRadio {
+    fn buffer_full_count(&mut self) -> Option<u16> {
+        None
     }
+}
 
-    fn last_descriptor_low(&mut self) -> u32 {
-        self.host.walker.borrow_mut().last_descriptor_low()
-    }
-
-    fn next_descriptor_low(&mut self) -> u32 {
-        self.host.walker.borrow_mut().next_descriptor_low()
-    }
-
-    fn next_descriptor(&mut self) -> RxDmaNextDescriptor {
-        self.host.walker.borrow_mut().next_descriptor()
-    }
-
-    fn with_ordered_cursor<R>(
-        &mut self,
-        observed: impl for<'c> FnOnce(RxDmaCursorObservation<'c>) -> R,
-    ) -> R {
-        self.host.walker.borrow_mut().with_ordered_cursor(observed)
-    }
-
-    fn walker_enabled(&mut self) -> bool {
-        self.host.walker.borrow_mut().walker_enabled()
-    }
-
-    fn reload_pending(&mut self) -> bool {
-        RxDma::reload_pending(&mut *self.host.walker.borrow_mut())
-    }
-
-    fn try_with_reload_settled<R>(
-        &mut self,
-        settled: impl for<'c> FnOnce(RxDmaReloadSettled<'c>) -> R,
-    ) -> Option<R> {
-        self.host
-            .walker
-            .borrow_mut()
-            .try_with_reload_settled(settled)
-    }
-
-    fn configure_descriptor_window(&mut self, binding: &RxDmaBinding<'_>) {
-        self.host
-            .walker
-            .borrow_mut()
-            .configure_descriptor_window(binding);
-    }
-
-    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>) {
-        self.host.walker.borrow_mut().write_descriptor_base(binding);
-    }
-
-    fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
-        self.host.walker.borrow_mut().publish_walker_enable(binding);
-    }
-
-    fn request_reload(&mut self, binding: &RxDmaBinding<'_>) {
-        self.host.walker.borrow_mut().request_reload(binding);
-    }
-
-    fn try_with_walker_enabled<R>(
-        &mut self,
-        binding: &RxDmaBinding<'_>,
-        enabled: impl for<'c> FnOnce(RxDmaWalkerEnabled<'c>) -> R,
-    ) -> Option<R> {
-        self.host
-            .walker
-            .borrow_mut()
-            .try_with_walker_enabled(binding, enabled)
-    }
-
-    fn try_with_walker_stopped<R>(
-        &mut self,
-        binding: &RxDmaBinding<'_>,
-        stopped: impl for<'c> FnOnce(RxDmaWalkerStopped<'c>) -> R,
-    ) -> Option<R> {
-        self.host.record(Event::WalkerStop);
-        self.host
-            .walker
-            .borrow_mut()
-            .try_with_walker_stopped(binding, stopped)
-    }
-
-    fn fence(&mut self) {
-        self.host.walker.borrow_mut().fence();
+/// The walker's stops go into the host's event log, ordered among the MAC
+/// events.
+impl RxWalkerJournal for Host {
+    fn record(&self, operation: RxWalkerOperation) {
+        if operation == RxWalkerOperation::Stop {
+            Host::record(self, Event::WalkerStop);
+        }
     }
 }
 
@@ -405,8 +335,8 @@ where
     E: Publisher<'static, BUFFER, STAGE> + 'static,
     M: Admission + 'static,
 {
-    let host: &'static Host = leak(Host::new());
-    let arena: &'static mut WifiRxArena<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
+    let host = Host::leaked();
+    let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
     let (parts, stop, frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
@@ -423,8 +353,10 @@ where
         host.record(Event::Activate);
         ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new())
     };
+    let walker = leak(SharedRxWalker(&host.walker));
     let runner = Box::pin(receive(
-        hardware, activate, parts, &host.cell, routes, doorbell, clock, publisher, admission,
+        hardware, walker, activate, parts, &host.cell, routes, doorbell, clock, publisher,
+        admission,
     ));
     Harness {
         host,
@@ -581,7 +513,7 @@ fn p2_drains_then_unmasks_only_through_the_doorbell() {
     assert_eq!(harness.rx.released_buffer_count(), 1);
     assert_eq!(
         harness.rx.descriptors()[0].word0(),
-        oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
     );
 }
 
@@ -637,7 +569,7 @@ fn released_frames_are_rearmed_before_unmask() {
     harness.rx_event();
     harness.settle();
     assert_eq!(rings(&harness), [Event::Ring { released: 15 }]);
-    let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..16] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -858,7 +790,7 @@ fn service_fault_masks_and_quarantines() {
 impl Harness {
     /// The reserved descriptor's low address, as the walker reports it.
     fn reserved_low(&self) -> u32 {
-        (self.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES)
+        (self.base + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
             & 0x000f_ffff
     }
 
@@ -866,11 +798,13 @@ impl Harness {
     /// descriptor and moves to its link.
     fn land_in_reserved(&self, length: u32) {
         let reserved = self.rx.reserved_descriptor();
-        reserved.write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
-            BUFFER as u32,
-            length,
-            true,
-        ));
+        reserved.write_word0(
+            oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+                BUFFER as u32,
+                length,
+                true,
+            ),
+        );
         let mut walker = self.host.walker.borrow_mut();
         walker.last_descriptor_low = self.reserved_low();
         walker.next_descriptor_low = reserved.next_address() & 0x000f_ffff;
@@ -967,13 +901,14 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     // A second epoch on the same cell: its line is refused and masked by
     // the executor itself, and its routes are never enabled.
     let cell = &first.host.cell;
-    let host: &'static Host = leak(Host::new());
-    let arena: &'static mut HostArena = leak(bytemuck::Zeroable::zeroed());
+    let host = Host::leaked();
+    let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
     let (parts, mut stop, _frames) =
         WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena)).unwrap();
     let counters = parts.counters();
     let mut runner = Box::pin(receive(
         leak(HostRadio { host }),
+        leak(SharedRxWalker(&host.walker)),
         || ActiveEpoch::for_host_test(MacInterruptModel::new(), PowerInterruptModel::new()),
         parts,
         cell,
@@ -1185,7 +1120,7 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     // BASE write, no manual cursor.
     let report = harness.report();
     assert_eq!(report.units, COUNT as u32);
-    let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..STAGE] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -1428,7 +1363,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     assert_eq!(
         snapshot.base,
         Some(
-            harness.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES
+            harness.base
+                + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
         )
     );
     assert!(snapshot.walker_enabled);
@@ -1597,7 +1533,7 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3].write_word0(
-        oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
     );
     held.borrow_mut().pop();
     harness.settle();

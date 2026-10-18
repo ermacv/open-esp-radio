@@ -5,15 +5,15 @@ use std::{boxed::Box, cell::Cell, rc::Rc};
 
 use super::*;
 
-use crate::space::{HOST_ARENA_BASE, HostDma};
-use oer_esp32s31_hal::dma_static::PlacedTxLease;
+use crate::dma_static::PlacedTxLease;
+use crate::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
 
 /// The host address of every storage's first descriptor.
 const DESCRIPTOR_BASE: u32 = HOST_ARENA_BASE;
 
 fn storage() -> PinnedAmpduDmaStorage<4, 256> {
-    AmpduDmaStorage::pin_static::<HostDma>(std::boxed::Box::leak(std::boxed::Box::new(
-        AmpduDmaStorage::new(),
+    AmpduDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(std::boxed::Box::leak(
+        std::boxed::Box::new(AmpduDmaStorage::new()),
     )))
     .unwrap()
 }
@@ -127,7 +127,10 @@ impl HostBacking for TestBacking {
 }
 
 fn descriptor_only_storage() -> PinnedAmpduDmaStorage<2, 0> {
-    AmpduDmaStorage::pin_static::<HostDma>(Box::leak(Box::new(AmpduDmaStorage::new()))).unwrap()
+    AmpduDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(Box::leak(Box::new(
+        AmpduDmaStorage::new(),
+    ))))
+    .unwrap()
 }
 
 fn retained_owner() -> RetainedAmpduDma<'static, TestBacking, 2, 0> {
@@ -137,8 +140,10 @@ fn retained_owner() -> RetainedAmpduDma<'static, TestBacking, 2, 0> {
 
 fn retained_owner_with_slots<const SLOTS: usize>()
 -> RetainedAmpduDma<'static, TestBacking, SLOTS, 0> {
-    let dma = AmpduDmaStorage::pin_static::<HostDma>(Box::leak(Box::new(AmpduDmaStorage::new())))
-        .unwrap();
+    let dma = AmpduDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(Box::leak(
+        Box::new(AmpduDmaStorage::new()),
+    )))
+    .unwrap();
     let retention = Box::leak(Box::new(RetainedAmpduDmaStorage::new()));
     RetainedAmpduDma::new(dma, retention)
 }
@@ -267,7 +272,8 @@ fn invalid_internal_chain_does_not_publish_capability() {
 #[test]
 fn late_internal_word_overflow_does_not_partially_publish_the_chain() {
     let arena = Box::leak(Box::new(AmpduDmaStorage::<2, 20_000>::new()));
-    let mut storage = AmpduDmaStorage::pin_static::<HostDma>(arena).unwrap();
+    let mut storage =
+        AmpduDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(arena)).unwrap();
     storage.begin().unwrap();
 
     assert!(matches!(
@@ -374,7 +380,7 @@ fn detach_proof_must_name_the_aggregate_head() {
 #[test]
 fn zero_slot_arena_is_rejected() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(AmpduDmaStorage::<0, 64>::new()));
-    assert!(AmpduDmaStorage::pin_static::<HostDma>(storage).is_err());
+    assert!(AmpduDmaStorage::pin::<HostDma>(crate::dma_static::Placed::host(storage)).is_err());
 }
 
 #[test]
@@ -803,6 +809,7 @@ fn review_forgotten_dma_owner_cannot_release_live_backings_from_retention() {
             .unwrap()
             .commit(|_| {});
         assert_eq!(owner.state(), AmpduDmaState::HardwareOwned);
+        #[allow(clippy::mem_forget, reason = "safe caller code may forget the owner")]
         core::mem::forget(owner);
         // This is all safe caller code. Forget does not run the owner destructor,
         // and the borrowed retention arena is an ordinary local value.
@@ -839,6 +846,7 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
             .publish_external_chain(&[descriptor])
             .unwrap()
             .commit(|_| {});
+        #[allow(clippy::mem_forget, reason = "safe caller code may forget the owner")]
         core::mem::forget(owner);
         // The arena and the CPU-only metadata can both end. Neither owns the
         // allocation once the lease is retained in its ManuallyDrop cell.
