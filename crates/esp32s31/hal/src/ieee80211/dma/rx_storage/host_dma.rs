@@ -2,13 +2,13 @@
 //!
 //! The Wi-Fi DMA engine writes received bytes at the buffer address a
 //! descriptor publishes. In the [`HostDma`] space that address is
-//! [`HOST_ARENA_BASE`](crate::space::HOST_ARENA_BASE) plus the buffer's offset
+//! [`HOST_ARENA_BASE`](crate::ieee80211::dma::space::HOST_ARENA_BASE) plus the buffer's offset
 //! in its arena, so a host test can play the engine's part through these
 //! methods. They exist only on a `HostDma` arena: a chip arena has no such
 //! port.
 
 use super::{RX_BUFFER_RING, RxDmaBuffer, RxDmaStorage, RxRingLive};
-use crate::space::HostDma;
+use crate::ieee80211::dma::space::HostDma;
 
 /// Why the modelled DMA engine refused an access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

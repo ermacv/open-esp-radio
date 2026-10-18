@@ -5,8 +5,8 @@ use std::{boxed::Box, cell::Cell, rc::Rc};
 
 use super::*;
 
-use crate::space::{HOST_ARENA_BASE, HostDma};
-use oer_esp32s31_hal::dma_static::PlacedTxLease;
+use crate::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
+use crate::dma_static::PlacedTxLease;
 
 /// The host address of every storage's first descriptor.
 const DESCRIPTOR_BASE: u32 = HOST_ARENA_BASE;
@@ -803,6 +803,7 @@ fn review_forgotten_dma_owner_cannot_release_live_backings_from_retention() {
             .unwrap()
             .commit(|_| {});
         assert_eq!(owner.state(), AmpduDmaState::HardwareOwned);
+        #[allow(clippy::mem_forget, reason = "safe caller code may forget the owner")]
         core::mem::forget(owner);
         // This is all safe caller code. Forget does not run the owner destructor,
         // and the borrowed retention arena is an ordinary local value.
@@ -839,6 +840,7 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
             .publish_external_chain(&[descriptor])
             .unwrap()
             .commit(|_| {});
+        #[allow(clippy::mem_forget, reason = "safe caller code may forget the owner")]
         core::mem::forget(owner);
         // The arena and the CPU-only metadata can both end. Neither owns the
         // allocation once the lease is retained in its ManuallyDrop cell.

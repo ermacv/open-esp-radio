@@ -27,11 +27,11 @@ use oer_esp32s31_hal::types::{
     MacTxProtection, MacTxQueueDetached,
 };
 
-pub use oer_esp32s31_ieee80211_dma::tx_storage::TxDmaState as TxSlotState;
+pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState as TxSlotState;
 #[cfg(any(test, feature = "test-support"))]
-use oer_esp32s31_ieee80211_dma::tx_storage::TxDmaStorage;
+use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
 
-use oer_esp32s31_ieee80211_dma::tx_storage::{PinnedTxDmaStorage, TxDmaStorageError};
+use oer_esp32s31_hal::ieee80211::dma::tx_storage::{PinnedTxDmaStorage, TxDmaStorageError};
 
 use oer_ieee80211_lower_mac::TxStatus;
 use oer_ieee80211_mac::qos::WmmAccessCategory;
@@ -3245,7 +3245,7 @@ The production constructor consumes a pinned DMA allocation:
 # fn panic(_: &core::panic::PanicInfo) -> ! {
 #     loop {}
 # }
-use oer_esp32s31_ieee80211_dma::tx_storage::PinnedTxDmaStorage;
+use oer_esp32s31_hal::ieee80211::dma::tx_storage::PinnedTxDmaStorage;
 use oer_esp32s31_ieee80211_mac::tx::TxSlot;
 fn slot(dma: PinnedTxDmaStorage<512>) -> TxSlot<512> {
     TxSlot::from_dma(dma)
@@ -3283,12 +3283,12 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// ```
     /// use oer_esp32s31_ieee80211_mac::tx::TxSlot;
     /// let slot = TxSlot::<512>::new_model()?;
-    /// # Ok::<(), oer_esp32s31_ieee80211_dma::tx_storage::TxDmaStorageError>(())
+    /// # Ok::<(), oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorageError>(())
     /// ```
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model() -> Result<Self, TxDmaStorageError> {
         let storage = Box::leak(Box::new(TxDmaStorage::new()));
-        let dma = TxDmaStorage::pin_static::<oer_esp32s31_ieee80211_dma::space::HostDma>(storage)?;
+        let dma = TxDmaStorage::pin_static::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(storage)?;
         Ok(Self::from_dma(dma))
     }
 

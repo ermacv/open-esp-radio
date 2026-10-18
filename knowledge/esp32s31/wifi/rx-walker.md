@@ -1,8 +1,8 @@
 # Wi-Fi RX descriptor walker: publication facts
 
 Facts about how the ESP32-S31 Wi-Fi MAC's RX descriptor walker takes newly
-published descriptors, and the design the `dma` crate's ring follows from
-them (`crates/esp32s31/ieee80211/dma`, `rx_ring.rs`). Registers:
+published descriptors, and the design the HAL's Wi-Fi DMA ring follows from
+them (`crates/esp32s31/hal/src/ieee80211/dma`, `rx_ring.rs`). Registers:
 `RX_DESCRIPTOR_BASE` (BASE), `RX_NEXT_DESCRIPTOR` (NEXT, low 20 address bits
 and an opaque upper field), `RX_LAST_DESCRIPTOR` (LAST, low 20 bits),
 `RX_CONTROL.APPEND_DESCRIPTOR_RELOAD` (the reload doorbell, bit 0) and

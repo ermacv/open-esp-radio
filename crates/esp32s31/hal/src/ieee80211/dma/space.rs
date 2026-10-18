@@ -13,7 +13,7 @@
 /// not zero: the walker's NEXT register reads a zero low address as an
 /// exhausted list.
 #[cfg(any(test, feature = "test-support"))]
-pub const HOST_ARENA_BASE: u32 = oer_esp32s31_hal::layouts::DMA_WINDOW.start + 0x1000;
+pub const HOST_ARENA_BASE: u32 = crate::layouts::DMA_WINDOW.start + 0x1000;
 
 /// How an arena's fields are addressed by DMA.
 pub trait DmaSpace: 'static {

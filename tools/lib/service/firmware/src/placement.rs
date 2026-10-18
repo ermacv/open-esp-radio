@@ -7,7 +7,7 @@
 //! - the DMA and critical sections (`.dma.*`, `.critical.*`);
 //! - a DMA section starting at an address whose low 20 bits are zero
 //!   (`0x2f00_0000`): an RX descriptor there reads as an exhausted list,
-//!   which the ring refuses (`oer-esp32s31-ieee80211-dma`
+//!   which the ring refuses (`oer-esp32s31-hal`
 //!   `descriptor_aliases_an_exhausted_list`).
 
 use object::{Object as _, ObjectSection as _, ObjectSymbol as _, read::elf::ElfFile32};

@@ -13,8 +13,8 @@
     clippy::arithmetic_side_effects
 )]
 
+use oer_esp32s31_hal::ieee80211::dma::descriptor::descriptor_address_valid;
 use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
-use oer_esp32s31_ieee80211_dma::descriptor::descriptor_address_valid;
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
 use super::{

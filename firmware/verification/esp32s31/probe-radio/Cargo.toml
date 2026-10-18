@@ -20,7 +20,6 @@ oer-esp32s31-phy = { path = "../../../../crates/esp32s31/phy", features = ["vali
 oer-tool-analysis-phy-relation-esp32s31 = { path = "../../../../tools/lib/analysis/phy-relation-esp32s31", features = ["projection"] }
 oer-esp32s31-ieee80211-mac = { path = "../../../../crates/esp32s31/ieee80211/mac", features = ["validation-probes", "validation-raw-dma"] }
 oer-esp32s31-ieee80211-driver = { path = "../../../../crates/esp32s31/ieee80211/driver" }
-oer-esp32s31-ieee80211-dma = { path = "../../../../crates/esp32s31/ieee80211/dma" }
 oer-ieee80211-mac = { path = "../../../../crates/ieee80211/mac" }
 oer-ieee80211-softmac = { path = "../../../../crates/ieee80211/softmac" }
 oer-adapters-esp-hal-radio = { path = "../../../../crates/adapters/esp-hal/radio", features = ["esp32s31"] }

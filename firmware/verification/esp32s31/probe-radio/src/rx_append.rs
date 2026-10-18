@@ -10,7 +10,7 @@
 //! descriptors at the same addresses.
 
 use oer_esp32s31_hal::owner::RadioRuntimeOwner;
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::{BIT_30, DESCRIPTOR_BYTES, Descriptor, LENGTH_MASK, LENGTH_SHIFT},
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,

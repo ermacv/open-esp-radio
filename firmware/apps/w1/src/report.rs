@@ -9,7 +9,7 @@
 
 use core::fmt::{self, Write};
 
-use oer_esp32s31_ieee80211_dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
+use oer_esp32s31_hal::ieee80211::dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
 use oer_esp32s31_ieee80211_driver::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
     counters::{WifiRxExhaustion, WifiRxReport},

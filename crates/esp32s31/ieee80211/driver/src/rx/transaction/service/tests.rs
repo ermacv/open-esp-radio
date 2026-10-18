@@ -3,7 +3,7 @@ extern crate std;
 use core::cell::RefCell;
 use std::{boxed::Box, vec::Vec};
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_armed_word, rx_dma::model::RxWalkerModel, rx_ring::RxDmaArenaState,
     space::HostDma,
 };
@@ -97,13 +97,13 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     // descriptor's 14-bit length field holds.
     for (descriptor, &buffer) in storage.descriptors().iter().zip(buffers.iter()).take(2) {
         storage.dma_write(&ring, buffer, &[0; 4]).unwrap();
-        descriptor.write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+        descriptor.write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
             BUFFER as u32,
             BUFFER as u32,
             false,
         ));
     }
-    storage.descriptors()[2].write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+    storage.descriptors()[2].write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
         BUFFER as u32,
         100,
         true,
@@ -192,7 +192,7 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
         frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
     ) -> Result<(), NetworkRxFrame<'pool, SLOTS, CAPACITY>> {
         let offset = frame.segment().descriptor_address - self.base;
-        let index = (offset / oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES) as usize;
+        let index = (offset / oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) as usize;
         self.seen
             .borrow_mut()
             .push(self.storage.descriptors()[index].word0());
@@ -212,7 +212,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         .try_start(&mut hardware)
         .map_err(|(_, error)| error)
         .unwrap();
-    let completed = oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(BUFFER as u32, 40, true);
+    let completed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 40, true);
     storage.descriptors()[0].write_word0(completed);
     hardware.set_cursor(base, 0, Some(1));
 

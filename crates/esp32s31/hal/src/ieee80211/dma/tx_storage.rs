@@ -6,17 +6,17 @@
 //! capability instead of a bare descriptor address to the register boundary.
 
 use core::{marker::PhantomPinned, pin::Pin};
-use oer_esp32s31_hal::dma_address;
+use crate::dma_address;
 
 use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
-use oer_esp32s31_hal::types::MacTxQueueDetached;
+use crate::types::MacTxQueueDetached;
 use pin_project::pin_project;
 
-use crate::space::DmaSpace;
+use crate::ieee80211::dma::space::DmaSpace;
 
-use oer_esp32s31_hal::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
+use crate::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
 
-use crate::descriptor::{
+use crate::ieee80211::dma::descriptor::{
     DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
 

@@ -2,17 +2,17 @@
 //!
 //! This module contains descriptor-walker mechanics only. 802.11 frame
 //! decoding remains in the MAC crate, while the semantic MMIO operations are
-//! defined by [`crate::rx_dma::RxDma`].
+//! defined by [`crate::ieee80211::dma::rx_dma::RxDma`].
 
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
-use oer_esp32s31_hal::dma_address;
+use crate::dma_address;
 
-use crate::ring_index::RingIndex;
+use crate::ieee80211::dma::ring_index::RingIndex;
 
-use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
+use crate::layouts::WifiRxDmaDescriptorControl;
 
-use crate::{
+use crate::ieee80211::dma::{
     descriptor::{
         DESCRIPTOR_BYTES, RxDescriptor, descriptor_address_valid, dma_range_valid, rx_armed_word,
         rx_detached_word, rx_rearm_word,
@@ -44,7 +44,7 @@ const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
 /// `COUNT` descriptors and the reserved descriptor R at index `COUNT`) has a
 /// zero low address. The walker's NEXT register reports only the low 20
 /// address bits, and a zero NEXT means the list is exhausted
-/// ([`RxDmaNextDescriptor::is_zero`](crate::rx_dma::RxDmaNextDescriptor::is_zero),
+/// ([`RxDmaNextDescriptor::is_zero`](crate::ieee80211::dma::rx_dma::RxDmaNextDescriptor::is_zero),
 /// read by [`RxRingLive::accepted_list_remaining_from_next`] and the
 /// exhausted-list reclaim): such a descriptor could not be told apart from
 /// the end of the list, whatever the linker's layout.
@@ -107,11 +107,11 @@ impl<const COUNT: usize> Default for RxDescriptorTable<COUNT> {
 /// doorbell cannot do (its link point, the accepted tail, would be part of
 /// the group). Each product geometry asserts this at compile time.
 ///
-/// [`MAX_ENCODED_MPDU_LEN`]: crate::descriptor::MAX_ENCODED_MPDU_LEN
+/// [`MAX_ENCODED_MPDU_LEN`]: crate::ieee80211::dma::descriptor::MAX_ENCODED_MPDU_LEN
 pub const fn rx_ring_outspans_any_unit(count: usize, buffer: usize) -> bool {
     match (count.checked_sub(1), buffer) {
         (Some(rest), buffer) => match rest.checked_mul(buffer) {
-            Some(bytes) => bytes > crate::descriptor::MAX_ENCODED_MPDU_LEN,
+            Some(bytes) => bytes > crate::ieee80211::dma::descriptor::MAX_ENCODED_MPDU_LEN,
             None => true,
         },
         (None, _) => false,
@@ -386,7 +386,7 @@ impl RxDmaArenaState {
 
 /// One descriptor whose completion ownership has moved from the MAC to Rust.
 ///
-/// Taking it through [`RxDmaStorage::take_completed`](crate::rx_storage::RxDmaStorage::take_completed) records that this
+/// Taking it through [`RxDmaStorage::take_completed`](crate::ieee80211::dma::rx_storage::RxDmaStorage::take_completed) records that this
 /// descriptor must not be exposed a second time before its recycle group has
 /// been rearmed. The token is deliberately neither `Copy` nor constructible
 /// by callers: consuming it at the staging boundary represents the unique
@@ -488,7 +488,7 @@ impl RxObservedMask {
 /// generation authorizes nothing.
 ///
 /// ```compile_fail,E0451
-/// let _forged = oer_esp32s31_ieee80211_dma::rx_ring::RxFrozenCursor {
+/// let _forged = oer_esp32s31_hal::ieee80211::dma::rx_ring::RxFrozenCursor {
 ///     last_descriptor_low: 0,
 ///     next_descriptor_low: 0,
 ///     descriptor_base: 0,
@@ -659,7 +659,7 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
 /// The token stays on its core: it is not `Sync`.
 /// ```compile_fail,E0277
 /// fn shared<T: Sync>() {}
-/// shared::<oer_esp32s31_ieee80211_dma::rx_ring::RxRingLive<'static, 2>>();
+/// shared::<oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'static, 2>>();
 /// ```
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [RxDescriptor; COUNT],
@@ -691,7 +691,7 @@ pub struct RxRingLive<'a, const COUNT: usize> {
 ///
 /// Live frontier bookkeeping is deliberately discarded at this lifecycle
 /// edge. A later association must rebuild and republish the ring through
-/// [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted), never resume descriptors from the previous
+/// [`RxDmaStorage::prepare_halted`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_halted), never resume descriptors from the previous
 /// peer epoch.
 pub struct RxRingHalted<'a, const COUNT: usize> {
     table: &'a RxDescriptorTable<COUNT>,
@@ -724,7 +724,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
     ///
     /// A halted ring can contain the terminal image of the preceding DMA
     /// epoch. This snapshot is useful for fault evidence before the next
-    /// [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted) rebuilds every descriptor.
+    /// [`RxDmaStorage::prepare_halted`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_halted) rebuilds every descriptor.
     pub fn descriptor_snapshot(&self, index: usize) -> Option<RxDescriptorSnapshot> {
         descriptor_snapshot(self.descriptors, self.descriptor_base, index)
     }
@@ -819,8 +819,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
     /// NEXT naming R resumes at R, which is this cold publication itself.
     ///
     /// Only the storage arena calls this, through
-    /// [`RxDmaStorage::prepare_ring`](crate::rx_storage::RxDmaStorage::prepare_ring)
-    /// and [`RxDmaStorage::prepare_halted`](crate::rx_storage::RxDmaStorage::prepare_halted),
+    /// [`RxDmaStorage::prepare_ring`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_ring)
+    /// and [`RxDmaStorage::prepare_halted`](crate::ieee80211::dma::rx_storage::RxDmaStorage::prepare_halted),
     /// which bind every descriptor to its arena buffer.
     #[allow(
         clippy::too_many_arguments,
@@ -1114,7 +1114,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     fn record_reload_observation(
         &mut self,
-        next_descriptor: crate::rx_dma::RxDmaNextDescriptor,
+        next_descriptor: crate::ieee80211::dma::rx_dma::RxDmaNextDescriptor,
         last_descriptor_low: Option<u32>,
     ) {
         let arena = self.arena;
@@ -2194,7 +2194,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// onto a plausible ring slot.
     pub fn accepted_list_remaining_from_next(
         &self,
-        next: crate::rx_dma::RxDmaNextDescriptor,
+        next: crate::ieee80211::dma::rx_dma::RxDmaNextDescriptor,
     ) -> Option<usize> {
         if next.is_zero() {
             return Some(0);
@@ -2487,7 +2487,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let Some(pending_tail) = self.pending_tail() else {
             return Ok(());
         };
-        let mut next_descriptor = crate::rx_dma::RxDmaNextDescriptor::default();
+        let mut next_descriptor = crate::ieee80211::dma::rx_dma::RxDmaNextDescriptor::default();
         let mut last_descriptor_low = None;
         let exhausted_short = mmio.with_reload_observation(|observation| {
             next_descriptor = observation.next_descriptor();

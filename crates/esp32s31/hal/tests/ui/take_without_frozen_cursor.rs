@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_ieee80211_dma::rx_ring::{RxFrozenCursor, RxRingLive};
-use oer_esp32s31_ieee80211_dma::rx_storage::RxDmaStorage;
+use oer_esp32s31_hal::ieee80211::dma::rx_ring::{RxFrozenCursor, RxRingLive};
+use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
 
 // A unit or a descriptor is taken only through a cursor frozen on the ring:
 // the take is bounded by its LAST inclusive. No bare descriptor limit and no

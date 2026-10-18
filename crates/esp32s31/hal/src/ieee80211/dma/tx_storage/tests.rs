@@ -2,7 +2,7 @@ extern crate std;
 
 use super::*;
 
-use crate::space::{HOST_ARENA_BASE, HostDma};
+use crate::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
 
 /// The host addresses of the storage's descriptor and buffer.
 const DESCRIPTOR_ADDRESS: u32 = HOST_ARENA_BASE;
@@ -19,7 +19,7 @@ fn storage() -> PinnedTxDmaStorage<64> {
 /// The host space, one byte off: a misaligned descriptor.
 enum Misaligned {}
 
-impl crate::space::DmaSpace for Misaligned {
+impl crate::ieee80211::dma::space::DmaSpace for Misaligned {
     fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
         HostDma::address(arena, field).map(|address| address + 1)
     }

@@ -5,7 +5,7 @@
 
 use std::{boxed::Box, vec, vec::Vec};
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
 };

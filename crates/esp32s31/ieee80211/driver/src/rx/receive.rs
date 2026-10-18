@@ -44,7 +44,7 @@ use core::{
 
 use oer_base_memory::HandlerCell;
 use oer_base_time::{Duration, Instant, Timer};
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
 use oer_esp32s31_ieee80211_mac::{

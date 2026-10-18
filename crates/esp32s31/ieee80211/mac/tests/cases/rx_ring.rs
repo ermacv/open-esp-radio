@@ -995,7 +995,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     for index in 1..COUNT {
         arena.dma_write(&live, index, &[0xa5; 80]);
     }
-    descriptors[0].write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+    descriptors[0].write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
         BUFFER_SIZE,
         BUFFER_SIZE,
         false,
@@ -1219,7 +1219,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         *byte = index as u8;
     }
     arena.dma_write(&live, 0, &unit);
-    arena.descriptors()[0].write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+    arena.descriptors()[0].write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
         BUFFER_SIZE,
         RECEIVED as u32,
         true,

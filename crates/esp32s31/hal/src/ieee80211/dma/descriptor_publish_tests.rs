@@ -2,9 +2,9 @@
 //! `descriptor`, which forbids `unsafe`: a host test makes its typed
 //! addresses through the HAL's placed source.
 
-use oer_esp32s31_hal::dma_address;
+use crate::dma_address;
 
-use crate::descriptor::{RxDescriptor, TxDescriptor, rx_armed_word, tx_owned_word};
+use crate::ieee80211::dma::descriptor::{RxDescriptor, TxDescriptor, rx_armed_word, tx_owned_word};
 
 #[test]
 fn a_descriptor_publishes_its_three_words() {

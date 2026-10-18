@@ -4,18 +4,18 @@
 //! External zero-copy aggregates receive prepare/start authority only through
 //! an owner which also retains every referenced [`StableDmaBacking`](oer_base_memory::StableDmaBacking) lease.
 
-use crate::space::DmaSpace;
+use crate::ieee80211::dma::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
-use oer_esp32s31_hal::dma_address;
+use crate::dma_address;
 
 use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
-use oer_esp32s31_hal::dma_static::PlacedBacking;
-use oer_esp32s31_hal::types::MacTxQueueDetached;
+use crate::dma_static::PlacedBacking;
+use crate::types::MacTxQueueDetached;
 use pin_project::pin_project;
 
-use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
+use crate::layouts::WifiTxDmaDescriptorControl;
 
-use crate::descriptor::{
+use crate::ieee80211::dma::descriptor::{
     DESCRIPTOR_BYTES, TxDescriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
 
@@ -800,6 +800,10 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         self.active_count = 0;
     }
 
+    #[allow(
+        clippy::mem_forget,
+        reason = "a backing the hardware may still read is leaked, never returned or freed"
+    )]
     fn forget_backings(&mut self) {
         for index in 0..self.held {
             if let Some(backing) = self.retention_mut().backings[index].take() {

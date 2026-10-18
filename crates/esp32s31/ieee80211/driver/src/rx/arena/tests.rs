@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::RxWalkerModel,
     rx_ring::RxDmaArenaState,
     space::{HOST_ARENA_BASE, HostDma},

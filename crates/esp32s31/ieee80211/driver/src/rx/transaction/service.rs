@@ -1,6 +1,6 @@
 use super::*;
 use crate::datapath::DatapathRxProgress;
-use oer_esp32s31_ieee80211_dma::rx_storage::RxDmaStorage;
+use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
 use oer_esp32s31_ieee80211_mac::{
     rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
     rx::{PUBLIC_HEADER_SIZE, RxDma, RxRingError, RxRingLive},
@@ -30,7 +30,7 @@ pub fn service<
     const STAGE_SLOTS: usize,
     const DMA_BUFFER_SIZE: usize,
     const DMA_STORAGE_SIZE: usize,
-    S: oer_esp32s31_ieee80211_dma::space::DmaSpace,
+    S: oer_esp32s31_hal::ieee80211::dma::space::DmaSpace,
 >(
     ring: &mut RxRingLive<'storage, COUNT>,
     storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,

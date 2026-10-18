@@ -12,9 +12,9 @@ use core::{
 };
 
 use oer_base_memory::ExternalRxBuffer;
-use oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl;
+use crate::layouts::WifiRxDmaDescriptorControl;
 
-use crate::{
+use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
     rx_dma::RxDma,
     rx_ring::{
@@ -605,9 +605,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// cursors against (test support only); `None` when the arena has no
     /// DMA address in its space.
     #[cfg(any(test, feature = "test-support"))]
-    pub fn walker_table(&self) -> Option<crate::rx_dma::RxWalkerTable<'_>> {
+    pub fn walker_table(&self) -> Option<crate::ieee80211::dma::rx_dma::RxWalkerTable<'_>> {
         let base = self.descriptor_base_address().ok()?;
-        Some(crate::rx_dma::RxWalkerTable::new(
+        Some(crate::ieee80211::dma::rx_dma::RxWalkerTable::new(
             base,
             self.descriptors.ring(),
             self.descriptors.reserved(),
@@ -729,7 +729,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// Temporary storage cannot authorize a DMA lifecycle, including in a model:
     /// ```compile_fail,E0597
-    /// use oer_esp32s31_ieee80211_dma::{rx_dma::RxDma, rx_storage::RxDmaStorage};
+    /// use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaStorage};
     /// fn temporary(hardware: &mut impl RxDma) {
     ///     let storage = RxDmaStorage::<2, 16, 20>::new();
     ///     let _ = storage.prepare_ring(hardware, 0x2f001000, &[0x2f002000, 0x2f002100]);
@@ -737,7 +737,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// ```
     /// A static arena can return an owner borrowing the address table:
     /// ```
-    /// use oer_esp32s31_ieee80211_dma::{
+    /// use oer_esp32s31_hal::ieee80211::dma::{
     ///     rx_dma::RxDma, rx_ring::{RxRingError, RxRingStopped}, rx_storage::RxDmaStorage,
     /// };
     /// fn prepare<'a>(storage: &'static RxDmaStorage<2, 16, 20>,

@@ -15,7 +15,7 @@
 
 use core::mem::MaybeUninit;
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_storage::{RxDmaStorage, RxDmaStorageError},
     space::{ChipDma, DmaSpace},
 };
@@ -131,7 +131,7 @@ impl<
         // (`rx_ring_outspans_any_unit`).
         const {
             assert!(
-                oer_esp32s31_ieee80211_dma::rx_ring::rx_ring_outspans_any_unit(COUNT, BUFFER),
+                oer_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(COUNT, BUFFER),
                 "one receive unit could span the whole ring"
             );
         }

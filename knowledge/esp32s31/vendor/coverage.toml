@@ -46,8 +46,8 @@ and returns zero: production has no untyped buffer-type dispatch; its \
 buffer ownership kinds are typed owners (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/dma/src/rx_ring.rs RxRingLive",
-    "crates/esp32s31/ieee80211/dma/src/tx_ampdu_storage.rs",
+    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive",
+    "crates/esp32s31/hal/src/ieee80211/dma/tx_ampdu_storage.rs",
 ]
 [[decision.place]]
 function = "esf_buf_recycle_default_handler"
@@ -456,7 +456,7 @@ the OS-adapter critical section `wDev_AppendRxBlocks` enters and leaves \
 through `g_osi_funcs_p`, answered as quiet calls; production serializes \
 the RX ring through its single owner"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/dma/src/rx_ring.rs RxRingLive"]
+port = ["crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive"]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
 start = 0x7e
@@ -477,8 +477,8 @@ then reports the walker busy; a hardware fault no comparison case can \
 bound cheaply"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/dma/src/rx_ring.rs complete_pending_reload",
-    "crates/esp32s31/ieee80211/dma/src/rx_ring.rs RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT",
+    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs complete_pending_reload",
+    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT",
 ]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
@@ -513,7 +513,7 @@ an exhausted walker whose LAST has no successor: the vendor counts it and \
 leaves the base alone, while production treats a LAST outside its accepted \
 list as corruption and requires a reset (fail-closed by design)"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/dma/src/rx_ring.rs RxRingError"]
+port = ["crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingError"]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
 start = 0xf2
@@ -685,7 +685,7 @@ port = [
 ]
 review = """
 the selector-two queue clear is described in \
-crates/esp32s31/ieee80211/dma/README.md; its code item was not located"""
+crates/esp32s31/hal/src/ieee80211/dma/README.md; its code item was not located"""
 [[decision.place]]
 function = "hal_mac_tsf_reset"
 start = 0x2

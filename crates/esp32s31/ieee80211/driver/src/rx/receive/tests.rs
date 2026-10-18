@@ -18,7 +18,7 @@ use std::{boxed::Box, vec::Vec};
 
 use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
     rx_dma::{
         RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled, RxDmaWalkerEnabled,
@@ -581,7 +581,7 @@ fn p2_drains_then_unmasks_only_through_the_doorbell() {
     assert_eq!(harness.rx.released_buffer_count(), 1);
     assert_eq!(
         harness.rx.descriptors()[0].word0(),
-        oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
     );
 }
 
@@ -637,7 +637,7 @@ fn released_frames_are_rearmed_before_unmask() {
     harness.rx_event();
     harness.settle();
     assert_eq!(rings(&harness), [Event::Ring { released: 15 }]);
-    let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..16] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -858,7 +858,7 @@ fn service_fault_masks_and_quarantines() {
 impl Harness {
     /// The reserved descriptor's low address, as the walker reports it.
     fn reserved_low(&self) -> u32 {
-        (self.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES)
+        (self.base + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
             & 0x000f_ffff
     }
 
@@ -866,7 +866,7 @@ impl Harness {
     /// descriptor and moves to its link.
     fn land_in_reserved(&self, length: u32) {
         let reserved = self.rx.reserved_descriptor();
-        reserved.write_word0(oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(
+        reserved.write_word0(oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
             BUFFER as u32,
             length,
             true,
@@ -1185,7 +1185,7 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     // BASE write, no manual cursor.
     let report = harness.report();
     assert_eq!(report.units, COUNT as u32);
-    let armed = oer_esp32s31_ieee80211_dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..STAGE] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -1428,7 +1428,7 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     assert_eq!(
         snapshot.base,
         Some(
-            harness.base + COUNT as u32 * oer_esp32s31_ieee80211_dma::descriptor::DESCRIPTOR_BYTES
+            harness.base + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
         )
     );
     assert!(snapshot.walker_enabled);
@@ -1597,7 +1597,7 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3].write_word0(
-        oer_esp32s31_ieee80211_dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
     );
     held.borrow_mut().pop();
     harness.settle();

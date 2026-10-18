@@ -12,7 +12,7 @@ use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_adapters_embassy_time::EmbassyClock;
 use oer_base_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
 use oer_esp32s31_hal::owner::{MacInterruptSetup, RadioRuntimeOwner};
-use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
+use oer_esp32s31_hal::ieee80211::dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
 use oer_esp32s31_ieee80211_driver::{
     irq::{
         RadioDoorbell, WifiIrqLine, WifiIrqRoutes, run_doorbell, service_mac_line,

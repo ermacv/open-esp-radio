@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_hal::layouts::{
+use crate::layouts::{
     DMA_WINDOW, DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorBuffer,
     WifiRxDmaDescriptorControl, WifiRxDmaDescriptorNext, WifiTxDmaDescriptor,
     WifiTxDmaDescriptorBuffer, WifiTxDmaDescriptorControl, WifiTxDmaDescriptorNext,

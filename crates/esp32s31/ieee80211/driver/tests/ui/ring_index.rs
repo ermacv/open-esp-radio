@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_ieee80211_dma::ring_index::RingIndex;
+use oer_esp32s31_hal::ieee80211::dma::ring_index::RingIndex;
 
 pub fn unchecked(raw: usize) -> Option<RingIndex<4>> {
     #[cfg(ui_reject)]

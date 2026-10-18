@@ -1,5 +1,5 @@
 use crate::rx::storage::{ReceiveDmaStorage, walker_enable_settle};
-use oer_esp32s31_ieee80211_dma::space::DmaSpace;
+use oer_esp32s31_hal::ieee80211::dma::space::DmaSpace;
 
 use oer_esp32s31_ieee80211_mac::rx::{
     RxDescriptorSnapshot, RxDma, RxDmaBufferAddresses, RxRingError, RxRingHalted, RxRingLive,

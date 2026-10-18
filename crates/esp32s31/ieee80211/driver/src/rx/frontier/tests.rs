@@ -1,6 +1,6 @@
 use crate::rx::storage::ReceiveDmaStorage;
 
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::{RxWalkerModel, RxWalkerOperation},
     space::HostDma,
 };
@@ -13,7 +13,7 @@ const COUNT: usize = 2;
 const BUFFER_SIZE: usize = 64;
 const STORAGE_SIZE: usize = 128;
 /// The host arena's descriptor base: descriptors lead the arena.
-const BASE: u32 = oer_esp32s31_ieee80211_dma::space::HOST_ARENA_BASE;
+const BASE: u32 = oer_esp32s31_hal::ieee80211::dma::space::HOST_ARENA_BASE;
 
 /// A static host arena, as the product's is static.
 fn leaked<const N: usize, const S: usize>() -> &'static ReceiveDmaStorage<N, BUFFER_SIZE, S, HostDma>

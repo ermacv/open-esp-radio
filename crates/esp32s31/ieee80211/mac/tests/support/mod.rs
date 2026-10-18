@@ -1,5 +1,5 @@
 use crate::*;
-use oer_esp32s31_ieee80211_dma::{
+use oer_esp32s31_hal::ieee80211::dma::{
     rx_ring::RxDmaBufferAddresses, rx_storage::RxDmaStorage, space::HostDma,
 };
 
@@ -143,8 +143,8 @@ impl RxDma for MockMmio {
         self.rx_next_descriptor_low
     }
 
-    fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
-        oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor::for_host_test(
+    fn next_descriptor(&mut self) -> oer_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaNextDescriptor {
+        oer_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaNextDescriptor::for_host_test(
             self.next_descriptor_low(),
             false,
         )

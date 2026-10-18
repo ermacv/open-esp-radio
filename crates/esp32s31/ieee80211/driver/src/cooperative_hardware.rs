@@ -467,7 +467,7 @@ impl RxDma for CooperativeRadioHardware<'_> {
         RxDma::next_descriptor_low(&mut self.wifi_mac_hal())
     }
 
-    fn next_descriptor(&mut self) -> oer_esp32s31_ieee80211_dma::rx_dma::RxDmaNextDescriptor {
+    fn next_descriptor(&mut self) -> oer_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaNextDescriptor {
         RxDma::next_descriptor(&mut self.wifi_mac_hal())
     }
 

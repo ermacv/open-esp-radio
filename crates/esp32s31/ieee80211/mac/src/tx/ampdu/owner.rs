@@ -13,7 +13,7 @@ use oer_esp32s31_hal::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
-use oer_esp32s31_ieee80211_dma::tx_ampdu_storage::{
+use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaState, AmpduDmaStorage, AmpduDmaStorageError, PinnedAmpduDmaStorage, RetainedAmpduDma,
     RetainedAmpduDmaStorage,
 };
@@ -63,7 +63,7 @@ impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
         let dma = Box::leak(Box::new(AmpduDmaStorage::<SLOTS, 0>::new()));
         Self::new(
             metadata,
-            AmpduDmaStorage::pin_static::<oer_esp32s31_ieee80211_dma::space::HostDma>(dma)?,
+            AmpduDmaStorage::pin_static::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(dma)?,
         )
     }
 }
@@ -84,7 +84,7 @@ impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
     ) -> Result<Self, HtAmpduTxError> {
         Self::new(
             HtAmpduTxStorage::pin_static(metadata),
-            AmpduDmaStorage::pin_static::<oer_esp32s31_ieee80211_dma::space::ChipDma>(dma)?,
+            AmpduDmaStorage::pin_static::<oer_esp32s31_hal::ieee80211::dma::space::ChipDma>(dma)?,
         )
     }
 }

@@ -6,16 +6,16 @@
 //! PAC above the register leaf.
 
 use core::marker::PhantomData;
-use oer_esp32s31_hal::dma_address;
+use crate::dma_address;
 
-use crate::{
+use crate::ieee80211::dma::{
     descriptor::DESCRIPTOR_BYTES,
     rx_ring::{RxArenaWords, RxDescriptorTable},
 };
 
 use oer_base_memory::StableDmaRange;
 
-use oer_esp32s31_hal::{
+use crate::{
     ieee80211::mac::WifiMacHal,
     layouts::{DmaRef, WifiRxDmaDescriptor},
     owner::RadioRuntimeOwner,
@@ -55,7 +55,7 @@ pub struct RxDmaBinding<'storage> {
 /// The proof stays on the core that observed the walker: it is not `Send`.
 /// ```compile_fail,E0277
 /// fn send<T: Send>() {}
-/// send::<oer_esp32s31_ieee80211_dma::rx_dma::RxDmaWalkerStopped<'static>>();
+/// send::<oer_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaWalkerStopped<'static>>();
 /// ```
 pub struct RxDmaWalkerStopped<'confirmation> {
     arena: &'confirmation RxArenaWords,
@@ -234,16 +234,16 @@ impl RxDmaCursorObservation<'_> {
 #[derive(Clone, Copy)]
 pub struct RxWalkerTable<'storage> {
     descriptor_base: u32,
-    ring: &'storage [crate::descriptor::RxDescriptor],
-    reserved: &'storage crate::descriptor::RxDescriptor,
+    ring: &'storage [crate::ieee80211::dma::descriptor::RxDescriptor],
+    reserved: &'storage crate::ieee80211::dma::descriptor::RxDescriptor,
 }
 
 #[cfg(any(test, feature = "test-support"))]
 impl<'storage> RxWalkerTable<'storage> {
     pub(crate) const fn new(
         descriptor_base: u32,
-        ring: &'storage [crate::descriptor::RxDescriptor],
-        reserved: &'storage crate::descriptor::RxDescriptor,
+        ring: &'storage [crate::ieee80211::dma::descriptor::RxDescriptor],
+        reserved: &'storage crate::ieee80211::dma::descriptor::RxDescriptor,
     ) -> Self {
         Self {
             descriptor_base,
@@ -254,7 +254,7 @@ impl<'storage> RxWalkerTable<'storage> {
 
     /// The descriptor at the low address bits `low`, which the walker's
     /// LAST/NEXT registers report, when it belongs to this table.
-    pub fn descriptor_at_low(&self, low: u32) -> Option<&'storage crate::descriptor::RxDescriptor> {
+    pub fn descriptor_at_low(&self, low: u32) -> Option<&'storage crate::ieee80211::dma::descriptor::RxDescriptor> {
         const LOW_MASK: u32 = 0x000f_ffff;
         let reserved_offset = u32::try_from(self.ring.len())
             .ok()?
@@ -329,7 +329,7 @@ impl<'storage> RxDmaBinding<'storage> {
     pub(crate) fn descriptor_at_low(
         &self,
         low: u32,
-    ) -> Option<&'storage crate::descriptor::RxDescriptor> {
+    ) -> Option<&'storage crate::ieee80211::dma::descriptor::RxDescriptor> {
         self.table.descriptor_at_low(low)
     }
 
