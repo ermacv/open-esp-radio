@@ -117,6 +117,8 @@ impl ApFollowPolicy {
     /// 2.4 GHz only; the access point stops where it may not follow; five
     /// beacons announce a move of its own; at most one move to where the
     /// station joins every 30 s, doubled after each failed join up to 480 s.
+    ///
+    /// Owner policy (2026-10-18 confirmation).
     pub const DEFAULT: Self = Self {
         bands: ApBands::GHZ2_4,
         unservable: ApUnservable::StopAccessPoint,
@@ -184,6 +186,8 @@ pub struct UpstreamLossPolicy {
 
 impl UpstreamLossPolicy {
     /// After 30 s, stop the access point, scan and restart it.
+    ///
+    /// Owner policy (2026-10-18 confirmation).
     pub const DEFAULT: Self = Self {
         after: Duration::from_secs(30),
         action: UpstreamLossAction::RescanAndRestart,
