@@ -57,6 +57,30 @@ chip's registers is **hardware access** and lives in `chips/`. A host tool
 that needs a chip fact takes it from `portable/`; it never links a HAL. The
 same split is `esp-metadata` beside `esp-hal`.
 
+## A protocol: wire, port, cores, backends
+
+Each radio protocol has three portable layers in `portable/<protocol>/`:
+
+| Layer | Holds | Depends on |
+|---|---|---|
+| `wire` | the over-the-air formats: parsing and building frames and PDUs, information elements; no state, no time | `portable/base` |
+| `port` | the contract with a backend: commands, events, resources, errors | `wire` |
+| cores | the sans-IO state machines (station, access point, RSN, an LE connection, the 802.15.4 MAC) | `port`, `wire` |
+
+A backend implements the port and depends on `port` and `wire` only, never
+on a core: the chip backend in `chips/<chip>/`, the model backend in
+`portable/<protocol>/` for host tests and simulation. A core never depends
+on a backend. Structures both sides share belong to `port` or `wire`. Host
+tools that read frames (monitors, capture analysis, fixtures, the air
+model of a simulator) take `wire`. This is smoltcp's `wire` beside its
+`iface` and `socket`.
+
+Today the Wi-Fi MAC crate holds the formats and the state together, and the
+chip backends and the radio system reach it for formats alone (the radio
+system for the channel type only). Wi-Fi splits at W2 and W3, where the
+transmit frames and the port's backend are built; Bluetooth LE and
+IEEE 802.15.4 split in their blocks.
+
 ## Dependency rules
 
 The layer test checks every normal dependency against its root. There are
