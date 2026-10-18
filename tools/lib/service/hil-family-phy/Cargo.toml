@@ -1,0 +1,20 @@
+[package]
+name = "oer-tool-service-hil-family-phy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "PHY HIL workloads: the vendor-versus-production calibration cross-check on the board under test"
+readme = "README.md"
+
+[dependencies]
+oer-tool-service-devices = { path = "../devices" }
+oer-tool-service-phy-calibration-capture = { path = "../phy-calibration-capture" }
+oer-tool-service-hil-workload = { path = "../hil-workload" }
+serde_json = "1.0"
+
+[lints]
+workspace = true
+

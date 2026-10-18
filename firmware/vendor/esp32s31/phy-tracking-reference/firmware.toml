@@ -1,0 +1,7 @@
+# Firmware catalog entry: `cargo hil firmware build phy-tracking-reference`.
+# The vendor link environment of the typed vendor scenarios: a Wi-Fi station
+# application whose image (`phy-sdk`), bootloader (`sdk`) and ESP-IDF
+# component archives define the symbols the linked vendor archives reference.
+image = "phy-tracking-reference"
+chip = "esp32s31"
+pins = "esp32s31"

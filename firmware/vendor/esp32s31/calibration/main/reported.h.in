@@ -1,0 +1,14 @@
+/* Generated from the pinned archives; see main/CMakeLists.txt. */
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+
+@definitions@
+typedef struct {
+    const char *name;
+    const uint8_t *bytes;
+    size_t length;
+} reported_object_t;
+
+static const reported_object_t REPORTED_OBJECTS[] = {
+@entries@};

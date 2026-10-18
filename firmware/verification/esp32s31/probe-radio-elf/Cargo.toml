@@ -1,0 +1,19 @@
+[package]
+name = "oer-firmware-verification-esp32s31-probe-radio-elf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+description = "Linked ESP32-S31 Rust probe image for compiled vendor verification"
+
+[dependencies]
+oer-firmware-verification-esp32s31-probe-radio = { path = "../probe-radio" }
+
+[lints]
+workspace = true
+
+
+[build-dependencies]
+oer-tool-service-probe-codegen = { path = "../../../../tools/lib/service/probe-codegen" }

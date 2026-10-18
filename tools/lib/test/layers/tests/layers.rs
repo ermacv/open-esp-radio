@@ -7,7 +7,7 @@ use std::path::{Component, Path, PathBuf};
 
 /// The `service → service` dependencies allowed, each listed: a new edge is
 /// added here on purpose, in the change that needs it.
-const SERVICE_ORDER: [(&str, &str); 105] = [
+const SERVICE_ORDER: [(&str, &str); 112] = [
     ("devices", "device-lock"),
     ("devices", "image-bundle"),
     ("firmware", "image-check-interrupts"),
@@ -26,6 +26,12 @@ const SERVICE_ORDER: [(&str, &str); 105] = [
     ("hil-experiment", "stand-claims"),
     ("hil-experiment", "stand-owners"),
     ("hil-experiment", "stats"),
+    ("hil-family-phy", "devices"),
+    ("hil-family-phy", "hil-workload"),
+    ("hil-family-phy", "phy-calibration-capture"),
+    ("hil-family-phy-esp32s31", "hil-family-phy"),
+    ("hil-family-phy-esp32s31", "phy-calibration-capture"),
+    ("hil-family-phy-esp32s31", "phy-vendor-calibration-esp32s31"),
     ("hil-family-system", "devices"),
     ("hil-family-system", "hil-scenario"),
     ("hil-family-system", "hil-workload"),
@@ -93,6 +99,7 @@ const SERVICE_ORDER: [(&str, &str); 105] = [
     ("image-checks", "image-check-interrupts"),
     ("image-checks", "image-check-placement"),
     ("image-checks", "image-check-stack"),
+    ("phy-vendor-calibration-esp32s31", "phy-calibration-capture"),
     ("probe-macros", "probe-codegen"),
     ("registers", "vendor-provenance"),
     ("stand-arbiter", "device-lock"),
@@ -278,6 +285,9 @@ fn every_dependency_goes_down_its_layers() {
     packages(&root, "tools", &mut found);
     packages(&root, "crates", &mut found);
     assert!(found.len() > 20, "{found:?}");
+    // A package that does not build yet answers to the rules when it joins.
+    let excluded = workspace_list(&root, "exclude");
+    found.retain(|package| !excluded.contains(package));
     let refusals = found
         .iter()
         .flat_map(|package| {
@@ -384,13 +394,15 @@ fn every_host_package_is_a_default_member_and_no_chip_only_one_is() {
         )
         .collect::<Vec<_>>();
     assert!(missing.is_empty(), "{}", missing.join("\n"));
-    // Every package directory below crates/ and tools/ is a member.
+    // Every package directory below crates/ and tools/ is a member, or
+    // listed in `exclude` with why it does not build yet.
+    let excluded = workspace_list(&root, "exclude");
     let mut found = Vec::new();
     packages(&root, "tools", &mut found);
     packages(&root, "crates", &mut found);
     let unlisted = found
         .iter()
-        .filter(|package| !members.contains(package))
+        .filter(|package| !members.contains(package) && !excluded.contains(package))
         .collect::<Vec<_>>();
     assert!(unlisted.is_empty(), "not workspace members: {unlisted:?}");
 }

@@ -1,0 +1,6 @@
+# Firmware catalog entry: `cargo hil firmware flash i-vendor-reference --board esp32s31`.
+# ESP-IDF's IEEE 802.15.4 driver on the device under test, behind the
+# reference peer's line protocol, for on-air comparison with the open driver.
+image = "ieee802154-vendor-reference"
+chip = "esp32s31"
+pins = "esp32s31"

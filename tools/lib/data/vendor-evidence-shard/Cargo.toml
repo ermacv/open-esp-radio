@@ -1,0 +1,22 @@
+[package]
+name = "oer-tool-data-vendor-evidence-shard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The vendor-comparison evidence shard format: the shard, its validation and currency, and the one shard reader and writer"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.10.9"
+toml = "=1.1.4"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

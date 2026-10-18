@@ -263,8 +263,7 @@ mod tests {
     fn the_tracked_catalog_names_its_projects() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
         let entries = entries(&root).unwrap();
-        // The vendor references (`firmware/vendor`) join with the verification tools.
-        for image in ["ieee802154-peer"] {
+        for image in ["ieee802154-peer", "vendor-calibration"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");
         }
     }

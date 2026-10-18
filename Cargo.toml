@@ -1,5 +1,15 @@
 [workspace]
 members = [
+    "firmware/verification/esp32c5/probe-radio",
+    "firmware/verification/esp32c5/probe-radio-elf",
+    "firmware/verification/esp32c5/register-probe",
+    "firmware/verification/esp32s31/boot-state-probe",
+    "tools/lib/data/vendor-evidence-shard",
+    "tools/lib/service/hil-family-phy",
+    "tools/lib/service/hil-family-phy-esp32s31",
+    "tools/lib/service/phy-archive",
+    "tools/lib/service/phy-calibration-capture",
+    "tools/lib/service/phy-vendor-calibration-esp32s31",
     "crates/esp32c5/pac",
     "crates/esp32c5/pac-raw",
     "crates/esp32c5/hal",
@@ -170,6 +180,12 @@ members = [
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [
+    "tools/lib/data/vendor-evidence-shard",
+    "tools/lib/service/hil-family-phy",
+    "tools/lib/service/hil-family-phy-esp32s31",
+    "tools/lib/service/phy-archive",
+    "tools/lib/service/phy-calibration-capture",
+    "tools/lib/service/phy-vendor-calibration-esp32s31",
     "crates/esp32c5/pac",
     "crates/esp32c5/pac-raw",
     "crates/esp32c5/hal",
@@ -325,6 +341,40 @@ default-members = [
     "firmware/platform/esp32s31/layout",
 ]
 resolver = "3"
+# Ported packages that do not build yet, each with why; they join the
+# workspace when what they need is there.
+exclude = [
+    # not building: needs feature `validation-probes` of `oer-esp32s31-phy`, which main does not have
+    "tools/lib/analysis/phy-relation-esp32s31",
+    # not building: needs `oer-firmware-verification-esp32s31-probe-register`, which does not build
+    "firmware/verification/esp32s31/probe-register-elf",
+    # not building: needs feature `validation-probes` of `oer-esp32s31-hal`, which main does not have
+    "firmware/verification/esp32s31/probe-register",
+    # not building: needs `oer-firmware-verification-esp32s31-probe-radio`, which does not build
+    "firmware/verification/esp32s31/probe-radio-elf",
+    # not building: needs feature `validation-probes` of `oer-esp32s31-hal`, which main does not have
+    "firmware/verification/esp32s31/probe-radio",
+    # needs tools/lib/service/vendor-scenario-report
+    "tools/cli/vendor-scenario",
+    # needs tools/lib/service/vendor-scenarios-esp32c5
+    "tools/cli/vendor-scenarios-esp32c5",
+    # needs tools/lib/service/vendor-scenarios-esp32s31
+    "tools/cli/vendor-scenarios-esp32s31",
+    # not building: reads the predecessor's repository model (`oer-repo`) for its host stands
+    "tools/cli/verification",
+    # needs tools/lib/service/vendor-evidence
+    "tools/lib/service/esp32s31-ieee802154-vendor-host",
+    # not building: classifies packages by `[package.metadata.open-radio]`, which the single workspace dropped (layers by folder); its policy needs a new source of the evidence classes
+    "tools/lib/service/vendor-evidence",
+    # not building: its shard closures read the predecessor's repository model (`oer-repo`)
+    "tools/lib/service/vendor-scenario-engine",
+    # needs tools/lib/service/vendor-scenario-engine
+    "tools/lib/service/vendor-scenario-report",
+    # needs tools/lib/service/vendor-scenario-engine
+    "tools/lib/service/vendor-scenarios-esp32c5",
+    # needs tools/lib/service/vendor-scenario-engine
+    "tools/lib/service/vendor-scenarios-esp32s31",
+]
 
 [workspace.package]
 version = "0.1.0"
