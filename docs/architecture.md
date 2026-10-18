@@ -111,6 +111,11 @@ sides can write has one runtime writer, listed and reviewed in
 `registers/esp32s31/shared-words.toml` and checked by
 `cargo registers check shared-words`.
 
+Structures the hardware reads and writes in RAM (DMA descriptors, the RX
+control prefix, TX descriptor words, BLE exchange memory) are part of the
+hardware too: [hardware memory](hardware-memory.md) proposes describing them
+in the register model, with the protocol in the HAL.
+
 ## Radio system
 
 One actor on the P2 executor will own the shared RF front-end: PHY
