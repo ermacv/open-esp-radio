@@ -131,9 +131,8 @@ absent. Application materializes the selected objects into the link workspace
 under aliases it chooses (`i{input}-m{member}.o`), never under an original
 untrusted name, and hands the linker adapter a fixed semantic invocation. The
 host identifies the selected linker before running it; no adapter substitutes
-another linker dialect. LLD and GNU ld keep distinct identities and archive
-semantics. The ELF output extent is bounded by the remaining working capacity;
-GNU ld's seekable output is bounded by `RLIMIT_FSIZE`.
+another linker dialect; LLD is the only supported linker. The ELF output
+extent is bounded by the remaining working capacity.
 
 Application validates every linker claim against the captured occurrences:
 roots resolve to the requested symbols, placements map to materialized

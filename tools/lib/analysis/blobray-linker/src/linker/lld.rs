@@ -20,7 +20,6 @@ pub(super) fn link(
     inherit(
         &mut command,
         vec![map_write.as_raw_fd(), extract_write.as_raw_fd()],
-        None,
     );
     let mut child = ChildOwner(command.spawn().map_err(io)?);
     drop(map_write);

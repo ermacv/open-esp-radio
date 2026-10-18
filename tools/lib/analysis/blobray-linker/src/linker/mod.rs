@@ -15,7 +15,6 @@ use std::{
         },
     },
 };
-mod gnu_ld;
 mod lld;
 mod process;
 mod records;
@@ -57,8 +56,6 @@ impl LinkerHost for ElfLinker {
         let version = text.lines().next().unwrap_or("").trim();
         let implementation = if version.starts_with("LLD ") {
             "lld-elf"
-        } else if version.starts_with("GNU ld ") {
-            "gnu-ld-elf"
         } else {
             return Err(Error::new(
                 ErrorCode::Incompatible,
@@ -93,7 +90,6 @@ impl LinkerHost for ElfLinker {
         }
         match request.identity.implementation.as_str() {
             "lld-elf" => lld::link(request, sink, control)?,
-            "gnu-ld-elf" => gnu_ld::link(request, sink, control)?,
             _ => {
                 return Err(Error::new(
                     ErrorCode::Incompatible,
@@ -189,21 +185,12 @@ fn semantic_arguments(request: &LinkInvocation<'_>, command: &mut Command) -> Re
     }
     Ok(())
 }
-fn inherit(command: &mut Command, descriptors: Vec<i32>, maximum: Option<u64>) {
-    // SAFETY: only fcntl/setrlimit run after fork; descriptors are retained until spawn.
+fn inherit(command: &mut Command, descriptors: Vec<i32>) {
+    // SAFETY: only fcntl runs after fork; descriptors are retained until spawn.
     unsafe {
         command.pre_exec(move || {
             for fd in &descriptors {
                 if libc::fcntl(*fd, libc::F_SETFD, 0) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-            }
-            if let Some(maximum) = maximum {
-                let limit = libc::rlimit {
-                    rlim_cur: maximum,
-                    rlim_max: maximum,
-                };
-                if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
             }
