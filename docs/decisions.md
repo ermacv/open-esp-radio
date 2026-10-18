@@ -9,7 +9,10 @@ A later line that changes an earlier one says so.
 The owner and the architect session decided these point by point. The initial
 tree is a selection of a predecessor repository, without its history.
 
-- **Chips.** ESP32-S31 and ESP32-C5 are research targets and peers on the vendor SDK; ESP32-C6 follows later (owner, 2026-10-18). The ESP32-C5 register model, HAL, platform and peers are carried in the predecessor port (owner, 2026-10-18).
+- **Chips.** ESP32-S31 and ESP32-C5 are research targets and peers on the
+  vendor SDK; ESP32-C6 follows later (owner, 2026-10-18). The ESP32-C5
+  register model, HAL, platform and peers are carried in the predecessor port
+  (owner, 2026-10-18).
 - **What came over.** PAC, HAL, PHY (whole), the Wi-Fi driver's `dma`, `mac`
   and driver crates (`LowerMacCore` as a draft), the radio coexistence
   binding, base crates, the radio port, all protocols (known defects in the
