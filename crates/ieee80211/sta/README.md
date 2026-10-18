@@ -490,3 +490,83 @@ A missing pending token is also a compile-time error. Owning rustdoc
 supplies that compile-fail test and its valid counterpart; module
 tests exercise stale handshake/rekey replies, slot return order and stale
 configuration replies.
+
+## Known defects
+
+Found in the predecessor's review of 2026-10-16 and still present.
+
+**Behaviour**
+
+- **PMKSA never forgotten.** `machine.rs::Station::begin_authentication`
+  only resumes and inserts; nothing calls `pmksa.rs::StaPmksaCache::remove`.
+  After an AP restart or cache expiry, status 53 repeats on every Connect
+  instead of falling back to full SAE.
+- **No link-loss detection.** `link_monitor.rs::StaLinkMonitor` exists but
+  nothing uses it; `StaConfig` has no beacon-loss values and there is no
+  `BeaconLoss` reason. A lost AP is never noticed.
+- **M4 is confirmed only by `Ended(Delivered)`.** `machine.rs::confirming_step`
+  does not take the first verified CCMP frame under the new PTK as
+  confirmation; `Station::link` is `None` in `Confirming`, so protected data
+  received meanwhile is dropped as `NotConnected`, and `leave_handshake`
+  sends a protected Deauthentication before confirmation.
+- **Unprotected Deauthentication/Disassociation before PTK install is
+  ignored** on a PMF link (`machine.rs::received_management`, the
+  `Handshake` arm). The station stays in a dead handshake.
+- **`Moved` and `Exchanged(Err)` are ignored in `Confirming`**
+  (`machine.rs`, `StationNotice::Moved` and `StaInput::Exchanged`): only
+  `Connected` reacts.
+- **AP-initiated PTK rekey is not supported** (`machine.rs::ConnectedRsn::receive`
+  answers it `UnsupportedMessage`). A recorded capability gap, not planned.
+- **Modem sleep is not wired.** `modem_sleep.rs::ModemSleep` (bool fields,
+  `Clone` as rollback, the coexistence slice inside) has no caller; only
+  `power_save.rs` is in the machine. No power save on hardware.
+- **Only `UpstreamFact::Connected` reaches the arbiter**; `SwitchAnnounced`,
+  `Lost`, `Found`, `JoinFailed`, `NotFound` and `Purpose::Search` are never
+  used, so the arbiter cannot follow a switch or a loss.
+
+**Types and ownership**
+
+- **Actions borrow `self`:** `machine.rs::StaAction` `RequestAbsence { home: &Lease }`,
+  `InstallGroupKey { association: & }`, `TransmitProtected { key: & }`.
+- **Arbiter answers are not correlated:** `machine.rs::answered`,
+  `absence_answered` and `StaInput::Exchanged(Ok)` overwrite or drop a
+  `Lease`/`AbsencePlace`; an owner can be lost silently.
+- **Placeholder and flag state:** `State::Taken`, `KeyCell::Installing/Removing`
+  (via `mem::replace`), `Option` fields `configuration`, `place`,
+  `absence_place`, `absence`, `epoch` on `Station`, `Held::Released`, bools
+  and `Option`s in `Connected`.
+- **`machine/commands.rs::CommandRefusal::Busy/TerminalPending`**, and
+  `Commands::complete` does nothing unless the cell is `Pending`.
+- **`machine.rs::Owed` variants carry no proof**; they re-read `self.lease`
+  and `self.keys.pairwise` behind `_ =>` arms.
+- **Silent losses and hidden panics:** `pool.rs::Pool::put` drops and
+  counts; public `Station::lost_tokens`; unreachable `data.rs` `overflowed`
+  sites; `StaInput::PairwiseKeyRemoved` collects into a `heapless` vector,
+  which panics on overflow.
+- **Authentication attempts matched by number:**
+  `machine.rs::TxPurpose::Authentication { attempt: u16 }`, with
+  `join/authentication.rs::begin_attempt` using `saturating_add`.
+- **`machine.rs::Station::finish` drops `lease` and `absence`** instead of
+  returning them to the arbiter.
+- **Low:** catch-all `_ =>` / `state => state` arms in `machine.rs`
+  (including `_ => AuthenticationFailed`); `machine/management.rs::receive`
+  masks raw frame-control bits and silently ignores a frame over 96 bytes;
+  `SaQueryStep::TimedOut` is discarded; raw `u16` reason codes (no reason 17
+  for an M3 RSN mismatch; `leave_handshake` derives a local reason from the
+  wire code); `pub` fields on `StaTransmit`, `LinkView`,
+  `StaCommandTerminal`, `StaSaeTransmission`, `StaSaePmk`; `Unsent` mapped
+  to `NullOutcome::Unconfirmed`; `data.rs::DataRefusal::NoTokens` without a
+  typed wake; one EAPOL error aborts the rest of an A-MSDU; dead
+  `Unsent::Encode` arms.
+
+**Security (A-MSDU and keys)**
+
+- **A-MSDU subframes are delivered before later ones are validated**
+  (`machine.rs::Station::receive_frame` over `mac`'s lazy `AmsduSubframes`);
+  Linux drops the whole A-MSDU.
+- **Plaintext EAPOL subframes are accepted from any DA** in
+  `machine.rs::Station::receive_frame`; in a protected BSS a subframe whose
+  DA is neither own nor the PAE group address must be dropped (an A-MSDU
+  injection vector).
+- **Non-constant-time comparison** of GTK/IGTK material in
+  `machine/group_keys.rs` `current_material` and `take_matching`.

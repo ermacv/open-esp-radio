@@ -138,3 +138,127 @@ scripts; nothing changes and the checks pass the same.
 One process at a time drives the router: `cargo fw` holds an exclusive lock
 `$XDG_RUNTIME_DIR/oer-fw/router-<hash of the target>.lock` for the whole
 `run w1` or `router`, and a second holder is refused, naming the first.
+
+## Stand notes
+
+Carried from the predecessor stand (2026-09 to 2026-10). Not yet used by
+`oer-lab`; kept for the fixtures that return.
+
+### Hub port power without sudo
+
+The stand's hubs are a cascade of Realtek RTS5423/RTS5411 hubs (USB 2 and
+USB 3 halves). This rule lets the `uucp` group run `uhubctl` on them and
+nothing else; install it as `/etc/udev/rules.d/52-oer-uhubctl.rules` with
+sudo and reload udev:
+
+```udev
+SUBSYSTEM=="usb", DRIVER=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="5423|5411|0423|0411", MODE="0660", GROUP="uucp"
+SUBSYSTEM=="usb", DRIVER=="hub", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="5423|5411|0423|0411", RUN+="/bin/sh -c 'chgrp uucp $sys$devpath/*-port*/disable; chmod g+w $sys$devpath/*-port*/disable'"
+```
+
+- After a port returns, udev took up to 1 s to give it back to the group;
+  a board took up to 15 s to re-enumerate after a reset.
+- **Port 2 of the top hub** (USB 2 location `3-8`) reports `off` but keeps
+  its power (checked 2026-10-02). It is not in `switchable`; a power cycle
+  there proves nothing. Not rechecked with a board in it.
+- A wedged ESP32-C5 USB console (EPIPE on writes and on RTS/DTR, the device
+  enumerated as `303a:1001` without string descriptors) recovered only by
+  cycling that board's port (2026-10-03).
+- There is no UART bridge to EN/BOOT: recovery is a port power cycle and a
+  quick entry into USB-JTAG download mode.
+
+### NetworkManager and the host radio
+
+Linux fixtures (station, monitor, legacy BSS) own the host's Wi-Fi
+interface, so NetworkManager must leave it. Permanently, in
+`/etc/NetworkManager/conf.d/oer-unmanaged.conf`:
+
+```ini
+[keyfile]
+unmanaged-devices=interface-name:wlan0
+```
+
+`nmcli -t -f DEVICE,STATE device` then shows `wlan0` as `unmanaged` (or
+not at all). For a run only, the predecessor wrote
+`/run/NetworkManager/conf.d/90-open-radio-hil.conf`, ran
+`nmcli general reload conf` and `nmcli device set wlan0 managed no`, and
+removed the file (and set `managed yes`) on release:
+
+```ini
+[device-open-radio-hil]
+match-device=interface-name:wlan0
+managed=0
+```
+
+`nmcli device set … managed no` alone is not enough: it binds one netdev,
+and every recreated `wlan0` is a new device that NetworkManager took back
+and reconnected mid-handshake. A reconnect between `ip link set down` and
+the nl80211 type or channel change gives `EBUSY` and leaves a monitor
+interface without a channel.
+
+### hostapd (Linux access point fixture)
+
+- hostapd 2.12, pinned by SHA-256, with OpenWrt's `300-noscan.patch`
+  applied unmodified.
+- `noscan=1` only for a forced HT40 BSS; every other profile uses
+  `noscan=0`. `noscan` skips the initial OBSS scan and all later
+  coexistence actions; `ht_coex=1` stays explicit, since `ht_coex=0` alone
+  does not skip the initial scan.
+- Profile skeleton (SSID written as `ssid2=` hex; the passphrase never on a
+  command line):
+
+  ```ini
+  interface=wlan0
+  driver=nl80211
+  ctrl_interface=<dir>
+  ctrl_interface_group=network
+  noscan=<0|1>
+  ht_coex=1
+  auth_algs=1
+  wpa=2
+  wpa_key_mgmt=WPA-PSK
+  rsn_pairwise=CCMP
+  ```
+
+  DSSS: `hw_mode=b`, `supported_rates=10 20 55 110`, `basic_rates=10 20`,
+  `wmm_enabled=0`. HT: `hw_mode=g`, `ieee80211n=1`, `wmm_enabled=1`,
+  `ht_capab=[SHORT-GI-20]`, or `[HT40+][SHORT-GI-20][SHORT-GI-40]` (channel
+  ≤ 9) / `[HT40-]…` (channel ≥ 5).
+- A distribution hostapd may lack `CONFIG_DEBUG_FILE`: run it with `-d` in
+  the foreground (`setsid stdbuf`) to keep the scan and coexistence
+  decision in the log, and wait for `ENABLED` on the control socket.
+- On OpenWrt, `beacon_int` and `dtim_period` were set as temporary UCI
+  options and checked in hostapd's generated configuration.
+- Repeated AP stop/start on the host's iwlwifi left a firmware peer context
+  that put nothing on air; recreating the managed wdev
+  (`iw dev wlan0 del`, `iw phy <phy> interface add wlan0 type managed`)
+  cleared it.
+
+### mt76 (OpenWrt router radio)
+
+- A second, managed interface on the AP radio inherits the AP's address;
+  mt76 creates the wdev but refuses to bring a duplicate address up. Give
+  the client a locally administered address.
+- Interface names are at most 15 bytes (IFNAMSIZ − 1); a longer one fails
+  in nl80211 with "Attribute failed policy validation".
+- Measured 2026-10-04/05: an OpenWrt mt76 client against the AP ran at
+  HT40 MCS7, 135 Mbit/s; the laptop's iwlwifi client at 150 Mbit/s.
+
+### wpa_supplicant (Linux station fixture)
+
+- Wait (up to 2 s, polled every 20 ms) for the previous daemon to exit
+  before starting one on the same interface; racing it gave an intermittent
+  20 s scan with no frame sent.
+- NetworkManager's global supplicant lives in `/run/wpa_supplicant`: use a
+  private `ctrl_interface=DIR=<dir> GROUP=network` and remove the
+  interface from the global one
+  (`wpa_cli -g /run/wpa_supplicant/global interface_remove wlan0`).
+- Global options `p2p_disabled=1` (a P2P wdev raced teardown on the Intel
+  PHY), `mac_addr=0`, `preassoc_mac_addr=0` (no randomization); network
+  block `disabled=1`, `key_mgmt=WPA-PSK`, `proto=RSN`, `pairwise=CCMP`,
+  `scan_freq=<freq>`; for non-HT also `disable_ht=1`, `disable_vht=1`,
+  `disable_he=1`. Before a run: `iw dev wlan0 set power_save off`.
+- The passphrase never goes into argv (`/proc` shows it); Arch's
+  `wpa_passphrase` needs a terminal even with piped input.
+- Before signalling a stored PID on the router, check that it still
+  belongs to `wpa_supplicant`.

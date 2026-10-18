@@ -93,3 +93,39 @@ reach crypto and handshake transitions. Runtime expect/unwrap paths become
 retained type proofs or typed peer-input refusals, without mechanically
 replacing indexing with `.get()` or suppressing the lint. Policy is enabled at
 the crate root when that migration is complete.
+
+## Known defects
+
+Found in the predecessor's review of 2026-10-16 and still present.
+
+- **The authenticator reuses the replay counter on M1/M3 retries.**
+  `state/authenticator.rs::RsnApState::retry_transmit` resends the stored
+  counter, and M2/M4 match one stored value, not a window of sent ones.
+  wpa_supplicant drops an M3 whose counter is not greater than the last one,
+  so a lost M4 ends the handshake. Our supplicant hides it:
+  `supplicant.rs::RsnConnectedSupplicant::on_message3` and
+  `state/supplicant.rs` accept an equal counter as a retransmission.
+- **AES key schedules are not wiped.** `Cargo.toml` enables `aes` without
+  its `zeroize` feature; no test checks `Aes128: ZeroizeOnDrop`. The
+  HMAC/SHA-2 state holding the KCK and PMK has no wipe either.
+- **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
+  always derives the keyseed with a zero salt; `rejected_groups` is only
+  parsed. H2E with a rejected group does not interoperate.
+- **SAE secrets are copyable or printable** (`sae.rs`):
+  `SaePasswordElement` and `SaePasswordToken` derive `Clone, Copy, Debug`;
+  `SaeKeys` is `Clone` with `pub kck`, `pmk`, `pmkid`; `SaePassword`
+  is `Clone`; `SaeComebackTokens.key` is never zeroized.
+- **Management CCMP receiver** (`management_ccmp.rs::ManagementCcmpReceiver`):
+  starts at no PN, so PN 0 is accepted; the KeyID is not checked to be 0;
+  A1 is not checked to be individually addressed. `new` copies the TK from
+  a raw `&[u8; 16]`.
+- **Raw keys in the API:** `ccmp_mpdu.rs::CcmpAssociation::seal`/`open`
+  take `&[u8; 16]` instead of `&Ccmp128Key`.
+- **Self-generated CCMP fixtures only** (`ccmp_mpdu/test_vector.rs`): no
+  IEEE 802.11-2020 Annex J CCMP vector, no hostap `wlantest` QoS or
+  4-address vector.
+- **Non-constant-time comparison** of IGTK material in
+  `bip.rs::BipReceiver::rekey`; `akm.rs` still builds the KCK MAC with
+  `new_from_slice(..).expect`.
+- **No strict lint block:** `lib.rs` has only `forbid(unsafe_code)` and
+  the crate has no `clippy.toml` (as `mac` and `ap`).

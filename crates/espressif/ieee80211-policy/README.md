@@ -91,3 +91,12 @@ A-MPDU controller returns `AmpduUnavailable` directly before changing its
 rate or ACK-SNR state. There is no separate refusal counter or pending error
 slot for a caller to poll.
 The crate uses the canonical strict lint block.
+
+## Known defects
+
+- **`rate_control.rs::ScheduleSelection::Invalid` keeps the current
+  schedule** (predecessor review, 2026-10-16; still present): `update_tx_per`
+  installs a schedule only on `Selected`, so an invalid selection leaves a
+  possibly too-fast rate in use. The decided rule is to clamp toward the
+  slowest schedule (a precomputed slowest `RateScheduleRef`) and delete
+  `Invalid`.

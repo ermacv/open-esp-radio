@@ -145,3 +145,30 @@ plus the guard, while a switch uses the TBTT itself. The next slot uses a
 checked difference, ceiling division, multiplication and addition; its cost
 does not depend on missed beacons. If no future slot fits the clock range,
 `ScheduleExhausted` returns the admission place without creating a lease.
+
+## Known defects
+
+Found in the predecessor's review of 2026-10-16 and still present.
+
+- **An absence returns to the home channel, not to the primary lease's.**
+  `lib.rs::Arbiter::lease_cycle` uses `Granted.returns: bool` and
+  `self.home`; after a CSA follow the station comes back to the old channel.
+- **Spin on an expired deadline.** `lib.rs::request_absence` refuses only
+  `from >= until`, `plan` skips the primary during an absence, but
+  `poll_deadline` still returns its past `listen_end`: an absence whose
+  `from` falls between `listen_end` and `until` makes the service wake
+  continuously.
+- **Flag and placeholder state:** `following`, `Granted.returns`,
+  `LeaseStep::Waiting { ready }`, `Outbox.stop` bools; `Outbox` `Option`
+  cells overwritten by assignment; `poll_action` uses
+  `mem::replace(&mut self.gate, Gate::Closing)` with restore arms;
+  `Port::Retuning` has no target.
+- **Low:** `lib.rs` `finish`/`terminate` always queues the AP stop;
+  `coordinator.rs::beacons_before` clamps to `u8::MAX` instead of deferring
+  the announcement; `Granted::listen_end` falls back with
+  `checked_sub(..).unwrap_or(until)`; the follow interval may double after
+  an AP `Stopped` (not traced); no test for a double announcement on `Found`
+  on a foreign channel.
+- **This README's search description** (the station chooses search
+  channels and requests their leases; `JoinFailed` resumes) describes
+  behaviour the station does not emit yet (see the station's known defects).
