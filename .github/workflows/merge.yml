@@ -23,8 +23,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Squash-merge and delete the branch
-        run: gh pr merge "${{ github.event.pull_request.number }}" --squash --delete-branch
+      - name: Squash-merge
+        run: gh pr merge "${{ github.event.pull_request.number }}" --squash
+      - name: Delete the branch
+        # `gh pr merge --delete-branch` skips it without a local checkout.
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: gh api -X DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH"
       - name: Check main
         # A push made with the workflow token starts no workflow.
         run: gh workflow run ci.yml --ref main
