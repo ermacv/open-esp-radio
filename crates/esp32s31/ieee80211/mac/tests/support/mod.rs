@@ -222,13 +222,14 @@ impl RxDma for MockMmio {
 
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding,
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
         self.rx_walker_enabled = false;
         self.operations.push(Operation::StopRxWalker);
         self.record_fence();
         self.operations.push(Operation::ObserveRxWalkerEnabled);
-        (!self.rx_walker_enabled).then(|| stopped(RxDmaWalkerStopped::for_host_test()))
+        (!self.rx_walker_enabled).then(|| stopped(RxDmaWalkerStopped::for_host_test(binding)))
     }
 
     fn fence(&mut self) {

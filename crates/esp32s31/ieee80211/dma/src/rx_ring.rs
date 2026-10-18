@@ -137,6 +137,12 @@ pub struct RxRingTopologySnapshot {
 /// fault.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxReloadRepairEvidence {
+    /// The most `APPEND_DESCRIPTOR_RELOAD` observations one
+    /// [`RxRingLive::complete_pending_reload`] made in this epoch, the one
+    /// which saw the doorbell clear included. It equals
+    /// [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`] once a reload exhausted the
+    /// limit.
+    pub max_reload_attempts: u32,
     pub observations: u32,
     pub unknown_upper_with_zero_address: u32,
     pub base_repairs: u32,
@@ -156,6 +162,7 @@ pub struct RxReloadRepairEvidence {
 #[derive(bytemuck::Zeroable)]
 pub struct RxArenaWords {
     lifecycle: AtomicU8,
+    max_reload_attempts: AtomicU32,
     observations: AtomicU32,
     unknown_upper_with_zero_address: AtomicU32,
     base_repairs: AtomicU32,
@@ -168,6 +175,7 @@ impl RxArenaWords {
     pub(crate) const fn new() -> Self {
         Self {
             lifecycle: AtomicU8::new(RxDmaArenaState::Reusable as u8),
+            max_reload_attempts: AtomicU32::new(0),
             observations: AtomicU32::new(0),
             unknown_upper_with_zero_address: AtomicU32::new(0),
             base_repairs: AtomicU32::new(0),
@@ -183,6 +191,7 @@ impl RxArenaWords {
 
     fn reset_evidence(&self) {
         for word in [
+            &self.max_reload_attempts,
             &self.observations,
             &self.unknown_upper_with_zero_address,
             &self.base_repairs,
@@ -196,6 +205,7 @@ impl RxArenaWords {
 
     fn evidence(&self) -> RxReloadRepairEvidence {
         RxReloadRepairEvidence {
+            max_reload_attempts: self.max_reload_attempts.load(Ordering::Relaxed),
             observations: self.observations.load(Ordering::Relaxed),
             unknown_upper_with_zero_address: self
                 .unknown_upper_with_zero_address
@@ -208,6 +218,10 @@ impl RxArenaWords {
             ),
         }
     }
+}
+
+fn record_maximum(maximum: &AtomicU32, value: u32) {
+    maximum.fetch_max(value, Ordering::Relaxed);
 }
 
 fn increment_saturating(counter: &AtomicU32) {
@@ -400,7 +414,8 @@ pub struct RxCompletedUnit {
     head_index: usize,
     descriptor_count: usize,
     descriptor_address: u32,
-    staged_word0: u32,
+    /// `None` when the total length does not fit the descriptor length field.
+    staged_word0: Option<u32>,
     total_length: usize,
     segment_lengths: RxCompletedUnitLengths,
 }
@@ -427,7 +442,12 @@ impl RxCompletedUnit {
     /// Synthetic single-segment metadata for the independent contiguous
     /// staging copy. It preserves the first descriptor's status bits while
     /// describing the complete unit length and terminal ownership.
-    pub const fn staged_word0(&self) -> u32 {
+    ///
+    /// `None` for a chain whose total length exceeds the descriptor's
+    /// 14-bit length field ([`SIZE_MASK`]): no single descriptor word can
+    /// describe it. Such a unit is still a complete owned unit; its consumer
+    /// drops it like any other chained unit and recycles its descriptors.
+    pub const fn staged_word0(&self) -> Option<u32> {
         self.staged_word0
     }
 
@@ -653,9 +673,10 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         if rx_armed_word(buffer_size).is_none() {
             return Err(RxRingError::Size);
         }
-        let binding = RxDmaBinding::new(descriptors, descriptor_base).ok_or(RxRingError::Count)?;
+        let binding =
+            RxDmaBinding::new(descriptors, descriptor_base, arena).ok_or(RxRingError::Count)?;
         if mmio.walker_enabled() {
-            disable_receive_inner(mmio)?;
+            disable_receive_inner(mmio, &binding, arena)?;
         }
         // NEXT and LAST belong to the walker. They are stable handoff
         // frontiers only after WALKER_ENABLE has been confirmed clear.
@@ -901,7 +922,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         mut self,
         mmio: &mut M,
     ) -> Result<RxRingHalted<'a, COUNT>, (Self, RxRingError)> {
-        if let Err(error) = disable_receive_inner(mmio) {
+        if let Err(error) = disable_receive_inner(mmio, &self.binding, self.arena) {
             return Err((self, error));
         }
         let halted = RxRingHalted {
@@ -1256,7 +1277,6 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         let first_word0 = self.validate_descriptor_image(first_index)?;
         let first_length = descriptor_length(first_word0);
         if rx_done(first_word0) {
-            let encoded_length = first_length;
             let descriptor_address = descriptor_address(self.descriptor_base, first_index.get())?;
             let segment_length = u16::try_from(first_length).map_err(|_| RxRingError::Size)?;
             self.observed_mask.insert(first_index.get());
@@ -1264,11 +1284,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 head_index: first_index.get(),
                 descriptor_count: 1,
                 descriptor_address,
-                staged_word0: (first_word0 & !(SIZE_MASK | LENGTH_MASK))
-                    | encoded_length
-                    | (encoded_length << LENGTH_SHIFT)
-                    | BIT_30
-                    | BIT_31,
+                staged_word0: Some(staged_word0(first_word0, first_length)),
                 total_length: first_length as usize,
                 segment_lengths: RxCompletedUnitLengths::Single(segment_length),
             }));
@@ -1310,11 +1326,14 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             if !rx_done(word0) {
                 continue;
             }
-            if total_length > SIZE_MASK as usize {
-                return Err(RxRingError::Size);
-            }
             let descriptor_count = step + 1;
-            let encoded_length = u32::try_from(total_length).map_err(|_| RxRingError::Overflow)?;
+            // A chain longer than the descriptor length field is received
+            // air input, not a ring fault: it is owned and returned like
+            // every complete unit, so its consumer can drop and recycle it.
+            let staged = u32::try_from(total_length)
+                .ok()
+                .filter(|length| *length <= SIZE_MASK)
+                .map(|length| staged_word0(metadata_word0, length));
             let descriptor_address =
                 descriptor_address(self.descriptor_base, metadata_index.get())?;
             self.observed_mask
@@ -1323,11 +1342,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 head_index: first_index.get(),
                 descriptor_count,
                 descriptor_address,
-                staged_word0: (metadata_word0 & !(SIZE_MASK | LENGTH_MASK))
-                    | encoded_length
-                    | (encoded_length << LENGTH_SHIFT)
-                    | BIT_30
-                    | BIT_31,
+                staged_word0: staged,
                 total_length,
                 segment_lengths: RxCompletedUnitLengths::Chained(segment_lengths),
             }));
@@ -2026,15 +2041,26 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// conditional `LAST`, without returning to its scheduler. Yielding after
     /// a pending sample lets a later RX completion replace that cursor epoch
     /// and can authorize a stale BASE repair for the descriptor just recycled.
+    ///
+    /// The doorbell is observed at most [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`]
+    /// times. When it is still pending after the last one, the reload stays
+    /// pending in this owner and the call returns `Busy`. Each call records
+    /// its observation count in
+    /// [`RxReloadRepairEvidence::max_reload_attempts`].
     pub fn complete_pending_reload<M: RxDma>(&mut self, mmio: &mut M) -> Result<(), RxRingError> {
         if self.pending_tail().is_none() {
             return Ok(());
         }
-        for _ in 0..RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT {
+        for attempt in 1..=RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT {
             if mmio.try_with_reload_settled(|_settled| ()).is_some() {
+                record_maximum(&self.arena.max_reload_attempts, attempt);
                 return self.settle_reload(mmio);
             }
         }
+        record_maximum(
+            &self.arena.max_reload_attempts,
+            RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT,
+        );
         Err(RxRingError::Busy)
     }
 
@@ -2103,6 +2129,12 @@ impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
             RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
         }
     }
+}
+
+/// One descriptor word describing a complete unit of `length` bytes, which
+/// fits the length field, with `word0`'s status bits.
+const fn staged_word0(word0: u32, length: u32) -> u32 {
+    (word0 & !(SIZE_MASK | LENGTH_MASK)) | length | (length << LENGTH_SHIFT) | BIT_30 | BIT_31
 }
 
 fn validate_live_ring_geometry<const COUNT: usize>() -> Result<(), RxRingError> {
@@ -2394,9 +2426,23 @@ fn enable_receive_inner<M: RxDma>(
 /// The pinned `hal_mac_rx_disable` body is exactly this bit clear. The fence
 /// and readback turn that raw leaf into an explicit Rust ownership boundary:
 /// callers may mutate the ring only after this function returns `Ok(())`.
-fn disable_receive_inner<M: RxDma>(mmio: &mut M) -> Result<(), RxRingError> {
-    mmio.try_with_walker_stopped(|_stopped| ())
-        .ok_or(RxRingError::Busy)
+///
+/// A walker which does not read back as stopped is `Busy`. A stop proof
+/// naming another arena proves nothing about this one: the arena is
+/// poisoned until radio reset and the stop is `Corrupt`.
+fn disable_receive_inner<M: RxDma>(
+    mmio: &mut M,
+    binding: &RxDmaBinding<'_>,
+    arena: &RxArenaWords,
+) -> Result<(), RxRingError> {
+    match mmio.try_with_walker_stopped(binding, |stopped| stopped.names(arena)) {
+        None => Err(RxRingError::Busy),
+        Some(true) => Ok(()),
+        Some(false) => {
+            RxDmaArenaState::ResetRequired.store(arena.lifecycle());
+            Err(RxRingError::Corrupt)
+        }
+    }
 }
 
 #[cfg(test)]

@@ -873,8 +873,9 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
     assert_eq!(unit.metadata().segment_length(0), Some(256));
     assert_eq!(unit.metadata().segment_length(1), Some(80));
     assert_eq!(unit.total_length(), 336);
-    assert_ne!(unit.metadata().staged_word0() & BIT_30, 0);
-    assert_eq!(length(unit.metadata().staged_word0()), 336);
+    let staged_word0 = unit.metadata().staged_word0().unwrap();
+    assert_ne!(staged_word0 & BIT_30, 0);
+    assert_eq!(length(staged_word0), 336);
 
     let append = unit.recycle(&mut mmio).unwrap().unwrap();
     let recycled = (0..COUNT)

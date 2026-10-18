@@ -587,3 +587,6 @@ where
         DatapathRxProgress::Drained
     })
 }
+
+#[cfg(test)]
+mod tests;

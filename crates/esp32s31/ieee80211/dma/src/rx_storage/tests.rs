@@ -88,6 +88,7 @@ impl RxDma for MockRxDma {
 
     fn try_with_walker_stopped<R>(
         &mut self,
+        binding: &RxDmaBinding<'_>,
         stopped: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
         self.disable_calls += 1;
@@ -95,7 +96,9 @@ impl RxDma for MockRxDma {
             return None;
         }
         self.walker = false;
-        Some(stopped(crate::rx_dma::RxDmaWalkerStopped::for_host_test()))
+        Some(stopped(crate::rx_dma::RxDmaWalkerStopped::for_host_test(
+            binding,
+        )))
     }
 
     fn fence(&mut self) {}
@@ -821,6 +824,7 @@ fn exhausted_reload_records_the_direct_base_repair_facts() {
     assert_eq!(
         live.reload_repair_evidence(),
         crate::rx_ring::RxReloadRepairEvidence {
+            max_reload_attempts: 0,
             observations: 1,
             unknown_upper_with_zero_address: 0,
             base_repairs: 1,
@@ -1256,4 +1260,345 @@ fn host_dma_port_refuses_a_foreign_ring_and_a_detached_buffer() {
     drop(detached);
     assert!(live.try_stop(&mut mmio).is_ok());
     assert!(other.try_stop(&mut other_mmio).is_ok());
+}
+
+/// A forwarding layer which stops the walker for another arena's binding.
+struct ForeignStopProof {
+    walker: crate::rx_dma::model::RxWalkerModel,
+    foreign: &'static RxDmaBinding<'static>,
+}
+
+impl ForeignStopProof {
+    fn new() -> Self {
+        let other = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+        let base = other.dma_layout(&mut [0; 2]).unwrap();
+        let foreign = RxDmaBinding::new(&other.descriptors, base, &other.arena).unwrap();
+        Self {
+            walker: crate::rx_dma::model::RxWalkerModel::new(),
+            foreign: Box::leak(Box::new(foreign)),
+        }
+    }
+}
+
+impl RxDma for ForeignStopProof {
+    fn last_descriptor_low(&mut self) -> u32 {
+        self.walker.last_descriptor_low()
+    }
+
+    fn next_descriptor_low(&mut self) -> u32 {
+        self.walker.next_descriptor_low()
+    }
+
+    fn next_descriptor(&mut self) -> crate::rx_dma::RxDmaNextDescriptor {
+        self.walker.next_descriptor()
+    }
+
+    fn with_ordered_cursor<R>(
+        &mut self,
+        observed: impl for<'confirmation> FnOnce(
+            crate::rx_dma::RxDmaCursorObservation<'confirmation>,
+        ) -> R,
+    ) -> R {
+        self.walker.with_ordered_cursor(observed)
+    }
+
+    fn walker_enabled(&mut self) -> bool {
+        self.walker.walker_enabled()
+    }
+
+    fn reload_pending(&mut self) -> bool {
+        self.walker.reload_pending()
+    }
+
+    fn try_with_reload_settled<R>(
+        &mut self,
+        settled: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaReloadSettled<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.walker.try_with_reload_settled(settled)
+    }
+
+    fn configure_descriptor_window(&mut self, binding: &RxDmaBinding<'_>) {
+        self.walker.configure_descriptor_window(binding);
+    }
+
+    fn write_descriptor_base(&mut self, binding: &RxDmaBinding<'_>, address: u32) {
+        self.walker.write_descriptor_base(binding, address);
+    }
+
+    fn publish_walker_enable(&mut self, binding: &RxDmaBinding<'_>) {
+        self.walker.publish_walker_enable(binding);
+    }
+
+    fn request_reload(&mut self, binding: &RxDmaBinding<'_>) {
+        self.walker.request_reload(binding);
+    }
+
+    fn try_with_walker_enabled<R>(
+        &mut self,
+        binding: &RxDmaBinding<'_>,
+        enabled: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaWalkerEnabled<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.walker.try_with_walker_enabled(binding, enabled)
+    }
+
+    fn try_with_walker_stopped<R>(
+        &mut self,
+        _: &RxDmaBinding<'_>,
+        stopped: impl for<'confirmation> FnOnce(crate::rx_dma::RxDmaWalkerStopped<'confirmation>) -> R,
+    ) -> Option<R> {
+        self.walker.try_with_walker_stopped(self.foreign, stopped)
+    }
+
+    fn fence(&mut self) {
+        self.walker.fence();
+    }
+}
+
+#[test]
+fn a_stop_proof_for_another_arena_poisons_the_live_arena() {
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let mut buffers = [0; 2];
+    let base = storage.dma_layout(&mut buffers).unwrap();
+    let mut mmio = ForeignStopProof::new();
+    let live = storage
+        .prepare_ring(&mut mmio, base, &buffers)
+        .unwrap()
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .unwrap();
+
+    let (live, error) = live
+        .try_stop(&mut mmio)
+        .err()
+        .expect("a foreign stop proof must not halt this ring");
+    assert_eq!(error, RxRingError::Corrupt);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
+    drop(live);
+}
+
+#[test]
+fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let mut buffers = [0; 2];
+    let base = storage.dma_layout(&mut buffers).unwrap();
+    let mut model = crate::rx_dma::model::RxWalkerModel::new();
+    let halted = storage
+        .prepare_ring(&mut model, base, &buffers)
+        .unwrap()
+        .try_start(&mut model)
+        .map_err(|(_, error)| error)
+        .unwrap()
+        .try_stop(&mut model)
+        .map_err(|(_, error)| error)
+        .unwrap();
+
+    // Something started the walker again; the rebuild must stop it first,
+    // and a proof for another arena's binding does not prove that.
+    let mut mmio = ForeignStopProof::new();
+    mmio.walker.walker_enabled = true;
+    let (_halted, error) = storage
+        .prepare_halted(halted, &mut mmio)
+        .err()
+        .expect("a foreign stop proof must not authorize a rebuild");
+    assert_eq!(error, RxRingError::Corrupt);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
+}
+
+#[test]
+fn a_walker_that_does_not_stop_returns_the_live_owner_busy() {
+    use crate::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let mut buffers = [0; 2];
+    let base = storage.dma_layout(&mut buffers).unwrap();
+    let mut mmio = RxWalkerModel::new();
+    let live = storage
+        .prepare_ring(&mut mmio, base, &buffers)
+        .unwrap()
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .unwrap();
+
+    mmio.refuse_stop = true;
+    let (live, error) = live
+        .try_stop(&mut mmio)
+        .err()
+        .expect("an unconfirmed stop keeps the live owner");
+    assert_eq!(error, RxRingError::Busy);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(mmio.walker_enabled);
+
+    mmio.refuse_stop = false;
+    assert!(live.try_stop(&mut mmio).is_ok());
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
+    assert_eq!(mmio.operation_count(RxWalkerOperation::Stop), 2);
+}
+
+#[test]
+fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
+    use crate::descriptor::{BIT_30, BIT_31, LENGTH_SHIFT, SIZE_MASK};
+    use crate::rx_dma::model::RxWalkerModel;
+    const COUNT: usize = 4;
+    const BUFFER: u32 = 8_192;
+    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 8_192, 8_196, HostDma>::new()));
+    let mut buffers = [0; COUNT];
+    let base = storage.dma_layout(&mut buffers).unwrap();
+    let mut mmio = RxWalkerModel::new();
+    let mut live = storage
+        .prepare_ring(&mut mmio, base, &buffers)
+        .unwrap()
+        .try_start(&mut mmio)
+        .map_err(|(_, error)| error)
+        .unwrap();
+
+    // Two full segments and a 100-byte terminal: 16 484 bytes, more than
+    // the 14-bit length field holds.
+    for (descriptor, &buffer) in storage.descriptors().iter().zip(&buffers).take(2) {
+        storage
+            .dma_write(&live, buffer, &[0; 4])
+            .expect("the walker filled the segment");
+        descriptor.write_word0(BUFFER | (BUFFER << LENGTH_SHIFT) | BIT_31);
+    }
+    storage.descriptors()[2].write_word0(BUFFER | (100 << LENGTH_SHIFT) | BIT_30 | BIT_31);
+    mmio.set_cursor(base, 2, Some(3));
+    let cursor = live.freeze_cursor(&mut mmio);
+    let frontier = storage
+        .completed_unit_frontier_through_cursor(
+            &live,
+            cursor.last_descriptor_low(),
+            cursor.next_descriptor_low(),
+        )
+        .unwrap();
+    assert_eq!(frontier.descriptor_count, 3);
+
+    let unit = storage
+        .take_completed_unit(&mut live, frontier.descriptor_count)
+        .expect("an oversized chain is air input, not a ring fault")
+        .expect("the complete chain is owned");
+    assert_eq!(unit.descriptor_count(), 3);
+    assert_eq!(unit.total_length(), 2 * BUFFER as usize + 100);
+    assert!(unit.total_length() > SIZE_MASK as usize);
+    assert_eq!(unit.metadata().staged_word0(), None);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+
+    // Its consumer drops it as it drops any chained unit.
+    unit.retain_for_deferred_recycle();
+    let append = storage
+        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 3)
+        .unwrap()
+        .expect("the frozen LAST releases the chain");
+    assert_eq!(append.head_index.get(), 0);
+    assert_eq!(append.descriptor_count, 3);
+    live.complete_pending_reload(&mut mmio).unwrap();
+    assert!(live.observed_mask().is_empty());
+    for index in 0..3 {
+        assert_eq!(
+            storage.descriptors()[index].word0(),
+            crate::descriptor::rx_armed_word(BUFFER).unwrap(),
+            "descriptor {index} is rearmed"
+        );
+    }
+    assert!(!storage.buffers()[0].leading_guard_overwritten());
+    assert!(live.topology_snapshot().valid);
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+/// A live ring with one appended descriptor whose reload is pending.
+fn ring_with_pending_reload(
+    mmio: &mut crate::rx_dma::model::RxWalkerModel,
+) -> (
+    &'static RxDmaStorage<2, 16, 20, HostDma>,
+    RxRingLive<'static, 2>,
+) {
+    let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
+    let buffers = Box::leak(Box::new([0; 2]));
+    let base = storage.dma_layout(buffers).unwrap();
+    let mut live = storage
+        .prepare_ring(mmio, base, buffers)
+        .unwrap()
+        .try_start(mmio)
+        .map_err(|(_, error)| error)
+        .unwrap();
+    storage.descriptors()[0]
+        .write_word0(crate::descriptor::rx_armed_word(16).unwrap() | crate::descriptor::BIT_30);
+    mmio.set_cursor(base, 0, Some(1));
+    let cursor = live.freeze_cursor(mmio);
+    storage
+        .take_completed_unit(&mut live, 1)
+        .unwrap()
+        .unwrap()
+        .retain_for_deferred_recycle();
+    storage
+        .recycle_completed_unit_through_frozen_last(&mut live, mmio, cursor, 1)
+        .unwrap()
+        .expect("the frozen LAST releases descriptor zero");
+    assert!(live.reload_pending());
+    (storage, live)
+}
+
+#[test]
+fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
+    use crate::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
+    use crate::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
+    let mut mmio = RxWalkerModel::new();
+    let (storage, mut live) = ring_with_pending_reload(&mut mmio);
+    mmio.reload_stuck = true;
+    mmio.clear_operations();
+
+    assert_eq!(
+        live.complete_pending_reload(&mut mmio),
+        Err(RxRingError::Busy)
+    );
+    assert!(mmio.overflowed(), "every attempt observed the doorbell");
+    assert_eq!(
+        live.reload_repair_evidence().max_reload_attempts,
+        RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT
+    );
+    assert!(live.reload_pending(), "the append stays pending");
+    assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
+
+    mmio.reload_stuck = false;
+    mmio.clear_operations();
+    assert_eq!(live.complete_pending_reload(&mut mmio), Ok(()));
+    assert_eq!(
+        mmio.operation_count(RxWalkerOperation::ObserveReloadPending),
+        1
+    );
+    assert!(!live.reload_pending());
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn reload_attempts_record_the_largest_observation_count() {
+    use crate::rx_dma::model::RxWalkerModel;
+    let mut mmio = RxWalkerModel::new();
+    mmio.reload_latency = 3;
+    let (storage, mut live) = ring_with_pending_reload(&mut mmio);
+    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 0);
+
+    live.complete_pending_reload(&mut mmio).unwrap();
+    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 4);
+    assert!(!live.reload_pending());
+
+    // Descriptor one completes and is appended behind descriptor zero; its
+    // quicker reload does not lower the epoch's maximum.
+    mmio.reload_latency = 1;
+    storage.descriptors()[1]
+        .write_word0(crate::descriptor::rx_armed_word(16).unwrap() | crate::descriptor::BIT_30);
+    mmio.set_cursor(live.descriptor_base(), 1, Some(0));
+    let cursor = live.freeze_cursor(&mut mmio);
+    storage
+        .take_completed_unit(&mut live, 1)
+        .unwrap()
+        .unwrap()
+        .retain_for_deferred_recycle();
+    storage
+        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 1)
+        .unwrap()
+        .expect("the frozen LAST releases descriptor one");
+    assert!(live.reload_pending());
+    live.complete_pending_reload(&mut mmio).unwrap();
+    assert!(!live.reload_pending());
+    assert_eq!(live.reload_repair_evidence().max_reload_attempts, 4);
+    assert!(live.try_stop(&mut mmio).is_ok());
 }
