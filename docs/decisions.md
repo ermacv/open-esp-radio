@@ -107,9 +107,9 @@ tree is a selection of a predecessor repository, without its history.
   `tools/lib` by layer (base, data, analysis, service); dependencies only
   downward, checked by a test (owner, 2026-10-18).
 - **Review and merge.** A developer session opens its pull request as a
-  draft at the start, pushes its work and reports it to the architect
-  session; the architect reviews it and marks it ready, which squash-merges
-  it and deletes its branch, or returns it with remarks. Pull requests run no
+  draft at the start, pushes its work and marks it ready when it is done,
+  which squash-merges it and deletes its branch; there is no review before
+  the merge. Pull requests run no
   CI; CI checks main after every merge, and a red main is not a blocker: whoever
   broke it fixes it (owner, 2026-10-18).
 - **Working rules.** The predecessor's working rules for agents return in
