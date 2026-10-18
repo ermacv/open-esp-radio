@@ -774,16 +774,25 @@ fn in_arena_intermediate_last_repairs_from_its_successor() {
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 
-#[test]
-fn exhausted_reload_records_the_direct_base_repair_facts() {
-    const COUNT: usize = 2;
-    const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+const REPAIR_COUNT: usize = 2;
+const ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+
+/// A live two-descriptor ring whose walker exhausted the accepted tail
+/// before it observed the new link, so the reload suffix republished the
+/// head (`base`) through BASE.
+fn ring_after_exhausted_reload_repair() -> (
+    &'static RxDmaStorage<REPAIR_COUNT, 16, 20, HostDma>,
+    RxRingLive<'static, REPAIR_COUNT>,
+    MockRxDma,
+    u32,
+) {
+    const COUNT: usize = REPAIR_COUNT;
     let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
-    let mut buffers = [0; COUNT];
-    let base = storage.dma_layout(&mut buffers).unwrap();
+    let buffers = Box::leak(Box::new([0; COUNT]));
+    let base = storage.dma_layout(buffers).unwrap();
     let mut mmio = MockRxDma::default();
     let prepared = storage
-        .prepare_ring(&mut mmio, base, &buffers)
+        .prepare_ring(&mut mmio, base, buffers)
         .expect("prepared owner");
     let mut live = prepared
         .try_start(&mut mmio)
@@ -821,6 +830,12 @@ fn exhausted_reload_records_the_direct_base_repair_facts() {
         Ok(crate::rx_ring::RxReloadObservation::Settled)
     );
     assert_eq!(mmio.descriptor_base, base);
+    (storage, live, mmio, base)
+}
+
+#[test]
+fn exhausted_reload_records_the_direct_base_repair_facts() {
+    let (_storage, live, mut mmio, base) = ring_after_exhausted_reload_repair();
     assert_eq!(
         live.reload_repair_evidence(),
         crate::rx_ring::RxReloadRepairEvidence {
@@ -831,8 +846,35 @@ fn exhausted_reload_records_the_direct_base_repair_facts() {
             last_next_low: 0,
             last_last_low: Some((base + crate::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK),
             last_repair_head: Some(base),
+            exhausted_republications: 1,
+            republications_accepted: 0,
         }
     );
+    assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_republished_head_is_accepted_once_when_the_walker_fetches_it() {
+    let (_storage, mut live, mut mmio, base) = ring_after_exhausted_reload_repair();
+    let accepted = |live: &RxRingLive<'_, REPAIR_COUNT>| {
+        let evidence = live.reload_repair_evidence();
+        (
+            evidence.exhausted_republications,
+            evidence.republications_accepted,
+        )
+    };
+    // NEXT still zero: the BASE store has not reached the walker.
+    live.observe_exhausted_republication(&mut mmio);
+    assert_eq!(accepted(&live), (1, 0));
+    // The walker fetched the head; the probe's last observation and any
+    // later one count nothing more.
+    mmio.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    live.observe_exhausted_republication(&mut mmio);
+    assert_eq!(accepted(&live), (1, 1));
+    live.observe_exhausted_republication(&mut mmio);
+    live.observe_exhausted_republication(&mut mmio);
+    assert!(!live.exhausted_republication_probe_pending());
+    assert_eq!(accepted(&live), (1, 1));
     assert!(live.try_stop(&mut mmio).is_ok());
 }
 

@@ -25,7 +25,8 @@
 //!   runtime stop; wait until no lease is staged, no buffer is detached and
 //!   the MAC runtime is idle (bounded); stop the walker exactly once. A fault
 //!   poisons the arena before the stop; a refused stop poisons it after, and
-//!   is never repeated.
+//!   is never repeated. The mask and drain waits are measured into the
+//!   counters' teardown report.
 //! - **Park.** Publish the [`WifiRxExit`] to the application and hold every
 //!   owner forever: nothing is quiesced, released or reset.
 
@@ -278,18 +279,24 @@ where
     /// Receive until the stop request or a fault.
     async fn run(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> WifiRxCause {
         loop {
-            let stop = poll_fn(|cx| {
+            // `None` is the stop request; otherwise whether a lease came back.
+            let wake = poll_fn(|cx| {
                 if self.control.poll_stop(cx).is_ready() {
-                    return Poll::Ready(true);
+                    return Poll::Ready(None);
                 }
                 // WDEVPWR facts are counted by the line; drain them here.
                 while self.power.poll(cx).is_ready() {}
                 // Any fact (RX, capacity) starts one drain.
-                self.irq.poll_batch(cx).map(|_facts| false)
+                self.irq
+                    .poll_batch(cx)
+                    .map(|facts| Some(facts.rx_capacity_returned()))
             })
             .await;
-            if stop {
+            let Some(capacity) = wake else {
                 return WifiRxCause::StopRequested;
+            };
+            if capacity {
+                self.counters.capacity_drain();
             }
             if let Err(cause) = self.drain(ring).await {
                 return cause;
@@ -300,7 +307,8 @@ where
     /// Service until the frontier drained or staging blocked, keeping RX
     /// masked meanwhile; unmask through the doorbell only once drained.
     async fn drain(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> Result<(), WifiRxCause> {
-        let mut streak = 0;
+        // Self-wakes since the last timer wait; continuations of this drain.
+        let (mut streak, mut continuations) = (0, 0);
         loop {
             if self.control.stop_requested() {
                 return Err(WifiRxCause::StopRequested);
@@ -334,7 +342,11 @@ where
                 | DatapathRxProgress::RecycledAppendPending
                 | DatapathRxProgress::BudgetExhausted
                 | DatapathRxProgress::NetworkBackpressured
-                | DatapathRxProgress::ProtocolBlockedByTx => self.continue_after(&mut streak).await,
+                | DatapathRxProgress::ProtocolBlockedByTx => {
+                    continuations += 1;
+                    self.counters.continuation(progress, continuations);
+                    self.continue_after(&mut streak).await;
+                }
             }
         }
     }
@@ -359,8 +371,7 @@ where
             self.hardware,
             (),
         );
-        self.counters
-            .reload_attempts(ring.reload_repair_evidence().max_reload_attempts);
+        self.counters.reload_evidence(ring.reload_repair_evidence());
         result.map_err(|error| {
             self.counters.service_error();
             WifiRxCause::Service(error)
@@ -438,8 +449,10 @@ where
         }
     }
 
-    /// Ask the line to mask both banks; whether it confirmed in time.
+    /// Ask the line to mask both banks; whether it confirmed in time. The
+    /// wait is counted.
     async fn mask_all(&mut self) -> bool {
+        let start = self.timer.now();
         self.requests.ring(WifiIrqRequest::MaskAll, self.doorbell);
         let deadline = self.timer.deadline_after(MASK_CONFIRM_TIMEOUT).ok();
         let irq = &mut self.irq;
@@ -453,13 +466,26 @@ where
                 }
             }
         });
-        within(self.timer, deadline, confirmed).await.is_some()
+        let confirmed = within(self.timer, deadline, confirmed).await.is_some();
+        self.counters
+            .mask_confirm(self.timer.now().saturating_duration_since(start));
+        confirmed
     }
 
     /// Wait until no lease is staged, no buffer is detached and the MAC
-    /// runtime is idle; whether that happened in time.
+    /// runtime is idle; whether that happened in time. The wait and its
+    /// polls are counted.
     async fn drained(&mut self) -> bool {
-        let deadline = self.timer.deadline_after(DRAIN_TIMEOUT).ok();
+        let start = self.timer.now();
+        let mut polls = 0;
+        let drained = self.drain_checks(start, &mut polls).await;
+        self.counters
+            .drain(self.timer.now().saturating_duration_since(start), polls);
+        drained
+    }
+
+    async fn drain_checks(&mut self, start: Instant, polls: &mut u32) -> bool {
+        let deadline = start.checked_add(DRAIN_TIMEOUT);
         loop {
             if self.stage.claimed_slots() == 0
                 && self.rx.detached_buffer_count() == 0
@@ -471,7 +497,10 @@ where
                 return false;
             }
             match self.timer.deadline_after(DRAIN_POLL) {
-                Ok(next) => self.timer.wait_until(next).await,
+                Ok(next) => {
+                    *polls = polls.saturating_add(1);
+                    self.timer.wait_until(next).await;
+                }
                 Err(oer_time::TimeOverflow) => return false,
             }
         }

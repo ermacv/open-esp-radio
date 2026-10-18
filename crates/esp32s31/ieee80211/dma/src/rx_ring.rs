@@ -149,6 +149,13 @@ pub struct RxReloadRepairEvidence {
     pub last_next_low: u32,
     pub last_last_low: Option<u32>,
     pub last_repair_head: Option<u32>,
+    /// Direct `RX_DESCRIPTOR_BASE` publications after the walker reached a
+    /// zero successor: appends to an empty software list and reload base
+    /// repairs alike.
+    pub exhausted_republications: u32,
+    /// Republished heads the walker was seen to fetch (its NEXT equalled
+    /// the head), at most one per publication.
+    pub republications_accepted: u32,
 }
 
 /// The words a static RX arena keeps beside its descriptors: the sticky
@@ -169,6 +176,8 @@ pub struct RxArenaWords {
     last_next_low: AtomicU32,
     last_last_low_plus_one: AtomicU32,
     last_repair_head_plus_one: AtomicU32,
+    exhausted_republications: AtomicU32,
+    republications_accepted: AtomicU32,
 }
 
 impl RxArenaWords {
@@ -182,6 +191,8 @@ impl RxArenaWords {
             last_next_low: AtomicU32::new(0),
             last_last_low_plus_one: AtomicU32::new(0),
             last_repair_head_plus_one: AtomicU32::new(0),
+            exhausted_republications: AtomicU32::new(0),
+            republications_accepted: AtomicU32::new(0),
         }
     }
 
@@ -198,6 +209,8 @@ impl RxArenaWords {
             &self.last_next_low,
             &self.last_last_low_plus_one,
             &self.last_repair_head_plus_one,
+            &self.exhausted_republications,
+            &self.republications_accepted,
         ] {
             word.store(0, Ordering::Relaxed);
         }
@@ -216,6 +229,8 @@ impl RxArenaWords {
             last_repair_head: decode_optional(
                 self.last_repair_head_plus_one.load(Ordering::Relaxed),
             ),
+            exhausted_republications: self.exhausted_republications.load(Ordering::Relaxed),
+            republications_accepted: self.republications_accepted.load(Ordering::Relaxed),
         }
     }
 }
@@ -1982,6 +1997,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         mmio.write_descriptor_base(&self.binding, head_address);
         mmio.fence();
         self.exhausted_republication_head_low = Some(head_address & RX_DESCRIPTOR_ADDRESS_LOW_MASK);
+        increment_saturating(&self.arena.exhausted_republications);
     }
 
     /// Observe whether the walker has accepted a directly republished head.
@@ -2006,6 +2022,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         } else if mmio.next_descriptor_low() == probe {
             self.exhausted_republication_head_low =
                 Some(probe | RX_EXHAUSTED_REPUBLICATION_ACCEPTED);
+            increment_saturating(&self.arena.republications_accepted);
         }
     }
 
