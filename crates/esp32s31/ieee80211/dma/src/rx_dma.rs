@@ -8,7 +8,7 @@
 use core::marker::PhantomData;
 
 use crate::{
-    descriptor::{DESCRIPTOR_BYTES, Descriptor},
+    descriptor::DESCRIPTOR_BYTES,
     rx_ring::{RxArenaWords, RxDescriptorTable},
 };
 
@@ -28,10 +28,10 @@ use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
 /// `RX_DESCRIPTOR_BASE`: every live publication goes through the reload
 /// doorbell.
 pub struct RxDmaBinding<'storage> {
-    descriptor_base: u32,
     reserved_address: u32,
-    ring: &'storage [Descriptor],
-    reserved: &'storage Descriptor,
+    /// The table, for a model walker that follows its links.
+    #[cfg(any(test, feature = "test-support"))]
+    table: ModelTable<'storage>,
     range: StableDmaRange<'storage>,
     arena: &'storage RxArenaWords,
 }
@@ -221,6 +221,14 @@ impl RxDmaCursorObservation<'_> {
     }
 }
 
+/// The descriptors a model walker resolves LAST against.
+#[cfg(any(test, feature = "test-support"))]
+struct ModelTable<'storage> {
+    descriptor_base: u32,
+    ring: &'storage [crate::descriptor::Descriptor],
+    reserved: &'storage crate::descriptor::Descriptor,
+}
+
 impl<'storage> RxDmaBinding<'storage> {
     #[allow(
         unsafe_code,
@@ -249,10 +257,13 @@ impl<'storage> RxDmaBinding<'storage> {
         // actor.
         let range = unsafe { StableDmaRange::from_owner(table, descriptor_base, range_len) }?;
         Some(Self {
-            descriptor_base,
             reserved_address,
-            ring: table.ring(),
-            reserved: table.reserved(),
+            #[cfg(any(test, feature = "test-support"))]
+            table: ModelTable {
+                descriptor_base,
+                ring: table.ring(),
+                reserved: table.reserved(),
+            },
             range,
             arena,
         })
@@ -267,16 +278,20 @@ impl<'storage> RxDmaBinding<'storage> {
     /// The descriptor at the low address bits `low`, which the walker's
     /// LAST/NEXT registers report, when it belongs to this table.
     #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn descriptor_at_low(&self, low: u32) -> Option<&'storage Descriptor> {
+    pub(crate) fn descriptor_at_low(
+        &self,
+        low: u32,
+    ) -> Option<&'storage crate::descriptor::Descriptor> {
         const LOW_MASK: u32 = 0x000f_ffff;
         if low == self.reserved_address & LOW_MASK {
-            return Some(self.reserved);
+            return Some(self.table.reserved);
         }
-        let offset = low.checked_sub(self.descriptor_base & LOW_MASK)?;
+        let offset = low.checked_sub(self.table.descriptor_base & LOW_MASK)?;
         if offset % DESCRIPTOR_BYTES != 0 {
             return None;
         }
-        self.ring
+        self.table
+            .ring
             .get(usize::try_from(offset / DESCRIPTOR_BYTES).ok()?)
     }
 
