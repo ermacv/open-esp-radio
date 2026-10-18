@@ -69,6 +69,19 @@ pub fn configure_runtime(bin: &str, layout: &Layout, chip_linker_dir: &Path) {
         &["runtime/link.x", "runtime/memory.x", "runtime/sections.x"],
         "-Truntime/link.x",
     );
+    // The DMA window and address width the runtime's `sections.x` includes,
+    // generated from the chip's register model.
+    let window = chip_linker_dir.join("dma-window.x");
+    assert!(
+        window.is_file(),
+        "the chip's generated {} is missing; run `cargo registers generate`",
+        window.display()
+    );
+    println!("cargo:rerun-if-changed={}", window.display());
+    // A section no rule places is an error, not an orphan the linker puts
+    // somewhere: a mistyped `.dma.bss.*` name would otherwise leave a DMA
+    // static outside the checked range.
+    println!("cargo:rustc-link-arg-bin={bin}=--orphan-handling=error");
     for (name, value) in [
         ("STAGE_TWO_MAGIC", stage_two::MAGIC),
         ("STAGE_TWO_ABI_VERSION", stage_two::ABI_VERSION),

@@ -143,8 +143,8 @@ stack-swap = [
 
 # The staged boot's host contract: the stage-two header the image build
 # packs (firmware/platform/espressif/staged-layout stage_two.rs) and the input sections
-# the runtime linker script zeroes (zeroed.rs), which the image linker refuses
-# initialized bytes in.
+# the runtime linker script zeroes (zeroed.rs); that none of them carries
+# initialized bytes is to be checked by `cargo fw` after the link (planned).
 [staged]
 zeroed-inputs = [
     ".dram2_uninit.bss", ".dram2_uninit.bss.*", ".dram2_uninit", ".dram2_uninit.*",

@@ -47,6 +47,17 @@ struct Outputs {
     /// The PAC a publication generates; a publication read only through its
     /// SVD and binding index, such as a chip's platform registers, has none.
     pac: Option<PacOutputs>,
+    /// The linker fragment the chip's images include: the DMA window and the
+    /// width of the address its DMA hardware reports.
+    linker: Option<LinkerOutput>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+struct LinkerOutput {
+    path: PathBuf,
+    /// `PERIPHERAL.REGISTER.FIELD`: the address the hardware reports, from
+    /// bit 0, whose width the link checks DMA storage against.
+    address_low_field: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -262,9 +273,11 @@ impl ChipPublication {
             .map(|pac| [&mut pac.raw, &mut pac.api])
             .into_iter()
             .flatten();
+        let linker = outputs.linker.as_mut().map(|linker| &mut linker.path);
         for p in [&mut outputs.svd, &mut outputs.bindings]
             .into_iter()
             .chain(pac)
+            .chain(linker)
         {
             *p = host::destination(&base.join(&*p))?;
             if input_paths.contains(p) || !destinations.insert(p.clone()) {
@@ -293,6 +306,14 @@ impl ChipPublication {
         if let (Some(pac), Some(policy)) = (pac, &self.api) {
             let (raw, api) = self.render_pac(&svd, pac, policy)?;
             outputs.extend([(&pac.raw, raw), (&pac.api, api)]);
+        }
+        if let Some(linker) = &self.outputs.linker {
+            let fragment = oer_register_model::render_dma_linker_fragment(
+                &svd,
+                &self.memory,
+                &linker.address_low_field,
+            )?;
+            outputs.push((&linker.path, fragment));
         }
         outputs.push((&self.outputs.svd, svd));
         host::publish(&outputs, check)

@@ -51,4 +51,5 @@ pub mod ieee802154;
 /// PAC: the protocol layers above reach them through these types only.
 pub use oer_esp32s31_pac::layouts;
 pub mod dma_address;
+pub mod dma_static;
 pub mod phy;

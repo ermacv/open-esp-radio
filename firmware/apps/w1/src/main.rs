@@ -654,6 +654,10 @@ async fn run(
             let _ = write!(console, "OER w1 bind refused {error:?}\r\n");
             return Err("bind");
         }
+        Bound::Claimed => {
+            let _ = write!(console, "OER w1 bind refused: the arena was claimed\r\n");
+            return Err("bind");
+        }
     };
 
     let survey = SURVEY.init(Survey::new(stand));

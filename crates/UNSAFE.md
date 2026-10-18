@@ -80,6 +80,12 @@ take an address of storage the caller keeps pinned in the DMA window, its
 `loaned` the start of a buffer lent to the hardware; each call site names the
 check that accepted the address.
 
+Its `dma_static` module holds the placement constructor:
+`DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,
+whose section is checked to be `.dma.bss.<block>`; the runtime linker
+script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
+the proof.
+
 `esp32s31-radio-client` has one unsafe module, `cell`: the one-request slot
 between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
 `WORKING`, `ANSWERED`) admits exactly one accessor to each payload place, a

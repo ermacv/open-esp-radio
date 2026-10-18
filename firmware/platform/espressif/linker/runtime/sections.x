@@ -262,6 +262,30 @@ SECTIONS
   _stack_start = __runtime_cpu0_task_stack_top;
   _stack_start_cpu0 = _stack_start;
 
+  /* Metadata that occupies no memory: debug information, the toolchain
+     comment and the RISC-V attributes. Named so that
+     `--orphan-handling=error` refuses every other unplaced section. */
+  .comment 0 (INFO) : { *(.comment) }
+  .riscv.attributes 0 (INFO) : { *(.riscv.attributes) }
+  .debug_abbrev 0 : { *(.debug_abbrev) }
+  .debug_aranges 0 : { *(.debug_aranges) }
+  .debug_info 0 : { *(.debug_info) }
+  .debug_line 0 : { *(.debug_line) }
+  .debug_loc 0 : { *(.debug_loc) }
+  .debug_ranges 0 : { *(.debug_ranges) }
+  .debug_str 0 : { *(.debug_str) }
+  .debug_frame 0 : { *(.debug_frame) }
+  .debug_line_str 0 : { *(.debug_line_str) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
+  .debug_addr 0 : { *(.debug_addr) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .symtab 0 : { *(.symtab) }
+  .strtab 0 : { *(.strtab) }
+  .shstrtab 0 : { *(.shstrtab) }
+
   /DISCARD/ :
   {
     *(.eh_frame .eh_frame.*);
@@ -307,6 +331,22 @@ ASSERT(__runtime_dma_data_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
        "runtime initialized DMA state does not fit internal SRAM");
 ASSERT(__runtime_dma_bss_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
        "runtime DMA storage does not fit internal SRAM");
+/* The chip's DMA window and the width of the address its DMA hardware
+   reports (dma-window.x, generated from the register model). All DMA
+   storage, `.dma.data` and `.dma.bss`, lies inside the window, and no
+   address of it has zero low DMA_ADDRESS_LOW_BITS bits: the hardware reads
+   such a link as the end of its list. This is the proof the HAL's placement
+   constructor relies on. */
+INCLUDE dma-window.x
+ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
+       (__runtime_dma_data_start >= DMA_WINDOW_ORIGIN &&
+        __runtime_dma_bss_end <= DMA_WINDOW_ORIGIN + DMA_WINDOW_LENGTH),
+       "runtime DMA storage lies outside the DMA window");
+ASSERT(__runtime_dma_bss_end <= __runtime_dma_data_start ||
+       ((__runtime_dma_data_start & ((1 << DMA_ADDRESS_LOW_BITS) - 1)) != 0 &&
+        (__runtime_dma_data_start >> DMA_ADDRESS_LOW_BITS) ==
+        ((__runtime_dma_bss_end - 1) >> DMA_ADDRESS_LOW_BITS)),
+       "runtime DMA storage holds an address with zero low DMA address bits");
 /* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep a bounded
    8-KiB transient handoff margin until `_runtime_stack_bootstrap` switches
    CPU0 to PSRAM; unlike the former 64-KiB hole this is not a task stack and
