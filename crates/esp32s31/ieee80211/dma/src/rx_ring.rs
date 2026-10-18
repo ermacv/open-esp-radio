@@ -106,11 +106,11 @@ impl<const COUNT: usize> Default for RxDescriptorTable<COUNT> {
 /// doorbell cannot do (its link point, the accepted tail, would be part of
 /// the group). Each product geometry asserts this at compile time.
 ///
-/// [`MAX_ENCODED_MPDU_LEN`]: crate::alignment::MAX_ENCODED_MPDU_LEN
+/// [`MAX_ENCODED_MPDU_LEN`]: crate::descriptor::MAX_ENCODED_MPDU_LEN
 pub const fn rx_ring_outspans_any_unit(count: usize, buffer: usize) -> bool {
     match (count.checked_sub(1), buffer) {
         (Some(rest), buffer) => match rest.checked_mul(buffer) {
-            Some(bytes) => bytes > crate::alignment::MAX_ENCODED_MPDU_LEN,
+            Some(bytes) => bytes > crate::descriptor::MAX_ENCODED_MPDU_LEN,
             None => true,
         },
         (None, _) => false,

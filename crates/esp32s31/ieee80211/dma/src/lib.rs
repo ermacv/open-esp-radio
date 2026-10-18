@@ -7,7 +7,6 @@
 //! live ring state and permanently located RX arena. Protocol decoding and
 //! executor policy deliberately remain above this leaf.
 
-pub mod alignment;
 pub mod descriptor;
 pub mod ring_index;
 pub mod rx_dma;

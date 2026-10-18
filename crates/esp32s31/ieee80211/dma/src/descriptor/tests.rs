@@ -117,3 +117,10 @@ fn the_dma_window_bounds_descriptors_and_buffers() {
     assert!(!dma_range_valid(DMA_WINDOW.start - 4, 4));
     assert!(!dma_range_valid(DMA_WINDOW.start, 0));
 }
+
+#[test]
+fn the_mpdu_length_bound_is_the_length_field_width() {
+    let bound = u16::try_from(MAX_ENCODED_MPDU_LEN).unwrap_or(u16::MAX);
+    assert!(rx(0).with_length(bound).is_some());
+    assert!(rx(0).with_length(bound + 1).is_none());
+}

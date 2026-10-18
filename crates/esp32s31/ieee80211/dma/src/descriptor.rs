@@ -13,6 +13,10 @@ use oer_esp32s31_hal::layouts::{
 /// The bytes of one descriptor, RX or TX: the layouts share their geometry.
 pub const DESCRIPTOR_BYTES: u32 = WifiRxDmaDescriptor::SIZE as u32;
 
+/// The largest MPDU length a descriptor's 14-bit `LENGTH` field (bits 27:14
+/// of the control word) encodes; the vendor encodes no longer unit.
+pub const MAX_ENCODED_MPDU_LEN: usize = 0x3fff;
+
 const _: () = {
     assert!(WifiTxDmaDescriptor::SIZE == WifiRxDmaDescriptor::SIZE);
     assert!(WifiTxDmaDescriptor::ALIGN == WifiRxDmaDescriptor::ALIGN);
