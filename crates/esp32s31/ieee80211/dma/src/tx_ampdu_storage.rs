@@ -2,14 +2,15 @@
 //!
 //! Internally buffered aggregates retain their static arena directly.
 //! External zero-copy aggregates receive prepare/start authority only through
-//! an owner which also retains every referenced [`StableDmaBacking`] lease.
+//! an owner which also retains every referenced [`StableDmaBacking`](oer_memory::StableDmaBacking) lease.
 
 use crate::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
 use oer_esp32s31_hal::dma_address;
 
+use oer_esp32s31_hal::dma_static::PlacedBacking;
 use oer_esp32s31_hal::types::MacTxQueueDetached;
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaRange};
+use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl;
@@ -532,14 +533,14 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
 /// The descriptor arena remains in static chip storage while `B` may be a
 /// movable lease object whose underlying allocation is stable. Moving this
 /// owner is safe: descriptor addresses never point at the lease object, only
-/// at the allocation guaranteed by its unsafe [`StableDmaBacking`] contract.
+/// at the allocation guaranteed by its unsafe [`StableDmaBacking`](oer_memory::StableDmaBacking) contract.
 ///
 /// The arena never automatically destroys a retained lease. Only the active
 /// owner can release one after cancellation or proven detach. If that owner
 /// is forgotten, destroying this arena leaks its leases and their allocations;
 /// it cannot free memory still visible to DMA. No destructor is required for
 /// this safety property, including the arena's own destructor.
-/// The [`StableDmaBacking`] contract requires the allocation and its exclusive
+/// The [`StableDmaBacking`](oer_memory::StableDmaBacking) contract requires the allocation and its exclusive
 /// reservation to survive a leaked lease; an ordinary borrowed backing is not
 /// sufficient. CPU-only metadata may still have a shorter lifetime because no
 /// forgotten owner accesses or destroys it.
@@ -845,7 +846,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 }
 
-impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
+impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     RetainedAmpduDma<'retention, B, SLOTS, BUFFER_SIZE>
 {
     fn prepare_backings_for_dma_read(&mut self) -> Result<(), AmpduDmaStorageError> {
@@ -861,7 +862,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
 
     /// Retain one stable allocation and issue its non-forgeable identity.
     ///
-    /// [`StableDmaBacking`] guarantees that the accepted allocation remains at
+    /// [`StableDmaBacking`](oer_memory::StableDmaBacking) guarantees that the accepted allocation remains at
     /// one address until the owner releases it, and remains allocated and
     /// exclusively reserved if the owner is quarantined or forgotten.
     pub fn push_backing(&mut self, backing: B) -> Result<RetainedDmaBacking, AmpduDmaStorageError> {
@@ -995,7 +996,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
             .checked_add(capacity)
             .filter(|end| *end <= identity.len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        let buffer_address = external_dma_address(identity, offset, buffer_capacity)?;
+        let buffer_address = external_dma_address(identity, offset)?;
         let word0 = tx_owned_word(buffer_capacity, transfer_length)
             .ok_or(AmpduDmaStorageError::InvalidLength)?;
         let slot = self
@@ -1140,8 +1141,7 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                 .checked_add(capacity)
                 .filter(|end| *end <= identity.len)
                 .ok_or(AmpduDmaStorageError::Address)?;
-            buffer_addresses[index] =
-                external_dma_address(identity, offset, entry.buffer_capacity)?;
+            buffer_addresses[index] = external_dma_address(identity, offset)?;
             descriptor_addresses[index] = self
                 .dma()
                 .binding
@@ -1164,13 +1164,13 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                 descriptor_addresses[index + 1]
             };
             let word0 = words[index].with_tx_last(next_address == 0);
-            // SAFETY: `external_dma_address` accepted each buffer in the DMA
-            // window inside a backing retained for this publication; the
-            // links name descriptors of the pinned static's validated base.
-            #[allow(unsafe_code, reason = "typed addresses of retained backings")]
+            // SAFETY: each buffer lies in a `PlacedBacking` retained for this
+            // publication, placed in the DMA window by its pool; the links
+            // name descriptors of the pinned static's validated base.
+            #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
             let (buffer, next) = unsafe {
                 (
-                    dma_address::loaned(buffer_addresses[index]),
+                    dma_address::placed(buffer_addresses[index]),
                     dma_address::placed_link(next_address),
                 )
             };
@@ -1229,14 +1229,14 @@ impl<'retention, B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usi
                     .ok_or(AmpduDmaStorageError::Address)?
             };
             let word0 = descriptor.word0.with_tx_last(next_address == 0);
-            // SAFETY: the retained descriptor image's buffer was accepted by
-            // `external_dma_address` when its backing was bound, and the
-            // backing is still retained; the link names a descriptor of the
-            // pinned static's validated base.
-            #[allow(unsafe_code, reason = "typed addresses of retained backings")]
+            // SAFETY: the retained descriptor image's buffer lies in a
+            // `PlacedBacking` still retained, placed in the DMA window by its
+            // pool; the link names a descriptor of the pinned static's
+            // validated base.
+            #[allow(unsafe_code, reason = "typed addresses of retained placed backings")]
             let (buffer, next) = unsafe {
                 (
-                    dma_address::loaned(descriptor.buffer_address),
+                    dma_address::placed(descriptor.buffer_address),
                     dma_address::placed_link(next_address),
                 )
             };
@@ -1276,29 +1276,19 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Drop
     }
 }
 
-/// The DMA address `offset` bytes into a retained region, admitted only when
-/// `capacity` bytes from there lie in a range the TX DMA reader can fetch.
+/// The DMA address `offset` bytes into a retained region. The region is a
+/// [`PlacedBacking`]'s, so it lies in the DMA window; that `capacity` bytes
+/// from `offset` stay inside it is checked by the caller against the
+/// region's length.
 fn external_dma_address(
     identity: RetainedDmaBackingIdentity,
     offset: usize,
-    capacity: u32,
 ) -> Result<u32, AmpduDmaStorageError> {
-    let address = identity
+    identity
         .dma_address
         .zip(u32::try_from(offset).ok())
         .and_then(|(base, offset)| base.checked_add(offset))
-        .ok_or(AmpduDmaStorageError::Address)?;
-    external_tx_buffer_range_valid(address, capacity)
-        .then_some(address)
         .ok_or(AmpduDmaStorageError::Address)
-}
-
-const fn external_tx_buffer_range_valid(address: u32, size: u32) -> bool {
-    dma_range_valid(address, size) || psram_tx_buffer_range_valid(address, size)
-}
-
-const fn psram_tx_buffer_range_valid(_address: u32, _size: u32) -> bool {
-    false
 }
 
 pub struct RetainedAmpduDmaPublication<
@@ -1318,7 +1308,7 @@ pub struct RetainedAmpduDmaPublication<
 // SAFETY: this token exists only after the retaining owner published the
 // complete aggregate chain; it mutably borrows that owner, which retains
 // every external lease, and hardware cannot own the chain before `commit`.
-unsafe impl<B: StableDmaBacking, const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma
+unsafe impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma
     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
 {
     fn descriptor_head(&self) -> u32 {

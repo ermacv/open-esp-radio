@@ -1,6 +1,21 @@
 //! Host/oracle tests for A-MPDU protocol, formatting and ownership.
 
 use super::*;
+
+use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
+
+/// A host pool, as if placed: its radio leases are the placed leases
+/// A-MPDU takes.
+fn host_pool<
+    const CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    const DEPTH: usize,
+>(
+    storage: &'static mut PinnedDmaTxPool<CAPACITY, HEADROOM, TRAILER, DEPTH>,
+) -> PlacedTxPool<CAPACITY, HEADROOM, TRAILER, DEPTH> {
+    PlacedTxPool::pin(Placed::host(storage))
+}
 mod length_budget;
 use crate::tx::runtime::{AmpduRetryDecision, AmpduRetryPolicy, AmpduRetryState};
 use crate::tx::{
@@ -10,10 +25,7 @@ use oer_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
-use oer_memory::{
-    HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease,
-    PreparedTxDma, StableDmaBacking,
-};
+use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -247,9 +259,8 @@ fn unlimited_ht_rate() -> HtRate {
 }
 
 /// A pool of network buffers, the product's external A-MPDU backing.
-fn frame_pool<const CAPACITY: usize, const DEPTH: usize>()
--> PinnedDmaTxPoolHandle<CAPACITY, 0, 0, DEPTH> {
-    PinnedDmaTxPool::pin_static(std::boxed::Box::leak(std::boxed::Box::new(
+fn frame_pool<const CAPACITY: usize, const DEPTH: usize>() -> PlacedTxPool<CAPACITY, 0, 0, DEPTH> {
+    host_pool(std::boxed::Box::leak(std::boxed::Box::new(
         PinnedDmaTxPool::new(),
     )))
 }
@@ -257,11 +268,11 @@ fn frame_pool<const CAPACITY: usize, const DEPTH: usize>()
 /// Encode one `length`-byte MPDU into pool slot `slot` behind the private
 /// DMA metadata prefix and hand its buffer to the radio.
 fn frame<const CAPACITY: usize, const DEPTH: usize>(
-    pool: &PinnedDmaTxPoolHandle<CAPACITY, 0, 0, DEPTH>,
+    pool: &PlacedTxPool<CAPACITY, 0, 0, DEPTH>,
     slot: u8,
     length: usize,
     encode: impl FnOnce(&mut [u8]),
-) -> PinnedDmaTxRadioLease<'static, CAPACITY, 0, 0> {
+) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, CAPACITY, 0, 0>> {
     let (index, ()) = pool
         .claim_network(slot)
         .publish(TX_AMPDU_METADATA_SIZE + length, |bytes| {
@@ -273,7 +284,7 @@ fn frame<const CAPACITY: usize, const DEPTH: usize>(
 /// The first `length` bytes of a returned slot: the image the MAC left for
 /// DMA, as the next network writer finds it.
 fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
-    pool: &PinnedDmaTxPoolHandle<CAPACITY, 0, 0, DEPTH>,
+    pool: &PlacedTxPool<CAPACITY, 0, 0, DEPTH>,
     slot: u8,
     length: usize,
 ) -> std::vec::Vec<u8> {
@@ -288,7 +299,7 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
 
 /// Publish the committed HT aggregate, then complete and detach it the way
 /// the MAC reports a finished exchange.
-fn complete_and_detach<B: StableDmaBacking, const SLOTS: usize>(
+fn complete_and_detach<B: oer_esp32s31_hal::dma_static::PlacedBacking, const SLOTS: usize>(
     owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
     cookie: TxCookie,
     rate: HtRate,
@@ -326,9 +337,9 @@ fn ampdu_frame_layout_rejects_unaligned_dma_prefix() {
 fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     let storage = HtAmpduTxStorage::<2>::new();
     let mut storage = core::pin::pin!(storage);
-    let pool: PinnedDmaTxPoolHandle<256, 0, 0, 1> = PinnedDmaTxPool::pin_static(
-        std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
-    );
+    let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
+        PinnedDmaTxPool::new(),
+    )));
     let network = pool.claim_network(0);
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
         bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
@@ -367,9 +378,9 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
 fn rejected_referenced_commit_rolls_back_the_lower_lease() {
     let storage = HtAmpduTxStorage::<2>::new();
     let mut storage = core::pin::pin!(storage);
-    let pool: PinnedDmaTxPoolHandle<256, 0, 0, 1> = PinnedDmaTxPool::pin_static(
-        std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
-    );
+    let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
+        PinnedDmaTxPool::new(),
+    )));
     let network = pool.claim_network(0);
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
     let backing = pool.claim_radio(index);
@@ -407,9 +418,9 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
 fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
     let storage = HtAmpduTxStorage::<2>::new();
     let mut storage = core::pin::pin!(storage);
-    let pool: PinnedDmaTxPoolHandle<256, 0, 0, 1> = PinnedDmaTxPool::pin_static(
-        std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
-    );
+    let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
+        PinnedDmaTxPool::new(),
+    )));
     let network = pool.claim_network(0);
     let (index, ()) = network.publish(TX_AMPDU_METADATA_SIZE + 32, |bytes| {
         bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
@@ -452,9 +463,9 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
 fn retained_abort_releases_backing_only_after_successful_detach() {
     for detach_failed in [false, true] {
         let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
-        let pool: PinnedDmaTxPoolHandle<256, 0, 0, 1> = PinnedDmaTxPool::pin_static(
-            std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
-        );
+        let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(
+            std::boxed::Box::new(PinnedDmaTxPool::new()),
+        ));
         let (index, ()) = pool
             .claim_network(0)
             .publish(TX_AMPDU_METADATA_SIZE + 32, |_| {});
@@ -514,9 +525,9 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
 fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     let storage = HtAmpduTxStorage::<4>::new();
     let mut storage = core::pin::pin!(storage);
-    let pool: PinnedDmaTxPoolHandle<256, 0, 0, 4> = PinnedDmaTxPool::pin_static(
-        std::boxed::Box::leak(std::boxed::Box::new(PinnedDmaTxPool::new())),
-    );
+    let pool: PlacedTxPool<256, 0, 0, 4> = host_pool(std::boxed::Box::leak(std::boxed::Box::new(
+        PinnedDmaTxPool::new(),
+    )));
     let rate = HtRate::new(
         crate::tx::HtMcs::Mcs0,
         crate::tx::HtGuardInterval::Long800Ns,

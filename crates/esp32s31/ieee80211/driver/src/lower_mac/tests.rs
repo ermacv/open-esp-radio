@@ -27,9 +27,9 @@ use oer_ieee80211_mac::{
 };
 use oer_ieee80211_softmac::{MacRxEvidence, MacRxMetadata};
 
+use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 use oer_memory::{
-    DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease,
-    ReturningStableDmaBacking,
+    DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
 };
 
 use super::*;
@@ -2507,7 +2507,7 @@ const SUBFRAMES: usize = 4;
 const BACKING: usize = 2048;
 const BACKINGS: usize = 8;
 
-type Lease = PinnedDmaTxRadioLease<'static, BACKING, 0, 0>;
+type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, BACKING, 0, 0>>;
 type Backing = ReturningStableDmaBacking<Lease, &'static FreeBackings>;
 
 /// The pool indices of free backings.
@@ -2523,7 +2523,7 @@ impl DmaIndexReturn for &'static FreeBackings {
 /// Subframe memory from a pinned DMA TX pool, as the station's network TX
 /// path lends it.
 struct Backings {
-    pool: PinnedDmaTxPoolHandle<BACKING, 0, 0, BACKINGS>,
+    pool: PlacedTxPool<BACKING, 0, 0, BACKINGS>,
     free: &'static FreeBackings,
 }
 
@@ -2549,7 +2549,7 @@ impl AmpduBackingSource for Backings {
 }
 
 fn backings() -> &'static Backings {
-    let pool = PinnedDmaTxPool::pin_static(Box::leak(Box::new(PinnedDmaTxPool::new())));
+    let pool = PlacedTxPool::pin(Placed::host(Box::leak(Box::new(PinnedDmaTxPool::new()))));
     let free: &'static FreeBackings = Box::leak(Box::default());
     free.0.borrow_mut().extend((0..BACKINGS as u8).rev());
     Box::leak(Box::new(Backings { pool, free }))

@@ -76,9 +76,9 @@ smallest operation; a safe state machine in an audited crate remains safe.
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of the PAC's generated `layouts` (clippy
 `disallowed-methods` refuses them elsewhere). Its `placed`/`placed_link`
-take an address of storage the caller keeps pinned in the DMA window, its
-`loaned` the start of a buffer lent to the hardware; each call site names the
-check that accepted the address.
+take an address of storage the caller keeps pinned in the DMA window: a
+placed static's descriptors and buffers, or a placed pool's buffer
+(`PlacedBacking`); each call site names its proof.
 
 Its `dma_static` module holds the placement constructor:
 `DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,
