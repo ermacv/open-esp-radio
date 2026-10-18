@@ -9,11 +9,13 @@
 //! cold initialization. It lends the clocked client, with the MAC stopped, to
 //! `leave` and gets it back cold.
 
-use oer_esp32s31_hal::ieee80211::client::{WifiClocked, WifiCold, WifiPowered};
+use oer_esp32s31_hal::ieee80211::client::{
+    ClockPoisoned, StoppedInstallation, WifiClocked, WifiCold, WifiPowered,
+};
 use oer_esp32s31_ieee80211_mac::init::{
     MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
-use oer_esp32s31_phy::{PhyTemperatureOutcome, PhyTxTargetPowerProfile};
+use oer_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
 use oer_ieee80211_mac::channel::WifiChannel;
 
 use crate::{Client, PhyPreparation, sealed};
@@ -56,6 +58,12 @@ pub enum WifiReturned {
     Cold(WifiCold),
     Powered(WifiPowered),
     Clocked(WifiClocked),
+    /// The module clocks did not release: the registers stay installed and
+    /// the clock obligation unresolved until reset.
+    ClockPoisoned {
+        stopped: StoppedInstallation,
+        obligation: ClockPoisoned,
+    },
 }
 
 /// A successful `join`: the clocked Wi-Fi client.
@@ -79,8 +87,9 @@ pub struct WifiTrack {
 pub struct TrackReport {
     /// The initial tracking's duration; `None` when tracking was not due.
     pub tracking_micros: Option<u64>,
-    /// The temperature the tracking read, if it read one.
-    pub temperature: Option<PhyTemperatureOutcome>,
+    /// The PHY's retained temperature after the initial tracking and
+    /// channel.
+    pub temperature: TemperatureObservation,
     pub tx_power: PhyTxTargetPowerProfile,
     pub mac: MacColdStartOutcome,
 }

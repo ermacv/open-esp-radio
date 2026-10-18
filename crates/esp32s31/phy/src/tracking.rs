@@ -18,3 +18,6 @@ pub mod fail_stop;
 // graph's transitions and bindings stay crate-private.
 pub use parameters::{CalibrationProgress, PhyParamTrackRequest, PhyParamTrackingOutcome};
 pub use rfpll::Observation as RfpllObservation;
+pub use temperature::{
+    Acquisition as TemperatureAcquisition, Observation as TemperatureObservation,
+};

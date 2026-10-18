@@ -20,10 +20,9 @@
 //! - **Membership.** `join` answers [`Member<K, Untracked>`](Member) and the
 //!   current [`RfEpoch`]; `track` is the only producer of
 //!   [`Member<K, Tracked>`](Member), which alone permits RF use; `leave`
-//!   takes either state and never refuses. A failure before any hardware work
-//!   is [`Failure::Refused`] and hands everything back; a hardware failure
-//!   poisons the domain ([`Failure::Poisoned`]), and every later answer
-//!   returns what was posted.
+//!   takes either state and never refuses. A failed request hands back what
+//!   it lent; its [`Failure`] says what the failure touched (below), and
+//!   after [`Failure::Poisoned`] every later answer returns what was posted.
 //! - **Wi-Fi.** The actor brings the Wi-Fi MAC up inside `track`, after the
 //!   initial tracking, the RX enable and the initial channel, in the order of
 //!   the driver's former cold start: the driver lends its clocked Wi-Fi client
@@ -107,15 +106,29 @@ pub enum PhyPreparation {
     Registered {
         calibration_path: oer_esp32s31_phy::PhyCalibrationPath,
         micros: u64,
+        /// The registration's complete outcome, with its diagnostics.
+        #[cfg(feature = "registration-diagnostics")]
+        outcome: oer_esp32s31_phy::PhyRegisterOutcome,
     },
 }
 
-/// Why a request did not succeed.
+/// Why a request did not succeed. The backend classifies every failure by
+/// what it touched; in each case the answer hands back everything the
+/// request lent.
+///
+/// | Cause | What changed |
+/// | --- | --- |
+/// | [`Refused`](Self::Refused) | Nothing: refused before any hardware write, a clock planner's refusal before its first write included. |
+/// | [`ClientFailed`](Self::ClientFailed) | Only the client's own hardware (its MAC partition, its clocks, its coexistence participation), and the rollback restored it. The shared domain (PHY, shared radio registers, common power) was not touched, or not left in an intermediate state. |
+/// | [`Poisoned`](Self::Poisoned) | Shared state was written before the failure, or the rollback failed: the domain is poisoned until reset. |
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Failure {
-    /// Refused before any hardware work; nothing changed.
+    /// Refused before any hardware write; nothing changed.
     Refused,
-    /// A hardware transaction failed, or had failed before: the PHY domain is
+    /// The client's own hardware work failed and was rolled back; the shared
+    /// domain is healthy.
+    ClientFailed,
+    /// Shared hardware work failed, or had failed before: the PHY domain is
     /// poisoned until reset.
     Poisoned,
 }

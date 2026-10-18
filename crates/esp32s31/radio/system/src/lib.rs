@@ -12,11 +12,14 @@
 //!
 //! - `join`: prepare the PHY domain (register it, or wake closed RF), mint a
 //!   new [`RfEpoch`](oer_esp32s31_radio_client::RfEpoch) when RF opened,
-//!   enable coexistence for the client, then let the backend enter the client.
-//!   A refused first client leaves RF closed again.
+//!   then let the backend enter the client, coexistence included in the
+//!   order its hardware requires. A first client that fails without poisoning
+//!   leaves RF closed again.
 //! - `track`: the client's initial tracking; the member becomes `Tracked`.
-//! - `leave`: the backend exits the client; when it was the last, the actor
-//!   alone mints [`LastClientLeft`] and closes RF with it.
+//! - `leave`: the backend exits the client, coexistence included; when it
+//!   was the last, the actor alone mints [`LastClientLeft`] and closes RF
+//!   with it. A [`CloseFault::Recoverable`] close leaves RF open, and the
+//!   next join finds it open in the same epoch.
 //! - Between requests the actor runs the periodic tracking tick when it falls
 //!   due, while a tracked member exists.
 //!
@@ -38,6 +41,16 @@ use oer_esp32s31_radio_client::{
 /// poisoned.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Fault;
+
+/// Why closing RF did not complete.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloseFault {
+    /// Nothing changed, or every issued transaction completed: RF stays open
+    /// and the domain is healthy.
+    Recoverable,
+    /// The domain is poisoned.
+    Poisoned,
+}
 
 /// Proof that the last member left the PHY domain: only the actor mints it,
 /// and only [`PhyDomain::close_rf`] consumes it.
@@ -62,7 +75,7 @@ pub trait PhyDomain {
     /// nothing if RF is open.
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault>;
     /// Close RF after the last member left.
-    async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), Fault>;
+    async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault>;
     /// When the periodic tracking falls due, while a member is tracked.
     fn tracking_deadline(&self) -> Option<oer_time::Instant>;
     /// One periodic tracking tick.
@@ -75,11 +88,7 @@ pub trait PhyDomain {
     reason = "the actor polls its backend on one executor; no Send bound is wanted"
 )]
 pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
-    /// Enable coexistence for `K`.
-    fn enter_coex(&mut self);
-    /// Disable coexistence for `K`.
-    fn leave_coex(&mut self);
-    /// Enter `K` into the prepared domain.
+    /// Enter `K` into the prepared domain, coexistence included.
     async fn enter(
         &mut self,
         join: K::Join,
@@ -88,7 +97,7 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
     ) -> Result<K::Joined, Failed<K::JoinReturned>>;
     /// Run `K`'s initial tracking and what its client contract adds to it.
     async fn track(&mut self, track: K::Track) -> Result<K::Tracked, Failed<K::TrackReturned>>;
-    /// Exit `K` from the domain.
+    /// Exit `K` from the domain, coexistence included.
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit);
 }
 
@@ -222,7 +231,6 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
             .epoch
             .unwrap_or_else(|| self.mint.next_epoch(None));
         self.state.epoch = Some(epoch);
-        self.backend.enter_coex();
         match self.backend.enter(join, phy, &self.lp).await {
             Ok(payload) => {
                 self.state.members += 1;
@@ -233,7 +241,6 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 })
             }
             Err(Failed { returned, cause }) => {
-                self.backend.leave_coex();
                 if cause == Failure::Poisoned {
                     self.state.poisoned = true;
                 } else if self.state.members == 0 {
@@ -258,7 +265,6 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
         self.mint.retire(member);
         let (payload, exit) = self.backend.exit(leave).await;
         self.state.members = self.state.members.saturating_sub(1);
-        self.backend.leave_coex();
         if exit.health == DomainHealth::Poisoned {
             self.state.poisoned = true;
         } else if exit.last && !self.state.poisoned {
@@ -275,11 +281,22 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
     }
 
     async fn close_rf(&mut self) {
-        if self.backend.close_rf(LastClientLeft(())).await.is_err() {
-            self.state.poisoned = true;
+        match self.backend.close_rf(LastClientLeft(())).await {
+            // RF stays open: the next join finds it open in this epoch.
+            Ok(()) | Err(CloseFault::Recoverable) => {}
+            Err(CloseFault::Poisoned) => self.state.poisoned = true,
         }
     }
 }
+
+#[cfg(any(target_arch = "riscv32", test))]
+mod channel;
+#[cfg(target_arch = "riscv32")]
+mod esp32s31;
+#[cfg(any(target_arch = "riscv32", test))]
+mod mac_sources;
+#[cfg(target_arch = "riscv32")]
+pub use esp32s31::Esp32s31Radio;
 
 #[cfg(test)]
 mod tests;

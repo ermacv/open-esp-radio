@@ -19,7 +19,7 @@
 
 use core::{
     cell::UnsafeCell,
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
     task::{Context, Poll},
 };
@@ -163,6 +163,9 @@ impl<Req, Ans> Slot<Req, Ans> {
 }
 
 /// The actor's duty to answer one taken request.
+///
+/// Dropping it unanswered would leave its client waiting forever, so the drop
+/// panics; [`Responder::answer`] consumes it without dropping.
 #[must_use = "a taken request must be answered, or its client waits forever"]
 pub struct Responder<'s, Req, Ans> {
     slot: &'s Slot<Req, Ans>,
@@ -171,16 +174,23 @@ pub struct Responder<'s, Req, Ans> {
 impl<Req, Ans> Responder<'_, Req, Ans> {
     /// Answer the request, and wake the client.
     pub fn answer(self, answer: Ans) {
+        let slot = ManuallyDrop::new(self).slot;
         #[allow(unsafe_code, reason = "the WORKING slot's actor owns the answer place")]
         // SAFETY: the slot is WORKING since this responder's `take_request`,
         // and only the actor holds the responder; the client reads `answer`
         // only after it observes ANSWERED, stored below, and the previous
         // answer was moved out before the slot returned to IDLE.
         unsafe {
-            (*self.slot.answer.get()).write(answer);
+            (*slot.answer.get()).write(answer);
         }
-        self.slot.state.store(ANSWERED, Ordering::Release);
-        self.slot.client.wake();
+        slot.state.store(ANSWERED, Ordering::Release);
+        slot.client.wake();
+    }
+}
+
+impl<Req, Ans> Drop for Responder<'_, Req, Ans> {
+    fn drop(&mut self) {
+        unreachable!("a taken request must be answered");
     }
 }
 
