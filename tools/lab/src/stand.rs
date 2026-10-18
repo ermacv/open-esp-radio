@@ -1,13 +1,14 @@
-//! The owner's stand file: which boards the stand has and which hub port
-//! powers each, and, for image `w1`, the stand router.
+//! The owner's stand file (README.md): which boards the stand has and
+//! which hub port powers each, and the stand router.
 //!
-//! Read are `schema`, `[[hub]]`, `[[board]]`, `[station].ssid` and of
-//! `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`,
-//! `ap_section` and `channel`. The file also holds the stand's network
-//! credentials, so nothing else is deserialized (`[station].passphrase` and
-//! `[access_point]` are never read), and a parse error names its line and
-//! never a value. The SSID, the SSH target and the interface are
-//! [`Secret`]s: their `Debug` shows nothing of them.
+//! This crate owns the whole file; each consumer's slice deserializes only
+//! its fields and ignores the rest: `schema`, `[[hub]]` and `[[board]]` for
+//! the boards, and for W1 `[station].ssid` and of `[station_fixture]`
+//! `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section` and
+//! `channel`. `[station].passphrase` and `[access_point]` are never read. A
+//! file whose mode is not 0600 is refused unread, and a parse error names
+//! its line and never a value. The SSID, the SSH target and the interface
+//! are [`Secret`]s: their `Debug` shows nothing of them.
 
 use std::path::{Path, PathBuf};
 

@@ -8,6 +8,7 @@ cargo fw build <image>
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout 30s]
 cargo fw monitor --board <id|MAC>
+cargo fw router
 cargo fw boards
 cargo fw power-cycle --board <id|MAC>
 ```
@@ -41,13 +42,10 @@ outside internal SRAM (`placement.txt`).
 ## Boards
 
 Boards and hubs come from the owner's stand file,
-`~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`). Read are
-`schema`, `[[hub]]`, `[[board]]`, `[station].ssid` and of
-`[station_fixture]` `kind` (`open-wrt`), `ssh_target`,
-`wireless_interface`, `radio` (the UCI `wifi-device` section), `ap_section`
-(the `wifi-iface` section of the stand's AP) and `channel` (1 to 13), the
-last group only for `run w1`. Nothing else is deserialized:
-`[station].passphrase` and `[access_point]` are never read. Attached boards are found in sysfs as
+`~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
+which `oer-lab` reads ([tools/lab/README.md](../lab/README.md): its
+schema, what each command reads of it, which values are secret). Attached
+boards are found in sysfs as
 Espressif USB Serial/JTAG devices (`303a:1001`), whose serial number is the
 chip's MAC. Only ESP32-S31 boards are reset or written; other chips are only
 listed.
@@ -112,42 +110,11 @@ its holder when it refuses.
 
 ## The stand router
 
-The stand's AP is a lab OpenWrt router: before every `run w1`, `cargo fw`
-brings it to the W1 profile and verifies it (`src/router.rs`). The profile
-is committed and stays; the router's earlier settings are not restored.
-Each step is one `ssh -o BatchMode=yes -o ConnectTimeout=5
-<ssh_target> <command>` (no prompt, at most 30 s); values reach the remote
-shell single-quoted. In order:
-
-```sh
-uci changes wireless
-uci show wireless
-uci set 'wireless.<radio>.channel=<channel>' && uci set 'wireless.<radio>.htmode=HT20' && uci set 'wireless.<radio>.beacon_int=100' && uci set 'wireless.<ap_section>.ssid=<ssid>' && uci set 'wireless.<ap_section>.disabled=0' && uci commit wireless && wifi reload
-uci show wireless
-iw dev '<wireless_interface>' info (up to 16 times, 2 s apart)
-```
-
-1. Staged, uncommitted wireless changes refuse the run (the commit would
-   take them along); they are named without their values.
-2. Before anything is set: `<radio>` is an enabled 2.4 GHz `wifi-device`
-   (`band='2g'`, or `hwmode` `11b`/`11g`), `<ap_section>` a `wifi-iface` of
-   it in mode `ap`, not hidden, and no other enabled `wifi-iface` of the
-   radio carries the stand's SSID (those are named by section and left as
-   they are).
-3. The profile: the stand's channel, HT 20 MHz, a 100 TU beacon interval,
-   the stand's SSID, the AP section enabled. Encryption and key are never
-   set or read.
-4. The committed values are the profile's, and the stand's SSID is on
-   exactly one enabled `wifi-iface` of the radio.
-5. After the reload, `iw` is asked until the interface is an AP on the
-   profile's channel, `width: 20 MHz`, with the stand's SSID: 30 s at most,
-   then the run is refused with the last reason. Its `addr` is the stand's
-   BSSID.
-
-Of `uci show` only `device`, `mode`, `disabled`, `hidden`, `ssid`, `band`,
-`hwmode`, `channel`, `htmode` and `beacon_int` are kept, an SSID only as
-whether it is the stand's. The SSID, the SSH target, the interface and the
-full BSSID are never printed: not on the console, in the lock file, in a
-run's `log.txt`, in an error or a `Debug`; a remote command's output and
-stderr are never shown (ssh's own errors name the host). Only the masked
-BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers and UCI section names appear.
+Before every `run w1`, and on `cargo fw router` (without a board), the
+stand's OpenWrt lab router is brought to W1's profile and verified by
+`oer-lab` ([tools/lab/README.md](../lab/README.md) lists every script it
+runs there); the profile stays, the earlier settings are not restored. Both
+hold the router's lock, `$XDG_RUNTIME_DIR/oer-fw/router-<hash>.lock`, for
+the whole run. Only the masked BSSID (`xx:xx:xx:xx:F6:D0`), channel numbers
+and UCI section names are printed; the SSID, the SSH target and the
+interface never are, in no message, lock file or `log.txt`.

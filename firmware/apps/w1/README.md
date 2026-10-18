@@ -76,7 +76,7 @@ cargo fw run w1 --board s31-a
 
 `cargo fw run w1` first brings the stand router to the W1 profile (the
 stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;
-`tools/fw/README.md`) and reads its AP's BSSID and channel. They and the
+`tools/lab/README.md`) and reads its AP's BSSID and channel. They and the
 SSID reach the image as build-time values (`OER_W1_CHANNEL`,
 `OER_W1_BSSID`, `OER_W1_SSID_HEX`) that `build.rs` writes to
 `$OUT_DIR/w1_config.rs`; built without them (`cargo fw build w1`) the image

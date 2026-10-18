@@ -1,6 +1,6 @@
 //! Image `w1`: its stand identity (the BSSID and channel of the stand
-//! router's AP after the profile, `router.rs`, and the stand's SSID) and the
-//! check of the report block it prints after its exit.
+//! router's AP after the profile, `oer_lab::router`, and the stand's SSID)
+//! and the check of the report block it prints after its exit.
 //!
 //! The BSSID is never printed whole: it is an `oer_lab::mac::Mac`, and every
 //! message shows only its last two octets (`xx:xx:xx:xx:F6:D0`); the SSID is
