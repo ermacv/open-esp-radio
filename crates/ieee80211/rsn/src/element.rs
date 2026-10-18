@@ -80,26 +80,25 @@ impl ValidatedRsnElement {
     }
 
     /// Whether the element's AKM list names `akm`.
-    ///
-    /// The element was validated when copied; were it not to parse again, it
-    /// would list nothing.
     pub fn lists_akm(&self, akm: Akm) -> bool {
-        RsnElement::parse(self.owned.as_bytes()).is_ok_and(|element| {
-            element
-                .akm_suites()
-                .iter()
-                .any(|selector| Akm::from_suite_selector(selector) == Some(akm))
-        })
+        self.element()
+            .akm_suites()
+            .iter()
+            .any(|selector| Akm::from_suite_selector(selector) == Some(akm))
+    }
+
+    /// The element `validate_rsn_element` parsed.
+    fn element(&self) -> RsnElement<'_> {
+        #[expect(
+            clippy::expect_used,
+            reason = "`validate_rsn_element` parsed these exact bytes; a failing re-parse is a bug here"
+        )]
+        RsnElement::parse(self.owned.as_bytes()).expect("a validated element parses again")
     }
 
     /// The PMKIDs the element lists, in order.
-    ///
-    /// Were the validated element not to parse again, it would list none.
     pub fn pmkids(&self) -> impl Iterator<Item = [u8; RSN_PMKID_LEN]> + '_ {
-        RsnElement::parse(self.owned.as_bytes())
-            .ok()
-            .into_iter()
-            .flat_map(|element| element.pmkids())
+        self.element().pmkids()
     }
 
     pub const fn management_frame_protection(&self) -> ManagementFrameProtection {

@@ -153,7 +153,13 @@ impl<const N: usize> RsnPlainKeyData<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.get(..self.len).unwrap_or_default()
+        #[expect(
+            clippy::expect_used,
+            reason = "`build` checks `len <= N` when it copies; a longer length is a bug here"
+        )]
+        self.bytes
+            .get(..self.len)
+            .expect("the copied length fits the buffer")
     }
 }
 

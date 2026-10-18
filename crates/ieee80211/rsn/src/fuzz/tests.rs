@@ -298,3 +298,53 @@ fn the_seeds_are_real_frames() {
     assert!(validate_rsn_element(&RSN_IE).is_ok());
     let _ = GroupKeyId::new(1);
 }
+
+/// The views above expect what their constructors checked; the constructors
+/// refuse every input those expectations would not hold for. The loops above
+/// also call each view on every input a constructor accepted.
+#[test]
+fn constructors_refuse_what_the_views_rely_on() {
+    use crate::{
+        EapolCopyError,
+        frames::RsnFrameError,
+        sae::{SaeError, SaePasswordElement},
+    };
+    let station = [2, 0, 0, 0, 0, 1];
+    assert!(matches!(
+        OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, station, &MESSAGE3[..120]),
+        Err(EapolCopyError::Invalid(_))
+    ));
+    assert_eq!(
+        OwnedEapolFrame::<100>::try_copy(RsnInterface::Station, station, &MESSAGE3),
+        Err(EapolCopyError::CapacityExceeded)
+    );
+    let owned =
+        OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, station, &MESSAGE3).unwrap();
+    assert_eq!(owned.key_frame().bytes(), MESSAGE3.as_slice());
+
+    let mut long = Vec::from(RSN_IE);
+    long[1] += 1;
+    assert_eq!(
+        OwnedRsnIe::<64>::try_copy(&long),
+        Err(RsnFrameError::InvalidRsnIe)
+    );
+    assert_eq!(
+        OwnedRsnIe::<16>::try_copy(&RSN_IE),
+        Err(RsnFrameError::CapacityExceeded)
+    );
+    assert_eq!(
+        OwnedAssociationSecurityIes::<128>::try_copy_bytes(&long),
+        Err(RsnFrameError::InvalidRsnIe)
+    );
+    assert!(validate_rsn_element(&RSN_IE[..RSN_IE.len() - 1]).is_err());
+
+    let pwe =
+        SaePasswordElement::hunting_and_pecking(b"password", station, [2, 0, 0, 0, 0, 2]).unwrap();
+    let one = core::array::from_fn(|index| u8::from(index == 31));
+    for rand in [[0; 32], one, [0xff; 32]] {
+        assert!(matches!(
+            SaeCommit::new(pwe, rand, [0x22; 32]),
+            Err(SaeError::UnsuitableRandom)
+        ));
+    }
+}

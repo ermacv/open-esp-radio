@@ -240,14 +240,6 @@ impl<'a> EapolKeyFrame<'a> {
         })
     }
 
-    /// A frame that matches no message and verifies under no key.
-    const CLOSED: EapolKeyFrame<'static> = EapolKeyFrame {
-        bytes: &[],
-        fixed: &[0; EAPOL_KEY_PACKET_LEN],
-        key_data: &[],
-        key_info: EapolKeyInfo(0),
-    };
-
     pub const fn bytes(self) -> &'a [u8] {
         self.bytes
     }
@@ -357,13 +349,22 @@ impl<const N: usize> OwnedEapolFrame<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.get(..self.len).unwrap_or_default()
+        #[expect(
+            clippy::expect_used,
+            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
+        )]
+        self.bytes
+            .get(..self.len)
+            .expect("the copied length fits the buffer")
     }
 
-    /// The frame view. The bytes were validated when copied; were they not,
-    /// the view would match no message and verify under no key.
+    /// The frame view of the bytes `try_copy` validated.
     pub fn key_frame(&self) -> EapolKeyFrame<'_> {
-        EapolKeyFrame::parse(self.as_bytes()).unwrap_or(EapolKeyFrame::CLOSED)
+        #[expect(
+            clippy::expect_used,
+            reason = "`try_copy` parsed these exact bytes; a failing re-parse is a bug here"
+        )]
+        EapolKeyFrame::parse(self.as_bytes()).expect("owned EAPOL frame was validated on creation")
     }
 }
 

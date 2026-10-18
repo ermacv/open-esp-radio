@@ -601,27 +601,26 @@ impl SaeComebackTokens {
             self.key_drawn = Some(now);
             self.pending = [0; 256];
         }
-        let slot = Self::slot(&self.key, station);
-        // A one-octet slot always names one of the 256 entries.
-        let index = match self.pending.get_mut(slot) {
-            Some(pending) => {
-                if *pending == 0 {
-                    *pending = 1;
-                }
-                pending.to_be_bytes()
-            }
-            None => 1_u16.to_be_bytes(),
-        };
+        let pending = self.pending_mut(station);
+        if *pending == 0 {
+            *pending = 1;
+        }
+        let index = pending.to_be_bytes();
         let mut token = hmac_sha256(&self.key, &[&station, &index]);
         let (head, _) = token.split_at_mut(2);
         head.copy_from_slice(&index);
         token
     }
 
-    /// `station`'s slot: the first octet of HMAC-SHA256(key, station address).
-    fn slot(key: &[u8; 32], station: [u8; 6]) -> usize {
-        let [first, ..] = hmac_sha256(key, &[&station]);
-        usize::from(first)
+    /// `station`'s pending index, in the slot of the first octet of
+    /// HMAC-SHA256(key, station address).
+    fn pending_mut(&mut self, station: [u8; 6]) -> &mut u16 {
+        let [first, ..] = hmac_sha256(&self.key, &[&station]);
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "a one-octet slot indexes the 256 entries of the table"
+        )]
+        &mut self.pending[usize::from(first)]
     }
 
     /// Whether `token` is the one pending for `station`; a valid token is
@@ -633,15 +632,12 @@ impl SaeComebackTokens {
         if token.len() != SAE_ANTI_CLOGGING_TOKEN_LEN {
             return false;
         }
-        let slot = Self::slot(&self.key, station);
-        let Some(pending) = self.pending.get_mut(slot) else {
-            return false;
-        };
+        let mac = hmac_sha256(&self.key, &[&station, index_bytes]);
+        let (_, mac_tail) = mac.split_at(2);
+        let pending = self.pending_mut(station);
         if *pending == 0 || pending.to_be_bytes() != *index_bytes {
             return false;
         }
-        let mac = hmac_sha256(&self.key, &[&station, index_bytes]);
-        let (_, mac_tail) = mac.split_at(2);
         if !bool::from(mac_tail.ct_eq(tail)) {
             return false;
         }
@@ -813,8 +809,11 @@ impl SaeCommit {
         if peer == self.own {
             return Err(SaeError::Reflection);
         }
-        // `new` validated both of this station's scalars.
-        let rand = scalar_from(&self.rand).ok_or(SaeError::UnsuitableRandom)?;
+        #[expect(
+            clippy::expect_used,
+            reason = "`SaeCommit::new` admitted `rand` only as a reduced scalar; a failure is a bug here"
+        )]
+        let rand = scalar_from(&self.rand).expect("rand was validated");
         #[allow(
             clippy::arithmetic_side_effects,
             reason = "elliptic-curve group operations are total; they neither overflow nor panic"
@@ -826,7 +825,11 @@ impl SaeCommit {
         let mut k: [u8; SAE_PRIME_LEN] = shared.to_affine().x().into();
         let mut keyseed = hmac_sha256(&[0; 32], &[&k]);
         k.zeroize();
-        let own_scalar = scalar_from(&self.own.scalar).ok_or(SaeError::UnsuitableRandom)?;
+        #[expect(
+            clippy::expect_used,
+            reason = "`SaeCommit::new` produced the scalar from a reduced sum; a failure is a bug here"
+        )]
+        let own_scalar = scalar_from(&self.own.scalar).expect("own scalar is reduced");
         #[allow(
             clippy::arithmetic_side_effects,
             reason = "scalar addition is modulo the group order; it neither overflows nor panics"

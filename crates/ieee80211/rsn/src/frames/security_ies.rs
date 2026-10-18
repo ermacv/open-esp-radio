@@ -38,7 +38,13 @@ impl<const N: usize> OwnedRsnIe<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.get(..self.len).unwrap_or_default()
+        #[expect(
+            clippy::expect_used,
+            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
+        )]
+        self.bytes
+            .get(..self.len)
+            .expect("the copied length fits the buffer")
     }
 }
 
@@ -100,17 +106,26 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.get(..self.len).unwrap_or_default()
+        #[expect(
+            clippy::expect_used,
+            reason = "`try_copy` checks `len <= N` when it copies; a longer length is a bug here"
+        )]
+        self.bytes
+            .get(..self.len)
+            .expect("the copied length fits the buffer")
     }
 
-    /// The RSN element and the RSNXE after it; both empty were the copy's
-    /// validation not to hold.
+    /// The RSN element and the RSNXE after it.
     fn split(&self) -> (&[u8], &[u8]) {
         let bytes = self.as_bytes();
+        #[expect(
+            clippy::expect_used,
+            reason = "`try_copy` starts the bytes with a whole RSN element; a short one is a bug here"
+        )]
         bytes
             .get(1)
             .and_then(|&length| bytes.split_at_checked(usize::from(length) + 2))
-            .unwrap_or((&[], &[]))
+            .expect("the copied bytes start with a whole RSN element")
     }
 
     pub fn rsn_ie(&self) -> &[u8] {
