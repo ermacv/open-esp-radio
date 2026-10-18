@@ -4,6 +4,7 @@ library = "../model/library.toml"
 api = "../policy/api.toml"
 evidence = [
     "../../esp32s31/evidence/vendor-libpp.toml",
+    "../../esp32c5/evidence/vendor-wifi-libraries.toml",
 ]
 
 [outputs]
