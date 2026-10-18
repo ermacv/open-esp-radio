@@ -55,8 +55,8 @@ Both JSON documents are schema 1 (`{"schema":1,"inputs":[...],"symbols":[...]}`,
 `oer_tool_analysis_blobray_application::linking::link(request, executables, linker, host,
 directory, memory, control)` links the image a `LinkRequest` describes and
 returns a `LinkedImage`: its `ImageManifest`, the ELF bytes as an `Executable`
-and the linker's map. `linker` is the path of an explicitly selected LLD or GNU
-BFD ld; `host` is the linker adapter (`oer_tool_analysis_blobray_linker::ElfLinker`);
+and the linker's map. `linker` is the path of an explicitly selected LLD (the only
+supported linker); `host` is the linker adapter (`oer_tool_analysis_blobray_linker::ElfLinker`);
 `directory` is where the link's private workspace is created and removed.
 
 A `LinkRequest` has ordered `inputs` (executable content identities), the
@@ -113,10 +113,9 @@ executable's SHA-256 form the linker identity, and the executable's hash is
 checked again before and after linking. This does not snapshot dynamically
 loaded system libraries.
 
-GNU ld processes archives in order; LLD can satisfy backward references from
-previous archives. Both implement `static-analysis-elf-link-v1`, but their
-selected members, success/failure and images can differ. Blobray preserves
-these differences and never claims original firmware selection.
+LLD can satisfy backward references from previous archives, which GNU ld,
+the vendor's linker, does not; the members LLD selects can therefore differ
+from the vendor's. Blobray never claims original firmware selection.
 
 Validation requires RV32 ET_EXEC, bounded nonoverlapping PT_LOAD segments inside
 the declared regions, no writable executable segment, allocated sections covered
@@ -146,27 +145,19 @@ CLI/script dialects and parsers behind `LinkerHost`; the common subprocess
 helper owns bounded transport and the linker process, which is killed and
 reaped when the link ends early. `SectionPlacement` and `ArchiveExtraction`
 identify the materialized member; application checks occurrence identity,
-extraction coverage, root extent and exit observations. LLD extraction evidence
-comes from why-extract; GNU extraction comes from the map.
+extraction coverage, root extent and exit observations. Extraction evidence
+comes from LLD's why-extract.
 
-LLD ELF, map and extraction output flow through concurrently drained pipes. GNU
-needs a seekable ELF: the link bounds its extent by the working capacity left
-after the fixed 8 MiB link metadata, and the adapter enforces that ceiling with
-a hard `RLIMIT_FSIZE`. The metadata reservation covers up to 512 inputs, 4096
+LLD ELF, map and extraction output flow through concurrently drained pipes;
+the ELF extent is bounded by the working capacity left after the fixed 8 MiB
+link metadata. The metadata reservation covers up to 512 inputs, 4096
 members, 64 roots, 32 blockers and the bounded capability probe. Root names are
 at most 512 bytes, map/observation records 64 KiB and the stderr tail 8192
 bytes. Capacity exhaustion fails explicitly. The workspace is a private
 temporary directory below the caller's directory, removed when the link ends.
 
-Real-link tests require both LLD (reference 22.1.8) and GNU ld (reference
-2.47 with RV32; `--start-lib`/`--end-lib` are new in 2.47), installed on the
-host. The LLD the pinned Rust toolchain ships (`gcc-ld/ld.lld`) and a GNU ld
-2.47 build pass them; Ubuntu's LLD 18 and binutils 2.42 fail these tests. Set `BLOBRAY_TEST_LLD` to override
-`/usr/bin/ld.lld`. `BLOBRAY_TEST_GNU_LD` selects the GNU executable; without it,
-tests use the first of `riscv-none-elf-ld`, `riscv32-unknown-elf-ld`, `riscv32-esp-elf-ld`,
-`riscv64-unknown-elf-ld`, `riscv64-elf-ld` and `riscv64-linux-gnu-ld` on `PATH`.
-The adapter always selects `elf32lriscv` and passes archive inputs with
-`--start-lib`/`--end-lib`, so any RISC-V cross GNU ld from binutils 2.47 or later
-qualifies. Earlier releases, including ESP-IDF's binutils 2.46 toolchain, and a
-GNU ld with only x86 emulations fail the capability probe. Missing tools fail
-tests. Tests use synthetic RV32 inputs, not hardware qualification.
+Real-link tests require LLD (reference 22.1.8) on the host; the LLD the
+pinned Rust toolchain ships (`gcc-ld/ld.lld`) passes them, Ubuntu's LLD 18
+fails them. Set `BLOBRAY_TEST_LLD` to override `/usr/bin/ld.lld`. The adapter
+always selects `elf32lriscv` and passes archive inputs with
+`--start-lib`/`--end-lib`. A missing LLD fails the tests. Tests use synthetic RV32 inputs, not hardware qualification.

@@ -70,7 +70,7 @@ links, such as the vendor scenarios, does not depend on the command line.
 | `oer-tool-analysis-blobray-riscv` | execution over lifted RV32 | Concrete machine state and RV32 execution | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-decode`, `oer-tool-analysis-riscv-lift` |
 | `oer-tool-analysis-blobray-verification` | scenarios, comparison, record validation | Comparison relations and verdict construction | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-riscv-model` |
 | `oer-tool-analysis-blobray-application` | captured, library, linking, data, audit, in_process | Operations over given executables and their resource ownership | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-artifacts`, `oer-tool-analysis-blobray-analysis`, `oer-tool-analysis-blobray-verification`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-analysis`, `oer-tool-analysis-riscv-program` |
-| `oer-tool-analysis-blobray-linker` | GNU ld and LLD adapters, bounded subprocess transport | External linker processes behind `LinkerHost` | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-application`, `oer-tool-analysis-riscv-model` |
+| `oer-tool-analysis-blobray-linker` | LLD adapter, bounded subprocess transport | External linker processes behind `LinkerHost` | `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-application`, `oer-tool-analysis-riscv-model` |
 | `oer-tool-cli-blobray` | CLI, JSON wire documents | Process entry point, rendering and concrete dependency selection | `oer-tool-analysis-blobray-application`, `oer-tool-analysis-blobray-domain`, `oer-tool-analysis-blobray-riscv`, `oer-tool-analysis-riscv-model`, `oer-tool-analysis-riscv-lift` |
 
 The `oer-riscv-*` crates belong to the
@@ -164,9 +164,8 @@ callers with different injections can coexist in one process.
 Linking owns link planning. Its host adapter owns each external linker
 process, CLI/script dialect and raw evidence parsers. `LinkerHost` accepts a
 fixed semantic invocation and returns typed placement, extraction and exit
-records. LLD and GNU ld retain distinct identities and archive-selection
-semantics. GNU seekable output uses an extent the application admits, enforced
-by Linux `RLIMIT_FSIZE`; application independently validates roots and the ELF
+records. LLD is the only linker; the ELF extent is the one the application
+admits. The application independently validates roots and the ELF
 before returning an image. The ISA backend consumes a linked image; it does not
 discover tools through `PATH` or invoke `rustc` to choose a linker.
 
@@ -186,7 +185,7 @@ dependencies or claims that their behavior meets Blobray's proof requirements.
 | --- | --- | --- |
 | [angr/CLE loading](https://docs.angr.io/en/latest/core-concepts/loading.html) | Objects, symbols, relocations and mapped address spaces have loader ownership | Separate artifact inventory and linked image. CLE's extern-object representation of unresolved symbols does not establish resolved behavior for Blobray. |
 | [rev.ng model](https://docs.rev.ng/user-manual/key-concepts/model/) and [artifacts and analyses](https://docs.rev.ng/user-manual/key-concepts/artifacts-and-analyses/) | Editable model is separate from derived artifacts | Separate reviewed interpretation from computed results. rev.ng analyses can update its model; Blobray analysis never changes a reviewed contract or register model. |
-| [LLD archive semantics](https://lld.llvm.org/ELF/warn_backrefs.html) | GNU ld and LLD can select different archive members | Identify the actual linker and recipe. A synthetic analysis link cannot prove original firmware selection. |
+| [LLD archive semantics](https://lld.llvm.org/ELF/warn_backrefs.html) | LLD and the vendor's GNU ld can select different archive members | Identify the actual linker and recipe. A synthetic analysis link cannot prove original firmware selection. |
 | [Bazel remote caching](https://bazel.build/remote/caching) | Action-result metadata is separate from content-addressed output bytes | Identify inputs and outputs by content; the vendor scenarios key reused results by their request and producer identities. |
 | [bumpalo allocation limits](https://docs.rs/bumpalo/latest/bumpalo/struct.Bump.html#bump-allocation-limits) | Limits apply when obtaining backing chunks, not to each allocation in an existing chunk | Phase allocation is useful; a generic bump allocator does not establish Blobray's accounting or cleanup contract. |
 | [Rust GlobalAlloc](https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html) and [Linux mmap](https://man7.org/linux/man-pages/man2/mmap.2.html) | Global allocation has reentrancy/unwind constraints; mappings and prefaulting do not guarantee physical memory availability | Keep capacity authority explicit. A global allocator or a successful mapping is insufficient evidence of a bounded operation. |

@@ -25,41 +25,6 @@ fn linker() -> PathBuf {
         .unwrap_or_else(|| "/usr/bin/ld.lld".into())
 }
 
-/// System GNU ld names whose builds include the `elf32lriscv` emulation; the
-/// adapter selects that emulation explicitly and probes capabilities itself.
-const GNU_LINKER_NAMES: [&str; 6] = [
-    "riscv-none-elf-ld",
-    "riscv32-unknown-elf-ld",
-    "riscv32-esp-elf-ld",
-    "riscv64-unknown-elf-ld",
-    "riscv64-elf-ld",
-    "riscv64-linux-gnu-ld",
-];
-
-fn gnu_linker() -> PathBuf {
-    if let Some(path) = std::env::var_os("BLOBRAY_TEST_GNU_LD").map(PathBuf::from) {
-        assert!(
-            path.is_file(),
-            "GNU RV32 linker is mandatory: BLOBRAY_TEST_GNU_LD={} is not a file",
-            path.display()
-        );
-        return path;
-    }
-    let search = std::env::var_os("PATH").unwrap_or_default();
-    GNU_LINKER_NAMES
-        .iter()
-        .find_map(|name| {
-            std::env::split_paths(&search)
-                .map(|directory| directory.join(name))
-                .find(|path| path.is_file())
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "GNU RV32 linker is mandatory: none of {GNU_LINKER_NAMES:?} is on PATH; install RISC-V GNU binutils 2.47+ or set BLOBRAY_TEST_GNU_LD"
-            )
-        })
-}
-
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {
     Symbol {
         name: name.into(),
@@ -263,15 +228,6 @@ fn test_linker(directory: &Path, body: &str) -> PathBuf {
     wrapper(directory, "test-linker", &linker(), body)
 }
 
-fn gnu_test_linker(directory: &Path, body: &str) -> PathBuf {
-    wrapper(
-        directory,
-        "gnu-test-linker",
-        &gnu_linker().canonicalize().unwrap(),
-        body,
-    )
-}
-
 fn wrapper(directory: &Path, name: &str, real: &Path, body: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let path = directory.join(name);
@@ -326,11 +282,6 @@ fn closed_image(tool: &Path) {
 #[test]
 fn real_lld_links_a_closed_image() {
     closed_image(&linker());
-}
-
-#[test]
-fn real_gnu_links_a_closed_image() {
-    closed_image(&gnu_linker());
 }
 
 #[test]
@@ -499,17 +450,13 @@ fn linker_stderr_flood_is_bounded_in_the_failure() {
 }
 
 #[test]
-fn gnu_output_limit_crash_and_deadline_fail_and_reap_the_linker() {
+fn crash_and_deadline_fail_and_reap_the_linker() {
     for (body, expected) in [
-        (
-            "exec /usr/bin/head -c 67108864 /dev/zero > image.elf",
-            ErrorCode::ResourceLimited,
-        ),
         ("kill -SEGV $$", ErrorCode::LinkFailed),
         ("exec /bin/sleep 30", ErrorCode::ResourceLimited),
     ] {
         let f = closed();
-        let tool = gnu_test_linker(f.dir.path(), body);
+        let tool = test_linker(f.dir.path(), body);
         let timeout = if body.contains("sleep") { 1 } else { 30 };
         let started = std::time::Instant::now();
         let error = link(
@@ -529,7 +476,7 @@ fn gnu_output_limit_crash_and_deadline_fail_and_reap_the_linker() {
 }
 
 #[test]
-fn archive_order_decides_gnu_extraction() {
+fn lld_satisfies_backward_archive_references() {
     let f = fixture(
         vec![
             support::archive(&[(b"target.o", &dependency_object(b"target", None))], false),
@@ -544,17 +491,12 @@ fn archive_order_decides_gnu_extraction() {
     );
     let lld = linked(&f).unwrap();
     assert_eq!(lld.manifest.linker.implementation, "lld-elf");
-    let gnu = link_with(&f, &gnu_linker(), 32 * 1024 * 1024);
-    assert_eq!(gnu.err().unwrap().code, ErrorCode::LinkFailed);
 }
 
 #[test]
 fn capabilities_not_version_numbers_decide_adapter_support() {
     use std::os::unix::fs::PermissionsExt;
-    for (version, real) in [
-        ("LLD 99.7", linker()),
-        ("GNU ld (future) 99.7", gnu_linker().canonicalize().unwrap()),
-    ] {
+    for (version, real) in [("LLD 99.7", linker())] {
         let f = closed();
         let path = f.dir.path().join("future-linker");
         fs::write(&path, format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{version}'; exit 0; fi\nexec '{}' \"$@\"\n", real.display())).unwrap();
@@ -569,19 +511,6 @@ fn capabilities_not_version_numbers_decide_adapter_support() {
         let error = link_with(&f, &path, 32 * 1024 * 1024).err().unwrap();
         assert_eq!(error.code, ErrorCode::Incompatible);
     }
-}
-
-#[test]
-fn gnu_code_only_image_retains_empty_segment_without_mapping_memory() {
-    let f = fixture(vec![dependency_object(b"entry", None)], 0, 0);
-    let image = link_with(&f, &gnu_linker(), 32 * 1024 * 1024).unwrap();
-    assert!(
-        image
-            .manifest
-            .segments
-            .iter()
-            .any(|s| s.memory_size == 0 && s.file_size == 0)
-    );
 }
 
 #[test]

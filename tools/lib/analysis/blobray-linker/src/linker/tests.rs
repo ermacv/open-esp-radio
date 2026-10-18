@@ -94,29 +94,6 @@ fn lld_symbols_cannot_impersonate_input_sections_and_extraction_is_typed() {
     );
 }
 #[test]
-fn gnu_discards_output_symbols_and_wildcards_are_not_placements() {
-    let mut sink = Sink::default();
-    let mut parser = gnu_ld::Parser::default();
-    lines(&mut parser, LinkOutput::Map, b"Archive member included to satisfy reference by file (symbol)\n\nhelper.o\n                              root.o (helper)\n\nDiscarded input sections\n .text.discard  0x0 0x4 helper.o\nLinker script and memory map\n.text 0x1000 0x14\n *(*)\n .text.root     0x1000 0x10 root.o\n                0x1000                fake.o:(.text)\n .text.long section name\n                0x1010 0x4 helper.o\n *fill* 0x1014 0xc\n", &mut sink).unwrap();
-    assert_eq!(sink.0.len(), 3);
-    assert!(
-        matches!(&sink.0[0], LinkObservation::ArchiveExtraction { cause: Some(cause), .. } if cause == b"helper")
-    );
-    assert!(
-        matches!(&sink.0[2], LinkObservation::SectionPlacement { section, address: 0x1010, evidence, .. } if section == b".text.long section name" && evidence.length > 40)
-    );
-    assert!(
-        lines(
-            &mut parser,
-            LinkOutput::Map,
-            b" .bad 0xNOTHEX 0x4 root.o\n",
-            &mut sink
-        )
-        .is_err()
-    );
-}
-
-#[test]
 fn version_diagnostics_are_bounded_and_do_not_change_family_detection() {
     let mut version = Version {
         stdout: Vec::new(),
@@ -136,24 +113,4 @@ fn version_diagnostics_are_bounded_and_do_not_change_family_detection() {
             .code,
         ErrorCode::Incompatible
     );
-}
-#[test]
-fn truncated_gnu_continuations_are_rejected() {
-    let mut parser = gnu_ld::Parser::default();
-    lines(
-        &mut parser,
-        LinkOutput::Map,
-        b"Linker script and memory map\n .text.unfinished\n",
-        &mut Sink::default(),
-    )
-    .unwrap();
-    assert!(parser.finish().is_err());
-}
-
-#[test]
-fn unknown_gnu_extraction_cannot_be_silently_treated_as_a_map_heading() {
-    let mut parser = gnu_ld::Parser::default();
-    let error = lines(&mut parser, LinkOutput::Map, b"Archive member included to satisfy reference by file (symbol)\n\nforeign.o                     root.o (helper)\n", &mut Sink::default()).unwrap_err();
-    assert_eq!(error.code, ErrorCode::LinkBlocked);
-    assert!(error.message.contains("extraction"));
 }
