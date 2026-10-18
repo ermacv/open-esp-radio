@@ -17,10 +17,12 @@ use crate::{
     descriptor::Descriptor,
     rx_dma::RxDma,
     rx_ring::{
-        RX_BUFFER_SENTINEL, RxCompletedDescriptor, RxCompletedUnit, RxCompletedUnitFrontier,
-        RxDmaArenaState, RxDmaBufferAddresses, RxFrozenCursor, RxLiveAppend, RxRingError,
-        RxRingHalted, RxRingLive, RxRingStopped, RxSegment, prepare_recycled_buffer,
+        RX_BUFFER_SENTINEL, RxArenaWords, RxCompletedDescriptor, RxCompletedUnit,
+        RxCompletedUnitFrontier, RxDmaArenaState, RxDmaBufferAddresses, RxFrozenCursor,
+        RxLiveAppend, RxRingError, RxRingHalted, RxRingLive, RxRingStopped, RxSegment,
+        prepare_recycled_buffer,
     },
+    space::{ChipDma, DmaSpace},
 };
 
 /// One aligned DMA-visible buffer with room for the hardware recycle guard.
@@ -53,10 +55,6 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
             UnsafeCell::new([0; STORAGE_SIZE]),
             AtomicU8::new(RX_BUFFER_RING),
         )
-    }
-
-    pub(crate) fn dma_address(&self) -> Result<u32, RxDmaStorageError> {
-        u32::try_from(self.0.get().addr()).map_err(|_| RxDmaStorageError::AddressWidth)
     }
 
     fn cpu_owned_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
@@ -322,9 +320,10 @@ pub struct RxDmaCompletedUnit<
     const COUNT: usize,
     const BUFFER_SIZE: usize,
     const STORAGE_SIZE: usize,
+    S: DmaSpace = ChipDma,
 > {
     unit: RxCompletedUnit,
-    storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>,
+    storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
     ring: &'owner mut RxRingLive<'ring, COUNT>,
     requires_recycle: bool,
     // Keep physical descriptor credit on the core-local DMA owner. The
@@ -366,7 +365,8 @@ impl<
     const COUNT: usize,
     const BUFFER_SIZE: usize,
     const STORAGE_SIZE: usize,
-> RxDmaCompletedUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE>
+    S: DmaSpace,
+> RxDmaCompletedUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     pub const fn head_index(&self) -> usize {
         self.unit.head_index()
@@ -466,8 +466,8 @@ impl<
     }
 }
 
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> Drop
-    for RxDmaCompletedUnit<'_, '_, '_, COUNT, BUFFER_SIZE, STORAGE_SIZE>
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Drop
+    for RxDmaCompletedUnit<'_, '_, '_, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     fn drop(&mut self) {
         if self.requires_recycle {
@@ -491,34 +491,42 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> Dr
 /// buffers in the ring, the identity descriptor binding and no observer.
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
-pub struct RxDmaStorage<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> {
+#[zeroable(bound = "")]
+pub struct RxDmaStorage<
+    const COUNT: usize,
+    const BUFFER_SIZE: usize,
+    const STORAGE_SIZE: usize,
+    S: DmaSpace = ChipDma,
+> {
     descriptors: [Descriptor; COUNT],
     buffers: [RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>; COUNT],
     /// Per descriptor, the distance to its bound buffer: descriptor `i` uses
     /// buffer `(i + offset) % COUNT`. Zero is the identity binding, so the
     /// arena's zero bytes bind every descriptor to its own buffer.
     descriptor_buffer_offsets: [AtomicU8; COUNT],
-    lifecycle: AtomicU8,
+    arena: RxArenaWords,
+    space: PhantomData<S>,
 }
 
 #[allow(unsafe_code, reason = "atomic bindings serialize cross-core ownership")]
 // SAFETY: descriptors, buffers and bindings change only through their
 // atomic ownership bindings and lifecycle state, which serialize every
 // cross-core access.
-unsafe impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> Sync
-    for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>
+unsafe impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
+    Sync for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
 }
 
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
-    RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
+    RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     pub const fn new() -> Self {
         Self {
             descriptors: [const { Descriptor::new() }; COUNT],
             buffers: [const { RxDmaBuffer::new() }; COUNT],
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
-            lifecycle: AtomicU8::new(RxDmaArenaState::Reusable as u8),
+            arena: RxArenaWords::new(),
+            space: PhantomData,
         }
     }
 
@@ -548,7 +556,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     /// Sticky lifecycle state stored with the static arena rather than in its
     /// movable ring token.
     pub fn lifecycle_state(&self) -> RxDmaArenaState {
-        RxDmaArenaState::load(&self.lifecycle)
+        RxDmaArenaState::load(self.arena.lifecycle())
     }
 
     pub const fn descriptors(&self) -> &[Descriptor; COUNT] {
@@ -604,10 +612,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         self.validate_descriptor_rotation(rotation)?;
         for (descriptor_index, address) in buffer_addresses.iter_mut().enumerate() {
             let buffer_id = (descriptor_index + rotation) % COUNT;
-            *address = self.buffers[buffer_id].dma_address()?;
+            *address = self.buffer_dma_address(&self.buffers[buffer_id])?;
         }
         self.bind_descriptor_rotation(rotation)?;
-        u32::try_from(self.descriptors.as_ptr().addr()).map_err(|_| RxDmaStorageError::AddressWidth)
+        self.descriptor_base_address()
     }
 
     fn validate_descriptor_rotation(&self, rotation: usize) -> Result<(), RxDmaStorageError> {
@@ -719,7 +727,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         // `prepare_ring` takes a shared static arena reference, so Rust
         // borrowing alone cannot prevent two root capabilities. Claim the
         // stopped/halted owner graph before mutating any descriptor.
-        if !RxDmaArenaState::claim_prepared(&self.lifecycle) {
+        if !RxDmaArenaState::claim_prepared(self.arena.lifecycle()) {
             return Err(RxRingError::Busy);
         }
         let prepared = RxRingStopped::prepare_inner(
@@ -733,14 +741,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
                 // the validated address table binds `index` to this arena.
                 unsafe { self.prepare_stopped_buffer(index) }
             },
-            Some(&self.lifecycle),
+            Some(&self.arena),
         );
         if prepared.is_err() {
             // Preparation may have failed while disabling an unexpectedly
             // live walker. Without the returned ring capability there is no
             // proof that DMA stopped referencing this arena, so never reopen
             // the root constructor until radio reset.
-            RxDmaArenaState::ResetRequired.store(&self.lifecycle);
+            RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
         }
         prepared
     }
@@ -757,24 +765,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         }
         match self.lifecycle_state() {
             RxDmaArenaState::Prepared => {}
-            #[cfg(any(test, feature = "test-support"))]
-            RxDmaArenaState::Reusable => {
-                // Native models may construct a raw halted ring over this
-                // arena because no asynchronous DMA actor exists. Claim the
-                // same singleton lifecycle before accepting that test owner.
-                if !RxDmaArenaState::claim_prepared(&self.lifecycle) {
-                    return Err((ring, RxRingError::Busy));
-                }
-            }
             RxDmaArenaState::ResetRequired => {
                 return Err((ring, RxRingError::ResetRequired));
             }
-            #[cfg(not(any(test, feature = "test-support")))]
             RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                return Err((ring, RxRingError::Busy));
-            }
-            #[cfg(any(test, feature = "test-support"))]
-            RxDmaArenaState::Live => {
                 return Err((ring, RxRingError::Busy));
             }
         }
@@ -1139,7 +1133,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         ring: &'owner mut RxRingLive<'ring, COUNT>,
         descriptor_limit: usize,
     ) -> Result<
-        Option<RxDmaCompletedUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE>>,
+        Option<RxDmaCompletedUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>>,
         RxRingError,
     > {
         self.validate_live_ring(ring)?;
@@ -1195,7 +1189,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     }
 
     fn validate_live_ring(&self, ring: &RxRingLive<'_, COUNT>) -> Result<(), RxRingError> {
-        if ring.belongs_to_lifecycle(&self.lifecycle) {
+        if ring.belongs_to_arena(&self.arena) {
             return Ok(());
         }
         self.validate_ring_layout(
@@ -1218,15 +1212,27 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         self.validate_buffer_addresses(buffer_addresses)
     }
 
+    /// The DMA address of descriptor 0 in this arena's space.
+    fn descriptor_base_address(&self) -> Result<u32, RxDmaStorageError> {
+        S::address(self, self.descriptors.as_ptr()).ok_or(RxDmaStorageError::AddressWidth)
+    }
+
+    /// The DMA address of `buffer`, one of this arena's buffers.
+    fn buffer_dma_address(
+        &self,
+        buffer: &RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>,
+    ) -> Result<u32, RxDmaStorageError> {
+        S::address(self, buffer.0.get()).ok_or(RxDmaStorageError::AddressWidth)
+    }
+
     fn validate_descriptor_base(&self, descriptor_base: u32) -> Result<(), RxRingError> {
-        #[cfg(not(any(test, feature = "test-support")))]
-        if u32::try_from(self.descriptors.as_ptr().addr()).map_err(|_| RxRingError::Address)?
+        if self
+            .descriptor_base_address()
+            .map_err(|_| RxRingError::Address)?
             != descriptor_base
         {
             return Err(RxRingError::DescriptorBaseAddress);
         }
-        #[cfg(any(test, feature = "test-support"))]
-        let _ = descriptor_base;
         Ok(())
     }
 
@@ -1234,15 +1240,15 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
         &self,
         buffer_addresses: &RxDmaBufferAddresses<COUNT>,
     ) -> Result<(), RxRingError> {
-        // Explicit models use synthetic low addresses and a mock that never
-        // touches DMA memory; descriptor
-        // identity remains checked by `validate_ring_layout` there.
-        #[cfg(not(any(test, feature = "test-support")))]
         for (index, &address) in buffer_addresses.iter().enumerate() {
             let buffer = self
                 .buffer_for_descriptor(index)
                 .ok_or(RxRingError::Count)?;
-            if buffer.dma_address().map_err(|_| RxRingError::Address)? != address {
+            if self
+                .buffer_dma_address(buffer)
+                .map_err(|_| RxRingError::Address)?
+                != address
+            {
                 return Err(if index + 1 == COUNT {
                     RxRingError::TailBufferAddress
                 } else {
@@ -1250,8 +1256,6 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
                 });
             }
         }
-        #[cfg(any(test, feature = "test-support"))]
-        let _ = buffer_addresses;
         Ok(())
     }
 
@@ -1261,7 +1265,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     ) -> Option<RxBufferAddressMismatch> {
         for (index, &observed) in buffer_addresses.iter().enumerate() {
             let buffer = self.buffer_for_descriptor(index)?;
-            let expected = buffer.dma_address().ok()?;
+            let expected = self.buffer_dma_address(buffer).ok()?;
             if expected != observed {
                 return Some(RxBufferAddressMismatch {
                     index,
@@ -1274,8 +1278,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
     }
 }
 
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> Default
-    for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Default
+    for RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     fn default() -> Self {
         Self::new()

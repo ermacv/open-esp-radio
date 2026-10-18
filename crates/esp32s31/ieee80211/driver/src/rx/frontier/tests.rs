@@ -1,18 +1,34 @@
 use crate::rx::storage::ReceiveDmaStorage;
 
-use oer_esp32s31_ieee80211_dma::descriptor::{BIT_30, DESCRIPTOR_BYTES};
-
-use oer_esp32s31_ieee80211_mac::rx::{
-    RxDma, RxDmaBinding, RxDmaWalkerStopped, RxRingHalted, RxRingStopped,
+use oer_esp32s31_ieee80211_dma::{
+    descriptor::{BIT_30, DESCRIPTOR_BYTES},
+    space::HostDma,
 };
+
+use oer_esp32s31_ieee80211_mac::rx::{RxDma, RxDmaBinding, RxDmaWalkerStopped, RxRingHalted};
 
 use super::*;
 
 const COUNT: usize = 2;
 const BUFFER_SIZE: usize = 64;
 const STORAGE_SIZE: usize = 128;
-const BASE: u32 = 0x2f00_1000;
-const BUFFERS: [u32; COUNT] = [0x2f00_2000, 0x2f00_2100];
+/// The host arena's descriptor base: descriptors lead the arena.
+const BASE: u32 = oer_esp32s31_ieee80211_dma::space::HOST_ARENA_BASE;
+
+/// A static host arena, as the product's is static.
+fn leaked<const N: usize, const S: usize>() -> &'static ReceiveDmaStorage<N, BUFFER_SIZE, S, HostDma>
+{
+    std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new()))
+}
+
+/// The arena's own buffer address table.
+fn layout<const N: usize, const S: usize>(
+    storage: &'static ReceiveDmaStorage<N, BUFFER_SIZE, S, HostDma>,
+) -> &'static [u32; N] {
+    let addresses = std::boxed::Box::leak(std::boxed::Box::new([0; N]));
+    assert_eq!(storage.dma_layout(addresses), Ok(BASE));
+    addresses
+}
 
 #[derive(Default)]
 struct Hardware {
@@ -126,28 +142,21 @@ impl RxDma for Hardware {
 fn completed_descriptors_are_delivered_in_ring_order_across_wrap() {
     const WRAP_COUNT: usize = 4;
     const WRAP_STORAGE_SIZE: usize = WRAP_COUNT * BUFFER_SIZE;
-    let storage = ReceiveDmaStorage::<WRAP_COUNT, BUFFER_SIZE, WRAP_STORAGE_SIZE>::new();
-    let addresses = [0x2f00_2000, 0x2f00_2100, 0x2f00_2200, 0x2f00_2300];
+    let storage = leaked::<WRAP_COUNT, WRAP_STORAGE_SIZE>();
     let mut hardware = Hardware::default();
-    let halted = RxRingStopped::prepare(
-        &mut hardware,
-        storage.descriptors(),
-        BASE,
-        &addresses,
-        BUFFER_SIZE as u32,
-        |_| Ok(()),
-    )
-    .unwrap()
-    .into_halted();
+    let halted = storage
+        .prepare_ring(&mut hardware, BASE, layout(storage))
+        .unwrap()
+        .into_halted();
     let mut rx = ReceiveFrontier::<WRAP_COUNT, BUFFER_SIZE>::from_halted(halted);
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, &storage))
+    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();
     // First reclaim 0,1 so the next logical receive frontier begins at two.
     for index in [0, 1, 2] {
         storage.descriptors()[index].write_word0(storage.descriptors()[index].word0() | BIT_30);
     }
     hardware.release_through(2, Some(3));
-    rx.service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Continue)
+    rx.service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
         .unwrap();
 
     // The subsequent finite interval 2,3,0 crosses physical zero.
@@ -159,7 +168,7 @@ fn completed_descriptors_are_delivered_in_ring_order_across_wrap() {
     let mut observed = [usize::MAX; 3];
     let mut count = 0;
     let first = rx
-        .service_completed(&mut hardware, &storage, |segment| {
+        .service_completed(&mut hardware, storage, |segment| {
             observed[count] =
                 usize::try_from((segment.descriptor_address - BASE) / DESCRIPTOR_BYTES).unwrap();
             count += 1;
@@ -167,7 +176,7 @@ fn completed_descriptors_are_delivered_in_ring_order_across_wrap() {
         })
         .unwrap();
     let second = rx
-        .service_completed(&mut hardware, &storage, |segment| {
+        .service_completed(&mut hardware, storage, |segment| {
             observed[count] =
                 usize::try_from((segment.descriptor_address - BASE) / DESCRIPTOR_BYTES).unwrap();
             count += 1;
@@ -180,37 +189,25 @@ fn completed_descriptors_are_delivered_in_ring_order_across_wrap() {
     assert_eq!(observed, [2, 3, 0]);
 }
 
-fn halted_ring<'a>(
+fn halted_ring(
     hardware: &mut Hardware,
-    storage: &'a ReceiveDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>,
-) -> RxRingHalted<'a, COUNT> {
-    RxRingStopped::prepare(
-        hardware,
-        storage.descriptors(),
-        BASE,
-        &BUFFERS,
-        BUFFER_SIZE as u32,
-        |_| Ok(()),
-    )
-    .unwrap()
-    .into_halted()
+    storage: &'static ReceiveDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, HostDma>,
+) -> RxRingHalted<'static, COUNT> {
+    storage
+        .prepare_ring(hardware, BASE, layout(storage))
+        .unwrap()
+        .into_halted()
 }
 
 #[test]
 fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() {
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
-    let prepared = RxRingStopped::prepare(
-        &mut hardware,
-        storage.descriptors(),
-        BASE,
-        &BUFFERS,
-        BUFFER_SIZE as u32,
-        |_| Ok(()),
-    )
-    .unwrap();
+    let prepared = storage
+        .prepare_ring(&mut hardware, BASE, layout(storage))
+        .unwrap();
     let mut rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_prepared(prepared);
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, &storage))
+    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();
 
     // The walker reached the accepted terminal and stopped at NEXT=0. The
@@ -234,11 +231,11 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
 
 #[test]
 fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, &storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, &storage))
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();
     assert_eq!(rx.phase(), RxFrontierPhase::Live);
 
@@ -247,7 +244,7 @@ fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
     }
     hardware.release_through(1, None);
     let progress = rx
-        .service_completed(&mut hardware, &storage, |segment| {
+        .service_completed(&mut hardware, storage, |segment| {
             assert_eq!(segment.descriptor_address, BASE);
             assert_eq!(segment.buffer.len(), BUFFER_SIZE);
             RxFrontierDirective::Stop
@@ -272,11 +269,11 @@ fn owner_services_a_terminal_descriptor_and_round_trips_between_phases() {
 
 #[test]
 fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, &storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, &storage))
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();
     for descriptor in storage.descriptors() {
         descriptor.write_word0(descriptor.word0() | BIT_30);
@@ -284,7 +281,7 @@ fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
     hardware.release_through(0, Some(1));
 
     let first = rx
-        .service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Pause)
+        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Pause)
         .unwrap();
     assert_eq!(first.completed, 1);
     assert!(!first.stopped);
@@ -294,7 +291,7 @@ fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
 
     hardware.release_through(1, Some(0));
     let second = rx
-        .service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Continue)
+        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
         .unwrap();
     assert_eq!(second.completed, 1);
     assert!(!second.stopped);
@@ -304,7 +301,7 @@ fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
     assert_ne!(storage.descriptors()[1].word0() & BIT_30, 0);
 
     let retained = rx
-        .service_completed(&mut hardware, &storage, |_| {
+        .service_completed(&mut hardware, storage, |_| {
             panic!("confirmation must not manufacture another completion")
         })
         .unwrap();
@@ -315,17 +312,17 @@ fn pause_bounds_one_service_pass_without_retaining_a_terminal_descriptor() {
 
 #[test]
 fn an_append_is_published_only_after_a_later_service_confirms_link_release() {
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, &storage));
-    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, &storage))
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
+    block_on(rx.start_with_storage(&oer_time_virtual::SkipClock::new(), &mut hardware, storage))
         .unwrap();
     storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | BIT_30);
     hardware.release_through(0, Some(1));
 
     let completed = rx
-        .service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Continue)
+        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
         .unwrap();
     assert_eq!(completed.completed, 1);
     assert!(!rx.reload_pending());
@@ -334,7 +331,7 @@ fn an_append_is_published_only_after_a_later_service_confirms_link_release() {
     storage.descriptors()[1].write_word0(storage.descriptors()[1].word0() | BIT_30);
     hardware.release_through(1, None);
     let confirmed = rx
-        .service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Continue)
+        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Continue)
         .unwrap();
     assert_eq!(confirmed.completed, 1);
     assert_eq!(storage.descriptors()[0].word0() & BIT_30, 0);
@@ -345,14 +342,14 @@ fn an_append_is_published_only_after_a_later_service_confirms_link_release() {
 
 #[test]
 fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
     let rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, &storage));
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
     let live = block_on(rx.try_into_live_with_storage(
         &oer_time_virtual::SkipClock::new(),
         &mut hardware,
-        &storage,
+        storage,
     ))
     .unwrap_or_else(|_| panic!("fresh halted owner must become live"));
     assert_eq!(live.descriptor_base(), BASE);
@@ -365,12 +362,12 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     block_on(already_live.start_with_storage(
         &oer_time_virtual::SkipClock::new(),
         &mut hardware,
-        &storage,
+        storage,
     ))
     .expect("finite protocol phase starts the ring");
     storage.descriptors()[0].write_word0(storage.descriptors()[0].word0() | BIT_30);
     already_live
-        .service_completed(&mut hardware, &storage, |_| RxFrontierDirective::Stop)
+        .service_completed(&mut hardware, storage, |_| RxFrontierDirective::Stop)
         .expect("the final protocol frame remains observed before promotion");
     let enable_count = hardware.enable_count;
     let disable_count = hardware.disable_count;
@@ -378,7 +375,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     let live = block_on(already_live.try_into_live_with_storage(
         &oer_time_virtual::SkipClock::new(),
         &mut hardware,
-        &storage,
+        storage,
     ))
     .unwrap_or_else(|_| panic!("an existing live frontier must transfer cleanly"));
     assert_eq!(hardware.enable_count, enable_count);
@@ -395,7 +392,7 @@ fn consuming_connected_promotion_preserves_live_frontier_or_exact_owner() {
     let failure = block_on(vacant.try_into_live_with_storage(
         &oer_time_virtual::SkipClock::new(),
         &mut hardware,
-        &storage,
+        storage,
     ))
     .err()
     .expect("vacant frontier must return its placeholder owner");
@@ -423,15 +420,15 @@ fn the_walker_starts_only_after_its_settle_on_the_caller_timer() {
     };
     use oer_time::{Duration, Instant};
 
-    let storage = ReceiveDmaStorage::<COUNT, BUFFER_SIZE, STORAGE_SIZE>::new();
+    let storage = leaked::<COUNT, STORAGE_SIZE>();
     let mut hardware = Hardware::default();
     let mut rx =
-        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, &storage));
+        ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, storage));
     let clock: oer_time_virtual::VirtualClock =
         oer_time_virtual::VirtualClock::starting_at(Instant::from_micros(100));
     let mut context = Context::from_waker(Waker::noop());
     {
-        let mut start = pin!(rx.start_with_storage(&clock, &mut hardware, &storage));
+        let mut start = pin!(rx.start_with_storage(&clock, &mut hardware, storage));
         assert!(start.as_mut().poll(&mut context).is_pending());
         assert_eq!(clock.next_deadline(), Some(Instant::from_micros(105)));
         clock.advance(Duration::from_micros(4)).unwrap();

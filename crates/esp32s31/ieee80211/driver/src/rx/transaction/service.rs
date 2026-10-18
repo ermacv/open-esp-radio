@@ -30,9 +30,10 @@ pub fn service<
     const STAGE_SLOTS: usize,
     const DMA_BUFFER_SIZE: usize,
     const DMA_STORAGE_SIZE: usize,
+    S: oer_esp32s31_ieee80211_dma::space::DmaSpace,
 >(
     ring: &mut RxRingLive<'storage, COUNT>,
-    storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+    storage: &'static RxDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     pool: &'pool RxStagePool<STAGE_SLOTS, STAGE_CAPACITY>,
     publisher: &E,
     admission: &P,

@@ -8,7 +8,9 @@ repository.workspace = true
 description = "Audited ESP32-S31 Wi-Fi MAC DMA ownership and descriptor ring"
 
 [features]
-# Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
+# Host models of the hardware: the HostDma address space and the proofs a
+# mock RxDma/TxDma reports from its registers. Models of the hardware, yes;
+# bypasses of the product's own checks, no.
 test-support = ["oer-esp32s31-hal/test-support"]
 default = []
 

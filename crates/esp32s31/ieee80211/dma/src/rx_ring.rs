@@ -4,7 +4,6 @@
 //! decoding remains in the MAC crate, while the semantic MMIO operations are
 //! defined by [`crate::rx_dma::RxDma`].
 
-#[cfg(not(any(test, feature = "test-support")))]
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -130,52 +129,86 @@ pub struct RxReloadRepairEvidence {
     pub last_repair_head: Option<u32>,
 }
 
-// Production has one hardware RX-ring authority. Keep
-// qualification evidence outside the movable ownership token: adding even a
-// few words to that token is multiplied across nested async state machines and
-// measurably changes the stack shape being diagnosed. Native model tests keep
-// evidence per instance so parallel tests cannot race through these globals.
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_OBSERVATIONS: AtomicU32 = AtomicU32::new(0);
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_UPPER_ONLY: AtomicU32 = AtomicU32::new(0);
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_BASE_REPAIRS: AtomicU32 = AtomicU32::new(0);
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_LAST_NEXT_LOW: AtomicU32 = AtomicU32::new(0);
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_LAST_LAST: AtomicU32 = AtomicU32::new(u32::MAX);
-#[cfg(not(any(test, feature = "test-support")))]
-static RELOAD_LAST_HEAD: AtomicU32 = AtomicU32::new(u32::MAX);
-
-#[cfg(not(any(test, feature = "test-support")))]
-fn reset_reload_repair_evidence() {
-    RELOAD_OBSERVATIONS.store(0, Ordering::Relaxed);
-    RELOAD_UPPER_ONLY.store(0, Ordering::Relaxed);
-    RELOAD_BASE_REPAIRS.store(0, Ordering::Relaxed);
-    RELOAD_LAST_NEXT_LOW.store(0, Ordering::Relaxed);
-    RELOAD_LAST_LAST.store(u32::MAX, Ordering::Relaxed);
-    RELOAD_LAST_HEAD.store(u32::MAX, Ordering::Relaxed);
+/// The words a static RX arena keeps beside its descriptors: the sticky
+/// lifecycle and the reload-repair evidence of its live epoch.
+///
+/// The evidence lives here, not in the movable ring token, so the token
+/// (carried through nested async state) stays one pointer wide. Its zero
+/// bytes are a reusable arena without evidence: optional values are stored
+/// as `value + 1`, so zero means `None`; a 20-bit descriptor address never
+/// reaches `u32::MAX`.
+#[derive(bytemuck::Zeroable)]
+pub struct RxArenaWords {
+    lifecycle: AtomicU8,
+    observations: AtomicU32,
+    unknown_upper_with_zero_address: AtomicU32,
+    base_repairs: AtomicU32,
+    last_next_low: AtomicU32,
+    last_last_low_plus_one: AtomicU32,
+    last_repair_head_plus_one: AtomicU32,
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
+impl RxArenaWords {
+    pub(crate) const fn new() -> Self {
+        Self {
+            lifecycle: AtomicU8::new(RxDmaArenaState::Reusable as u8),
+            observations: AtomicU32::new(0),
+            unknown_upper_with_zero_address: AtomicU32::new(0),
+            base_repairs: AtomicU32::new(0),
+            last_next_low: AtomicU32::new(0),
+            last_last_low_plus_one: AtomicU32::new(0),
+            last_repair_head_plus_one: AtomicU32::new(0),
+        }
+    }
+
+    pub(crate) const fn lifecycle(&self) -> &AtomicU8 {
+        &self.lifecycle
+    }
+
+    fn reset_evidence(&self) {
+        for word in [
+            &self.observations,
+            &self.unknown_upper_with_zero_address,
+            &self.base_repairs,
+            &self.last_next_low,
+            &self.last_last_low_plus_one,
+            &self.last_repair_head_plus_one,
+        ] {
+            word.store(0, Ordering::Relaxed);
+        }
+    }
+
+    fn evidence(&self) -> RxReloadRepairEvidence {
+        RxReloadRepairEvidence {
+            observations: self.observations.load(Ordering::Relaxed),
+            unknown_upper_with_zero_address: self
+                .unknown_upper_with_zero_address
+                .load(Ordering::Relaxed),
+            base_repairs: self.base_repairs.load(Ordering::Relaxed),
+            last_next_low: self.last_next_low.load(Ordering::Relaxed),
+            last_last_low: decode_optional(self.last_last_low_plus_one.load(Ordering::Relaxed)),
+            last_repair_head: decode_optional(
+                self.last_repair_head_plus_one.load(Ordering::Relaxed),
+            ),
+        }
+    }
+}
+
 fn increment_saturating(counter: &AtomicU32) {
     let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
         Some(value.saturating_add(1))
     });
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
-const fn encode_optional_evidence(value: Option<u32>) -> u32 {
+const fn encode_optional(value: Option<u32>) -> u32 {
     match value {
-        Some(value) => value,
-        None => u32::MAX,
+        Some(value) => value.saturating_add(1),
+        None => 0,
     }
 }
 
-#[cfg(not(any(test, feature = "test-support")))]
-const fn decode_optional_evidence(value: u32) -> Option<u32> {
-    if value == u32::MAX { None } else { Some(value) }
+const fn decode_optional(value: u32) -> Option<u32> {
+    value.checked_sub(1)
 }
 
 /// Persistent state of the static RX arena, independent of a movable ring
@@ -427,7 +460,7 @@ pub struct RxRingStopped<'a, const COUNT: usize> {
     retained_next_low: u32,
     retained_last_low: u32,
     binding: RxDmaBinding<'a>,
-    lifecycle: Option<&'a AtomicU8>,
+    arena: Option<&'a RxArenaWords>,
 }
 
 /// Sole software owner of one running S31 RX descriptor frontier.
@@ -456,10 +489,8 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     cursor_generation: u32,
     completion_release_probe_pending: bool,
     exhausted_republication_head_low: Option<u32>,
-    #[cfg(any(test, feature = "test-support"))]
-    reload_repair_evidence: RxReloadRepairEvidence,
     binding: RxDmaBinding<'a>,
-    lifecycle: Option<&'a AtomicU8>,
+    arena: Option<&'a RxArenaWords>,
     requires_stop: bool,
 }
 
@@ -474,7 +505,7 @@ pub struct RxRingHalted<'a, const COUNT: usize> {
     descriptor_base: u32,
     buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
     buffer_size: u16,
-    lifecycle: Option<&'a AtomicU8>,
+    arena: Option<&'a RxArenaWords>,
 }
 
 impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
@@ -517,7 +548,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
         if u32::from(self.buffer_size) != buffer_size {
             return Err((self, RxRingError::Size));
         }
-        let lifecycle = self.lifecycle;
+        let lifecycle = self.arena.map(RxArenaWords::lifecycle);
         let buffer_addresses = self.buffer_addresses;
         match RxRingStopped::prepare_inner(
             mmio,
@@ -526,7 +557,7 @@ impl<'a, const COUNT: usize> RxRingHalted<'a, COUNT> {
             buffer_addresses,
             buffer_size,
             prepare_buffer,
-            self.lifecycle,
+            self.arena,
         ) {
             Ok(stopped) => Ok(stopped),
             Err(error) => {
@@ -578,7 +609,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             descriptor_base: self.descriptor_base,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
-            lifecycle: self.lifecycle,
+            arena: self.arena,
         }
     }
 
@@ -626,7 +657,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         buffer_addresses: &'a RxDmaBufferAddresses<COUNT>,
         buffer_size: u32,
         mut prepare_buffer: F,
-        lifecycle: Option<&'a AtomicU8>,
+        arena: Option<&'a RxArenaWords>,
     ) -> Result<Self, RxRingError>
     where
         M: RxDma,
@@ -691,7 +722,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             retained_next_low,
             retained_last_low,
             binding,
-            lifecycle,
+            arena,
         })
     }
 
@@ -740,7 +771,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         self,
         mmio: &mut M,
     ) -> Result<RxRingLive<'a, COUNT>, (Self, RxRingError)> {
-        if let Some(lifecycle) = self.lifecycle {
+        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
             match RxDmaArenaState::load(lifecycle) {
                 RxDmaArenaState::Prepared => {}
                 RxDmaArenaState::ResetRequired => {
@@ -756,7 +787,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         }
         if let Err(error) = enable_receive_inner(mmio, &self.binding) {
             if mmio.walker_enabled()
-                && let Some(lifecycle) = self.lifecycle
+                && let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
             {
                 // A failed start which nevertheless observes WALKER_ENABLE
                 // cannot return an honestly stopped capability. Keep the
@@ -766,11 +797,12 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             }
             return Err((self, error));
         }
-        if let Some(lifecycle) = self.lifecycle {
+        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
             RxDmaArenaState::Live.store(lifecycle);
         }
-        #[cfg(not(any(test, feature = "test-support")))]
-        reset_reload_repair_evidence();
+        if let Some(arena) = self.arena {
+            arena.reset_evidence();
+        }
         Ok(RxRingLive {
             descriptors: self.descriptors,
             descriptor_base: self.descriptor_base,
@@ -783,10 +815,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             cursor_generation: 0,
             completion_release_probe_pending: false,
             exhausted_republication_head_low: None,
-            #[cfg(any(test, feature = "test-support"))]
-            reload_repair_evidence: RxReloadRepairEvidence::default(),
             binding: self.binding,
-            lifecycle: self.lifecycle,
+            arena: self.arena,
             requires_stop: true,
         })
     }
@@ -818,9 +848,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// pointer identity is a constant-time proof of the same binding during a
     /// live epoch. Raw validation rings carry no lifecycle and deliberately
     /// fall back to complete address validation.
-    pub(crate) fn belongs_to_lifecycle(&self, lifecycle: &AtomicU8) -> bool {
-        self.lifecycle
-            .is_some_and(|bound| core::ptr::eq(bound, lifecycle))
+    pub(crate) fn belongs_to_arena(&self, arena: &RxArenaWords) -> bool {
+        self.arena.is_some_and(|bound| core::ptr::eq(bound, arena))
     }
 
     /// Observe one live descriptor without transferring its ownership.
@@ -845,24 +874,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         )
     }
 
+    /// The reload-repair evidence of this live epoch; none for a ring
+    /// without an arena.
     pub fn reload_repair_evidence(&self) -> RxReloadRepairEvidence {
-        #[cfg(not(any(test, feature = "test-support")))]
-        {
-            RxReloadRepairEvidence {
-                observations: RELOAD_OBSERVATIONS.load(Ordering::Relaxed),
-                unknown_upper_with_zero_address: RELOAD_UPPER_ONLY.load(Ordering::Relaxed),
-                base_repairs: RELOAD_BASE_REPAIRS.load(Ordering::Relaxed),
-                last_next_low: RELOAD_LAST_NEXT_LOW.load(Ordering::Relaxed),
-                last_last_low: decode_optional_evidence(RELOAD_LAST_LAST.load(Ordering::Relaxed)),
-                last_repair_head: decode_optional_evidence(
-                    RELOAD_LAST_HEAD.load(Ordering::Relaxed),
-                ),
-            }
-        }
-        #[cfg(any(test, feature = "test-support"))]
-        {
-            self.reload_repair_evidence
-        }
+        self.arena.map(RxArenaWords::evidence).unwrap_or_default()
     }
 
     fn record_reload_repair_observation(
@@ -871,41 +886,24 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         last_descriptor_low: Option<u32>,
         repair_head: Option<u32>,
     ) {
-        let upper_only =
-            next_descriptor.address_low() == 0 && next_descriptor.has_unknown_upper_state();
-        #[cfg(not(any(test, feature = "test-support")))]
-        {
-            increment_saturating(&RELOAD_OBSERVATIONS);
-            if upper_only {
-                increment_saturating(&RELOAD_UPPER_ONLY);
-            }
-            RELOAD_LAST_NEXT_LOW.store(next_descriptor.address_low(), Ordering::Relaxed);
-            RELOAD_LAST_LAST.store(
-                encode_optional_evidence(last_descriptor_low),
-                Ordering::Relaxed,
-            );
-            if let Some(repair_head) = repair_head {
-                increment_saturating(&RELOAD_BASE_REPAIRS);
-                RELOAD_LAST_HEAD.store(repair_head, Ordering::Relaxed);
-            }
+        let Some(arena) = self.arena else {
+            return;
+        };
+        increment_saturating(&arena.observations);
+        if next_descriptor.address_low() == 0 && next_descriptor.has_unknown_upper_state() {
+            increment_saturating(&arena.unknown_upper_with_zero_address);
         }
-        #[cfg(any(test, feature = "test-support"))]
-        {
-            self.reload_repair_evidence.observations =
-                self.reload_repair_evidence.observations.saturating_add(1);
-            if upper_only {
-                self.reload_repair_evidence.unknown_upper_with_zero_address = self
-                    .reload_repair_evidence
-                    .unknown_upper_with_zero_address
-                    .saturating_add(1);
-            }
-            self.reload_repair_evidence.last_next_low = next_descriptor.address_low();
-            self.reload_repair_evidence.last_last_low = last_descriptor_low;
-            if let Some(repair_head) = repair_head {
-                self.reload_repair_evidence.base_repairs =
-                    self.reload_repair_evidence.base_repairs.saturating_add(1);
-                self.reload_repair_evidence.last_repair_head = Some(repair_head);
-            }
+        arena
+            .last_next_low
+            .store(next_descriptor.address_low(), Ordering::Relaxed);
+        arena
+            .last_last_low_plus_one
+            .store(encode_optional(last_descriptor_low), Ordering::Relaxed);
+        if let Some(repair_head) = repair_head {
+            increment_saturating(&arena.base_repairs);
+            arena
+                .last_repair_head_plus_one
+                .store(encode_optional(Some(repair_head)), Ordering::Relaxed);
         }
     }
 
@@ -913,7 +911,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// no longer be proven. The live token may still be retained for reset
     /// diagnostics, but no later stop observation can make this arena reusable.
     pub fn require_reset(&mut self) {
-        if let Some(lifecycle) = self.lifecycle {
+        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle) {
             RxDmaArenaState::ResetRequired.store(lifecycle);
         }
     }
@@ -939,9 +937,9 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             descriptor_base: self.descriptor_base,
             buffer_addresses: self.buffer_addresses,
             buffer_size: self.buffer_size,
-            lifecycle: self.lifecycle,
+            arena: self.arena,
         };
-        if let Some(lifecycle) = self.lifecycle
+        if let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
             && RxDmaArenaState::load(lifecycle) != RxDmaArenaState::ResetRequired
         {
             // The halted token still owns the arena. Only that exact token may
@@ -2240,7 +2238,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
     fn drop(&mut self) {
         if self.requires_stop
-            && let Some(lifecycle) = self.lifecycle
+            && let Some(lifecycle) = self.arena.map(RxArenaWords::lifecycle)
         {
             RxDmaArenaState::ResetRequired.store(lifecycle);
         }

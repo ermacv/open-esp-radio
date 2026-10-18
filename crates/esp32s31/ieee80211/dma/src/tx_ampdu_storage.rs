@@ -4,6 +4,7 @@
 //! External zero-copy aggregates receive prepare/start authority only through
 //! an owner which also retains every referenced [`StableDmaBacking`] lease.
 
+use crate::space::DmaSpace;
 use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
 
 use oer_esp32s31_hal::types::MacTxQueueDetached;
@@ -111,8 +112,11 @@ impl AmpduExternalDescriptor<'_> {
 struct AmpduDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 
 /// Final static allocation for an internal-buffer A-MPDU arena.
+///
+/// Its layout is fixed: the descriptors, then the 16-byte aligned buffers.
 #[pin_project]
 #[derive(bytemuck::Zeroable)]
+#[repr(C)]
 pub struct AmpduDmaStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
     #[pin]
     descriptors: [Descriptor; SLOTS],
@@ -140,27 +144,17 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         }
     }
 
-    pub fn pin_static(
+    /// Bind the static storage at its DMA addresses in space `S`, once.
+    pub fn pin_static<S: DmaSpace>(
         storage: &'static mut Self,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
-        let descriptor_base = u32::try_from(storage.descriptors.as_ptr().addr())
-            .map_err(|_| AmpduDmaStorageError::Address)?;
+        let descriptor_base = S::address(storage, storage.descriptors.as_ptr())
+            .ok_or(AmpduDmaStorageError::Address)?;
         let buffer_base = if BUFFER_SIZE == 0 {
             0
         } else {
-            u32::try_from(storage.buffers.as_ptr().addr())
-                .map_err(|_| AmpduDmaStorageError::Address)?
+            S::address(storage, storage.buffers.as_ptr()).ok_or(AmpduDmaStorageError::Address)?
         };
-        Self::pin_static_inner(storage, descriptor_base, buffer_base)
-    }
-
-    /// Bind deterministic target-like addresses in a native model.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn pin_static_model(
-        storage: &'static mut Self,
-        descriptor_base: u32,
-        buffer_base: u32,
-    ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
         Self::pin_static_inner(storage, descriptor_base, buffer_base)
     }
 

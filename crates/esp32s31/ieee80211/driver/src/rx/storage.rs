@@ -1,6 +1,9 @@
 //! Qualified storage geometry and aliases over the affine DMA arena.
 
-use oer_esp32s31_ieee80211_dma::rx_storage::{RxDmaBuffer, RxDmaStorage};
+use oer_esp32s31_ieee80211_dma::{
+    rx_storage::{RxDmaBuffer, RxDmaStorage},
+    space::ChipDma,
+};
 
 /// Descriptor count and allocation geometry qualified by the ordinary S31
 /// large-RX profile.
@@ -31,4 +34,5 @@ pub type ReceiveDmaStorage<
     const COUNT: usize = ESP32S31_RX_DESCRIPTOR_COUNT,
     const BUFFER_SIZE: usize = ESP32S31_RX_BUFFER_SIZE,
     const STORAGE_SIZE: usize = ESP32S31_RX_BUFFER_STORAGE_SIZE,
-> = RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE>;
+    S = ChipDma,
+> = RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>;
