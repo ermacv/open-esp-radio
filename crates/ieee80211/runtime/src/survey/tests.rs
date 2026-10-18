@@ -232,6 +232,58 @@ fn the_handoff_lag_is_the_handoff_less_the_stamp() {
 }
 
 #[test]
+fn the_stamp_and_handoff_spans_cover_the_same_stamped_frames() {
+    let mut survey = Survey::<1>::new(bssid(STAND));
+    let meta = heard(-40);
+    // Without a stamped frame there is no span.
+    survey.take(at(1_000), &beacon(STAND, 0), &meta, None, at(1_000));
+    let (_, tally) = survey.bss(0).unwrap();
+    assert_eq!(
+        (tally.stamp_span_us(), tally.handoff_span_us()),
+        (None, None)
+    );
+    // The stamp clock runs at half the handoff clock's rate.
+    survey.take(at(5_000), &beacon(STAND, BI), &meta, Some(1_000), at(5_000));
+    survey.take(at(6_000), &beacon(STAND, 2 * BI), &meta, None, at(6_000));
+    survey.take(
+        at(205_000),
+        &beacon(STAND, 3 * BI),
+        &meta,
+        Some(101_000),
+        at(205_000),
+    );
+    // An unstamped frame after the last stamped one moves neither span.
+    survey.take(
+        at(300_000),
+        &beacon(STAND, 4 * BI),
+        &meta,
+        None,
+        at(300_000),
+    );
+    let (_, tally) = survey.bss(0).unwrap();
+    assert_eq!(
+        (tally.first_handoff, tally.last_handoff),
+        (Some(5_000), Some(205_000))
+    );
+    assert_eq!(tally.stamp_span_us(), Some(100_000));
+    assert_eq!(tally.handoff_span_us(), Some(200_000));
+
+    // The handoff is kept as its low 32 bits, and its span wraps.
+    let mut survey = Survey::<1>::new(bssid(STAND));
+    survey.take(
+        at(1),
+        &beacon(STAND, 0),
+        &meta,
+        Some(7),
+        at(u64::from(u32::MAX) - 9),
+    );
+    survey.take(at(1), &beacon(STAND, BI), &meta, Some(27), at(1 << 32 | 10));
+    let (_, tally) = survey.bss(0).unwrap();
+    assert_eq!(tally.first_handoff, Some(u32::MAX - 9));
+    assert_eq!(tally.handoff_span_us(), Some(20));
+}
+
+#[test]
 fn counters_sort_every_frame_by_what_became_of_it() {
     let mut survey = Survey::<1>::new(bssid(STAND));
     let now = at(1);
@@ -328,6 +380,7 @@ fn survey_never_panics(count: usize) {
     });
     for (_, tally) in survey.entries() {
         let _ = tally.stamp_span_us();
+        let _ = tally.handoff_span_us();
     }
     assert!(survey.counters().frames > 0);
 }

@@ -82,6 +82,11 @@ pub struct BssTally {
     pub first_stamp: Option<u32>,
     /// The receive stamp of the latest stamped frame.
     pub last_stamp: Option<u32>,
+    /// The handoff time of the first stamped frame, in µs, low 32 bits: the
+    /// clock the stamps are compared with.
+    pub first_handoff: Option<u32>,
+    /// The handoff time of the latest stamped frame, in µs, low 32 bits.
+    pub last_handoff: Option<u32>,
     /// The longest time between two consecutive stamped beacons, in µs.
     pub max_beacon_gap_us: u32,
     /// Gaps between consecutive stamped beacons longer than 1.5 beacon
@@ -119,6 +124,8 @@ impl BssTally {
         without_stamp: 0,
         first_stamp: None,
         last_stamp: None,
+        first_handoff: None,
+        last_handoff: None,
         max_beacon_gap_us: 0,
         late_gaps: 0,
         missed_beacons: 0,
@@ -132,6 +139,13 @@ impl BssTally {
     /// The time from the first to the latest stamped frame, in µs.
     pub fn stamp_span_us(&self) -> Option<u32> {
         Some(self.last_stamp?.wrapping_sub(self.first_stamp?))
+    }
+
+    /// The time from the first to the latest stamped frame's handoff, in
+    /// µs. Over the same frames as [`Self::stamp_span_us`], their ratio is
+    /// the stamp clock's rate against the handoff clock.
+    pub fn handoff_span_us(&self) -> Option<u32> {
+        Some(self.last_handoff?.wrapping_sub(self.first_handoff?))
     }
 }
 
@@ -312,10 +326,13 @@ impl BssTally {
         }
         match stamp {
             Some(stamp) => {
+                // The low 32 bits of the handoff time, on the stamp's wrap.
+                let handoff = handoff.as_micros() as u32;
                 self.first_stamp.get_or_insert(stamp);
                 self.last_stamp = Some(stamp);
-                // The low 32 bits of the handoff time, on the stamp's wrap.
-                let lag = (handoff.as_micros() as u32).wrapping_sub(stamp);
+                self.first_handoff.get_or_insert(handoff);
+                self.last_handoff = Some(handoff);
+                let lag = handoff.wrapping_sub(stamp);
                 MinMax::widen(&mut self.handoff_lag_us, lag);
             }
             None => self.without_stamp = self.without_stamp.saturating_add(1),
