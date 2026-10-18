@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/key_use_required.rs:5:30
+  |
+5 |     { TxAdmission::Protected(ticket) } // ui-error: E0308
+  |       ---------------------- ^^^^^^ expected `KeyUse<'_>`, found `TxTicket<'_>`
+  |       |
+  |       arguments to this enum variant are incorrect
+  |
+  = note: expected struct `KeyUse<'_>`
+             found struct `TxTicket<'core>`
+note: tuple variant defined here
+ --> src/lower_mac/keys.rs
+  |
+  |     Protected(KeyUse<'core, Path>),
+  |     ^^^^^^^^^

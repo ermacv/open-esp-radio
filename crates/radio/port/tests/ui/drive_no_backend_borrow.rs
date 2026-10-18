@@ -81,7 +81,7 @@ impl PortBackend for Backend {
     }
     #[cfg(ui_reject)]
     fn drive<'p, 'id>(
-        &mut self, // ui-error: E0185
+        &mut self, // ui-error@-1: E0185
         _: &'p Self::Held<'id>,
         retire: Retire<'p>,
     ) -> impl Future<Output = DriverExit<(), ()>> + use<'p, 'id> {

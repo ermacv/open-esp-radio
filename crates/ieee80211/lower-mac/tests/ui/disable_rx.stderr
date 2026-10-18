@@ -1,0 +1,5 @@
+error[E0599]: no variant named `Received` found for enum `LowerMacTerminal<'_, _>`
+  --> tests/ui/disable_rx.rs:10:30
+   |
+10 |     return LowerMacTerminal::Received { frame, meta }; // ui-error: E0599
+   |                              ^^^^^^^^ variant not found in `LowerMacTerminal<'_, _>`

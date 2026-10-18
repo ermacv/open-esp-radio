@@ -1,0 +1,40 @@
+error[E0599]: no method named `want_access_point` found for enum `RetiredArbiter<'id, K, R, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:11:12
+   |
+11 |     failed.want_access_point(); // ui-error: E0599
+   |            ^^^^^^^^^^^^^^^^^ method not found in `RetiredArbiter<'_, K>`
+
+error[E0599]: no method named `upstream` found for struct `FailedArbiter<'id, K, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:21:12
+   |
+21 |     failed.upstream(now, fact); // ui-error: E0599
+   |            ^^^^^^^^ method not found in `FailedArbiter<'id, K>`
+
+error[E0599]: no method named `retuned` found for struct `FailedArbiter<'id, K, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:30:12
+   |
+30 |     failed.retuned(pending); // ui-error: E0599
+   |            ^^^^^^^
+   |
+help: there is a method `retune_ended` with a similar name
+   |
+30 |     failed.retune_ended(pending); // ui-error: E0599
+   |                  +++++
+
+error[E0599]: no method named `request` found for struct `FailedArbiter<'id, K, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:42:17
+   |
+42 |     drop(failed.request(now, request, place)); // ui-error: E0599
+   |                 ^^^^^^^ method not found in `FailedArbiter<'id, K>`
+
+error[E0599]: no method named `ready` found for struct `FailedArbiter<'id, K, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:51:12
+   |
+51 |     failed.ready(lease); // ui-error: E0599
+   |            ^^^^^ method not found in `FailedArbiter<'id, K>`
+
+error[E0599]: no method named `restart` found for struct `FailedArbiter<'id, K, Path>` in the current scope
+  --> tests/ui/failed_arbiter_inputs.rs:60:17
+   |
+60 |     drop(failed.restart(channel)); // ui-error: E0599
+   |                 ^^^^^^^ method not found in `FailedArbiter<'id, K>`

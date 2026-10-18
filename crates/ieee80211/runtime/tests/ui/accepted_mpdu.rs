@@ -7,7 +7,10 @@ pub fn reorder<'id, C, T>(
     second: &mut InFlight<C, T, ModelMpdu<'id>>,
 ) {
     #[cfg(ui_reject)]
-    core::mem::swap(first.execute().mpdu, second.execute().mpdu); // ui-error: E0616 // ui-error: E0616
+    core::mem::swap(
+        first.execute().mpdu, // ui-error: E0616
+        second.execute().mpdu, // ui-error: E0616
+    );
     #[cfg(not(ui_reject))]
     core::mem::swap(first, second);
 }

@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/submission_owner.rs:8:26
+  |
+8 |     let _ = phase.submit(attempt); // ui-error: E0308
+  |                   ------ ^^^^^^^ expected `AdmittedAttempt<'_, ..., ..., ..., ..., ...>`, found `Attempt<'_, ..., ..., ..., ..., ...>`
+  |                   |
+  |                   arguments to this method are incorrect
+  |
+  = note: expected struct `AdmittedAttempt<'id, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketKind, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Prepared<'_, 'p, <I as InterfacePhase<'p, 'id>>::Role, <I as InterfacePhase<'p, 'id>>::Caps>, <I as InterfacePhase<'p, 'id>>::Caps, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Context, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketPath>`
+             found struct `Attempt<'id, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketKind, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Prepared<'k, 'p, <I as InterfacePhase<'p, 'id>>::Role, <I as InterfacePhase<'p, 'id>>::Caps>, <I as InterfacePhase<'p, 'id>>::Caps, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::Context, <<I as InterfacePhase<'p, 'id>>::Types as PhaseTypes<'id>>::TicketPath>`
+note: method defined here
+ --> src/phase.rs
+  |
+  |     fn submit<'k>(
+  |        ^^^^^^

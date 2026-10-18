@@ -1,0 +1,10 @@
+error[E0624]: method `set_checked_channel` is private
+ --> tests/ui/enabled_retune.rs:6:10
+  |
+6 |     core.set_checked_channel(channel); // ui-error: E0624
+  |          ^^^^^^^^^^^^^^^^^^^ private method
+  |
+ ::: src/lower_mac.rs
+  |
+  |     fn set_checked_channel(&mut self, channel: WifiChannel) {
+  |     ------------------------------------------------------- private method defined here

@@ -2055,6 +2055,7 @@ dependencies = [
  "oer-espressif-modem-clock",
  "oer-memory",
  "oer-radio-coex",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2076,6 +2077,7 @@ dependencies = [
  "oer-radio-port",
  "oer-time",
  "oer-time-virtual",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2247,6 +2249,7 @@ dependencies = [
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-time",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2312,6 +2315,7 @@ dependencies = [
  "oer-ieee80211-mac",
  "oer-radio-port",
  "oer-time",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2332,6 +2336,7 @@ dependencies = [
  "oer-radio-coex",
  "oer-radio-port",
  "oer-time",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2339,6 +2344,7 @@ name = "oer-ieee80211-mac"
 version = "0.1.0"
 dependencies = [
  "oer-time",
+ "oer-ui-cases",
  "zeroize",
 ]
 
@@ -2391,6 +2397,7 @@ dependencies = [
  "oer-radio-port",
  "oer-time",
  "oer-time-virtual",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2415,6 +2422,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-radio-port",
  "oer-time",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2433,6 +2441,7 @@ version = "0.1.0"
 dependencies = [
  "oer-radio-port",
  "oer-time",
+ "oer-ui-cases",
  "scopeguard",
 ]
 
@@ -2445,6 +2454,7 @@ name = "oer-memory"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2472,6 +2482,7 @@ version = "0.1.0"
 dependencies = [
  "oer-radio-port",
  "oer-time",
+ "oer-ui-cases",
 ]
 
 [[package]]
@@ -2480,6 +2491,7 @@ version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "oer-time",
+ "oer-ui-cases",
  "scopeguard",
 ]
 

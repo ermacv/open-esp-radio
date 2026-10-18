@@ -23,6 +23,7 @@ oer-radio-coex = { path = "../../radio/coex" }
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
+oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
 
 [lints]
 workspace = true

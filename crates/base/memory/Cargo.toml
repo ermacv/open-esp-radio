@@ -13,6 +13,9 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["min_cons
 [features]
 default = []
 
+[dev-dependencies]
+oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+
 [lints]
 workspace = true
 

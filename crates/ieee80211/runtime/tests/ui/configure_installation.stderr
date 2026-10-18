@@ -1,0 +1,29 @@
+error: lifetime may not live long enough
+  --> tests/ui/configure_installation.rs:52:9
+   |
+36 |     async fn run<'p, 'id>(
+   |                      --- lifetime `'id` defined here
+37 |         self,
+   |         ---- has type `Inner<'1>`
+...
+52 |         Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'id` but it is returning data with lifetime `'1`
+
+error: lifetime may not live long enough
+  --> tests/ui/configure_installation.rs:52:9
+   |
+36 |     async fn run<'p, 'id>(
+   |                      --- lifetime `'id` defined here
+37 |         self,
+   |         ---- has type `Inner<'1>`
+...
+52 |         Ended::fail_stopped(owner.fail_stop(), ()) // ui-error: lifetime may not live long enough
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`
+
+warning: unused variable: `resources`
+  --> tests/ui/configure_installation.rs:39:9
+   |
+39 |         resources: ModelResources<'id>,
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_resources`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

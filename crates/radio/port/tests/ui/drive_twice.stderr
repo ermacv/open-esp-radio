@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `driver`
+  --> tests/ui/drive_twice.rs:11:22
+   |
+ 4 |     driver: oer_radio_port::DriverLoan<'p, B::Driver>,
+   |     ------ move occurs because `driver` has type `DriverLoan<'_, ()>`, which does not implement the `Copy` trait
+...
+ 9 |     let running = B::drive(driver, held, first);
+   |                            ------ value moved here
+10 |     #[cfg(all())]
+11 |     let _ = B::drive(driver, held, second); // ui-error: E0382
+   |                      ^^^^^^ value used here after move

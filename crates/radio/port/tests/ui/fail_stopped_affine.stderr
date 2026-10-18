@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `oer_radio_port::FailStopped<'id, B>` in the current scope
+ --> tests/ui/fail_stopped_affine.rs:6:25
+  |
+6 |     let _second = proof.clone(); // ui-error: E0599
+  |                         ^^^^^ method not found in `oer_radio_port::FailStopped<'id, B>`

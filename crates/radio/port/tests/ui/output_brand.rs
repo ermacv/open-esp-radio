@@ -18,7 +18,7 @@ where
     ) -> Ended<'id, B, Self::Output> {
         #[cfg(ui_reject)]
         {
-            Ended::uninstall(owner, (), slot) // ui-error: null lifetime may not live long enough
+            Ended::uninstall(owner, (), slot) // ui-error: lifetime may not live long enough
         }
         #[cfg(not(ui_reject))]
         {

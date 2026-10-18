@@ -1,0 +1,13 @@
+error[E0271]: type mismatch resolving `<PairwiseKeySlot<'static, Station, 1, 4> as AssociationSlot>::Pool == AssociationPool<Station, 2, 2>`
+  --> tests/ui/key_pool_size.rs:11:16
+   |
+11 |     declared::<PairwiseKeySlot<'static, Station, 1, 4>>(); // ui-error: E0271
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `2`, found `1`
+   |
+   = note: expected struct `AssociationPool<oer_ieee80211_lower_mac::Station, 2, 2>`
+              found struct `AssociationPool<oer_ieee80211_lower_mac::Station, 1, 4>`
+note: required by a bound in `declared`
+  --> tests/ui/key_pool_size.rs:7:32
+   |
+ 7 | fn declared<S: AssociationSlot<Pool = AssociationPool<Station, 2, 2>>>() {}
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `declared`

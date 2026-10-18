@@ -11,6 +11,9 @@ description = "Allocation-free IEEE 802.11 protocol types and state machines"
 oer-time = { path = "../../base/time" }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
+[dev-dependencies]
+oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+
 [lints]
 workspace = true
 

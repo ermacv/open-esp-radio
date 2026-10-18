@@ -1,0 +1,13 @@
+error[E0505]: cannot move out of `owner` because it is borrowed
+  --> tests/ui/setup_transition.rs:7:13
+   |
+ 3 | pub async fn setup<'p, 'id, B: PortBackend>(mut owner: Owner<'p, 'id, B, Disabled>) {
+   |                                             --------- binding `owner` declared here
+ 4 |     let setup = owner.setup();
+   |                 ----- borrow of `owner` occurs here
+...
+ 7 |     let _ = owner.enable().await; // ui-error: E0505
+   |             ^^^^^ move out of `owner` occurs here
+...
+10 | }
+   | - borrow might be used here, when `setup` is dropped and runs the destructor for type `Lent<'_, <B as PortBackend>::Setup<'_, '_>>`

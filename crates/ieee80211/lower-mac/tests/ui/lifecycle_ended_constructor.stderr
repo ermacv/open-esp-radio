@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/lifecycle_ended_constructor.rs:6:40
+  |
+6 |     { drop(owner); Ended::fail_stopped((), ()) } // ui-error: E0308
+  |                    ------------------- ^^ expected `FailStopped<'_, B>`, found `()`
+  |                    |
+  |                    arguments to this function are incorrect
+  |
+  = note: expected struct `oer_radio_port::FailStopped<'_, B>`
+          found unit type `()`
+note: associated function defined here
+ --> $WORKSPACE/crates/radio/port/src/lifecycle.rs
+  |
+  |     pub fn fail_stopped(proof: FailStopped<'id, B>, output: Out) -> Self {
+  |            ^^^^^^^^^^^^

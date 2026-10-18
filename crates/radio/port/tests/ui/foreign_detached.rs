@@ -6,7 +6,7 @@ pub fn foreign<'first: 'second, 'second, S>(
     retired: Retired<'first, S>,
     detached: Detached<'second>,
 ) {
-    finish(retired, detached); // ui-error: null lifetime may not live long enough
+    finish(retired, detached); // ui-error: lifetime may not live long enough
 }
 #[cfg(not(ui_reject))]
 pub fn same<'id, S>(retired: Retired<'id, S>, detached: Detached<'id>) {

@@ -86,6 +86,6 @@ impl PortBody<ModelBackend> for Target<'_, '_, '_> {
         }
         // Exchanging the rates would force the two independent installation
         // lifetimes to be equal. The returned owner exposes both directions.
-        Ended::fail_stopped(target.fail_stop(), ()) // ui-error: null lifetime may not live long enough // ui-error: null lifetime may not live long enough
+        Ended::fail_stopped(target.fail_stop(), ()) // ui-error: lifetime may not live long enough
     }
 }

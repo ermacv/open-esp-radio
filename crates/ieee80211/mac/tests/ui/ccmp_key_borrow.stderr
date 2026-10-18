@@ -1,0 +1,12 @@
+error[E0505]: cannot move out of `key` because it is borrowed
+ --> tests/ui/ccmp_key_borrow.rs:6:10
+  |
+3 | pub fn programming(key: Ccmp128Key) -> u8 {
+  |                    --- binding `key` declared here
+4 |     let bytes = key.as_bytes();
+  |                 --- borrow of `key` occurs here
+5 |     #[cfg(all())]
+6 |     drop(key); // ui-error: E0505
+  |          ^^^ move out of `key` occurs here
+7 |     let first = bytes[0];
+  |                 -------- borrow later used here

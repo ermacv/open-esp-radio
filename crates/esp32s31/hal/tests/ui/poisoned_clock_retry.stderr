@@ -1,0 +1,5 @@
+error[E0599]: no method named `release_clocks` found for struct `ClockPoisoned` in the current scope
+  --> tests/ui/poisoned_clock_retry.rs:12:16
+   |
+12 |     obligation.release_clocks(_lease); // ui-error: E0599
+   |                ^^^^^^^^^^^^^^ method not found in `ClockPoisoned`

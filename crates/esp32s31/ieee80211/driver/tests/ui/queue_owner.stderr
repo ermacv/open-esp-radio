@@ -1,0 +1,19 @@
+error[E0382]: use of moved value: `queue`
+  --> tests/ui/queue_owner.rs:19:49
+   |
+11 |     queue: FreeQueue<'core>,
+   |     ----- move occurs because `queue` has type `FreeQueue<'_>`, which does not implement the `Copy` trait
+...
+17 |     let returned = core.submit_checked(hardware, queue, first_admission, first);
+   |                                                  ----- value moved here
+18 |     #[cfg(all())]
+19 |     let _second = core.submit_checked(hardware, queue, second_admission, second); // ui-error: E0382
+   |                                                 ^^^^^ value used here after move
+
+warning: unused variable: `returned`
+  --> tests/ui/queue_owner.rs:17:9
+   |
+17 |     let returned = core.submit_checked(hardware, queue, first_admission, first);
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_returned`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

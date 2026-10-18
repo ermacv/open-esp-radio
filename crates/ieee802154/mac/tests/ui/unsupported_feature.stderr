@@ -1,0 +1,24 @@
+error[E0080]: evaluation panicked: the backend does not state this feature
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_ieee802154::owner::Has::<Capabilities, oer_ieee802154::owner::Promiscuous>::from_const::{constant#0}` failed here
+  |
+ ::: src/owner.rs
+  |
+  | /             assert!(
+  | |                 K::CAPS.operations.contains(F::REQUIRED),
+  | |                 "the backend does not state this feature"
+  | |             );
+  | |_____________- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/owner.rs
+  |
+  | /         const {
+  | |             assert!(
+  | |                 K::CAPS.operations.contains(F::REQUIRED),
+  | |                 "the backend does not state this feature"
+  | |             );
+  | |         }
+  | |_________^

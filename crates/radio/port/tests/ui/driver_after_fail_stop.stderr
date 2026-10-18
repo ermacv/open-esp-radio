@@ -1,0 +1,22 @@
+error[E0382]: borrow of moved value: `driver`
+ --> tests/ui/driver_after_fail_stop.rs:6:28
+  |
+3 | pub fn finish<D>(driver: DriverLoan<'_, D>, published: PublishedPoison) -> PoisonProof {
+  |                  ------ move occurs because `driver` has type `DriverLoan<'_, D>`, which does not implement the `Copy` trait
+4 |     let proof = driver.fail_stop(published);
+  |                        -------------------- `driver` moved due to this method call
+5 |     #[cfg(all())]
+6 |     let _still_driving = &*driver; // ui-error: E0382
+  |                            ^^^^^^ value borrowed here after move
+  |
+note: `DriverLoan::<'_, D>::fail_stop` takes ownership of the receiver `self`, which moves `driver`
+ --> src/lifecycle.rs
+  |
+  |     pub fn fail_stop(self, published: PublishedPoison) -> PoisonProof {
+  |                      ^^^^
+  = note: borrow occurs due to deref coercion to `D`
+note: deref defined here
+ --> src/lifecycle.rs
+  |
+  |     type Target = D;
+  |     ^^^^^^^^^^^

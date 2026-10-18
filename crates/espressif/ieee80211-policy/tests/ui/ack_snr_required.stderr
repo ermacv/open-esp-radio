@@ -1,0 +1,24 @@
+error[E0277]: the trait bound `Unmeasured: AckSnr` is not satisfied
+  --> tests/ui/ack_snr_required.rs:24:31
+   |
+24 |     for_port::<M, Unmeasured>(EspressifRateSelection::<K>::new()); // ui-error: E0277
+   |     ------------------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |     |
+   |     required by a bound introduced by this call
+   |
+help: the trait `AckSnr` is not implemented for `Unmeasured`
+  --> tests/ui/ack_snr_required.rs:20:1
+   |
+20 | pub struct Unmeasured;
+   | ^^^^^^^^^^^^^^^^^^^^^
+help: the trait `AckSnr` is implemented for `Snr`
+  --> tests/ui/ack_snr_required.rs:12:1
+   |
+12 | impl AckSnr for Snr {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: required for `EspressifRateSelection<K>` to implement `RateSelection<M, Unmeasured>`
+note: required by a bound in `for_port`
+  --> tests/ui/ack_snr_required.rs:6:43
+   |
+ 6 | fn for_port<M: SignalMetadata, A>(_: impl RateSelection<M, A>) {}
+   |                                           ^^^^^^^^^^^^^^^^^^^ required by this bound in `for_port`

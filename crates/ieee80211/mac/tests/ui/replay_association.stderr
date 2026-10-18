@@ -1,0 +1,5 @@
+error[E0599]: no method named `commit` found for mutable reference `&mut CcmpRxReplayEpoch` in the current scope
+ --> tests/ui/replay_association.rs:9:13
+  |
+9 |     current.commit(candidate); // ui-error: E0599
+  |             ^^^^^^ method not found in `&mut CcmpRxReplayEpoch`

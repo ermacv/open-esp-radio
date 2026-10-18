@@ -1,0 +1,5 @@
+error[E0616]: field `_retained` of struct `oer_radio_port::Quarantined` is private
+ --> tests/ui/quarantined_private.rs:6:27
+  |
+6 |     let _owners = receipt._retained; // ui-error: E0616
+  |                           ^^^^^^^^^ private field
