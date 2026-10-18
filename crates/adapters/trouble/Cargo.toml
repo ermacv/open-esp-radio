@@ -1,0 +1,48 @@
+[package]
+name = "oer-bluetooth-gatt-trouble"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Portable GATT application over the Trouble Host, composed by the Bluetooth HIL firmware"
+readme = "README.md"
+
+[features]
+default = []
+# LE Secure Connections numeric comparison, bonding and encrypted access.
+secure = [
+    "trouble-host/security",
+    "dep:embassy-futures",
+    "dep:embedded-io-async",
+    "dep:heapless",
+]
+
+[dependencies]
+bt-hci = "=0.10.1"
+embassy-sync = "0.8.0"
+embassy-futures = { version = "0.1.2", optional = true }
+embedded-io-async = { version = "0.7.0", optional = true }
+heapless = { version = "0.9", optional = true }
+trouble-host = { version = "=0.8.0", git = "https://github.com/ermacv/trouble", rev = "a6af435ba1539cead0afce04718ad8a089bcc4b9", default-features = false, features = ["default-packet-pool", "gatt", "peripheral"] }
+
+[dev-dependencies]
+oer-bluetooth-controller = { path = "../../../../protocols/bluetooth/le/controller" }
+oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
+oer-bluetooth-hci-transport = { path = "../../../../services/bluetooth/hci/transport" }
+oer-bluetooth-radio = { path = "../../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-runtime = { path = "../../../../runtime/bluetooth" }
+oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+embassy-futures = "0.1.2"
+critical-section = { version = "1.2.0", features = ["std"] }
+# Trouble links against the embassy-time driver; host tests use the std one.
+embassy-time = { version = "0.5.1", features = ["std", "generic-queue-64"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Document the complete application, including the `secure` module.
+features = ["secure"]
+

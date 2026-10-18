@@ -1,0 +1,24 @@
+[package]
+name = "oer-radio-supervisor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent mailbox and role-epoch actor of the portable radio service"
+readme = "README.md"
+
+[dependencies]
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
+oer-radio = { path = "../../../radio", default-features = false, features = ["wifi"] }
+oer-ieee80211-runtime = { path = "../../../runtime/ieee80211" }
+
+[dev-dependencies]
+oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-radio = { path = "../../../radio", default-features = false, features = ["wifi", "test-support"] }
+oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+
+[lints]
+workspace = true
+

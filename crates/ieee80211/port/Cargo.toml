@@ -1,0 +1,22 @@
+[package]
+name = "oer-ieee80211-port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The lifecycle of the IEEE 802.11 lower-MAC port: its owner, body, backend and joined driver"
+readme = "README.md"
+
+[features]
+# Lets a host test's dropped owner skip its debug assertion while a panic
+# unwinds.
+test-support = []
+
+[dependencies]
+oer-radio-port = { path = "../../../radio/port" }
+oer-time = { path = "../../../time" }
+
+[lints]
+workspace = true
+

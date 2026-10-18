@@ -1,0 +1,27 @@
+[package]
+name = "oer-esp32s31-radio-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Product-level ESP32-S31 shared radio: the arbiter, the shared PHY domain and its periodic tracking over the oer-time contract"
+
+[dependencies]
+embassy-sync = "0.8.0"
+oer-esp32s31-coex = { path = "../../../hardware/esp32s31/driver/coex" }
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
+oer-esp32s31-phy = { path = "../../../hardware/esp32s31/phy" }
+oer-time = { path = "../../../time" }
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

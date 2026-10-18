@@ -1,0 +1,23 @@
+[package]
+name = "oer-ieee80211-sta-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent Wi-Fi station join, scan, attempt and lifecycle drivers"
+readme = "README.md"
+
+[dependencies]
+oer-time = { path = "../../../time" }
+oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/security/rsn" }
+oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+
+[dev-dependencies]
+oer-time-virtual = { path = "../../../adapters/virtual/time" }
+critical-section = { version = "1.2.0", features = ["std"] }
+
+[lints]
+workspace = true
+

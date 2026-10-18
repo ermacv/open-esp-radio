@@ -1,0 +1,24 @@
+[package]
+name = "oer-bluetooth-hci-transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bounded in-process HCI transport between an LE Host and Controller"
+readme = "README.md"
+
+[dependencies]
+oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
+bt-hci = "=0.10.1"
+embassy-sync = "0.8.0"
+embedded-io = "0.7.1"
+
+[dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+embassy-futures = "0.1.2"
+trouble-host = { version = "=0.8.0", git = "https://github.com/ermacv/trouble", rev = "a6af435ba1539cead0afce04718ad8a089bcc4b9", default-features = false, features = ["peripheral"] }
+
+[lints]
+workspace = true
+

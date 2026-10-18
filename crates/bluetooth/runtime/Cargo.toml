@@ -1,0 +1,27 @@
+[package]
+name = "oer-bluetooth-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent service loop between an in-process HCI transport, the LE Controller core and a radio port"
+
+[dependencies]
+oer-bluetooth-port = { path = "../../protocols/bluetooth/le/port" }
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
+oer-bluetooth-controller = { path = "../../protocols/bluetooth/le/controller" }
+oer-bluetooth-hci = { path = "../../protocols/bluetooth/hci" }
+oer-bluetooth-hci-transport = { path = "../../services/bluetooth/hci/transport" }
+oer-bluetooth-radio = { path = "../../protocols/bluetooth/le/radio" }
+oer-radio-port = { path = "../../radio/port" }
+oer-time = { path = "../../time" }
+
+[dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+oer-time-virtual = { path = "../../adapters/virtual/time" }
+
+[lints]
+workspace = true
+

@@ -1,0 +1,43 @@
+[package]
+name = "oer-esp32s31-bluetooth-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent ESP32-S31 Bluetooth LE radio runtime over the oer-time contract"
+
+[features]
+# Record the runtime's trace points (`oer-bluetooth-trace`) into `oer-trace`.
+trace = ["oer-trace/record"]
+
+[dependencies]
+oer-bluetooth-port = { path = "../../../protocols/bluetooth/le/port" }
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
+oer-bluetooth-radio = { path = "../../../protocols/bluetooth/le/radio" }
+oer-bluetooth-trace = { path = "../../../protocols/bluetooth/trace" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-esp32s31-bluetooth = { path = "../../../hardware/esp32s31/driver/bluetooth" }
+oer-esp32s31-bluetooth-memory = { path = "../../../hardware/esp32s31/driver/bluetooth/memory" }
+oer-esp32s31-bluetooth-radio = { path = "../../../roles/esp32s31/bluetooth/radio" }
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
+oer-time = { path = "../../../time" }
+oer-trace = { path = "../../../trace" }
+
+[dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+oer-time-virtual = { path = "../../../adapters/virtual/time" }
+oer-esp32s31-bluetooth = { path = "../../../hardware/esp32s31/driver/bluetooth", features = ["test-support"] }
+oer-esp32s31-bluetooth-memory = { path = "../../../hardware/esp32s31/driver/bluetooth/memory", features = ["validation-probes"] }
+oer-esp32s31-bluetooth-radio = { path = "../../../roles/esp32s31/bluetooth/radio", features = ["test-support"] }
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

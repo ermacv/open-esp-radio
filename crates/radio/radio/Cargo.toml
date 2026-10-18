@@ -1,0 +1,32 @@
+[package]
+name = "oer-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable radio control, requests and role lifecycle"
+readme = "README.md"
+
+[features]
+default = ["wifi"]
+wifi = [
+    "dep:oer-ieee80211-mac",
+    "dep:oer-ieee80211-ap",
+    "dep:oer-ieee80211-softmac",
+    "dep:oer-ieee80211-sta",
+    "dep:oer-ieee80211-rsn",
+]
+# Synthetic portable service profiles for adapter tests.
+test-support = ["wifi"]
+
+[dependencies]
+oer-ieee80211-mac = { path = "../protocols/ieee80211/mac", optional = true }
+oer-ieee80211-ap = { path = "../protocols/ieee80211/ap", optional = true }
+oer-ieee80211-softmac = { path = "../protocols/ieee80211/softmac", optional = true }
+oer-ieee80211-sta = { path = "../protocols/ieee80211/sta", optional = true }
+oer-ieee80211-rsn = { path = "../protocols/ieee80211/security/rsn", optional = true }
+
+[lints]
+workspace = true
+

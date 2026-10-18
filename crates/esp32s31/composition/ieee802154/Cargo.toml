@@ -1,0 +1,36 @@
+[package]
+name = "oer-esp32s31-ieee802154-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Product-level ESP32-S31 IEEE 802.15.4 composition over the shared radio arbiter for Embassy and esp-hal"
+
+[dependencies]
+oer-memory = { path = "../../../../memory" }
+embassy-sync = "0.8.0"
+oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
+oer-espressif-ieee802154-engine = { path = "../../../../hardware/espressif/ieee802154/engine" }
+oer-espressif-ieee802154-runtime = { path = "../../../../runtime/espressif/ieee802154" }
+oer-ieee802154 = { path = "../../../../protocols/ieee802154" }
+oer-ieee802154-port = { path = "../../../../protocols/ieee802154/port" }
+oer-radio-port = { path = "../../../../radio/port" }
+oer-esp32s31-phy = { path = "../../../../hardware/esp32s31/phy" }
+oer-esp32s31-radio-runtime = { path = "../../../../runtime/esp32s31/radio" }
+oer-esp32s31-coex = { path = "../../../../hardware/esp32s31/driver/coex" }
+oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+
+# Hardware composition is target-only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-esp32s31-ieee802154-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/ieee802154", features = ["esp32s31"] }
+oer-esp32s31-radio-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/radio", features = ["esp32s31"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

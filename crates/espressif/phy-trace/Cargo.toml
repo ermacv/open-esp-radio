@@ -1,0 +1,15 @@
+[package]
+name = "oer-phy-trace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Trace points and the post-mortem snapshot of the Espressif PHY, decodable on the host"
+
+[dependencies]
+oer-trace = { path = "../../../trace" }
+
+[lints]
+workspace = true
+

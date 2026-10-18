@@ -1,0 +1,50 @@
+[package]
+name = "open-esp-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Public radio protocols, chip backends and system compositions"
+readme = "README.md"
+
+[lib]
+name = "oer"
+
+[features]
+default = ["wifi"]
+wifi = [
+    "dep:mac",
+    "dep:softmac",
+    "dep:datapath",
+    "dep:sta",
+    "dep:ap",
+    "dep:rsn",
+    "dep:rsn-service",
+]
+bluetooth = ["dep:hci", "dep:le-ll"]
+ieee802154 = ["dep:ieee802154"]
+esp32s31 = ["dep:chip-hal"]
+esp32s31-bluetooth = ["esp32s31", "bluetooth", "dep:chip-bluetooth"]
+esp32s31-ieee802154 = ["esp32s31", "ieee802154", "dep:chip-ieee802154"]
+
+
+[dependencies]
+memory = { package = "oer-memory", path = "../memory" }
+network = { package = "oer-network-interface", path = "../network/interface" }
+mac = { package = "oer-ieee80211-mac", path = "../protocols/ieee80211/mac", optional = true }
+softmac = { package = "oer-ieee80211-softmac", path = "../protocols/ieee80211/softmac", optional = true }
+datapath = { package = "oer-ieee80211-datapath", path = "../protocols/ieee80211/datapath", optional = true }
+sta = { package = "oer-ieee80211-sta", path = "../protocols/ieee80211/sta", optional = true }
+ap = { package = "oer-ieee80211-ap", path = "../protocols/ieee80211/ap", optional = true }
+rsn = { package = "oer-ieee80211-rsn", path = "../protocols/ieee80211/security/rsn", optional = true }
+rsn-service = { package = "oer-ieee80211-rsn-service", path = "../services/ieee80211/rsn", optional = true }
+hci = { package = "oer-bluetooth-hci", path = "../protocols/bluetooth/hci", optional = true }
+le-ll = { package = "oer-bluetooth-ll", path = "../protocols/bluetooth/le/ll", optional = true }
+ieee802154 = { package = "oer-ieee802154", path = "../protocols/ieee802154", optional = true }
+chip-hal = { package = "oer-esp32s31-hal", path = "../hardware/esp32s31/hal", optional = true }
+chip-bluetooth = { package = "oer-esp32s31-bluetooth", path = "../hardware/esp32s31/driver/bluetooth", optional = true }
+chip-ieee802154 = { package = "oer-espressif-ieee802154-engine", path = "../hardware/espressif/ieee802154/engine", optional = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,98 @@
+[package]
+name = "oer-esp32s31-ieee80211-system"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/the predecessor repository"
+description = "Product-level ESP32-S31 Wi-Fi composition for Embassy and esp-hal"
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
+embassy-executor = { version = "0.10.0", default-features = false }
+embassy-futures = "0.1.2"
+# The owned Xarxa/Embassy network stack: the maintained owner-transfer fork.
+embassy-net-owned = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "4868fd9acfd4191173cd6531b537d6009d3ae5d0", default-features = false, features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "raw-ethernet"], optional = true }
+embassy-sync = "0.8.0"
+embassy-time = "0.5.1"
+log = { version = "0.4.29", optional = true }
+oer-time = { path = "../../../../time" }
+oer-time-embassy = { path = "../../../../adapters/embassy/time" }
+riscv = { version = "0.15", optional = true }
+oer-radio = { path = "../../../../radio", default-features = false, features = ["wifi"] }
+oer-radio-supervisor = { path = "../../../../runtime/radio/supervisor" }
+oer-esp32s31-ieee80211 = { path = "../../../../hardware/esp32s31/driver/ieee80211" }
+oer-esp32s31-hal = { path = "../../../../hardware/esp32s31/hal" }
+oer-espressif-ieee80211-policy = { path = "../../../../protocols/espressif/ieee80211/policy" }
+oer-esp32s31-phy = { path = "../../../../hardware/esp32s31/phy" }
+oer-esp32s31-ieee80211-ap = { path = "../../../../roles/esp32s31/ieee80211/ap" }
+oer-esp32s31-ieee80211-dma = { path = "../../../../hardware/esp32s31/driver/ieee80211/dma" }
+oer-esp32s31-ieee80211-mac = { path = "../../../../hardware/esp32s31/driver/ieee80211/mac" }
+oer-esp32s31-ieee80211-sta = { path = "../../../../roles/esp32s31/ieee80211/sta" }
+oer-embassy-net-owned = { path = "../../../../adapters/embassy-net/owned", optional = true }
+oer-esp32s31-ieee80211-runtime = { path = "../../../../runtime/esp32s31/ieee80211", default-features = false }
+oer-esp32s31-coex = { path = "../../../../hardware/esp32s31/driver/coex" }
+oer-esp32s31-radio-runtime = { path = "../../../../runtime/esp32s31/radio" }
+oer-ieee80211-runtime = { path = "../../../../runtime/ieee80211" }
+oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac" }
+oer-network-interface = { path = "../../../../network/interface" }
+oer-ieee80211-ap = { path = "../../../../protocols/ieee80211/ap" }
+oer-ieee80211-softmac = { path = "../../../../protocols/ieee80211/softmac" }
+oer-ieee80211-sta = { path = "../../../../protocols/ieee80211/sta" }
+oer-ieee80211-rsn = { path = "../../../../protocols/ieee80211/security/rsn" }
+oer-memory = { path = "../../../../memory" }
+static_cell = "2.1.1"
+
+# Hardware composition is target-only; the product resource profile and its
+# ownership tests also compile on the host without running esp-hal's build script.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+oer-esp32s31-soc-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/soc", features = ["esp32s31"] }
+oer-esp32s31-ieee80211-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/ieee80211", features = ["esp32s31"] }
+oer-esp32s31-radio-esp-hal = { path = "../../../../adapters/esp-hal/esp32s31/radio", features = ["esp32s31"] }
+
+[target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+
+[features]
+rx-ownership-observation = ["oer-esp32s31-ieee80211-dma/rx-ownership-observation"]
+# Experimental direct RX-gain transaction SRAM placement for the RXCAL A/B profile.
+phy-rx-hot-sram = ["oer-esp32s31-ieee80211-runtime/phy-rx-hot-sram"]
+default = ["owned-network"]
+owned-network = [
+    "dep:embassy-net-owned",
+    "dep:oer-embassy-net-owned",
+    "oer-esp32s31-ieee80211-runtime/owned-network",
+]
+diagnostics = [
+    "dep:log",
+    "oer-esp32s31-ieee80211-runtime/diagnostics",
+]
+# Hard-IRQ callbacks are a deliberately separate diagnostic boundary. Enabling
+# ordinary value observers must not change the SRAM-closed interrupt call graph.
+mac-irq-diagnostics = ["diagnostics"]
+tx-wait-probe = ["diagnostics", "oer-esp32s31-ieee80211-runtime/tx-wait-probe"]
+rx-clock-probe = ["diagnostics", "oer-esp32s31-ieee80211-runtime/rx-clock-probe"]
+task-poll-telemetry = [
+    "diagnostics",
+    "oer-esp32s31-ieee80211-runtime/task-poll-telemetry",
+]
+connected-datapath-cycle-telemetry = ["dep:riscv"]
+core0-rx-coarse-telemetry = [
+    "oer-esp32s31-ieee80211-runtime/core0-rx-coarse-telemetry",
+    "oer-esp32s31-ieee80211-runtime/tx-phase-telemetry",
+]
+tx-psram-dma-probe = [
+    "oer-esp32s31-soc-esp-hal/psram-dma-diagnostic",
+    "oer-esp32s31-ieee80211-dma/tx-psram-dma-probe",
+]
+
+[lints]
+workspace = true
+

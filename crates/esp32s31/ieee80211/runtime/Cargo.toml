@@ -1,0 +1,115 @@
+[package]
+name = "oer-esp32s31-ieee80211-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Executor-independent ESP32-S31 Wi-Fi radio execution over oer-time"
+
+[dependencies]
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
+oer-embassy-net-owned = { path = "../../../adapters/embassy-net/owned", optional = true }
+oer-memory = { path = "../../../memory" }
+oer-network-interface = { path = "../../../network/interface" }
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal" }
+oer-esp32s31-phy = { path = "../../../hardware/esp32s31/phy" }
+oer-esp32s31-radio-runtime = { path = "../radio" }
+oer-esp32s31-coex = { path = "../../../hardware/esp32s31/driver/coex" }
+oer-esp32s31-ieee80211 = { path = "../../../hardware/esp32s31/driver/ieee80211" }
+oer-esp32s31-ieee80211-dma = { path = "../../../hardware/esp32s31/driver/ieee80211/dma" }
+oer-esp32s31-ieee80211-mac = { path = "../../../hardware/esp32s31/driver/ieee80211/mac" }
+oer-esp32s31-ieee80211-ap = { path = "../../../roles/esp32s31/ieee80211/ap" }
+oer-esp32s31-ieee80211-sta = { path = "../../../roles/esp32s31/ieee80211/sta" }
+oer-time = { path = "../../../time" }
+oer-time-virtual = { path = "../../../adapters/virtual/time", optional = true }
+oer-trace = { path = "../../../trace" }
+oer-ieee80211-trace = { path = "../../../protocols/ieee80211/trace" }
+oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
+oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
+oer-ieee80211-datapath = { path = "../../../protocols/ieee80211/datapath" }
+oer-ieee80211-sta = { path = "../../../protocols/ieee80211/sta" }
+oer-espressif-ieee80211-policy = { path = "../../../protocols/espressif/ieee80211/policy" }
+oer-ieee80211-rsn = { path = "../../../protocols/ieee80211/security/rsn" }
+oer-ieee80211-sta-service = { path = "../../../services/ieee80211/sta" }
+oer-ieee80211-rsn-service = { path = "../../../services/ieee80211/rsn" }
+oer-ieee80211-runtime = { path = "../../ieee80211" }
+oer-ieee80211-port = { path = "../../../protocols/ieee80211/port" }
+oer-radio-port = { path = "../../../radio/port" }
+oer-radio-permit-pool = { path = "../../radio/permit-pool" }
+log = { version = "0.4", optional = true }
+
+[dev-dependencies]
+oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac", features = ["test-support"] }
+oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+critical-section = { version = "1.2.0", features = ["std"] }
+oer-esp32s31-hal = { path = "../../../hardware/esp32s31/hal", features = ["validation-probes"] }
+oer-esp32s31-ieee80211-ap = { path = "../../../roles/esp32s31/ieee80211/ap", features = ["diagnostics"] }
+oer-time-virtual = { path = "../../../adapters/virtual/time" }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "9e0e3293724c30c5892e6af56150c849f5231eb2", features = ["async"] }
+
+[features]
+# Place the direct source-owned RX-gain transaction in internal SRAM for A/B
+# measurement. The recovered graph and short ROM settles remain unchanged.
+phy-rx-hot-sram = ["oer-esp32s31-phy/rx-gain-hot-sram"]
+default = ["owned-network"]
+# Record the station and RX slot trace points into the image's installed trace.
+trace = [
+    "oer-trace/record",
+    "oer-esp32s31-ieee80211-mac/trace",
+    "oer-esp32s31-ieee80211-sta/trace",
+]
+# Optimized Xarxa/Embassy owner glue. The radio-native policy and physical
+# materialization boundary compile without this feature for compatibility and
+# research integrations.
+owned-network = ["dep:oer-embassy-net-owned"]
+# Host models of the station TX hardware for other packages' host tests,
+# including observers. Absent on 32-bit targets, where the models do not exist.
+test-support = ["diagnostics", "dep:oer-time-virtual"]
+# Value-only driver observers. Ordinary/performance builds do not retain
+# diagnostic counters or invoke observation clocks.
+diagnostics = [
+    "dep:log",
+    "oer-esp32s31-ieee80211-ap/diagnostics",
+]
+# Intrusive station TX waiting probe; adds timed hardware observations.
+tx-wait-probe = ["diagnostics"]
+# Intrusive receive-clock probe: logs frame receive timestamps beside their
+# handoff time (`diagnostic-rx-clock`).
+rx-clock-probe = ["diagnostics"]
+# Low-overhead phase timing for the Core0 RX producer. This is deliberately
+# tied to the intrusive task-poll image and is absent from production builds.
+task-poll-telemetry = [
+    "diagnostics",
+    "dep:riscv",
+    "oer-esp32s31-ieee80211/task-poll-telemetry",
+    "oer-esp32s31-ieee80211-sta/task-poll-telemetry",
+]
+# Coarse Core0 accounting deliberately excludes `diagnostics` and every
+# per-frame phase observer. It samples only radio polls and finite
+# runner/DMA/protocol batches, so the result remains close to the production
+# owner graph while still pairing elapsed cycles with retired instructions.
+core0-rx-coarse-telemetry = ["dep:riscv"]
+# Per-transaction TX phase samples used only by the coarse diagnostic image.
+# Core1 packet emission is measured at the paired embassy-net boundary.
+tx-phase-telemetry = [
+    "core0-rx-coarse-telemetry",
+]
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+riscv = { version = "0.15", optional = true }
+
+[[test]]
+name = "owned_datapath_network"
+required-features = ["owned-network"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

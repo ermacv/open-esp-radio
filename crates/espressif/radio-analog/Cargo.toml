@@ -1,0 +1,12 @@
+[package]
+name = "oer-radio-analog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Chip-neutral non-blocking analog register bus contract and field transactions of the Espressif PHY"
+
+[lints]
+workspace = true
+

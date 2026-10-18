@@ -1,0 +1,28 @@
+# The ESP32-S31 standalone examples: one workspace, one lockfile, one
+# chip-target configuration (`.cargo/config.toml`).
+[workspace]
+resolver = "3"
+members = ["access-point", "monitor", "station", "thread"]
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# A mutable call inside `debug_assert!` disappears from optimized firmware.
+debug_assert_with_mut_call = "deny"
+# The repository `clippy.toml` lists methods radio code must not call.
+disallowed_methods = "deny"
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = false
+
+[patch."https://github.com/ermacv/embassy.git"]
+embassy-futures = { version = "0.1.2", registry = "crates-io" }
+embassy-sync = { version = "0.8.0", registry = "crates-io" }
+embassy-time = { version = "0.5.1", registry = "crates-io" }
+

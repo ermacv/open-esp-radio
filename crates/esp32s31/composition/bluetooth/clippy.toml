@@ -1,0 +1,5 @@
+# The nearest clippy.toml wins, so this repeats the workspace's rule.
+disallowed-methods = [
+    { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
+    { path = "core::future::pending", reason = "a port body ends through its owner's uninstall or fail_stop, never by pending forever (docs/architecture.md#ownership-and-refusals)" },
+]
