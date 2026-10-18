@@ -8,10 +8,24 @@
 //! not own radio policy, board electrical parameters, credentials, sockets or
 //! a host protocol. Optional timer observations and idle accounting describe only
 //! its own execution. Applications supply the ESP-HAL software
-//! interrupt and timer capabilities explicitly, with the tokens of their
-//! sources in the image's interrupt table, whose entries name
-//! `wake_handler` and `timer_interrupt`.
+//! interrupt capabilities and the system timer explicitly, with the tokens of
+//! their sources in the image's interrupt table.
+//!
+//! - `Executor<SWI>` runs in thread mode, woken by its software interrupt,
+//!   whose entry names `wake_handler::<SWI>`.
+//! - `InterruptExecutor<SWI>` polls in its software interrupt's handler
+//!   (`interrupt_handler::<SWI>`), at that interrupt's level: the radio
+//!   executor (P2). Starting it takes a `LevelOrder`, which checks when the
+//!   image compiles that the radio interrupts preempt it and it preempts the
+//!   application.
+//! - The time driver (`init`, `bind`) gives each executor its own timer
+//!   queue and SYSTIMER comparator, whose alarm (`alarm_interrupt::<N>`) only
+//!   acknowledges and pends; one executor writes the SYSTIMER registers. No
+//!   lock is taken on any of these paths; the module documentation of
+//!   `time_driver` has the details.
 
+#[cfg(any(feature = "chip", test))]
+mod deadline_cell;
 #[cfg(feature = "chip")]
 mod executor;
 #[cfg(feature = "chip")]
@@ -20,9 +34,9 @@ mod time_driver;
 mod timer_queue;
 
 #[cfg(feature = "chip")]
-pub use executor::{Executor, wake_handler};
+pub use executor::{Executor, InterruptExecutor, LevelOrder, interrupt_handler, wake_handler};
 #[cfg(feature = "chip")]
-pub use time_driver::{Timer, init, timer_interrupt};
+pub use time_driver::{alarm_interrupt, bind, init};
 
 #[cfg(any(feature = "timer-observation", test))]
 pub mod timer_observation;

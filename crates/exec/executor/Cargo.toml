@@ -18,13 +18,11 @@ idle-accounting = ["chip"]
 esp32s31 = [
     "chip",
     "esp-hal/esp32s31",
-    "esp-sync/esp32s31",
     "oer-espressif-interrupt-table-esp-hal/esp32s31",
 ]
 esp32c5 = [
     "chip",
     "esp-hal/esp32c5",
-    "esp-sync/esp32c5",
     "oer-espressif-interrupt-table-esp-hal/esp32c5",
 ]
 # The executor and time driver, which a chip feature selects.
@@ -33,7 +31,6 @@ chip = [
     "dep:embassy-time-driver",
     "dep:embassy-time-queue-utils",
     "dep:esp-hal",
-    "dep:esp-sync",
     "dep:portable-atomic",
     "dep:riscv",
     "dep:oer-espressif-interrupt-table-esp-hal",
@@ -47,7 +44,6 @@ embassy-executor = { version = "0.10.0", default-features = false, optional = tr
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 embassy-time-queue-utils = { version = "0.3", optional = true }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["static-interrupts", "rt", "unstable"], optional = true }
-esp-sync = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-interrupt-table = { path = "../interrupt-table", optional = true }
 oer-espressif-interrupt-table-esp-hal = { path = "../esp-hal-irq", optional = true }

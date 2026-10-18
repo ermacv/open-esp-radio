@@ -14,15 +14,11 @@
 
 use core::fmt::Write as _;
 
-use embassy_futures::select::{Either, select};
 use esp_hal::{
-    Blocking, efuse,
-    interrupt::software::SoftwareInterrupt,
-    rng::Rng,
-    timer::{OneShotTimer, systimer::SystemTimer},
+    Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::Rng,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
-use oer_esp32s31_hal::{domain::RadioDomain, root::ProtocolPartitions};
+use oer_esp32s31_hal::root::ProtocolPartitions;
 use oer_esp32s31_ieee80211::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
     start_esp32s31_radio,
@@ -38,7 +34,7 @@ use oer_esp32s31_platform_board as board;
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_esp_hal::{EspHalClocks, RadioSingletons, take_radio};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_espressif_executor_embassy::Executor;
+use oer_espressif_executor_embassy::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
@@ -46,23 +42,36 @@ use oer_time_embassy::EmbassyClock;
 use static_cell::StaticCell;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    /// The executor's wake.
+    /// The application executor's wake (thread mode).
     wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor_embassy::wake_handler::<0>, Priority1, ProCpu;
-    /// The time driver's alarm.
-    alarm: AlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor_embassy::timer_interrupt, Priority1, ProCpu;
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor_embassy::interrupt_handler::<2>, Priority2, ProCpu;
+    /// The radio executor's timer alarm; it only acknowledges and pends.
+    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor_embassy::alarm_interrupt::<0>, Priority3, ProCpu;
+    /// The application executor's timer alarm.
+    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor_embassy::alarm_interrupt::<1>, Priority1, ProCpu;
 }
+
+/// The radio executor between the latching interrupts and the application.
+const LEVELS: LevelOrder<RadioAlarmToken, RadioToken, WakeToken> = LevelOrder::new();
 
 type Console = UsbSerialJtag<'static, Blocking>;
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
+static RADIO_EXECUTOR: StaticCell<InterruptExecutor<2>> = StaticCell::new();
 
-/// What the run needs from the boot.
+type Actor = RadioSystem<
+    oer_esp32s31_radio_client::wifi::Wifi,
+    RcSlow,
+    Esp32s31Radio<EspHalClocks, EmbassyClock, NoopPhyTargetObserver>,
+    EmbassyClock,
+>;
+
+/// What the Wi-Fi client needs from the boot.
 struct Boot {
     console: Console,
-    domain: RadioDomain<ConcurrentPhy>,
-    partitions: ProtocolPartitions,
-    clocks: EspHalClocks,
-    identity: PhyCalibrationIdentity,
+    cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
+    wifi: oer_esp32s31_hal::root::WifiPartition,
     station: [u8; 6],
     access_point: [u8; 6],
 }
@@ -124,45 +133,6 @@ extern "C" fn runtime_main() -> ! {
         }
     };
     let (domain, partitions) = hardware.split(ConcurrentPhy::new());
-
-    let systimer = SystemTimer::new(peripherals.SYSTIMER);
-    oer_espressif_executor_embassy::init(OneShotTimer::new(systimer.alarm0), interrupts.alarm);
-    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
-        peripherals.FROM_CPU_INTR0,
-    )));
-    // SAFETY: the vectors, the interrupt stack, the time driver and, from
-    // `run`, the executor's wake are bound; the interrupt table routes only
-    // their two sources, and interrupts were disabled since the handoff.
-    unsafe { oer_espressif_staged_runtime::enable_interrupts_after_handoff() };
-    let boot = Boot {
-        console,
-        domain,
-        partitions,
-        clocks,
-        identity,
-        station,
-        access_point,
-    };
-    executor.run(interrupts.wake, move |spawner| {
-        // The task's one slot is free: this is its only spawn.
-        if let Ok(token) = w0(boot) {
-            spawner.spawn(token);
-        }
-    })
-}
-
-/// The radio system's actor and the Wi-Fi client, polled together.
-#[embassy_executor::task]
-async fn w0(boot: Boot) {
-    let Boot {
-        mut console,
-        domain,
-        partitions,
-        clocks,
-        identity,
-        station,
-        access_point,
-    } = boot;
     let _ = write!(
         console,
         "OER w0 identity rf_cal_version={} base_mac={:02x?} mac_ext={:#06x}\r\n",
@@ -170,7 +140,7 @@ async fn w0(boot: Boot) {
     );
     let (Some((end, cells)), Some(lp)) = (claim(), LpClock::<RcSlow>::claim()) else {
         let _ = console.write(b"OER-RESULT: fail w0 claim\r\n");
-        return;
+        park()
     };
     let ProtocolPartitions {
         wifi, wifi_coex, ..
@@ -184,21 +154,65 @@ async fn w0(boot: Boot) {
         PhyRegisterConfig::new(identity),
     );
     let actor = RadioSystem::new(end, backend, EmbassyClock, lp);
-    let app = async {
-        let verdict = run(&mut console, cells.wifi, wifi, station, access_point).await;
-        match verdict {
-            Ok(()) => {
-                let _ = console.write(b"OER-RESULT: pass w0\r\n");
-            }
-            Err(reason) => {
-                let _ = write!(console, "OER-RESULT: fail w0 {reason}\r\n");
-            }
-        }
-        core::future::pending::<()>().await
+
+    // The radio executor writes the system timer; the application executor
+    // publishes its deadlines to it.
+    oer_espressif_executor_embassy::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
+    oer_espressif_executor_embassy::bind::<0, _>(interrupts.app_alarm);
+    let radio = RADIO_EXECUTOR
+        .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
+            peripherals.FROM_CPU_INTR2,
+        )))
+        .start(interrupts.radio, LEVELS);
+    if let Ok(token) = radio_actor(actor) {
+        radio.spawn(token);
+    }
+    let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
+        peripherals.FROM_CPU_INTR0,
+    )));
+    // SAFETY: the vectors, the interrupt stack, the time driver, the radio
+    // executor and, from `run`, the application executor's wake are bound;
+    // the interrupt table routes only their four sources, and interrupts were
+    // disabled since the handoff.
+    unsafe { oer_espressif_staged_runtime::enable_interrupts_after_handoff() };
+    let boot = Boot {
+        console,
+        cell: cells.wifi,
+        wifi,
+        station,
+        access_point,
     };
-    match select(actor.run(), app).await {
-        Either::First(never) => match never {},
-        Either::Second(()) => {}
+    executor.run(interrupts.wake, move |spawner| {
+        // The task's one slot is free: this is its only spawn.
+        if let Ok(token) = w0(boot) {
+            spawner.spawn(token);
+        }
+    })
+}
+
+/// The radio system's actor, on the radio executor (P2).
+#[embassy_executor::task]
+async fn radio_actor(actor: Actor) {
+    match actor.run().await {}
+}
+
+/// The Wi-Fi client, on the application executor.
+#[embassy_executor::task]
+async fn w0(boot: Boot) {
+    let Boot {
+        mut console,
+        cell,
+        wifi,
+        station,
+        access_point,
+    } = boot;
+    match run(&mut console, cell, wifi, station, access_point).await {
+        Ok(()) => {
+            let _ = console.write(b"OER-RESULT: pass w0\r\n");
+        }
+        Err(reason) => {
+            let _ = write!(console, "OER-RESULT: fail w0 {reason}\r\n");
+        }
     }
 }
 
