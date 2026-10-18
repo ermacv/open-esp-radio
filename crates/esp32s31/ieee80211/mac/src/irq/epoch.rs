@@ -6,11 +6,8 @@
 
 use core::marker::PhantomData;
 use oer_esp32s31_hal::{
-    owner::{
-        ConnectedStaInterruptPrepared, MacInterruptRegisters, MacInterruptSetup,
-        MacPowerInterruptRegisters, RadioRuntimeOwner,
-    },
-    types::{MacInterruptMask, MacPowerWakeCause},
+    owner::{MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters},
+    types::MacInterruptMask,
 };
 
 use super::{IrqDisposition, IrqSnapshot, PowerIrqDisposition, PowerIrqSnapshot, handle_power_irq};
@@ -92,17 +89,6 @@ impl<M: RxDelivery> ActiveEpoch<M> {
     #[inline(always)]
     pub fn service_power(&mut self) -> (PowerIrqDisposition, PowerIrqSnapshot) {
         handle_power_irq(&mut self.power)
-    }
-
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        radio: &mut RadioRuntimeOwner,
-    ) -> ConnectedStaInterruptPrepared {
-        self.mac.prepare_connected_sta_without_power_save(radio)
-    }
-
-    pub fn mask_and_acknowledge_power_wake_cause(&mut self, cause: MacPowerWakeCause) {
-        self.power.mask_and_acknowledge_wake_cause(cause);
     }
 
     /// Owning this value proves that no registered ISR retains a borrow.

@@ -203,7 +203,7 @@ pub use wifi::mac::{
     },
     interrupt::{
         ConnectedStaWithoutPowerSavePrepared, MacInterruptEnableState, MacInterruptRegisters,
-        MacInterruptSetup, MacPowerInterruptRegisters, MacPowerWakeCause, MacTsfTimerIndex,
+        MacInterruptSetup, MacPowerInterruptRegisters,
     },
     rx::{
         dma::{MacRxDmaSnapshot, MacRxNextDescriptorObservation},

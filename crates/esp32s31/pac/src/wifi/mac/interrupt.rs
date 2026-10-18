@@ -8,61 +8,6 @@ use crate::{
     svd::{self, interrupt_snapshot},
 };
 
-/// One of the four guarded generic TSF timers recovered from `hal_tsf.o`.
-///
-/// This type deliberately does not identify any timer as the station timer:
-/// the reviewed low three control bits still have no semantic decode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacTsfTimerIndex {
-    Timer0,
-    Timer1,
-    Timer2,
-    Timer3,
-}
-
-/// WDEVPWR causes whose bit identity is proven by complete TSF timer and
-/// TBTT interrupt leaves.
-///
-/// Beacon-miss, modem-limit and RF causes remain intentionally absent: the
-/// reviewed bank exposes their opaque status bits but not their identities.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacPowerWakeCause {
-    TsfTimer(MacTsfTimerIndex),
-    /// The station TSF's target beacon transmission time.
-    StaTbtt,
-}
-
-fn acknowledge_mac_power_wake_cause(
-    peripheral: &svd::WifiMacPowerInterrupt,
-    cause: MacPowerWakeCause,
-) {
-    match cause {
-        MacPowerWakeCause::TsfTimer(MacTsfTimerIndex::Timer0) => {
-            svd::zero_based_field_write::acknowledge_mac_power_tsf_timer(
-                peripheral, true, false, false, false,
-            );
-        }
-        MacPowerWakeCause::TsfTimer(MacTsfTimerIndex::Timer1) => {
-            svd::zero_based_field_write::acknowledge_mac_power_tsf_timer(
-                peripheral, false, true, false, false,
-            );
-        }
-        MacPowerWakeCause::TsfTimer(MacTsfTimerIndex::Timer2) => {
-            svd::zero_based_field_write::acknowledge_mac_power_tsf_timer(
-                peripheral, false, false, true, false,
-            );
-        }
-        MacPowerWakeCause::TsfTimer(MacTsfTimerIndex::Timer3) => {
-            svd::zero_based_field_write::acknowledge_mac_power_tsf_timer(
-                peripheral, false, false, false, true,
-            );
-        }
-        MacPowerWakeCause::StaTbtt => {
-            svd::zero_based_field_write::acknowledge_mac_power_sta_tbtt(peripheral, true);
-        }
-    }
-}
-
 /// Proof that the connected-STA hardware policy was applied before IRQ activation.
 ///
 /// Construction is private to the exact two-register transaction below. The
@@ -219,6 +164,19 @@ fn activate_mac_interrupt_epoch(
     backend.fence();
 }
 
+/// One live interrupt bank whose complete enable image can be masked.
+trait InterruptBankMaskBackend {
+    fn mask_events(&mut self);
+    fn fence(&mut self);
+}
+
+fn mask_interrupt_bank(backend: &mut impl InterruptBankMaskBackend) {
+    // Masking is not an acknowledgement: a latched event stays in STATUS and
+    // becomes visible again when its source is unmasked.
+    backend.mask_events();
+    backend.fence();
+}
+
 impl MacInterruptActivationBackend for MacInterruptSetup {
     fn mask_mac_events(&mut self) {
         publish_mac_interrupt_mask(&self.peripheral, MacInterruptMask::NONE);
@@ -334,23 +292,24 @@ pub struct MacPowerInterruptRegisters {
     peripheral: svd::WifiMacPowerInterrupt,
 }
 
-impl MacPowerInterruptRegisters {
-    /// Mask the complete WDEVPWR bank and acknowledge one reviewed cause.
-    ///
-    /// The current reviewed SVD permits the complete MASKED image and exact
-    /// CLEAR writes, but deliberately has no safe writer for a partial ENABLE
-    /// image. Consequently this is a rollback/handoff operation, not a claim
-    /// that the selected cause can yet wake production firmware.
-    pub fn mask_and_acknowledge_wake_cause(&mut self, cause: MacPowerWakeCause) {
+impl InterruptBankMaskBackend for MacPowerInterruptRegisters {
+    fn mask_events(&mut self) {
         svd::fixed_register_image::mask_mac_power_interrupts(&self.peripheral);
-        acknowledge_mac_power_wake_cause(&self.peripheral, cause);
-        device_fence();
     }
 
-    /// Acknowledge one reviewed cause without changing the active mask.
-    pub fn acknowledge_wake_cause(&mut self, cause: MacPowerWakeCause) {
-        acknowledge_mac_power_wake_cause(&self.peripheral, cause);
+    fn fence(&mut self) {
         device_fence();
+    }
+}
+
+impl MacPowerInterruptRegisters {
+    /// Mask every WDEVPWR cause of the live epoch without acknowledging one.
+    ///
+    /// Publishes the fixed all-zero ENABLE image, then orders the write. A
+    /// latched cause stays in STATUS; the CPU line deasserts once the masked
+    /// image reaches the bank.
+    pub fn mask_all_power_interrupts(&mut self) {
+        mask_interrupt_bank(self);
     }
 
     /// Sample the complete masked WDEVPWR event image.
@@ -380,23 +339,25 @@ pub struct MacInterruptRegisters {
     pub(crate) peripheral: svd::WifiMacInterrupt,
 }
 
+impl InterruptBankMaskBackend for MacInterruptRegisters {
+    fn mask_events(&mut self) {
+        publish_mac_interrupt_mask(&self.peripheral, MacInterruptMask::NONE);
+    }
+
+    fn fence(&mut self) {
+        device_fence();
+    }
+}
+
 impl MacInterruptRegisters {
-    /// Disable vendor hardware beacon filtering while the MAC route is live.
+    /// Mask every MAC interrupt source of the live epoch without
+    /// acknowledging one.
     ///
-    /// The caller must exclude the hard ISR for the complete transaction. The
-    /// active interrupt capability owns the interrupt-enable register while
-    /// `registers` owns the disjoint beacon-filter control register, so this
-    /// is the live-epoch counterpart of
-    /// [`MacInterruptSetup::prepare_connected_sta_without_power_save`].
-    pub fn prepare_connected_sta_without_power_save(
-        &mut self,
-        registers: &mut WifiRadioRegisters,
-    ) -> ConnectedStaWithoutPowerSavePrepared {
-        disable_sta_beacon_filter(
-            &registers.peripherals.wifi_mac.wifi_mac_sta_beacon_filter,
-            &self.peripheral,
-        );
-        ConnectedStaWithoutPowerSavePrepared { _private: () }
+    /// Publishes the fixed all-zero ENABLE image, then orders the write. A
+    /// latched event stays in STATUS. [`Self::unmask_rx_delivery_interrupts`]
+    /// afterwards restores only the RX delivery group.
+    pub fn mask_all_mac_interrupts(&mut self) {
+        mask_interrupt_bank(self);
     }
 
     /// Sample the complete MAC interrupt status image.
