@@ -31,6 +31,7 @@ mod relocations;
 mod resolutions;
 mod summaries;
 mod sweep;
+mod tasks;
 mod trap;
 mod wakers;
 
@@ -54,6 +55,7 @@ pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
+pub use tasks::task_poll_resolutions;
 pub use trap::{TrapEntry, trap_entry, vector_table};
 pub use wakers::{waker_resolutions, waker_vtables};
 

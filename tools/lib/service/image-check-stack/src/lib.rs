@@ -30,7 +30,7 @@ use oer_tool_analysis_riscv_program::facts::ImageFacts;
 use oer_tool_analysis_riscv_stack::{
     Analysis, Bound, Dwarf, Function, Reason, Resolutions, Summary, analyze,
     function_pointer_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
-    waker_resolutions, waker_vtables,
+    task_poll_resolutions, waker_resolutions, waker_vtables,
 };
 
 use crate::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
@@ -197,6 +197,16 @@ impl Image {
         let taken = taken_addresses(&facts, &mut keep, &mut control)?;
         let pointers =
             function_pointer_resolutions(&analysis, &types, &taken, &mut keep, &mut control)?;
+        // The executor reaches each task's poll through its header.
+        resolutions.extend(task_poll_resolutions(
+            &analysis,
+            &dwarf,
+            names
+                .iter()
+                .map(|(&address, name)| (address, name.as_str())),
+            &mut keep,
+            &mut control,
+        )?);
         drop(types);
         let stack_sizes = stack_sizes(&facts, &mut keep, &mut control)?;
         drop(companions);

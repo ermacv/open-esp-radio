@@ -19,6 +19,9 @@ pub enum Fact {
     WakerVtables,
     /// The functions whose type can be a static field's function pointer.
     FieldType,
+    /// Every task poll of the image, for the executor's call of a dequeued
+    /// task's `poll_fn`.
+    TaskPolls,
 }
 
 /// What a resolution takes for granted that the analysis does not prove: a
@@ -52,7 +55,7 @@ impl Fact {
     pub fn assumption(self) -> Option<Assumption> {
         match self {
             Self::InterruptTable => None,
-            Self::IpcPosts | Self::WakerVtables | Self::FieldType => {
+            Self::IpcPosts | Self::WakerVtables | Self::FieldType | Self::TaskPolls => {
                 Some(Assumption::ExecutorInvariant)
             }
         }

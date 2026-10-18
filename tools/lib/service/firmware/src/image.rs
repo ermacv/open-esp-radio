@@ -262,7 +262,7 @@ pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manif
     }
 
     eprintln!("fw: checking the runtime's stacks");
-    let stacks = gates::runtime(root, &profile, &policy, &runtime_elf, &output)?;
+    let stacks = gates::runtime(root, &profile, &policy, &runtime_elf, &output);
     for warning in &stacks {
         eprintln!("warning: stack: {warning}");
     }
@@ -276,7 +276,7 @@ pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manif
         &runtime_env(BOOTSTRAP, None),
     )?;
     eprintln!("fw: checking the bootstrap's stack");
-    let stacks = gates::bootstrap(root, &profile, &policy, &bootstrap_elf, &output)?;
+    let stacks = gates::bootstrap(root, &profile, &policy, &bootstrap_elf, &output);
     for warning in &stacks {
         eprintln!("warning: stack: {warning}");
     }

@@ -190,7 +190,7 @@ fn rustflags(existing: Option<String>, max_move_bytes: u64, linker: &Path) -> Re
     for required in [
         "-Z emit-stack-sizes".to_owned(),
         format!("-Z move-size-limit={max_move_bytes}"),
-        "-D large-assignments".to_owned(),
+        "-W large-assignments".to_owned(),
         "-Z share-generics=y".to_owned(),
         format!("-C linker={linker}"),
         "-C linker-flavor=ld.lld".to_owned(),
@@ -237,7 +237,7 @@ mod tests {
             )
             .unwrap(),
             "-C debuginfo=1 -Z emit-stack-sizes -Z move-size-limit=4096 \
-             -D large-assignments -Z share-generics=y \
+             -W large-assignments -Z share-generics=y \
              -C linker=/repo/target/image-linker/debug/oer-tool-service-image-linker -C linker-flavor=ld.lld"
         );
         // A path RUSTFLAGS would split is refused.
