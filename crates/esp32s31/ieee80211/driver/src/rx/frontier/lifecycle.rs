@@ -1,4 +1,5 @@
 use crate::rx::storage::{ReceiveDmaStorage, walker_enable_settle};
+use oer_esp32s31_ieee80211_dma::space::DmaSpace;
 
 use oer_esp32s31_ieee80211_mac::rx::{
     RxDescriptorSnapshot, RxDma, RxDmaBufferAddresses, RxRingError, RxRingHalted, RxRingLive,
@@ -14,9 +15,9 @@ use super::{
 impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     ReceiveFrontier<'storage, COUNT, DMA_BUFFER_SIZE>
 {
-    pub fn prepare_initial<M: RxDma, const DMA_STORAGE_SIZE: usize>(
+    pub fn prepare_initial<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         hardware: &mut M,
-        storage: &'static ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'static ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
         descriptor_base: u32,
         buffer_addresses: &'storage RxDmaBufferAddresses<COUNT>,
     ) -> Result<Self, RxRingError> {
@@ -52,10 +53,10 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     }
 
     /// Prepare a halted ring without starting the DMA walker.
-    pub fn prepare_with_storage<M: RxDma, const DMA_STORAGE_SIZE: usize>(
+    pub fn prepare_with_storage<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError> {
         let state = core::mem::replace(&mut self.state, RxFrontierState::Vacant);
         match state {
@@ -101,10 +102,10 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         }
     }
 
-    pub fn prepare_initial_or_retry<M: RxDma, const DMA_STORAGE_SIZE: usize>(
+    pub fn prepare_initial_or_retry<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError> {
         self.prepare_with_storage(hardware, storage)
     }
@@ -170,11 +171,11 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     }
 
     /// Start RX using the production DMA storage bound to this ring.
-    pub async fn start_with_storage<M, const DMA_STORAGE_SIZE: usize>(
+    pub async fn start_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         timer: &impl oer_time::Timer,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError>
     where
         M: RxDma,
@@ -212,10 +213,10 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
 
     /// Visit every descriptor in one finite completed frontier and recycle
     /// its contiguous observed prefix.
-    pub fn service_completed_frontier<M, F, const DMA_STORAGE_SIZE: usize>(
+    pub fn service_completed_frontier<M, F, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
         mut observe: F,
     ) -> Result<RxFrontierServiceProgress, RxFrontierError>
     where
@@ -281,10 +282,10 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
         }
     }
 
-    pub fn prepare_next<M: RxDma, const DMA_STORAGE_SIZE: usize>(
+    pub fn prepare_next<M: RxDma, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<(), RxFrontierError> {
         self.prepare_with_storage(hardware, storage)
     }
@@ -372,10 +373,10 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     /// from escaping across the recycle edge. A terminal descriptor remains
     /// owned and observed by the live ring for transfer into the next finite
     /// protocol phase.
-    pub fn service_completed<M, F, const DMA_STORAGE_SIZE: usize>(
+    pub fn service_completed<M, F, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         &mut self,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
         mut observe: F,
     ) -> Result<RxFrontierProgress, RxFrontierError>
     where
@@ -470,11 +471,11 @@ impl<'storage, const COUNT: usize, const DMA_BUFFER_SIZE: usize>
     /// application therefore cannot strand a halted or prepared ring
     /// between the WPA2 and connected phases.
     #[allow(clippy::result_large_err)]
-    pub async fn try_into_live_with_storage<M, const DMA_STORAGE_SIZE: usize>(
+    pub async fn try_into_live_with_storage<M, const DMA_STORAGE_SIZE: usize, S: DmaSpace>(
         mut self,
         timer: &impl oer_time::Timer,
         hardware: &mut M,
-        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE>,
+        storage: &'storage ReceiveDmaStorage<COUNT, DMA_BUFFER_SIZE, DMA_STORAGE_SIZE, S>,
     ) -> Result<
         RxRingLive<'storage, COUNT>,
         RxFrontierIntoLiveFailure<'storage, COUNT, DMA_BUFFER_SIZE>,

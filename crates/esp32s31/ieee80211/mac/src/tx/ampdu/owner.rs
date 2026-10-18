@@ -62,11 +62,10 @@ impl<'storage, const SLOTS: usize, const BUFFER_SIZE: usize>
     pub fn new_model(
         metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS, BUFFER_SIZE>>,
     ) -> Result<Self, HtAmpduTxError> {
-        const MODEL_DESCRIPTOR_BASE: u32 = 0x2f00_1000;
         let dma = Box::leak(Box::new(AmpduDmaStorage::<SLOTS, 0>::new()));
         Self::new(
             metadata,
-            AmpduDmaStorage::pin_static_model(dma, MODEL_DESCRIPTOR_BASE, 0)?,
+            AmpduDmaStorage::pin_static::<oer_esp32s31_ieee80211_dma::space::HostDma>(dma)?,
         )
     }
 }
@@ -89,7 +88,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> HtAmpduTxResources<'static, S
     ) -> Result<Self, HtAmpduTxError> {
         Self::new(
             HtAmpduTxStorage::pin_static(metadata),
-            AmpduDmaStorage::pin_static(dma)?,
+            AmpduDmaStorage::pin_static::<oer_esp32s31_ieee80211_dma::space::ChipDma>(dma)?,
         )
     }
 }

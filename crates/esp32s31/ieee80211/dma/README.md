@@ -29,6 +29,15 @@ A CTS timeout means the data PPDU was not transmitted. The ordinary owner
 republishes the MPDU without the Retry bit; an aggregate owner republishes the
 unchanged aggregate, also without Retry bits, until the short-retry limit.
 
+Every arena is published by its DMA addresses in a [`DmaSpace`](src/space.rs):
+`ChipDma` on the chip, where a field's address is its DMA address, and the
+host models' `HostDma` (test support), where it is `HOST_ARENA_BASE` plus the
+field's offset in its arena. The RX arena carries its space and checks the
+published layout against it at every preparation; a TX storage takes its space
+when its binding is built (`pin_static::<S>`). The arena checks run the same
+code in both spaces. Test support supplies models of the hardware (the host
+space, the proofs a mock walker reports), never bypasses of these checks.
+
 [`PinnedTxDmaStorage`](src/tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.
 External aggregate retention stores leases without automatic destruction.

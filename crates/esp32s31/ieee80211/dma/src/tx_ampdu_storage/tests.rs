@@ -6,15 +6,15 @@ use std::{boxed::Box, cell::Cell, rc::Rc};
 use super::*;
 use crate::descriptor::{length, size};
 
-const DESCRIPTOR_BASE: u32 = 0x2f00_1000;
-const BUFFER_BASE: u32 = 0x2f01_0000;
+use crate::space::{HOST_ARENA_BASE, HostDma};
+
+/// The host address of every storage's first descriptor.
+const DESCRIPTOR_BASE: u32 = HOST_ARENA_BASE;
 
 fn storage() -> PinnedAmpduDmaStorage<4, 256> {
-    AmpduDmaStorage::pin_static_model(
-        std::boxed::Box::leak(std::boxed::Box::new(AmpduDmaStorage::new())),
-        DESCRIPTOR_BASE,
-        BUFFER_BASE,
-    )
+    AmpduDmaStorage::pin_static::<HostDma>(std::boxed::Box::leak(std::boxed::Box::new(
+        AmpduDmaStorage::new(),
+    )))
     .unwrap()
 }
 
@@ -102,12 +102,7 @@ unsafe impl StableDmaBacking for LargeTestBacking {
 }
 
 fn descriptor_only_storage() -> PinnedAmpduDmaStorage<2, 0> {
-    AmpduDmaStorage::pin_static_model(
-        Box::leak(Box::new(AmpduDmaStorage::new())),
-        DESCRIPTOR_BASE,
-        0,
-    )
-    .unwrap()
+    AmpduDmaStorage::pin_static::<HostDma>(Box::leak(Box::new(AmpduDmaStorage::new()))).unwrap()
 }
 
 fn retained_owner() -> RetainedAmpduDma<'static, TestBacking, 2, 0> {
@@ -117,12 +112,8 @@ fn retained_owner() -> RetainedAmpduDma<'static, TestBacking, 2, 0> {
 
 fn retained_owner_with_slots<const SLOTS: usize>()
 -> RetainedAmpduDma<'static, TestBacking, SLOTS, 0> {
-    let dma = AmpduDmaStorage::pin_static_model(
-        Box::leak(Box::new(AmpduDmaStorage::new())),
-        DESCRIPTOR_BASE,
-        0,
-    )
-    .unwrap();
+    let dma = AmpduDmaStorage::pin_static::<HostDma>(Box::leak(Box::new(AmpduDmaStorage::new())))
+        .unwrap();
     let retention = Box::leak(Box::new(RetainedAmpduDmaStorage::new()));
     RetainedAmpduDma::new(dma, retention)
 }
@@ -245,8 +236,7 @@ fn invalid_internal_chain_does_not_publish_capability() {
 #[test]
 fn late_internal_word_overflow_does_not_partially_publish_the_chain() {
     let arena = Box::leak(Box::new(AmpduDmaStorage::<2, 20_000>::new()));
-    let mut storage =
-        AmpduDmaStorage::pin_static_model(arena, DESCRIPTOR_BASE, BUFFER_BASE).unwrap();
+    let mut storage = AmpduDmaStorage::pin_static::<HostDma>(arena).unwrap();
     storage.begin().unwrap();
 
     assert!(matches!(
@@ -347,7 +337,7 @@ fn detach_proof_must_name_the_aggregate_head() {
 #[test]
 fn zero_slot_arena_is_rejected() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(AmpduDmaStorage::<0, 64>::new()));
-    assert!(AmpduDmaStorage::pin_static_model(storage, DESCRIPTOR_BASE, BUFFER_BASE).is_err());
+    assert!(AmpduDmaStorage::pin_static::<HostDma>(storage).is_err());
 }
 
 #[test]

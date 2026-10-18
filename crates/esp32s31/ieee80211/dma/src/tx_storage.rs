@@ -11,6 +11,8 @@ use oer_esp32s31_hal::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
+use crate::space::DmaSpace;
+
 use crate::descriptor::{
     DESCRIPTOR_BYTES, Descriptor, descriptor_address_valid, dma_range_valid, tx_owned_word,
 };
@@ -44,12 +46,11 @@ struct TxDmaBuffer<const BUFFER_SIZE: usize>([u8; BUFFER_SIZE]);
 /// Construct this in static storage. The returned owner is movable; this
 /// backing allocation is not.
 /// Consume the hardware allocation through [`Self::pin_static`].
-#[cfg_attr(
-    any(test, feature = "test-support"),
-    doc = "Explicit models consume the allocation through [`Self::pin_static_model`]."
-)]
+///
+/// Its layout is fixed: the descriptor, then the 16-byte aligned buffer.
 #[pin_project]
 #[derive(bytemuck::Zeroable)]
+#[repr(C)]
 pub struct TxDmaStorage<const BUFFER_SIZE: usize> {
     #[pin]
     descriptor: Descriptor,
@@ -70,25 +71,15 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
         }
     }
 
-    /// Consume the unique static hardware allocation and bind its real DMA
-    /// addresses to a movable owner.
-    pub fn pin_static(
+    /// Consume the unique static hardware allocation and bind its DMA
+    /// addresses in space `S` to a movable owner, once.
+    pub fn pin_static<S: DmaSpace>(
         storage: &'static mut Self,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
-        let descriptor_address = u32::try_from(core::ptr::addr_of!(storage.descriptor).addr())
-            .map_err(|_| TxDmaStorageError::Address)?;
-        let buffer_address = u32::try_from(storage.buffer.0.as_ptr().addr())
-            .map_err(|_| TxDmaStorageError::Address)?;
-        Self::pin_static_inner(storage, descriptor_address, buffer_address)
-    }
-
-    /// Bind deterministic low addresses for a native model with no DMA actor.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn pin_static_model(
-        storage: &'static mut Self,
-        descriptor_address: u32,
-        buffer_address: u32,
-    ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
+        let descriptor_address = S::address(storage, core::ptr::addr_of!(storage.descriptor))
+            .ok_or(TxDmaStorageError::Address)?;
+        let buffer_address =
+            S::address(storage, storage.buffer.0.as_ptr()).ok_or(TxDmaStorageError::Address)?;
         Self::pin_static_inner(storage, descriptor_address, buffer_address)
     }
 

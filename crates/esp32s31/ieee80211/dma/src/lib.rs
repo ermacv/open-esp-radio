@@ -13,6 +13,7 @@ pub mod ring_index;
 pub mod rx_dma;
 pub mod rx_ring;
 pub mod rx_storage;
+pub mod space;
 pub mod tx_ampdu_storage;
 pub mod tx_storage;
 

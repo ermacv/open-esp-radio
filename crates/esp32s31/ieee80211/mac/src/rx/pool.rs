@@ -96,6 +96,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         const COUNT: usize,
         const BUFFER_SIZE: usize,
         const STORAGE_SIZE: usize,
+        S: oer_esp32s31_ieee80211_dma::space::DmaSpace,
     >(
         &'pool self,
         completed: RxDmaCompletedUnit<
@@ -105,6 +106,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
             COUNT,
             BUFFER_SIZE,
             STORAGE_SIZE,
+            S,
         >,
         maximum_length: usize,
     ) -> Result<RxDmaDeferredStageUnitOutcome<'pool, SLOTS, CAPACITY>, RxStageTransactionError>

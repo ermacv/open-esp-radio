@@ -2,16 +2,27 @@ extern crate std;
 
 use super::*;
 
-const DESCRIPTOR_ADDRESS: u32 = 0x2f00_1000;
-const BUFFER_ADDRESS: u32 = 0x2f00_2000;
+use crate::space::{HOST_ARENA_BASE, HostDma};
+
+/// The host addresses of the storage's descriptor and buffer.
+const DESCRIPTOR_ADDRESS: u32 = HOST_ARENA_BASE;
+const BUFFER_ADDRESS: u32 =
+    HOST_ARENA_BASE + core::mem::offset_of!(TxDmaStorage<64>, buffer) as u32;
 
 fn storage() -> PinnedTxDmaStorage<64> {
-    TxDmaStorage::pin_static_model(
-        std::boxed::Box::leak(std::boxed::Box::new(TxDmaStorage::new())),
-        DESCRIPTOR_ADDRESS,
-        BUFFER_ADDRESS,
-    )
+    TxDmaStorage::pin_static::<HostDma>(std::boxed::Box::leak(std::boxed::Box::new(
+        TxDmaStorage::new(),
+    )))
     .unwrap()
+}
+
+/// The host space, one byte off: a misaligned descriptor.
+enum Misaligned {}
+
+impl crate::space::DmaSpace for Misaligned {
+    fn address<Arena: ?Sized, Field: ?Sized>(arena: &Arena, field: *const Field) -> Option<u32> {
+        HostDma::address(arena, field).map(|address| address + 1)
+    }
 }
 
 fn prepared_head(authority: &dyn PreparedTxDma) -> u32 {
@@ -127,11 +138,9 @@ fn impossible_sequence_can_only_quarantine_backing() {
 }
 
 #[test]
-fn invalid_model_ranges_fail_before_pinning() {
+fn invalid_ranges_fail_before_pinning() {
     let storage = std::boxed::Box::leak(std::boxed::Box::new(TxDmaStorage::<64>::new()));
-    assert!(
-        TxDmaStorage::pin_static_model(storage, DESCRIPTOR_ADDRESS + 1, BUFFER_ADDRESS).is_err()
-    );
+    assert!(TxDmaStorage::pin_static::<Misaligned>(storage).is_err());
 }
 
 #[test]
