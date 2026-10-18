@@ -2165,6 +2165,29 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         // Make both MMIO observations precede descriptor and payload reads by
         // the caller which receives this generation-bound snapshot.
         mmio.fence();
+        // No false positive on a just-completed descriptor. A descriptor
+        // is detached only by `RxDmaCompletedUnit::detach_single`
+        // (rx_storage.rs:473), whose `detached_word` (rx_ring.rs:1175)
+        // requires it observed and RX_DONE. Its unit came from
+        // `take_completed_unit` (rx_storage.rs:1212) with a limit from a
+        // LAST-bounded frontier: the drain takes only through
+        // `completed_unit_frontier_through_cursor` or its first-unit form
+        // (driver rx/transaction/service.rs:150, 208, 316), which ends the
+        // limit at the frozen LAST inclusive (rx_ring.rs:1361-1364,
+        // 1417-1420). So every detached descriptor lies at or before a LAST
+        // sampled before its detach: the walker completed it. LAST names
+        // the last completed descriptor and NEXT the one to fill after it,
+        // `LAST.next` or zero (SOURCE[HIL_W1_OWNER_BIT_2026_10_18]: stopped
+        // at NEXT = P with LAST = P - 1; H1 in HIL_W1_RX_WALKER_2026_10_18:
+        // NEXT = LAST.next), so a NEXT read after that LAST never names it
+        // again. NEXT may hold a descriptor whose RX_DONE is already
+        // visible while LAST has not reached it; that unit is outside the
+        // LAST bound, not taken, and keeps its owner bit. No relink names a
+        // detached descriptor: a rearm sets the owner bit and leaves the
+        // observed mask (rx_ring.rs:2086, 2106), and a group's tail link is
+        // zero until the accepted tail links the rearmed head
+        // (rx_ring.rs:2097). The frozen-LAST unit at exhaustion is detached
+        // with NEXT = 0, which names no descriptor (rx_ring.rs:1207).
         self.check_walker_on_detached(next_descriptor_low)?;
         Ok(RxFrozenCursor {
             last_descriptor_low,
@@ -2423,7 +2446,17 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         });
         self.record_reload_observation(next_descriptor, last_descriptor_low);
         // The doorbell resumed the walker: it must not hold a detached
-        // descriptor.
+        // descriptor. No false positive on a just-completed one: every
+        // detached descriptor was taken through a frozen LAST inclusive
+        // (rx_ring.rs:1361-1364, driver rx/transaction/service.rs:150,
+        // 316), so the walker had completed it and NEXT, which names the
+        // descriptor after LAST or zero, has left it for good (the proof
+        // next to the check in `freeze_cursor`). A doorbell rung on an
+        // exhausted list resumes at `LAST.next` (H1,
+        // HIL_W1_RX_WALKER_2026_10_18): the rearmed head linked at
+        // rx_ring.rs:2097, owner bit set, never observed. With LAST itself
+        // detached at exhaustion, a NEXT still zero names no descriptor
+        // (rx_ring.rs:1207).
         self.check_walker_on_detached(next_descriptor.address_low())?;
         let exhausted_short = match exhausted_short {
             Ok(exhausted_short) => exhausted_short,
