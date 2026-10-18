@@ -18,9 +18,10 @@
 //!   [`CONTINUATION_WAIT`] timer wait. A pass blocked on staging capacity
 //!   stays masked and waits for the capacity fact, which the upper layer
 //!   posts when it returns a lease ([`super::returns`]): the walker may be
-//!   exhausted then, with no RX interrupt to come. Before that capacity
-//!   drain the runner reads the walker registers and the ring's view into
-//!   the counters' exhaustion snapshot (report-only).
+//!   exhausted then, with no RX interrupt to come. When a drain left every
+//!   staging slot claimed or every buffer detached, the next wake that
+//!   carries a returned lease first reads the walker registers and the
+//!   ring's view into the counters' exhaustion snapshot (report-only).
 //! - **Teardown**, on the stop request or a fault, in this order: mask both
 //!   banks through the doorbell and wait for the masked fact (bounded);
 //!   silence the routes; close promiscuous receive and request the MAC
@@ -171,7 +172,7 @@ where
         publisher,
         admission,
         totals: [0; 3],
-        blocked_since: None,
+        full_since: None,
     };
 
     let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(
@@ -255,9 +256,9 @@ struct Receiver<
     admission: &'r M,
     /// The service's cumulative descriptors, units and bytes.
     totals: [u64; 3],
-    /// When the last drain ended blocked on staging capacity, until the
-    /// next wake.
-    blocked_since: Option<Instant>,
+    /// Since when the drains ended with every staging slot claimed or every
+    /// buffer detached; until the next wake that carries a returned lease.
+    full_since: Option<Instant>,
 }
 
 impl<
@@ -301,15 +302,26 @@ where
             let Some(capacity) = wake else {
                 return WifiRxCause::StopRequested;
             };
-            let blocked_since = self.blocked_since.take();
-            if capacity {
+            let full_since = if capacity {
                 self.counters.capacity_drain();
-                if let Some(since) = blocked_since {
+                let full_since = self.full_since.take();
+                if let Some(since) = full_since {
                     self.observe_exhaustion(ring, since);
                 }
-            }
+                None
+            } else {
+                self.full_since.take()
+            };
             if let Err(cause) = self.drain(ring).await {
                 return cause;
+            }
+            // Every lease out: the walker has no buffer to fill until one
+            // comes back. The first full drain marks the time.
+            if usize::try_from(self.stage.claimed_slots())
+                .is_ok_and(|claimed| claimed == STAGE_SLOTS)
+                || self.rx.detached_buffer_count() == COUNT
+            {
+                self.full_since = Some(full_since.unwrap_or_else(|| self.timer.now()));
             }
         }
     }
@@ -341,7 +353,6 @@ where
                 }
                 DatapathRxProgress::StageCapacityBlocked => {
                     self.counters.stage_capacity_block();
-                    self.blocked_since = Some(self.timer.now());
                     return Ok(());
                 }
                 // A released buffer is rearmed before any unmask, so a burst
@@ -362,10 +373,10 @@ where
         }
     }
 
-    /// Read the walker registers and the ring's view after a stage-capacity
-    /// block that began at `since`, before the capacity drain services
-    /// anything. Only reads: no register is written and no descriptor
-    /// changes hands.
+    /// Read the walker registers and the ring's view when a lease returned
+    /// to a pool that was full since `since`, before the capacity drain
+    /// services anything. Only reads: no register is written and no
+    /// descriptor changes hands.
     fn observe_exhaustion(&mut self, ring: &RxRingLive<'static, COUNT>, since: Instant) {
         let blocked = self.timer.now().saturating_duration_since(since);
         let next = self.hardware.next_descriptor();

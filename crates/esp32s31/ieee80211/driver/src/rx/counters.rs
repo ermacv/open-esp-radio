@@ -6,8 +6,8 @@
 //! at any time. Counts wrap. The reload evidence is the ring's own
 //! (saturating, its maximum stops at the attempt limit), copied after every
 //! service pass; the teardown durations are written once, by the teardown.
-//! The exhaustion snapshot is the runner's, written when a returned lease
-//! ends a stage-capacity block ([`WifiRxExhaustion`]).
+//! The exhaustion snapshot is the runner's, written when a lease returns to
+//! a full staging pool ([`WifiRxExhaustion`]).
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -397,14 +397,15 @@ impl PrefixCounters {
     }
 }
 
-/// The walker and the ring as the runner read them when a returned lease
-/// ended a stage-capacity block: the registers before the capacity drain's
-/// first service pass, while the walker had nothing to fill (the block kept
-/// RX masked and every buffer staged or completed). Report-only: no field
-/// takes part in descriptor ownership.
+/// The walker and the ring as the runner read them when a lease returned
+/// after a drain had left every staging slot claimed or every buffer
+/// detached: the registers before the capacity drain's first service pass,
+/// in the state of the full pool (one lease already back). Report-only: no
+/// field takes part in descriptor ownership.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxExhaustion {
-    /// How long the block lasted, in µs (saturating).
+    /// How long the pool stayed full, from the first drain that left it so
+    /// to the return, in µs (saturating).
     pub blocked_us: u32,
     /// `RX_NEXT_DESCRIPTOR`: the low address and whether its unassigned
     /// upper field read nonzero.
@@ -446,8 +447,8 @@ const BUFFER_FULL_READ: u32 = 1 << 4;
 const REMAINING_KNOWN: u32 = 1 << 5;
 const RELOAD_PENDING: u32 = 1 << 6;
 
-/// The exhaustion snapshot of the longest stage-capacity block, and how many
-/// blocks a returned lease ended.
+/// The exhaustion snapshot of the longest full-pool stretch, and how many
+/// such stretches a returned lease ended.
 #[derive(bytemuck::Zeroable, Default)]
 struct ExhaustionCounters {
     snapshots: AtomicU32,
@@ -471,7 +472,7 @@ struct ExhaustionCounters {
 /// One reading of the exhaustion snapshot.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WifiRxExhaustionReport {
-    /// Stage-capacity blocks a returned lease ended.
+    /// Full-pool stretches a returned lease ended.
     pub snapshots: u32,
     /// The snapshot of the longest of them; `None` before the first.
     pub longest: Option<WifiRxExhaustion>,
@@ -617,8 +618,7 @@ pub struct WifiRxReport {
     pub teardown: WifiRxTeardownReport,
     /// The application's RX-control prefix decode.
     pub prefix: WifiRxPrefixReport,
-    /// The walker and ring when a returned lease ended a stage-capacity
-    /// block.
+    /// The walker and ring when a lease returned to a full staging pool.
     pub exhaustion: WifiRxExhaustionReport,
 }
 
@@ -802,8 +802,8 @@ impl WifiRxCounters {
         }
     }
 
-    /// A returned lease ended a stage-capacity block; `snapshot` is what the
-    /// runner read before its capacity drain.
+    /// A lease returned to a full pool; `snapshot` is what the runner read
+    /// before its capacity drain.
     pub(crate) fn exhaustion(&self, snapshot: WifiRxExhaustion) {
         self.exhaustion.record(snapshot);
     }
