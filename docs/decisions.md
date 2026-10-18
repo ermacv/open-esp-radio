@@ -82,7 +82,7 @@ tree is a selection of a predecessor repository, without its history.
   per pull request, on the owner's request, findings in the pull request; a
   branch and draft pull request per task, merged by the owner; one plain,
   non-blocking CI workflow; English in the repository.
-- **Staged boot stays** (code and stacks in PSRAM). `tools/fw` builds, flashes
+- **Staged boot stays** (code and stacks in PSRAM). `tools/lib/service/firmware` builds, flashes
   and runs images with a minimal SRAM-placement check reported as warnings.
 - **Execution-level DMA rules** are kept as facts and are the W1 checklist
   (`knowledge/esp32s31/wifi/dma-execution.md`).
@@ -93,7 +93,7 @@ tree is a selection of a predecessor repository, without its history.
 
 - **Stand core.** The stand core of the predecessor's hardware-in-the-loop
   setup (the OpenWrt fixtures, the stand configuration, network and
-  traffic) moves to `tools/lab`; its runner, on-board agent, evidence and
+  traffic) moves to `tools/lib/service/lab`; its runner, on-board agent, evidence and
   archive do not. The stand router is a lab router: the tool brings it to
   the slice's profile and does not restore it.
 - **W1 stand identity.** W1 identifies the stand's AP by the BSSID of the
@@ -102,6 +102,9 @@ tree is a selection of a predecessor repository, without its history.
 
 ## 2026-10-18: how the work runs
 
+- **Host tools.** One folder per CLI under `tools/cli`, libraries under
+  `tools/lib` by layer (base, data, analysis, service); dependencies only
+  downward, checked by a test (owner, 2026-10-18).
 - **Review and merge.** A developer session opens a pull request and reports
   it to the architect session; the architect reviews it and merges it when CI
   is green, or returns it with remarks.

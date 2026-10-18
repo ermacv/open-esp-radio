@@ -16,7 +16,7 @@ oer-time = { path = "../../base/time" }
 oer-radio-port = { path = "../../radio/port" }
 
 [dev-dependencies]
-oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+oer-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

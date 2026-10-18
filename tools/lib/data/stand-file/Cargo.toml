@@ -1,0 +1,19 @@
+[package]
+name = "oer-stand-file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The owner's stand file: its one reader"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true

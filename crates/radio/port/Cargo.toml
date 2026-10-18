@@ -19,7 +19,7 @@ scopeguard = { version = "1.2.0", default-features = false }
 oer-time = { path = "../../base/time" }
 
 [dev-dependencies]
-oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+oer-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

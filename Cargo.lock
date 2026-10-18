@@ -2000,6 +2000,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-chip-profile"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "oer-command-tree"
 version = "0.1.0"
 dependencies = [
@@ -2287,21 +2295,30 @@ name = "oer-espressif-staged-layout"
 version = "0.1.0"
 
 [[package]]
-name = "oer-fw"
+name = "oer-firmware"
 version = "0.1.0"
 dependencies = [
- "clap",
  "espflash",
  "object 0.37.3",
- "oer-command-tree",
+ "oer-chip-profile",
  "oer-esp32s31-platform-layout",
  "oer-espressif-staged-layout",
  "oer-lab",
  "oer-process",
+ "oer-stand-file",
  "serde",
  "serialport",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-fw"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-command-tree",
+ "oer-firmware",
 ]
 
 [[package]]
@@ -2460,10 +2477,9 @@ name = "oer-lab"
 version = "0.1.0"
 dependencies = [
  "oer-process",
- "serde",
+ "oer-stand-file",
  "sha2 0.10.9",
  "tempfile",
- "toml",
 ]
 
 [[package]]
@@ -2558,15 +2574,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-register-tool"
+name = "oer-registers"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
- "clap",
- "oer-command-tree",
  "oer-durable",
  "oer-process",
- "oer-register-bindings",
  "oer-register-contracts",
  "oer-register-model",
  "oer-register-review",
@@ -2579,6 +2592,28 @@ dependencies = [
  "tempfile",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "oer-registers-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-command-tree",
+ "oer-process",
+ "oer-register-bindings",
+ "oer-register-model",
+ "oer-registers",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-stand-file"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -2606,6 +2641,13 @@ dependencies = [
  "embassy-futures",
  "embassy-sync 0.8.0",
  "oer-time",
+]
+
+[[package]]
+name = "oer-tools-layers"
+version = "0.1.0"
+dependencies = [
+ "toml",
 ]
 
 [[package]]

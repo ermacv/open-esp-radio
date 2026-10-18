@@ -22,7 +22,7 @@ oer-time = { path = "../../base/time" }
 [dev-dependencies]
 # The crate's own tests run the shared conformance suite on the model.
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
-oer-ui-cases = { path = "../../../tools/lib/ui-cases" }
+oer-ui-cases = { path = "../../base/ui-cases" }
 
 [lints]
 workspace = true

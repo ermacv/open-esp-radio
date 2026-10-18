@@ -19,7 +19,8 @@ Not affiliated with or endorsed by Espressif Systems.
 | --- | --- |
 | `crates/` | the radio libraries, placed by protocol and chip ([architecture](docs/architecture.md)) |
 | `firmware/` | the chip-target workspace: staged boot platform and images |
-| `registers/`, `tools/registers/` | reviewed register model and its SVD/PAC generator (`cargo registers`) |
+| `registers/` | the reviewed register model (`cargo registers` publishes its SVD and PAC) |
+| `tools/` | host tools: `cargo registers`, `cargo fw`, by layer ([tools](tools/README.md)) |
 | `knowledge/` | recovered hardware facts and research notes |
 | `docs/` | architecture, owner decisions, source policy, hardware errata |
 

@@ -14,4 +14,4 @@ The second command checks SVD, raw PAC, restricted PAC API and binding index
 together. Omit `--check` to publish an intentional reviewed change. Missing or
 invalid selected sources fail validation. Evidence catalog references document
 provenance; this source-only operation does not open/authenticate vendor binaries
-or qualify hardware behavior. See the [tool contract](../../../tools/registers/README.md).
+or qualify hardware behavior. See the [tool contract](../../../tools/lib/service/registers/README.md).

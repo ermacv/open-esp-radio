@@ -1,7 +1,7 @@
 //! The generated memory layouts as values and cells: the builders and
 //! getters agree, a value wider than its field is refused, cells keep what
 //! they were given, and typed addresses round-trip. Field positions are the
-//! generator's to prove (`tools/registers`), not repeated here.
+//! generator's to prove (`tools/lib/service/registers`), not repeated here.
 
 use oer_esp32s31_pac::layouts::{
     DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorControl, WifiTxDmaDescriptor,
