@@ -9,6 +9,7 @@ description = "The ESP32-S31 radio system: one actor that owns the shared RF fro
 
 [dependencies]
 embassy-futures = "0.1.2"
+oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-ieee80211-mac = { path = "../../ieee80211/mac" }
@@ -17,6 +18,7 @@ oer-esp32s31-radio-client = { path = "../client" }
 oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
 oer-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }

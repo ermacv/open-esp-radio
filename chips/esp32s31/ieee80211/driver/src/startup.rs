@@ -28,6 +28,7 @@ use oer_ieee80211_softmac::WifiMacAddress;
 use oer_time::Duration;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
+use oer_radio_regulatory::{Permitted, TxCeiling};
 
 /// The values Wi-Fi's own platform gives the MAC bring-up, and where it keeps
 /// the calibrated TX power profile for its TX vectors.
@@ -41,21 +42,19 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 /// Application-selected inputs for one Wi-Fi bring-up.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
-    pub initial_channel: WifiChannel,
-    pub maximum_tx_power_quarter_dbm: i8,
+    /// The channel the regulatory domain permits.
+    pub initial_channel: Permitted<WifiChannel>,
+    /// The most any transmission radiates: the domain's, the board's and the
+    /// chip's limits together.
+    pub tx_ceiling: TxCeiling,
 }
 
 impl WifiColdStartConfig {
-    pub const fn new(initial_channel: WifiChannel) -> Self {
+    pub const fn new(initial_channel: Permitted<WifiChannel>, tx_ceiling: TxCeiling) -> Self {
         Self {
             initial_channel,
-            maximum_tx_power_quarter_dbm: i8::MAX,
+            tx_ceiling,
         }
-    }
-
-    pub const fn with_maximum_tx_power_quarter_dbm(mut self, maximum: i8) -> Self {
-        self.maximum_tx_power_quarter_dbm = maximum;
-        self
     }
 }
 
@@ -182,7 +181,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     let request = WifiTrack {
         wifi,
         channel: config.wifi.initial_channel,
-        maximum_tx_power_quarter_dbm: config.wifi.maximum_tx_power_quarter_dbm,
+        tx_ceiling: config.wifi.tx_ceiling,
         mac: MacColdStartConfig {
             handshake_deadline: config.mac.handshake_deadline,
             station_address: config.mac.station_address.bytes(),
@@ -201,7 +200,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     };
     platform.install_phy_tx_power_profile(report.tx_power);
     let report = WifiStartReport {
-        initial_channel: config.wifi.initial_channel,
+        initial_channel: config.wifi.initial_channel.channel(),
         epoch,
         phy,
         track: report,

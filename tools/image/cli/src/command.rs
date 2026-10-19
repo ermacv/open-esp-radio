@@ -209,8 +209,19 @@ fn w1_stand(
         channel: applied.channel,
         bssid: applied.bssid,
         ssid: w1::Ssid::new(ssid.as_bytes())?,
+        country: applied.country,
     };
     Ok((config, shown))
+}
+
+/// The stand router's regulatory country, read only, with the router lock.
+fn w0_country(stand: &stand::Stand) -> Result<(oer_lab_router::lock::RouterLock, [u8; 2])> {
+    let router = stand.router()?;
+    let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
+    let lock = oer_lab_router::lock::router(&router_lock_directory()?, router.ssh_target.expose())?;
+    let country = router::radio_country(&mut ssh, router.radio)?;
+    eprintln!("fw: w0 regulatory country {}", w1::country_text(country));
+    Ok((lock, country))
 }
 
 /// The stand router of `stand`, locked and brought to W1's profile; the
@@ -231,15 +242,22 @@ fn w1_router(stand: &stand::Stand) -> Result<(oer_lab_router::lock::RouterLock, 
 pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
     let (stand, board) = board(selector)?;
     // The router lock is held to the end of the run.
-    let (_router, w1) = if image == w1::IMAGE {
+    let (_router, built) = if image == w1::IMAGE {
         // The router is changed only for a board that is there.
         tty(&board)?;
         let (lock, config) = w1_router(&stand)?;
-        (Some(lock), Some(config))
+        (Some(lock), Some(image::Stand::W1(config)))
+    } else if image == "w0" {
+        let (lock, country) = w0_country(&stand)?;
+        (Some(lock), Some(image::Stand::W0 { country }))
     } else {
         (None, None)
     };
-    image::build(root, image, w1.as_ref())?;
+    let w1 = match &built {
+        Some(image::Stand::W1(config)) => Some(config.clone()),
+        _ => None,
+    };
+    image::build(root, image, built.as_ref())?;
     let leased = leased(root, &stand, &board)?;
     write_image(root, image, &board.id, &leased)?;
     let run = root
@@ -537,7 +555,7 @@ client_address = "192.168.77.2/24"
                     String::new()
                 } else if script.starts_with("config=") {
                     // What the router's allowlist filter passes.
-                    "wireless.radio9=wifi-device\nwireless.radio9.band='2g'\nwireless.radio9.channel='6'\n\
+                    "wireless.radio9=wifi-device\nwireless.radio9.band='2g'\nwireless.radio9.channel='6'\nwireless.radio9.country='DE'\n\
                  wireless.radio9.htmode='HT20'\nwireless.radio9.beacon_int='100'\n\
                  wireless.radio9.disabled='0'\nwireless.lab_ap=wifi-iface\n\
                  wireless.lab_ap.device='radio9'\nwireless.lab_ap.mode='ap'\n\
@@ -578,11 +596,12 @@ client_address = "192.168.77.2/24"
         assert_eq!(config.bssid.masked(), "xx:xx:xx:xx:F6:D0");
         // The runtime build gets the whole identity.
         assert_eq!(
-            image::runtime_env("w1", Some(&config)),
+            image::runtime_env("w1", Some(&image::Stand::W1(config.clone()))),
             [
                 (w1::ENV_CHANNEL, "6"),
                 (w1::ENV_BSSID, "02:5E:C0:DE:F6:D0"),
                 (w1::ENV_SSID, "4d616465205570204c6162204e6574"),
+                (w1::ENV_COUNTRY, "DE"),
             ]
             .map(|(name, value)| (name.to_owned(), Some(value.to_owned())))
         );

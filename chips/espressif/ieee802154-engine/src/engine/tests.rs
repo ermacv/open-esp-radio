@@ -481,7 +481,12 @@ impl Bench {
     fn enabled() -> Self {
         let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
         let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
-        let mut engine = Ieee802154Engine::new(buffers, levels, Ieee802154PibDefaults::default());
+        let mut engine = Ieee802154Engine::new(
+            buffers,
+            levels,
+            Ieee802154PibDefaults::default(),
+            crate::pib::test_permit(11, levels),
+        );
         let mut hw = Hw::default();
         engine.enable();
         engine.mac_init(&mut hw, Ieee802154PibDefaults::default());
@@ -543,7 +548,12 @@ fn assert_subsequence(calls: &[Call], expected: &[Call]) {
 fn mac_init_publishes_the_register_baseline_and_idles() {
     let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
     let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
-    let mut engine = Ieee802154Engine::new(buffers, levels, Ieee802154PibDefaults::default());
+    let mut engine = Ieee802154Engine::new(
+        buffers,
+        levels,
+        Ieee802154PibDefaults::default(),
+        crate::pib::test_permit(11, levels),
+    );
     assert_eq!(engine.state(), Ieee802154State::Disable);
     let mut hw = Hw::default();
     engine.mac_init(&mut hw, Ieee802154PibDefaults::default());
@@ -581,7 +591,12 @@ fn txrx_ptis(calls: &[Call]) -> Vec<u8> {
 fn software_coexistence_publishes_each_scene_priority() {
     let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
     let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
-    let mut engine = Ieee802154Engine::new(buffers, levels, Ieee802154PibDefaults::default());
+    let mut engine = Ieee802154Engine::new(
+        buffers,
+        levels,
+        Ieee802154PibDefaults::default(),
+        crate::pib::test_permit(11, levels),
+    );
     engine.set_coexistence(Ieee802154Coexistence::Software(vendor_priorities()));
     let mut hw = Hw::default();
     engine.enable();

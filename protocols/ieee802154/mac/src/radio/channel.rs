@@ -70,6 +70,15 @@ impl Channel {
     }
 }
 
+impl oer_radio_regulatory::RadioChannel for Channel {
+    /// The 2 MHz the channel occupies around its center.
+    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+        let center_khz = u32::from(self.center_frequency_mhz()) * 1000;
+        oer_radio_regulatory::FrequencySpan::new(center_khz - 1000, center_khz + 1000)
+            .unwrap_or_else(|| unreachable!("a channel has a width"))
+    }
+}
+
 impl TryFrom<u8> for Channel {
     type Error = ChannelError;
 

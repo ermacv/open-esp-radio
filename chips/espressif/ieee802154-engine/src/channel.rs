@@ -61,6 +61,17 @@ impl Ieee802154Channel {
     }
 }
 
+impl oer_radio_regulatory::RadioChannel for Ieee802154Channel {
+    /// The 2 MHz around the channel's center, `2405 + 5 * (channel - 11)` MHz.
+    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+        let center_khz = (2405 + 5 * u32::from(self.0 - IEEE802154_MIN_CHANNEL)) * 1000;
+        match oer_radio_regulatory::FrequencySpan::new(center_khz - 1000, center_khz + 1000) {
+            Some(span) => span,
+            None => unreachable!("a channel has a width"),
+        }
+    }
+}
+
 impl TryFrom<u8> for Ieee802154Channel {
     type Error = Ieee802154ChannelError;
 

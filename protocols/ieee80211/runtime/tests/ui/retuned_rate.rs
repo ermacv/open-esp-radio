@@ -28,7 +28,7 @@ impl PortBody<ModelBackend> for Retune {
         }
         let mut owner = owner.disable(&mut |_| core::ops::ControlFlow::Continue(())).await.ok().unwrap(); // ui-error: E0505
         owner.setup().set_channel(
-            SupportedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()).unwrap(),
+            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()).unwrap()).unwrap(),
         );
         let mut owner = owner.enable().await.ok().unwrap();
         {

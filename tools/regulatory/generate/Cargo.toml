@@ -1,0 +1,16 @@
+[package]
+name = "oer-tool-regulatory-generate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Generates the regulatory domain tables from a pinned subset of wireless-regdb"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "regulatory-generate"
+path = "src/main.rs"

@@ -40,6 +40,19 @@ impl LeCapabilities for Peripheral {
     };
 }
 
+/// A power under the open test domain's ceiling.
+fn power(dbm: i8) -> TxPower {
+    let band = oer_radio_regulatory::TEST_DOMAIN
+        .permit(crate::LeBand)
+        .unwrap();
+    let ceiling = band.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: None,
+    });
+    TxPower::within(crate::LeTxCeiling::new(band, ceiling), dbm).unwrap()
+}
+
 const ADV_NONCONN_IND: [u8; 8] = [0x02, 6, 1, 2, 3, 4, 5, 6];
 const ADV_IND: [u8; 8] = [0x00, 6, 1, 2, 3, 4, 5, 6];
 /// `ADV_NONCONN_IND` with the RFU header bit set.
@@ -55,7 +68,7 @@ fn advertising(
         set: AdvertisingSetId::new(0),
         pdu: AdvertisingPdu::new(pdu).unwrap(),
         reception,
-        tx_power: TxPower::from_dbm(dbm),
+        tx_power: power(dbm),
         phy,
     }
 }
@@ -65,7 +78,7 @@ fn scanner(scan_type: ScanType, filter_policy: ScanFilterPolicy) -> ScannerConfi
         scanner: ScannerId::new(0),
         scan_type,
         filter_policy,
-        tx_power: TxPower::from_dbm(0),
+        tx_power: power(0),
         phy: LePhy::Le1M,
     }
 }
@@ -153,7 +166,7 @@ fn an_advertising_set_needs_a_served_pdu_type_reception_phy_and_power() {
             &ADV_NONCONN_IND,
             AdvertisingReception::None,
             LePhy::Le1M,
-            40
+            20
         ))
         .is_ok()
     );
@@ -224,7 +237,7 @@ fn data_and_tests_are_bounded_by_the_connection_and_test_capabilities() {
         phy,
         window: window(2_000, 100),
         recurring: false,
-        tx_power: TxPower::from_dbm(0),
+        tx_power: power(0),
     };
     let now = LeInstant::from_micros(0);
     assert!(Supported::<Peripheral, _>::placed(test(TestPhy::Le2M), now).is_ok());
@@ -233,7 +246,7 @@ fn data_and_tests_are_bounded_by_the_connection_and_test_capabilities() {
 
 #[test]
 fn nothing_is_supported_without_a_radio() {
-    assert!(Supported::<NoCapabilities, _>::new(TxPower::from_dbm(0)).is_err());
+    assert!(Supported::<NoCapabilities, _>::new(power(0)).is_err());
     assert!(
         Supported::<NoCapabilities, _>::new(DataPdu::new(DataPduKind::Start, &[]).unwrap())
             .is_err()
@@ -351,11 +364,32 @@ fn a_test_payload_is_at_most_255_octets() {
         channel: TestChannel::new(0).unwrap(),
         phy: TestPhy::Le1M,
         window: window(2_000, 100),
-        tx_power: TxPower::from_dbm(0),
+        tx_power: power(0),
         payload_type: TestPayloadType::new(0).unwrap(),
         payload: &payload[..length],
     };
     let now = LeInstant::from_micros(0);
     assert!(Supported::<Peripheral, _>::placed(test(255), now).is_ok());
     assert!(Supported::<Peripheral, _>::placed(test(256), now).is_err());
+}
+
+#[test]
+fn a_power_above_the_regulatory_ceiling_is_not_requestable() {
+    let band = oer_radio_regulatory::TEST_DOMAIN
+        .permit(crate::LeBand)
+        .unwrap();
+    let ceiling = band.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: Some(500),
+    });
+    let ceiling = crate::LeTxCeiling::new(band, ceiling);
+    assert!(TxPower::within(ceiling, 5).is_ok());
+    assert_eq!(
+        TxPower::within(ceiling, 6),
+        Err(crate::AboveCeiling {
+            requested_dbm: 6,
+            ceiling_dbm: 5
+        })
+    );
 }

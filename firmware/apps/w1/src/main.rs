@@ -57,8 +57,8 @@ use oer_esp32s31_ieee80211_mac::{
     portable::rx_meta,
 };
 use oer_esp32s31_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, PhyTxTargetPowerProfile,
-    concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
+    PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
@@ -72,6 +72,7 @@ use oer_ieee80211_mac::{
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_softmac::WifiMacAddress;
 use oer_memory::{AffineSpscQueue, AffineSpscReceiver};
+use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::{Clock, Duration, Instant};
 use static_cell::StaticCell;
 
@@ -90,6 +91,8 @@ pub struct W1Config {
     pub stand: [u8; 6],
     /// The stand's SSID, 1 to 32 bytes, which the stand's beacons carry.
     pub ssid: &'static [u8],
+    /// The stand router radio's regulatory country.
+    pub country: [u8; 2],
 }
 
 include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
@@ -594,8 +597,19 @@ async fn run(
     };
     let channel =
         WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
+    let domain = Country::new(config.country)
+        .ok()
+        .and_then(RegulatoryDomain::of)
+        .ok_or("domain")?;
+    let channel = domain
+        .permit(channel)
+        .map_err(|_| "channel-not-permitted")?;
+    let ceiling = channel.tx_ceiling(board::wifi_power_limits(
+        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+        None,
+    ));
     let start = RadioStartConfig::new(
-        WifiColdStartConfig::new(channel),
+        WifiColdStartConfig::new(channel, ceiling),
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
     );
     let (_cell, started) = start_esp32s31_radio(cell, wifi, Platform::default(), start).await;

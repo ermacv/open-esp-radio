@@ -20,6 +20,7 @@ use crate::channel::{IEEE802154_MIN_CHANNEL, Ieee802154Channel};
 use crate::ll::Ieee802154LowLevel;
 use crate::tx_power::Ieee802154TxPowerLevels;
 use crate::types::Ieee802154CcaMode;
+use oer_radio_regulatory::{Permitted, TxCeiling};
 
 const CHANNEL_COUNT: usize = 16;
 const INTERFACE_COUNT: usize = Ieee802154MultipanIndex::COUNT as usize;
@@ -82,6 +83,69 @@ impl Default for Ieee802154PibDefaults {
     }
 }
 
+/// A channel the regulatory domain permits, with the power it allows on it:
+/// the only way the PIB takes a channel.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ieee802154Permit {
+    channel: Permitted<Ieee802154Channel>,
+    ceiling_dbm: i8,
+}
+
+/// The ceiling lies below the provider's lowest level: no level radiates less
+/// than the ceiling allows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CeilingBelowLowestLevel {
+    /// The ceiling in dBm.
+    pub ceiling_dbm: i8,
+    /// The provider's lowest level in dBm.
+    pub lowest_dbm: i8,
+}
+
+impl Ieee802154Permit {
+    /// `channel` under `ceiling`, when `levels` has a level at or below it.
+    pub const fn new(
+        channel: Permitted<Ieee802154Channel>,
+        ceiling: TxCeiling,
+        levels: Ieee802154TxPowerLevels<'_>,
+    ) -> Result<Self, CeilingBelowLowestLevel> {
+        let ceiling_dbm = ceiling.dbm();
+        if ceiling_dbm < levels.lowest_dbm() {
+            return Err(CeilingBelowLowestLevel {
+                ceiling_dbm,
+                lowest_dbm: levels.lowest_dbm(),
+            });
+        }
+        Ok(Self {
+            channel,
+            ceiling_dbm,
+        })
+    }
+
+    /// The permitted channel.
+    pub const fn channel(self) -> Permitted<Ieee802154Channel> {
+        self.channel
+    }
+
+    /// The most any transmission radiates, in dBm.
+    pub const fn ceiling_dbm(self) -> i8 {
+        self.ceiling_dbm
+    }
+}
+
+/// Channel `number` under the open test domain, for the tests of this crate.
+#[cfg(test)]
+pub(crate) fn test_permit(number: u8, levels: Ieee802154TxPowerLevels<'_>) -> Ieee802154Permit {
+    let permitted = oer_radio_regulatory::TEST_DOMAIN
+        .permit(Ieee802154Channel::new(number).unwrap())
+        .unwrap();
+    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: None,
+    });
+    Ieee802154Permit::new(permitted, ceiling, levels).unwrap()
+}
+
 /// The driver's PAN information base.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ieee802154Pib {
@@ -93,6 +157,7 @@ pub struct Ieee802154Pib {
     rx_when_idle: bool,
     power_dbm: [i8; CHANNEL_COUNT],
     channel: Ieee802154Channel,
+    ceiling_dbm: i8,
     pending_mode: [AutoPendingMode; INTERFACE_COUNT],
     cca_threshold_dbm: i8,
     cca_mode: Ieee802154CcaMode,
@@ -105,10 +170,14 @@ const fn channel_slot(channel: Ieee802154Channel) -> usize {
 
 impl Ieee802154Pib {
     /// `ieee802154_pib_init`: auto-ACK in both directions with enhanced ACK
-    /// timing, promiscuous, not a coordinator, receiver off when idle,
-    /// channel 11, every channel at the provider's highest power, and a
-    /// pending update.
-    pub fn new(defaults: Ieee802154PibDefaults, levels: Ieee802154TxPowerLevels<'_>) -> Self {
+    /// timing, promiscuous, not a coordinator, receiver off when idle, the
+    /// permitted channel (the vendor's channel 11), every channel at the
+    /// provider's highest power, and a pending update.
+    pub fn new(
+        defaults: Ieee802154PibDefaults,
+        levels: Ieee802154TxPowerLevels<'_>,
+        permit: Ieee802154Permit,
+    ) -> Self {
         Self {
             auto_ack_tx: true,
             auto_ack_rx: true,
@@ -117,10 +186,8 @@ impl Ieee802154Pib {
             coordinator: false,
             rx_when_idle: false,
             power_dbm: [levels.highest_dbm(); CHANNEL_COUNT],
-            channel: match Ieee802154Channel::new(11) {
-                Ok(channel) => channel,
-                Err(_) => unreachable!(),
-            },
+            channel: permit.channel.channel(),
+            ceiling_dbm: permit.ceiling_dbm,
             pending_mode: [AutoPendingMode::Disable; INTERFACE_COUNT],
             cca_threshold_dbm: defaults.cca_threshold_dbm,
             cca_mode: defaults.cca_mode,
@@ -145,7 +212,7 @@ impl Ieee802154Pib {
             return;
         }
         ll.set_channel(self.channel);
-        ll.set_tx_power(&levels.resolve(self.channel, self.power()));
+        ll.set_tx_power(&levels.resolve(self.channel, self.power().min(self.ceiling_dbm)));
         ll.set_cca_mode(self.cca_mode);
         ll.set_cca_threshold(self.cca_threshold_dbm);
         ll.set_tx_auto_ack(self.auto_ack_tx);
@@ -173,9 +240,19 @@ impl Ieee802154Pib {
         self.channel
     }
 
-    /// `ieee802154_pib_set_channel`.
-    pub fn set_channel(&mut self, channel: Ieee802154Channel) {
-        Self::replace(&mut self.pending, &mut self.channel, channel);
+    /// `ieee802154_pib_set_channel`, for a channel the domain permits.
+    pub fn set_channel(&mut self, permit: Ieee802154Permit) {
+        Self::replace(
+            &mut self.pending,
+            &mut self.channel,
+            permit.channel.channel(),
+        );
+        Self::replace(&mut self.pending, &mut self.ceiling_dbm, permit.ceiling_dbm);
+    }
+
+    /// The most the current channel radiates, in dBm.
+    pub const fn ceiling_dbm(&self) -> i8 {
+        self.ceiling_dbm
     }
 
     /// `ieee802154_pib_get_power`: the requested power of the current channel.

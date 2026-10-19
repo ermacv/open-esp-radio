@@ -44,7 +44,7 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 /// # use core::marker::PhantomData;
 /// # use oer_bluetooth_le_radio::{NoCapabilities, Supported, TxPower};
 /// let forged: Supported<NoCapabilities, TxPower> =
-///     Supported { value: TxPower::from_dbm(0), caps: PhantomData };
+///     Supported { value: todo!(), caps: PhantomData };
 /// ```
 ///
 /// ```compile_fail,E0599
@@ -73,8 +73,9 @@ pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 ///
 /// ```
 /// # use oer_bluetooth_le_radio::{LeCapabilities, Supported, TxPower};
-/// fn build<K: LeCapabilities>(dbm: i8) -> Option<Supported<K, TxPower>> {
-///     Supported::new(TxPower::from_dbm(dbm)).ok()
+/// # use oer_bluetooth_le_radio::LeTxCeiling;
+/// fn build<K: LeCapabilities>(ceiling: LeTxCeiling, dbm: i8) -> Option<Supported<K, TxPower>> {
+///     Supported::new(TxPower::within(ceiling, dbm).ok()?).ok()
 /// }
 /// # use oer_bluetooth_le_radio::{LeInstant, ScanWindow};
 /// fn place<K: LeCapabilities>(window: ScanWindow, now: LeInstant) -> Option<Supported<K, ScanWindow>> {

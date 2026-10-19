@@ -20,7 +20,7 @@ The root says what the code is about.
 
 ```text
 protocols/  sans-IO protocols and their vocabularies (no_std)
-  radio/        the radio port, coexistence vocabulary, permit pool
+  radio/        the radio port, coexistence vocabulary, regulatory domain, permit pool
   ieee80211/    Wi-Fi: MAC formats and state, lower and upper MAC, station,
                 access point, RSN, arbiter, runtime, datapath
   bluetooth/    HCI and the LE link layer, controller and radio port
@@ -45,7 +45,7 @@ chips/      everything about Espressif hardware
                 vendor/     the vendor pins, coverage and generated facts
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
 tools/      everything that runs on the developer's machine, by domain:
-  os/ test/ analysis/ chip/ pins/ registers/ probe/ image/ lab/ hil/ vendor/
+  os/ test/ analysis/ chip/ pins/ regulatory/ registers/ probe/ image/ lab/ hil/ vendor/
 docs/       cross-cutting documents
 ```
 

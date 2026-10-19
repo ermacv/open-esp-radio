@@ -373,7 +373,7 @@ where
         let WifiTrack {
             mut wifi,
             channel,
-            maximum_tx_power_quarter_dbm,
+            tx_ceiling,
             mac,
             slow_clock,
             delay_random,
@@ -414,7 +414,7 @@ where
         };
 
         set_wifi_rx(&mut self.radio, &membership, true);
-        let lowered = crate::channel::lower_wifi_channel(channel);
+        let lowered = crate::channel::lower_wifi_channel(channel.channel());
         let mut observer = self.observer.clone();
         let mut platform = ();
         let selected = {
@@ -450,7 +450,7 @@ where
             Ok(state) => (
                 state
                     .tx_target_power_profile()
-                    .with_maximum_quarter_dbm(maximum_tx_power_quarter_dbm),
+                    .with_maximum_quarter_dbm(tx_ceiling.quarter_dbm()),
                 state.temperature_observation(),
             ),
             Err(_) => {

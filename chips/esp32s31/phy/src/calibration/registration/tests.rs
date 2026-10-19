@@ -84,8 +84,16 @@ fn production_config_contains_only_the_qualified_tx_power_policy() {
                 0x50, 0x50, 0x50, 0x50, 0x4c, 0x48, 0x50, 0x50, 0x4c, 0x48, 0x40, 0x3c, 0x3c, 0x3c,
                 0x4c, 0x4c, 0x48, 0x44,
             ],
-            false,
         )
+    );
+}
+
+#[test]
+fn the_chip_maximum_is_the_largest_production_target_power() {
+    // 0x50 quarter dBm: 20 dBm.
+    assert_eq!(
+        crate::state::PhyConfig::production().highest_target_power_quarter_dbm(),
+        0x50
     );
 }
 

@@ -37,8 +37,8 @@ use oer_esp32s31_ieee80211_mac::init::{
     MacSlowClockCalibrationSource,
 };
 use oer_esp32s31_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, PhyTxTargetPowerProfile,
-    concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
+    PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
@@ -47,6 +47,7 @@ use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
 use oer_espressif_staged_runtime::panic;
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
+use oer_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
 oer_espressif_staged_runtime::interrupt_table! {
@@ -187,6 +188,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     })
 }
 
+include!(concat!(env!("OUT_DIR"), "/w0_config.rs"));
+
 /// The radio system's actor, on the radio executor (P2).
 #[embassy_executor::task]
 async fn radio_actor(actor: Actor) {
@@ -227,8 +230,20 @@ async fn run(
         return Err("efuse-mac");
     };
     let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
+    let country = COUNTRY.ok_or("unconfigured")?;
+    let domain = Country::new(country)
+        .ok()
+        .and_then(RegulatoryDomain::of)
+        .ok_or("domain")?;
+    let channel = domain
+        .permit(channel)
+        .map_err(|_| "channel-not-permitted")?;
+    let ceiling = channel.tx_ceiling(board::wifi_power_limits(
+        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+        None,
+    ));
     let config = RadioStartConfig::new(
-        WifiColdStartConfig::new(channel),
+        WifiColdStartConfig::new(channel, ceiling),
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
     );
     let (cell, started) = start_esp32s31_radio(cell, wifi, Platform::default(), config).await;

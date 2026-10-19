@@ -37,7 +37,7 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
         } = resources;
         let (arbiter, place, absence) = PortArbiter::<ModelBackend<ModelCaps24, ServiceContexts>>::new(
             ArbiterPolicy::DEFAULT.checked(<ModelBackend<ModelCaps24, ServiceContexts> as LowerMacBackend>::PUBLICATION_BOUND).unwrap(),
-            SupportedChannel::new(channel6()).unwrap(), arbiter_authority, gate,
+            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(), arbiter_authority, gate,
         );
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
@@ -90,7 +90,15 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
                 panic!()
             };
             let (arbiter, places) = stopped
-                .restart(SupportedChannel::new(channel6()).unwrap(), places)
+                .restart(
+                    SupportedChannel::new(
+                        oer_radio_regulatory::TEST_DOMAIN
+                            .permit(channel6())
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                    places,
+                )
                 .ok()
                 .unwrap()
                 .into_parts();

@@ -11,6 +11,9 @@ description = "Allocation-free Bluetooth LE Link Layer protocol and role state"
 aes = { version = "0.8.4", default-features = false }
 oer-bluetooth-le-radio = { path = "../radio" }
 
+[dev-dependencies]
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+
 [lints]
 workspace = true
 

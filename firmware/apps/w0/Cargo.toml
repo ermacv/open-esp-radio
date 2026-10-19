@@ -26,6 +26,7 @@ oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
 oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
 
 [build-dependencies]

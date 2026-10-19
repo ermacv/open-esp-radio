@@ -28,7 +28,7 @@ use crate::ll::{
     self, Ieee802154EtmRoute, Ieee802154LlCommand, Ieee802154LowLevel,
     Ieee802154MultipanEnableState, Ieee802154RxAbortEnableSet, Ieee802154RxStatus, Ieee802154Timer,
 };
-use crate::pib::{Ieee802154MultipanIndex, Ieee802154Pib, Ieee802154PibDefaults};
+use crate::pib::{Ieee802154MultipanIndex, Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
 use crate::tx_power::Ieee802154TxPowerLevels;
 use crate::types::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154RxAbortReason,
@@ -314,6 +314,8 @@ pub struct Ieee802154Engine<'storage> {
     buffers: &'storage mut Ieee802154EngineBuffers,
     levels: Ieee802154TxPowerLevels<'static>,
     pib: Ieee802154Pib,
+    /// The channel and ceiling every PIB initialization restores.
+    start: Ieee802154Permit,
     /// The defaults the last PIB initialization restored.
     defaults: Ieee802154PibDefaults,
     pending_tables: [PendingTable<PENDING_TABLE_SIZE>; Ieee802154MultipanIndex::COUNT as usize],
@@ -336,16 +338,19 @@ pub struct Ieee802154Engine<'storage> {
 impl<'storage> Ieee802154Engine<'storage> {
     /// A disabled engine over exclusively borrowed buffers. `levels` is the
     /// transmit-power provider the vendor reads through
-    /// `bt_bb_get_tx_pwr_table`.
+    /// `bt_bb_get_tx_pwr_table`; `start` is the permitted channel and power
+    /// ceiling every PIB initialization restores.
     pub fn new(
         buffers: &'storage mut Ieee802154EngineBuffers,
         levels: Ieee802154TxPowerLevels<'static>,
         defaults: Ieee802154PibDefaults,
+        start: Ieee802154Permit,
     ) -> Self {
         Self {
             buffers,
             levels,
-            pib: Ieee802154Pib::new(defaults, levels),
+            pib: Ieee802154Pib::new(defaults, levels, start),
+            start,
             defaults,
             pending_tables: [const { PendingTable::new() };
                 Ieee802154MultipanIndex::COUNT as usize],
@@ -371,8 +376,9 @@ impl<'storage> Ieee802154Engine<'storage> {
         levels: Ieee802154TxPowerLevels<'static>,
         defaults: Ieee802154PibDefaults,
         interfaces: Ieee802154Interfaces,
+        start: Ieee802154Permit,
     ) -> Self {
-        let mut engine = Self::new(buffers, levels, defaults);
+        let mut engine = Self::new(buffers, levels, defaults, start);
         engine.multipan = Some(interfaces);
         engine
     }
@@ -727,7 +733,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         ll: &mut L,
         defaults: Ieee802154PibDefaults,
     ) {
-        self.pib = Ieee802154Pib::new(defaults, self.levels);
+        self.pib = Ieee802154Pib::new(defaults, self.levels, self.start);
         self.defaults = defaults;
         self.clear_txrx_statistics();
         ll::mac_init_registers(ll, &self.coexistence);

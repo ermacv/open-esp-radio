@@ -173,6 +173,29 @@ impl Channel {
     }
 }
 
+/// The span `bandwidth_mhz` wide around `center_mhz`.
+fn centered_span(center_mhz: u16, bandwidth_mhz: u16) -> oer_radio_regulatory::FrequencySpan {
+    let half_khz = u32::from(bandwidth_mhz) * 500;
+    let center_khz = u32::from(center_mhz) * 1000;
+    oer_radio_regulatory::FrequencySpan::new(
+        center_khz.saturating_sub(half_khz),
+        center_khz.saturating_add(half_khz),
+    )
+    .unwrap_or_else(|| unreachable!("a channel has a width"))
+}
+
+impl oer_radio_regulatory::RadioChannel for Channel {
+    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+        centered_span(self.center_frequency_mhz(), self.bandwidth_mhz())
+    }
+}
+
+impl oer_radio_regulatory::RadioChannel for WifiChannel {
+    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+        centered_span(self.center_frequency_mhz(), self.bandwidth_mhz())
+    }
+}
+
 impl From<WifiChannel> for Channel {
     fn from(channel: WifiChannel) -> Self {
         Self::from_wifi_channel(channel)

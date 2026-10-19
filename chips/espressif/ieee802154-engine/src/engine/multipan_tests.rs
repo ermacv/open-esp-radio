@@ -91,8 +91,14 @@ impl Bench {
                 levels,
                 defaults,
                 Ieee802154Interfaces::new(count).unwrap(),
+                crate::pib::test_permit(11, levels),
             ),
-            None => Ieee802154Engine::new(buffers, levels, defaults),
+            None => Ieee802154Engine::new(
+                buffers,
+                levels,
+                defaults,
+                crate::pib::test_permit(11, levels),
+            ),
         };
         let mut hw = Ieee802154LlModel::default();
         engine.enable();

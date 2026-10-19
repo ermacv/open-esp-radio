@@ -91,6 +91,11 @@ impl<'levels> Ieee802154TxPowerLevels<'levels> {
         self.levels_dbm.len()
     }
 
+    /// Return the first, lowest provider level.
+    pub const fn lowest_dbm(self) -> i8 {
+        self.levels_dbm[0]
+    }
+
     /// Return the final, highest provider level (`IEEE802154_TXPOWER_VALUE_MAX`).
     pub const fn highest_dbm(self) -> i8 {
         self.levels_dbm[self.levels_dbm.len() - 1]

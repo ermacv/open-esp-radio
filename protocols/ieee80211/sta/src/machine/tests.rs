@@ -205,7 +205,12 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
 };
 
 fn channel(number: u8) -> SupportedChannel<Caps> {
-    SupportedChannel::new(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap()).unwrap()
+    SupportedChannel::new(
+        oer_radio_regulatory::TEST_DOMAIN
+            .permit(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap())
+            .unwrap(),
+    )
+    .unwrap()
 }
 
 fn at(millis: u32) -> Instant {

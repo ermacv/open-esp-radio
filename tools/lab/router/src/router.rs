@@ -234,11 +234,14 @@ pub fn plan() -> Vec<String> {
     ]
 }
 
-/// The applied profile: the stand AP's BSSID and channel.
+/// The applied profile: the stand AP's BSSID and channel, and the radio's
+/// regulatory country.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Applied {
     pub bssid: Mac,
     pub channel: u8,
+    /// The radio's UCI `country`: two uppercase letters.
+    pub country: [u8; 2],
 }
 
 impl Applied {
@@ -278,7 +281,46 @@ pub fn apply(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         &profile.ssid,
     )?;
     after.check_after(profile)?;
-    settle(remote, profile)
+    let country = country_of(after.sections(profile)?.0)?;
+    settle(remote, profile, country)
+}
+
+/// The UCI `country` of the radio `radio`: the stand's regulatory domain.
+/// Read only.
+pub fn radio_country(remote: &mut dyn Remote, radio: &str) -> Result<[u8; 2]> {
+    if !section_name(radio) {
+        return Err("[station_fixture].radio is no named UCI section".to_owned());
+    }
+    let wireless = Wireless::parse(
+        &remote
+            .run(&show_script())
+            .map_err(step("reading the wireless configuration"))?,
+        "",
+    )?;
+    let section = wireless
+        .section(radio)
+        .filter(|section| section.kind == "wifi-device")
+        .ok_or_else(|| format!("the router has no wifi-device section {radio}"))?;
+    country_of(section)
+}
+
+/// The two-letter `country` of a radio section.
+fn country_of(radio: &Section) -> Result<[u8; 2]> {
+    let country = radio.option("country").ok_or_else(|| {
+        format!(
+            "the router's radio {} has no country: the stand needs a regulatory domain",
+            radio.name
+        )
+    })?;
+    match country.as_bytes() {
+        &[first, second] if first.is_ascii_uppercase() && second.is_ascii_uppercase() => {
+            Ok([first, second])
+        }
+        _ => Err(format!(
+            "the router's radio {} country is not two uppercase letters",
+            radio.name
+        )),
+    }
 }
 
 /// An error of the step `what`.
@@ -287,7 +329,7 @@ fn step(what: &str) -> impl FnOnce(String) -> String + '_ {
 }
 
 /// Step 6: the AP interface until it runs the profile.
-fn settle(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
+fn settle(remote: &mut dyn Remote, profile: &Profile, country: [u8; 2]) -> Result<Applied> {
     let script = profile.iw_script();
     let mut last = String::new();
     for attempt in 0..SETTLE_ATTEMPTS {
@@ -304,6 +346,7 @@ fn settle(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
                     return Ok(Applied {
                         bssid: info.bssid,
                         channel: info.channel,
+                        country,
                     });
                 }
                 Some(reason) => last = reason,

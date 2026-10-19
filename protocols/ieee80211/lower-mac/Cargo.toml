@@ -17,9 +17,11 @@ heapless = "0.9.3"
 oer-ieee80211-mac = { path = "../mac" }
 oer-radio-coex = { path = "../../radio/coex" }
 oer-radio-port = { path = "../../radio/port" }
+oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 # The crate's own tests run the shared conformance suite on the model.
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }

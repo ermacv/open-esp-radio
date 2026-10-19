@@ -9,6 +9,19 @@ use super::{
     DTM_MAX_PAYLOAD, DtmEvent, DtmPayloadPattern, DtmSession, DtmStartError, DtmStop, DtmTest,
 };
 
+/// A power under the open test domain's ceiling.
+fn power(dbm: i8) -> TxPower {
+    let band = oer_radio_regulatory::TEST_DOMAIN
+        .permit(oer_bluetooth_le_radio::LeBand)
+        .unwrap();
+    let ceiling = band.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: None,
+    });
+    TxPower::within(oer_bluetooth_le_radio::LeTxCeiling::new(band, ceiling), dbm).unwrap()
+}
+
 const TIMING: RadioTiming = RadioTiming {
     preparation_lead: RadioDuration::from_micros(107),
     admission_guard: RadioDuration::from_micros(40),
@@ -67,7 +80,7 @@ fn prbs_patterns_match_the_vendor_table_fingerprints() {
 
 #[test]
 fn transmitter_packets_stay_on_the_interval_grid() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session.start(transmit()).unwrap();
     assert_eq!(session.start(transmit()), Err(DtmStartError::Active));
     let mut payload = [0; DTM_MAX_PAYLOAD];
@@ -107,7 +120,7 @@ fn transmitter_packets_stay_on_the_interval_grid() {
 
 #[test]
 fn a_later_le_2m_packet_takes_the_next_admitted_slot() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session
         .start(DtmTest::Transmit {
             channel: TestChannel::new(0).unwrap(),
@@ -157,7 +170,7 @@ fn a_later_le_2m_packet_takes_the_next_admitted_slot() {
 
 #[test]
 fn a_receiver_counts_packets_and_drains_before_it_stops() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session
         .start(DtmTest::Receive {
             channel: TestChannel::new(0).unwrap(),
@@ -204,7 +217,7 @@ fn a_receiver_counts_packets_and_drains_before_it_stops() {
 
 #[test]
 fn coded_transmitters_are_refused_and_refusals_replan() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     assert_eq!(
         session.start(DtmTest::Transmit {
             channel: TestChannel::new(0).unwrap(),
@@ -234,7 +247,7 @@ fn coded_transmitters_are_refused_and_refusals_replan() {
 #[test]
 fn planning_failure_retains_the_test_history_and_payload() {
     use super::{DtmCalculation, DtmEpochExhausted};
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session.start(transmit()).unwrap();
     let last = oer_bluetooth_le_radio::LeWindow::new(
         LeInstant::from_micros(u64::MAX - 400),
@@ -264,7 +277,7 @@ fn planning_failure_retains_the_test_history_and_payload() {
 
 #[test]
 fn a_recurring_packet_near_epoch_end_needs_only_recurring_slack() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session.start(transmit()).unwrap();
     session.last = Some(
         oer_bluetooth_le_radio::LeWindow::new(
@@ -285,7 +298,7 @@ fn a_recurring_packet_near_epoch_end_needs_only_recurring_slack() {
 
 #[test]
 fn failed_reservation_changes_neither_receiver_recurrence_nor_history() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session
         .start(DtmTest::Receive {
             channel: TestChannel::new(0).unwrap(),
@@ -309,7 +322,7 @@ fn failed_reservation_changes_neither_receiver_recurrence_nor_history() {
 #[test]
 fn uncertain_events_are_counted_apart_and_the_next_test_event_follows() {
     for result in [EventResult::Aborted, EventResult::Indeterminate] {
-        let mut session = DtmSession::new(TxPower::from_dbm(0));
+        let mut session = DtmSession::new(power(0));
         session
             .start(DtmTest::Receive {
                 channel: TestChannel::new(19).unwrap(),
@@ -348,7 +361,7 @@ fn uncertain_events_are_counted_apart_and_the_next_test_event_follows() {
 /// session plans as before.
 #[test]
 fn reports_without_an_event_in_progress_count_nothing() {
-    let mut session = DtmSession::new(TxPower::from_dbm(0));
+    let mut session = DtmSession::new(power(0));
     session
         .start(DtmTest::Receive {
             channel: TestChannel::new(0).unwrap(),

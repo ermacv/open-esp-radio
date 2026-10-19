@@ -35,19 +35,35 @@ pub fn package(root: &Path, image: &str) -> Result<String> {
     Ok(manifest.package.name)
 }
 
-/// The stand identity's variables a cargo build of `image`'s runtime sets
-/// (`Some`) or removes (`None`): only a configured `w1` runtime gets them,
+/// The runtime build's variable of image `w0`'s regulatory country.
+pub const ENV_W0_COUNTRY: &str = "OER_W0_COUNTRY";
+
+/// What an image is built for on the stand.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Stand {
+    /// Image `w0`: the stand router radio's regulatory country.
+    W0 { country: [u8; 2] },
+    /// Image `w1`: the stand's identity.
+    W1(w1::Config),
+}
+
+/// The stand's variables a cargo build of `image`'s runtime sets (`Some`) or
+/// removes (`None`): only a configured runtime of its own image gets them,
 /// so a value left in the caller's environment reaches no other build, nor
-/// the unconfigured `w1`.
-pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(String, Option<String>)> {
-    match w1.filter(|_| image == w1::IMAGE) {
-        Some(config) => config
+/// the unconfigured one.
+pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<String>)> {
+    match (image, stand) {
+        (w1::IMAGE, Some(Stand::W1(config))) => config
             .runtime_env()
             .into_iter()
             .map(|(name, value)| (name.to_owned(), Some(value)))
             .collect(),
-        None => w1::ENV
+        ("w0", Some(Stand::W0 { country })) => {
+            vec![(ENV_W0_COUNTRY.to_owned(), Some(w1::country_text(*country)))]
+        }
+        _ => w1::ENV
             .into_iter()
+            .chain([ENV_W0_COUNTRY])
             .map(|name| (name.to_owned(), None))
             .collect(),
     }
@@ -64,9 +80,9 @@ pub fn run_timeout(image: &str) -> std::time::Duration {
     }
 }
 
-/// The pipeline's spec of `image`, with `w1`'s parameters for image `w1`:
+/// The pipeline's spec of `image`, with the stand's parameters:
 /// every check, reported and never failing the build.
-pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSpec> {
+pub fn spec(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageSpec> {
     let profile = oer_chip_profile::Profile::load(root, CHIP)?;
     let package = package(root, image)?;
     Ok(ImageSpec {
@@ -80,7 +96,7 @@ pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSp
         },
         stack_policy: profile.stack_policy(),
         layout_seed: None,
-        runtime_environment: runtime_env(image, w1),
+        runtime_environment: runtime_env(image, stand),
         output: output(root, image),
         checks: Some(Gates {
             enforced: false,
@@ -89,9 +105,9 @@ pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSp
     })
 }
 
-/// Build `image`, with `w1`'s parameters for image `w1`, into its bundle.
-pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageBundle> {
-    let bundle = oer_image_build::build(&spec(root, image, w1)?)?;
+/// Build `image`, with the stand's parameters, into its bundle.
+pub fn build(root: &Path, image: &str, stand: Option<&Stand>) -> Result<ImageBundle> {
+    let bundle = oer_image_build::build(&spec(root, image, stand)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -127,21 +143,35 @@ mod tests {
             channel: 11,
             bssid: oer_lab_router::mac::Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
             ssid: w1::Ssid::new(b"Lab").unwrap(),
+            country: *b"DE",
         };
+        let stand = Stand::W1(config);
         let set = |name: &str, value: &str| (name.to_owned(), Some(value.to_owned()));
         assert_eq!(
-            runtime_env("w1", Some(&config)),
+            runtime_env("w1", Some(&stand)),
             [
                 set(w1::ENV_CHANNEL, "11"),
                 set(w1::ENV_BSSID, "02:00:00:00:F6:D0"),
                 set(w1::ENV_SSID, "4c6162"),
+                set(w1::ENV_COUNTRY, "DE"),
             ]
         );
-        let removed =
-            [w1::ENV_CHANNEL, w1::ENV_BSSID, w1::ENV_SSID].map(|name| (name.to_owned(), None));
+        let removed = [
+            w1::ENV_CHANNEL,
+            w1::ENV_BSSID,
+            w1::ENV_SSID,
+            w1::ENV_COUNTRY,
+            ENV_W0_COUNTRY,
+        ]
+        .map(|name| (name.to_owned(), None));
         // The unconfigured w1 and another image remove them.
         assert_eq!(runtime_env("w1", None), removed);
-        assert_eq!(runtime_env("w0", Some(&config)), removed);
+        assert_eq!(runtime_env("w0", Some(&stand)), removed);
+        // w0 gets only its country.
+        assert_eq!(
+            runtime_env("w0", Some(&Stand::W0 { country: *b"DE" })),
+            [set(ENV_W0_COUNTRY, "DE")]
+        );
     }
 
     #[test]

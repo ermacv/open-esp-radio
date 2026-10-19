@@ -58,7 +58,12 @@ impl Ieee80211Capabilities for Caps {
 type TestArbiter<'id, R = NoReservation> = Arbiter<'id, Caps, R>;
 
 fn channel(number: u8) -> SupportedChannel<Caps> {
-    SupportedChannel::new(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap()).unwrap()
+    SupportedChannel::new(
+        oer_radio_regulatory::TEST_DOMAIN
+            .permit(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap())
+            .unwrap(),
+    )
+    .unwrap()
 }
 
 fn at(millis: u32) -> Instant {
@@ -922,7 +927,12 @@ fn lease_after<'id>(arbiter: &mut TestArbiter<'id>, place: LeasePlace<'id>) -> L
 fn a_join_where_the_access_point_may_not_follow_stops_it_by_the_default_policy() {
     installed(|mint| {
         let (mut arbiter, place, mut port) = beside_access_point::<NoReservation>(mint);
-        let five = SupportedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()).unwrap();
+        let five = SupportedChannel::new(
+            oer_radio_regulatory::TEST_DOMAIN
+                .permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
+                .unwrap(),
+        )
+        .unwrap();
         let lease = lease(arbiter.request(
             at(0),
             ChannelRequest {
@@ -1434,8 +1444,12 @@ fn a_cancelled_starting_absence_delivers_its_pending_leave_and_both_places() {
             arbiter.upstream(
                 at(53),
                 UpstreamFact::SwitchAnnounced {
-                    target: SupportedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
-                        .unwrap(),
+                    target: SupportedChannel::new(
+                        oer_radio_regulatory::TEST_DOMAIN
+                            .permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
+                            .unwrap(),
+                    )
+                    .unwrap(),
                     mode: ChannelSwitchMode::Continue,
                     at: at(100),
                 },

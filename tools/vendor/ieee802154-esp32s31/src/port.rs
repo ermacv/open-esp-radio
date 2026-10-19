@@ -790,6 +790,22 @@ fn level_table() -> CoexPtiTable {
     table
 }
 
+/// Channel `number` under the open domain: the comparison does not model a
+/// country, and the ceiling is the open domain's EIRP.
+fn permit(
+    number: u8,
+    levels: oer_espressif_ieee802154_engine::tx_power::Ieee802154TxPowerLevels<'_>,
+) -> Option<oer_espressif_ieee802154_engine::pib::Ieee802154Permit> {
+    let channel = Ieee802154Channel::new(number).ok()?;
+    let permitted = oer_radio_regulatory::TEST_DOMAIN.permit(channel).ok()?;
+    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: None,
+    });
+    oer_espressif_ieee802154_engine::pib::Ieee802154Permit::new(permitted, ceiling, levels).ok()
+}
+
 /// Run `scenario` against the production engine.
 ///
 /// # Errors
@@ -802,8 +818,9 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     // through `bt_bb_get_tx_pwr_table` (`crate::record`).
     let levels = oer_esp32s31_knowledge::tx_power::ESP32S31_TX_POWER_LEVELS;
     let defaults = Ieee802154PibDefaults::default();
+    let start = permit(11, levels).expect("channel 11 under the open domain");
     #[cfg(not(feature = "multipan"))]
-    let mut engine = Ieee802154Engine::new(buffers, levels, defaults);
+    let mut engine = Ieee802154Engine::new(buffers, levels, defaults, start);
     // The stand's multi-PAN build uses the Kconfig default of two interfaces.
     #[cfg(feature = "multipan")]
     let mut engine = Ieee802154Engine::new_multipan(
@@ -812,6 +829,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
         defaults,
         oer_espressif_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
             .expect("two interfaces"),
+        start,
     );
     // The stand's software-coexistence build uses the driver's default
     // scene levels.
@@ -843,8 +861,8 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
             }
             Step::Disable => engine.disable(),
             Step::SetChannel(channel) => {
-                if let Ok(channel) = Ieee802154Channel::new(channel) {
-                    engine.pib().set_channel(channel);
+                if let Some(permit) = permit(channel, levels) {
+                    engine.pib().set_channel(permit);
                 }
             }
             Step::SetPromiscuous(enable) => engine.pib().set_promiscuous(enable),

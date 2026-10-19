@@ -24,8 +24,11 @@ pub const ENV_CHANNEL: &str = "OER_W1_CHANNEL";
 pub const ENV_BSSID: &str = "OER_W1_BSSID";
 /// The runtime build's variable of the stand's SSID, in hex.
 pub const ENV_SSID: &str = "OER_W1_SSID_HEX";
+/// The runtime build's variable of the stand's regulatory country (the
+/// router radio's UCI `country`).
+pub const ENV_COUNTRY: &str = "OER_W1_COUNTRY";
 /// Every variable of the runtime build.
-pub const ENV: [&str; 3] = [ENV_CHANNEL, ENV_BSSID, ENV_SSID];
+pub const ENV: [&str; 4] = [ENV_CHANNEL, ENV_BSSID, ENV_SSID, ENV_COUNTRY];
 /// The first line of the report block.
 pub const BEGIN: &str = "OER-W1-BEGIN";
 /// The last line of the report block.
@@ -107,6 +110,11 @@ fn unmasked(mac: &Mac) -> String {
         .join(":")
 }
 
+/// The two letters of `country`.
+pub fn country_text(country: [u8; 2]) -> String {
+    country.iter().copied().map(char::from).collect()
+}
+
 /// The stand image `w1` is built for and checked against.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -116,15 +124,18 @@ pub struct Config {
     pub bssid: Mac,
     /// The SSID the stand's beacons carry.
     pub ssid: Ssid,
+    /// The router radio's regulatory country.
+    pub country: [u8; 2],
 }
 
 impl Config {
     /// The variables of the runtime build.
-    pub fn runtime_env(&self) -> [(&'static str, String); 3] {
+    pub fn runtime_env(&self) -> [(&'static str, String); 4] {
         [
             (ENV_CHANNEL, self.channel.to_string()),
             (ENV_BSSID, unmasked(&self.bssid)),
             (ENV_SSID, self.ssid.hex()),
+            (ENV_COUNTRY, country_text(self.country)),
         ]
     }
 }
@@ -2193,6 +2204,7 @@ mod tests {
             channel: 6,
             bssid: Mac::new([0x02, 0, 0, 0, 0xF6, 0xD0]).unwrap(),
             ssid: Ssid::new(SSID.as_bytes()).unwrap(),
+            country: *b"DE",
         }
     }
 
@@ -2310,6 +2322,7 @@ mod tests {
                 (ENV_CHANNEL, "6".to_owned()),
                 (ENV_BSSID, "02:00:00:00:F6:D0".to_owned()),
                 (ENV_SSID, "4d61646520557020274c616227204e6574".to_owned()),
+                (ENV_COUNTRY, "DE".to_owned()),
             ]
         );
     }
@@ -2665,6 +2678,7 @@ mod tests {
             channel: 6,
             bssid: Mac::new([0x02, 0xAB, 0xCD, 0xEF, 0xF6, 0xD0]).unwrap(),
             ssid: Ssid::new(SSID.as_bytes()).unwrap(),
+            country: *b"DE",
         };
         let mut shown = vec![format!("{config:?}"), format!("{config:#?}")];
         for (body, result) in [
