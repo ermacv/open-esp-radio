@@ -139,7 +139,9 @@ enum Check {
     },
     /// Build every verified chip's comparison probe images.
     Probes,
-    /// Clippy and the tests of each verified chip's vendor host stands.
+    /// Clippy and the tests of each verified chip's vendor host stands, at
+    /// the workspace's lint levels: an error fails, a warning (such as an
+    /// existing panic site) does not.
     HostStands,
 }
 
@@ -155,6 +157,9 @@ fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
     oer_vendor_provenance::registry::check(&ctx.root, chip)
 }
 
+/// Clippy of a host stand's manifest, at the workspace's lint levels.
+const STAND_CLIPPY: [&str; 4] = ["clippy", "--locked", "--all-targets", "--manifest-path"];
+
 fn host_stands(ctx: &Checkout) -> Result<()> {
     let workspace = oer_vendor_evidence::workspace::Workspace::load(&ctx.root, None)?;
     for chip in verified_chips(ctx)? {
@@ -165,9 +170,8 @@ fn host_stands(ctx: &Checkout) -> Result<()> {
                 let manifest = ctx.root.join(manifest);
                 oer_os_process::run(
                     oer_os_toolchain::cargo_in(&ctx.root)
-                        .args(["clippy", "--locked", "--manifest-path"])
-                        .arg(&manifest)
-                        .args(["--all-targets", "--", "-D", "warnings"]),
+                        .args(STAND_CLIPPY)
+                        .arg(&manifest),
                 )?;
                 oer_os_process::run(
                     oer_os_toolchain::cargo_in(&ctx.root)
@@ -321,6 +325,12 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_host_stand_keeps_the_workspace_lint_levels() {
+        // A warning, such as an existing panic site, never fails the check.
+        assert!(!STAND_CLIPPY.iter().any(|arg| *arg == "-D" || *arg == "--"));
+    }
 
     #[test]
     fn the_comparison_covers_every_chip_and_never_one() {
