@@ -342,6 +342,13 @@ max = 0x3ffff
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
 [[bounded-domains]]
+name = "WifiDescriptorAddressLow"
+description = "The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold."
+min = 0
+max = 0xfffff
+sources = ["PROMOTED_LMAC_TX"]
+
+[[bounded-domains]]
 name = "ExternalCoexNibble"
 description = "One four-bit external coexistence priority or grant field image."
 min = 0
