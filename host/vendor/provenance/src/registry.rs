@@ -39,13 +39,7 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
 
 /// Production sources scanned for `SOURCE:` blocks: Rust files and, with
 /// `#` comments, TOML files such as the platform's ROM function summaries.
-const PRODUCTION: [&str; 2] = ["crates", "firmware"];
-/// The chip's reviewed verification decisions, relative to its
-/// verification directory: the coverage decisions' data and the scenario
-/// crate's decision modules.
-const DECISIONS: [&str; 2] = ["decisions", "scenarios/src/decisions"];
-/// Extensions of the decision files.
-const DECISION_EXTENSIONS: [&str; 2] = ["toml", "rs"];
+const PRODUCTION: [&str; 3] = ["portable", "chips", "firmware"];
 /// Shortest identifier taken as a reference; shorter words are prose.
 const MINIMUM_NAME: usize = 4;
 
@@ -207,33 +201,38 @@ fn is_code_name(word: &str) -> bool {
         || word.chars().skip(1).any(|c| c.is_ascii_uppercase())
 }
 
-/// Code-shaped string literals of every decision file of `directory`, by
-/// name, with the files that name them: a decision's `Place` names the
-/// vendor function whose code it excludes.
-fn decision_words(directory: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
-    let mut words: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return Ok(words);
-    };
-    for entry in entries {
+/// The chip's reviewed verification decisions: its coverage decisions and
+/// accepted losses, and every decision module of its scenario library. A
+/// missing file or directory is an error, never an empty list.
+fn decision_files(root: &Path, project: &Project) -> Result<Vec<PathBuf>> {
+    let mut files = vec![
+        root.join(project.coverage()),
+        root.join(project.accepted_losses()),
+    ];
+    let modules = root.join(project.scenario_decisions());
+    for entry in std::fs::read_dir(&modules).map_err(|e| format!("{}: {e}", modules.display()))? {
         let path = entry?.path();
-        if !path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| DECISION_EXTENSIONS.contains(&e))
-        {
-            continue;
+        if path.extension().is_some_and(|e| e == "rs") {
+            files.push(path);
         }
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// Code-shaped string literals of the decision `files`, by name, with the
+/// names of the files that name them: a decision's `Place` names the vendor
+/// function whose code it excludes.
+fn decision_words(files: &[PathBuf]) -> Result<BTreeMap<String, BTreeSet<String>>> {
+    let mut words: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for path in files {
         let file = path
             .file_name()
             .and_then(|n| n.to_str())
             .ok_or("decision file name")?
             .to_owned();
-        for literal in std::fs::read_to_string(&path)?
-            .split('"')
-            .skip(1)
-            .step_by(2)
-        {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        for literal in text.split('"').skip(1).step_by(2) {
             if !literal.is_empty()
                 && literal
                     .chars()
@@ -251,12 +250,8 @@ fn decision_words(directory: &Path) -> Result<BTreeMap<String, BTreeSet<String>>
 }
 
 /// The chips with a vendor verification project, which a citation may name.
-fn citable_chips(root: &Path, supported: &[String]) -> Vec<String> {
-    supported
-        .iter()
-        .filter(|chip| Project::new(root, chip).is_ok())
-        .cloned()
-        .collect()
+fn citable_chips(root: &Path) -> Result<Vec<String>> {
+    project::projects(root)
 }
 
 /// Identifiers of every `SOURCE:` comment block under `directory` that cites
@@ -487,7 +482,7 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
     }
     let supported = project::supported(root)?;
     let scanned = Project::new(root, chip)?;
-    let citable = citable_chips(root, &supported);
+    let citable = citable_chips(root)?;
     let mut found = Found::default();
     let repo = crate::files::Files::load(root)?;
     for directory in PRODUCTION {
@@ -534,15 +529,10 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
         &mut bare_at,
     );
 
-    let mut decisions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     // A decision names the function a scenario executed, whichever copy its
     // link took; its copy is not named until coverage locations carry one
     // (), so it cites every copy.
-    for directory in DECISIONS {
-        for (word, files) in decision_words(&root.join(scanned.verification(directory)))? {
-            decisions.entry(word).or_default().extend(files);
-        }
-    }
+    let decisions = decision_words(&decision_files(root, &scanned)?)?;
     words.extend(decisions.keys().cloned());
     if let Some(rom) = scanned.rom(root)?
         && let Some(summaries) = rom.summaries
@@ -772,7 +762,7 @@ fn ambiguous_citations(survey: &Survey) -> Vec<String> {
 fn review_hint(decisions: Option<&BTreeSet<String>>) -> String {
     match decisions {
         Some(files) if !files.is_empty() => {
-            let files: Vec<String> = files.iter().map(|f| format!("decisions/{f}")).collect();
+            let files: Vec<&str> = files.iter().map(String::as_str).collect();
             format!("; re-review the exclusions in {}", files.join(", "))
         }
         _ => String::new(),

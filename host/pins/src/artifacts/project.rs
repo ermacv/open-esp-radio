@@ -8,14 +8,23 @@
 use crate::artifacts::Result;
 use std::path::Path;
 
-/// Directory of every chip's verification project, relative to the root.
-const VERIFICATION: &str = "firmware/verification";
 /// Directory of every chip's knowledge, relative to the root.
 const KNOWLEDGE: &str = "knowledge";
+/// Directory of the vendor packages, relative to the root.
+const VENDOR: &str = "host/vendor";
 
 /// Every supported chip, sorted: the chips with a profile.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
     oer_chip_profile::supported(root)
+}
+
+/// Every supported chip with a vendor verification project, sorted: those
+/// whose pins exist.
+pub fn projects(root: &Path) -> Result<Vec<String>> {
+    Ok(supported(root)?
+        .into_iter()
+        .filter(|chip| Project::new(root, chip).is_ok())
+        .collect())
 }
 
 /// Directory of `chip`'s vendor scenario evidence shards, relative to the
@@ -32,9 +41,9 @@ pub fn evidence_shards(chip: &str) -> String {
 /// verdict library never depends on).
 #[derive(Debug, Eq, PartialEq)]
 pub struct Scenarios {
-    /// `verification/<chip>/scenarios`.
+    /// `host/vendor/scenarios-<chip>`.
     pub library: String,
-    /// `verification/<chip>/scenarios/cli`.
+    /// `tools/vendor-scenarios-<chip>`.
     pub entry: String,
 }
 
@@ -53,11 +62,6 @@ impl Project {
 
     pub fn name(&self) -> &str {
         &self.0
-    }
-
-    /// `firmware/verification/<chip>/<path>`, relative to the root.
-    pub fn verification(&self, path: &str) -> String {
-        format!("{VERIFICATION}/{}/{path}", self.0)
     }
 
     /// The single pin of the chip's vendor artifacts.
@@ -82,7 +86,22 @@ impl Project {
     /// whose comparisons it narrowed, which a comparison with an earlier
     /// index accepts as intended rather than lost evidence.
     pub fn accepted_losses(&self) -> String {
-        self.verification("decisions/accepted-losses.toml")
+        format!("{KNOWLEDGE}/{}/vendor/accepted-losses.toml", self.0)
+    }
+
+    /// The chip's reviewed coverage decisions.
+    pub fn coverage(&self) -> String {
+        format!("{KNOWLEDGE}/{}/vendor/coverage.toml", self.0)
+    }
+
+    /// Directory of the chip's typed vendor scenario library.
+    pub fn scenarios_directory(&self) -> String {
+        format!("{VENDOR}/scenarios-{}", self.0)
+    }
+
+    /// Directory of the scenario library's decision modules.
+    pub fn scenario_decisions(&self) -> String {
+        format!("{}/src/decisions", self.scenarios_directory())
     }
 
     /// The chip's registry of reviewed vendor-function fingerprints.
@@ -117,11 +136,30 @@ mod tests {
     }
 
     #[test]
+    fn the_projects_are_the_chips_with_pins() {
+        let projects = projects(&root()).unwrap();
+        assert!(projects.contains(&"esp32s31".to_owned()), "{projects:?}");
+        for chip in &projects {
+            assert!(root().join(crate::manifest(chip)).is_file());
+        }
+    }
+
+    #[test]
     fn paths_follow_the_chip_directory() {
         for name in supported(&root()).unwrap() {
             let Ok(chip) = Project::new(&root(), &name) else {
                 continue;
             };
+            // Every path of a project lies in this checkout.
+            for path in [
+                chip.artifacts(),
+                chip.accepted_losses(),
+                chip.coverage(),
+                format!("{}/Cargo.toml", chip.scenarios_directory()),
+                chip.scenario_decisions(),
+            ] {
+                assert!(root().join(&path).exists(), "{path}");
+            }
             assert_eq!(
                 chip.artifacts(),
                 format!("knowledge/{name}/vendor/artifacts.toml")
@@ -132,7 +170,11 @@ mod tests {
             );
             assert_eq!(
                 chip.accepted_losses(),
-                format!("firmware/verification/{name}/decisions/accepted-losses.toml")
+                format!("knowledge/{name}/vendor/accepted-losses.toml")
+            );
+            assert_eq!(
+                chip.scenarios_directory(),
+                format!("host/vendor/scenarios-{name}")
             );
             assert_eq!(
                 chip.scenarios(),

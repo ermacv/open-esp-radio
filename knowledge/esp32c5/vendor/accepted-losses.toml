@@ -1,0 +1,11 @@
+# ESP32-C5: reviewed acceptances of vendor roots the evidence index retired or
+# whose comparison it narrowed. A comparison with an earlier index accepts
+# such a loss as intended only when it is listed here, each with its reason.
+#
+# [[retired]]: source, symbol, reason.
+# [[narrowed]]: source, symbol, blocks, directions (the reach the comparison
+# keeps), reason.
+#
+# None is accepted yet.
+retired = []
+narrowed = []
