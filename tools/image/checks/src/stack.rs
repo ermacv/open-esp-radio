@@ -122,7 +122,7 @@ impl Image {
         let rom = profile
             .rom
             .as_ref()
-            .ok_or_else(|| format!("platform/{}/chip.toml names no [rom] ELF", profile.id))?;
+            .ok_or_else(|| format!("chips/{}/platform/chip.toml names no [rom] ELF", profile.id))?;
         let rom_elf = std::fs::read(oer_tool_pins::artifacts::ensure(
             root,
             &profile.id,

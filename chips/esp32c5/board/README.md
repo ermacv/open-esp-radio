@@ -38,7 +38,7 @@ compiler may store it in PSRAM. The final-image gate rejects cached callees
 of panic entries and hooks. Images are built by the
 [image pipeline](../../../tools/image/build/README.md) from `chip.toml` (boot
 `staged`, the `[flash]` map: application QIO at 80 MHz on 16 MiB, DIO
-bootloader). The HIL agent (`hil/targets/esp32c5/agent`) runs on the staged
+bootloader). The HIL agent (`firmware/hil/esp32c5`) runs on the staged
 runtime; its image classes are `boot-smoke` and `system-watchdog`:
 
 ```console

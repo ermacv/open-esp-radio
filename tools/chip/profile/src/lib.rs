@@ -104,7 +104,7 @@ pub struct Profile {
     #[serde(default)]
     pub packages: Packages,
     /// The Rust probe images of the chip's vendor comparison, in build
-    /// order (`verification/<id>/probes`).
+    /// order (`firmware/probes/<id>-*`).
     #[serde(default)]
     pub probe: Vec<Probe>,
     /// The staged boot's host contract; a chip with images names it.
@@ -275,7 +275,7 @@ pub struct StageTwo {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Rom {
-    /// The id of the pinned ROM ELF in `verification/<id>/artifacts.toml`
+    /// The id of the pinned ROM ELF in `chips/<id>/vendor/artifacts.toml`
     /// (`oer-vendor-pins`) the stack analyses run with.
     pub elf: String,
     /// The reviewed ROM function summaries of the stack analyses, relative
@@ -455,7 +455,7 @@ pub struct Packages {
 }
 
 /// One Rust probe image of the vendor comparison: the artifact role it
-/// serves and its package in `verification/<id>/probes`. Every probe
+/// serves and its package in `firmware/probes/<id>-*`. Every probe
 /// compiles in the host's one firmware compile cache.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -612,7 +612,7 @@ impl Profile {
             .collect()
     }
 
-    /// `<root>/<directory>/<id>`, such as `verification/<id>`.
+    /// `<root>/chips/<id>/<directory>`, such as `chips/<id>/vendor`.
     pub fn directory(&self, root: &Path, directory: &str) -> PathBuf {
         root.join(CHIPS).join(&self.id).join(directory)
     }
