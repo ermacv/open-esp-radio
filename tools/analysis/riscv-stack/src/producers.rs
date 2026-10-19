@@ -81,19 +81,13 @@ pub(crate) fn loads(
                     known = false;
                     break;
                 }
-                let dest = match op {
-                    SemanticOp::Integer { dest, .. }
-                    | SemanticOp::Upper { dest, .. }
-                    | SemanticOp::Link { dest }
-                    | SemanticOp::Opaque { dest } => Some(dest),
-                    SemanticOp::Memory { dest, .. } => dest,
-                    SemanticOp::Unsupported => {
-                        known = false;
-                        break;
-                    }
-                    _ => None,
-                };
-                if dest == Some(register) {
+                // No described destination is not proof of preservation:
+                // unsupported operations can have unknown writes.
+                if op == SemanticOp::Unsupported {
+                    known = false;
+                    break;
+                }
+                if op.destination_register() == Some(register) {
                     match op {
                         SemanticOp::Memory {
                             kind: MemoryKind::Load,

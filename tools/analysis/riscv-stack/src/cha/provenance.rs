@@ -6,7 +6,7 @@ use crate::dwarf::{Reader, dwarf_error, invalid, reference};
 use crate::{Analysis, Fact, Resolutions, TransferKind};
 use oer_analysis_elf::dwarf::{DebugSections, gimli};
 use oer_analysis_elf::rv32::{self, Role};
-use oer_analysis_riscv_lift::RiscvDecoder;
+use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
@@ -479,7 +479,10 @@ impl Locations {
                         .map(|group| (dest, group)),
                     _ => None,
                 };
-                if let Some(dest) = writes(op).filter(|dest| *dest != 0 && *dest < 32) {
+                if let Some(dest) = op
+                    .destination_register()
+                    .filter(|dest| *dest != 0 && *dest < 32)
+                {
                     for group in &mut aliases {
                         *group &= !(1 << dest);
                     }
@@ -495,7 +498,7 @@ impl Locations {
                         }
                     }
                 }
-                if decoded.flow != InstructionFlow::Next || !base_instruction(bytes) {
+                if decoded.flow != InstructionFlow::Next || !is_base_instruction(bytes) {
                     aliases = identity();
                 }
                 at += usize::from(decoded.length);
@@ -519,35 +522,6 @@ struct AddressUse {
     site: u32,
     role: Role,
     exact: bool,
-}
-
-fn base_instruction(bytes: &[u8]) -> bool {
-    matches!(
-        oer_analysis_riscv_lift::decode_instruction(bytes),
-        Some((oer_analysis_riscv_decode::Instruction::Base(_), _))
-    )
-}
-
-fn writes(op: SemanticOp) -> Option<u8> {
-    match op {
-        SemanticOp::Integer { dest, .. }
-        | SemanticOp::Upper { dest, .. }
-        | SemanticOp::Link { dest }
-        | SemanticOp::Opaque { dest } => Some(dest),
-        SemanticOp::Memory { dest, .. } => dest,
-        _ => None,
-    }
-}
-
-fn reads(op: SemanticOp, register: u8) -> bool {
-    match op {
-        SemanticOp::Integer { left, right, .. } => {
-            [left, right].contains(&Operand::Register(register))
-        }
-        SemanticOp::Memory { base, source, .. } => base == register || source == Some(register),
-        SemanticOp::Unsupported => true,
-        _ => false,
-    }
 }
 
 /// A deliberately small proof for an absolute HI20/LO12 address. Every
@@ -627,11 +601,11 @@ fn code_use(
         let Some(decoded) = RiscvDecoder.decode(bytes) else {
             return Ok(None);
         };
-        if !base_instruction(bytes) || decoded.flow != InstructionFlow::Next {
+        if !is_base_instruction(bytes) || decoded.flow != InstructionFlow::Next {
             return Ok(None);
         }
         let op = RiscvDecoder.lift(bytes);
-        if reads(op, register) {
+        if op.reads_register(register) {
             match op {
                 SemanticOp::Memory {
                     kind: MemoryKind::Store,
@@ -657,7 +631,7 @@ fn code_use(
                 _ => return Ok(None),
             }
         }
-        if writes(op) == Some(register) {
+        if op.destination_register() == Some(register) {
             return Ok(Some(fields));
         }
         site += u32::from(decoded.length);

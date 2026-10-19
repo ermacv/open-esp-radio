@@ -34,6 +34,25 @@ inferred function extents and cross-archive definition selection are not
 implicit in these values. Calls and possible continuations remain distinct
 graph observations.
 
+`SemanticOp::reads_register` and `destination_register` in
+[semantics](src/semantics.rs) are the shared queries for described integer
+register effects. Integer operands and memory bases/sources count as reads;
+`Unsupported` conservatively may read every register. Integer, upper, link,
+opaque and memory operations retain their described destination, including
+`x0`; no zero-register filtering is implicit. `Fence`, `None` and
+`Unsupported` describe no destination.
+
+These queries do not describe every machine-instruction effect: branches
+can lift to `None`, indirect jumps to `Link` without their base, and CSR/FP
+forms can omit integer inputs. A false read query is not proof of no read,
+and no described destination is not proof of no write. Consumers must keep
+their instruction-class, control-flow and unknown-effect policies. In the
+stack analyzer, task-spawn and typed-address provenance retain their base
+instruction gates and flow checks; alias tracking still filters `x0` and
+resets at non-base instructions or control transfers. Reaching producers
+accept a broader instruction set but explicitly abandon the proof on
+`Unsupported` before querying the destination.
+
 [Image values](src/image.rs) record the ELF floating-point calling
 convention (`RiscvAbi`) separately from the RV32 integer-analysis target,
 load segments (`ImageSegment`), borrowed executable sections with their

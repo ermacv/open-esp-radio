@@ -2,6 +2,63 @@ use super::*;
 use oer_analysis_riscv_model::{FunctionDecoder, InstructionFlow};
 
 #[test]
+fn base_classification_preserves_the_provenance_instruction_restriction() {
+    for bytes in [
+        &0x0015_0513u32.to_le_bytes()[..], // addi a0, a0, 1
+        &0x0505u16.to_le_bytes(),          // c.addi a0, 1
+        &0x02c5_8533u32.to_le_bytes(),     // mul a0, a1, a2
+        &0x1005_252fu32.to_le_bytes(),     // lr.w a0, (a0)
+        &0x0000_0073u32.to_le_bytes(),     // ecall: base, but unsupported semantics
+    ] {
+        assert!(is_base_instruction(bytes), "{bytes:02x?}");
+    }
+    for bytes in [
+        &0x20c5_a533u32.to_le_bytes()[..], // sh1add: supported integer extension
+        &0x3401_1073u32.to_le_bytes(),     // csrw mscratch, sp: opaque destination x0
+        &0xffc1_2507u32.to_le_bytes(),     // flw fa0, -4(sp): memory operation
+        &0xb842u16.to_le_bytes(),          // cm.push {ra}, -16: unsupported semantics
+        &[0xff; 4],
+        &[0x13, 0, 0],
+        &[],
+    ] {
+        assert!(!is_base_instruction(bytes), "{bytes:02x?}");
+    }
+}
+
+#[test]
+fn semantic_register_queries_do_not_describe_all_machine_reads() {
+    let branch = 0x00b5_0463u32.to_le_bytes(); // beq a0, a1, +8
+    let op = RiscvDecoder.lift(&branch);
+    assert_eq!(op, SemanticOp::None);
+    assert!(!op.reads_register(10));
+    assert_eq!(
+        RiscvDecoder.branch(&branch),
+        Some((BranchTest::Eq, Operand::Register(10), Operand::Register(11)))
+    );
+
+    let indirect = 0x0005_00e7u32.to_le_bytes(); // jalr ra, 0(a0)
+    let op = RiscvDecoder.lift(&indirect);
+    assert_eq!(op.destination_register(), Some(1));
+    assert!(!op.reads_register(10));
+    assert_eq!(
+        RiscvDecoder
+            .decode(&indirect)
+            .unwrap()
+            .flow
+            .through_register(),
+        Some((10, 0, true))
+    );
+
+    // csrw mscratch, sp and fmv.w.x fa0, zero read integer operands
+    // omitted by Opaque/None. The provenance base-instruction gate excludes both.
+    for (word, source) in [(0x3401_1073u32, 2), (0xf000_0553, 0)] {
+        let bytes = word.to_le_bytes();
+        assert!(!RiscvDecoder.lift(&bytes).reads_register(source));
+        assert!(!is_base_instruction(&bytes));
+    }
+}
+
+#[test]
 fn compressed_and_full_instructions_lift_without_display_parsing() {
     assert_eq!(
         RiscvDecoder.lift(&[0x05, 0x05]),

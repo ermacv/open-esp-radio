@@ -303,4 +303,12 @@ pub fn decode_instruction(bytes: &[u8]) -> Option<(Instruction, usize)> {
     oer_analysis_riscv_decode::decode(bytes, Extensions::ALL)
 }
 
+/// Whether the decoder classifies the next instruction as a base RV32IMAC
+/// form, including expanded compressed forms. Extension and floating-point
+/// forms are excluded even when they lift to supported integer operations.
+/// This classification does not imply that all semantic effects are known.
+pub fn is_base_instruction(bytes: &[u8]) -> bool {
+    matches!(decode_instruction(bytes), Some((Instruction::Base(_), _)))
+}
+
 mod semantics;
