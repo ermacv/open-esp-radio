@@ -15,17 +15,14 @@ cargo fw power-cycle --board <id|MAC>
 
 ## Build
 
-`build` compiles the image's package as the stage-two runtime
-(`riscv32imafc-unknown-none-elf`, release), flattens its load image from
-`__runtime_image_start` to `__runtime_payload_end` and stores the payload CRC
-in its stage-two header (`oer-platform-staged-layout`'s `stage_two`). The
-packed runtime goes to the bootstrap through `PSRAM_RUNTIME_BIN`; an unchanged
-runtime keeps its file, so the bootstrap is not rebuilt. The `espflash`
-library then encodes the bootstrap ELF for the `[flash]` map of
-`firmware/platform/esp32s31/chip.toml`: the DIO bootloader from espflash's
-resources, the partition table, the QIO application in `ota_0` and the OTA
-selection of `ota_0`. Everything lands in `target/fw/<image>/`, listed by
-`segments.toml` in write order.
+`build` runs the image pipeline (`build(ImageSpec)`, [README.md](README.md))
+on the image's package: the stage-two runtime for
+`riscv32imafc-unknown-none-elf` with the `firmware` profile, packed and
+embedded in the bootstrap, and the flash contents encoded for the `[flash]`
+map of `firmware/platform/esp32s31/chip.toml`. The bundle lands in
+`target/fw/<image>/`, described by its `bundle.json`; `flash` and `run`
+write its flash files in `ImageBundle::segments` order, checked against the
+digests the manifest records.
 
 `build w1` builds the unconfigured image (it prints
 `OER-RESULT: fail w1 unconfigured` when run; CI builds it so). Only
@@ -35,10 +32,6 @@ build of `w1`, as `OER_W1_CHANNEL`, `OER_W1_BSSID` and `OER_W1_SSID_HEX`;
 every other cargo build runs with all three removed. No image takes a
 flag for them.
 
-The build warns, and never fails, when the runtime places an interrupt table
-handler, the panic entry or hook, or a `.dma.*` or `.critical.*` section
-outside internal SRAM (`placement.txt`).
-
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 moves above the stack policy's `max_move_bytes` warned (`-W
 large-assignments`), and through the image linker
@@ -46,8 +39,10 @@ large-assignments`), and through the image linker
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `firmware/platform/esp32s31/stack.toml` (`runtime-stack.txt`,
-`interrupt-stack.txt`, `bootstrap-stack.txt`). They report and do not fail
-the build yet: a failed check prints as a warning.
+`interrupt-stack.txt`, `bootstrap-stack.txt`), and the placement check holds
+the runtime to the chip's `[placement]` contract (`placement.txt`). `cargo
+fw` reports and does not fail the build yet (`Gates::enforced` is off): a
+check that does not pass prints as a warning.
 
 ## Boards
 

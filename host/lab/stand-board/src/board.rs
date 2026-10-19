@@ -230,7 +230,7 @@ impl LeasedBoard {
     pub fn carries(
         &self,
         store: &Store,
-        bundle: &oer_image_bundle::ImageBundle,
+        bundle: &oer_image_build::bundle::ImageBundle,
     ) -> crate::Result<Option<Receipt>> {
         oer_lab_devices::image::carries(store, &self.access, bundle)
     }
@@ -246,7 +246,7 @@ impl LeasedBoard {
     pub fn flash(
         &self,
         store: &Store,
-        bundle: &oer_image_bundle::ImageBundle,
+        bundle: &oer_image_build::bundle::ImageBundle,
         image: &str,
         via: Via,
         by: &str,
@@ -597,7 +597,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let profile = oer_image_profile::Profile::load(&root, "esp32c5").unwrap();
         let directory = tempfile::tempdir().unwrap();
-        let bundle = oer_image_bundle::ImageBundle::new(
+        let bundle = oer_image_build::bundle::ImageBundle::new(
             directory.path(),
             &profile,
             profile.flash.clone().unwrap(),

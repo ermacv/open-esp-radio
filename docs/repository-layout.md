@@ -256,10 +256,10 @@ profile, ELF through `host/analysis/elf`.
 | `host/hil/source-snapshot` | `host/hil/runs` | host |
 | `host/hil/scenario` | `host/hil/scenario` | host |
 | `host/hil/workload` | `host/hil/scenario` | host |
-| `host/image/firmware` | `host/image/build` | host |
 | `host/image/build` | `host/image/build` | host |
-| `host/image/bundle` | `host/image/build` | host |
-| `host/image/encode` | `host/image/build` | host |
+| `host/image/build` | `host/image/build` | host |
+| `host/image/build` | `host/image/build` | host |
+| `host/image/build` | `host/image/build` | host |
 | `host/image/check-interrupts` | `host/image/checks` | host |
 | `host/image/check-placement` | `host/image/checks` | host |
 | `host/image/check-stack` | `host/image/checks` | host |

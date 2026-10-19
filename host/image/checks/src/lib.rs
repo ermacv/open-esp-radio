@@ -6,8 +6,8 @@
 //! The checks an image build runs when its caller requests them are
 //! assembled here.
 //!
-//! [`Gates`] is the [`oer_image_build::Checks`] of an image build: the dev kit
-//! passes the checks a developer asks for, HIL images always pass them all.
+//! [`Gates`] are the checks an image build runs: `cargo fw` reports them,
+//! HIL images must pass them all.
 //! Every check reads what it needs from the chip profile and the stack
 //! policy, whatever the chip's boot kind. A requested check whose data is
 //! absent is a [`CheckResult::MissingContract`], which fails the build: a
@@ -18,10 +18,93 @@ pub mod linker;
 pub mod placement;
 pub mod stack;
 
+use std::{collections::BTreeSet, path::Path};
+
+use serde::{Deserialize, Serialize};
+
 use crate::interrupts::Required;
-use oer_image_build::{CheckInput, CheckOutcome, CheckResult, CheckedElf};
+use oer_image_profile::{Profile, policy::StackPolicy};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+/// Which ELF of an image a check examined.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CheckedElf {
+    /// The runtime (application) ELF.
+    Runtime,
+    /// A staged boot's bootstrap ELF.
+    Bootstrap,
+}
+
+/// The result of one requested check. Only [`CheckResult::Passed`] and
+/// [`CheckResult::NotApplicable`] pass it.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "result", content = "reason")]
+pub enum CheckResult {
+    Passed,
+    /// The check ran and the image does not hold the property.
+    Failed(String),
+    /// The chip data or policy the check needs is absent: the property was
+    /// not shown, whether or not it applies. Fails a requested check.
+    MissingContract(String),
+    /// The property does not apply to this image, for the explicit reason
+    /// given (never because data is missing).
+    NotApplicable(String),
+}
+
+impl CheckResult {
+    /// Whether the check passed.
+    pub fn passes(&self) -> bool {
+        matches!(self, Self::Passed | Self::NotApplicable(_))
+    }
+}
+
+impl std::fmt::Display for CheckResult {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Passed => write!(formatter, "passed"),
+            Self::Failed(reason) => write!(formatter, "failed: {reason}"),
+            Self::MissingContract(what) => write!(formatter, "missing contract: {what}"),
+            Self::NotApplicable(reason) => write!(formatter, "not applicable: {reason}"),
+        }
+    }
+}
+
+/// One requested check of one ELF and its result.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckRecord {
+    pub elf: CheckedElf,
+    pub check: String,
+    pub result: CheckResult,
+}
+
+/// What a check of one of an image's ELF files reads.
+pub struct CheckInput<'a> {
+    /// The tree the image is built from.
+    pub root: &'a Path,
+    pub profile: &'a Profile,
+    pub policy: &'a StackPolicy,
+    pub elf: &'a Path,
+    /// The staged runtime's flattened image, beside its ELF.
+    pub flat: Option<&'a Path>,
+    /// The bundle's directory, where reports go.
+    pub output: &'a Path,
+}
+
+/// What the checks passed with.
+#[derive(Clone, Debug, Default)]
+pub struct CheckOutcome {
+    /// Every requested check, by name, with its result.
+    pub results: Vec<(String, CheckResult)>,
+    /// The reports they wrote into the bundle, by file name.
+    pub reports: Vec<String>,
+    /// The reviewed ROM summaries an analysis applied.
+    pub rom_summaries: BTreeSet<String>,
+    /// Partial or conditional results they passed with.
+    pub warnings: Vec<String>,
+}
 
 /// The placement report in an image bundle.
 pub const PLACEMENT_REPORT: &str = "placement.txt";
@@ -43,6 +126,9 @@ pub enum Check {
 /// The checks of one image build.
 #[derive(Default)]
 pub struct Gates {
+    /// Whether a requested check that does not pass fails the build;
+    /// otherwise the build reports it as a warning.
+    pub enforced: bool,
     /// The task and bootstrap stacks.
     pub stack: bool,
     /// The image's placement in the chip's memory map.
@@ -57,6 +143,7 @@ impl Gates {
     /// Every check, the interrupt stacks held to `interrupts`.
     pub fn all(interrupts: Required) -> Self {
         Self {
+            enforced: true,
             stack: true,
             placement: true,
             interrupts: Some(interrupts),
@@ -67,6 +154,7 @@ impl Gates {
     /// The checks `checks` names, the interrupt stacks proven.
     pub fn of(checks: &[Check]) -> Self {
         Self {
+            enforced: true,
             stack: checks.contains(&Check::Stack),
             placement: checks.contains(&Check::Placement),
             interrupts: checks
@@ -83,6 +171,25 @@ const INTERRUPTS: &str = "interrupts";
 const PLACEMENT: &str = "placement";
 const AUDIT: &str = "audit";
 
+/// The code sections of the mask ROM, from `profile`'s pinned `[rom]` ELF at
+/// `root`; none for a chip without one.
+fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_image_profile::Region>> {
+    let Some(rom) = &profile.rom else {
+        return Ok(Vec::new());
+    };
+    let bytes = std::fs::read(oer_vendor_artifacts::ensure(root, &profile.id, &rom.elf)?)?;
+    let elf = oer_analysis_elf::Elf::parse(&bytes)?;
+    elf.sections()
+        .filter(|section| section.allocated && section.executable && section.size > 0)
+        .map(|section| {
+            Ok(oer_image_profile::Region {
+                origin: u32::try_from(section.address)?,
+                length: u32::try_from(section.size)?,
+            })
+        })
+        .collect()
+}
+
 /// The result of an analysis that ran: passed, or failed with its error.
 fn ran(analysis: Result<()>) -> CheckResult {
     match analysis {
@@ -91,8 +198,10 @@ fn ran(analysis: Result<()>) -> CheckResult {
     }
 }
 
-impl oer_image_build::Checks for Gates {
-    fn requested(&self, elf: CheckedElf) -> Vec<String> {
+impl Gates {
+    /// The names of the checks requested of `elf`; each gets a result in
+    /// the outcome of [`Gates::runtime`] or [`Gates::bootstrap`].
+    pub fn requested(&self, elf: CheckedElf) -> Vec<String> {
         match elf {
             CheckedElf::Runtime => [
                 (self.stack, STACK),
@@ -116,7 +225,7 @@ impl oer_image_build::Checks for Gates {
     /// Every requested check gets a result: an analysis that runs passes or
     /// fails; one whose chip data or policy is absent is a missing
     /// contract, never "not applicable".
-    fn runtime(&self, input: &CheckInput<'_>) -> oer_image_build::Result<CheckOutcome> {
+    pub fn runtime(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
         let profile = input.profile;
         let chip = |table: &str| format!("platform/{}/chip.toml names no {table}", profile.id);
@@ -200,7 +309,22 @@ impl oer_image_build::Checks for Gates {
         if self.placement {
             let result = match (&profile.memory, &profile.placement) {
                 (Some(memory), Some(placement)) => ran((|| -> Result<()> {
-                    let report = crate::placement::audit(memory, placement, input.elf, input.flat)?;
+                    let rom = if placement
+                        .interrupt_handlers
+                        .iter()
+                        .any(|region| region == crate::placement::ROM)
+                    {
+                        rom_code(input.root, profile)?
+                    } else {
+                        Vec::new()
+                    };
+                    let contract = crate::placement::Contract {
+                        memory,
+                        placement,
+                        interrupts: profile.interrupts.as_ref(),
+                        rom: &rom,
+                    };
+                    let report = crate::placement::audit(&contract, input.elf, input.flat)?;
                     std::fs::write(input.output.join(PLACEMENT_REPORT), report)?;
                     outcome.reports.push(PLACEMENT_REPORT.to_owned());
                     Ok(())
@@ -218,7 +342,8 @@ impl oer_image_build::Checks for Gates {
         Ok(outcome)
     }
 
-    fn bootstrap(&self, input: &CheckInput<'_>) -> oer_image_build::Result<CheckOutcome> {
+    /// Check a staged boot's bootstrap ELF.
+    pub fn bootstrap(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
         if !self.stack {
             return Ok(outcome);

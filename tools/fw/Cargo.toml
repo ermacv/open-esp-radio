@@ -13,7 +13,7 @@ name = "fw"
 path = "src/main.rs"
 
 [dependencies]
-oer-image-firmware = { path = "../../host/image/firmware" }
+oer-image-build = { path = "../../host/image/build" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }
 

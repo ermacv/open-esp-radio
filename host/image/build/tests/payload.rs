@@ -1,4 +1,4 @@
-use oer_image_encode::stage_two::{pack_runtime, payload_crc32};
+use oer_image_build::encode::stage_two::{pack_runtime, payload_crc32};
 
 /// A stage-two contract shaped like a staged chip's profile.
 fn contract() -> oer_image_profile::StageTwo {

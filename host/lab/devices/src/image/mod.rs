@@ -53,7 +53,7 @@ use std::path::{Path, PathBuf};
 use crate::Result;
 
 use crate::flash::After;
-use oer_image_bundle::{ImageBundle, Snapshot};
+use oer_image_build::bundle::{ImageBundle, Snapshot};
 pub use oer_image_profile::Start;
 pub use oer_lab_device_lock::{DeviceAccess, DeviceId};
 use serde::{Deserialize, Serialize};

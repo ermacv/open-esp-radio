@@ -233,22 +233,12 @@ fn copy_regular_file(source: &Path, destination: &Path) -> Result<()> {
 }
 
 pub fn capture_sources(root: &Path, run_directory: &Path) -> Result<Vec<SourceMaterial>> {
-    let mut materials = vec![capture_source_material(
+    Ok(vec![capture_source_material(
         "repository",
         root,
         run_directory,
         Path::new("source/repository.patch"),
-    )?];
-    for (name, path) in external_source_override_paths()? {
-        let patch_path = PathBuf::from("source/overrides").join(format!("{name}.patch"));
-        materials.push(capture_source_material(
-            &name,
-            &path,
-            run_directory,
-            &patch_path,
-        )?);
-    }
-    Ok(materials)
+    )?])
 }
 
 pub fn capture_source_material(
@@ -372,23 +362,6 @@ fn capture_git_source_state(root: &Path) -> Result<Option<GitSourceState>> {
         untracked_files,
         workspace_sha256: format!("{:x}", digest.finalize()),
     }))
-}
-
-fn external_source_override_paths() -> Result<Vec<(String, PathBuf)>> {
-    let current_directory = env::current_dir()?;
-    let mut overrides = Vec::new();
-    for (name, variable) in [("esp-hal", "ESP_HAL_ROOT")] {
-        let Some(path) = env::var_os(variable).map(PathBuf::from) else {
-            continue;
-        };
-        let path = if path.is_absolute() {
-            path
-        } else {
-            current_directory.join(path)
-        };
-        overrides.push((name.to_owned(), fs::canonicalize(&path).unwrap_or(path)));
-    }
-    Ok(overrides)
 }
 
 fn sanitize_git_remote(remote: String) -> String {

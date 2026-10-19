@@ -1,10 +1,10 @@
 //! The Cargo commands of an image build: an environment that cannot change
-//! the image unseen, local source overrides and dependency fetching.
+//! the image unseen, and dependency fetching.
 
 use std::{
     env,
     ffi::OsString,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -43,92 +43,23 @@ fn inherited_build_overrides(names: impl Iterator<Item = OsString>) -> Vec<OsStr
         .collect()
 }
 
-/// Local checkouts that replace pinned Git dependencies for one build.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Overrides {
-    /// `ESP_HAL_ROOT`: esp-hal, esp-sync and the ESP-IDF bootloader crate.
-    pub esp_hal: Option<PathBuf>,
-}
-
-const ESP_HAL_PACKAGES: [&str; 3] = ["esp-bootloader-esp-idf", "esp-hal", "esp-sync"];
-
-impl Overrides {
-    /// The overrides the caller's environment names, each checked for the
-    /// package directories it must hold.
-    pub fn from_environment() -> Result<Self> {
-        let checked = |variable: &str, packages: &[&str]| -> Result<Option<PathBuf>> {
-            let Some(local) = env::var_os(variable).map(PathBuf::from) else {
-                return Ok(None);
-            };
-            let missing = packages
-                .iter()
-                .filter(|path| !local.join(path).is_dir())
-                .copied()
-                .collect::<Vec<_>>();
-            if !missing.is_empty() {
-                return Err(format!(
-                    "{variable}={} is missing required package directories: {}",
-                    local.display(),
-                    missing.join(", ")
-                )
-                .into());
-            }
-            Ok(Some(local))
-        };
-        Ok(Self {
-            esp_hal: checked("ESP_HAL_ROOT", &ESP_HAL_PACKAGES)?,
-        })
-    }
-
-    /// Whether no dependency is overridden: the build then resolves exactly
-    /// the committed pins (`--locked`).
-    pub fn is_empty(&self) -> bool {
-        self.esp_hal.is_none()
-    }
-
-    /// Patch the build `command` with every override.
-    pub(crate) fn apply(&self, command: &mut Command) {
-        if let Some(local) = &self.esp_hal {
-            for package in ESP_HAL_PACKAGES {
-                patch(
-                    command,
-                    "https://github.com/ermacv/esp-hal",
-                    package,
-                    &local.join(package),
-                );
-            }
-        }
-    }
-}
-
-fn patch(command: &mut Command, source: &str, package: &str, path: &Path) {
-    command.arg("--config").arg(format!(
-        "patch.\"{source}\".{package}.path=\"{}\"",
-        path.display()
-    ));
-}
-
-/// Downloads what the workspace of `manifest` at `root` needs and the local
-/// Cargo cache lacks, with the lock file `configure` selects. Cargo runs
+/// Downloads what the workspace at `root` needs and the local Cargo cache
+/// lacks, against its one `Cargo.lock`. Cargo runs
 /// offline in this repository; an offline `cargo fetch` of a complete cache
 /// takes a fraction of a second, and only a missing dependency goes online.
-pub fn ensure_fetched(
-    root: &Path,
-    manifest: &Path,
-    configure: impl Fn(&mut Command),
-) -> Result<()> {
+pub fn ensure_fetched(root: &Path) -> Result<()> {
+    let manifest = root.join("Cargo.toml");
     let fetch = |online: bool| -> Result<bool> {
         let mut command = command();
         command
             .current_dir(root)
             .args(["fetch", "--locked", "--manifest-path"])
-            .arg(manifest);
+            .arg(&manifest);
         if online {
             command.args(["--config", "net.offline=false"]);
         } else {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
-        configure(&mut command);
         Ok(command.status()?.success())
     };
     if fetch(false)? || fetch(true)? {
@@ -174,26 +105,5 @@ mod tests {
                 .any(|(name, value)| name == LAYOUT_SEED_ENV && value.is_none()),
             "the image's Cargo command must remove {LAYOUT_SEED_ENV}"
         );
-    }
-
-    #[test]
-    fn the_esp_hal_override_patches_each_of_its_packages() {
-        let overrides = Overrides {
-            esp_hal: Some("/esp-hal".into()),
-        };
-        let mut command = oer_os_process::command("cargo");
-        overrides.apply(&mut command);
-        let arguments = command
-            .get_args()
-            .map(|argument| argument.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        for package in ESP_HAL_PACKAGES {
-            assert!(
-                arguments.iter().any(|argument| argument.contains(package)),
-                "{package}"
-            );
-        }
-        assert!(Overrides::default().is_empty());
-        assert!(!overrides.is_empty());
     }
 }

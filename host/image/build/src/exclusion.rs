@@ -2,8 +2,8 @@
 //! ([`oer_os_process::lock::FileLock`]), for every place builds must not
 //! overlap.
 //!
-//! - [`BuildLock`]: one build owns the private lockfile copy in its
-//!   directory; a second build of the same directory fails at once.
+//! - [`Staging`]: one build owns a bundle's output; a second build of it
+//!   fails at once.
 //! - the host's one compile cache ([`crate::compile_cache`]) is used by one
 //!   build at a time, from its Cargo run until its outputs are copied out,
 //!   the next waiting for it ([`oer_image_toolchain::image::lock_compile_cache`]);
@@ -17,10 +17,8 @@
 use crate::Result;
 use oer_os_process::lock::{FileLock, Mode};
 use std::{
-    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 /// One of the host's image compilation slots below `directory`: each holds
@@ -75,7 +73,7 @@ impl Staging {
     /// Start the build of `output`; fails at once while another build of it
     /// runs.
     pub fn begin(output: &Path) -> Result<Self> {
-        let directory = oer_image_bundle::staging_directory(output)?;
+        let directory = crate::bundle::staging_directory(output)?;
         let parent = directory
             .parent()
             .ok_or("a staging directory has a parent")?;
@@ -89,7 +87,7 @@ impl Staging {
             Mode::Exclusive,
         )?
         .ok_or_else(|| format!("another build owns {}", output.display()))?;
-        oer_image_bundle::remove_directory(&directory)?;
+        crate::bundle::remove_directory(&directory)?;
         fs::create_dir_all(&directory)?;
         Ok(Self {
             output: output.to_owned(),
@@ -105,95 +103,9 @@ impl Staging {
 
     /// Publish `bundle`, built in [`Staging::directory`], as the bundle in
     /// the output.
-    pub fn publish(
-        self,
-        bundle: oer_image_bundle::ImageBundle,
-    ) -> Result<oer_image_bundle::ImageBundle> {
+    pub fn publish(self, bundle: crate::bundle::ImageBundle) -> Result<crate::bundle::ImageBundle> {
         bundle.publish(&self.output)
     }
-}
-
-/// A private copy of one workspace's committed `Cargo.lock` for one build.
-///
-/// Cargo resolves through `resolver.lockfile-path`, so a patched or locally
-/// overridden resolution is written only to this copy. The committed catalog
-/// is never modified, concurrent builds never observe a temporary resolution,
-/// and the copy is the build's effective lockfile. One build owns the copy's
-/// directory at a time.
-pub struct BuildLock {
-    committed: PathBuf,
-    path: PathBuf,
-    _lease: FileLock,
-}
-
-impl BuildLock {
-    /// Copy `workspace/Cargo.lock` to `directory/Cargo.lock` for one build.
-    pub fn prepare(workspace: &Path, directory: &Path) -> Result<Self> {
-        let lease = FileLock::try_acquire(&directory.join("build.lease"), Mode::Exclusive)?
-            .ok_or_else(|| format!("another build owns {}", directory.display()))?;
-        let committed = workspace.join("Cargo.lock");
-        let path = directory.join("Cargo.lock");
-        fs::copy(&committed, &path)?;
-        Ok(Self {
-            committed,
-            path,
-            _lease: lease,
-        })
-    }
-
-    /// The effective lockfile of this build.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Resolve `command` through this copy instead of the committed catalog.
-    pub fn configure(&self, command: &mut Command) {
-        let path = toml::Value::String(self.path.display().to_string());
-        command
-            .arg("--config")
-            .arg(format!("resolver.lockfile-path={path}"));
-    }
-
-    /// Check that the build resolved exactly the committed pins.
-    pub fn validate(&self) -> Result<()> {
-        validate_identities(
-            identities(&fs::read(&self.committed)?)?,
-            identities(&fs::read(&self.path)?)?,
-        )
-    }
-}
-
-type Identity = (String, String, Option<String>);
-fn identities(bytes: &[u8]) -> Result<BTreeSet<Identity>> {
-    let lock: toml::Value = toml::from_str(std::str::from_utf8(bytes)?)?;
-    lock["package"]
-        .as_array()
-        .ok_or("Cargo.lock has no package catalog")?
-        .iter()
-        .map(|p| {
-            Ok((
-                p["name"].as_str().ok_or("package name missing")?.to_owned(),
-                p["version"]
-                    .as_str()
-                    .ok_or("package version missing")?
-                    .to_owned(),
-                p.get("source")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned),
-            ))
-        })
-        .collect()
-}
-fn validate_identities(expected: BTreeSet<Identity>, actual: BTreeSet<Identity>) -> Result<()> {
-    if expected != actual {
-        return Err(format!(
-            "the build changed dependency pins: removed {:?}; added {:?}",
-            expected.difference(&actual).collect::<Vec<_>>(),
-            actual.difference(&expected).collect::<Vec<_>>()
-        )
-        .into());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

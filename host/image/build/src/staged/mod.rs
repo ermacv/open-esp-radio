@@ -9,21 +9,16 @@
 //! the partition tables and the OTA selection of the first slot are encoded
 //! beside it.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use oer_image_bundle::{ImageBundle, Lock, Staged, files};
-use oer_image_encode as encode;
-use oer_image_encode::Encoding;
+use crate::bundle::{ImageBundle, Staged, files};
+use crate::encode;
+use crate::encode::Encoding;
 use oer_image_profile::policy::StackPolicy;
 
-use crate::{
-    ImageSpec, Result,
-    build_log::BuildLog,
-    exclusion::{BuildLock, Staging},
-    source_inputs,
-};
+use crate::{ImageSpec, Result, build_log::BuildLog, exclusion::Staging, source_inputs};
 
-use oer_image_encode::stage_two::pack_runtime;
+use crate::encode::stage_two::pack_runtime;
 
 /// The staged images' MMU page: the bootstrap keeps its text on 64-KiB
 /// pages and stage two starts on one.
@@ -33,7 +28,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
     let bootstrap_package = profile.bootstrap_package();
-    let platform = profile.platform_workspace(root);
     let flash = profile.flash.clone().ok_or("no flash map")?;
     // Every file goes into the staging directory; the bundle is published
     // only once the whole build succeeded.
@@ -44,26 +38,17 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
     let cache = crate::compile_cache()?;
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
-    // Private copies of both committed catalogs: patched networks and local
-    // overrides resolve into them, never into the source tree.
-    let workspace = root.join(&spec.application.workspace);
-    let runtime_lock = BuildLock::prepare(&workspace, &output.join("locks/runtime"))?;
-    let bootstrap_lock = BuildLock::prepare(&platform, &output.join("locks/bootstrap"))?;
+    crate::test_support::refuse(root, &spec.application.package, target)?;
 
-    // Every image uplifts into the same `<target>/release` of the shared
+    // Every image uplifts into the same `<target>/firmware` of the shared
     // cache: each build holds it until its ELF and dependency information
     // are copied out.
-    let release = cache.join(target).join("release");
+    let release = cache.join(target).join(crate::FIRMWARE_PROFILE);
     let (runtime_elf, mut compiled) = {
         let _cache = oer_image_toolchain::image::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
-        runtime_lock.configure(&mut runtime);
-        if spec.overrides.is_empty() {
-            crate::cargo::ensure_fetched(root, &workspace.join("Cargo.toml"), |command| {
-                runtime_lock.configure(command)
-            })?;
-        }
+        crate::cargo::ensure_fetched(root)?;
         {
             let _slot = crate::exclusion::slot(&crate::host_build_root()?.join("tokens"))?;
             log.run(&mut runtime, "build the stage-two runtime")?;
@@ -77,11 +62,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
             source_inputs::collect(root, &[(&release, spec.application.binary.as_str())])?;
         (elf, compiled)
     };
-    // Local overrides deliberately resolve path packages.
-    if spec.overrides.is_empty() {
-        runtime_lock.validate()?;
-    }
-
     let runtime_bin = output.join(files::RUNTIME_BIN);
     let mut objcopy = oer_image_toolchain::command(oer_image_toolchain::Tool::LlvmObjcopy)?;
     objcopy
@@ -107,12 +87,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
                 output: &output,
             })
             .map_err(|error| log.failed("runtime checks", error))?;
-        crate::apply_outcome(
-            checks.as_ref(),
-            crate::CheckedElf::Runtime,
-            outcome,
-            &mut bundle,
-        )?;
+        crate::apply_outcome(checks, crate::CheckedElf::Runtime, outcome, &mut bundle)?;
     }
 
     // The bootstrap embeds the runtime with `include_bytes!`; a stable path
@@ -124,27 +99,19 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     let mut bootstrap = crate::cargo::command();
     bootstrap
         .current_dir(root)
-        .args(["build", "--manifest-path"])
-        .arg(platform.join("Cargo.toml"))
-        .args(["-p", &bootstrap_package, "--release", "--target", target])
+        .args(["build", "--locked", "-p", &bootstrap_package])
+        .args(["--profile", crate::FIRMWARE_PROFILE, "--target", target])
         .env("CARGO_TARGET_DIR", &cache)
         .env("CARGO_INCREMENTAL", "0")
         .env("PSRAM_RUNTIME_BIN", &embedded);
-    if spec.overrides.esp_hal.is_none() {
-        bootstrap.arg("--locked");
+    for (name, _) in &spec.runtime_environment {
+        bootstrap.env_remove(name);
     }
-    bootstrap_lock.configure(&mut bootstrap);
-    spec.overrides.apply(&mut bootstrap);
     crate::zeroed_inputs(&mut bootstrap, profile);
     oer_image_toolchain::image::configure(
         &mut bootstrap,
         &policy.image_compiler(root, &crate::linker_cache()?, target),
     )?;
-    if spec.overrides.esp_hal.is_none() {
-        crate::cargo::ensure_fetched(root, &platform.join("Cargo.toml"), |command| {
-            bootstrap_lock.configure(command)
-        })?;
-    }
     log.run(&mut bootstrap, "build the Flash/SRAM bootstrap")?;
     let bootstrap_elf = crate::snapshot(
         &release.join(&bootstrap_package),
@@ -167,12 +134,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
                 output: &output,
             })
             .map_err(|error| log.failed("bootstrap checks", error))?;
-        crate::apply_outcome(
-            checks.as_ref(),
-            crate::CheckedElf::Bootstrap,
-            outcome,
-            &mut bundle,
-        )?;
+        crate::apply_outcome(checks, crate::CheckedElf::Bootstrap, outcome, &mut bundle)?;
     }
 
     let elf = std::fs::read(&bootstrap_elf)?;
@@ -184,23 +146,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     bundle.staged = Some(Staged {
         bootstrap_package: bootstrap_package.clone(),
     });
-
-    for (lock, committed, file) in [
-        (
-            &runtime_lock,
-            &spec.application.workspace,
-            files::RUNTIME_LOCK,
-        ),
-        // The runtime and the bootstrap resolve against the workspace's one
-        // lock.
-        (&bootstrap_lock, &PathBuf::new(), files::BOOTSTRAP_LOCK),
-    ] {
-        std::fs::copy(lock.path(), output.join(file))?;
-        bundle.locks.push(Lock {
-            committed: committed.join("Cargo.lock"),
-            file: file.to_owned(),
-        });
-    }
 
     let map = bundle.flash.clone();
     let mut reads = vec![
@@ -223,11 +168,10 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     reads.extend(profile.rom.iter().filter_map(|rom| rom.summaries.clone()));
     reads.push(map.partitions.clone());
     reads.extend(spec.reads.iter().cloned());
-    let platform_relative = platform.strip_prefix(root)?.to_owned();
     let mut inputs = source_inputs::configuration(
         root,
         &compiled,
-        &[spec.application.workspace.as_path(), &platform_relative],
+        &[Path::new("")],
         &reads
             .iter()
             .map(std::path::PathBuf::as_path)
@@ -236,8 +180,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     inputs.extend(compiled);
     inputs.extend(spec.builder_inputs.iter().cloned());
     source_inputs::write(&output, &inputs)?;
-    // The private lock copies end with the build.
-    drop((runtime_lock, bootstrap_lock));
     staging.publish(bundle)
 }
 

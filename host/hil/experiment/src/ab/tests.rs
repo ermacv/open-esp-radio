@@ -10,7 +10,6 @@ fn enclosing_lease_reaches_preparation_and_replay() {
                 arm: Arm::A,
                 variant: Variant {
                     commit: "HEAD".into(),
-                    overrides: Vec::new(),
                     features: FeatureDelta::default(),
                 },
                 worktree: Worktree::detached(&root, &directory.join("arm-a"), "HEAD").unwrap(),
@@ -76,12 +75,11 @@ fn a_feature_delta_reaches_the_runner_as_one_argument_even_when_it_removes_first
 }
 
 #[test]
-fn a_variant_is_a_revision_and_its_dependency_overrides() {
+fn a_variant_is_a_revision_and_its_features() {
     assert_eq!(
-        "rev=main;override:esp-hal=/src/esp-hal".parse::<VariantSpec>(),
+        "rev=main".parse::<VariantSpec>(),
         Ok(VariantSpec {
             revision: String::from("main"),
-            overrides: vec![(Dependency::EspHal, PathBuf::from("/src/esp-hal"))],
             features: FeatureDelta::default(),
         })
     );
@@ -94,18 +92,12 @@ fn a_variant_is_a_revision_and_its_dependency_overrides() {
         "+usb-jtag-off,-panic-hook"
     );
     assert_eq!(
-        "override:esp-hal=/h"
-            .parse::<VariantSpec>()
-            .unwrap()
-            .revision,
+        "features=+trace".parse::<VariantSpec>().unwrap().revision,
         "HEAD"
     );
     for invalid in [
         "rev=a;rev=b",
-        "override:esp-hal=/a;override:esp-hal=/b",
-        "override:tokio=/t",
-        "override:xarxa=/x",
-        "override:esp-hal",
+        "override:esp-hal=/a",
         "features=x",
         "features=+a;features=+b",
         "colour=red",
@@ -152,7 +144,6 @@ fn run(runs: &Path, id: &str, arm: Arm, index: u32, throughput: u64) -> Run {
                 arm,
                 variant: Variant {
                     commit: arm.to_string(),
-                    overrides: Vec::new(),
                     features: FeatureDelta::default(),
                 },
                 round: round(
@@ -181,7 +172,6 @@ fn the_summary_names_the_variants_and_each_verdict() {
     .map(|(arm, id, index, throughput)| (arm, run(directory.path(), id, arm, index, throughput)));
     let variant = |commit: &str| Variant {
         commit: commit.into(),
-        overrides: Vec::new(),
         features: FeatureDelta::default(),
     };
     let report = Report {
@@ -190,12 +180,6 @@ fn the_summary_names_the_variants_and_each_verdict() {
         a: variant("aaaaaaaaaaaaaaaa"),
         b: Variant {
             commit: String::from("aaaaaaaaaaaaaaaa"),
-            overrides: vec![DependencyOverride {
-                dependency: Dependency::EspHal,
-                path: PathBuf::from("/x"),
-                commit: String::from("ea9385e"),
-                dirty: true,
-            }],
             features: FeatureDelta::default(),
         },
         scenarios: vec![String::from("udp-rx")],
@@ -210,10 +194,7 @@ fn the_summary_names_the_variants_and_each_verdict() {
         .unwrap(),
     };
     let text = summary(&report);
-    assert!(
-        text.contains("A aaaaaaaaaaaa vs B aaaaaaaaaaaa +esp-hal@ea9385e+"),
-        "{text}"
-    );
+    assert!(text.contains("A aaaaaaaaaaaa vs B aaaaaaaaaaaa,"), "{text}");
     assert!(
         text.contains("rx.bps") && text.contains("significant, B better"),
         "{text}"
@@ -223,7 +204,7 @@ fn the_summary_names_the_variants_and_each_verdict() {
         "{text}"
     );
     let json = serde_json::to_value(&report).unwrap();
-    assert_eq!(json["b"]["overrides"][0]["dependency"], "esp-hal");
+    assert_eq!(json["b"]["commit"], "aaaaaaaaaaaaaaaa");
 }
 
 #[test]
@@ -259,12 +240,10 @@ fn a_metric_without_pairs_is_summarized_as_such() {
         id: String::from("7"),
         a: Variant {
             commit: String::from("a"),
-            overrides: Vec::new(),
             features: FeatureDelta::default(),
         },
         b: Variant {
             commit: String::from("b"),
-            overrides: Vec::new(),
             features: FeatureDelta::default(),
         },
         scenarios: vec![String::from("udp-rx")],

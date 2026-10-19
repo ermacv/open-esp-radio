@@ -6,9 +6,6 @@
 //! measured on, and the round it pairs with the other arm in, stay with the
 //! run however long after the comparison it is read.
 
-use std::path::PathBuf;
-
-use oer_hil_schema::dependency::Dependency;
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -120,34 +117,18 @@ impl std::fmt::Display for Arm {
     }
 }
 
-/// What an arm builds: a commit of the repository and the local checkouts
-/// that replace its pinned dependencies.
+/// What an arm builds: a commit of the repository and its feature delta.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
     /// The repository commit, resolved.
     pub commit: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub overrides: Vec<DependencyOverride>,
     /// Runtime features added to or removed from each image class's own.
     #[serde(
         default,
         skip_serializing_if = "oer_hil_schema::image::FeatureDelta::is_empty"
     )]
     pub features: oer_hil_schema::image::FeatureDelta,
-}
-
-/// A local checkout that replaces a pinned dependency, as the
-/// `ESP_HAL_ROOT` root does.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DependencyOverride {
-    pub dependency: Dependency,
-    pub path: PathBuf,
-    /// The checkout's commit when the experiment started.
-    pub commit: String,
-    /// Whether it had uncommitted changes; the source snapshot keeps them.
-    pub dirty: bool,
 }
 
 impl Experiment {
@@ -173,12 +154,6 @@ mod tests {
             arm: Arm::B,
             variant: Variant {
                 commit: String::from("abc"),
-                overrides: vec![DependencyOverride {
-                    dependency: Dependency::EspHal,
-                    path: PathBuf::from("/src/esp-hal"),
-                    commit: String::from("ea9385e"),
-                    dirty: false,
-                }],
                 features: "+trace".parse().unwrap(),
             },
             round: Round {
@@ -191,7 +166,7 @@ mod tests {
         };
         let json = serde_json::to_string(&experiment).unwrap();
         assert!(json.contains(r#""arm":"b""#), "{json}");
-        assert!(json.contains(r#""dependency":"esp-hal""#), "{json}");
+        assert!(json.contains(r#""features":{"add":["trace"]}"#), "{json}");
         assert!(json.contains(r#""phase":"measurement""#), "{json}");
         assert_eq!(
             serde_json::from_str::<Experiment>(&json).unwrap(),

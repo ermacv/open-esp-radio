@@ -14,7 +14,7 @@ oer-lab-device-lock = { path = "../device-lock" }
 oer-image-profile = { path = "../../image/profile" }
 oer-lab-model = { path = "../model" }
 oer-lab-stand-power = { path = "../stand-power" }
-oer-image-bundle = { path = "../../image/bundle" }
+oer-image-build = { path = "../../image/build" }
 oer-os-process = { path = "../../os/process" }
 
 [dev-dependencies]

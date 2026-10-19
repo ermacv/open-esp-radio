@@ -87,7 +87,6 @@ fn each_chip_s_spec_takes_its_agent_policy() {
         &staged_chip.id,
         ImageClass::SystemWatchdog,
         (None, &FeatureDelta::default()),
-        Overrides::default(),
         placement(),
     )
     .unwrap();
@@ -101,7 +100,6 @@ fn each_chip_s_spec_takes_its_agent_policy() {
         &staged_chip.id,
         ImageClass::DiagnosticUsbJtagOff,
         (None, &FeatureDelta::default()),
-        Overrides::default(),
         placement(),
     )
     .unwrap();
@@ -110,17 +108,12 @@ fn each_chip_s_spec_takes_its_agent_policy() {
         &application_chip.id,
         ImageClass::SystemWatchdog,
         (None, &FeatureDelta::default()),
-        Overrides::default(),
         placement(),
     )
     .unwrap();
     assert_eq!(
         esp_idf.application.package,
         application_chip.hil_agent_package()
-    );
-    assert_eq!(
-        root.join(&esp_idf.application.workspace),
-        application_chip.hil_agent_workspace(&root)
     );
     assert_eq!(esp_idf.application.features, ["system-watchdog"]);
     assert_eq!(esp_idf.stack_policy, application_chip.hil_stack_policy());

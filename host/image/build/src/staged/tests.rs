@@ -132,10 +132,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
                 (flash.otadata, "OTA selection"),
             ]
         );
-        assert_eq!(
-            oer_image_bundle::ImageBundle::load(&output).unwrap(),
-            bundle
-        );
+        assert_eq!(crate::bundle::ImageBundle::load(&output).unwrap(), bundle);
         // Boot files that are not the chip's are refused.
         assert!(
             around(

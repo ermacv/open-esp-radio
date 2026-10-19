@@ -26,7 +26,7 @@ use std::{
     time::Duration,
 };
 
-use oer_image_bundle::Snapshot;
+use oer_image_build::bundle::Snapshot;
 
 /// Where the writer leaves the chip after the last segment.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -307,6 +307,13 @@ pub struct Placement {
     /// Symbols whose `bytes` from their address lie in a region.
     #[serde(default)]
     pub symbol: Vec<SymbolRule>,
+    /// The regions every handler of the `[interrupts]` table lies in;
+    /// `rom` names the mask ROM's code, as the `[rom]` ELF holds it.
+    #[serde(default)]
+    pub interrupt_handlers: Vec<String>,
+    /// Allocated sections, by name prefix, that lie in a region.
+    #[serde(default)]
+    pub section: Vec<SectionRule>,
     /// Entries whose first instruction swaps `sp` with `mscratch` before
     /// anything touches the interrupted stack.
     #[serde(default)]
@@ -351,6 +358,18 @@ pub struct SymbolRule {
     #[serde(default)]
     pub numbers: Option<[u32; 2]>,
     pub bytes: u64,
+    pub region: String,
+    /// Whether an image may lack the symbol.
+    #[serde(default)]
+    pub optional: bool,
+}
+
+/// Allocated sections whose name starts with `prefix`, each wholly in
+/// `region`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct SectionRule {
+    pub prefix: String,
     pub region: String,
 }
 
@@ -674,12 +693,6 @@ impl Profile {
         root.join(directory).join(&self.id)
     }
 
-    /// The Cargo workspace of the chip's platform, which holds the
-    /// bootstrap of a staged boot.
-    pub fn platform_workspace(&self, root: &Path) -> PathBuf {
-        self.directory(root, PLATFORM)
-    }
-
     /// The bootstrap package the staged boot builds into every image beside
     /// its runtime.
     pub fn bootstrap_package(&self) -> String {
@@ -696,12 +709,6 @@ impl Profile {
     /// has a HIL agent where it exists.
     pub fn hil_agent_directory(&self) -> PathBuf {
         Path::new("firmware/hil").join(&self.id)
-    }
-
-    /// The workspace the chip's HIL images build in: the repository's one
-    /// workspace at `root`.
-    pub fn hil_agent_workspace(&self, root: &Path) -> PathBuf {
-        root.to_owned()
     }
 
     /// The manifest of the chip's HIL agent, which declares the features the

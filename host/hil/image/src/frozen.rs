@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use oer_hil_image_class::NETWORK;
 use oer_hil_schema::image::{FeatureDelta, ImageClass};
 use oer_hil_source_snapshot::FrozenSources;
-use oer_image_build::Overrides;
 use oer_os_durable::atomic_json;
 
 use crate::{Artifacts, LayoutSeed, Result, built, chip_build_root, seed_suffix, spec};
@@ -15,8 +14,7 @@ pub fn build_slots(chip: &str) -> Result<PathBuf> {
     Ok(chip_build_root(chip)?.join("source-build"))
 }
 
-/// Build `class` for `chip` from `frozen` through the image pipeline. The snapshot's own esp-hal, Embassy and Xarxa
-/// sources, when it holds them, replace the pinned ones.
+/// Build `class` for `chip` from `frozen` through the image pipeline.
 pub fn build(
     frozen: &FrozenSources,
     chip: &str,
@@ -40,9 +38,6 @@ pub fn build(
         chip,
         class,
         (layout_seed, features),
-        Overrides {
-            esp_hal: frozen.source_root("esp-hal"),
-        },
         output.clone(),
     )?;
     let artifacts = built(&spec, features)?;

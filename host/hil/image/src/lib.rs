@@ -19,8 +19,8 @@ use serde::Serialize;
 
 use oer_hil_image_class::NETWORK;
 use oer_hil_schema::image::{FeatureDelta, ImageClass};
-use oer_image_build::{ImageSpec, Overrides};
-use oer_image_bundle::ImageBundle;
+use oer_image_build::ImageSpec;
+use oer_image_build::bundle::ImageBundle;
 use oer_image_checks::Gates;
 use oer_image_checks::interrupts::Required;
 
@@ -180,18 +180,15 @@ pub(crate) fn spec(
     chip: &str,
     class: ImageClass,
     (layout_seed, features): (LayoutSeed, &FeatureDelta),
-    overrides: Overrides,
     output: PathBuf,
 ) -> Result<ImageSpec> {
     let profile = oer_image_profile::Profile::load(root, chip)?;
-    let workspace = profile.hil_agent_workspace(root);
     let class_features = oer_hil_image_class::build_features_on(class, chip);
     let package = profile.hil_agent_package();
     Ok(ImageSpec {
         root: root.to_owned(),
         chip: chip.to_owned(),
         application: oer_image_build::Application {
-            workspace: workspace.strip_prefix(root)?.to_owned(),
             binary: package.clone(),
             package,
             features: features
@@ -204,7 +201,7 @@ pub(crate) fn spec(
         },
         stack_policy: profile.hil_stack_policy(),
         layout_seed,
-        overrides,
+        runtime_environment: Vec::new(),
         builder_inputs: builder::closure(root, &BUILDERS)?,
         reads: Vec::new(),
         output,
@@ -212,16 +209,16 @@ pub(crate) fn spec(
         // chip's data names what it checks.
         // A diagnostic image's interrupt stacks may be `partial + ?`, with
         // their holes named.
-        checks: Some(Box::new(Gates::all(if class.diagnostic() {
+        checks: Some(Gates::all(if class.diagnostic() {
             Required::Partial
         } else {
             Required::Proven
-        }))),
+        })),
     })
 }
 
 /// Build `class` for `chip` from the live tree at `root`, with the caller's
-/// local overrides, into the class's directory below `target/hil/<chip>`.
+/// into the class's directory below `target/hil/<chip>`.
 pub fn build(
     root: &Path,
     chip: &str,
@@ -237,14 +234,7 @@ pub fn build(
         seed_suffix(layout_seed),
         features.suffix()
     ));
-    let spec = spec(
-        root,
-        chip,
-        class,
-        (layout_seed, features),
-        Overrides::from_environment()?,
-        output,
-    )?;
+    let spec = spec(root, chip, class, (layout_seed, features), output)?;
     built(&spec, features)
 }
 
@@ -271,14 +261,7 @@ pub fn check(root: &Path, chip: &str, class: ImageClass) -> Result<()> {
         root.join("target/hil")
             .join(chip)
             .join(format!("check-{}-{}", class.id(), NETWORK));
-    let mut spec = spec(
-        root,
-        chip,
-        class,
-        (None, &FeatureDelta::default()),
-        Overrides::default(),
-        output,
-    )?;
+    let mut spec = spec(root, chip, class, (None, &FeatureDelta::default()), output)?;
     // A type check makes no image for the class's gates to examine; they
     // run on `cargo hil image build`.
     spec.checks = None;
@@ -299,8 +282,7 @@ pub fn packages(
     let mut command = oer_os_process::command(oer_image_toolchain::cargo_program());
     command
         .current_dir(root)
-        .args(["tree", "--manifest-path"])
-        .arg(profile.hil_agent_workspace(root).join("Cargo.toml"))
+        .args(["tree"])
         .args([
             "-p",
             &profile.hil_agent_package(),
@@ -352,7 +334,7 @@ pub(crate) fn seed_suffix(layout_seed: LayoutSeed) -> String {
     layout_seed.map_or_else(String::new, |seed| format!("-seed{seed}"))
 }
 
-/// Fails when the root lock or a chip's HIL agent workspace pulls in a
+/// Fails when the root lock or a chip's HIL agent manifest pulls in a
 /// package the chip's profile forbids its HIL agent (`[hil]
 /// forbidden-packages`): the source-only radio graph.
 pub fn ensure_vendor_dependencies_absent(root: &Path) -> Result<()> {
@@ -360,12 +342,7 @@ pub fn ensure_vendor_dependencies_absent(root: &Path) -> Result<()> {
         let Some(hil) = &profile.hil else {
             continue;
         };
-        let workspace = profile.hil_agent_workspace(root);
-        for path in [
-            root.join("Cargo.lock"),
-            workspace.join("Cargo.toml"),
-            workspace.join("Cargo.lock"),
-        ] {
+        for path in [root.join("Cargo.lock"), profile.hil_agent_manifest(root)] {
             let contents = std::fs::read_to_string(&path)?;
             for package in &hil.forbidden_packages {
                 let forbidden = format!("name = \"{package}\"");

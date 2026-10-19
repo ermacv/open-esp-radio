@@ -1,11 +1,11 @@
 //! `cargo fw`: build, flash and run the staged images of `firmware/apps` on
-//! the stand's boards (`host/image/firmware/README.md`). This binary
-//! parses the command line and calls the `oer-image-firmware` service.
+//! the stand's boards (`host/image/build/FW.md`). This binary parses the
+//! command line and calls the commands of `oer-image-build` (`fw`).
 
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_image_firmware as fw;
+use oer_image_build::fw;
 
 #[derive(Parser)]
 #[command(about = "Build, flash and run staged firmware images on the stand's boards")]
@@ -90,7 +90,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let cli = Cli::parse();
-    let result = (|| -> fw::Result<ExitCode> {
+    let result = (|| -> oer_image_build::Result<ExitCode> {
         let root = fw::root()?;
         match cli.command {
             Command::Build { image } => fw::build(&root, &image)?,

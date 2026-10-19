@@ -13,34 +13,33 @@ use oer_hil_schema::image::ImageClass;
 
 use super::firmware;
 use crate::Artifacts;
-use oer_image_bundle::{Lock, Staged, files};
+use oer_image_build::bundle::{Staged, files};
 
 /// The Rust target of the fixture images.
 const TARGET: &str = "riscv32imafc-unknown-none-elf";
 
 /// Bluetooth GATT artifacts: a staged bundle beside `application`
-/// holding the given files, with one lock standing in for both effective
-/// locks and a host-independent environment.
+/// holding the given files and a host-independent environment.
 fn test_artifacts(
     application: &Path,
     runtime_elf: &Path,
     runtime_bin: &Path,
     bootstrap_elf: &Path,
-    lock: &Path,
 ) -> Artifacts {
     let directory = application.parent().unwrap().join("bundle");
     fs::create_dir_all(&directory).unwrap();
     let profile: oer_image_profile::Profile =
         toml::from_str(oer_hil_run_bundle::run::test_support::TEST_CHIP_PROFILE).unwrap();
-    let mut bundle =
-        oer_image_bundle::ImageBundle::new(&directory, &profile, profile.flash.clone().unwrap());
+    let mut bundle = oer_image_build::bundle::ImageBundle::new(
+        &directory,
+        &profile,
+        profile.flash.clone().unwrap(),
+    );
     for (source, name) in [
         (application, files::APPLICATION),
         (runtime_elf, files::RUNTIME_ELF),
         (runtime_bin, files::RUNTIME_BIN),
         (bootstrap_elf, files::BOOTSTRAP_ELF),
-        (lock, files::RUNTIME_LOCK),
-        (lock, files::BOOTSTRAP_LOCK),
     ] {
         fs::copy(source, directory.join(name)).unwrap();
     }
@@ -54,16 +53,6 @@ fn test_artifacts(
     bundle.staged = Some(Staged {
         bootstrap_package: "oer-chip-a-platform-bootstrap".into(),
     });
-    bundle.locks = vec![
-        Lock {
-            committed: "Cargo.lock".into(),
-            file: files::RUNTIME_LOCK.into(),
-        },
-        Lock {
-            committed: "Cargo.lock".into(),
-            file: files::BOOTSTRAP_LOCK.into(),
-        },
-    ];
     assert_eq!(bundle.rust_target, TARGET);
     Artifacts {
         bundle,
@@ -82,7 +71,6 @@ fn firmware_record_archives_the_exact_application() {
     let runtime_elf = root.join("runtime.elf");
     let runtime_bin = root.join("runtime.bin");
     let bootstrap_elf = root.join("bootstrap.elf");
-    let effective_embedded_lock = root.join("Cargo.lock");
     fs::write(&application, b"application bytes").unwrap();
     fs::write(&runtime_elf, b"runtime elf").unwrap();
     fs::write(&runtime_bin, b"runtime bin").unwrap();
@@ -101,13 +89,7 @@ fn firmware_record_archives_the_exact_application() {
     firmware::record(
         &mut first_session,
         ImageClass::SystemWatchdog,
-        &test_artifacts(
-            &application,
-            &runtime_elf,
-            &runtime_bin,
-            &bootstrap_elf,
-            &effective_embedded_lock,
-        ),
+        &test_artifacts(&application, &runtime_elf, &runtime_bin, &bootstrap_elf),
     )
     .unwrap();
     let artifact = &first_session.manifest().firmware[0];
@@ -191,13 +173,7 @@ fn firmware_record_archives_the_exact_application() {
         firmware::record(
             &mut first_session,
             ImageClass::SystemWatchdog,
-            &test_artifacts(
-                &application,
-                &runtime_elf,
-                &runtime_bin,
-                &bootstrap_elf,
-                &effective_embedded_lock,
-            ),
+            &test_artifacts(&application, &runtime_elf, &runtime_bin, &bootstrap_elf,),
         )
         .is_err()
     );
@@ -217,13 +193,7 @@ fn firmware_record_archives_the_exact_application() {
     firmware::record(
         &mut second,
         ImageClass::SystemWatchdog,
-        &test_artifacts(
-            &application,
-            &runtime_elf,
-            &runtime_bin,
-            &bootstrap_elf,
-            &effective_embedded_lock,
-        ),
+        &test_artifacts(&application, &runtime_elf, &runtime_bin, &bootstrap_elf),
     )
     .unwrap();
     assert_eq!(inventory(&object_root).unwrap(), first_objects);
@@ -244,7 +214,6 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
     let runtime_elf = repository_root.join("runtime.elf");
     let runtime_bin = repository_root.join("runtime.bin");
     let bootstrap_elf = repository_root.join("bootstrap.elf");
-    let effective_embedded_lock = repository_root.join("Cargo.lock");
     fs::write(&application, b"application bytes").unwrap();
     fs::write(&runtime_elf, b"runtime elf").unwrap();
     fs::write(&runtime_bin, b"runtime bin").unwrap();
@@ -268,13 +237,7 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
     firmware::record(
         &mut source,
         ImageClass::SystemWatchdog,
-        &test_artifacts(
-            &application,
-            &runtime_elf,
-            &runtime_bin,
-            &bootstrap_elf,
-            &effective_embedded_lock,
-        ),
+        &test_artifacts(&application, &runtime_elf, &runtime_bin, &bootstrap_elf),
     )
     .unwrap();
     source

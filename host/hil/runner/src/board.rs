@@ -6,7 +6,7 @@ use std::path::Path;
 
 use oer_hil_schema::image::ImageClass;
 use oer_image_build::bundle::BootFiles;
-use oer_image_bundle::ImageBundle;
+use oer_image_build::bundle::ImageBundle;
 use oer_lab_device_lock::DeviceAccess;
 
 use crate::Result;

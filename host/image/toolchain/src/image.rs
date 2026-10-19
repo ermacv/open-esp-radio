@@ -44,7 +44,7 @@ pub fn host_build_root() -> Result<PathBuf> {
 /// the vendor comparison probes, from every checkout and source snapshot.
 /// Cargo keeps the units apart by target, package path, features and flags,
 /// and the flags are the same for every build of a chip. Builds uplift
-/// their binaries to the same `<target>/release/<name>`, so each holds
+/// their binaries to the same `<target>/firmware/<name>`, so each holds
 /// [`lock_compile_cache`] from its Cargo run until its outputs are copied
 /// out.
 pub fn compile_cache(build_root: &Path) -> PathBuf {

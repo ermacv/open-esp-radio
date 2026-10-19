@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use oer_image_bundle::ImageBundle;
+use oer_image_build::bundle::ImageBundle;
 use oer_image_profile::{Profile, Start};
 use serde::Serialize;
 

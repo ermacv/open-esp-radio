@@ -796,7 +796,7 @@ struct RunImages<'a> {
     lab: &'a LabConfig,
     lock: &'a oer_lab_device_lock::DeviceAccess,
     class: ImageClass,
-    bundle: &'a oer_image_bundle::ImageBundle,
+    bundle: &'a oer_image_build::bundle::ImageBundle,
     revision: oer_hil_flash::Revision,
     origin: String,
     /// Whether the workload wrote any image.
@@ -804,11 +804,11 @@ struct RunImages<'a> {
 }
 
 impl oer_hil_workload::context::BoardImages for RunImages<'_> {
-    fn scenario_image(&self) -> &oer_image_bundle::ImageBundle {
+    fn scenario_image(&self) -> &oer_image_build::bundle::ImageBundle {
         self.bundle
     }
 
-    fn flash(&self, bundle: &oer_image_bundle::ImageBundle, name: &str) -> Result<()> {
+    fn flash(&self, bundle: &oer_image_build::bundle::ImageBundle, name: &str) -> Result<()> {
         self.flashed
             .store(true, std::sync::atomic::Ordering::Relaxed);
         crate::board::flash_dut(

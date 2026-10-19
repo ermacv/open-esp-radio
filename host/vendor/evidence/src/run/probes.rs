@@ -1,7 +1,7 @@
 //! Build each chip's caller-owned vendor comparison artifacts.
 //!
 //! The probes are the packages of `firmware/probes/` (`<chip>-<name>`), built by
-//! `cargo fw`'s probe build (`oer_image_firmware::probe`): the chip's
+//! `cargo fw`'s probe build (`oer_image_build::fw::probe`): the chip's
 //! image compiler, with `cfg(oer_probe)`, in the probe target directory.
 
 use crate::Result;
@@ -77,7 +77,7 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
         std::env::var_os(JOBS).as_deref(),
         |probe, jobs| {
             let package = probe.probe.package.as_str();
-            let built = oer_image_firmware::probe::build(
+            let built = oer_image_build::fw::probe::build(
                 &context.root,
                 package,
                 jobs.map(NonZeroUsize::get),
