@@ -389,6 +389,8 @@ fn prepare(
 ) -> Result<PreparedArm> {
     let commit = oer_os_process::git::commit(checkout, &spec.revision)?;
     let worktree = Worktree::detached(checkout, &directory.join(format!("arm-{arm}")), &commit)?;
+    // A warm start: the arm recompiles only what its revision changes.
+    oer_image_build::seed_build_cache(checkout, worktree.path())?;
     if crate::experiment::bisect::messages_lock(worktree.path()).as_deref() != Some(current) {
         return Err(format!(
             "arm {arm} ({}) speaks another HIL wire than this checkout (its \

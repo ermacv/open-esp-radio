@@ -125,7 +125,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         &mut cargo,
         &crate::compiler::ImageCompiler {
             root,
-            linker_target: &root.join("target/image-linker"),
+            linker_target: &crate::compiler::linker_target(root),
             rust_target: target,
             max_move_bytes: policy.max_move_bytes,
             runtime_environment: Vec::new(),

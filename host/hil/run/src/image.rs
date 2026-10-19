@@ -5,8 +5,8 @@
 //! This crate owns what is HIL's own about an image: the class's features
 //! and network integration, the agent package of each chip, the HIL stack
 //! policies, the radio observers' placement, where class builds write their
-//! bundles, and the records. Every build compiles in the pipeline's one
-//! shared compile cache (`oer_image_build::compile_cache`). Compiling, gating and encoding are
+//! bundles, and the records. Every build compiles in its checkout's compile
+//! cache (`oer_image_build::compile_cache`). Compiling, gating and encoding are
 //! the pipeline's.
 
 use std::{
@@ -293,7 +293,7 @@ pub(crate) fn built(
 
 /// Type-check the runtime of `class` for `chip` against the committed
 /// pins, with the image build's target, features and compiler
-/// configuration, in the image pipeline's shared compile cache. A pre-push check:
+/// configuration, in the checkout's compile cache. A pre-push check:
 /// lints that need monomorphization (`large_assignments`) and the link-time
 /// gates still need `cargo hil image build`.
 pub fn check(root: &Path, chip: &str, class: ImageClass) -> Result<()> {
@@ -350,11 +350,6 @@ fn tree_packages(tree: &str) -> std::collections::BTreeSet<String> {
         .filter_map(|line| line.split_whitespace().next())
         .map(str::to_owned)
         .collect()
-}
-
-/// The host build root of `chip` images.
-pub fn chip_build_root(chip: &str) -> Result<PathBuf> {
-    Ok(oer_image_build::host_build_root()?.join(chip))
 }
 
 /// The artifact directory suffix of a seeded build, so a seed never reuses
