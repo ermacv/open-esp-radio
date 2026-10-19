@@ -12,11 +12,9 @@
 
 #![forbid(unsafe_code)]
 
-use crate::generated::PhyI2cReadMask;
-use crate::{
-    generated::{PhyI2cField, phy_i2c_fields as fields},
-    svd,
-};
+#[cfg(any(test, feature = "test-support", oer_probe))]
+use crate::generated::{PhyI2cField, PhyI2cReadMask, phy_i2c_fields as fields};
+use crate::svd;
 
 /// One of the two analog-register command hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
