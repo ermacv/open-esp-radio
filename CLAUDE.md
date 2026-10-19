@@ -40,7 +40,7 @@ without vendor radio binaries. Decisions are in
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
   `registers/*/published/*`, `knowledge/*/vendor/facts/**`) are never read
   whole or edited by hand: grep them by path, regenerate them.
-  `firmware/platform/*/linker/dma-window.x` is small and may be read, but it
+  `portable/platform/*-layout/linker/dma-window.x` is small and may be read, but it
   is regenerated, never edited.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
