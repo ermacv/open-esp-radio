@@ -8,6 +8,10 @@ repository.workspace = true
 description = "Regulatory domains: which channels a country permits, and at what power"
 readme = "README.md"
 
+[features]
+# A domain that permits every 2.4 GHz and 5 GHz channel, for tests of the callers.
+test-support = []
+
 [lints]
 workspace = true
 

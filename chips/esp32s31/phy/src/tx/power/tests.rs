@@ -3,9 +3,8 @@ use super::*;
 fn target_profile(
     maximum: i8,
     targets: [i8; PHY_TX_TARGET_POWER_COUNT],
-    regulatory_override: bool,
 ) -> PhyTxTargetPowerProfile {
-    PhyTxTargetPowerProfile::new(maximum, targets, regulatory_override)
+    PhyTxTargetPowerProfile::new(maximum, targets)
 }
 
 fn uncalibrated_parameters() -> PhyTxPowerParameters {
@@ -37,11 +36,7 @@ fn bluetooth_calibration_does_not_publish_its_search_channel() {
 
 #[test]
 fn target_profile_matches_every_recovered_rate_mapping_class() {
-    let profile = target_profile(
-        100,
-        core::array::from_fn(|index| 8 + (index as i8 * 4)),
-        false,
-    );
+    let profile = target_profile(100, core::array::from_fn(|index| 8 + (index as i8 * 4)));
     assert_eq!(
         profile.pair(0),
         PhyTxTargetPowerPair {
@@ -99,20 +94,21 @@ fn target_profile_matches_every_recovered_rate_mapping_class() {
 }
 
 #[test]
-fn target_profile_applies_default_fcc_and_calibrated_maximum_bounds() {
+fn target_profile_is_bounded_by_the_calibrated_maximum_and_the_ceiling() {
     let mut targets = [0_i8; PHY_TX_TARGET_POWER_COUNT];
     targets[0] = 120;
-    assert_eq!(target_profile(100, targets, false).pair(0).primary, 21);
-    assert_eq!(target_profile(80, targets, false).pair(0).primary, 20);
-    assert_eq!(target_profile(100, targets, true).pair(0).primary, 25);
+    assert_eq!(target_profile(100, targets).pair(0).primary, 25);
+    assert_eq!(target_profile(80, targets).pair(0).primary, 20);
+    let ceiled = target_profile(100, targets).with_maximum_quarter_dbm(60);
+    assert_eq!(ceiled.pair(0).primary, 15);
     targets[0] = -12;
-    assert_eq!(target_profile(100, targets, false).pair(0).primary, -3);
+    assert_eq!(target_profile(100, targets).pair(0).primary, -3);
 }
 
 #[test]
 fn runtime_quarter_dbm_limit_matches_vendor_mac_power_code() {
     let targets = [80_i8; PHY_TX_TARGET_POWER_COUNT];
-    let profile = target_profile(84, targets, false).with_maximum_quarter_dbm(20);
+    let profile = target_profile(84, targets).with_maximum_quarter_dbm(20);
     assert_eq!(
         profile.pair(0),
         PhyTxTargetPowerPair {
@@ -127,7 +123,7 @@ fn cold_state_exports_an_owned_target_profile_snapshot() {
     let mut targets = [0; PHY_TX_TARGET_POWER_COUNT];
     targets[0] = 44;
     let state = crate::state::PhyState::new(
-        crate::state::PhyConfig::esp32s31_default().with_target_power(80, targets, false),
+        crate::state::PhyConfig::esp32s31_default().with_target_power(80, targets),
     );
     let profile = state.tx_target_power_profile();
     let _ = state;

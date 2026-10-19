@@ -2689,6 +2689,7 @@ dependencies = [
  "esp-hal",
  "oer-esp32s31-layout",
  "oer-espressif-staged-layout",
+ "oer-radio-regulatory",
 ]
 
 [[package]]
@@ -2729,6 +2730,7 @@ dependencies = [
  "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -2812,6 +2814,7 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-ieee80211-mac",
  "oer-memory",
+ "oer-radio-regulatory",
  "oer-time",
 ]
 
@@ -2833,6 +2836,7 @@ dependencies = [
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-ieee80211-mac",
+ "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",
 ]
@@ -3001,6 +3005,7 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
+ "oer-radio-regulatory",
  "oer-time",
  "static_cell",
 ]
@@ -3032,6 +3037,7 @@ dependencies = [
  "oer-ieee80211-softmac",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-radio-regulatory",
  "oer-time",
  "static_cell",
 ]
@@ -3443,6 +3449,7 @@ dependencies = [
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
 ]
@@ -3464,6 +3471,7 @@ dependencies = [
  "oer-ieee80211-mac",
  "oer-radio-coex",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
 ]
@@ -3472,6 +3480,7 @@ dependencies = [
 name = "oer-ieee80211-mac"
 version = "0.1.0"
 dependencies = [
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "zeroize",
@@ -3513,6 +3522,7 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-memory",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "oer-time-virtual",
@@ -3539,6 +3549,7 @@ dependencies = [
  "oer-ieee80211-rsn",
  "oer-ieee80211-upper-mac",
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
 ]
@@ -3558,6 +3569,7 @@ name = "oer-ieee802154-mac"
 version = "0.1.0"
 dependencies = [
  "oer-radio-port",
+ "oer-radio-regulatory",
  "oer-test-ui-cases",
  "oer-time",
  "scopeguard",

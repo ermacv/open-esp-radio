@@ -74,7 +74,6 @@ pub struct PhyConfig {
     initial_bluetooth_tx_gain_base: u8,
     target_power_maximum: i8,
     target_power: [i8; PHY_TX_TARGET_POWER_COUNT],
-    regulatory_override: bool,
     target_adjustment: u8,
     channel_14_mic_enabled: bool,
     tx_gain_skip_publication: bool,
@@ -96,7 +95,6 @@ impl PhyConfig {
             initial_bluetooth_tx_gain_base: 0,
             target_power_maximum: 0x54,
             target_power: [0; PHY_TX_TARGET_POWER_COUNT],
-            regulatory_override: false,
             target_adjustment: 0,
             channel_14_mic_enabled: false,
             tx_gain_skip_publication: false,
@@ -112,7 +110,6 @@ impl PhyConfig {
                 0x50, 0x50, 0x50, 0x50, 0x4c, 0x48, 0x50, 0x50, 0x4c, 0x48, 0x40, 0x3c, 0x3c, 0x3c,
                 0x4c, 0x4c, 0x48, 0x44,
             ],
-            false,
         )
     }
 
@@ -120,11 +117,9 @@ impl PhyConfig {
         mut self,
         maximum: i8,
         target: [i8; PHY_TX_TARGET_POWER_COUNT],
-        regulatory_override: bool,
     ) -> Self {
         self.target_power_maximum = maximum;
         self.target_power = target;
-        self.regulatory_override = regulatory_override;
         self
     }
 }
@@ -938,11 +933,7 @@ impl PhyState {
     }
 
     pub const fn tx_target_power_profile(&self) -> PhyTxTargetPowerProfile {
-        PhyTxTargetPowerProfile::new(
-            self.config.target_power_maximum,
-            self.config.target_power,
-            self.config.regulatory_override,
-        )
+        PhyTxTargetPowerProfile::new(self.config.target_power_maximum, self.config.target_power)
     }
 
     pub const fn baseband_calibration_complete(&self) -> bool {

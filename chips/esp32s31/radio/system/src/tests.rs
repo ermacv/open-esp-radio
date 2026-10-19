@@ -184,8 +184,17 @@ fn cold() -> WifiCold {
 fn track_request(wifi: WifiClocked) -> WifiTrack {
     WifiTrack {
         wifi,
-        channel: WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-        maximum_tx_power_quarter_dbm: 80,
+        channel: oer_radio_regulatory::TEST_DOMAIN
+            .permit(WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap())
+            .unwrap(),
+        tx_ceiling: oer_radio_regulatory::TEST_DOMAIN
+            .permit(WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap())
+            .unwrap()
+            .tx_ceiling(oer_radio_regulatory::PowerLimits {
+                antenna_gain_mbm: 0,
+                chip_maximum_mbm: 2000,
+                owner_cap_mbm: None,
+            }),
         mac: MacColdStartConfig {
             handshake_deadline: oer_time::Duration::from_millis(1),
             station_address: [2, 0, 0, 0, 0, 1],

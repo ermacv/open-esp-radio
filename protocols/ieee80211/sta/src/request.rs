@@ -7,12 +7,12 @@
 
 use core::{fmt, num::NonZeroU16};
 
+use oer_ieee80211_mac::channel::WifiChannel;
 pub use oer_ieee80211_mac::ssid::{WifiSsid, WifiSsidError};
 use oer_ieee80211_mac::station::association::Preference;
+use oer_radio_regulatory::{Initiate, RegulatoryDomain};
 
 const CHANNEL_ONE_BIT: u16 = 1;
-const CHANNEL_FOURTEEN_BIT: u16 = 1 << 13;
-const ALL_2_4_GHZ_CHANNEL_BITS: u16 = (CHANNEL_FOURTEEN_BIT << 1) - 1;
 
 /// Number of beacon intervals an infrastructure AP may buffer traffic for
 /// this station after association.
@@ -70,47 +70,106 @@ impl StationPowerMode {
 }
 
 /// Allocation-free set of 2.4-GHz primary channels selected for scanning.
-/// Only bits 0..=13 can be set: constructors validate channels 1..=14
-/// before deriving an offset. Iterators retain that bound, including after
-/// removing a selected preference, so their exact lengths never exceed 14.
+/// Only bits 0..=13 can be set, and only for channels the regulatory domain
+/// permits: constructors validate channels 1..=14 before deriving an offset.
+/// A channel the domain allows to listen on only is scanned passively: the
+/// station sends no probe request there. Iterators retain the bound,
+/// including after removing a selected preference, so their exact lengths
+/// never exceed 14.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct StationScanChannels(u16);
+pub struct StationScanChannels {
+    /// Channels the station may send probe requests on.
+    active: u16,
+    /// Channels it listens on only.
+    passive: u16,
+}
 
 impl StationScanChannels {
-    /// Channels 1 through 13. Applications must still select a set permitted
-    /// by their regulatory policy.
-    pub const CHANNELS_1_TO_13: Self = Self(CHANNEL_FOURTEEN_BIT - 1);
-
-    /// All 2.4-GHz channel numbers representable by the current IEEE layer.
-    pub const CHANNELS_1_TO_14: Self = Self(ALL_2_4_GHZ_CHANNEL_BITS);
-
-    pub fn from_primary_channels(channels: &[u8]) -> Result<Self, StationScanChannelsError> {
-        let mut bits = 0_u16;
+    /// The requested primary channels, when `domain` permits each.
+    pub fn permitted(
+        domain: &RegulatoryDomain,
+        channels: &[u8],
+    ) -> Result<Self, StationScanChannelsError> {
+        let mut set = Self {
+            active: 0,
+            passive: 0,
+        };
         for &channel in channels {
             if !(1..=14).contains(&channel) {
                 return Err(StationScanChannelsError::InvalidPrimary(channel));
             }
-            // The checked channel is 1..=14, so the exact shift is 0..=13.
-            bits |= CHANNEL_ONE_BIT << channel.wrapping_sub(1);
+            let permitted = WifiChannel::mhz20(channel)
+                .ok()
+                .and_then(|wifi| domain.permit(wifi).ok());
+            let Some(permitted) = permitted else {
+                return Err(StationScanChannelsError::NotPermitted(channel));
+            };
+            set.insert(channel, permitted.initiate());
         }
-        if bits == 0 {
-            return Err(StationScanChannelsError::Empty);
+        set.non_empty()
+    }
+
+    /// Every 2.4-GHz channel `domain` permits.
+    pub fn all_permitted(domain: &RegulatoryDomain) -> Result<Self, StationScanChannelsError> {
+        let mut set = Self {
+            active: 0,
+            passive: 0,
+        };
+        for channel in 1..=14_u8 {
+            if let Some(permitted) = WifiChannel::mhz20(channel)
+                .ok()
+                .and_then(|wifi| domain.permit(wifi).ok())
+            {
+                set.insert(channel, permitted.initiate());
+            }
         }
-        Ok(Self(bits))
+        set.non_empty()
+    }
+
+    fn insert(&mut self, channel: u8, initiate: Initiate) {
+        // The checked channel is 1..=14, so the exact shift is 0..=13.
+        let bit = CHANNEL_ONE_BIT << channel.wrapping_sub(1);
+        match initiate {
+            Initiate::Allowed => self.active |= bit,
+            Initiate::PassiveOnly => self.passive |= bit,
+        }
+    }
+
+    fn non_empty(self) -> Result<Self, StationScanChannelsError> {
+        if self.bits() == 0 {
+            Err(StationScanChannelsError::Empty)
+        } else {
+            Ok(self)
+        }
+    }
+
+    const fn bits(self) -> u16 {
+        self.active | self.passive
     }
 
     pub const fn contains(self, primary: u8) -> bool {
         // Short-circuit range checks prove 1..=14 before subtraction/shift.
-        primary != 0 && primary <= 14 && self.0 & (CHANNEL_ONE_BIT << primary.wrapping_sub(1)) != 0
+        primary != 0
+            && primary <= 14
+            && self.bits() & (CHANNEL_ONE_BIT << primary.wrapping_sub(1)) != 0
+    }
+
+    /// Whether the station may send a probe request on `primary`: it is
+    /// selected and not passive-only.
+    pub const fn may_probe(self, primary: u8) -> bool {
+        primary != 0
+            && primary <= 14
+            && self.active & (CHANNEL_ONE_BIT << primary.wrapping_sub(1)) != 0
     }
 
     pub const fn count(self) -> u8 {
-        self.0.count_ones() as u8
+        self.bits().count_ones() as u8
     }
 
     pub const fn primary_channels(self) -> StationScanChannelIter {
-        StationScanChannelIter { remaining: self.0 }
+        StationScanChannelIter {
+            remaining: self.bits(),
+        }
     }
 
     /// Iterate the selected set with one optional channel first.
@@ -127,12 +186,13 @@ impl StationScanChannels {
             _ => None,
         };
         StationScanChannelOrderIter {
-            remaining: Self(match preferred {
-                // `contains` proved the selected preference is 1..=14.
-                Some(channel) => self.0 & !(CHANNEL_ONE_BIT << channel.wrapping_sub(1)),
-                None => self.0,
-            })
-            .primary_channels(),
+            remaining: StationScanChannelIter {
+                remaining: match preferred {
+                    // `contains` proved the selected preference is 1..=14.
+                    Some(channel) => self.bits() & !(CHANNEL_ONE_BIT << channel.wrapping_sub(1)),
+                    None => self.bits(),
+                },
+            },
             preferred,
         }
     }
@@ -197,6 +257,8 @@ impl ExactSizeIterator for StationScanChannelOrderIter {}
 pub enum StationScanChannelsError {
     Empty,
     InvalidPrimary(u8),
+    /// The regulatory domain does not permit the channel.
+    NotPermitted(u8),
 }
 
 impl fmt::Display for StationScanChannelsError {
@@ -205,6 +267,9 @@ impl fmt::Display for StationScanChannelsError {
             Self::Empty => formatter.write_str("a station scan requires at least one channel"),
             Self::InvalidPrimary(channel) => {
                 write!(formatter, "invalid 2.4-GHz primary channel {channel}")
+            }
+            Self::NotPermitted(channel) => {
+                write!(formatter, "the regulatory domain forbids channel {channel}")
             }
         }
     }

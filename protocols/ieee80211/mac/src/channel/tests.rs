@@ -88,3 +88,14 @@ fn five_gigahertz_channels_follow_the_global_operating_classes() {
     assert_eq!(channel.wifi_channel(), None);
     assert!(WifiChannel::try_from(channel).is_err());
 }
+
+#[test]
+fn channels_span_their_width_around_the_center() {
+    use oer_radio_regulatory::RadioChannel as _;
+    let six = Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap().span();
+    assert_eq!((six.low_khz(), six.high_khz()), (2_427_000, 2_447_000));
+    let ht40 = Channel::ghz2_4(1, ChannelWidth::Mhz40Above).unwrap().span();
+    assert_eq!((ht40.low_khz(), ht40.high_khz()), (2_402_000, 2_442_000));
+    let fourteen = Channel::ghz2_4(14, ChannelWidth::Mhz20).unwrap().span();
+    assert_eq!(fourteen.high_khz(), 2_494_000);
+}

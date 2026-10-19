@@ -29,6 +29,23 @@ pub const FLASH_SIZE_BYTES: usize = 16 * 1024 * 1024;
 pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
 pub const FLASH_DATA_LINES: u8 = 4;
 
+/// What bounds Wi-Fi transmit power besides the regulatory domain: the
+/// board's antenna gain and the chip's maximum. The owner cap is a setting of
+/// the installation (the stand's laboratory limit), not a board fact.
+///
+/// The antenna gain is 0 dBi: no gain is recorded for this board's antenna.
+/// The chip maximum is 21 dBm, the cap the vendor PHY applies to every
+/// target power.
+/// SOURCE(esp32s31): `rom[]::phy_get_chan_target_power`, the four default
+/// FCC bytes at ROM 0x2f84_834c, all 84 quarter dBm.
+pub const fn wifi_power_limits(owner_cap_mbm: Option<i32>) -> oer_radio_regulatory::PowerLimits {
+    oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: 2100,
+        owner_cap_mbm,
+    }
+}
+
 pub const fn psram_config() -> PsramConfig {
     PsramConfig {
         size: PsramSize::AutoDetect,

@@ -9,6 +9,7 @@ use oer_esp32s31_phy::{
     switch_concurrent_wifi_channel,
 };
 use oer_ieee80211_mac::channel::WifiChannel;
+use oer_radio_regulatory::Permitted;
 
 use crate::channel::lower_wifi_channel;
 
@@ -19,10 +20,10 @@ pub(crate) async fn switch_wifi_channel<O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
     domain: &mut RadioDomain<ConcurrentPhy>,
     radio: &mut RadioRuntimeOwner,
-    channel: WifiChannel,
+    channel: Permitted<WifiChannel>,
     observer: &mut O,
 ) -> Result<(), ConcurrentWifiChannelError> {
-    let channel = lower_wifi_channel(channel);
+    let channel = lower_wifi_channel(channel.channel());
     let mut platform = ();
     let (mut hardware, phy) = radio.channel_hal_with_attachment(&mut platform, domain);
     switch_concurrent_wifi_channel::<RomShortDelay, _, _>(
@@ -46,10 +47,10 @@ pub(crate) async fn switch_published_wifi_channel<O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
     radio: &mut RadioDomain<ConcurrentPhy>,
     registers: &oer_esp32s31_hal::ieee80211::arena::RadioAccess<'_>,
-    channel: WifiChannel,
+    channel: Permitted<WifiChannel>,
     observer: &mut O,
 ) -> Result<(), PublishedWifiChannelError> {
-    let channel = lower_wifi_channel(channel);
+    let channel = lower_wifi_channel(channel.channel());
     let mut platform = ();
     let (mut hardware, phy) = registers
         .try_channel_hal_with_attachment(&mut platform, radio)

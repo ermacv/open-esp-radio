@@ -222,6 +222,7 @@ fn the_profile_is_applied_verified_and_settles() {
     let applied = apply(&mut remote, &profile()).unwrap();
     assert_eq!(applied.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
     assert_eq!(applied.channel, 6);
+    assert_eq!(applied.country, *b"DE");
     assert_eq!(remote.pauses, 2);
     let iw = profile().iw_script();
     assert_eq!(
@@ -781,4 +782,33 @@ fn nothing_secret_is_shown() {
         assert!(!shown.contains(secret), "{secret}: {shown}");
     }
     assert!(shown.contains("xx:xx:xx:xx:F6:D0"), "{shown}");
+}
+
+#[test]
+fn the_radio_country_is_read_without_changing_anything() {
+    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
+    assert_eq!(radio_country(&mut remote, "radio9").unwrap(), *b"DE");
+    assert_eq!(remote.scripts, [show_script()]);
+    let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(show_before())])]);
+    assert!(radio_country(&mut remote, "radio7").is_err());
+}
+
+#[test]
+fn a_radio_without_a_valid_country_is_refused() {
+    for country in ["", "country='de'\n", "country='DEU'\n"] {
+        let text = show_before().replace(
+            "wireless.radio9.country='DE'\n",
+            &format!(
+                "{}",
+                if country.is_empty() {
+                    String::new()
+                } else {
+                    format!("wireless.radio9.{country}")
+                }
+            ),
+        );
+        let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(text)])]);
+        let error = radio_country(&mut remote, "radio9").unwrap_err();
+        assert!(error.contains("country"), "{error}");
+    }
 }

@@ -233,6 +233,36 @@ impl RegulatoryDomain {
     }
 }
 
+/// A domain that permits the whole 2.4 GHz and 5 GHz range at 20 dBm, for the
+/// tests of crates that take a [`Permitted`] channel.
+#[cfg(feature = "test-support")]
+pub const TEST_DOMAIN: RegulatoryDomain = {
+    const RULES: &[Rule] = &[
+        Rule::new(
+            match FrequencySpan::new(2_400_000, 2_500_000) {
+                Some(span) => span,
+                None => panic!("test span"),
+            },
+            40_000,
+            2000,
+            RuleFlags::NONE,
+        ),
+        Rule::new(
+            match FrequencySpan::new(5_100_000, 5_900_000) {
+                Some(span) => span,
+                None => panic!("test span"),
+            },
+            160_000,
+            2000,
+            RuleFlags::NONE,
+        ),
+    ];
+    RegulatoryDomain {
+        country: Country(*b"ZZ"),
+        rules: RULES,
+    }
+};
+
 /// A channel of some protocol, as frequencies.
 pub trait RadioChannel: Copy {
     /// Every frequency the channel occupies.

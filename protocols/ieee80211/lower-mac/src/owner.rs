@@ -38,28 +38,25 @@
 //! type, so it is an associated constant of a capabilities marker
 //! ([`Ieee80211Capabilities`]); a validated value is branded by that
 //! marker, minted only by its checks, and a portable core is generic over
-//! the marker alone. A literal value is checked at compile time:
+//! the marker alone. A channel is first permitted by a regulatory domain, then
+//! checked against the marker:
 //!
 //! ```
 //! # use oer_ieee80211_lower_mac::{Channel, ChannelWidth, Ieee80211Capabilities, SupportedChannel};
-//! fn tune<K: Ieee80211Capabilities>() -> SupportedChannel<K> {
-//!     const {
-//!         match SupportedChannel::<K>::new(match Channel::ghz2_4(6, ChannelWidth::Mhz20) {
-//!             Ok(channel) => channel,
-//!             Err(_) => panic!("channel 6 is a 2.4 GHz channel"),
-//!         }) {
-//!         Some(channel) => channel,
-//!         None => panic!("the backend does not tune to this channel"),
-//!     }
-//!     }
+//! # use oer_radio_regulatory::{RegulatoryDomain, Refused};
+//! fn tune<K: Ieee80211Capabilities>(
+//!     domain: &RegulatoryDomain,
+//!     channel: Channel,
+//! ) -> Option<SupportedChannel<K>> {
+//!     SupportedChannel::new(domain.permit(channel).ok()?)
 //! }
 //! ```
 //!
 //! # Compile-fail tests
 //!
-//! A channel the capabilities do not state does not compile as a constant:
+//! A backend that tunes to 2.4 GHz only does not tune to a 5 GHz channel:
 //!
-//! ```compile_fail,E0080
+//! ```
 //! # use oer_ieee80211_lower_mac::*;
 //! # use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
 //! # struct TwoFourOnly;
@@ -93,15 +90,10 @@
 //! #         edca_max_cw_exponent: 10,
 //! #     };
 //! # }
-//! const FIVE: SupportedChannel<TwoFourOnly> =
-//!     match SupportedChannel::new(match Channel::ghz5(36, ChannelWidth::Mhz20) {
-//!         Ok(channel) => channel,
-//!         Err(_) => panic!(),
-//!     }) {
-//!         Some(channel) => channel,
-//!         None => panic!("the backend does not tune to this channel"),
-//!     };
-//! # fn main() { let _ = FIVE; }
+//! let permitted = oer_radio_regulatory::TEST_DOMAIN
+//!     .permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
+//!     .unwrap();
+//! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_none());
 //! ```
 //!
 //! Its compiling twin names a channel the capabilities state:
@@ -140,15 +132,10 @@
 //! #         edca_max_cw_exponent: 10,
 //! #     };
 //! # }
-//! const SIX: SupportedChannel<TwoFourOnly> =
-//!     match SupportedChannel::new(match Channel::ghz2_4(6, ChannelWidth::Mhz20) {
-//!         Ok(channel) => channel,
-//!         Err(_) => panic!(),
-//!     }) {
-//!         Some(channel) => channel,
-//!         None => panic!("the backend does not tune to this channel"),
-//!     };
-//! # fn main() { let _ = SIX; }
+//! let permitted = oer_radio_regulatory::TEST_DOMAIN
+//!     .permit(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap())
+//!     .unwrap();
+//! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_some());
 //! ```
 //!
 //! No caller or backend mints a rate past the phase's check:
@@ -184,6 +171,7 @@ use oer_ieee80211_mac::frame::FrameControl;
 
 use oer_ieee80211_mac::{extensions::wmm::WmmParameterSet, sequence::SequenceNumber};
 use oer_radio_port::PortBackend;
+use oer_radio_regulatory::Permitted;
 
 use crate::{
     Channel, CoexPriority, LowerMacCapabilities, MacAddress, PhyRate, ReceiveFilter, TxPower,
@@ -199,18 +187,18 @@ pub trait Ieee80211Capabilities {
     const CAPS: LowerMacCapabilities;
 }
 
-/// A channel the capabilities `K` tune to.
+/// A channel the regulatory domain permits and the capabilities `K` tune to.
 pub struct SupportedChannel<K> {
-    channel: Channel,
+    permitted: Permitted<Channel>,
     brand: PhantomData<fn() -> K>,
 }
 
 impl<K: Ieee80211Capabilities> SupportedChannel<K> {
-    /// `channel`, when `K` tunes to it.
-    pub const fn new(channel: Channel) -> Option<Self> {
-        if K::CAPS.supports_channel(channel) {
+    /// `permitted`, when `K` tunes to its channel.
+    pub const fn new(permitted: Permitted<Channel>) -> Option<Self> {
+        if K::CAPS.supports_channel(permitted.channel()) {
             Some(Self {
-                channel,
+                permitted,
                 brand: PhantomData,
             })
         } else {
@@ -220,7 +208,12 @@ impl<K: Ieee80211Capabilities> SupportedChannel<K> {
 
     /// The channel.
     pub const fn channel(&self) -> Channel {
-        self.channel
+        self.permitted.channel()
+    }
+
+    /// The channel with what the domain allows on it.
+    pub const fn permitted(&self) -> Permitted<Channel> {
+        self.permitted
     }
 }
 
@@ -234,7 +227,7 @@ impl<K> Copy for SupportedChannel<K> {}
 
 impl<K> PartialEq for SupportedChannel<K> {
     fn eq(&self, other: &Self) -> bool {
-        self.channel == other.channel
+        self.permitted == other.permitted
     }
 }
 
@@ -244,7 +237,7 @@ impl<K> core::fmt::Debug for SupportedChannel<K> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_tuple("SupportedChannel")
-            .field(&self.channel)
+            .field(&self.permitted)
             .finish()
     }
 }

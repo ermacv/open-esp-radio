@@ -31,6 +31,7 @@ oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-ieee80211-rsn = { path = "../rsn", optional = true }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-sta = { path = "../sta", features = ["test-support"] }
 # The deterministic received-byte inputs of the survey's never-panics test.
 oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }

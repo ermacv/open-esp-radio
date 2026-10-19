@@ -21,8 +21,10 @@ oer-ieee80211-rsn = { path = "../rsn" }
 oer-ieee80211-upper-mac = { path = "../upper-mac" }
 oer-time = { path = "../../../portable/time" }
 oer-radio-port = { path = "../../radio/port" }
+oer-radio-regulatory = { path = "../../radio/regulatory" }
 
 [dev-dependencies]
+oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
