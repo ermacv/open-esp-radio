@@ -4184,3 +4184,47 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
         );
     });
 }
+
+#[test]
+fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
+    use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxError, OrdinaryTxInterface};
+    use oer_esp32s31_ieee80211_mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate};
+    let mut owner = OrdinaryTxOwner::new_legacy(WifiTxResources {
+        slot: slot(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        power: Power,
+        entropy: entropy as fn() -> u32,
+        timer: Timer::default(),
+    });
+    let mut hardware = Hardware::default();
+    let plan = OrdinaryTxPlan {
+        frame_length: 24,
+        descriptor_capacity: None,
+        exchange: MacTxPlan {
+            access_category: WmmAccessCategory::Voice,
+            initial_rate: TxPhyRate::Ht(HtRate::new(
+                HtMcs::Mcs0,
+                HtGuardInterval::Long800Ns,
+                HtChannelWidth::Mhz20,
+            )),
+            publication_limit: 1,
+            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+        },
+        hardware_mic_length: 0,
+        hardware_key_selector: 0,
+        interface: OrdinaryTxInterface::Station,
+        scheduler_priority: 1,
+        packet_priority: 1,
+        priority_count: 1,
+    };
+    let OrdinaryTxAccess::Idle(idle) = owner.access() else {
+        panic!("fresh owner");
+    };
+    assert_eq!(
+        idle.start(&mut hardware, plan),
+        Err(OrdinaryTxError::UnsupportedPhyRate)
+    );
+    assert_eq!(hardware.publications(), 0);
+    assert!(!owner.active());
+    assert_eq!(owner.slot_state(), TxDmaState::Free);
+}

@@ -32,6 +32,14 @@ build of `w1`, as `OER_W1_CHANNEL`, `OER_W1_BSSID` and `OER_W1_SSID_HEX`;
 every other cargo build runs with all three removed. No image takes a
 flag for them.
 
+`build w2` likewise builds an unconfigured scanner. `run w2` applies the
+same router profile, requires its UCI country and supplies the lab's
+explicit 10 dBm cap. It captures AX211 air evidence in memory, validates
+the scanner's report and recomputes gates a–e, including derived rates,
+sequence/ACK correlation and per-queue power readback. See
+[the W2 image](../../../firmware/apps/w2/README.md) for its scan and report
+contract. The five `OER_W2_*` values are removed from unrelated builds.
+
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 moves above the stack policy's `max_move_bytes` warned (`-W
 large-assignments`), and through the image linker
@@ -144,7 +152,7 @@ when it refuses.
 
 ## The stand router
 
-Before every `run w1`, and on `cargo fw router` (without a board), the
+Before every `run w1` or `run w2`, and on `cargo fw router` (without a board), the
 stand's OpenWrt lab router is brought to W1's profile and verified by
 `oer-lab-router` ([tools/lab/router/README.md](../../lab/router/README.md) lists every script it
 runs there); the profile stays, the earlier settings are not restored. Both

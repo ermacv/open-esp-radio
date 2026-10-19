@@ -3,6 +3,7 @@ use core::fmt::{self, Write};
 #[derive(Clone, Copy, Default)]
 pub struct Visit {
     pub channel: u8,
+    pub sequence: u16,
     pub allowed: bool,
     pub sent: u8,
     pub success: bool,
@@ -18,6 +19,8 @@ pub struct Report {
     pub lab_channel: u8,
     pub country: [u8; 2],
     pub cap_dbm: i8,
+    pub antenna_mbm: i32,
+    pub chip_mbm: i32,
     pub target: [u8; 2],
     pub stand: [u8; 2],
     pub unicast_rate: u32,
@@ -32,6 +35,11 @@ pub struct Report {
     pub collisions: u32,
     pub colors: u32,
     pub errors: u32,
+    pub irq_free: usize,
+    pub supported: [u8; 8],
+    pub supported_len: usize,
+    pub extended: [u8; 16],
+    pub extended_len: usize,
     pub error: Option<&'static str>,
 }
 impl Report {
@@ -42,6 +50,10 @@ impl Report {
             lab_channel: config.channel,
             country: config.country,
             cap_dbm: config.cap_dbm,
+            antenna_mbm: oer_esp32s31_board::WIFI_ANTENNA_GAIN_MBM,
+            chip_mbm: i32::from(
+                oer_esp32s31_phy::PhyConfig::production().highest_target_power_quarter_dbm(),
+            ) * 25,
             target: [station[4], station[5]],
             stand: [config.stand[4], config.stand[5]],
             unicast_rate: 0,
@@ -56,6 +68,11 @@ impl Report {
             collisions: 0,
             colors: 0,
             errors: 0,
+            irq_free: 0,
+            supported: [0; 8],
+            supported_len: 0,
+            extended: [0; 16],
+            extended_len: 0,
             error: None,
         }
     }
@@ -64,7 +81,8 @@ impl Report {
             self.visits[..self.count]
                 .iter()
                 .any(|v| v.channel == self.lab_channel && v.responses > 0),
-            self.count > 0
+            self.error.is_none()
+                && self.count > 0
                 && self.visits[..self.count].iter().all(|v| {
                     if v.allowed {
                         v.sent == 1 && v.success
@@ -100,11 +118,13 @@ impl Report {
         writeln!(out, "OER-W2-BEGIN v=1\r")?;
         writeln!(
             out,
-            "w2.config channel={} country={}{} cap={} target=xx:xx:xx:xx:{:02X}:{:02X} stand=xx:xx:xx:xx:{:02X}:{:02X}\r",
+            "w2.config channel={} country={}{} cap={} antenna_mbm={} chip_mbm={} target=xx:xx:xx:xx:{:02X}:{:02X} stand=xx:xx:xx:xx:{:02X}:{:02X}\r",
             self.lab_channel,
             self.country[0] as char,
             self.country[1] as char,
             self.cap_dbm,
+            self.antenna_mbm,
+            self.chip_mbm,
             self.target[0],
             self.target[1],
             self.stand[0],
@@ -113,8 +133,9 @@ impl Report {
         for v in &self.visits[..self.count] {
             writeln!(
                 out,
-                "w2.channel channel={} allowed={} sent={} success={} responses={} rate_kbps={} retune_us={} power={},{},{},{} ceiling={}\r",
+                "w2.channel channel={} sequence={} allowed={} sent={} success={} responses={} rate_kbps={} retune_us={} power={},{},{},{} ceiling={}\r",
                 v.channel,
+                v.sequence,
                 u8::from(v.allowed),
                 v.sent,
                 u8::from(v.success),
@@ -128,6 +149,21 @@ impl Report {
                 v.ceiling
             )?;
         }
+        write!(out, "w2.basic supported=")?;
+        if self.supported_len == 0 {
+            write!(out, "-")?;
+        }
+        for byte in &self.supported[..self.supported_len] {
+            write!(out, "{byte:02x}")?;
+        }
+        write!(out, " extended=")?;
+        if self.extended_len == 0 {
+            write!(out, "-")?;
+        }
+        for byte in &self.extended[..self.extended_len] {
+            write!(out, "{byte:02x}")?;
+        }
+        writeln!(out, "\r")?;
         writeln!(
             out,
             "w2.unicast rate_kbps={} sequence={} success={} responses={} attempts={} raw={} power={},{},{},{} ceiling={}\r",
@@ -145,17 +181,18 @@ impl Report {
         )?;
         writeln!(
             out,
-            "w2.stats timeouts={} collisions={} colors={} errors={} error={}\r",
+            "w2.stats timeouts={} collisions={} colors={} errors={} irq_free={} error={}\r",
             self.timeouts,
             self.collisions,
             self.colors,
             self.errors,
+            self.irq_free,
             self.error.unwrap_or("-")
         )?;
         for (name, pass) in ['a', 'b', 'c', 'd', 'e'].into_iter().zip(gates) {
             writeln!(out, "w2.gate name={name} pass={}\r", u8::from(pass))?;
         }
-        writeln!(out, "OER-W2-END lines={}\r", self.count + 8)?;
+        writeln!(out, "OER-W2-END lines={}\r", self.count + 9)?;
         writeln!(
             out,
             "OER-RESULT: {} w2\r",

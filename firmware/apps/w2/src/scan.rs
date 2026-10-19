@@ -17,8 +17,7 @@ use oer_esp32s31_hal::{
 };
 use oer_esp32s31_ieee80211_driver::{
     ordinary_tx::{
-        OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxOutcome, OrdinaryTxOwner, OrdinaryTxPlan,
-        TX_METADATA_SIZE,
+        OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxOwner, OrdinaryTxPlan, TX_METADATA_SIZE,
     },
     runtime::{WifiRoleMaterialized, WifiRoleOwner, materialize_esp32s31_wifi_role},
     rx::{
@@ -68,6 +67,7 @@ type Tx = OrdinaryTxOwner<
     Entropy,
     EmbassyClock,
     TX,
+    true,
 >;
 static CLOCK: EmbassyClock = EmbassyClock;
 const DWELL: Duration = Duration::from_millis(150);
@@ -87,6 +87,7 @@ pub struct Boot {
 }
 struct Platform {
     rng: Option<RngOwner<'static>>,
+    tx_power: Option<PhyTxTargetPowerProfile>,
 }
 impl MacDelayEntropy for Platform {
     fn mac_delay_random(&mut self) -> u32 {
@@ -102,7 +103,9 @@ impl MacSlowClockCalibrationSource for Platform {
     }
 }
 impl WifiMacPlatform for Platform {
-    fn install_phy_tx_power_profile(&mut self, _profile: PhyTxTargetPowerProfile) {}
+    fn install_phy_tx_power_profile(&mut self, profile: PhyTxTargetPowerProfile) {
+        self.tx_power = Some(profile);
+    }
 }
 struct Entropy(RngOwner<'static>);
 impl WifiTxEntropy for Entropy {
@@ -170,8 +173,16 @@ async fn run(
             WifiMacAddress::new(ap).map_err(|_| "ap-mac")?,
         ),
     );
-    let (returned, started) =
-        start_esp32s31_radio(cell, wifi, Platform { rng: Some(rng) }, start).await;
+    let (returned, started) = start_esp32s31_radio(
+        cell,
+        wifi,
+        Platform {
+            rng: Some(rng),
+            tx_power: None,
+        },
+        start,
+    )
+    .await;
     cell = returned;
     let stopped = started.map_err(|_| "bringup")?;
     let profile = stopped.start_report().track.tx_power;
@@ -207,7 +218,7 @@ async fn run(
     let dma = TxDmaStorage::pin::<ChipDma>(irq::TX_DMA.take().ok_or("tx-claimed")?)
         .map_err(|_| "tx-bind")?;
     let slot = irq::TX_SLOT.init(TxSlot::from_dma(dma));
-    let mut tx = OrdinaryTxOwner::new(WifiTxResources {
+    let mut tx = OrdinaryTxOwner::new_legacy(WifiTxResources {
         slot: Pin::new(slot),
         policy: WifiTxRuntimePolicy::vendor_defaults(),
         power: CappedTxPowerProfile::new(profile, ceiling(initial, config)),
@@ -243,7 +254,7 @@ async fn run(
             .map_err(|_| "irq-reattach")?;
         let mut resources = tx.try_into_resources().map_err(|_| "tx-active-on-retune")?;
         resources.power = CappedTxPowerProfile::new(tuned.tx_power, limit);
-        tx = OrdinaryTxOwner::new(resources);
+        tx = OrdinaryTxOwner::new_legacy(resources);
         let priority = tuned.probe_priority;
         session
             .start(&mut registers, &CLOCK, &mut routes)
@@ -253,6 +264,7 @@ async fn run(
         report.count += 1;
         let rate = management_rate(Band::Ghz2_4, None).ok_or("group-rate")?;
         report.visits[index].channel = number;
+        report.visits[index].sequence = sequence.get();
         report.visits[index].allowed = channel.initiate() == Initiate::Allowed;
         report.visits[index].rate_kbps = rate.kbps();
         report.visits[index].retune_us = tuned.micros;
@@ -315,7 +327,7 @@ async fn run(
         .try_into_resources()
         .map_err(|_| "tx-active-before-unicast")?;
     resources.power = CappedTxPowerProfile::new(tuned.tx_power, limit);
-    tx = OrdinaryTxOwner::new(resources);
+    tx = OrdinaryTxOwner::new_legacy(resources);
     session
         .start(&mut registers, &CLOCK, &mut routes)
         .await
@@ -538,6 +550,12 @@ fn observe(
                 && record.ssid_bytes() == config.ssid
                 && record.channel == config.channel
             {
+                report.supported_len = record.supported_rates_bytes().len();
+                report.supported[..report.supported_len]
+                    .copy_from_slice(record.supported_rates_bytes());
+                report.extended_len = record.extended_supported_rates_bytes().len();
+                report.extended[..report.extended_len]
+                    .copy_from_slice(record.extended_supported_rates_bytes());
                 *basic = Some(BasicRates::from_rate_elements(
                     record.supported_rates_bytes(),
                     record.extended_supported_rates_bytes(),

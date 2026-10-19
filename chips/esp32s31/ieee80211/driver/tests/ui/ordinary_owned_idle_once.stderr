@@ -10,8 +10,8 @@ error[E0382]: borrow of moved value: `owner`
 11 |     let _ = owner.access(); // ui-error: E0382
    |             ^^^^^ value borrowed here after move
    |
-note: `OrdinaryTxOwner::<'slot, P, E, T, BUFFER_SIZE>::into_idle` takes ownership of the receiver `self`, which moves `owner`
+note: `OrdinaryTxOwner::<'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY>::into_idle` takes ownership of the receiver `self`, which moves `owner`
   --> src/ordinary_tx.rs
    |
-   |     pub fn into_idle(self) -> Result<OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>, Self> {
-   |                      ^^^^
+   |         self,
+   |         ^^^^

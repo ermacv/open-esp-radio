@@ -88,6 +88,10 @@ impl Ssid {
         Ok(Self(bytes.to_vec()))
     }
 
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
     /// Two lower-case hex digits per byte, for the runtime build only.
     fn hex(&self) -> String {
         self.0.iter().map(|byte| format!("{byte:02x}")).collect()

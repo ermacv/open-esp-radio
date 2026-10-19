@@ -13,7 +13,7 @@ use oer_lab_router::{router, ssh};
 use oer_lab_board::lock::{DeviceAccess, DeviceId};
 use oer_lab_board::stand::{LeasedBoard, Via};
 
-use crate::{image, w1};
+use crate::{image, w1, w2};
 use oer_image_build::Result;
 
 /// The chips whose boards this tool resets and writes. Another chip's board
@@ -226,27 +226,51 @@ fn w0_country(stand: &stand::Stand) -> Result<(oer_lab_router::lock::RouterLock,
 
 /// The stand router of `stand`, locked and brought to W1's profile; the
 /// lock and image w1's configuration.
-fn w1_router(stand: &stand::Stand) -> Result<(oer_lab_router::lock::RouterLock, w1::Config)> {
+fn stand_router(
+    stand: &stand::Stand,
+    image: &str,
+) -> Result<(oer_lab_router::lock::RouterLock, w1::Config)> {
     let router = stand.router()?;
     let mut ssh = ssh::Ssh::new(router.ssh_target.expose())?;
     let lock = oer_lab_router::lock::router(&router_lock_directory()?, router.ssh_target.expose())?;
     // The stand AP's SSID is the run's: no file holds it.
-    let ssid = oer_lab_router::credentials::ssid("oer-w1")?;
+    let ssid = oer_lab_router::credentials::ssid(&format!("oer-{image}"))?;
     let (config, shown) = w1_stand(&router, ssid.expose(), &mut ssh)?;
     for line in shown {
-        eprintln!("fw: {line}");
+        eprintln!("fw: {}", line.replacen("w1", image, 1));
     }
     Ok((lock, config))
 }
 
 pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
     let (stand, board) = board(selector)?;
+    // Acquire the laptop/air lease before the router lock to keep HIL's lock order.
+    let capture = if image == w2::IMAGE {
+        let lab = oer_hil_lab::config::LabConfig::load(
+            &stand::path()?,
+            image::CHIP,
+            &oer_hil_lab::config::BoardChoice {
+                dut: Some(board.id.clone()),
+                ..Default::default()
+            },
+        )?;
+        Some(oer_hil_lab::air::AirCapture::start(
+            &lab,
+            stand.router()?.channel,
+        )?)
+    } else {
+        None
+    };
     // The router lock is held to the end of the run.
     let (_router, built) = if image == w1::IMAGE {
         // The router is changed only for a board that is there.
         tty(&board)?;
-        let (lock, config) = w1_router(&stand)?;
+        let (lock, config) = stand_router(&stand, w1::IMAGE)?;
         (Some(lock), Some(image::Stand::W1(config)))
+    } else if image == w2::IMAGE {
+        tty(&board)?;
+        let (lock, config) = stand_router(&stand, w2::IMAGE)?;
+        (Some(lock), Some(image::Stand::W2(config)))
     } else if image == "w0" {
         let (lock, country) = w0_country(&stand)?;
         (Some(lock), Some(image::Stand::W0 { country }))
@@ -255,6 +279,10 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     };
     let w1 = match &built {
         Some(image::Stand::W1(config)) => Some(config.clone()),
+        _ => None,
+    };
+    let w2 = match &built {
+        Some(image::Stand::W2(config)) => Some(config.clone()),
         _ => None,
     };
     image::build(root, image, built.as_ref())?;
@@ -287,7 +315,7 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
                 if let Some(verdict) = verdict(&text) {
                     break Some((verdict, text.into_owned()));
                 }
-                if w1.is_some() {
+                if w1.is_some() || w2.is_some() {
                     console.push(text.into_owned());
                 }
             }
@@ -297,9 +325,33 @@ pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Resul
     };
     drop(lines);
     eprintln!("fw: log {}", log_path.display());
+    let air = capture
+        .map(oer_hil_lab::air::AirCapture::finish)
+        .transpose()?;
     Ok(match verdict {
         Some((_, result)) if let Some(config) = &w1 => {
             ExitCode::from(check_w1(&console, &result, config))
+        }
+        Some((_, result)) if let Some(config) = &w2 => {
+            let target = oer_lab_router::mac::Mac::parse(&board.mac).ok_or("invalid board MAC")?;
+            match w2::check(
+                &console,
+                &result,
+                config,
+                target,
+                air.as_deref().unwrap_or_default(),
+            ) {
+                Ok(checked) => {
+                    for line in checked.summary {
+                        eprintln!("fw: w2 {line}");
+                    }
+                    ExitCode::from(if checked.passed { 0 } else { 1 })
+                }
+                Err(error) => {
+                    eprintln!("fw: w2 report contradiction or malformed evidence: {error}");
+                    ExitCode::from(3)
+                }
+            }
         }
         Some((Verdict::Pass, _)) => ExitCode::SUCCESS,
         Some((Verdict::Fail, _)) => ExitCode::from(1),
@@ -423,7 +475,7 @@ pub fn flash_image(root: &Path, image_name: &str, selector: &str) -> Result<()> 
 /// `cargo fw router`.
 pub fn router_ready() -> Result<()> {
     let stand = stand::Stand::load(&stand::path()?)?;
-    let (_lock, config) = w1_router(&stand)?;
+    let (_lock, config) = stand_router(&stand, w1::IMAGE)?;
     println!(
         "router ready: the stand AP {} on channel {}",
         config.bssid, config.channel

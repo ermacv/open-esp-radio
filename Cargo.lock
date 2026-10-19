@@ -4045,6 +4045,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
+ "oer-hil-lab",
+ "oer-ieee80211-lower-mac",
+ "oer-ieee80211-mac",
+ "oer-ieee80211-upper-mac",
  "oer-image-build",
  "oer-image-checks",
  "oer-lab-board",
@@ -4052,6 +4056,7 @@ dependencies = [
  "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
+ "oer-radio-regulatory",
  "serde",
  "tempfile",
  "toml",

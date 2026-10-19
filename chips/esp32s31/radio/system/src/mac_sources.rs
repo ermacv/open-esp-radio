@@ -77,3 +77,31 @@ pub(crate) fn probe_priority(
         scheduler: MacCoexPti::new(scheduler).expect("the table has four-bit PTI"),
     }
 }
+
+#[cfg(test)]
+mod probe_tests {
+    use super::*;
+    #[test]
+    fn probe_priority_follows_the_live_shared_operation_and_slice_entries() {
+        use oer_espressif_coex::{CoexPti, CoexPtiTable, wifi_event, wifi_events};
+        use oer_ieee80211_lower_mac::{ConnectionFrame, Operation, TxOperation};
+        let event = wifi_event(Operation::Transmit(TxOperation::Connection(
+            ConnectionFrame::ProbeRequest,
+        )))
+        .expect("probe event");
+        let mut table = CoexPtiTable::VENDOR;
+        table.set(event, CoexPti::new(2).expect("PTI"));
+        table.set(wifi_events::SLICE, CoexPti::new(3).expect("PTI"));
+        let priority = probe_priority(table);
+        assert_eq!(
+            (priority.packet.value(), priority.scheduler.value()),
+            (2, 2)
+        );
+        table.set(event, CoexPti::new(9).expect("PTI"));
+        let priority = probe_priority(table);
+        assert_eq!(
+            (priority.packet.value(), priority.scheduler.value()),
+            (9, 3)
+        );
+    }
+}

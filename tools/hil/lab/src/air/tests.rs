@@ -75,3 +75,26 @@ fn tshark_decodes_a_radiotap_probe_and_ack_from_memory() {
     assert_eq!(frames[0].ssid, b"Lab");
     assert_eq!(acknowledged_probes(&frames, TARGET, AP), 1);
 }
+
+#[test]
+fn tshark_zero_length_wildcard_ssid_is_a_valid_probe() {
+    let mut pcap = Vec::new();
+    for word in [0xa1b2c3d4u32, 0x00040002, 0, 0, 65535, 127] {
+        pcap.extend_from_slice(&word.to_le_bytes());
+    }
+    let mut frame = vec![
+        0, 0, 14, 0, 12, 0, 0, 0, 2, 0, 0xa8, 9, 0xa0, 0, 0x40, 0, 0, 0,
+    ];
+    frame.extend_from_slice(&[255; 6]);
+    frame.extend_from_slice(&TARGET);
+    frame.extend_from_slice(&[255; 6]);
+    frame.extend_from_slice(&[0, 0, 0, 0, 1, 1, 2]);
+    for word in [1u32, 0, frame.len() as u32, frame.len() as u32] {
+        pcap.extend_from_slice(&word.to_le_bytes());
+    }
+    pcap.extend_from_slice(&frame);
+    let frames = decode(&pcap).expect("wildcard SSID decode");
+    assert_eq!(frames.len(), 1);
+    assert!(frames[0].ssid.is_empty());
+    assert_eq!(frames[0].subtype, 4);
+}

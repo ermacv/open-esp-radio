@@ -166,7 +166,7 @@ async fn reporting(
     mut console: UsbSerialJtag<'static, esp_hal::Blocking>,
     receiver: AffineSpscReceiver<'static, report::Report, 1>,
 ) {
-    let result = loop {
+    let mut result = loop {
         if let Ok(report) = receiver.try_receive() {
             break report;
         }
@@ -175,6 +175,11 @@ async fn reporting(
             .wait_for(oer_time::Duration::from_millis(10))
             .await;
     };
+    result.irq_free =
+        oer_espressif_staged_runtime::stacks::current_hart_interrupt_stack_free_bytes();
+    if result.irq_free < 4096 {
+        result.errors += 1;
+    }
     let _ = result.print(&mut console);
 }
 fn park() -> ! {
