@@ -11,9 +11,7 @@
 //!   [`EpochExhausted`](timing::EpochExhausted) when a result leaves the radio
 //!   epoch;
 //! - [`receive`]: authentication of received data channel PDUs before Link
-//!   Layer and Host dispatch;
-//! - [`diagnostic`]: the codec of the vendor HCI command `0xFC01` that armed
-//!   one received-MIC corruption, and the corruption itself.
+//!   Layer and Host dispatch.
 //!
 //! No Controller core serves HCI commands or runs the Link Layer roles over a
 //! radio request port yet.
@@ -21,6 +19,5 @@
 #[cfg(test)]
 extern crate std;
 
-pub mod diagnostic;
 pub mod receive;
 pub mod timing;

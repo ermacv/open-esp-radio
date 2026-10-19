@@ -2554,7 +2554,6 @@ dependencies = [
 name = "oer-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
- "bt-hci",
  "oer-bluetooth-le-ll",
  "oer-bluetooth-le-radio",
 ]
