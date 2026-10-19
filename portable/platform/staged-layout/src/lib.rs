@@ -6,7 +6,7 @@
 //! A staged image boots in two stages: the ESP-IDF second-stage bootloader
 //! loads a Flash-resident bootstrap, which initializes PSRAM, copies the
 //! separately linked stage-two runtime there and enters it. The bootstrap,
-//! the stage-two runtime, the shared linker scripts (`firmware/platform/espressif/linker`)
+//! the stage-two runtime, the shared linker scripts (`portable/platform/staged-layout/linker`)
 //! and the host image packer share these definitions; each chip's platform
 //! (`platform/<chip>/layout`) states its address map as a [`Layout`].
 //!

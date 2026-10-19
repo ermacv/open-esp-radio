@@ -1,7 +1,7 @@
 //! Cargo build-script helpers that bind a chip's [`Layout`] to the shared
 //! linker scripts.
 //!
-//! The scripts under `firmware/platform/espressif/linker` read every address, size and
+//! The scripts under `portable/platform/staged-layout/linker` read every address, size and
 //! header constant through `--defsym` symbols, so the linked images, the
 //! bootstrap and the host auditor share one definition. The chip's own
 //! `linker` directory holds only its ROM symbol script
@@ -12,9 +12,9 @@ extern crate std;
 use crate::{Layout, stage_two};
 use std::{path::Path, println};
 
-/// The shared linker scripts, beside this crate.
+/// The shared linker scripts, in this crate.
 fn shared_linker_dir() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/platform/espressif/linker")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("linker")
 }
 
 fn defsym(bin: &str, name: &str, value: u32) {

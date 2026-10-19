@@ -7,12 +7,18 @@ use std::path::Path;
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let root = root.canonicalize().expect("the repository root exists");
+    // A chip's platform directory appears below `portable/`.
     println!(
         "cargo::rerun-if-changed={}",
-        root.join("firmware/platform").display()
+        root.join("portable").display()
     );
     let mut entries = String::new();
     for profile in oer_chip_profile::Profile::all(&root).expect("the chip profiles load") {
+        println!(
+            "cargo::rerun-if-changed={}",
+            root.join(oer_chip_profile::platform_dir(&profile.id))
+                .display()
+        );
         let agent = root.join(profile.hil_agent_directory());
         let manifest = agent.join("Cargo.toml");
         println!("cargo::rerun-if-changed={}", agent.display());

@@ -9,9 +9,9 @@ test protocol, radio role, executor or network-stack dependency.
 | `bootstrap` | Flash entry, PSRAM initialization, image validation/CRC, relocation, Flash tuning and non-returning handoff |
 | `runtime` | Stage-two entry, SRAM section initialization, mapping adoption, vector handoff, per-core interrupt stacks and the image's one panic entry |
 | `layout` | Address map, the stage-two placement and the stage-two header/checksum shared with the host packer and auditor |
-| `linker` | Semantic code, data, DMA and stack sections over the `layout` symbols |
-| `partitions` | Application partition layout |
-| `stack.toml` | Stack policy: each stack's root function, storage and reserve, the move limit and the frame-coverage review (`stack-coverage.toml`) |
+| `linker` (`portable/platform/staged-layout/linker`, `portable/platform/esp32s31-layout/linker`) | Semantic code, data, DMA and stack sections over the `layout` symbols |
+| `portable/esp32s31/platform/partitions` | Application partition layout |
+| `portable/esp32s31/platform/stack.toml` | Stack policy: each stack's root function, storage and reserve, the move limit and the frame-coverage review (`stack-coverage.toml`) |
 
 The runtime owns every image's `#[panic_handler]`. It writes a bounded record
 of the panic to `.rtc_fast.persistent` without formatting (the end of the

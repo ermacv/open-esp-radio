@@ -63,7 +63,7 @@ way.
 Each chip's `platform/<chip>/chip.toml` `[flash]` table
 ([`oer-chip-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
 bootloader, partition-table, application and OTA-data offsets and the
-partition table CSVs (`platform/esp32s31/partitions/`). The flash map is
+partition table CSVs (`portable/esp32s31/platform/partitions/`). The flash map is
 host data: no target code reads it (the bootstrap finds its payload through
 the flash MMU), and the esp32c5, whose partition table comes from its
 ESP-IDF build, has no layout crate. The staged pipeline refuses a flash map
@@ -159,12 +159,12 @@ toolchain `rust-toolchain.toml` pins. Images build without frame pointers;
 frame-pointer walk.
 
 The stage-two header, checksum and address map come from the
-[platform layout](../../../platform/espressif/staged-layout/README.md), which application
+[platform layout](../../../portable/platform/staged-layout/README.md), which application
 build scripts also use to configure the linker.
 
 The staged runtime's placement audit (`staged::placement`) checks the
 PSRAM/SRAM placement contract of the
-[platform layout](../../../platform/espressif/staged-layout/README.md) and that each
+[platform layout](../../../portable/platform/staged-layout/README.md) and that each
 PSRAM trap and interrupt entry first swaps to its SRAM stack; the caller's
 audit runs beside it.
 

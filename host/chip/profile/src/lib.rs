@@ -1,7 +1,7 @@
 //! The chips this repository supports, from their tracked profiles, and
 //! the stack policy of their image families ([`policy`]).
 //!
-//! Every supported chip has `firmware/platform/<id>/chip.toml`, holding only what
+//! Every supported chip has `portable/<id>/platform/chip.toml`, holding only what
 //! differs between chips and cannot be derived from the id: the chip family,
 //! the Rust target, the boot flow, the chip name `espflash` uses, the silicon revisions and
 //! the chip's properties (radio bands, Bluetooth modes, cores).
@@ -20,10 +20,20 @@ use serde::{Deserialize, Serialize};
 
 /// Format of `chip.toml`.
 pub const SCHEMA: u32 = 1;
-/// Directory of the platforms, relative to the repository root.
-const PLATFORM: &str = "firmware/platform";
+/// The root of the portable packages, whose `<id>/platform` directories hold
+/// each chip's platform data.
+const PORTABLE: &str = "portable";
+/// The platform data directory of a chip, below `portable/<id>/`.
+const PLATFORM: &str = "platform";
 /// The profile file in a chip's platform directory.
 const PROFILE: &str = "chip.toml";
+
+/// The platform data directory of chip `id` (`portable/<id>/platform`),
+/// relative to the root: its profile, stack policy, partitions and ROM
+/// function summaries.
+pub fn platform_dir(id: &str) -> PathBuf {
+    Path::new(PORTABLE).join(id).join(PLATFORM)
+}
 
 pub mod policy;
 
@@ -723,11 +733,11 @@ impl Profile {
         Path::new("firmware/hil").join(&self.id).join("stack.toml")
     }
 
-    /// The chip's own stack policy (`firmware/platform/<id>/stack.toml`), relative
+    /// The chip's own stack policy (`portable/<id>/platform/stack.toml`), relative
     /// to the root: the move limit and reserves of every image of the chip,
     /// which the HIL policy extends.
     pub fn stack_policy(&self) -> PathBuf {
-        Path::new(PLATFORM).join(&self.id).join("stack.toml")
+        platform_dir(&self.id).join("stack.toml")
     }
 
     /// The input sections the chip's staged boot zeroes, comma separated,
@@ -766,9 +776,9 @@ pub fn valid_identifier(id: &str) -> bool {
 /// Ids of the chips with a profile, sorted.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
     let mut ids = Vec::new();
-    for entry in std::fs::read_dir(root.join(PLATFORM))? {
+    for entry in std::fs::read_dir(root.join(PORTABLE))? {
         let entry = entry?;
-        if entry.path().join(PROFILE).is_file() {
+        if entry.path().join(PLATFORM).join(PROFILE).is_file() {
             ids.push(entry.file_name().to_string_lossy().into_owned());
         }
     }
@@ -777,7 +787,7 @@ pub fn supported(root: &Path) -> Result<Vec<String>> {
 }
 
 fn profile_path(root: &Path, id: &str) -> PathBuf {
-    root.join(PLATFORM).join(id).join(PROFILE)
+    root.join(platform_dir(id)).join(PROFILE)
 }
 
 #[cfg(test)]
@@ -821,7 +831,7 @@ mod tests {
     #[test]
     fn an_unknown_chip_names_the_supported_ones() {
         let root = tempfile::tempdir().unwrap();
-        let platform = root.path().join(PLATFORM).join("esp32x9");
+        let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
         std::fs::write(
             platform.join(PROFILE),
@@ -829,7 +839,7 @@ mod tests {
              boot = \"staged\"\nespflash-chip = \"esp32x9\"\nrevisions = [\"rev0\"]\n",
         )
         .unwrap();
-        std::fs::create_dir_all(root.path().join(PLATFORM).join("no-profile")).unwrap();
+        std::fs::create_dir_all(root.path().join(platform_dir("no-profile"))).unwrap();
         let error = Profile::load(root.path(), "esp32s2")
             .unwrap_err()
             .to_string();
@@ -840,7 +850,7 @@ mod tests {
     #[test]
     fn a_profile_must_name_its_own_chip() {
         let root = tempfile::tempdir().unwrap();
-        let platform = root.path().join(PLATFORM).join("esp32x9");
+        let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
         std::fs::write(
             platform.join(PROFILE),
@@ -854,7 +864,7 @@ mod tests {
     #[test]
     fn a_profile_must_name_a_valid_family() {
         let root = tempfile::tempdir().unwrap();
-        let platform = root.path().join(PLATFORM).join("esp32x9");
+        let platform = root.path().join(platform_dir("esp32x9"));
         std::fs::create_dir_all(&platform).unwrap();
         let profile = |family: &str| {
             format!(

@@ -984,11 +984,10 @@ fn a_summary_the_image_does_not_reach_is_unused() {
 
 #[test]
 fn the_platform_rom_summaries_parse() {
-    let platforms =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/platform");
+    let portable = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../portable");
     let mut parsed = 0;
-    for platform in std::fs::read_dir(platforms).unwrap() {
-        let path = platform.unwrap().path().join("linker/rom/functions.toml");
+    for chip in std::fs::read_dir(portable).unwrap() {
+        let path = chip.unwrap().path().join("platform/rom-functions.toml");
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };

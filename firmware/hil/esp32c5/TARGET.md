@@ -2,7 +2,7 @@
 
 This workspace builds the esp32c5's HIL runtime, `oer-firmware-hil-esp32c5`,
 for `riscv32imac-unknown-none-elf`, as the stage two of the
-[staged boot](../../../platform/esp32c5/README.md): the platform bootstrap
+[staged boot](../../../chips/platform/esp32c5-board/README.md): the platform bootstrap
 copies it into PSRAM and enters it. It runs the scheduler-free Embassy
 executor of `oer-exec-executor` on the image's interrupt table.
 

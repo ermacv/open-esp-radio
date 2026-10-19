@@ -1,73 +1,61 @@
-# The facts of the ESP32-C5 that host tools cannot derive from the chip id.
-# Paths follow the id by convention: verification/<id>, registers/<id>,
-# hil/targets/<id>, target/hil/<id>.
+# The facts of the ESP32-S31 that host tools cannot derive from the chip id.
+# Paths follow the id by convention, such as registers/<id>.
 schema = 1
-id = "esp32c5"
+id = "esp32s31"
 # The family whose shared code the chip uses (`platform = "family"` packages).
 family = "espressif"
-rust-target = "riscv32imac-unknown-none-elf"
-# The ROM loads the ESP-IDF bootloader, which loads firmware/bootstrap/esp32c5;
+rust-target = "riscv32imafc-unknown-none-elf"
+# The ROM loads the ESP-IDF bootloader, which loads firmware/bootstrap/esp32s31;
 # the bootstrap stages the runtime into PSRAM.
 boot = "staged"
-espflash-chip = "esp32c5"
-revisions = ["rev100"]
+espflash-chip = "esp32s31"
+revisions = ["rev0"]
 
 # What the chip has: its radio bands, Bluetooth modes, IEEE 802.15.4 and
 # cores. Differences of address or layout belong in the register model.
 [properties]
-# Dual-band: 2.4 GHz and 5 GHz.
-wifi-bands = ["2g4", "5g"]
-# LE-only controller in the vendor Bluetooth library.
-bluetooth = ["le"]
+wifi-bands = ["2g4"]
+# BTDM controller (BR/EDR and LE) in the vendor Bluetooth library.
+bluetooth = ["le", "br-edr"]
 ieee802154 = true
-cores = 1
+cores = 2
 
 # Where every image lies in flash. The image pipeline encodes the ESP-IDF
 # bootloader, the partition table and the OTA selection for these offsets at
 # build time; a flash writes the bundle there. `application` and `otadata`
 # are the partitions of `partitions` (the image pipeline holds them to it).
 [flash]
-# SOURCE(esp32c5): ESP-IDF 4d59230d `components/esp_rom/esp32c5/esp_rom_caps.h:40`
-# (the ROM loads the second-stage bootloader from flash offset 0x2000).
 bootloader = 0x2000
 partition-table = 0x8000
 application = 0x10000
 otadata = 0xd000
-partitions = "firmware/platform/esp32c5/partitions/applications.csv"
-# The application image's header: the fastest settings an ESP image header
-# holds for the N16R8 module's 16-MiB quad flash, QIO at 80 MHz (ESP-IDF's
-# 120-MHz option also writes 80m and tunes at run time); the ROM reads the
-# bootloader in DIO.
-# SOURCE(esp32c5): ESP-IDF 4d59230d `components/spi_flash/esp32c5/Kconfig.flash_freq`
-# and `components/esptool_py/Kconfig.projbuild:47-60,75-82,104-109`.
+partitions = "portable/esp32s31/platform/partitions/applications.csv"
+# The application image's header: ESP-IDF's bootloader switches the board's
+# 16-MiB flash to QIO at 80 MHz before it loads the bootstrap (the bootstrap
+# then tunes 120 MHz itself). The ROM reads the bootloader in DIO.
 application-encoding = { mode = "qio", frequency-mhz = 80, size-mib = 16 }
 bootloader-mode = "dio"
-# How a written image starts: the writer leaves the ROM in download mode,
-# and a power-on reset (RTS without power control) starts the image; an RTS
-# reset out of download mode leaves the esp32c5's USB console silent.
-start = "power-on"
+# How a written image starts: the writer's hard reset.
+start = "reset"
 
 # The staged-boot address map as host tools check images against it: the
-# firmware's own copy is portable/platform/esp32c5-layout (LAYOUT), which the linker
-# scripts read. One MMU window (0x42000000..0x44000000) serves flash and
-# PSRAM: the bootstrap's flash pages in its lower half, the module's 8-MiB
-# PSRAM at the fixed start of its upper half.
+# firmware's own copy is portable/platform/esp32s31-layout (LAYOUT), which the linker
+# scripts read. Sizes describe the fitted memories.
 [memory]
 # Application-owned internal SRAM (ESP-IDF's SRAM_START..SRAM_SEG_END).
-sram = { origin = 0x40800000, length = 0x0004e5a0 }
-# The flash half of the shared cache window.
-flash-xip = { origin = 0x42000000, length = 0x01000000 }
-# The module's PSRAM where the bootstrap maps it.
-psram = { origin = 0x43000000, length = 0x00800000 }
+sram = { origin = 0x2f000000, length = 0x0007afc0 }
+# The unified 64-MiB Flash XIP instruction/data window.
+flash-xip = { origin = 0x40000000, length = 0x04000000 }
+# Cached external RAM aperture of the fitted 16-MiB PSRAM.
+psram = { origin = 0x50000000, length = 0x01000000 }
 # Stage-two code relocated to PSRAM, after the bootstrap's 64-KiB probe page.
-runtime-psram = { origin = 0x43010000, length = 0x007f0000 }
+runtime-psram = { origin = 0x50010000, length = 0x00ff0000 }
 # The runtime's task stacks lie in PSRAM.
 task-stacks = "psram"
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
-# (chips/platform/staged-runtime) installs these vectors and the stack;
-# the chip-neutral symbols are portable/platform/staged-layout
-# (interrupts.rs). One hart, no inter-processor call.
+# (chips/platform/staged-runtime) installs these vectors and stacks; the
+# chip-neutral symbols are portable/platform/staged-layout (interrupts.rs).
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
 # `Binding<Interrupt, Priority, Cpu>`: source u16 at 0, level u8 at 2, core
@@ -80,19 +68,30 @@ table-handler = 8
 vector-table-symbol = "_runtime_psram_mtvt_source"
 exception-entry-symbol = "_start_trap"
 source-table-symbol = "__EXTERNAL_INTERRUPTS"
-harts = [0]
-always-levels = []
-# The hart's dedicated SRAM interrupt stack.
+harts = [0, 1]
+# esp-hal's IPC line.
+always-levels = [1]
+# Each hart's dedicated SRAM interrupt stack.
 irq-stack-bytes = 0x8000
 irq-stack-guard-bytes = 1024
 irq-stack-margin-percent = 10
 
-# esp-hal sets a CPU line's CLIC level only while it initializes vectoring
-# (the line's level from its constant priority map), and routes a source
-# only at start-up and through the table's routing capability.
+# The only writer of the IPC callback, whose `handler` argument (`a1`) is
+# every function the IPC dispatch runs, and the functions that call it.
+[interrupts.ipc]
+post = "<esp_hal::interrupt::ipc::Ipc>::call_function"
+post-handler-argument = 1
+dispatch = [
+    "esp_hal::interrupt::ipc::implem::dispatch",
+    "esp_hal::interrupt::ipc::implem::callback_handler",
+]
+
 [[interrupts.level-writers]]
 writer = "esp_hal::interrupt::arch::cpu_int::set_priority_raw"
-contexts = ["esp_hal::interrupt::arch::init_vectoring"]
+contexts = [
+    "esp_hal::interrupt::arch::init_vectoring",
+    "esp_hal::interrupt::ipc::implem::install_core",
+]
 
 [[interrupts.level-writers]]
 writer = "esp_hal::interrupt::map_raw"
@@ -102,18 +101,22 @@ contexts = [
     "<esp_hal::interrupt::InterruptRoutes>::disable",
 ]
 
-# The mask ROM the stack analyses read: the pinned ROM ELF of the revision
-# the profile describes (knowledge/esp32c5/vendor/artifacts.toml) and the
-# reviewed function summaries of the ROM the images link
-# (firmware/platform/esp32c5/linker/rom/esp32c5-eco2.x).
+# The mask ROM the stack analyses read: the pinned ROM ELF
+# (knowledge/esp32s31/vendor/artifacts.toml), the reviewed function summaries
+# and the vendor radio ROM no product image may call into (no check reads
+# these ranges yet).
 [rom]
-elf = "rom-rev100"
-summaries = "firmware/platform/esp32c5/linker/rom/functions.toml"
+elf = "rom"
+summaries = "portable/esp32s31/platform/rom-functions.toml"
+forbidden = [
+    { name = "eco0-radio-api", start = 0x2f800bf0, end = 0x2f8016bc },
+    { name = "eco0-radio-body", start = 0x2f823c12, end = 0x2f83e6d0 },
+]
 
-# The staged runtime's placement contract (firmware/platform/espressif/linker/runtime):
-# code, data and the CPU0 task stack in PSRAM; interrupt entries, vector
-# tables, the interrupt stack, critical code and data, DMA data and the panic
-# entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
+# The staged runtime's placement contract (portable/platform/staged-layout/linker/runtime
+# script): code, data and the CPU0 task stack in PSRAM; interrupt entries,
+# vector tables, interrupt stacks, critical code and data, DMA data and the
+# panic entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
 [placement]
 name = "psram-code-psram-data-psram-stack"
 image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
@@ -125,12 +128,14 @@ range = [
     { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
     { range = ["_stack_end", "_stack_start"], region = "psram", bytes = 0x30000 },
     { range = ["__runtime_cpu0_irq_stack_bottom", "__runtime_cpu0_irq_stack_top"], region = "sram", bytes = 0x8000 },
+    { range = ["__runtime_cpu1_irq_stack_bottom", "__runtime_cpu1_irq_stack_top"], region = "sram", bytes = 0x8000 },
 ]
 symbol = [
     { name = "_start_trap", bytes = 4, region = "sram" },
     { name = "_runtime_psram_irq_entry_{n}", numbers = [1, 47], bytes = 4, region = "sram" },
     { name = "_runtime_psram_mtvt_source", bytes = 192, region = "sram" },
     { name = "_mtvt_table", bytes = 192, region = "sram" },
+    { name = "_mtvt_table2", bytes = 192, region = "sram" },
     { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
     { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
 ]
@@ -142,10 +147,10 @@ stack-swap = [
     { name = "_runtime_psram_irq_entry_{n}", numbers = [1, 47] },
 ]
 
-# The staged boot's host contract: the stage-two header the image pipeline
+# The staged boot's host contract: the stage-two header the image build
 # packs (portable/platform/staged-layout stage_two.rs) and the input sections
-# the runtime linker script zeroes (zeroed.rs), which the image linker refuses
-# initialized bytes in.
+# the runtime linker script zeroes (zeroed.rs); that none of them carries
+# initialized bytes is to be checked by `cargo fw` after the link (planned).
 [staged]
 zeroed-inputs = [
     ".dram2_uninit.bss", ".dram2_uninit.bss.*", ".dram2_uninit", ".dram2_uninit.*",
@@ -167,35 +172,22 @@ abi-version-offset = 4
 header-size-offset = 28
 crc-offset = 40
 
-# The HIL agent's graph is the source-only stack: the root lock and
-# hil/targets/esp32c5 must not pull in esp-rtos, whose scheduler and
-# interrupt bindings the staged runtime's static table replaces.
-[hil]
-forbidden-packages = ["esp-rtos"]
-
-# The chip's packages by the role the repository policies give them.
-[packages]
-generated = ["oer-esp32c5-pac-raw"]
-audited-unsafe = ["oer-esp32c5-pac"]
-closed-pac = ["oer-esp32c5-pac"]
-pac-consumers = ["oer-esp32c5-pac-raw", "oer-esp32c5-pac", "oer-esp32c5-hal"]
-
-# What the repository gate builds and audits for the chip (`cargo xtask`).
-[gate]
-release-builds = ["verification/esp32c5/hardware/register-probe"]
-target-builds = ["oer-esp32c5-pac", "oer-esp32c5-hal"]
-agent-clippy = true
-
-# The Rust probe images of the vendor comparison (firmware/probes).
+# The Rust probe images of the vendor comparison (firmware/probes),
+# in build order: the artifact role each serves. The Bluetooth probe returns
+# with its hooks (knowledge/esp32s31/open-questions.md).
 [[probe]]
 role = "rust-artifact"
-package = "oer-firmware-probes-esp32c5-radio"
+package = "oer-firmware-probes-esp32s31-radio"
 
-# Why the core last reset, which the stand reads through JTAG after a power
+[[probe]]
+role = "rust-artifact:wifi-registers"
+package = "oer-firmware-probes-esp32s31-register"
+
+# Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
-# the platform publication's (registers/esp32c5/publication/platform.toml), with
+# the platform publication's (registers/esp32s31/publication/platform.toml), with
 # its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
-# `components/soc/esp32c5/register/soc/lp_clkrst_reg.h`.
+# `components/soc/esp32s31/register/soc/lp_clkrst_reg.h`.
 [reset-cause]
-field = "LP_CLKRST.RESET_CAUSE.RESET_CAUSE"
+field = "LP_AON_CLKRST.HPCORE0_RESET_CAUSE.HPCORE0_RESET_CAUSE"
 power-on = 1

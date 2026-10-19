@@ -83,7 +83,7 @@ pub mod build {
     use std::path::Path;
 
     fn linker_dir() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/platform/esp32c5/linker")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("linker")
     }
 
     /// Link binary `bin` as a stage-two runtime of this board.
