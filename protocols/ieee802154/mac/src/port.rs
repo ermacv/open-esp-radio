@@ -1,7 +1,7 @@
 //! The IEEE 802.15.4 radio values every backend shares: its capabilities
 //! ([`Ieee802154Capabilities`]) and the radio configuration
-//! ([`RadioSetting`]): the state the backend reads
-//! from its own interrupt context (MAC keys and frame counters, the CSL
+//! ([`RadioSettings`](crate::owner::RadioSettings)): the state the backend
+//! reads from its own interrupt context (MAC keys and frame counters, the CSL
 //! receiver, the enhanced-ACK generator), and the transmit power and
 //! clear-channel assessment the next operation publishes. The port itself
 //! is the owner shape of [`crate::owner`].
@@ -9,15 +9,9 @@
 pub use oer_radio_port::{CancelError, ClockError};
 pub use oer_radio_port::{ClockInfo, EventsLost, Poisoned, PortResult};
 
-use crate::mac::link_metrics::ProbingInitiator;
 use crate::radio::{
     capabilities::RadioCapabilities,
-    channel::Channel,
-    command::CcaMode,
-    interface::Interface,
-    power::{
-        CcaThresholdCapability, CcaThresholdError, TransmitPowerCapability, TransmitPowerError,
-    },
+    power::{CcaThresholdCapability, TransmitPowerCapability},
 };
 
 /// What a backend supports, read before submission.
@@ -28,20 +22,19 @@ pub struct Ieee802154Capabilities {
     /// Its addressing interfaces: one without
     /// [`RadioCapabilities::MULTI_PAN`].
     pub interfaces: u8,
-    /// The transmit power it radiates, for [`RadioSetting::TransmitPowerDbm`],
-    /// [`RadioSetting::ChannelTransmitPowerDbm`] and a transmission's own
-    /// power; `None` when the power is fixed.
+    /// The transmit power it radiates, for `RadioSettings::set_transmit_power`,
+    /// `RadioSettings::set_channel_power` and a transmission's own power; `None` when the power is fixed.
     pub transmit_power: Option<TransmitPowerCapability>,
     /// The clear-channel assessment energy thresholds it accepts
-    /// ([`RadioSetting::CcaThresholdDbm`]); `None` when it has none.
+    /// (`RadioSettings::set_cca_threshold`); `None` when it has none.
     pub cca_threshold: Option<CcaThresholdCapability>,
     /// Its receive sensitivity in dBm: the weakest signal it receives.
     pub receive_sensitivity_dbm: i8,
-    /// The timing a CSL peer relies on ([`RadioSetting::Csl`]); `None`
+    /// The timing a CSL peer relies on (`RadioSettings::set_csl`); `None`
     /// when it publishes none.
     pub csl: Option<CslCapability>,
     /// The header IE bytes every enhanced ACK carries at most
-    /// ([`RadioSetting::EnhancedAckHeaderIes`]).
+    /// (`RadioSettings::set_enhanced_ack_header_ies`).
     pub enhanced_ack_header_ies: u8,
 }
 
@@ -88,93 +81,4 @@ pub struct EnhancedAckGeneration {
     /// The noise floor in dBm Link Metrics probing measures link margins
     /// from.
     pub noise_floor_dbm: i8,
-}
-
-/// A radio setting: state outside an operation.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum RadioSetting<'a> {
-    /// Replace the MAC keys of `interface` (`otPlatRadioSetMacKey`),
-    /// keeping its frame counter; an interface without keys starts from
-    /// [`MacKeys::ZEROED`](crate::MacKeys::ZEROED).
-    MacKeys {
-        /// The interface whose keys change.
-        interface: Interface,
-        /// The key index of `current`.
-        key_id: u8,
-        /// The key of key index `key_id - 1`.
-        previous: [u8; 16],
-        /// The key of key index `key_id`.
-        current: [u8; 16],
-        /// The key of key index `key_id + 1`.
-        next: [u8; 16],
-    },
-    /// Change the frame counter of `interface`; an interface without keys
-    /// starts from [`MacKeys::ZEROED`](crate::MacKeys::ZEROED).
-    FrameCounter {
-        /// The interface whose frame counter changes.
-        interface: Interface,
-        /// The change.
-        update: FrameCounterUpdate,
-    },
-    /// Forget the MAC keys of `interface`: its secured frames go out as
-    /// given and secured enhanced ACKs to its frames are refused.
-    RemoveMacKeys {
-        /// The interface whose keys go.
-        interface: Interface,
-    },
-    /// Replace the CSL receiver state.
-    Csl(CslReceiver),
-    /// Generate enhanced ACKs with the header IEs and probing initiators
-    /// set so far, or refuse every enhanced ACK (`None`), keeping them.
-    EnhancedAck(Option<EnhancedAckGeneration>),
-    /// Replace the header IEs every enhanced ACK carries; kept while
-    /// generation is off.
-    EnhancedAckHeaderIes(&'a [u8]),
-    /// Replace the Link Metrics probing initiators, most recently added
-    /// first ([`EnhAckProbing::replace`](crate::EnhAckProbing::replace));
-    /// kept while generation is off.
-    EnhancedAckProbing(&'a [ProbingInitiator]),
-    /// Set the transmit power of every channel in dBm
-    /// (`esp_ieee802154_set_txpower`, `otPlatRadioSetTransmitPower`).
-    TransmitPowerDbm(i8),
-    /// Set the transmit power of one channel in dBm
-    /// (`esp_ieee802154_set_power_with_channel`).
-    ChannelTransmitPowerDbm {
-        /// The channel whose power changes.
-        channel: Channel,
-        /// Transmit power in dBm.
-        power_dbm: i8,
-    },
-    /// Set the energy threshold of clear-channel assessment in dBm
-    /// (`esp_ieee802154_set_cca_threshold`,
-    /// `otPlatRadioSetCcaEnergyDetectThreshold`).
-    CcaThresholdDbm(i8),
-    /// Set how clear-channel assessment decides that the channel is busy
-    /// (`esp_ieee802154_set_cca_mode`); refused
-    /// [`SettingError::Unsupported`] without
-    /// [`RadioCapabilities::CLEAR_CHANNEL_ASSESSMENT`].
-    CcaMode(CcaMode),
-}
-
-/// Why the backend refused a [`RadioSetting`]; nothing changed.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum SettingError {
-    /// The setting names an interface the radio does not have.
-    UnknownInterface {
-        /// The rejected interface.
-        interface: Interface,
-        /// The radio's interface count.
-        interfaces: u8,
-    },
-    /// The header IEs exceed what an enhanced ACK carries.
-    HeaderIesTooLong {
-        /// The IE bytes the backend holds at most.
-        capacity: usize,
-    },
-    /// The transmit power was refused.
-    TransmitPower(TransmitPowerError),
-    /// The CCA threshold was refused.
-    CcaThreshold(CcaThresholdError),
-    /// The backend does not implement the setting.
-    Unsupported,
 }

@@ -74,8 +74,7 @@ pub use oer_radio_port::ClockRelation;
 pub use oer_radio_port::{Correlation, CorrelationIds};
 pub use port::{
     CancelError, ClockError, ClockInfo, CslCapability, CslReceiver, EnhancedAckGeneration,
-    EventsLost, FrameCounterUpdate, Ieee802154Capabilities, Poisoned, PortResult, RadioSetting,
-    SettingError,
+    EventsLost, FrameCounterUpdate, Ieee802154Capabilities, Poisoned, PortResult,
 };
 pub use radio::capabilities::{CapabilityBitsError, RadioCapabilities};
 pub use radio::channel::{Channel, ChannelError};
