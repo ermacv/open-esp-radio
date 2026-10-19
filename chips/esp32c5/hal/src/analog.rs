@@ -175,4 +175,44 @@ mod tests {
         };
         assert_eq!((bit(false), bit(true)), (1, 0));
     }
+
+    #[test]
+    fn modeled_configuration_writes_match_the_old_byte_packing() {
+        // Leaf, command, old mask, old shift, old logical value. These are
+        // the pre-model configuration expressions, exercised through the HAL.
+        for (leaf, index, mask, shift, old_value) in [
+            (1, 0, 0x10, 4, 0),
+            (1, 1, 0x20, 5, 1),
+            (2, 0, 0x10, 4, 0),
+            (3, 0, 0x04, 2, 1),
+            (4, 0, 0x04, 2, 0),
+            (5, 0, 0x0f, 0, 15),
+            (5, 1, 0xf0, 4, 7),
+            (5, 2, 0xf0, 4, 9),
+            (5, 3, 0x0f, 0, 15),
+            (6, 0, 0x80, 7, 1),
+            (6, 1, 0x70, 4, 4),
+            (6, 2, 0x70, 4, 4),
+            (7, 0, 0x0c, 2, 0),
+            (7, 1, 0x40, 6, 1),
+            (7, 2, 0x08, 3, 1),
+            (7, 3, 0x20, 5, 1),
+            (8, 0, 0x30, 4, 3),
+            (8, 1, 0xf8, 3, 31),
+            (8, 2, 0x3c, 2, 15),
+            (9, 0, 0x0f, 0, 15),
+        ] {
+            let command = LEAVES[leaf].command(index).expect("configuration command");
+            let Some(ConfigurationCommand::Modify(field, value)) = configuration_command(command)
+            else {
+                panic!("expected a masked analog write");
+            };
+            for raw in 0..=u8::MAX {
+                assert_eq!(
+                    field.insert(raw, value),
+                    Some((raw & !mask) | (old_value << shift))
+                );
+            }
+        }
+    }
 }

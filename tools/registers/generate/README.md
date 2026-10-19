@@ -101,7 +101,10 @@ word layout a `#[repr(C, align(N))]` type of volatile cells with `zeroed`,
 and `write` of a value type, which has `from_bits`, `bits`, a getter per
 field and a `with_*` builder (`Option<Self>` when the value may not fit);
 per byte layout a decoder over `&[u8; N]` with a value type per range and a
-getter per field. When an address field exists it also gains the typed
+getter per field; a byte layout with CPU-written fields also gains a writer
+over `&mut [u8; N]` (`set_<range>` and the range getter) and `from_bits` and
+`with_*` builders on the ranges the CPU writes, never on a hardware-written
+field. When an address field exists it also gains the typed
 addresses of the DMA region: `DmaWindowAddress` for a buffer and
 `DmaRef<L>` for a layout placed there (the sealed `DmaLayout`), both with an
 `unsafe` constructor only `oer_esp32s31_hal::dma_address` calls. An address

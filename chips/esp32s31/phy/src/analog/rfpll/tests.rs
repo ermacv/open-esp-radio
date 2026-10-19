@@ -460,3 +460,47 @@ fn cap_search_averages_programmed_codes_below_zero() {
     );
     assert!(outcome.final_cap <= 0x1ff);
 }
+
+#[test]
+fn modeled_sdm_split_matches_the_old_packing() {
+    for frequency in [0_u16, 2400, 2484, 4000, 4001, 5000, u16::MAX] {
+        for selector in [0_u8, 1, 2, 3, 4, u8::MAX] {
+            for offset in [0_u8, 1, 127, u8::MAX] {
+                let divisor = match selector.wrapping_sub(1) {
+                    0 => 26_u64,
+                    1 => 32,
+                    2 => 48,
+                    _ => 40,
+                };
+                let scaled_offset = ((u32::from(offset).wrapping_shl(18) as i32) / 1_000) as u32;
+                let scaled = u32::from(frequency)
+                    .wrapping_shl(18)
+                    .wrapping_add(scaled_offset);
+                let (shift, first_divisor) = if frequency > 4_000 { (5, 27) } else { (3, 3) };
+                let encoded = (((u64::from(scaled) << shift) / first_divisor / divisor) as u32)
+                    .wrapping_add(0xff00_0000);
+                let old = [
+                    (encoded & 7) as u8,
+                    (encoded >> 3) as u8,
+                    (encoded >> 11) as u8,
+                    (encoded >> 19) as u8,
+                ];
+                assert_eq!(
+                    calculate_rfpll_sdm(frequency, selector, offset).bytes(),
+                    old
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn modeled_capacitor_split_matches_the_old_packing() {
+    for code in 0..=super::RfpllCapacitorCode::MAX {
+        let code = super::RfpllCapacitorCode::new(code).expect("bounded code");
+        assert_eq!(
+            [code.low_byte(), code.high_bit()],
+            [code.get() as u8, (code.get() >> 8) as u8]
+        );
+    }
+}

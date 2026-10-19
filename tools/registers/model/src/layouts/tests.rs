@@ -147,6 +147,26 @@ naming = "descriptive"
 
 /// A reviewed owned byte layout: a signed byte, a two-byte range with two
 /// fields and a four-byte word.
+const CPU_HEAD: &str = r#"schema = 1
+
+[layout]
+name = "HEAD"
+description = "The word the fixture CPU fills in before a frame."
+size = 8
+align = 1
+
+[[layout.bytes]]
+name = "FLAGS"
+offset = 4
+size = 4
+access = "owned"
+fields = [
+    { name = "READY", bits = "24", writer = "cpu" },
+    { name = "STATE", bits = "7:4", writer = "cpu" },
+    { name = "DONE", bits = "25", writer = "hardware" },
+]
+"#;
+
 const PREFIX: &str = r#"schema = 1
 
 [layout]
@@ -505,6 +525,34 @@ fn a_byte_layout_renders_a_fixed_size_decoder() {
     assert!(
         !rust.contains("DMA_WINDOW"),
         "only named regions are rendered"
+    );
+}
+
+#[test]
+fn a_cpu_written_byte_layout_renders_a_typed_writer() {
+    let mut text = CPU_HEAD.to_owned() + &complete_review("HEAD");
+    for entity in [
+        "HEAD.FLAGS",
+        "HEAD.FLAGS.READY",
+        "HEAD.FLAGS.STATE",
+        "HEAD.FLAGS.DONE",
+    ] {
+        text += &named_review(entity);
+    }
+    let model = load(&[("prefix.toml", &text)]).unwrap();
+    let rust = super::render(model.layouts(), &regions()).unwrap();
+    for item in [
+        "pub struct HeadMut<'a> {\nbytes: &'a mut [u8; 8],",
+        "pub fn set_flags(&mut self, value: HeadFlags)",
+        "pub const fn from_bits(bits: u32) -> Self { Self(bits) }",
+        "pub const fn with_ready(self, value: bool) -> Self",
+        "pub const fn with_state(self, value: u8) -> Option<Self>",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    assert!(
+        !rust.contains("with_done"),
+        "a hardware-written field is read, never built"
     );
 }
 

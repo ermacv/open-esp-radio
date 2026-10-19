@@ -167,3 +167,14 @@ fn sample_step_rejects_a_non_sample_completion() {
         Err(PhyTemperatureTransitionError::WrongCompletion)
     );
 }
+
+#[test]
+fn modeled_dac_decode_preserves_the_old_masked_transition() {
+    for raw in 0..=u8::MAX {
+        let mut modeled = PhyTemperatureTransition::new();
+        let mut old = PhyTemperatureTransition::new();
+        complete_dac_read(&mut modeled, raw);
+        complete_dac_read(&mut old, raw & 0x0f);
+        assert_eq!(modeled.action(), old.action());
+    }
+}

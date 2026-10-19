@@ -100,3 +100,21 @@ fn both_descriptors_have_the_same_geometry() {
         WifiTxDmaDescriptor::PLACEMENT
     );
 }
+
+#[test]
+fn the_tx_metadata_head_sets_only_the_container_bit() {
+    use oer_esp32s31_pac::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+
+    let mut bytes = [0x1c, 0x00, 0x00, 0x00];
+    let mut head = WifiTxMetadataHeadMut::new(&mut bytes);
+    let control = head.control().with_he_smpdu(true);
+    head.set_control(control);
+    assert!(head.view().control().he_smpdu());
+    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x01]);
+    assert_eq!(bytes.len(), WifiTxMetadataHead::SIZE);
+
+    let mut head = WifiTxMetadataHeadMut::new(&mut bytes);
+    let control = head.control().with_he_smpdu(false);
+    head.set_control(control);
+    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x00]);
+}

@@ -1,0 +1,56 @@
+schema = 1
+
+[layout]
+name = "PHY_RFPLL_CAPACITOR_CODE"
+description = "Nine-bit RFPLL capacitor code split between its low byte and the high analog-register bit."
+size = 2
+align = 1
+
+[[layout.bytes]]
+name = "CODE"
+offset = 0
+size = 2
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "LOW"
+bits = "7:0"
+writer = "cpu"
+description = "Low capacitor byte."
+
+[[layout.bytes.fields]]
+name = "HIGH"
+bits = "15:8"
+writer = "cpu"
+description = "Unmasked high byte of the ROM code carrier; admitted nine-bit codes use only its low bit."
+
+[[review]]
+entity = "PHY_RFPLL_CAPACITOR_CODE"
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_RFPLL_CAPACITOR_CODE.CODE"
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_RFPLL_CAPACITOR_CODE.CODE.LOW"
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_RFPLL_CAPACITOR_CODE.CODE.HIGH"
+sources = ["ROM_REV0_PHY_RFPLL_VALUE_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

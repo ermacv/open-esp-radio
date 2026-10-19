@@ -12,6 +12,8 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
+use crate::generated::{PhyI2cField, PhyI2cReadMask, phy_i2c_fields as fields};
 use crate::svd;
 
 /// One of the two analog-register command hosts.
@@ -34,13 +36,6 @@ pub struct PhyI2cBlock {
 const FIRST_BLOCK: u8 = 0x61;
 #[cfg(any(test, feature = "test-support", oer_probe))]
 const LAST_BLOCK: u8 = 0x6f;
-
-/// `CSWTCH.81`: the one-hot read-mask quarter of blocks 0x61 to 0x6F.
-#[cfg(any(test, feature = "test-support", oer_probe))]
-const READ_MASK_QUARTERS: [u16; 15] = [
-    0x0040, 0x0000, 0x0004, 0x0000, 0x0400, 0x0020, 0x0001, 0x0008, 0x0080, 0x0010, 0x0002, 0x0800,
-    0x0100, 0x0200, 0x1000,
-];
 
 /// Blocks 0x63 to 0x6E that `phy_get_i2c_hostid_` assigns to host 1, as bit
 /// `block - 0x63`.
@@ -72,11 +67,25 @@ impl PhyI2cBlock {
         }
     }
 
-    /// Low 24 bits of the complemented read mask `phy_chip_i2c_readReg_org`
-    /// publishes for the block as called; the high byte is 0xFF.
-    pub const fn read_mask_complement_low(self) -> u32 {
-        let mask = (READ_MASK_QUARTERS[(self.code - FIRST_BLOCK) as usize] as u32) << 2;
-        !mask & 0x00ff_ffff
+    /// The complemented one-hot read mask `phy_chip_i2c_readReg_org`
+    /// publishes for the block as called.
+    pub const fn read_mask(self) -> PhyI2cReadMask {
+        match self.code {
+            0x61 => PhyI2cReadMask::Block61,
+            0x63 => PhyI2cReadMask::Block63,
+            0x65 => PhyI2cReadMask::Block65,
+            0x66 => PhyI2cReadMask::Block66,
+            0x67 => PhyI2cReadMask::Block67,
+            0x68 => PhyI2cReadMask::Block68,
+            0x69 => PhyI2cReadMask::Block69,
+            0x6a => PhyI2cReadMask::Block6A,
+            0x6b => PhyI2cReadMask::Block6B,
+            0x6c => PhyI2cReadMask::Block6C,
+            0x6d => PhyI2cReadMask::Block6D,
+            0x6e => PhyI2cReadMask::Block6E,
+            0x6f => PhyI2cReadMask::Block6F,
+            _ => PhyI2cReadMask::Unselected,
+        }
     }
 
     /// The block code the command carries: both leaves address block 0x65
@@ -194,7 +203,17 @@ impl PhyI2cInitializationInputs {
             11 => ((0x6b, 0x8, 0xfd), (0x67, 0xc, self.parameter_f7)),
             12 => ((0x6b, 0x4, 0xac), (0x67, 0x7, self.parameter_f6)),
             13 => (
-                (0x6e, 0x5, ((self.parameter_416 >> 2) as u8) | 0x40),
+                (
+                    0x6e,
+                    0x5,
+                    crate::generated::layouts::PhyI2cCommandWord::from_bits(
+                        crate::generated::PhyI2cInitializationHighCommand::compose(
+                            self.parameter_416,
+                        )
+                        .get(),
+                    )
+                    .data(),
+                ),
                 (0x67, 0x9, clamp(self.parameter_f8, 10, 60)),
             ),
             14 => ((0x6e, 0x7, 0x63), (0x67, 0xb, self.parameter_f6)),
@@ -206,7 +225,17 @@ impl PhyI2cInitializationInputs {
             20 => ((0x6e, 0x11, 0x73), (0x67, 0xf, self.parameter_fc)),
             21 => ((0x6e, 0x4, 0x47), (0x67, 0x11, self.parameter_fc)),
             22 => (
-                (0x6e, 0xc, ((self.parameter_416 << 4) as u8) & 0x30),
+                (
+                    0x6e,
+                    0xc,
+                    crate::generated::layouts::PhyI2cCommandWord::from_bits(
+                        crate::generated::PhyI2cInitializationLowCommand::compose(
+                            self.parameter_416,
+                        )
+                        .get(),
+                    )
+                    .data(),
+                ),
                 (0x67, 0x13, self.parameter_fa),
             ),
             23 => ((0x6e, 0xf, 0x47), (0x67, 0x15, self.parameter_fa)),
@@ -327,17 +356,12 @@ impl PhyI2cSar2Code {
 impl PhyI2cConfiguration {
     /// Command `index`, or `None` after the last.
     pub const fn command(self, index: usize) -> Option<PhyI2cConfigurationCommand> {
-        const fn modify(
-            block: u8,
-            register: u8,
-            msb: u8,
-            lsb: u8,
-            value: u8,
-        ) -> PhyI2cConfigurationCommand {
+        const fn modify(field: PhyI2cField, value: u8) -> PhyI2cConfigurationCommand {
+            let mask = field.replace(0, u8::MAX);
             PhyI2cConfigurationCommand::Modify {
-                address: PhyI2cAddress::new(PhyI2cBlock { code: block }, register),
-                msb,
-                lsb,
+                address: PhyI2cAddress::new(PhyI2cBlock { code: field.bank() }, field.register()),
+                msb: 7 - mask.leading_zeros() as u8,
+                lsb: mask.trailing_zeros() as u8,
                 value,
             }
         }
@@ -346,21 +370,27 @@ impl PhyI2cConfiguration {
                 PhyI2cAddress::new(PhyI2cBlock { code: 0x6a }, 1),
                 0x7f,
             ),
-            (Self::CrystalRegisters, 0) => modify(0x61, 8, 4, 4, 0),
-            (Self::CrystalRegisters, 1) => modify(0x61, 7, 5, 5, 1),
-            (Self::DacRate, 0) => modify(0x66, 4, 4, 4, 0),
-            (Self::AdcRate(rate), 0) => modify(0x66, 4, 2, 2, if rate { 0 } else { 1 }),
-            (Self::BiasRegisters, 0) => modify(0x6a, 0, 3, 0, 0xf),
-            (Self::BiasRegisters, 1) => modify(0x6a, 1, 7, 4, 7),
-            (Self::BiasRegisters, 2) => modify(0x6a, 0, 7, 4, 9),
-            (Self::BiasRegisters, 3) => modify(0x6a, 1, 3, 0, 0xf),
-            (Self::RcCalibration(arguments), 0) => modify(0x6b, 0x11, 5, 4, arguments.first),
-            (Self::RcCalibration(arguments), 1) => modify(0x6b, 0x0f, 7, 3, arguments.second),
-            (Self::RcCalibration(arguments), 2) => modify(0x6b, 0x13, 5, 2, arguments.third),
-            (Self::FilterCapacitors(_), 0) => modify(0x67, 0x1d, 3, 2, 0),
-            (Self::FilterCapacitors(_), 1) => modify(0x67, 5, 6, 6, 1),
-            (Self::FilterCapacitors(_), 2) => modify(0x67, 5, 3, 3, 1),
-            (Self::FilterCapacitors(_), 3) => modify(0x67, 5, 5, 5, 1),
+            (Self::CrystalRegisters, 0) => modify(fields::XTAL_REGISTER_8_CONTROL, 0),
+            (Self::CrystalRegisters, 1) => modify(fields::XTAL_REGISTER_7_CONTROL, 1),
+            (Self::DacRate, 0) => modify(fields::DAC_RATE, 0),
+            (Self::AdcRate(rate), 0) => modify(fields::ADC_RATE, if rate { 0 } else { 1 }),
+            (Self::BiasRegisters, 0) => modify(fields::BIAS_REGISTER_0_LOW, 0xf),
+            (Self::BiasRegisters, 1) => modify(fields::BIAS_REGISTER_1_HIGH, 7),
+            (Self::BiasRegisters, 2) => modify(fields::BIAS_REGISTER_0_HIGH, 9),
+            (Self::BiasRegisters, 3) => modify(fields::BIAS_REGISTER_1_LOW, 0xf),
+            (Self::RcCalibration(arguments), 0) => {
+                modify(fields::RC_CALIBRATION_FIRST, arguments.first)
+            }
+            (Self::RcCalibration(arguments), 1) => {
+                modify(fields::RC_CALIBRATION_SECOND, arguments.second)
+            }
+            (Self::RcCalibration(arguments), 2) => {
+                modify(fields::RC_CALIBRATION_THIRD, arguments.third)
+            }
+            (Self::FilterCapacitors(_), 0) => modify(fields::FILTER_REGISTER_1D_CONTROL, 0),
+            (Self::FilterCapacitors(_), 1) => modify(fields::FILTER_REGISTER_5_BIT_6, 1),
+            (Self::FilterCapacitors(_), 2) => modify(fields::FILTER_REGISTER_5_BIT_3, 1),
+            (Self::FilterCapacitors(_), 3) => modify(fields::FILTER_REGISTER_5_BIT_5, 1),
             (Self::FilterCapacitors(inputs), 4..=19) => {
                 let (register, value) = match index {
                     4 => (6, inputs.parameter_f5),
@@ -385,10 +415,12 @@ impl PhyI2cConfiguration {
                     value,
                 )
             }
-            (Self::PeakDetector, 0) => modify(0x67, 0x1d, 7, 7, 1),
-            (Self::PeakDetector, 1) => modify(0x67, 0x1d, 6, 4, 4),
-            (Self::PeakDetector, 2) => modify(0x67, 3, 6, 4, 4),
-            (Self::Sar2InitializationCode(code), 0) => modify(0x69, 4, 3, 0, (code.0 >> 8) as u8),
+            (Self::PeakDetector, 0) => modify(fields::PEAK_DETECTOR_ENABLE, 1),
+            (Self::PeakDetector, 1) => modify(fields::PEAK_DETECTOR_REFERENCE, 4),
+            (Self::PeakDetector, 2) => modify(fields::PEAK_DETECTOR_REGISTER_3_CONTROL, 4),
+            (Self::Sar2InitializationCode(code), 0) => {
+                modify(fields::SAR2_CODE_HIGH, code.0.to_le_bytes()[1])
+            }
             (Self::Sar2InitializationCode(code), 1) => PhyI2cConfigurationCommand::Write(
                 PhyI2cAddress::new(PhyI2cBlock { code: 0x69 }, 3),
                 code.0 as u8,
@@ -598,11 +630,7 @@ impl PhyI2cRegisters {
         if self.is_busy(host) {
             return Err(PhyI2cAccessError::Busy);
         }
-        svd::zero_based_field_write::publish_phy_i2c_read_mask(
-            self.master(),
-            address.block.read_mask_complement_low(),
-            0xff,
-        );
+        crate::generated::publish_phy_i2c_read_mask(self.master(), address.block.read_mask());
         self.publish(host, address, 0, false);
         Ok(())
     }
@@ -660,11 +688,36 @@ impl PhyI2cRegisters {
 mod tests {
     use super::*;
 
+    #[test]
+    fn modeled_initialization_payloads_match_the_old_packing() {
+        for parameter in 0..=u16::MAX {
+            let inputs = PhyI2cInitializationInputs {
+                parameter_416: parameter,
+                ..Default::default()
+            };
+            assert_eq!(
+                inputs.pair(13).expect("pair").first(),
+                (0x6e, 5, ((parameter >> 2) as u8) | 0x40)
+            );
+            assert_eq!(
+                inputs.pair(22).expect("pair").first(),
+                (0x6e, 12, ((parameter << 4) as u8) & 0x30)
+            );
+        }
+        for raw in 0..=0xfff {
+            let code = PhyI2cSar2Code::new(raw).expect("12-bit SAR code");
+            assert!(
+                matches!(PhyI2cConfiguration::Sar2InitializationCode(code).command(0),
+                Some(PhyI2cConfigurationCommand::Modify { value, .. }) if value == (raw >> 8) as u8)
+            );
+        }
+    }
+
     /// The blocks ESP-IDF's `regi2c_impl.c` names agree with the libphy
     /// tables: the same one-hot read-mask bit and the same host.
     #[test]
     fn the_public_regi2c_blocks_agree_with_the_libphy_tables() {
-        // (block, ANA_CONF1 read-mask bit, ANA_CONF2 selection bit set)
+        // (block, ANA_CONF1 read-mask bit, host 0 selected)
         for (code, mask_bit, selects_host0) in [
             (0x6a, 6, false),
             (0x66, 7, false),
@@ -673,28 +726,13 @@ mod tests {
             (0x6d, 10, true),
         ] {
             let block = PhyI2cBlock::from_vendor_abi(code).expect("reviewed block");
-            assert_eq!(
-                block.read_mask_complement_low(),
-                !(1 << mask_bit) & 0x00ff_ffff,
-                "{code:#x}"
-            );
+            assert_eq!(block.read_mask() as u32, !(1_u32 << mask_bit), "{code:#x}");
             let host = if selects_host0 {
                 PhyI2cHost::Host0
             } else {
                 PhyI2cHost::Host1
             };
             assert_eq!(block.host(), host, "{code:#x}");
-            // The reviewed host map sets exactly the selection bits of the
-            // host-0 blocks (bits 8..=12 of ANA_CONF2, field offset 4).
-            let selection = 0x19c1_u32 << 4;
-            let bit = match code {
-                0x6a => 8,
-                0x66 => 9,
-                0x61 => 10,
-                0x69 => 11,
-                _ => 12,
-            };
-            assert_eq!(selection & (1 << bit) != 0, selects_host0, "{code:#x}");
         }
     }
 
@@ -703,7 +741,7 @@ mod tests {
         let block = PhyI2cBlock::from_vendor_abi(0x62).expect("block");
         assert_eq!(block.command_code(), 0x65);
         assert_eq!(block.host(), PhyI2cHost::Host0);
-        assert_eq!(block.read_mask_complement_low(), 0x00ff_ffff);
+        assert_eq!(block.read_mask(), PhyI2cReadMask::Unselected);
         let target = PhyI2cBlock::from_vendor_abi(0x65).expect("block");
         assert_eq!(target.command_code(), 0x65);
         assert_eq!(target.host(), PhyI2cHost::Host1);

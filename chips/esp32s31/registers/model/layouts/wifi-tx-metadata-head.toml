@@ -1,0 +1,44 @@
+schema = 1
+
+[layout]
+name = "WIFI_TX_METADATA_HEAD"
+description = """
+The first word of the TX metadata that precedes a transmit frame in its
+buffer: the CPU fills it in before DMA publication."""
+size = 4
+align = 1
+
+[[layout.bytes]]
+name = "CONTROL"
+offset = 0x00
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "HE_SMPDU"
+bits = "24"
+writer = "cpu"
+description = "Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion."
+
+[[review]]
+entity = "WIFI_TX_METADATA_HEAD"
+sources = ["BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "WIFI_TX_METADATA_HEAD.CONTROL"
+sources = ["BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_METADATA_HEAD.CONTROL.HE_SMPDU"
+sources = ["BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"

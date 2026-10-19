@@ -36,7 +36,7 @@ fn rx_buffer_address_snapshot<const COUNT: usize>(
     *binding
 }
 
-const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+const RX_DESCRIPTOR_ADDRESS_LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
 
 /// The descriptors one RX arena publishes: the ring and, right after it, the
 /// reserved descriptor R.

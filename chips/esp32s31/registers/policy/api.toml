@@ -342,6 +342,13 @@ max = 0x3ffff
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
 [[bounded-domains]]
+name = "WifiDescriptorAddressLow"
+description = "The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold."
+min = 0
+max = 0xfffff
+sources = ["PROMOTED_LMAC_TX"]
+
+[[bounded-domains]]
 name = "ExternalCoexNibble"
 description = "One four-bit external coexistence priority or grant field image."
 min = 0
@@ -11263,3 +11270,51 @@ fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SF
 value = 0x01868000
 exposure = "facade"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[bitwise-composed-domains]]
+name = "PhyFrequencyCapCorrectionInput"
+description = "Exact capacitor correction publication, including signed high-byte spill. signed_code is the adjusted i16 sign-extended to u32; the final left shift makes a logical right shift equivalent to the ROM arithmetic one."
+peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
+register = "FREQUENCY_MEMORY_DATA"
+arguments = [
+    { name = "raw", value-type = "u32", retain-mask = 0xbf00, left-shift = 0x0 },
+    { name = "low", value-type = "u8", left-shift = 0x0 },
+    { name = "signed_code", value-type = "u32", right-shift = 0x8, left-shift = 0xe },
+]
+fixed-value = 0x0
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_FREQUENCY_PACKING"]
+
+[[bitwise-composed-domains]]
+name = "PhyPbusParameter002Data"
+description = "PBUS table data composed from phy_param byte 0x002 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them."
+peripheral = "PHY_MEMORY"
+register = "DATA_0"
+arguments = [
+    { name = "parameter", value-type = "u8", left-shift = 0x9 },
+]
+fixed-value = 0x801ff
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
+
+[[bitwise-composed-domains]]
+name = "PhyPbusParameter014Data"
+description = "PBUS table data composed from phy_param byte 0x014 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them."
+peripheral = "PHY_MEMORY"
+register = "DATA_0"
+arguments = [
+    { name = "parameter", value-type = "u8", left-shift = 0xc },
+]
+fixed-value = 0x48001ff
+output-mask = 0xffffffff
+sources = ["ROM_REV0_PHY_SET_PBUS_MEM"]
+
+[[flag-domains]]
+name = "WifiRxCsiControlMask"
+description = "Reviewed CSI append selector in a captured RX/CSI control image."
+
+[[flag-domains.values]]
+name = "APPEND"
+value = 0x00800000
+description = "CSI appending enabled by hal_mac_set_csi."
+sources = ["BLOB_LIBPP_HAL_MAC_SET_CSI"]

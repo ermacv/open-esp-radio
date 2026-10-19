@@ -70,3 +70,7 @@ description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a
 [[sources]]
 id = "BLOB_LIBNET80211_RAW_TX_RATE_CONFIG"
 description = "_oracles/libnet80211.a sha256 92550813de20ed0d51110dbd72b646e891a86a8a2f81fa53714ebf2ebf9c8f40; complete ieee80211_api.o esp_wifi_config_80211_tx and ieee80211_output.o esp_wifi_80211_tx. The public configuration copies a 12-byte phymode/rate/ERSU/DCM record through ic_set_80211_tx_rate_config. Only the raw 802.11 submission path reads that record: for phymode six it selects the HE descriptor branch, copies the configured rate to descriptor+0x0c and copies DCM to descriptor+0x31 bit 7. This API is therefore not an oracle for ordinary STA data rate-control packets unless a raw frame is explicitly submitted."
+
+[[sources]]
+id = "BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR"
+description = "espressif/esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 esp32s31/libnet80211.a sha256 23de6b00cbc71f4cd4a43c0c6cca4aa670154f52eb43d798668e1f1507f2425d. Complete ieee80211_output.o ieee80211_set_tx_desc, size 0x268, stores the OR of requested and existing flags at descriptor+0, branches on sign bit 31 for HE, builds priority at +4 as class << 4 | (priority & 15), replaces interface bits 19:18 of +0x10, and sets or clears its station bit 16 according to interface byte +0x154 == 4. Ordinary callers observed request bits 3 and 4; this does not assign meanings to the unmodeled node or descriptor bits."

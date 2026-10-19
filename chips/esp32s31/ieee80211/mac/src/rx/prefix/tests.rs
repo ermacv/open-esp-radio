@@ -12,10 +12,10 @@ use oer_ieee80211_mac::{
 };
 
 use super::*;
-use crate::{
-    portable::rx_meta,
-    rx::{CSI_APPEND_ENABLE, PUBLIC_HEADER_SIZE},
-};
+use crate::{portable::rx_meta, rx::PUBLIC_HEADER_SIZE};
+
+// Old register image used as the independent packing reference.
+const CSI_APPEND_ENABLE: u32 = 0x0080_0000;
 
 const DESCRIPTOR_ADDRESS: u32 = 0x2f00_1000;
 

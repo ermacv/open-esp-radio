@@ -4,6 +4,16 @@
 
 use crate::RadioPhyRegisters;
 
+/// Corrected capacitor word, retaining the ROM's signed spill into the mode.
+pub const fn frequency_cap_correction_word(raw: u32, adjusted: u16) -> u32 {
+    crate::generated::PhyFrequencyCapCorrectionInput::compose(
+        raw,
+        adjusted as u8,
+        adjusted as i16 as i32 as u32,
+    )
+    .get()
+}
+
 /// Semantic PHY-I2C number-address sequence consumed by
 /// `phy_freq_i2c_num_addr`.
 ///

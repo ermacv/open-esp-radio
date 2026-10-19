@@ -5019,17 +5019,10 @@ scope = []
 register-method = "ana_conf1"
 
 [[registers.fields]]
-svd-name = "READ_MASK_COMPLEMENT_LOW"
-method = "read_mask_complement_low"
+svd-name = "READ_MASK_COMPLEMENT"
+method = "read_mask_complement"
 bit-offset = 0
-bit-width = 24
-access = "read-write"
-
-[[registers.fields]]
-svd-name = "READ_MASK_COMPLEMENT_HIGH"
-method = "read_mask_complement_high"
-bit-offset = 24
-bit-width = 8
+bit-width = 32
 access = "read-write"
 
 [[registers]]

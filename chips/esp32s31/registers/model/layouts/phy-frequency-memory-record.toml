@@ -1,0 +1,154 @@
+schema = 1
+
+[layout]
+name = "PHY_FREQUENCY_MEMORY_RECORD"
+description = "The three words passed to phy_wr_rf_freq_mem for one frequency-table entry."
+size = 12
+align = 1
+
+[[layout.bytes]]
+name = "CAP_AND_SDM"
+offset = 0
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "CAP_LOW"
+bits = "7:0"
+writer = "cpu"
+description = "Low capacitor byte."
+
+[[layout.bytes.fields]]
+name = "CAP_HIGH_BYTE"
+bits = "15:8"
+writer = "cpu"
+description = "Complete block 0x62 register 2 payload, including the capacitor high bit and fixed configuration."
+
+[[layout.bytes.fields]]
+name = "SDM_LOW_BYTE"
+bits = "23:16"
+writer = "cpu"
+description = "Complete block 0x63 register 6 payload, combining the low SDM bits and saved upper configuration."
+
+[[layout.bytes]]
+name = "SDM_HIGH"
+offset = 4
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "LOWER_MIDDLE"
+bits = "7:0"
+writer = "cpu"
+description = "Block 0x63 register 5 payload."
+
+[[layout.bytes.fields]]
+name = "UPPER_MIDDLE"
+bits = "15:8"
+writer = "cpu"
+description = "Block 0x63 register 4 payload."
+
+[[layout.bytes.fields]]
+name = "MOST_SIGNIFICANT"
+bits = "23:16"
+writer = "cpu"
+description = "Block 0x63 register 3 payload."
+
+[[layout.bytes]]
+name = "XTAL_DUTY"
+offset = 8
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "VALUE"
+bits = "7:0"
+writer = "cpu"
+description = "Crystal duty payload."
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.CAP_LOW"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.CAP_HIGH_BYTE"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.SDM_LOW_BYTE"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH.LOWER_MIDDLE"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH.UPPER_MIDDLE"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH.MOST_SIGNIFICANT"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.XTAL_DUTY"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "PHY_FREQUENCY_MEMORY_RECORD.XTAL_DUTY.VALUE"
+sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"

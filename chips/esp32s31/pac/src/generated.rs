@@ -37,6 +37,39 @@ impl core::ops::BitOr for MacInterruptMask {
     }
 }
 
+/// Reviewed CSI append selector in a captured RX/CSI control image.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct WifiRxCsiControlMask(u32);
+
+impl WifiRxCsiControlMask {
+    /// CSI appending enabled by hal_mac_set_csi.
+    pub const APPEND: Self = Self(0x00800000);
+
+    /// Combine reviewed writable values.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Test whether all bits in `other` are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Read-only numeric image for diagnostics and the private raw-PAC bridge.
+    /// There is intentionally no inverse integer constructor.
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+}
+
+impl core::ops::BitOr for WifiRxCsiControlMask {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        self.union(rhs)
+    }
+}
+
 /// The sole fixed-crystal modem-power tick target accepted by the ESP32-S31 common-PHY prelude.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -692,6 +725,29 @@ impl MacSlowClockCalibrationValue {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= 0x0003ffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct WifiDescriptorAddressLow(u32);
+
+impl WifiDescriptorAddressLow {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x000fffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x000fffff {
             Some(Self(value))
         } else {
             None
@@ -2696,6 +2752,54 @@ impl PhyTransmitGainData2 {
                 | (((gain_72_high as u32) >> 1) & 0x0000001c)
                 | ((gain_32 as u32) << 15),
         )
+    }
+
+    /// Return the generated numeric image to its private raw-PAC bridge.
+    pub(crate) const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// Exact capacitor correction publication, including signed high-byte spill. signed_code is the adjusted i16 sign-extended to u32; the final left shift makes a logical right shift equivalent to the ROM arithmetic one.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyFrequencyCapCorrectionInput(u32);
+
+impl PhyFrequencyCapCorrectionInput {
+    /// Compose one register-specific image from typed logical arguments.
+    pub(crate) const fn compose(raw: u32, low: u8, signed_code: u32) -> Self {
+        Self(((raw) & 0x0000bf00) | (low as u32) | (((signed_code) >> 8) << 14))
+    }
+
+    /// Return the generated numeric image to its private raw-PAC bridge.
+    pub(crate) const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// PBUS table data composed from phy_param byte 0x002 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyPbusParameter002Data(u32);
+
+impl PhyPbusParameter002Data {
+    /// Compose one register-specific image from typed logical arguments.
+    pub(crate) const fn compose(parameter: u8) -> Self {
+        Self(0x000801ff | ((parameter as u32) << 9))
+    }
+
+    /// Return the generated numeric image to its private raw-PAC bridge.
+    pub(crate) const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// PBUS table data composed from phy_param byte 0x014 and the complete ROM fixed image. The parameter bits are ORed without independently narrowing them.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PhyPbusParameter014Data(u32);
+
+impl PhyPbusParameter014Data {
+    /// Compose one register-specific image from typed logical arguments.
+    pub(crate) const fn compose(parameter: u8) -> Self {
+        Self(0x048001ff | ((parameter as u32) << 12))
     }
 
     /// Return the generated numeric image to its private raw-PAC bridge.
@@ -8738,6 +8842,1119 @@ pub mod layouts {
     impl sealed::Sealed for WifiTxDmaDescriptor {}
     impl DmaLayout for WifiTxDmaDescriptor {}
 
+    /// One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Individual electrical meanings are unassigned.
+    ///
+    /// A decoder over the 1 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiRxRateControlFlags<'a> {
+        bytes: &'a [u8; 1],
+    }
+
+    impl<'a> WifiRxRateControlFlags<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 1;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 1]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 1] {
+            self.bytes
+        }
+
+        /// The `FLAGS` range: byte 0x0.
+        pub const fn flags(self) -> WifiRxRateControlFlagsFlags {
+            WifiRxRateControlFlagsFlags(u8::from_le_bytes([self.bytes[0]]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_RATE_CONTROL_FLAGS.FLAGS` range.
+    /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxRateControlFlagsFlags(u8);
+
+    impl WifiRxRateControlFlagsFlags {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Opaque: meaning not established. With bit 5 clear, selects route zero.
+        ///
+        /// `BIT_4_OPAQUE`, bit 4; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_4_opaque(self) -> bool {
+            self.0 & 0x10 != 0
+        }
+
+        /// Opaque: meaning not established. With bit 4 clear, selects route one; with bit 4 set, suppresses lookup.
+        ///
+        /// `BIT_5_OPAQUE`, bit 5; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_5_opaque(self) -> bool {
+            self.0 & 0x20 != 0
+        }
+
+        /// Opaque: meaning not established. With bits 4 and 5 clear, selects route two.
+        ///
+        /// `BIT_6_OPAQUE`, bit 6; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_6_opaque(self) -> bool {
+            self.0 & 0x40 != 0
+        }
+    }
+
+    /// The first twenty bytes of the ordinary TX descriptor, with the reviewed flags, priority and security words written by ieee80211_set_tx_desc. A-MPDU and unassigned bits are not modeled.
+    ///
+    /// A decoder over the 20 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiTxDescriptorPrefix<'a> {
+        bytes: &'a [u8; 20],
+    }
+
+    impl<'a> WifiTxDescriptorPrefix<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 20;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 20]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 20] {
+            self.bytes
+        }
+
+        /// The `FLAGS` range: bytes 0x0..0x4, little-endian.
+        pub const fn flags(self) -> WifiTxDescriptorPrefixFlags {
+            WifiTxDescriptorPrefixFlags(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+
+        /// The `PRIORITY` range: byte 0x4.
+        pub const fn priority(self) -> WifiTxDescriptorPrefixPriority {
+            WifiTxDescriptorPrefixPriority(u8::from_le_bytes([self.bytes[4]]))
+        }
+
+        /// The `SECURITY` range: bytes 0x10..0x14, little-endian.
+        pub const fn security(self) -> WifiTxDescriptorPrefixSecurity {
+            WifiTxDescriptorPrefixSecurity(u32::from_le_bytes([
+                self.bytes[16],
+                self.bytes[17],
+                self.bytes[18],
+                self.bytes[19],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_DESCRIPTOR_PREFIX.FLAGS` range.
+    /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxDescriptorPrefixFlags(u32);
+
+    impl WifiTxDescriptorPrefixFlags {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Observed ordinary station request flag.
+        ///
+        /// `STATION_REQUEST`, bit 3; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn station_request(self) -> bool {
+            self.0 & 0x8 != 0
+        }
+
+        /// This value with `STATION_REQUEST` set to `value`.
+        pub const fn with_station_request(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x8)
+            } else {
+                Self(self.0 & 0xfffffff7)
+            }
+        }
+
+        /// Project-assigned name. Observed AP cold-start request flag.
+        ///
+        /// `AP_REQUEST`, bit 4; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn ap_request(self) -> bool {
+            self.0 & 0x10 != 0
+        }
+
+        /// This value with `AP_REQUEST` set to `value`.
+        pub const fn with_ap_request(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10)
+            } else {
+                Self(self.0 & 0xffffffef)
+            }
+        }
+
+        /// Project-assigned name. Selects the HE descriptor branch.
+        ///
+        /// `HE`, bit 31; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn he(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `HE` set to `value`.
+        pub const fn with_he(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
+            }
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_DESCRIPTOR_PREFIX.PRIORITY` range.
+    /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxDescriptorPrefixPriority(u8);
+
+    impl WifiTxDescriptorPrefixPriority {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u8) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Ordinary user priority.
+        ///
+        /// `USER_PRIORITY`, bits 3:0; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn user_priority(self) -> u8 {
+            self.0 & 0xf
+        }
+
+        /// This value with `USER_PRIORITY` set to `value`, or `None` when `value` does not
+        /// fit its 4 bits.
+        pub const fn with_user_priority(self, value: u8) -> Option<Self> {
+            if value > 0xf {
+                None
+            } else {
+                Some(Self((self.0 & 0xf0) | value))
+            }
+        }
+
+        /// Project-assigned name. Hardware queue class.
+        ///
+        /// `QUEUE_CLASS`, bits 7:4; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn queue_class(self) -> u8 {
+            self.0 >> 4
+        }
+
+        /// This value with `QUEUE_CLASS` set to `value`, or `None` when `value` does not
+        /// fit its 4 bits.
+        pub const fn with_queue_class(self, value: u8) -> Option<Self> {
+            if value > 0xf {
+                None
+            } else {
+                Some(Self((self.0 & 0xf) | (value) << 4))
+            }
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_DESCRIPTOR_PREFIX.SECURITY` range.
+    /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxDescriptorPrefixSecurity(u32);
+
+    impl WifiTxDescriptorPrefixSecurity {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Station interface state equals four.
+        ///
+        /// `STATION_STATE`, bit 16; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn station_state(self) -> bool {
+            self.0 & 0x10000 != 0
+        }
+
+        /// This value with `STATION_STATE` set to `value`.
+        pub const fn with_station_state(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10000)
+            } else {
+                Self(self.0 & 0xfffeffff)
+            }
+        }
+
+        /// Project-assigned name. Hardware interface selector.
+        ///
+        /// `INTERFACE`, bits 19:18; written by the CPU.
+        /// SOURCE: BLOB_LIBNET80211_ORDINARY_TX_DESCRIPTOR.
+        pub const fn interface(self) -> u8 {
+            ((self.0 >> 18) & 0x3) as u8
+        }
+
+        /// This value with `INTERFACE` set to `value`, or `None` when `value` does not
+        /// fit its 2 bits.
+        pub const fn with_interface(self, value: u8) -> Option<Self> {
+            if value > 0x3 {
+                None
+            } else {
+                Some(Self((self.0 & 0xfff3ffff) | (value as u32) << 18))
+            }
+        }
+    }
+
+    /// A writer over the 20 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct WifiTxDescriptorPrefixMut<'a> {
+        bytes: &'a mut [u8; 20],
+    }
+
+    impl<'a> WifiTxDescriptorPrefixMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 20]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> WifiTxDescriptorPrefix<'_> {
+            WifiTxDescriptorPrefix::new(self.bytes)
+        }
+
+        /// Store the `FLAGS` range, little-endian.
+        pub fn set_flags(&mut self, value: WifiTxDescriptorPrefixFlags) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `FLAGS` range as last stored.
+        pub const fn flags(&self) -> WifiTxDescriptorPrefixFlags {
+            self.view().flags()
+        }
+
+        /// Store the `PRIORITY` range, little-endian.
+        pub fn set_priority(&mut self, value: WifiTxDescriptorPrefixPriority) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[4] = bytes[0];
+        }
+
+        /// The `PRIORITY` range as last stored.
+        pub const fn priority(&self) -> WifiTxDescriptorPrefixPriority {
+            self.view().priority()
+        }
+
+        /// Store the `SECURITY` range, little-endian.
+        pub fn set_security(&mut self, value: WifiTxDescriptorPrefixSecurity) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[16] = bytes[0];
+            self.bytes[17] = bytes[1];
+            self.bytes[18] = bytes[2];
+            self.bytes[19] = bytes[3];
+        }
+
+        /// The `SECURITY` range as last stored.
+        pub const fn security(&self) -> WifiTxDescriptorPrefixSecurity {
+            self.view().security()
+        }
+    }
+
+    /// Payload and mode of the frequency-memory publication word, including signed capacitor-correction spill into the mode.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyMemoryWord<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> PhyFrequencyMemoryWord<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `WORD` range: bytes 0x0..0x4, little-endian.
+        pub const fn word(self) -> PhyFrequencyMemoryWordWord {
+            PhyFrequencyMemoryWordWord(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_FREQUENCY_MEMORY_WORD.WORD` range.
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyFrequencyMemoryWordWord(u32);
+
+    impl PhyFrequencyMemoryWordWord {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. The frequency-memory payload.
+        ///
+        /// `PAYLOAD`, bits 23:0; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn payload(self) -> u32 {
+            self.0 & 0xffffff
+        }
+
+        /// This value with `PAYLOAD` set to `value`, or `None` when `value` does not
+        /// fit its 24 bits.
+        pub const fn with_payload(self, value: u32) -> Option<Self> {
+            if value > 0xffffff {
+                None
+            } else {
+                Some(Self((self.0 & 0xff000000) | value))
+            }
+        }
+
+        /// Project-assigned name. The frequency-memory write mode.
+        ///
+        /// `MODE`, bits 31:24; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn mode(self) -> u8 {
+            (self.0 >> 24) as u8
+        }
+
+        /// This value with `MODE` set to `value`.
+        pub const fn with_mode(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff) | (value as u32) << 24)
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyMemoryWordMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> PhyFrequencyMemoryWordMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyFrequencyMemoryWord<'_> {
+            PhyFrequencyMemoryWord::new(self.bytes)
+        }
+
+        /// Store the `WORD` range, little-endian.
+        pub fn set_word(&mut self, value: PhyFrequencyMemoryWordWord) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `WORD` range as last stored.
+        pub const fn word(&self) -> PhyFrequencyMemoryWordWord {
+            self.view().word()
+        }
+    }
+
+    /// The three command bytes written into frequency memory by phy_freq_i2c_write_set, least-significant byte first.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyI2cCommand<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> PhyFrequencyI2cCommand<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `COMMAND` range: bytes 0x0..0x4, little-endian.
+        pub const fn command(self) -> PhyFrequencyI2cCommandCommand {
+            PhyFrequencyI2cCommandCommand(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_FREQUENCY_I2C_COMMAND.COMMAND` range.
+    /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyFrequencyI2cCommandCommand(u32);
+
+    impl PhyFrequencyI2cCommandCommand {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Analog I2C block.
+        ///
+        /// `BLOCK`, bits 7:0; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn block(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `BLOCK` set to `value`.
+        pub const fn with_block(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+
+        /// Project-assigned name. Analog register byte address.
+        ///
+        /// `REGISTER`, bits 15:8; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn register(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
+        }
+
+        /// This value with `REGISTER` set to `value`.
+        pub const fn with_register(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
+        }
+
+        /// Project-assigned name. Analog register data byte.
+        ///
+        /// `DATA`, bits 23:16; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn data(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `DATA` set to `value`.
+        pub const fn with_data(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyI2cCommandMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> PhyFrequencyI2cCommandMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyFrequencyI2cCommand<'_> {
+            PhyFrequencyI2cCommand::new(self.bytes)
+        }
+
+        /// Store the `COMMAND` range, little-endian.
+        pub fn set_command(&mut self, value: PhyFrequencyI2cCommandCommand) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `COMMAND` range as last stored.
+        pub const fn command(&self) -> PhyFrequencyI2cCommandCommand {
+            self.view().command()
+        }
+    }
+
+    /// The three words passed to phy_wr_rf_freq_mem for one frequency-table entry.
+    ///
+    /// A decoder over the 12 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyMemoryRecord<'a> {
+        bytes: &'a [u8; 12],
+    }
+
+    impl<'a> PhyFrequencyMemoryRecord<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 12;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 12]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 12] {
+            self.bytes
+        }
+
+        /// The `CAP_AND_SDM` range: bytes 0x0..0x4, little-endian.
+        pub const fn cap_and_sdm(self) -> PhyFrequencyMemoryRecordCapAndSdm {
+            PhyFrequencyMemoryRecordCapAndSdm(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+
+        /// The `SDM_HIGH` range: bytes 0x4..0x8, little-endian.
+        pub const fn sdm_high(self) -> PhyFrequencyMemoryRecordSdmHigh {
+            PhyFrequencyMemoryRecordSdmHigh(u32::from_le_bytes([
+                self.bytes[4],
+                self.bytes[5],
+                self.bytes[6],
+                self.bytes[7],
+            ]))
+        }
+
+        /// The `XTAL_DUTY` range: bytes 0x8..0xc, little-endian.
+        pub const fn xtal_duty(self) -> PhyFrequencyMemoryRecordXtalDuty {
+            PhyFrequencyMemoryRecordXtalDuty(u32::from_le_bytes([
+                self.bytes[8],
+                self.bytes[9],
+                self.bytes[10],
+                self.bytes[11],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM` range.
+    /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyFrequencyMemoryRecordCapAndSdm(u32);
+
+    impl PhyFrequencyMemoryRecordCapAndSdm {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Low capacitor byte.
+        ///
+        /// `CAP_LOW`, bits 7:0; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn cap_low(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `CAP_LOW` set to `value`.
+        pub const fn with_cap_low(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+
+        /// Project-assigned name. Complete block 0x62 register 2 payload, including the capacitor high bit and fixed configuration.
+        ///
+        /// `CAP_HIGH_BYTE`, bits 15:8; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn cap_high_byte(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
+        }
+
+        /// This value with `CAP_HIGH_BYTE` set to `value`.
+        pub const fn with_cap_high_byte(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
+        }
+
+        /// Project-assigned name. Complete block 0x63 register 6 payload, combining the low SDM bits and saved upper configuration.
+        ///
+        /// `SDM_LOW_BYTE`, bits 23:16; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn sdm_low_byte(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `SDM_LOW_BYTE` set to `value`.
+        pub const fn with_sdm_low_byte(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH` range.
+    /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyFrequencyMemoryRecordSdmHigh(u32);
+
+    impl PhyFrequencyMemoryRecordSdmHigh {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Block 0x63 register 5 payload.
+        ///
+        /// `LOWER_MIDDLE`, bits 7:0; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn lower_middle(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `LOWER_MIDDLE` set to `value`.
+        pub const fn with_lower_middle(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+
+        /// Project-assigned name. Block 0x63 register 4 payload.
+        ///
+        /// `UPPER_MIDDLE`, bits 15:8; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn upper_middle(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
+        }
+
+        /// This value with `UPPER_MIDDLE` set to `value`.
+        pub const fn with_upper_middle(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
+        }
+
+        /// Project-assigned name. Block 0x63 register 3 payload.
+        ///
+        /// `MOST_SIGNIFICANT`, bits 23:16; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn most_significant(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `MOST_SIGNIFICANT` set to `value`.
+        pub const fn with_most_significant(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_FREQUENCY_MEMORY_RECORD.XTAL_DUTY` range.
+    /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyFrequencyMemoryRecordXtalDuty(u32);
+
+    impl PhyFrequencyMemoryRecordXtalDuty {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Crystal duty payload.
+        ///
+        /// `VALUE`, bits 7:0; written by the CPU.
+        /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
+        pub const fn value(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `VALUE` set to `value`.
+        pub const fn with_value(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+    }
+
+    /// A writer over the 12 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyFrequencyMemoryRecordMut<'a> {
+        bytes: &'a mut [u8; 12],
+    }
+
+    impl<'a> PhyFrequencyMemoryRecordMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 12]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyFrequencyMemoryRecord<'_> {
+            PhyFrequencyMemoryRecord::new(self.bytes)
+        }
+
+        /// Store the `CAP_AND_SDM` range, little-endian.
+        pub fn set_cap_and_sdm(&mut self, value: PhyFrequencyMemoryRecordCapAndSdm) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `CAP_AND_SDM` range as last stored.
+        pub const fn cap_and_sdm(&self) -> PhyFrequencyMemoryRecordCapAndSdm {
+            self.view().cap_and_sdm()
+        }
+
+        /// Store the `SDM_HIGH` range, little-endian.
+        pub fn set_sdm_high(&mut self, value: PhyFrequencyMemoryRecordSdmHigh) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[4] = bytes[0];
+            self.bytes[5] = bytes[1];
+            self.bytes[6] = bytes[2];
+            self.bytes[7] = bytes[3];
+        }
+
+        /// The `SDM_HIGH` range as last stored.
+        pub const fn sdm_high(&self) -> PhyFrequencyMemoryRecordSdmHigh {
+            self.view().sdm_high()
+        }
+
+        /// Store the `XTAL_DUTY` range, little-endian.
+        pub fn set_xtal_duty(&mut self, value: PhyFrequencyMemoryRecordXtalDuty) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[8] = bytes[0];
+            self.bytes[9] = bytes[1];
+            self.bytes[10] = bytes[2];
+            self.bytes[11] = bytes[3];
+        }
+
+        /// The `XTAL_DUTY` range as last stored.
+        pub const fn xtal_duty(&self) -> PhyFrequencyMemoryRecordXtalDuty {
+            self.view().xtal_duty()
+        }
+    }
+
+    /// Nine-bit RFPLL capacitor code split between its low byte and the high analog-register bit.
+    ///
+    /// A decoder over the 2 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyRfpllCapacitorCode<'a> {
+        bytes: &'a [u8; 2],
+    }
+
+    impl<'a> PhyRfpllCapacitorCode<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 2;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 2]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 2] {
+            self.bytes
+        }
+
+        /// The `CODE` range: bytes 0x0..0x2, little-endian.
+        pub const fn code(self) -> PhyRfpllCapacitorCodeCode {
+            PhyRfpllCapacitorCodeCode(u16::from_le_bytes([self.bytes[0], self.bytes[1]]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_RFPLL_CAPACITOR_CODE.CODE` range.
+    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyRfpllCapacitorCodeCode(u16);
+
+    impl PhyRfpllCapacitorCodeCode {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u16 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u16) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Low capacitor byte.
+        ///
+        /// `LOW`, bits 7:0; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn low(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `LOW` set to `value`.
+        pub const fn with_low(self, value: u8) -> Self {
+            Self((self.0 & 0xff00) | value as u16)
+        }
+
+        /// Project-assigned name. Unmasked high byte of the ROM code carrier; admitted nine-bit codes use only its low bit.
+        ///
+        /// `HIGH`, bits 15:8; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn high(self) -> u8 {
+            (self.0 >> 8) as u8
+        }
+
+        /// This value with `HIGH` set to `value`.
+        pub const fn with_high(self, value: u8) -> Self {
+            Self((self.0 & 0xff) | (value as u16) << 8)
+        }
+    }
+
+    /// A writer over the 2 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyRfpllCapacitorCodeMut<'a> {
+        bytes: &'a mut [u8; 2],
+    }
+
+    impl<'a> PhyRfpllCapacitorCodeMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 2]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyRfpllCapacitorCode<'_> {
+            PhyRfpllCapacitorCode::new(self.bytes)
+        }
+
+        /// Store the `CODE` range, little-endian.
+        pub fn set_code(&mut self, value: PhyRfpllCapacitorCodeCode) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+        }
+
+        /// The `CODE` range as last stored.
+        pub const fn code(&self) -> PhyRfpllCapacitorCodeCode {
+            self.view().code()
+        }
+    }
+
+    /// The encoded RFPLL sigma-delta value split into the four analog-register payloads by phy_rfpll_set_freq / phy_write_rfpll_sdm.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct PhyRfpllSdmCode<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> PhyRfpllSdmCode<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `ENCODED` range: bytes 0x0..0x4, little-endian.
+        pub const fn encoded(self) -> PhyRfpllSdmCodeEncoded {
+            PhyRfpllSdmCodeEncoded(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `PHY_RFPLL_SDM_CODE.ENCODED` range.
+    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct PhyRfpllSdmCodeEncoded(u32);
+
+    impl PhyRfpllSdmCodeEncoded {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Low three SDM bits, written into block 0x63 register 6.
+        ///
+        /// `LOW`, bits 2:0; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn low(self) -> u8 {
+            (self.0 & 0x7) as u8
+        }
+
+        /// This value with `LOW` set to `value`, or `None` when `value` does not
+        /// fit its 3 bits.
+        pub const fn with_low(self, value: u8) -> Option<Self> {
+            if value > 0x7 {
+                None
+            } else {
+                Some(Self((self.0 & 0xfffffff8) | value as u32))
+            }
+        }
+
+        /// Project-assigned name. Payload of block 0x63 register 5.
+        ///
+        /// `LOWER_MIDDLE`, bits 10:3; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn lower_middle(self) -> u8 {
+            ((self.0 >> 3) & 0xff) as u8
+        }
+
+        /// This value with `LOWER_MIDDLE` set to `value`.
+        pub const fn with_lower_middle(self, value: u8) -> Self {
+            Self((self.0 & 0xfffff807) | (value as u32) << 3)
+        }
+
+        /// Project-assigned name. Payload of block 0x63 register 4.
+        ///
+        /// `UPPER_MIDDLE`, bits 18:11; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn upper_middle(self) -> u8 {
+            ((self.0 >> 11) & 0xff) as u8
+        }
+
+        /// This value with `UPPER_MIDDLE` set to `value`.
+        pub const fn with_upper_middle(self, value: u8) -> Self {
+            Self((self.0 & 0xfff807ff) | (value as u32) << 11)
+        }
+
+        /// Project-assigned name. Payload of block 0x63 register 3.
+        ///
+        /// `MOST_SIGNIFICANT`, bits 26:19; written by the CPU.
+        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
+        pub const fn most_significant(self) -> u8 {
+            ((self.0 >> 19) & 0xff) as u8
+        }
+
+        /// This value with `MOST_SIGNIFICANT` set to `value`.
+        pub const fn with_most_significant(self, value: u8) -> Self {
+            Self((self.0 & 0xf807ffff) | (value as u32) << 19)
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct PhyRfpllSdmCodeMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> PhyRfpllSdmCodeMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> PhyRfpllSdmCode<'_> {
+            PhyRfpllSdmCode::new(self.bytes)
+        }
+
+        /// Store the `ENCODED` range, little-endian.
+        pub fn set_encoded(&mut self, value: PhyRfpllSdmCodeEncoded) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `ENCODED` range as last stored.
+        pub const fn encoded(&self) -> PhyRfpllSdmCodeEncoded {
+            self.view().encoded()
+        }
+    }
+
     /// The 12-byte node the Wi-Fi RX DMA walker follows: the control word, the
     /// buffer address and the link to the next node.
     ///
@@ -9865,6 +11082,111 @@ pub mod layouts {
         /// SOURCE: ESP_WIFI_SYS_S31_RXCTRL.
         pub const fn bits_0_7_opaque(self) -> u8 {
             self.0
+        }
+    }
+
+    /// The first word of the TX metadata that precedes a transmit frame in its
+    /// buffer: the CPU fills it in before DMA publication.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiTxMetadataHead<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> WifiTxMetadataHead<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `CONTROL` range: bytes 0x0..0x4, little-endian.
+        pub const fn control(self) -> WifiTxMetadataHeadControl {
+            WifiTxMetadataHeadControl(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_METADATA_HEAD.CONTROL` range.
+    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxMetadataHeadControl(u32);
+
+    impl WifiTxMetadataHeadControl {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion.
+        ///
+        /// `HE_SMPDU`, bit 24; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+        pub const fn he_smpdu(self) -> bool {
+            self.0 & 0x1000000 != 0
+        }
+
+        /// This value with `HE_SMPDU` set to `value`.
+        pub const fn with_he_smpdu(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x1000000)
+            } else {
+                Self(self.0 & 0xfeffffff)
+            }
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct WifiTxMetadataHeadMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> WifiTxMetadataHeadMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> WifiTxMetadataHead<'_> {
+            WifiTxMetadataHead::new(self.bytes)
+        }
+
+        /// Store the `CONTROL` range, little-endian.
+        pub fn set_control(&mut self, value: WifiTxMetadataHeadControl) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `CONTROL` range as last stored.
+        pub const fn control(&self) -> WifiTxMetadataHeadControl {
+            self.view().control()
         }
     }
 }

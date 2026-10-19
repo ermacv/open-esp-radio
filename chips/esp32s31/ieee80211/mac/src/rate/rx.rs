@@ -1,5 +1,7 @@
 //! Stateless receive-protocol classification recovered from ESP32-S31 PP.
 
+use oer_esp32s31_hal::layouts::WifiRxRateControlFlags;
+
 /// Numeric rate-control context selected by the pinned
 /// `libpp.a[pp.o]::ppRxProtoProc` body.
 ///
@@ -21,15 +23,17 @@ impl RxRateControlRoute {
 /// Bits outside `0x10 | 0x20 | 0x40` do not participate. This function owns
 /// no state and performs no polling, waiting, allocation, or indirect call.
 pub const fn rate_control_route(rx_flags: u8) -> Option<RxRateControlRoute> {
-    if rx_flags & 0x10 != 0 {
-        if rx_flags & 0x20 != 0 {
+    let bytes = [rx_flags];
+    let flags = WifiRxRateControlFlags::new(&bytes).flags();
+    if flags.bit_4_opaque() {
+        if flags.bit_5_opaque() {
             None
         } else {
             Some(RxRateControlRoute(0))
         }
-    } else if rx_flags & 0x20 != 0 {
+    } else if flags.bit_5_opaque() {
         Some(RxRateControlRoute(1))
-    } else if rx_flags & 0x40 != 0 {
+    } else if flags.bit_6_opaque() {
         Some(RxRateControlRoute(2))
     } else {
         None

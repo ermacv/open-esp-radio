@@ -8,13 +8,11 @@
 use oer_ieee80211_mac::data::DataInterfaceRole;
 
 use crate::tx::metadata::descriptor_priority_byte;
+use oer_esp32s31_hal::layouts::{WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity};
 
-const DESCRIPTOR_INTERFACE_SHIFT: u32 = 18;
 const DESCRIPTOR_NODE_NIBBLE_SHIFT: u32 = 12;
-const DESCRIPTOR_SECURITY_REPLACED_MASK: u32 = 0x000c_f000;
-const DESCRIPTOR_STA_STATE_BIT: u32 = 1 << 16;
-const HE_DESCRIPTOR_FLAG: u32 = 1 << 31;
-const OBSERVED_REQUEST_FLAGS: u32 = 0x08 | 0x10;
+// This node-derived nibble's meaning remains unassigned.
+const DESCRIPTOR_NODE_NIBBLE_MASK: u32 = 0x0000_f000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DescriptorPolicyInput {
@@ -55,11 +53,17 @@ pub const fn ordinary_descriptor_policy(input: DescriptorPolicyInput) -> Option<
     // request into the descriptor. Strict STA data observes 0x08; strict AP
     // cold-start management TX additionally observes 0x10. Keep all other
     // request bits fail-closed until they are seen and qualified.
-    if input.requested_flags & !OBSERVED_REQUEST_FLAGS != 0 {
+    if WifiTxDescriptorPrefixFlags::from_bits(input.requested_flags)
+        .with_station_request(false)
+        .with_ap_request(false)
+        .bits()
+        != 0
+    {
         return None;
     }
-    let flags = input.existing_flags | input.requested_flags;
-    if flags & HE_DESCRIPTOR_FLAG != 0 {
+    let flags =
+        WifiTxDescriptorPrefixFlags::from_bits(input.existing_flags | input.requested_flags);
+    if flags.he() {
         return None;
     }
     let priority_byte = match descriptor_priority_byte(input.priority) {
@@ -71,16 +75,16 @@ pub const fn ordinary_descriptor_policy(input: DescriptorPolicyInput) -> Option<
         DataInterfaceRole::AccessPoint => (1, input.node_rate_context_index_0x26),
     };
 
-    let mut security = input.existing_security & !DESCRIPTOR_SECURITY_REPLACED_MASK;
+    let mut security = input.existing_security & !DESCRIPTOR_NODE_NIBBLE_MASK;
     security |=
         ((input.node_descriptor_nibble_0x2b8 & 0x0f) as u32) << DESCRIPTOR_NODE_NIBBLE_SHIFT;
-    security |= (selector as u32) << DESCRIPTOR_INTERFACE_SHIFT;
+    let mut security =
+        match WifiTxDescriptorPrefixSecurity::from_bits(security).with_interface(selector) {
+            Some(value) => value,
+            None => panic!("ordinary interface selector is zero or one"),
+        };
     if matches!(input.role, DataInterfaceRole::Station) {
-        if input.interface_state_0x154 == 4 {
-            security |= DESCRIPTOR_STA_STATE_BIT;
-        } else {
-            security &= !DESCRIPTOR_STA_STATE_BIT;
-        }
+        security = security.with_station_state(input.interface_state_0x154 == 4);
     }
 
     // The stock non-HE prefix first retains only descriptor byte 0x30 bits
@@ -98,9 +102,9 @@ pub const fn ordinary_descriptor_policy(input: DescriptorPolicyInput) -> Option<
     let byte_0x2f_bit_2 = input.node_word_0x35c & 0x0400 == 0 && input.node_byte_0x4f3 & 1 != 0;
 
     Some(DescriptorPolicy {
-        flags,
+        flags: flags.bits(),
         priority_byte,
-        security,
+        security: security.bits(),
         he_control,
         byte_0x2f_bit_2,
         byte_0x38,

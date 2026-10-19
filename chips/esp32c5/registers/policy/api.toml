@@ -65,6 +65,94 @@ register = "EVENT_STATUS"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 
 [[enum-domains]]
+name = "PhyI2cReadMask"
+description = "The complemented one-hot read mask `phy_chip_i2c_readReg_org` publishes for each analog block of `phy_get_i2c_read_mask_` (CSWTCH.81); blocks without a one-hot entry publish all ones."
+
+[[enum-domains.values]]
+name = "Block61"
+value = 0xfffffeff
+description = "Read mask of analog block 0x61."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Unselected"
+value = 0xffffffff
+description = "Read mask of analog blocks 0x62 and 0x64, which have no one-hot entry."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block63"
+value = 0xffffffef
+description = "Read mask of analog block 0x63."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block65"
+value = 0xffffefff
+description = "Read mask of analog block 0x65."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block66"
+value = 0xffffff7f
+description = "Read mask of analog block 0x66."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block67"
+value = 0xfffffffb
+description = "Read mask of analog block 0x67."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block68"
+value = 0xffffffdf
+description = "Read mask of analog block 0x68."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block69"
+value = 0xfffffdff
+description = "Read mask of analog block 0x69."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6A"
+value = 0xffffffbf
+description = "Read mask of analog block 0x6a."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6B"
+value = 0xfffffff7
+description = "Read mask of analog block 0x6b."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6C"
+value = 0xffffdfff
+description = "Read mask of analog block 0x6c."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6D"
+value = 0xfffffbff
+description = "Read mask of analog block 0x6d."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6E"
+value = 0xfffff7ff
+description = "Read mask of analog block 0x6e."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6F"
+value = 0xffffbfff
+description = "Read mask of analog block 0x6f."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains]]
 name = "Ieee802154TxOnDelay"
 description = "The sole transmit-on delay image accepted by the pinned ESP32-C5 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
 
@@ -630,11 +718,13 @@ value = 0x206
 exposure = "facade"
 sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
 
-[[zero-based-field-writes]]
+[[full-register-writes]]
 name = "publish_phy_i2c_read_mask"
 peripheral = "I2C_ANA_MST"
 register = "ANA_CONF1"
-fields = ["READ_MASK_COMPLEMENT_LOW", "READ_MASK_COMPLEMENT_HIGH"]
+field = "READ_MASK_COMPLEMENT"
+domain = "PhyI2cReadMask"
+exposure = "facade"
 sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
 
 [[zero-based-field-writes]]
@@ -1615,3 +1705,199 @@ fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SF
 value = 0x01868000
 exposure = "facade"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
+
+[[bitwise-composed-domains]]
+name = "PhyI2cInitializationHighCommand"
+description = "DATA field for block 0x6e register 5 in phy_i2c_init1: parameter bits 9:2 with data bit 6 set. Other command fields are zero."
+peripheral = "I2C_ANA_MST"
+register = "I2C0_CTRL"
+arguments = [{ name = "parameter", value-type = "u16", right-shift = 2, retain-mask = 0xff, left-shift = 16 }]
+fixed-value = 0x00400000
+output-mask = 0x00ff0000
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+
+[[bitwise-composed-domains]]
+name = "PhyI2cInitializationLowCommand"
+description = "DATA field for block 0x6e register 12 in phy_i2c_init1: parameter bits 1:0 in data bits 5:4. Other command fields are zero."
+peripheral = "I2C_ANA_MST"
+register = "I2C0_CTRL"
+arguments = [{ name = "parameter", value-type = "u16", retain-mask = 3, left-shift = 20 }]
+output-mask = 0x00300000
+sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
+
+[[indirect-register-field-domains]]
+name = "PhyI2cField"
+module = "phy_i2c_fields"
+description = "Reviewed fields of the C5 analog I2C configuration leaves."
+value-bits = 8
+
+[[indirect-register-field-domains.fields]]
+name = "XTAL_REGISTER_8_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x61
+register = 0x8
+bit-offset = 4
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "XTAL_REGISTER_7_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x61
+register = 0x7
+bit-offset = 5
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "DAC_RATE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x66
+register = 0x4
+bit-offset = 4
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "ADC_RATE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x66
+register = 0x4
+bit-offset = 2
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_0_LOW"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x0
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_1_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x1
+bit-offset = 4
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_0_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x0
+bit-offset = 4
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "BIAS_REGISTER_1_LOW"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6a
+register = 0x1
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_FIRST"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0x11
+bit-offset = 4
+bit-width = 2
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_SECOND"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0xf
+bit-offset = 3
+bit-width = 5
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "RC_CALIBRATION_THIRD"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x6b
+register = 0x13
+bit-offset = 2
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_1D_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 2
+bit-width = 2
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_6"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 6
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_3"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 3
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "FILTER_REGISTER_5_BIT_5"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x5
+bit-offset = 5
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_ENABLE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 7
+bit-width = 1
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_REFERENCE"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x1d
+bit-offset = 4
+bit-width = 3
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "PEAK_DETECTOR_REGISTER_3_CONTROL"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x67
+register = 0x3
+bit-offset = 4
+bit-width = 3
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]
+
+[[indirect-register-field-domains.fields]]
+name = "SAR2_CODE_HIGH"
+description = "Analog field used by the reviewed C5 configuration leaf."
+bank = 0x69
+register = 0x4
+bit-offset = 0
+bit-width = 4
+sources = ["C5_BLOB_LIBPHY_RF_INIT_LEAVES_3"]

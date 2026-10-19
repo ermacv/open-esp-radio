@@ -40,6 +40,9 @@ pub enum ExternalCoexRole {
 pub struct ExternalCoexPriority(ExternalCoexNibble);
 
 impl ExternalCoexPriority {
+    /// The largest external priority, from the generated value domain.
+    pub const MAX: u8 = ExternalCoexNibble::MAX as u8;
+
     /// A priority of the four-bit domain, or `None` above it.
     pub const fn new(value: u8) -> Option<Self> {
         match ExternalCoexNibble::new(value as u32) {

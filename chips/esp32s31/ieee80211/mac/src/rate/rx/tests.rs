@@ -60,3 +60,19 @@ fn rate_sample_filter_preserves_guards_and_byte_wrapping() {
         })
     );
 }
+
+#[test]
+fn modeled_route_decode_matches_the_old_rx_control_packing() {
+    for flags in 0..=u8::MAX {
+        let old = if flags & 0x10 != 0 {
+            if flags & 0x20 != 0 { None } else { Some(0) }
+        } else if flags & 0x20 != 0 {
+            Some(1)
+        } else if flags & 0x40 != 0 {
+            Some(2)
+        } else {
+            None
+        };
+        assert_eq!(route(flags), old);
+    }
+}

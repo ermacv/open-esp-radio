@@ -72,7 +72,7 @@ oer_probe_macros::probe! {
     /// the table, as the vendor leaf returns.
     pub fn open_phy_i2c_trace_phy_get_i2c_read_mask_(block: u32) -> u32 {
         match u8::try_from(block).ok().and_then(PhyI2cBlock::from_vendor_abi) {
-            Some(block) => !block.read_mask_complement_low() & 0x00ff_ffff,
+            Some(block) => !block.read_mask().bits(),
             None => 0,
         }
     }

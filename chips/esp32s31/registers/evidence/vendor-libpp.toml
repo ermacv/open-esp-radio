@@ -415,3 +415,11 @@ description = "espressif/esp32-wifi-lib commit af55a0ca258ce9d791d1661d7c2bbb65f
 [[sources]]
 id = "BLOB_LIBPP_SPP_AMSDU"
 description = "ESP32-S31 esp32-wifi-lib pin af55a0ca258ce9d791d1661d7c2bbb65f08c0c21: complete libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp -> libpp[if_hwctrl.o]::ic_set_key provides the association decision. It controls SPP A-MSDU at bit 9 of the selected interface control, not an individual key entry."
+
+[[sources]]
+id = "BLOB_LIBPP_HAL_MAC_SET_CSI"
+description = "espressif/esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 esp32s31/libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete hal_mac.o hal_mac_set_csi, size 0x32: when the configuration gate is enabled, freshly reads 0x20104098 and sets bit 23 for nonzero input, clears it for zero input, and writes the word back. The input-gated return does not establish a broader CSI configuration contract."
+
+[[sources]]
+id = "BLOB_LIBPP_RX_RATE_ROUTE"
+description = "espressif/esp32-wifi-lib af55a0ca258ce9d791d1661d7c2bbb65f08c0c21 esp32s31/libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117fff6153eccbda4. Complete pp.o ppRxProtoProc, size 0x154, loads its received RX-control prefix argument's byte 3 at +0x24. Bits 4, 5 and 6 select rc_get_trc routes 0, 1 and 2 in that precedence; simultaneous bits 4 and 5 suppress the lookup. ppRxPkt obtains the prefix pointer from its received packet, uses prefix+0x40 for the MPDU, and passes the prefix as the second argument. These instructions establish route selection, not electrical meanings of the individual flags."

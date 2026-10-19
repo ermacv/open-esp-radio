@@ -180,7 +180,9 @@ fn pac_read(i2c: &mut PhyI2cRegisters, address: PhyI2cAddress) -> Option<u8> {
 
 fn rom_read(address: PhyI2cAddress) -> u8 {
     let block = address.block();
-    let mask = !block.read_mask_complement_low();
+    // Preserve this ROM ABI's old argument: complement the low 24 bits of
+    // the register image, leaving the argument's high byte set.
+    let mask = !(block.read_mask().bits() & 0x00ff_ffff);
     let host = match block.host() {
         PhyI2cHost::Host0 => 0,
         PhyI2cHost::Host1 => 1,

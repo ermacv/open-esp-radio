@@ -253,7 +253,7 @@ impl<'storage> RxWalkerTable<'storage> {
         &self,
         low: u32,
     ) -> Option<&'storage crate::ieee80211::dma::descriptor::RxDescriptor> {
-        const LOW_MASK: u32 = 0x000f_ffff;
+        const LOW_MASK: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
         let reserved_offset = u32::try_from(self.ring.len())
             .ok()?
             .checked_mul(DESCRIPTOR_BYTES)?;
