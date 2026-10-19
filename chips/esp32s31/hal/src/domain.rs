@@ -1124,47 +1124,6 @@ impl<T> RadioDomain<T> {
         self.registers().radio_phy().register_image(index)
     }
 
-    /// Registers of the analog register image [`Self::phy_analog_image`]
-    /// reads.
-    pub const PHY_ANALOG_IMAGE_LEN: usize = crate::phy::i2c::PhyI2cAddress::IMAGE_LEN;
-
-    /// Registers of the analog register image.
-    pub const fn phy_analog_image_len(&self) -> usize {
-        Self::PHY_ANALOG_IMAGE_LEN
-    }
-
-    /// Read analog register `index` of the analog register image under
-    /// this domain, for hardware cross-checks of the calibrated analog state;
-    /// `None` past its end. The read is one analog-I2C read command, which
-    /// selects the block's host and read mask as every production read
-    /// does; the busy host is polled at most `maximum_polls` times.
-    pub fn phy_analog_image(
-        &mut self,
-        index: usize,
-        maximum_polls: u32,
-    ) -> Option<Result<u8, crate::phy::i2c::PhyI2cAccessError>> {
-        let address = crate::phy::i2c::PhyI2cAddress::image(index)?;
-        let phy = self.registers_mut().radio_phy_mut();
-        let mut polls = 0;
-        while let Err(busy) = phy.try_start_phy_i2c_read(address) {
-            polls += 1;
-            if polls >= maximum_polls {
-                return Some(Err(busy));
-            }
-        }
-        loop {
-            match phy.try_finish_phy_i2c_read(address) {
-                Ok(value) => return Some(Ok(value)),
-                Err(busy) => {
-                    polls += 1;
-                    if polls >= maximum_polls {
-                        return Some(Err(busy));
-                    }
-                }
-            }
-        }
-    }
-
     pub(crate) fn registers(&self) -> &SharedRadioRegisters {
         &self.state().registers
     }

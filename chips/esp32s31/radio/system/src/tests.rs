@@ -187,7 +187,7 @@ fn track_request(wifi: WifiClocked) -> WifiTrack {
         channel: WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
         maximum_tx_power_quarter_dbm: 80,
         mac: MacColdStartConfig {
-            handshake_sample_limit: 100,
+            handshake_deadline: oer_time::Duration::from_millis(1),
             station_address: [2, 0, 0, 0, 0, 1],
             access_point_address: [2, 0, 0, 0, 0, 2],
         },

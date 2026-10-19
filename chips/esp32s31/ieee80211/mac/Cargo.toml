@@ -31,6 +31,7 @@ zeroize = { version = "1.9.0", default-features = false }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac", features = ["test-support"] }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [[test]]

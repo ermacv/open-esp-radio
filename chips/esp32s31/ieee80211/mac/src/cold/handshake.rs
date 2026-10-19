@@ -1,15 +1,24 @@
-//! Ownership boundary for the finite cold MAC handshake prefix.
+//! Ownership boundary for the cold MAC handshake prefix.
 
 use oer_esp32s31_hal::ieee80211::mac::WifiMacColdHal;
+use oer_time::{Duration, Timer};
+
+/// The wait between two samples of the ready edge.
+pub const MAC_COLD_HANDSHAKE_RESAMPLE: Duration = Duration::from_micros(10);
+
+/// The deadline the apps give the ready edge; the vendor waits forever.
+pub const MAC_COLD_HANDSHAKE_DEADLINE: Duration = Duration::from_millis(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacColdStartError {
     HandshakeTimedOut {
-        /// Number of not-ready observations consumed before stopping.
+        /// Number of not-ready observations before the deadline.
         samples: u32,
-        /// Caller-provided finite not-ready observation limit.
-        sample_limit: u32,
+        /// Caller-provided deadline, counted from the request.
+        deadline: Duration,
     },
+    /// The timer cannot express the deadline or a resample wait.
+    TimerOverflow,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,25 +30,59 @@ pub struct MacColdStartOutcome {
 }
 
 pub trait MacColdHandshakeHardware {
-    fn begin_cold_handshake(
-        &mut self,
-        sample_limit: u32,
-    ) -> Result<MacColdStartOutcome, MacColdStartError>;
+    /// Request the cold MAC start.
+    fn request_cold_handshake(&mut self);
+
+    /// Sample whether the cold MAC start is ready.
+    fn sample_cold_handshake_ready(&mut self) -> bool;
+
+    /// Mask and clear the MAC interrupts after the ready edge.
+    fn finish_cold_handshake(&mut self);
 }
 
 impl MacColdHandshakeHardware for WifiMacColdHal<'_> {
-    fn begin_cold_handshake(
-        &mut self,
-        sample_limit: u32,
-    ) -> Result<MacColdStartOutcome, MacColdStartError> {
-        self.begin_handshake(sample_limit)
-            .map(|outcome| MacColdStartOutcome {
-                handshake_samples: outcome.samples,
-                handshake_observations: outcome.observations,
-            })
-            .map_err(|timeout| MacColdStartError::HandshakeTimedOut {
-                samples: timeout.samples,
-                sample_limit: timeout.sample_limit,
-            })
+    fn request_cold_handshake(&mut self) {
+        self.request_handshake();
     }
+
+    fn sample_cold_handshake_ready(&mut self) -> bool {
+        self.sample_handshake_ready()
+    }
+
+    fn finish_cold_handshake(&mut self) {
+        self.finish_handshake();
+    }
+}
+
+/// Request the cold start, sample the ready edge once, then again after each
+/// [`MAC_COLD_HANDSHAKE_RESAMPLE`] wait on `timer` until `deadline` has
+/// passed, and finish with the interrupt cleanup.
+///
+/// One sample always occurs. After a not-ready sample at or past the deadline
+/// the handshake times out before the interrupt cleanup.
+pub async fn run_cold_handshake<H: MacColdHandshakeHardware, T: Timer>(
+    hardware: &mut H,
+    timer: &T,
+    deadline: Duration,
+) -> Result<MacColdStartOutcome, MacColdStartError> {
+    hardware.request_cold_handshake();
+    let end = timer
+        .deadline_after(deadline)
+        .map_err(|_| MacColdStartError::TimerOverflow)?;
+    let mut samples = 0_u32;
+    while !hardware.sample_cold_handshake_ready() {
+        samples = samples.saturating_add(1);
+        if timer.now() >= end {
+            return Err(MacColdStartError::HandshakeTimedOut { samples, deadline });
+        }
+        timer
+            .wait_for(MAC_COLD_HANDSHAKE_RESAMPLE)
+            .await
+            .map_err(|_| MacColdStartError::TimerOverflow)?;
+    }
+    hardware.finish_cold_handshake();
+    Ok(MacColdStartOutcome {
+        handshake_samples: samples,
+        handshake_observations: samples.saturating_add(1),
+    })
 }

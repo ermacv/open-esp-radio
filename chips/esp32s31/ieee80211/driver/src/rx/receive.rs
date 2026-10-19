@@ -43,7 +43,10 @@ use core::{
 };
 
 use oer_esp32s31_hal::ieee80211::dma::{
-    descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
+    descriptor::RxDescriptor,
+    rx_ring::{RxReloadSettle, RxReloadSettleLimit},
+    rx_storage::RxDmaStorage,
+    space::DmaSpace,
 };
 use oer_esp32s31_ieee80211_mac::{
     init::{
@@ -80,6 +83,11 @@ pub const IMMEDIATE_CONTINUATIONS: u32 = 4;
 /// exercised on hardware (timed continuations 0 in the W1 runs of
 /// 2026-10-18).
 pub const CONTINUATION_WAIT: Duration = Duration::from_micros(20);
+/// How long a reload doorbell may be observed in one service transaction, a
+/// named settle. Measured: the W1 runs of 2026-10-19 saw the doorbell clear
+/// on the first observation every time (`max_attempts` 1).
+pub const RELOAD_SETTLE_LIMIT: RxReloadSettleLimit =
+    RxReloadSettleLimit::new(Duration::from_micros(20)).expect("20 µs is a valid settle limit");
 /// How long teardown waits for the line to confirm the mask. Measured: the
 /// W1 runs of 2026-10-18 confirmed the mask in 17 µs.
 pub const MASK_CONFIRM_TIMEOUT: Duration = Duration::from_millis(1);
@@ -507,6 +515,7 @@ where
             },
             self.rx_dma,
             self.hardware,
+            RxReloadSettle::new(RELOAD_SETTLE_LIMIT, self.timer),
             (),
         );
         self.counters.reload_evidence(ring.reload_evidence());

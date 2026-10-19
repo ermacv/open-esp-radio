@@ -20,7 +20,8 @@ use super::{
     sink::{CountingAdmission, frame_control_preview, unclassified_preview},
     transaction::{CompletedUnit, Counters, Preview, Publisher, service},
 };
-use crate::datapath::DatapathRxProgress;
+use crate::{datapath::DatapathRxProgress, rx::receive::RELOAD_SETTLE_LIMIT};
+use oer_esp32s31_hal::ieee80211::dma::rx_ring::RxReloadSettle;
 
 /// A MAC without the receive-buffer starvation counter.
 pub(crate) struct NoBufferFullCounter;
@@ -113,6 +114,7 @@ impl Ring {
         E: Publisher<'static, BUFFER, SLOTS>,
     {
         let (mut descriptors, mut units, mut bytes) = (0, 0, 0);
+        let clock = oer_time_virtual::VirtualClock::<1>::default();
         for _ in 0..4 {
             let progress = service(
                 &mut self.live,
@@ -127,6 +129,7 @@ impl Ring {
                 },
                 &mut self.walker,
                 &mut NoBufferFullCounter,
+                RxReloadSettle::new(RELOAD_SETTLE_LIMIT, &clock),
                 (),
             )
             .expect("received input never faults the ring");

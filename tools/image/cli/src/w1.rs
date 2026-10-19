@@ -434,7 +434,7 @@ const SPECS: &[Spec] = &[
         keyword: "w1.reload",
         keys: numbers!(
             "max_attempts",
-            "limit",
+            "limit_us",
             "observations",
             "reload_rerings",
             "rering_failures",
@@ -2213,7 +2213,7 @@ mod tests {
             "w1.own cycle=0 order=forward held=32 owner_clear=32 first_drop=4 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,6,7,8 order_breaks=0 chained=0 oversized=0 discards=-",
             "w1.own cycle=1 order=reverse held=32 owner_clear=32 first_drop=3 hold_mismatch=0 dwell_mismatch=0 release_mismatch=0 first_mismatch=- first_after_release=4,5,7,x,31,0 order_breaks=3 chained=0 oversized=1 discards=oversized:1,rx_failure:2",
             "w1.prefix fcs=0 strict_rxend_refusable=0 strict_dump_refusable=0 admitted=500",
-            "w1.reload max_attempts=3 limit=100001 observations=2 reload_rerings=0 rering_failures=0 base_writes=1 reserved_landings=1 reserved_late_landings=0 walker_on_detached=0",
+            "w1.reload max_attempts=3 limit_us=20 observations=2 reload_rerings=0 rering_failures=0 base_writes=1 reserved_landings=1 reserved_late_landings=0 walker_on_detached=0",
             "w1.continuation stale_doorbell=2 longest_streak=1",
             "w1.teardown mask_confirm_us=4 drain_us=30 drain_polls=2",
             "w1.exit cause=StopRequested end=Halted",
@@ -2971,7 +2971,7 @@ mod tests {
             .iter_mut()
             .find(|line| line.starts_with("w1.reload"))
             .unwrap();
-        *line = "w1.reload max_attempts=3 limit=100001 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1".to_owned();
+        *line = "w1.reload max_attempts=3 limit_us=20 observations=2 base_repairs=0 exhausted_republications=1 republications_accepted=1".to_owned();
         assert!(Report::parse(&console(&old)).is_err());
         // Every key is required.
         for key in [

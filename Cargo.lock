@@ -2749,6 +2749,7 @@ dependencies = [
  "oer-memory",
  "oer-test-ui-cases",
  "oer-time",
+ "oer-time-virtual",
  "pin-project",
  "subtle",
  "zeroize",
