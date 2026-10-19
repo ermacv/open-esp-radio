@@ -42,7 +42,7 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
-        let station = Station::new_open(
+        let (station, _credits) = Station::new_open(
             config(StaSecurity::Open).0,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,

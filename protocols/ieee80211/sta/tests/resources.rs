@@ -102,7 +102,10 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     place: LeasePlace<'id>,
     absence: AbsencePlace<'id>,
     configure: oer_ieee80211_lower_mac::ConfigurePermission<'id, oer_ieee80211_lower_mac::Station>,
-) -> Station<'id, Tokens<G>, Caps> {
+) -> (
+    Station<'id, Tokens<G>, Caps>,
+    oer_ieee80211_sta::machine::StaCommandCredits<'id>,
+) {
     Station::new_open::<T, B, G>(
         config,
         StationResources {

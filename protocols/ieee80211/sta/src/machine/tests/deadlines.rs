@@ -3,8 +3,8 @@ use super::*;
 fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
     assert_eq!(
         world.completed,
-        [StaCommandTerminal {
-            request: StaRequest::new(401, StaCommand::BackgroundScan),
+        [ObservedCommandTerminal {
+            request: ObservedRequest::new(401, StaCommand::BackgroundScan),
             outcome: StaCommandOutcome::BackgroundScan {
                 interrupted: Some(BackgroundScanEnd::DeadlineOverflow),
             },
@@ -30,17 +30,14 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
     // A subsequent, representable operation really runs on the retained lease.
     world.completed.clear();
     world.station.config.dwell = Duration::from_micros(1);
-    world
-        .station
-        .command(now, StaRequest::new(402, StaCommand::BackgroundScan))
-        .unwrap();
+    world.command(now, 402, StaCommand::BackgroundScan).unwrap();
     world.run(now);
     assert!(world.frames.iter().any(|frame| frame[0] == 0x40));
     world.advance();
     assert_eq!(
         world.completed,
-        [StaCommandTerminal {
-            request: StaRequest::new(402, StaCommand::BackgroundScan),
+        [ObservedCommandTerminal {
+            request: ObservedRequest::new(402, StaCommand::BackgroundScan),
             outcome: StaCommandOutcome::BackgroundScan { interrupted: None },
         }]
     );
@@ -60,10 +57,10 @@ fn background_overflow_before_configuration_has_no_effect_and_keeps_the_link() {
             world.take();
             let late = Instant::from_micros(u64::MAX - 1);
             world
-                .station
                 .command(
                     if delayed_poll { at(50) } else { late },
-                    StaRequest::new(401, StaCommand::BackgroundScan),
+                    401,
+                    StaCommand::BackgroundScan,
                 )
                 .unwrap();
             world.run(late);
@@ -86,8 +83,7 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
         world.take();
         world.hold_configured = true;
         world
-            .station
-            .command(at(50), StaRequest::new(401, StaCommand::BackgroundScan))
+            .command(at(50), 401, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(50));
         assert_eq!(world.take(), [Seen::Configure("bss+scan")]);
@@ -113,10 +109,7 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
 fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(403, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 403, StaCommand::Connect).unwrap();
         world.run(at(0));
         world.advance();
         world.receive(at(13), &beacon());
@@ -138,8 +131,8 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
         world.run(late);
         assert_eq!(
             world.completed,
-            [StaCommandTerminal {
-                request: StaRequest::new(403, StaCommand::Connect),
+            [ObservedCommandTerminal {
+                request: ObservedRequest::new(403, StaCommand::Connect),
                 outcome: StaCommandOutcome::ConnectFailed(StaDisconnectReason::DeadlineOverflow),
             }]
         );
@@ -174,10 +167,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                 },
                 [Slot(1), Slot(2)],
             );
-            world
-                .station
-                .command(at(0), StaRequest::new(404, StaCommand::Connect))
-                .unwrap();
+            world.command(at(0), 404, StaCommand::Connect).unwrap();
             world.run(at(0));
             world.advance();
             world.receive(at(13), &wpa2_beacon());
@@ -199,8 +189,8 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
             }
             assert_eq!(
                 world.completed,
-                [StaCommandTerminal {
-                    request: StaRequest::new(404, StaCommand::Connect),
+                [ObservedCommandTerminal {
+                    request: ObservedRequest::new(404, StaCommand::Connect),
                     outcome: StaCommandOutcome::ConnectFailed(
                         StaDisconnectReason::DeadlineOverflow
                     ),

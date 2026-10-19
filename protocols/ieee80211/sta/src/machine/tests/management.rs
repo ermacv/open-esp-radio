@@ -273,10 +273,7 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
                     world.station.input(at(1074), StaInput::Tick);
                     at(1074)
                 } else {
-                    world
-                        .station
-                        .command(at(50), StaRequest::new(8, StaCommand::Disconnect))
-                        .unwrap();
+                    world.command(at(50), 8, StaCommand::Disconnect).unwrap();
                     at(50)
                 };
                 let Some(StaAction::TransmitProtected { transmit, .. }) =

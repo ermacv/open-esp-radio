@@ -322,7 +322,6 @@ impl PortBody<ModelBackend> for Case {
                             aggregate,
                             protection: Protection::None,
                             power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                            coex_operation: TxOperation::Data,
                             min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                         })
                         .admit(),

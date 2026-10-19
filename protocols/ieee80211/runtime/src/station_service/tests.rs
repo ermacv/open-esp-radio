@@ -7,7 +7,10 @@ use core::cell::{Cell, RefCell};
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
 use core::task::{Poll, Waker};
-use oer_ieee80211_sta::machine::StaCommand;
+use oer_ieee80211_sta::machine::{
+    CommandRefusal, ConnectCommand, DisconnectCommand, ScanCommand, StaCommand, StaCommandCredit,
+    StaCommandCredits, StaCommandOutcome, StaCommandPermission,
+};
 
 use embassy_futures::join::join;
 use oer_espressif_ieee80211_policy::{
@@ -346,8 +349,7 @@ enum ExpectedStreamEnd {
 struct World<'b> {
     air: Rc<ModelAir>,
     clock: VirtualClock,
-    commands: Cell<Option<MsduSender<'b, ServiceCommand<ModelCaps24>, 4>>>,
-    outputs: RefCell<Vec<ServiceOutput<ModelCaps24>>>,
+    outputs: RefCell<Vec<ObservedOutput>>,
     completions: RefCell<Vec<FrameRates>>,
     refuse_rate: Cell<bool>,
     fail_submission: Cell<bool>,
@@ -427,7 +429,160 @@ impl RateSelection<ModelRxMeta, ModelAck> for RecordingRates<'_> {
     }
 }
 
-impl World<'_> {
+type CommandPath = <ModelTypes<ServiceContexts> as PhaseTypes<'static>>::StationCommandPath;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ObservedRequest {
+    correlation: u64,
+    command: StaCommand,
+}
+impl ObservedRequest {
+    fn of(request: &StaRequest<'_, CommandPath>) -> Self {
+        Self {
+            correlation: request.correlation(),
+            command: request.command(),
+        }
+    }
+    const fn correlation(&self) -> u64 {
+        self.correlation
+    }
+    const fn command(&self) -> StaCommand {
+        self.command
+    }
+}
+#[derive(Debug)]
+struct ObservedCommandRefused {
+    request: ObservedRequest,
+    reason: CommandRefusal,
+}
+#[derive(Debug)]
+struct ObservedCommandTerminal {
+    request: ObservedRequest,
+    outcome: StaCommandOutcome,
+}
+enum ObservedOutput {
+    RxFrameDropped(oer_ieee80211_sta::machine::StaRxError),
+    MsduRefused {
+        packet: TxMsdu,
+        reason: DataRefusal,
+    },
+    RxMsduRefused(FrameTooLong),
+    TxRefused {
+        operation: TxOperation,
+        reason: TxRefusal,
+    },
+    Notice(StaNotice),
+    CommandRefused(ObservedCommandRefused),
+    CommandCompleted(ObservedCommandTerminal),
+    AccessPoint(AccessPointCommand<ModelCaps24>),
+}
+
+struct CommandCredits<'id> {
+    connect: Option<StaCommandCredit<'id, CommandPath, ConnectCommand>>,
+    scan: Option<StaCommandCredit<'id, CommandPath, ScanCommand>>,
+    disconnect: Option<StaCommandCredit<'id, CommandPath, DisconnectCommand>>,
+}
+impl<'id> CommandCredits<'id> {
+    fn new(credits: StaCommandCredits<'id, CommandPath>) -> Self {
+        Self {
+            connect: Some(credits.connect),
+            scan: Some(credits.scan),
+            disconnect: Some(credits.disconnect),
+        }
+    }
+    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, CommandPath> {
+        match kind {
+            StaCommand::Connect => self
+                .connect
+                .take()
+                .expect("application owns connect credit")
+                .into(),
+            StaCommand::BackgroundScan => self
+                .scan
+                .take()
+                .expect("application owns scan credit")
+                .into(),
+            StaCommand::Disconnect => self
+                .disconnect
+                .take()
+                .expect("application owns disconnect credit")
+                .into(),
+        }
+    }
+    fn restore(&mut self, permission: StaCommandPermission<'id, CommandPath>) {
+        match permission {
+            StaCommandPermission::Connect(credit) => {
+                assert!(self.connect.replace(credit).is_none())
+            }
+            StaCommandPermission::BackgroundScan(credit) => {
+                assert!(self.scan.replace(credit).is_none())
+            }
+            StaCommandPermission::Disconnect(credit) => {
+                assert!(self.disconnect.replace(credit).is_none())
+            }
+        }
+    }
+}
+
+/// Command transport and credits remain inside the installation which minted them.
+/// The outer world's observations own no command permission.
+struct Application<'a, 'b, 'id> {
+    world: &'a World<'b>,
+    commands: Cell<Option<MsduSender<'a, ServiceCommand<'id, ModelCaps24, CommandPath>, 4>>>,
+    credits: RefCell<CommandCredits<'id>>,
+}
+impl<'b> core::ops::Deref for Application<'_, 'b, '_> {
+    type Target = World<'b>;
+    fn deref(&self) -> &Self::Target {
+        self.world
+    }
+}
+
+impl<'id> Application<'_, '_, 'id> {
+    async fn station_command(&self, correlation: u64, command: StaCommand) {
+        let permission = self.credits.borrow_mut().take(command);
+        self.command(ServiceCommand::Station(StaRequest::new(
+            correlation,
+            permission,
+        )))
+        .await;
+    }
+    fn record_output(&self, output: ServiceOutput<'id, ModelCaps24, CommandPath>) {
+        let observed = match output {
+            ServiceOutput::RxFrameDropped(error) => ObservedOutput::RxFrameDropped(error),
+            ServiceOutput::MsduRefused { packet, reason } => {
+                ObservedOutput::MsduRefused { packet, reason }
+            }
+            ServiceOutput::RxMsduRefused(error) => ObservedOutput::RxMsduRefused(error),
+            ServiceOutput::TxRefused { operation, reason } => {
+                ObservedOutput::TxRefused { operation, reason }
+            }
+            ServiceOutput::Notice(notice) => ObservedOutput::Notice(notice),
+            ServiceOutput::AccessPoint(command) => ObservedOutput::AccessPoint(command),
+            ServiceOutput::CommandRefused(refused) => {
+                let request = ObservedRequest::of(&refused.request);
+                self.credits
+                    .borrow_mut()
+                    .restore(refused.request.into_parts().1);
+                ObservedOutput::CommandRefused(ObservedCommandRefused {
+                    request,
+                    reason: refused.reason,
+                })
+            }
+            ServiceOutput::CommandCompleted(terminal) => {
+                let request = ObservedRequest::of(&terminal.request);
+                self.credits
+                    .borrow_mut()
+                    .restore(terminal.request.into_parts().1);
+                ObservedOutput::CommandCompleted(ObservedCommandTerminal {
+                    request,
+                    outcome: terminal.outcome,
+                })
+            }
+        };
+        self.outputs.borrow_mut().push(observed);
+    }
+
     /// The next frame of `subtype` the station sent after the first
     /// `seen`, advancing the clock to the machines' deadlines while it
     /// waits.
@@ -457,7 +612,7 @@ impl World<'_> {
                 .outputs
                 .borrow()
                 .iter()
-                .any(|output| matches!(output, ServiceOutput::Notice(seen) if *seen == notice))
+                .any(|output| matches!(output, ObservedOutput::Notice(seen) if *seen == notice))
             {
                 return;
             }
@@ -516,7 +671,7 @@ impl World<'_> {
         ptk
     }
 
-    async fn command(&self, command: ServiceCommand<ModelCaps24>) {
+    async fn command(&self, command: ServiceCommand<'id, ModelCaps24, CommandPath>) {
         let mut sender = self
             .commands
             .take()
@@ -566,11 +721,7 @@ impl World<'_> {
         beacon: Vec<u8>,
         protected: bool,
     ) -> [AirFrame; 3] {
-        self.command(ServiceCommand::Station(StaRequest::new(
-            1,
-            StaCommand::Connect,
-        )))
-        .await;
+        self.station_command(1, StaCommand::Connect).await;
         let probe = self.sent(seen, PROBE_REQUEST).await;
         self.air.receive(&beacon, meta());
         let authentication = self.sent(seen, AUTHENTICATION).await;
@@ -586,7 +737,6 @@ impl World<'_> {
 /// The body that runs the service beside the test's script.
 struct Body<'w, 'b, S, const GROUPS: usize> {
     world: &'w World<'b>,
-    commands: MsduReceiver<'b, ServiceCommand<ModelCaps24>, 4>,
     transmit: MsduReceiver<'b, TxMsdu, 2>,
     receive: MsduSender<'b, EthernetFrame, 2>,
     config: TestConfig,
@@ -600,7 +750,7 @@ type Script<'w> = Pin<Box<dyn Future<Output = ()> + 'w>>;
 impl<'w, 'b, S, const GROUPS: usize> PortBody<ModelBackend<ModelCaps24, ServiceContexts>>
     for Body<'w, 'b, S, GROUPS>
 where
-    S: FnOnce(&'w World<'b>) -> Script<'w>,
+    S: for<'a, 'id> FnOnce(&'a Application<'a, 'b, 'id>) -> Script<'a>,
 {
     type Output = ();
     async fn run<'p, 'id>(
@@ -662,15 +812,19 @@ where
                 ),
                 group_permission: station_group_permission,
             };
-            let mut station = match security {
+            let (mut station, credits) = match security {
                 StaSecurity::Open => Station::new_open(config, resources),
                 StaSecurity::Personal { password, pmk } => {
                     Station::new_personal(config, password, pmk, resources, GroupCapacity::new())
                 }
             };
+            let mut credits = CommandCredits::new(credits);
             if self.refuse_initial_enable {
                 station
-                    .command(Instant::EPOCH, StaRequest::new(901, StaCommand::Connect))
+                    .command(
+                        Instant::EPOCH,
+                        StaRequest::new(901, credits.take(StaCommand::Connect)),
+                    )
                     .unwrap();
                 self.world.air.refuse_enable();
             }
@@ -687,10 +841,18 @@ where
                 },
                 terminal_access,
             );
-            let world = self.world;
-            let mut output = |output| world.outputs.borrow_mut().push(output);
+            let mut command_queue =
+                MsduQueue::<ServiceCommand<'id, ModelCaps24, CommandPath>, 4>::new();
+            let (application, commands) = command_queue.split();
+            let application = Application {
+                world: self.world,
+                commands: Cell::new(Some(application)),
+                credits: RefCell::new(credits),
+            };
+            let world = &application;
+            let mut output = |output| world.record_output(output);
             let mut io = ServiceIo {
-                commands: self.commands,
+                commands,
                 transmit: self.transmit,
                 receive: self.receive,
                 output: &mut output,
@@ -859,7 +1021,7 @@ where
                     "all request terminals were delivered once"
                 );
                 assert_eq!(world.outputs.borrow().iter().filter(|output| matches!(output,
-                    ServiceOutput::CommandCompleted(terminal) if terminal.request.correlation() == 901
+                    ObservedOutput::CommandCompleted(terminal) if terminal.request.correlation() == 901
                     && terminal.outcome == oer_ieee80211_sta::machine::StaCommandOutcome::ConnectFailed(
                         oer_ieee80211_sta::machine::StaDisconnectReason::Arbiter(oer_ieee80211_arbiter::LeaveReason::PortFailed))
                 )).count(), 1);
@@ -893,7 +1055,7 @@ where
 /// the access point by `script`.
 fn run<S>(security: StaSecurity, script: S)
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
     run_with(config(security), script);
 }
@@ -901,14 +1063,14 @@ where
 /// Run the service on a 2.4 GHz model with `config`.
 fn run_with<S>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
     run_with_groups::<S, 2>(config, script)
 }
 
 fn run_with_groups<S, const GROUPS: usize>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
     run_case::<S, GROUPS>(config, script, false)
 }
@@ -921,7 +1083,7 @@ fn run_case<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
     std::thread::scope(|scope| {
         std::thread::Builder::new()
@@ -941,7 +1103,7 @@ fn run_case_on_this_thread<S, const GROUPS: usize>(
     refuse_initial_enable: bool,
 ) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+    S: for<'w, 'b, 'id> FnOnce(&'w Application<'w, 'b, 'id>) -> Script<'w> + Send,
 {
     let (backend, air) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
         channel6(),
@@ -950,8 +1112,6 @@ where
             IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
         ],
     );
-    let mut commands = MsduQueue::<ServiceCommand<ModelCaps24>, 4>::new();
-    let (application, commands) = commands.split();
     let mut transmit = MsduQueue::<TxMsdu, 2>::new();
     let mut receive = MsduQueue::<EthernetFrame, 2>::new();
     let (stack, transmit) = transmit.split();
@@ -959,7 +1119,6 @@ where
     let world = World {
         air,
         clock: VirtualClock::new(),
-        commands: Cell::new(Some(application)),
         outputs: RefCell::new(Vec::new()),
         completions: RefCell::new(Vec::new()),
         refuse_rate: Cell::new(false),
@@ -976,7 +1135,6 @@ where
         backend,
         Body::<S, GROUPS> {
             world: &world,
-            commands,
             transmit,
             receive,
             config,
@@ -1029,12 +1187,7 @@ fn port_failure_during_scan_returns_one_connect_terminal_and_one_lifecycle_notic
     run(StaSecurity::Open, |world| {
         Box::pin(async move {
             let mut seen = 0;
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    777,
-                    StaCommand::Connect,
-                )))
-                .await;
+            world.station_command(777, StaCommand::Connect).await;
             world.sent(&mut seen, PROBE_REQUEST).await;
             world.air.poison();
             let reason =
@@ -1045,7 +1198,7 @@ fn port_failure_during_scan_returns_one_connect_terminal_and_one_lifecycle_notic
                 outputs
                     .iter()
                     .filter(|output| matches!(output,
-            ServiceOutput::CommandCompleted(terminal) if terminal.request.correlation() == 777
+            ObservedOutput::CommandCompleted(terminal) if terminal.request.correlation() == 777
                 && terminal.outcome == StaCommandOutcome::ConnectFailed(reason)))
                     .count(),
                 1
@@ -1055,7 +1208,7 @@ fn port_failure_during_scan_returns_one_connect_terminal_and_one_lifecycle_notic
                     .iter()
                     .filter(|output| matches!(
                         output,
-                        ServiceOutput::Notice(StaNotice::Disconnected(_))
+                        ObservedOutput::Notice(StaNotice::Disconnected(_))
                     ))
                     .count(),
                 1
@@ -1161,13 +1314,13 @@ fn poisoned_disable_after_stop_finishes_the_connected_lifecycle() {
                     .iter()
                     .filter(|output| matches!(
                         output,
-                        ServiceOutput::Notice(StaNotice::Disconnected(_))
+                        ObservedOutput::Notice(StaNotice::Disconnected(_))
                     ))
                     .count(),
                 1
             );
             assert_eq!(outputs.iter().filter(|output| matches!(output,
-            ServiceOutput::CommandCompleted(terminal) if terminal.request.command() == StaCommand::Connect)).count(), 1);
+            ObservedOutput::CommandCompleted(terminal) if terminal.request.command() == StaCommand::Connect)).count(), 1);
         })
     });
 }
@@ -1236,12 +1389,7 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
                 data.rate,
                 EspressifRateControl::for_peer((), &peer, meta().link_metric()).mpdu_rate()
             );
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    2,
-                    StaCommand::Disconnect,
-                )))
-                .await;
+            world.station_command(2, StaCommand::Disconnect).await;
             let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
             assert_eq!(deauthentication.rate, dsss1());
         })
@@ -1278,12 +1426,7 @@ fn on_wpa2_the_join_goes_on_the_default_record_and_the_handshake_on_the_associat
                 assert_ne!(group_message2.plaintext[1] & 0x40, 0);
                 assert!(group_message2.packet_number.is_some());
                 assert_eq!(group_message2.rate, dsss1());
-                world
-                    .command(ServiceCommand::Station(StaRequest::new(
-                        2,
-                        StaCommand::Disconnect,
-                    )))
-                    .await;
+                world.station_command(2, StaCommand::Disconnect).await;
                 let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
                 assert_eq!(deauthentication.rate, dsss1());
             })
@@ -1309,12 +1452,7 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
                     .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
                 let response = world.sent(&mut seen, DATA).await;
                 assert!(matches!(response.key, Some((_, true))));
-                world
-                    .command(ServiceCommand::Station(StaRequest::new(
-                        2,
-                        StaCommand::Disconnect,
-                    )))
-                    .await;
+                world.station_command(2, StaCommand::Disconnect).await;
                 world.sent(&mut seen, DEAUTHENTICATION).await;
                 world
                     .notice(StaNotice::Disconnected(StaDisconnectReason::Requested))
@@ -1364,14 +1502,14 @@ fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_r
                     .await;
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
                     output,
-                    ServiceOutput::TxRefused {
+                    ObservedOutput::TxRefused {
                         operation: TxOperation::Station,
                         reason: TxRefusal::NoRate
                     }
                 )));
                 assert!(!world.outputs.borrow().iter().any(|output| matches!(
                     output,
-                    ServiceOutput::Notice(StaNotice::Connected { .. })
+                    ObservedOutput::Notice(StaNotice::Connected { .. })
                 )));
                 let sent = world.air.sent();
                 assert!(
@@ -1415,7 +1553,7 @@ fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
                 }
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
                     output,
-                    ServiceOutput::TxRefused {
+                    ObservedOutput::TxRefused {
                         operation: TxOperation::Data,
                         reason: TxRefusal::NoRate
                     }
@@ -1515,12 +1653,7 @@ fn a_station_scans_joins_handshakes_carries_data_both_ways_and_disconnects() {
 
                 // The disconnection: Deauthentication, the notice, and no
                 // data after it.
-                world
-                    .command(ServiceCommand::Station(StaRequest::new(
-                        2,
-                        StaCommand::Disconnect,
-                    )))
-                    .await;
+                world.station_command(2, StaCommand::Disconnect).await;
                 let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
                 assert_eq!(deauthentication.plaintext[4..10], BSSID);
                 world
@@ -1605,21 +1738,11 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
             assert_ne!(group_message2.plaintext[1] & 0x40, 0);
             assert_eq!(group_message2.plaintext[38..40], [0x88, 0x8e], "EAPOL");
 
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    3,
-                    StaCommand::BackgroundScan,
-                )))
-                .await;
+            world.station_command(3, StaCommand::BackgroundScan).await;
             let null = world.sent(&mut seen, NULL).await;
             assert_ne!(null.plaintext[1] & 0x10, 0, "PM=1 before the absence");
 
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    2,
-                    StaCommand::Disconnect,
-                )))
-                .await;
+            world.station_command(2, StaCommand::Disconnect).await;
             world.sent(&mut seen, DEAUTHENTICATION).await;
         })
     });
@@ -1633,12 +1756,7 @@ fn a_passed_station_deadline_ticks_the_station() {
     run(StaSecurity::Open, |world| {
         Box::pin(async move {
             let mut seen = 0;
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    1,
-                    StaCommand::Connect,
-                )))
-                .await;
+            world.station_command(1, StaCommand::Connect).await;
             world.sent(&mut seen, PROBE_REQUEST).await;
             world.air.receive(&beacon(false), meta());
             world.sent(&mut seen, AUTHENTICATION).await;
@@ -1695,19 +1813,9 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
                 }
             }
             // The absence starts; the station leaves during it.
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    3,
-                    StaCommand::BackgroundScan,
-                )))
-                .await;
+            world.station_command(3, StaCommand::BackgroundScan).await;
             world.sent(&mut seen, NULL).await;
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    2,
-                    StaCommand::Disconnect,
-                )))
-                .await;
+            world.station_command(2, StaCommand::Disconnect).await;
             // Leaving waits for the absence to end before sending the
             // Deauthentication. `sent` advances the virtual clock to that
             // deadline; waiting only for a notice leaves time stopped.
@@ -1795,12 +1903,7 @@ fn beside_an_access_point_msdus_survive_an_absence() {
                     .unwrap(),
                 }))
                 .await;
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    3,
-                    StaCommand::BackgroundScan,
-                )))
-                .await;
+            world.station_command(3, StaCommand::BackgroundScan).await;
             let away = world.sent(&mut seen, NULL).await;
             assert_ne!(away.plaintext[1] & 0x10, 0, "PM=1 before the absence");
             assert!(world.clock.now() >= tbtt, "the absence follows a TBTT");
@@ -1930,12 +2033,7 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
                     let frame = world.sent(&mut seen, QOS_DATA).await;
                     assert_eq!(frame.plaintext[21], priority);
                 }
-                world
-                    .command(ServiceCommand::Station(StaRequest::new(
-                        2,
-                        StaCommand::Disconnect,
-                    )))
-                    .await;
+                world.station_command(2, StaCommand::Disconnect).await;
                 world.sent(&mut seen, DEAUTHENTICATION).await;
             })
         },
@@ -1996,12 +2094,7 @@ fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_atte
                     world.sent(&mut seen, QOS_DATA).await;
                 }
                 fill().await;
-                world
-                    .command(ServiceCommand::Station(StaRequest::new(
-                        2,
-                        StaCommand::Disconnect,
-                    )))
-                    .await;
+                world.station_command(2, StaCommand::Disconnect).await;
                 for _ in 0..20 {
                     yield_now().await;
                 }
@@ -2051,7 +2144,7 @@ fn continuous_rx_cannot_starve_data_tx_or_application_commands() {
                 let command = world.outputs.borrow().iter().any(|output| {
                     matches!(
                         output,
-                        ServiceOutput::AccessPoint(AccessPointCommand::Start(_))
+                        ObservedOutput::AccessPoint(AccessPointCommand::Start(_))
                     )
                 });
                 if tx && command {
@@ -2102,38 +2195,28 @@ fn application_requests_return_correlated_refusals_and_unique_completions() {
     use oer_ieee80211_sta::machine::{CommandRefusal, StaCommandOutcome};
     run_with(config(StaSecurity::Open), |world| {
         Box::pin(async move {
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    91,
-                    StaCommand::BackgroundScan,
-                )))
-                .await;
+            world.station_command(91, StaCommand::BackgroundScan).await;
             for _ in 0..16 {
                 yield_now().await;
             }
             assert!(world.outputs.borrow().iter().any(|output| matches!(output,
-                ServiceOutput::CommandRefused(StaCommandRefused { request, reason: CommandRefusal::NotConnected })
+                ObservedOutput::CommandRefused(ObservedCommandRefused { request, reason: CommandRefusal::NotConnected })
                     if request.correlation() == 91 && request.command() == StaCommand::BackgroundScan)));
             let mut seen = 0;
             world.associate(&mut seen, false).await;
             for _ in 0..16 {
                 yield_now().await;
             }
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    92,
-                    StaCommand::Connect,
-                )))
-                .await;
+            world.station_command(92, StaCommand::Connect).await;
             for _ in 0..16 {
                 yield_now().await;
             }
             let outputs = world.outputs.borrow();
             assert_eq!(outputs.iter().filter(|output| matches!(output,
-                ServiceOutput::CommandCompleted(StaCommandTerminal { request, outcome: StaCommandOutcome::Connected { .. } })
+                ObservedOutput::CommandCompleted(ObservedCommandTerminal { request, outcome: StaCommandOutcome::Connected { .. } })
                     if request.correlation() == 1)).count(), 1);
             assert!(outputs.iter().any(|output| matches!(output,
-                ServiceOutput::CommandRefused(StaCommandRefused { request, reason: CommandRefusal::AlreadyConnected })
+                ObservedOutput::CommandRefused(ObservedCommandRefused { request, reason: CommandRefusal::AlreadyConnected })
                     if request.correlation() == 92)));
         })
     });
@@ -2173,7 +2256,7 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 }
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
                     output,
-                    ServiceOutput::RxFrameDropped(oer_ieee80211_sta::machine::StaRxError::Frame(
+                    ObservedOutput::RxFrameDropped(oer_ieee80211_sta::machine::StaRxError::Frame(
                         RxDropReason::Integrity
                     ))
                 )));
@@ -2191,7 +2274,7 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 assert_eq!(world.air.sent().len(), after);
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
                     output,
-                    ServiceOutput::RxFrameDropped(oer_ieee80211_sta::machine::StaRxError::Frame(
+                    ObservedOutput::RxFrameDropped(oer_ieee80211_sta::machine::StaRxError::Frame(
                         RxDropReason::Replay
                     ))
                 )));
@@ -2228,7 +2311,7 @@ fn message4_waits_for_the_actual_group_installation_terminal() {
                 assert!(
                     !world.outputs.borrow().iter().any(|out| matches!(
                         out,
-                        ServiceOutput::Notice(StaNotice::Connected { .. })
+                        ObservedOutput::Notice(StaNotice::Connected { .. })
                     ))
                 );
                 world.air.hold_group_commands(false);
@@ -2279,7 +2362,7 @@ fn stop_or_fault_with_an_accepted_group_install_keeps_owners_and_sends_no_messag
                         outputs
                             .iter()
                             .filter(|output| matches!(output,
-                ServiceOutput::CommandCompleted(terminal) if terminal.request.correlation() == 1
+                ObservedOutput::CommandCompleted(terminal) if terminal.request.correlation() == 1
                     && terminal.outcome == StaCommandOutcome::ConnectFailed(reason)))
                             .count(),
                         1
@@ -2289,7 +2372,7 @@ fn stop_or_fault_with_an_accepted_group_install_keeps_owners_and_sends_no_messag
                             .iter()
                             .filter(|output| matches!(
                                 output,
-                                ServiceOutput::Notice(StaNotice::Disconnected(_))
+                                ObservedOutput::Notice(StaNotice::Disconnected(_))
                             ))
                             .count(),
                         1
@@ -2320,12 +2403,7 @@ fn an_extended_ofdm_rate_set_reaches_the_data_and_control_plans() {
             world.send_msdu([0x02, 0, 0, 0, 0, 0x07]);
             let data = world.sent(&mut seen, DATA).await;
             assert_eq!(data.rate, PhyRate::Legacy(LegacyRate::Ofdm54M));
-            world
-                .command(ServiceCommand::Station(StaRequest::new(
-                    2,
-                    StaCommand::Disconnect,
-                )))
-                .await;
+            world.station_command(2, StaCommand::Disconnect).await;
             let disconnect = world.sent(&mut seen, DEAUTHENTICATION).await;
             assert_eq!(disconnect.rate, PhyRate::Legacy(LegacyRate::Ofdm6M));
         })
@@ -2398,7 +2476,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     assert!(
                         !world.outputs.borrow().iter().any(|o| matches!(
                             o,
-                            ServiceOutput::Notice(StaNotice::Disconnected(_))
+                            ObservedOutput::Notice(StaNotice::Disconnected(_))
                         ))
                     );
                     if peer_disconnect {
@@ -2421,12 +2499,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                             ))
                             .await;
                     } else {
-                        world
-                            .command(ServiceCommand::Station(StaRequest::new(
-                                2,
-                                StaCommand::Disconnect,
-                            )))
-                            .await;
+                        world.station_command(2, StaCommand::Disconnect).await;
                         let deauthentication = world.sent(&mut seen, DEAUTHENTICATION).await;
                         assert_eq!(deauthentication.plaintext[..2], [0xc0, 0x40]);
                         assert!(matches!(deauthentication.key, Some((_, true))));
