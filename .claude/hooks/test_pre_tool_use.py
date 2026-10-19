@@ -36,6 +36,7 @@ class Edits(unittest.TestCase):
             ("Edit", "/w/knowledge/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
             ("Write", "knowledge/esp32s31/vendor/facts/names/libble_app.toml", "re-deriving"),
             ("Edit", "/w/firmware/platform/esp32s31/linker/dma-window.x", "cargo registers generate"),
+            ("Edit", "/w/portable/platform/esp32s31-layout/linker/dma-window.x", "cargo registers generate"),
         ]:
             self.assert_blocked(tool, path, command)
 
