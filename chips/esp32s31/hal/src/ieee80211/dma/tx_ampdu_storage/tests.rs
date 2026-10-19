@@ -168,8 +168,11 @@ fn retaining_a_backing_samples_its_dma_region_once() {
 fn internal_chain_publishes_phased_dma_authority() {
     let mut storage = storage();
     storage.begin().unwrap();
-    storage.buffer_mut(0).unwrap()[0] = 0x11;
-    storage.buffer_mut(1).unwrap()[0] = 0x22;
+    let AmpduDmaAccess::Writable(mut software) = storage.access() else {
+        panic!("fixture owns software backing")
+    };
+    software.buffer_mut(0).unwrap()[0] = 0x11;
+    software.buffer_mut(1).unwrap()[0] = 0x22;
     let entries = [
         AmpduInternalDescriptor {
             buffer_capacity: 256,
@@ -523,10 +526,10 @@ fn detached_compaction_rejects_more_logical_entries_than_dma_slots() {
         .as_ptr()
         .addr();
     owner
-        .commit_backing_descriptor(&first, first_address, 64, 32)
+        .commit_backing_descriptor(first, first_address, 64, 32)
         .unwrap();
     owner
-        .commit_backing_descriptor(&second, second_address, 64, 32)
+        .commit_backing_descriptor(second, second_address, 64, 32)
         .unwrap();
     owner.publish_retained_chain(2).unwrap().commit(|_| {});
     owner.mark_completed().unwrap();
@@ -572,7 +575,7 @@ fn detached_compaction_supports_every_slot_admitted_by_the_owner() {
             .as_ptr()
             .addr();
         owner
-            .commit_backing_descriptor(&backing, address, 64, 32)
+            .commit_backing_descriptor(backing, address, 64, 32)
             .unwrap();
         last_address = address;
     }
@@ -613,6 +616,39 @@ fn full_retention_arena_reports_count_without_mutating_the_owner() {
 }
 
 #[test]
+fn rejected_descriptor_returns_the_same_identity_for_correction() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let backing = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let address = owner
+        .reserved_backing_mut(&backing)
+        .unwrap()
+        .bytes
+        .as_ptr()
+        .addr();
+    let index = backing.index();
+    let generation = backing.generation;
+    let (backing, error) = owner
+        .commit_backing_descriptor(backing, address, 64, 0)
+        .unwrap_err();
+    assert_eq!(error, AmpduDmaStorageError::InvalidLength);
+    assert_eq!((backing.index(), backing.generation), (index, generation));
+    assert_eq!(owner.active_count, 0);
+    assert_eq!(drops.get(), 0);
+    owner
+        .commit_backing_descriptor(backing, address, 64, 32)
+        .unwrap();
+    owner.publish_retained_chain(1).unwrap().commit(|_| {});
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    owner.release_detached().unwrap();
+    assert_eq!(drops.get(), 1);
+}
+
+#[test]
 fn retained_publication_fails_closed_when_descriptor_image_is_missing() {
     let drops = Rc::new(Cell::new(0));
     let mut owner = retained_owner();
@@ -632,16 +668,17 @@ fn retained_publication_fails_closed_when_descriptor_image_is_missing() {
         .as_ptr()
         .addr();
     owner
-        .commit_backing_descriptor(&first, first_address, 64, 32)
+        .commit_backing_descriptor(first, first_address, 64, 32)
         .unwrap();
+    let second_index = usize::from(second.index);
     owner
-        .commit_backing_descriptor(&second, second_address, 64, 32)
+        .commit_backing_descriptor(second, second_address, 64, 32)
         .unwrap();
 
     // Model corrupted retained metadata directly. The safe publication
     // boundary must reject it before mutating even an earlier valid
     // descriptor or handing the arena to hardware.
-    owner.retention_mut().backing_descriptors[usize::from(second.index)] = None;
+    owner.retention_mut().backing_descriptors[second_index] = None;
     assert!(matches!(
         owner.publish_retained_chain(2),
         Err(AmpduDmaStorageError::StaleBacking)

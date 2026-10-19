@@ -185,7 +185,7 @@ pub(super) fn confirm_completed_unit_link_release<const COUNT: usize>(
 /// One leaked RX DMA arena in the host address space and the layout it
 /// published.
 pub(super) struct HostRxArena<const COUNT: usize, const BUFFER: usize, const STORAGE: usize> {
-    placed: PlacedRxDma<COUNT, BUFFER, STORAGE, HostDma>,
+    placed: core::cell::Cell<Option<PlacedRxDma<COUNT, BUFFER, STORAGE, HostDma>>>,
     pub(super) storage: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, HostDma>,
     pub(super) base: u32,
     pub(super) buffers: &'static RxDmaBufferAddresses<COUNT>,
@@ -203,10 +203,11 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         }
         let placed = RxDmaStorage::place(Placed::host(Box::leak(storage))).unwrap();
         let storage = placed.storage();
+        let base = placed.descriptor_base();
         Self {
-            placed,
+            placed: core::cell::Cell::new(Some(placed)),
             storage,
-            base: placed.descriptor_base(),
+            base,
             buffers: storage.buffer_addresses(),
         }
     }
@@ -223,7 +224,10 @@ impl<const COUNT: usize, const BUFFER: usize, const STORAGE: usize>
         &self,
         mmio: &mut RxWalkerModel,
     ) -> Result<RxRingStopped<'static, COUNT>, RxRingError> {
-        self.placed.prepare_ring(mmio)
+        self.placed
+            .take()
+            .expect("fixture consumes the initial placement once")
+            .prepare_ring(mmio)
     }
 
     pub(super) fn start(&self, mmio: &mut RxWalkerModel) -> RxRingLive<'static, COUNT> {

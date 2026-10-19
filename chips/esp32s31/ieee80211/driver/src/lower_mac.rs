@@ -150,7 +150,7 @@ use oer_esp32s31_ieee80211_mac::{
     },
     sta_ap_registers::StaApRegisterHardware,
     tx::{
-        HeEdcaTxopLimit, HtAmpduDensity, LegacyTxQueue, TxError, TxPhyRate, TxSlot,
+        HeEdcaTxopLimit, HtAmpduDensity, LegacyTxQueue, TxPhyRate, TxSlot,
         ampdu::{HeAmpduPolicy, HtAmpduHardware},
         runtime::he_txop_limit,
     },
@@ -198,11 +198,12 @@ pub use ampdu::{
 use crate::{
     ampdu_tx::AmpduTxRoleAdapter,
     ordinary_tx::{
-        MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS, OrdinaryTxError, OrdinaryTxInterface, OrdinaryTxOutcome,
-        OrdinaryTxOwner, OrdinaryTxPlan, QuarantinedSingleAttempt, QueuedSingleAttempt,
-        QueuedSingleAttemptFailed, QueuedSingleAttemptProgress, QueuedSingleAttemptRefused,
-        SingleAttempt, SingleAttemptProtection, TX_CCMP_MIC_SIZE, TX_FCS_SIZE, TX_METADATA_SIZE,
-        WifiTxEntropy, WifiTxPowerProfile,
+        MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS, OrdinaryTxError, OrdinaryTxIdleOwner,
+        OrdinaryTxInterface, OrdinaryTxOutcome, OrdinaryTxOwner, OrdinaryTxPlan,
+        QuarantinedSingleAttempt, QueuedSingleAttempt, QueuedSingleAttemptFailed,
+        QueuedSingleAttemptProgress, QueuedSingleAttemptRefused, SingleAttempt,
+        SingleAttemptProtection, TX_CCMP_MIC_SIZE, TX_FCS_SIZE, TX_METADATA_SIZE, WifiTxEntropy,
+        WifiTxPowerProfile,
     },
     tx::WifiTxWake,
 };
@@ -610,7 +611,6 @@ fn frame_bssid(frame: &[u8]) -> Option<MacAddress> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpNumberingError {
     /// Software cannot currently write the slot's buffer.
-    BufferUnavailable(TxError),
     /// The CCMP header does not fit after the metadata and MAC header,
     /// including when the offset overflows.
     InsufficientSpace,
@@ -667,7 +667,7 @@ pub struct LowerMacCoreParts<
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
-    tx: OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>,
+    tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
     config: LowerMacConfig,
     coex: &'slot dyn RadioCoexPriorities,
     keys: KeyBank<'core, Path, TICKETS>,
@@ -853,13 +853,13 @@ where
     /// frames ask for the air at its priorities.
     pub fn new(
         authority: CoreAuthority<'core, Path, TICKETS>,
-        tx: OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>,
+        tx: OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>,
         config: LowerMacConfig,
         coex: &'slot dyn RadioCoexPriorities,
     ) -> DisabledCore<Self> {
         DisabledCore::new(Self {
             authority,
-            tx,
+            tx: tx.owner,
             config,
             fault: None,
             channel: config.channel,
@@ -978,19 +978,16 @@ where
     ///
     /// # Errors
     ///
-    /// An unavailable buffer, insufficient header space or packet-number
-    /// exhaustion is a distinct [`CcmpNumberingError`]. Receive-only group
-    /// handles are excluded by the argument type.
+    /// Insufficient header space or packet-number exhaustion is a distinct
+    /// [`CcmpNumberingError`]. Only a free slot and a transmit-capable key
+    /// provide the operation's authority.
     pub fn number(
         &mut self,
         key: &mut KeyHandle<'core, Path>,
-        slot: &mut Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+        slot: &mut oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'_, BUFFER_SIZE>,
         header_len: usize,
     ) -> Result<(), CcmpNumberingError> {
-        let buffer = slot
-            .as_mut()
-            .buffer_mut()
-            .map_err(CcmpNumberingError::BufferUnavailable)?;
+        let buffer = slot.buffer_mut();
         let at = TX_METADATA_SIZE
             .checked_add(header_len)
             .ok_or(CcmpNumberingError::InsufficientSpace)?;
@@ -1028,7 +1025,7 @@ where
     ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
         let MpduValues {
             role,
-            mut slot,
+            slot,
             len,
             no_ack,
             rate,
@@ -1039,6 +1036,7 @@ where
             operation,
             retry,
         } = values;
+        let mut slot = slot.into_slot();
         if let Some(fault) = self.fault {
             return Err(SubmitFault {
                 queue,
@@ -1049,11 +1047,8 @@ where
         }
         let access_category = queue.category();
         if retry {
-            let marked = slot
-                .as_mut()
-                .buffer_mut()
-                .map_err(OrdinaryTxError::from)
-                .and_then(|buffer| crate::ordinary_tx::mark_retry(buffer, len));
+            let marked =
+                crate::ordinary_tx::mark_retry(queued_free_slot(slot.as_mut()).into_buffer(), len);
             if let Err(error) = marked {
                 return Err(SubmitFault {
                     queue,
@@ -1063,18 +1058,13 @@ where
                 });
             }
         }
-        let matches_admission = slot
-            .as_mut()
-            .buffer_mut()
-            .map(|buffer| {
-                admission.matches_frame(
-                    role,
-                    buffer
-                        .get(TX_METADATA_SIZE..)
-                        .and_then(|frame| frame.get(..len)),
-                )
-            })
-            .map_err(OrdinaryTxError::from);
+        let matches_admission: Result<bool, OrdinaryTxError> = Ok(admission.matches_frame(
+            role,
+            queued_free_slot(slot.as_mut())
+                .into_buffer()
+                .get(TX_METADATA_SIZE..)
+                .and_then(|frame| frame.get(..len)),
+        ));
         match matches_admission {
             Ok(true) => {}
             Ok(false) => {
@@ -2223,7 +2213,7 @@ impl CheckedKeyScope {
 pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
     /// The slot holding the MPDU after the TX metadata word.
-    slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+    slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     /// The MPDU's length, without its MIC and FCS.
     len: usize,
     /// An individual frame sent without soliciting its ACK.
@@ -2267,7 +2257,7 @@ pub enum MpduValueError {
 /// Checked construction refuses with the complete, unpublished slot.
 #[must_use = "retain the refused slot"]
 pub struct MpduValuesRefused<'slot, const BUFFER_SIZE: usize> {
-    pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+    pub slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     pub reason: MpduValueError,
 }
 
@@ -2276,7 +2266,7 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
     /// length, rate or protection fields before submission. Encryption itself
     /// comes from the separately consumed `TxAdmission`, never these values.
     pub fn checked(
-        slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+        slot: oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
         values: MpduParameters,
     ) -> Result<Self, MpduValuesRefused<'slot, BUFFER_SIZE>> {
         let capabilities = esp32s31_lower_mac_capabilities(BUFFER_SIZE);
@@ -2482,5 +2472,17 @@ fn spp_mode(spp: oer_ieee80211_mac::security::Spp) -> oer_esp32s31_hal::types::M
         oer_ieee80211_mac::security::Spp::NotNegotiated => {
             oer_esp32s31_hal::types::MacSppMode::Unauthenticated
         }
+    }
+}
+
+// The private queued path received its slot through MpduValues' consumed free
+// loan or a successful queue-detach completion. It never lends the owner out
+// while an attempt is held here.
+fn queued_free_slot<const N: usize>(
+    slot: Pin<&mut TxSlot<N>>,
+) -> oer_esp32s31_ieee80211_mac::tx::TxSlotFree<'_, N> {
+    match slot.access() {
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(free) => free,
+        _ => panic!("queued publication retains its admitted free slot"),
     }
 }

@@ -115,7 +115,10 @@ pub enum RxRingError {
     DescriptorOwnerAddress,
     Size,
     Overflow,
-    Busy,
+    /// An asynchronous upper owner has not returned its detached buffer.
+    OutstandingLeases,
+    /// Descriptor ownership contradicts the independently retained buffer.
+    BufferOwnershipConflict,
     /// The peripheral has not retired its previous reload doorbell.
     ReloadPending,
     /// The receive walker did not acknowledge its enable edge.

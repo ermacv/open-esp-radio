@@ -34,7 +34,6 @@ pub enum TxDmaState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxDmaStorageError {
     Address,
-    Busy,
     InvalidLength,
     State,
 }
@@ -204,6 +203,29 @@ pub struct PinnedTxDmaStorage<const BUFFER_SIZE: usize> {
     binding: TxDmaBinding,
 }
 
+/// The phase of an exclusively borrowed DMA owner. Only `Free` grants
+/// authority to edit the buffer or reserve a descriptor.
+pub enum TxDmaAccess<'owner, const BUFFER_SIZE: usize> {
+    Free(TxDmaFree<'owner, BUFFER_SIZE>),
+    Reserved,
+    HardwareOwned,
+    Completed,
+    ResetRequired,
+}
+
+/// Exclusive software authority over one free TX allocation.
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaFree;
+/// fn reserve_twice(free: TxDmaFree<'_, 64>) {
+///     let _ = free.reserve(64, 8);
+///     let _ = free.reserve(64, 8);
+/// }
+/// ```
+pub struct TxDmaFree<'owner, const BUFFER_SIZE: usize> {
+    owner: &'owner mut PinnedTxDmaStorage<BUFFER_SIZE>,
+}
+
 impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
     pub fn state(&self) -> TxDmaState {
         self.storage.as_ref().get_ref().state
@@ -213,28 +235,27 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         &self.binding
     }
 
-    /// Borrow the source buffer only before a descriptor is reserved.
-    pub fn buffer_mut(&mut self) -> Result<&mut [u8; BUFFER_SIZE], TxDmaStorageError> {
-        if self.state() != TxDmaState::Free {
-            return Err(TxDmaStorageError::Busy);
+    /// Classify and lend the software phase for the whole bounded operation.
+    pub fn access(&mut self) -> TxDmaAccess<'_, BUFFER_SIZE> {
+        match self.state() {
+            TxDmaState::Free => TxDmaAccess::Free(TxDmaFree { owner: self }),
+            TxDmaState::Reserved => TxDmaAccess::Reserved,
+            TxDmaState::HardwareOwned => TxDmaAccess::HardwareOwned,
+            TxDmaState::Completed => TxDmaAccess::Completed,
+            TxDmaState::ResetRequired => TxDmaAccess::ResetRequired,
         }
-        let storage = self.storage.as_mut().project();
-        Ok(&mut storage.buffer.get_mut().0)
     }
 
     pub fn descriptor_word0(&self) -> WifiTxDmaDescriptorControl {
         self.storage.as_ref().get_ref().descriptor.word0()
     }
 
-    /// Publish a software-owned descriptor without opening a hardware queue.
-    pub fn reserve(
+    /// The private transition is callable only through the free loan.
+    fn reserve_free(
         &mut self,
         buffer_capacity: u32,
         transfer_length: u32,
     ) -> Result<(), TxDmaStorageError> {
-        if self.state() != TxDmaState::Free {
-            return Err(TxDmaStorageError::Busy);
-        }
         if buffer_capacity == 0
             || buffer_capacity > self.binding.buffer_capacity
             || transfer_length == 0
@@ -324,6 +345,26 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         storage.descriptor.as_ref().get_ref().clear();
         *storage.state = TxDmaState::Free;
         Ok(())
+    }
+}
+
+impl<'owner, const BUFFER_SIZE: usize> TxDmaFree<'owner, BUFFER_SIZE> {
+    pub fn buffer_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
+        &mut self.owner.storage.as_mut().project().buffer.get_mut().0
+    }
+
+    pub fn into_buffer(self) -> &'owner mut [u8; BUFFER_SIZE] {
+        &mut self.owner.storage.as_mut().project().buffer.get_mut().0
+    }
+
+    /// Consume free authority and publish a software-owned descriptor. A
+    /// rejected external length leaves the allocation free.
+    pub fn reserve(
+        self,
+        buffer_capacity: u32,
+        transfer_length: u32,
+    ) -> Result<(), TxDmaStorageError> {
+        self.owner.reserve_free(buffer_capacity, transfer_length)
     }
 }
 

@@ -223,7 +223,7 @@ where
     receiver.routes.enable();
 
     let cause = match frontier
-        .start_with_storage(receiver.timer, receiver.rx_dma, rx.storage())
+        .start_with_storage(receiver.timer, receiver.rx_dma, receiver.rx)
         .await
     {
         Err(error) => WifiRxCause::Start(error),

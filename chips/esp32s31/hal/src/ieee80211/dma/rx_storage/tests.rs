@@ -494,36 +494,26 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
 }
 
 #[test]
-fn one_arena_cannot_issue_two_root_ring_capabilities() {
-    const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
-    let placed = place(storage);
+fn the_consumed_placement_moves_through_one_prepared_live_halted_graph() {
+    let placed = place(Box::leak(Box::new(
+        RxDmaStorage::<2, 16, 20, HostDma>::new(),
+    )));
     let storage = placed.storage();
-    let mut first_mmio = MockRxDma::default();
-    let mut second_mmio = MockRxDma::default();
-
-    let first = placed
-        .prepare_ring(&mut first_mmio)
-        .expect("first root capability");
+    let mut mmio = MockRxDma::default();
+    let prepared = placed.prepare_ring(&mut mmio).expect("initial root owner");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
-    assert!(matches!(
-        placed.prepare_ring(&mut second_mmio),
-        Err(RxRingError::Busy)
-    ));
-
-    let live = first
-        .try_start(&mut first_mmio)
+    let live = prepared
+        .try_start(&mut mmio)
         .map_err(|(_, error)| error)
-        .expect("first live epoch");
+        .expect("live owner");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
-    let _halted = live
-        .try_stop(&mut first_mmio)
+    let halted = live
+        .try_stop(&mut mmio)
         .unwrap_or_else(|_| panic!("walker stops"));
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
-    assert!(matches!(
-        placed.prepare_ring(&mut second_mmio),
-        Err(RxRingError::Busy)
-    ));
+    let _prepared = storage
+        .prepare_halted(halted, &mut mmio)
+        .unwrap_or_else(|_| panic!("same stopped arena is reusable"));
 }
 
 #[test]
@@ -685,7 +675,7 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
         (base + crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert_eq!(
         storage.recycle_completed_prefix::<1, _>(&mut live, &mut mmio),
-        Err(RxRingError::Busy),
+        Err(RxRingError::BufferOwnershipConflict),
     );
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
     drop(detached);

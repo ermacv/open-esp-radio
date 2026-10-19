@@ -457,12 +457,12 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         }
         let metadata = storage.as_ref().get_ref();
         let descriptor_result = dma.commit_backing_descriptor(
-            &backing_capability,
+            backing_capability,
             metadata.buffer_addresses[metadata_index],
             u32::from(metadata.descriptor_capacities[metadata_index]),
             (TX_AMPDU_METADATA_SIZE as u32) + u32::from(metadata.psdu_lengths[metadata_index]),
         );
-        if let Err(error) = descriptor_result {
+        if let Err((_backing, error)) = descriptor_result {
             *storage.as_mut().project().state = TxDmaState::ResetRequired;
             dma.quarantine();
             return Err(error.into());
@@ -505,12 +505,12 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         }
         let metadata = storage.as_ref().get_ref();
         let descriptor_result = dma.commit_backing_descriptor(
-            &backing_capability,
+            backing_capability,
             metadata.buffer_addresses[metadata_index],
             u32::from(metadata.descriptor_capacities[metadata_index]),
             (TX_AMPDU_METADATA_SIZE as u32) + u32::from(metadata.psdu_lengths[metadata_index]),
         );
-        if let Err(error) = descriptor_result {
+        if let Err((_backing, error)) = descriptor_result {
             *storage.as_mut().project().state = TxDmaState::ResetRequired;
             dma.quarantine();
             return Err(error.into());

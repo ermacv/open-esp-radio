@@ -40,7 +40,7 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
             LegacyTxQueue::Background,
         ] {
             for phy in 0..3 {
-                let cookie = slot.as_mut().reserve(512, 100).unwrap();
+                let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
                 // Unprotected PPDUs publish the vendor rate of their data rate.
                 let unprotected_rate = match phy {
                     0 => {
@@ -123,8 +123,8 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
     let mut hardware = MockMmio::default();
     let mut previous = None;
     for payload in 0..32_u8 {
-        slot.as_mut().buffer_mut().unwrap()[0] = payload;
-        let cookie = slot.as_mut().reserve(512, 100).unwrap();
+        free_slot(slot.as_mut()).into_buffer()[0] = payload;
+        let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
         slot.as_mut()
             .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
             .unwrap();
@@ -134,7 +134,10 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
                 .unwrap()
                 .is_none()
         );
-        assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+        assert!(!matches!(
+            slot.as_mut().access(),
+            oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+        ));
         hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(0, 0));
         let completion = slot
             .as_mut()
@@ -143,10 +146,13 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
             .unwrap();
         let completion = observed(completion);
         assert_eq!(completion.cookie(), cookie);
-        assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+        assert!(!matches!(
+            slot.as_mut().access(),
+            oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+        ));
         assert!(matches!(
-            slot.as_mut().reserve(512, 100),
-            Err(TxError::Busy)
+            slot.as_mut().access(),
+            oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Completed
         ));
         if let Some(stale) = previous {
             assert_eq!(
@@ -158,7 +164,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
         slot.as_mut()
             .detach_completed(&mut hardware, cookie)
             .unwrap();
-        assert_eq!(slot.as_mut().buffer_mut().unwrap()[0], payload);
+        assert_eq!(free_slot(slot.as_mut()).into_buffer()[0], payload);
         previous = Some(cookie);
     }
 }
@@ -167,7 +173,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
 fn failed_completion_detach_quarantines_storage_despite_success_status() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
@@ -182,24 +188,30 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
         Err(TxError::DetachFailed)
     );
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
-    assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+    assert!(!matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
     hardware.tx_detach_fails[0] = false;
     assert_eq!(
         slot.as_mut().detach_completed(&mut hardware, cookie),
         Err(TxError::Stale)
     );
     assert!(matches!(
-        slot.as_mut().reserve(512, 100),
-        Err(TxError::Busy)
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::ResetRequired
     ));
 }
 
 #[test]
 fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    slot.as_mut().buffer_mut().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
-    assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+    free_slot(slot.as_mut()).into_buffer()[..4].copy_from_slice(&[1, 2, 3, 4]);
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    assert!(!matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
     assert_eq!(slot.descriptor_word0().size(), 512);
     assert_eq!(slot.descriptor_word0().length(), 100);
     assert_eq!(slot.state(), TxDmaState::Reserved);
@@ -240,7 +252,7 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
 #[test]
 fn tx_slot_cancels_only_an_unpublished_reservation() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
 
     assert_eq!(slot.as_mut().cancel_reservation(cookie), Ok(()));
     assert_eq!(slot.state(), TxDmaState::Free);
@@ -248,7 +260,10 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
         slot.descriptor_word0(),
         oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl::ZERO
     );
-    assert!(slot.as_mut().buffer_mut().is_ok());
+    assert!(matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
     assert_eq!(
         slot.as_mut().cancel_reservation(cookie),
         Err(TxError::Stale)
@@ -259,14 +274,17 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
 fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() {
     let mut slot = std::boxed::Box::pin(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
 
     assert_eq!(slot.as_mut().require_reset(cookie), Ok(()));
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
-    assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+    assert!(!matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
     assert_eq!(slot.as_mut().require_reset(cookie), Err(TxError::Stale));
     drop(slot);
 }
@@ -275,7 +293,7 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
 fn tx_completion_decodes_the_blob_ack_snr_byte() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
@@ -307,7 +325,7 @@ fn tx_completion_decodes_the_blob_ack_snr_byte() {
 fn tx_slot_preserves_the_semantic_timeout_abort_order() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
@@ -352,7 +370,7 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
 fn tx_slot_disables_before_acknowledging_one_collision_queue() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
@@ -385,7 +403,7 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     use oer_esp32s31_ieee80211_mac::tx::CompletionFault;
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = slot.as_mut().reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
         .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
         .unwrap();
@@ -399,12 +417,18 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
         slot.as_mut().detach_completed(&mut hardware, cookie),
         Err(TxError::Stale)
     );
-    assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+    assert!(!matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(1, 0xc0));
     assert_eq!(
         slot.as_mut().acknowledge_completion(&mut hardware),
         Err(TxError::Completion(CompletionFault::SecurityKeyError))
     );
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
-    assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
+    assert!(!matches!(
+        slot.as_mut().access(),
+        oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Free(_)
+    ));
 }

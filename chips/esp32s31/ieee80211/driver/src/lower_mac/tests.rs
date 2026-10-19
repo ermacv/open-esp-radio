@@ -12,7 +12,7 @@ use oer_esp32s31_ieee80211_mac::{
     irq::{EVENT_COLLISION, EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT},
     rx::RxPhyInfo,
     tx::{
-        HardwareOwnedTxDma, PreparedTxDma, TxHardware,
+        HardwareOwnedTxDma, PreparedTxDma, TxDmaState, TxError, TxHardware,
         ampdu::{HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
         runtime::WifiTxRuntimePolicy,
     },
@@ -35,6 +35,7 @@ use oer_memory::{
 use super::*;
 use crate::ordinary_tx::{WifiTxPowerPair, WifiTxResources};
 use crate::station_tsf::StationTsfWrite;
+use crate::tx::WifiTxProgress;
 use oer_ieee80211_lower_mac::TSF_DRIFT_PPM;
 
 const STATION: MacAddress = [0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
@@ -623,7 +624,7 @@ impl<'core> Core<'core> {
         let queue = self.free[queue_of(request.category)].take().unwrap();
         let ticket = self.take_ticket();
         let key_use = self.inner.admit_key(key, ticket).ok().expect("TX key");
-        let frame = &mut request.slot.as_mut().buffer_mut().unwrap()[TX_METADATA_SIZE..];
+        let frame = &mut request.slot.buffer_mut()[TX_METADATA_SIZE..];
         let control =
             oer_ieee80211_mac::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
                 .unwrap();
@@ -846,7 +847,10 @@ fn core(resources: CoreResources<'_>) -> Core<'_> {
                 power: Power,
                 entropy: entropy as fn() -> u32,
                 timer: Timer::default(),
-            }),
+            })
+            .into_idle()
+            .ok()
+            .expect("fresh core transmitter is idle"),
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),
@@ -898,17 +902,96 @@ fn data_frame(receiver: MacAddress) -> [u8; 26] {
 /// The rate the attempts go at by default, 24 Mb/s OFDM.
 const OFDM24: PhyRate = PhyRate::Legacy(LegacyRate::Ofdm24M);
 
+#[test]
+fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detach() {
+    use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface};
+    let mut owner = OrdinaryTxOwner::new(WifiTxResources {
+        slot: slot(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        power: Power,
+        entropy: entropy as fn() -> u32,
+        timer: Timer::default(),
+    });
+    let frame = data_frame(PEER);
+    let plan = OrdinaryTxPlan {
+        frame_length: frame.len(),
+        descriptor_capacity: None,
+        exchange: MacTxPlan {
+            access_category: WmmAccessCategory::BestEffort,
+            initial_rate: TxPhyRate::try_from(OFDM24).unwrap(),
+            publication_limit: 1,
+            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+        },
+        hardware_mic_length: 0,
+        hardware_key_selector: 0,
+        interface: OrdinaryTxInterface::Station,
+        scheduler_priority: 1,
+        packet_priority: 1,
+        priority_count: 1,
+    };
+    let mut hardware = Hardware::default();
+    let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
+        panic!("a fresh transmitter lends its idle phase");
+    };
+    idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()].copy_from_slice(&frame);
+    assert_eq!(
+        idle.start(&mut hardware, plan).unwrap(),
+        WifiTxProgress::Pending
+    );
+    assert_eq!(owner.slot_state(), TxDmaState::HardwareOwned);
+    let mut owner = owner
+        .into_idle()
+        .err()
+        .expect("a live transaction cannot enter queued mode");
+    let OrdinaryTxAccess::Active(active) = owner.access() else {
+        panic!("a published transaction lends only its active phase");
+    };
+    hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+    assert_eq!(
+        active
+            .service(&mut hardware, interrupt(EVENT_TX_COMPLETE))
+            .unwrap(),
+        WifiTxProgress::Complete
+    );
+    assert!(matches!(owner.access(), OrdinaryTxAccess::Idle(_)));
+    assert!(owner.into_idle().is_ok());
+    assert_eq!(hardware.publications(), 1);
+}
+
+#[test]
+fn reserved_descriptor_never_lends_classic_idle_authority() {
+    use crate::ordinary_tx::OrdinaryTxAccess;
+    let mut slot = slot();
+    let cookie = queued_free_slot(slot.as_mut()).reserve(64, 32).unwrap();
+    let owner = OrdinaryTxOwner::new(WifiTxResources {
+        slot,
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        power: Power,
+        entropy: entropy as fn() -> u32,
+        timer: Timer::default(),
+    });
+    let mut owner = owner
+        .into_idle()
+        .err()
+        .expect("a reserved descriptor retains its phase");
+    assert!(matches!(
+        owner.access(),
+        OrdinaryTxAccess::Unavailable(TxDmaState::Reserved)
+    ));
+    let _ = cookie;
+}
+
 /// The station's best-effort attempt of `frame` at 24 Mb/s, in its own
 /// slot, acknowledged unless `no_ack`.
 fn values(frame: &[u8], no_ack: bool) -> Request {
     let mut slot = slot();
-    slot.as_mut().buffer_mut().unwrap()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
+    queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()]
         .copy_from_slice(frame);
     Request {
         category: WmmAccessCategory::BestEffort,
         values: MpduValues {
             role: VifRole::Station,
-            slot,
+            slot: queued_free_slot(slot),
             len: frame.len(),
             no_ack,
             rate: TxPhyRate::try_from(OFDM24).unwrap(),
@@ -1020,7 +1103,7 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
         let frame = data_frame(BSSID);
 
         let request = values(&frame, false);
-        let written = request.slot.as_ref().buffer_address();
+        let written = request.slot.slot().buffer_address();
         assert_eq!(submit(&mut core, &mut hardware, request), Ok(()));
         // The queue publishes the slot the MPDU was written in, which comes
         // back with its completion.
@@ -1128,7 +1211,10 @@ fn an_unacknowledged_attempt_is_reported_and_never_published_again() {
         assert!(
             slots
                 .iter_mut()
-                .all(|slot| slot.as_mut().buffer_mut().unwrap()[TX_METADATA_SIZE + 1] == 0x01)
+                .all(
+                    |slot| queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 1]
+                        == 0x01
+                )
         );
     });
 }
@@ -1139,7 +1225,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let request = values(&data_frame(BSSID), false);
-        let address = request.slot.as_ref().buffer_address();
+        let address = request.slot.slot().buffer_address();
         submit(&mut core, &mut hardware, request).unwrap();
         let deadline = core.next_deadline();
         let mut events = Events::default();
@@ -1257,7 +1343,7 @@ fn a_transmission_the_plan_sends_again_carries_the_retry_bit() {
         let mut events = Events::default();
         core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
             .unwrap();
-        let returned = events.slots[0].as_mut().buffer_mut().unwrap();
+        let returned = queued_free_slot(events.slots[0].as_mut()).into_buffer();
         let returned = &returned[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
         let control =
             FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
@@ -1280,7 +1366,7 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
             let mut hardware = Hardware::default();
             let mut core = enabled(&mut hardware, pools);
             let mut request = values(frame, false);
-            let original = request.slot.as_mut().buffer_mut().unwrap().to_vec();
+            let original = request.slot.buffer_mut().to_vec();
             request.retry = true;
             let Err(mut refused) = core.submit_checked(&mut hardware, request) else {
                 panic!("an invalid retry header must be refused before publication");
@@ -1290,7 +1376,10 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
                 LowerMacFault::Tx(OrdinaryTxError::InvalidRetryHeader)
             );
             assert_eq!(hardware.publications(), 0);
-            assert_eq!(refused.slot.as_mut().buffer_mut().unwrap()[..], original);
+            assert_eq!(
+                queued_free_slot(refused.slot.as_mut()).into_buffer()[..],
+                original
+            );
             assert!(core.queues.iter().all(Option::is_none));
         });
     }
@@ -1875,8 +1964,12 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
         let mut slot = slot();
         // The vendor's step of three: a new key emits PN 3, then 6.
         for expected in [3, 6] {
-            assert_eq!(core.number(&mut pairwise, &mut slot, 26), Ok(()));
-            let header = &slot.as_mut().buffer_mut().unwrap()[TX_METADATA_SIZE + 26..][..8];
+            assert_eq!(
+                core.number(&mut pairwise, &mut queued_free_slot(slot.as_mut()), 26),
+                Ok(())
+            );
+            let header =
+                &queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 26..][..8];
             assert_eq!(header, &[expected, 0, 0, 0x20, 0, 0, 0, 0]);
         }
         // A receive-only key has no admitted TX rights to delay its removal.
@@ -1891,7 +1984,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
 }
 
 #[test]
-fn numbering_refuses_an_unavailable_buffer_without_allocating_a_packet_number() {
+fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -1904,18 +1997,21 @@ fn numbering_refuses_an_unavailable_buffer_without_allocating_a_packet_number() 
             )
             .unwrap();
         let mut slot = slot();
-        slot.as_mut().buffer_mut().unwrap().fill(0xee);
-        let cookie = slot.as_mut().reserve(512, 64).unwrap();
+        queued_free_slot(slot.as_mut()).into_buffer().fill(0xee);
+        let cookie = queued_free_slot(slot.as_mut()).reserve(512, 64).unwrap();
 
-        assert_eq!(
-            core.number(&mut key, &mut slot, 26),
-            Err(CcmpNumberingError::BufferUnavailable(TxError::Busy))
-        );
+        assert!(matches!(
+            slot.as_mut().access(),
+            oer_esp32s31_ieee80211_mac::tx::TxSlotAccess::Reserved
+        ));
         slot.as_mut().cancel_reservation(cookie).unwrap();
-        assert_eq!(slot.as_mut().buffer_mut().unwrap(), &[0xee; 512]);
-        assert_eq!(core.number(&mut key, &mut slot, 26), Ok(()));
+        assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
         assert_eq!(
-            slot.as_mut().buffer_mut().unwrap()[TX_METADATA_SIZE + 26..][..8],
+            core.number(&mut key, &mut queued_free_slot(slot.as_mut()), 26),
+            Ok(())
+        );
+        assert_eq!(
+            queued_free_slot(slot.as_mut()).into_buffer()[TX_METADATA_SIZE + 26..][..8],
             [3, 0, 0, 0x20, 0, 0, 0, 0]
         );
     });
@@ -1935,7 +2031,7 @@ fn numbering_checks_header_space_and_offset_overflow_before_allocating_a_packet_
             )
             .unwrap();
         let mut slot = slot();
-        slot.as_mut().buffer_mut().unwrap().fill(0xee);
+        queued_free_slot(slot.as_mut()).into_buffer().fill(0xee);
         let last_header_len = 512 - TX_METADATA_SIZE - CCMP_HEADER_LEN;
 
         for header_len in [
@@ -1945,14 +2041,21 @@ fn numbering_checks_header_space_and_offset_overflow_before_allocating_a_packet_
             usize::MAX,
         ] {
             assert_eq!(
-                core.number(&mut key, &mut slot, header_len),
+                core.number(&mut key, &mut queued_free_slot(slot.as_mut()), header_len),
                 Err(CcmpNumberingError::InsufficientSpace)
             );
-            assert_eq!(slot.as_mut().buffer_mut().unwrap(), &[0xee; 512]);
+            assert_eq!(queued_free_slot(slot.as_mut()).into_buffer(), &[0xee; 512]);
         }
-        assert_eq!(core.number(&mut key, &mut slot, last_header_len), Ok(()));
         assert_eq!(
-            slot.as_mut().buffer_mut().unwrap()[512 - CCMP_HEADER_LEN..],
+            core.number(
+                &mut key,
+                &mut queued_free_slot(slot.as_mut()),
+                last_header_len
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            queued_free_slot(slot.as_mut()).into_buffer()[512 - CCMP_HEADER_LEN..],
             [3, 0, 0, 0x20, 0, 0, 0, 0]
         );
     });
@@ -3022,7 +3125,7 @@ fn a_failed_gate_open_returns_every_unpublished_owner_then_drains_the_prefix() {
                     // held queue; no DMA publication occurs for this attempt.
                     request.backoff_slots = MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS + 1;
                 }
-                addresses.push(core::ptr::from_ref(request.slot.as_ref().get_ref()));
+                addresses.push(core::ptr::from_ref(request.slot.slot().get_ref()));
                 submit(&mut core, &mut hardware, request).unwrap();
             }
             let mut events = Events::default();
@@ -3553,12 +3656,11 @@ fn checked_mpdu_values_retain_refused_slots_and_prevent_unchecked_lengths() {
     ] {
         let slot = slot();
         let address = core::ptr::from_ref(slot.as_ref().get_ref());
-        let refused = MpduValues::checked(slot, invalid).err().unwrap();
+        let refused = MpduValues::checked(queued_free_slot(slot), invalid)
+            .err()
+            .unwrap();
         assert_eq!(refused.reason, reason);
-        assert_eq!(
-            core::ptr::from_ref(refused.slot.as_ref().get_ref()),
-            address
-        );
+        assert_eq!(core::ptr::from_ref(refused.slot.slot().get_ref()), address);
         assert!(MpduValues::checked(refused.slot, parameters).is_ok());
     }
 }
@@ -3604,7 +3706,10 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
                 power: Power,
                 entropy: entropy as fn() -> u32,
                 timer: Timer::default(),
-            }),
+            })
+            .into_idle()
+            .ok()
+            .expect("fresh core transmitter is idle"),
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),

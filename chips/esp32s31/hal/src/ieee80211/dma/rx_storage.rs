@@ -79,7 +79,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     pub(crate) unsafe fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
         match self.1.load(Ordering::Acquire) {
             RX_BUFFER_RING => {}
-            RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => {
+                return Err(RxRingError::BufferOwnershipConflict);
+            }
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: ring ownership makes this the only CPU or DMA writer.
@@ -95,7 +97,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// therefore safe to republish, but its allocation still carries the
     /// durable `Released` state. Normalize that state in the same transaction;
     /// otherwise the descriptor becomes DMA-visible while a later detach sees
-    /// the stale release and rejects a real completion as `Busy`.
+    /// the stale release and rejects a real completion as `BufferOwnershipConflict`.
     #[allow(
         unsafe_code,
         reason = "the observed live-ring prefix excludes DMA and detached upper ownership"
@@ -111,9 +113,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
-                    .map_err(|_| RxRingError::Busy)?;
+                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
             }
-            RX_BUFFER_DETACHED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: the state check/transition excludes every external owner.
@@ -137,7 +139,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
-            .map_err(|_| RxRingError::Busy)?;
+            .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         let pointer = NonNull::new(self.0.get().cast::<u8>()).expect("RX DMA buffer is non-null");
         #[allow(
             unsafe_code,
@@ -172,9 +174,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
-                    .map_err(|_| RxRingError::Busy)?;
+                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
             }
-            RX_BUFFER_DETACHED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: stopped-ring ownership excludes DMA, and DETACHED was
@@ -658,29 +660,16 @@ pub struct PlacedRxDma<
     descriptor_base: u32,
 }
 
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Clone
-    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
-{
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Copy
-    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
-{
-}
-
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     /// The placed storage.
-    pub const fn storage(self) -> &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S> {
+    pub const fn storage(&self) -> &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S> {
         self.storage
     }
 
     /// The DMA address of descriptor 0.
-    pub const fn descriptor_base(self) -> u32 {
+    pub const fn descriptor_base(&self) -> u32 {
         self.descriptor_base
     }
 
@@ -692,8 +681,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// # Errors
     ///
-    /// The storage already has a ring or must be reset, or an unexpectedly
-    /// live walker did not stop.
+    /// The arena must be reset, or an unexpectedly live walker did not stop.
+    /// The unique placement owner is consumed even when preparation fails.
+    ///
+    /// ```compile_fail,E0382
+    /// use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, rx_dma::RxDma};
+    /// fn twice<M: RxDma>(placed: PlacedRxDma<2, 16, 20>, mmio: &mut M) {
+    ///     let _ = placed.prepare_ring(mmio);
+    ///     let _ = placed.prepare_ring(mmio);
+    /// }
+    /// ```
     pub fn prepare_ring<M: RxDma>(
         self,
         mmio: &mut M,
@@ -913,17 +910,18 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         match self.lifecycle_state() {
             RxDmaArenaState::Reusable => {}
             RxDmaArenaState::Prepared | RxDmaArenaState::Live => {
-                return Err(RxRingError::Busy);
+                panic!("RX initial owner invariant");
             }
             RxDmaArenaState::ResetRequired => return Err(RxRingError::ResetRequired),
         }
         let buffer_size = u32::try_from(BUFFER_SIZE).map_err(|_| RxRingError::Size)?;
-        // `prepare_ring` takes a shared static arena reference, so Rust
-        // borrowing alone cannot prevent two root capabilities. Claim the
-        // stopped/halted owner graph before mutating any descriptor.
-        if !RxDmaArenaState::claim_prepared(self.arena.lifecycle()) {
-            return Err(RxRingError::Busy);
-        }
+        // The consumed, non-Copy placement owner is the sole constructor.
+        // Keep the durable claim before publishing descriptors, so a lost
+        // owner or failed preparation still leaves the arena fail-closed.
+        assert!(
+            RxDmaArenaState::claim_prepared(self.arena.lifecycle()),
+            "RX initial owner invariant"
+        );
         let prepared = match self.reserved_buffer_address() {
             Ok(reserved_buffer_address) => RxRingStopped::prepare_inner(
                 mmio,
@@ -963,8 +961,11 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         ring: RxRingHalted<'storage, COUNT>,
         mmio: &mut M,
     ) -> Result<RxRingStopped<'storage, COUNT>, (RxRingHalted<'storage, COUNT>, RxRingError)> {
+        if !ring.belongs_to_arena(&self.arena) {
+            return Err((ring, RxRingError::DescriptorOwnerAddress));
+        }
         if self.any_buffer_in_state(RX_BUFFER_DETACHED) {
-            return Err((ring, RxRingError::Busy));
+            return Err((ring, RxRingError::OutstandingLeases));
         }
         match self.lifecycle_state() {
             RxDmaArenaState::Prepared => {}
@@ -972,11 +973,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 return Err((ring, RxRingError::ResetRequired));
             }
             RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                return Err((ring, RxRingError::Busy));
+                panic!("RX halted owner invariant");
             }
-        }
-        if !ring.belongs_to_arena(&self.arena) {
-            return Err((ring, RxRingError::DescriptorOwnerAddress));
         }
         let buffer_size = match u32::try_from(BUFFER_SIZE) {
             Ok(buffer_size) => buffer_size,

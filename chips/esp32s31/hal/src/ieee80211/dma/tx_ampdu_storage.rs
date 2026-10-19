@@ -32,7 +32,6 @@ pub enum AmpduDmaState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduDmaStorageError {
     Address,
-    Busy,
     Count,
     GenerationExhausted,
     InvalidLength,
@@ -317,6 +316,27 @@ pub struct PinnedAmpduDmaStorage<const SLOTS: usize, const BUFFER_SIZE: usize> {
     binding: AmpduDmaBinding,
 }
 
+/// Only the software phase lends mutable internal backing.
+pub enum AmpduDmaAccess<'owner, const SLOTS: usize, const BUFFER_SIZE: usize> {
+    Writable(AmpduDmaWritable<'owner, SLOTS, BUFFER_SIZE>),
+    Unavailable(AmpduDmaState),
+}
+
+pub struct AmpduDmaWritable<'owner, const SLOTS: usize, const BUFFER_SIZE: usize> {
+    owner: &'owner mut PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>,
+}
+
+impl<'owner, const SLOTS: usize, const BUFFER_SIZE: usize>
+    AmpduDmaWritable<'owner, SLOTS, BUFFER_SIZE>
+{
+    pub fn buffer_mut(
+        &mut self,
+        index: usize,
+    ) -> Result<&mut [u8; BUFFER_SIZE], AmpduDmaStorageError> {
+        self.owner.writable_buffer_mut(index)
+    }
+}
+
 impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE> {
     pub fn state(&self) -> AmpduDmaState {
         self.storage.as_ref().get_ref().state
@@ -330,13 +350,20 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         self.transition(AmpduDmaState::Free, AmpduDmaState::Reserved)
     }
 
-    pub fn buffer_mut(
+    /// Lend buffer-edit authority only while software owns the allocation.
+    pub fn access(&mut self) -> AmpduDmaAccess<'_, SLOTS, BUFFER_SIZE> {
+        match self.state() {
+            AmpduDmaState::Free | AmpduDmaState::Reserved => {
+                AmpduDmaAccess::Writable(AmpduDmaWritable { owner: self })
+            }
+            state => AmpduDmaAccess::Unavailable(state),
+        }
+    }
+
+    fn writable_buffer_mut(
         &mut self,
         index: usize,
     ) -> Result<&mut [u8; BUFFER_SIZE], AmpduDmaStorageError> {
-        if !matches!(self.state(), AmpduDmaState::Free | AmpduDmaState::Reserved) {
-            return Err(AmpduDmaStorageError::Busy);
-        }
         self.storage
             .as_mut()
             .project()
@@ -892,16 +919,15 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             return Err(AmpduDmaStorageError::Count);
         }
         let backing_index = u8::try_from(index).map_err(|_| AmpduDmaStorageError::Count)?;
-        if self
-            .retention()
-            .backings
-            .get(index)
-            .is_none_or(|slot| slot.is_some())
-            || self.retention().backing_identities[index].is_some()
-            || self.retention().backing_descriptors[index].is_some()
-        {
-            return Err(AmpduDmaStorageError::Busy);
-        }
+        // `held` is private and advances only when a moved backing enters
+        // this owner; pop/release clear its identity and descriptor together.
+        // The next bounded slot therefore cannot already have an owner.
+        assert!(
+            self.retention().backings[index].is_none()
+                && self.retention().backing_identities[index].is_none()
+                && self.retention().backing_descriptors[index].is_none(),
+            "retained append owns its next vacant backing slot"
+        );
         let descriptor_head = self.descriptor_head();
         let external_region = self.dma().binding.external_region;
         let generation = self.next_lease_generation()?;
@@ -971,7 +997,20 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// reconstructing or revalidating address-bearing values in an upper
     /// layer. The descriptor remains private to this owner until every
     /// retained backing is released or quarantined.
+    /// Consume the sole retained-backing identity when binding its descriptor.
+    /// A rejected external image returns that exact identity for correction.
     pub fn commit_backing_descriptor(
+        &mut self,
+        backing: RetainedDmaBacking,
+        address: usize,
+        buffer_capacity: u32,
+        transfer_length: u32,
+    ) -> Result<(), (RetainedDmaBacking, AmpduDmaStorageError)> {
+        self.commit_backing_descriptor_inner(&backing, address, buffer_capacity, transfer_length)
+            .map_err(|error| (backing, error))
+    }
+
+    fn commit_backing_descriptor_inner(
         &mut self,
         backing: &RetainedDmaBacking,
         address: usize,
@@ -1005,9 +1044,10 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             .backing_descriptors
             .get_mut(usize::from(backing.index))
             .ok_or(AmpduDmaStorageError::Count)?;
-        if slot.is_some() {
-            return Err(AmpduDmaStorageError::Busy);
-        }
+        assert!(
+            slot.is_none(),
+            "consumed backing identity binds its descriptor once"
+        );
         *slot = Some(RetainedDmaDescriptor {
             buffer_address,
             word0,

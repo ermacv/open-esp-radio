@@ -1,0 +1,17 @@
+error[E0382]: use of moved value: `free`
+ --> tests/ui/tx_slot_free_once.rs:8:13
+  |
+4 | pub fn reserve(mut free: TxSlotFree<'_, 64>) {
+  |                -------- move occurs because `free` has type `TxSlotFree<'_, 64>`, which does not implement the `Copy` trait
+5 |     free.buffer_mut()[0] = 1;
+6 |     let _ = free.reserve(64, 8);
+  |                  -------------- `free` moved due to this method call
+7 |     #[cfg(all())]
+8 |     let _ = free.reserve(64, 8); // ui-error: E0382
+  |             ^^^^ value used here after move
+  |
+note: `TxSlotFree::<'owner, BUFFER_SIZE>::reserve` takes ownership of the receiver `self`, which moves `free`
+ --> src/tx.rs
+  |
+  |     pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
+  |                    ^^^^
