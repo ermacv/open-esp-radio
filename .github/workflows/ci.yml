@@ -68,6 +68,25 @@ jobs:
           cargo test --locked -p oer-esp32s31-ieee80211-mac
           cargo test --locked -p oer-time --features serde
           cargo test --locked -p oer-time --features schema
+      - name: Tests under each instrumentation cfg
+        # The default members whose sources hold code under an
+        # instrumentation class's cfg, tested once with it, each cfg in a
+        # target directory of its own.
+        run: |
+          meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          members=$(jq -r '.workspace_default_members as $members | .packages[]
+            | select(.id as $id | $members | index($id))
+            | .name + " " + (.manifest_path | rtrimstr("/Cargo.toml"))' <<<"$meta")
+          for cfg in oer_trace oer_profile oer_debug_control; do
+            packages=$(while read -r name directory; do
+              if grep -rqE --include='*.rs' "cfg!?\(.*\b$cfg\b" "$directory"; then
+                echo "-p $name"
+              fi
+            done <<<"$members")
+            echo "cfg($cfg):" $packages
+            RUSTFLAGS="--cfg $cfg" CARGO_TARGET_DIR="target/cfg/$cfg" \
+              cargo test --locked $packages
+          done
 
   chip:
     runs-on: ubuntu-latest
