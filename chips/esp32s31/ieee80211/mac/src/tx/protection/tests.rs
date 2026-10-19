@@ -474,3 +474,27 @@ fn leaving_the_bss_keeps_only_the_local_length_threshold() {
         Some(RtsLengthThreshold::VENDOR_DEFAULT)
     );
 }
+
+#[test]
+fn legacy_protection_keeps_all_rules_without_entering_the_he_budget() {
+    for erp in [
+        ErpProtection::NONE,
+        ErpProtection::from_information(Some(0x03)),
+    ] {
+        for ht in [HtProtectionMode::None, HtProtectionMode::Nonmember] {
+            let mut facts = bss(erp, ht, basic(DSSS_BASIC));
+            facts.he_txop_rts_threshold = HeTxopDurationRtsThreshold::new(1);
+            let policy = policy(facts);
+            for rate in (0..=15).filter_map(LegacyRate::from_code) {
+                for receiver in [TxReceiver::Individual, TxReceiver::Group] {
+                    for length in [100, 2347, 4095] {
+                        assert_eq!(
+                            policy.select_legacy(rate, receiver, TxPsdu::Mpdu { length }),
+                            policy.select(ppdu(TxPhyRate::Legacy(rate), receiver, length))
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

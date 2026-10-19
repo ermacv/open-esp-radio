@@ -427,3 +427,17 @@ mod survey {
         assert!(survey.bss(2).is_none());
     }
 }
+
+#[test]
+fn a_finite_dwell_drains_queued_leases_without_waiting_or_discarding_them() {
+    let mut fixture = fixture();
+    assert!(fixture.receiver.try_next().is_none());
+    let beacon = S31Prefix::new().unit(&management_header(8));
+    fixture.ring.complete_with(&beacon);
+    fixture.settle();
+    let held = fixture.receiver.try_next().expect("the staged frame");
+    assert!(fixture.receiver.try_next().is_none());
+    assert_eq!(fixture.ring.pool.available_slots(), SLOTS - 1);
+    drop(held);
+    assert_eq!(fixture.ring.pool.available_slots(), SLOTS);
+}

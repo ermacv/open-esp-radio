@@ -13,7 +13,7 @@ use oer_esp32s31_hal::ieee80211::client::{
     ClockPoisoned, StoppedInstallation, WifiClocked, WifiCold, WifiPowered,
 };
 use oer_esp32s31_ieee80211_mac::init::{
-    MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
+    MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
 use oer_esp32s31_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
 use oer_ieee80211_mac::channel::WifiChannel;
@@ -99,6 +99,7 @@ pub struct TrackReport {
     /// channel.
     pub temperature: TemperatureObservation,
     pub tx_power: PhyTxTargetPowerProfile,
+    pub probe_priority: ProbePriority,
     pub mac: MacColdStartOutcome,
 }
 
@@ -131,10 +132,19 @@ pub struct RetuneReport {
     /// Full channel transaction on the radio system's timer.
     pub micros: u64,
     pub tx_power: PhyTxTargetPowerProfile,
+    pub probe_priority: ProbePriority,
     pub temperature: TemperatureObservation,
 }
 
 pub struct WifiRetuned {
     pub wifi: WifiClocked,
     pub report: RetuneReport,
+}
+
+/// PTI-only service of a Probe Request, read by the coexistence owner from
+/// the shared (client, operation) table and returned with channel preparation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProbePriority {
+    pub packet: MacCoexPti,
+    pub scheduler: MacCoexPti,
 }

@@ -55,6 +55,11 @@ jobs:
             | @tsv' "$RUNNER_TEMP/clippy.json" \
             | awk -F '\t' '{ printf "%-40s %s\n", $1, $2 }' || true
           exit "$status"
+      - name: Air decoder test dependency
+        # The synthetic radiotap tests run the actual tshark decoder on stdin.
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
       - name: Tests
         # The default members: every package but the chip-only firmware ones.
         run: cargo test --locked
@@ -178,9 +183,9 @@ jobs:
           cargo fw build boot-smoke
           cargo fw build radio-root
           cargo fw build w0
-          # Unconfigured: only `run w1` builds it for the stand router; this
-          # one reports `fail w1 unconfigured` when run, same layout.
+          # Unconfigured: only `run w1/w2` builds for the stand router.
           cargo fw build w1
+          cargo fw build w2
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.
         # Discover packages from the workspace so new probes join this check.

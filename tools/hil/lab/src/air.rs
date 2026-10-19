@@ -249,7 +249,11 @@ fn parse(text: &str) -> Result<Vec<Frame>> {
                 .checked_mul(1_000_000)
                 .and_then(|s| s.checked_add(fraction[..6].parse().ok()?))
                 .ok_or("capture timestamp overflow")?;
-            let ssid = ssid.replace(':', "");
+            let ssid = if ssid == "<MISSING>" {
+                String::new()
+            } else {
+                ssid.replace(':', "")
+            };
             if !ssid.is_ascii() || ssid.len() % 2 != 0 {
                 return Err("invalid decoded SSID".into());
             }

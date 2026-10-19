@@ -229,6 +229,7 @@ pub enum TxResetReason {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxError {
     BufferSizeOverflow,
+    UnsupportedPhyRate,
     DeadlineOverflow,
     Tx(TxError),
     Retry(OrdinaryRetryError),
@@ -495,7 +496,14 @@ enum OrdinaryTxPhase {
 }
 
 /// Unique ordinary-MPDU descriptor and retry owner shared by protocol phases.
-pub struct OrdinaryTxOwner<'slot, P, E, T, const BUFFER_SIZE: usize> {
+pub struct OrdinaryTxOwner<
+    'slot,
+    P,
+    E,
+    T,
+    const BUFFER_SIZE: usize,
+    const LEGACY_ONLY: bool = false,
+> {
     slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
     policy: WifiTxRuntimePolicy,
     power: P,
@@ -506,28 +514,29 @@ pub struct OrdinaryTxOwner<'slot, P, E, T, const BUFFER_SIZE: usize> {
 }
 
 /// The methods available during one exclusively borrowed ordinary TX phase.
-pub enum OrdinaryTxAccess<'owner, 'slot, P, E, T, const N: usize> {
-    Idle(OrdinaryTxIdle<'owner, 'slot, P, E, T, N>),
-    Active(OrdinaryTxActive<'owner, 'slot, P, E, T, N>),
+pub enum OrdinaryTxAccess<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
+    Idle(OrdinaryTxIdle<'owner, 'slot, P, E, T, N, LEGACY_ONLY>),
+    Active(OrdinaryTxActive<'owner, 'slot, P, E, T, N, LEGACY_ONLY>),
     Unavailable(TxDmaState),
 }
 
-pub struct OrdinaryTxIdle<'owner, 'slot, P, E, T, const N: usize> {
-    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N>,
+pub struct OrdinaryTxIdle<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
+    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
 }
 
-pub struct OrdinaryTxActive<'owner, 'slot, P, E, T, const N: usize> {
-    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N>,
+pub struct OrdinaryTxActive<'owner, 'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false>
+{
+    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
 }
 
 /// An owned idle transmitter. Consuming this owner into the lower MAC fixes
 /// queued mode: that core never exposes its nested classic transmitter.
-pub struct OrdinaryTxIdleOwner<'slot, P, E, T, const N: usize> {
-    pub(crate) owner: OrdinaryTxOwner<'slot, P, E, T, N>,
+pub struct OrdinaryTxIdleOwner<'slot, P, E, T, const N: usize, const LEGACY_ONLY: bool = false> {
+    pub(crate) owner: OrdinaryTxOwner<'slot, P, E, T, N, LEGACY_ONLY>,
 }
 
-impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
-    OrdinaryTxIdle<'_, '_, P, E, T, N>
+impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LEGACY_ONLY: bool>
+    OrdinaryTxIdle<'_, '_, P, E, T, N, LEGACY_ONLY>
 {
     pub fn buffer_mut(&mut self) -> &mut [u8; N] {
         self.owner.free_slot().into_buffer()
@@ -585,8 +594,8 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
     }
 }
 
-impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
-    OrdinaryTxActive<'_, '_, P, E, T, N>
+impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LEGACY_ONLY: bool>
+    OrdinaryTxActive<'_, '_, P, E, T, N, LEGACY_ONLY>
 {
     pub fn service<H: TxHardware>(
         self,
@@ -606,13 +615,17 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
 }
 
 /// The owner's timer, for phases that wait on the owner's clock.
-impl<P, E, T: Clock, const BUFFER_SIZE: usize> Clock for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE> {
+impl<P, E, T: Clock, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Clock
+    for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
+{
     fn now(&self) -> Instant {
         self.timer.now()
     }
 }
 
-impl<P, E, T: Timer, const BUFFER_SIZE: usize> Timer for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE> {
+impl<P, E, T: Timer, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool> Timer
+    for OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
+{
     fn wait_until(&self, deadline: Instant) -> impl Future<Output = ()> {
         self.timer.wait_until(deadline)
     }
@@ -626,13 +639,14 @@ pub struct OrdinaryTxParked {
     last_outcome: Option<OrdinaryTxOutcome>,
 }
 
-impl<'slot, P, E, T, const BUFFER_SIZE: usize> OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE>
+impl<'slot, P, E, T, const BUFFER_SIZE: usize, const LEGACY_ONLY: bool>
+    OrdinaryTxOwner<'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY>
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
     T: Timer,
 {
-    pub fn new(resources: WifiTxResources<'slot, P, E, T, BUFFER_SIZE>) -> Self {
+    fn from_resources(resources: WifiTxResources<'slot, P, E, T, BUFFER_SIZE>) -> Self {
         let WifiTxResources {
             slot,
             policy,
@@ -657,7 +671,7 @@ where
         resources: WifiTxResources<'slot, P, E, T, BUFFER_SIZE>,
         parked: OrdinaryTxParked,
     ) -> Self {
-        let mut owner = Self::new(resources);
+        let mut owner = Self::from_resources(resources);
         owner.last_outcome = parked.last_outcome;
         owner
     }
@@ -667,7 +681,7 @@ where
     }
 
     /// Lend the current software phase for one encoding or service operation.
-    pub fn access(&mut self) -> OrdinaryTxAccess<'_, 'slot, P, E, T, BUFFER_SIZE> {
+    pub fn access(&mut self) -> OrdinaryTxAccess<'_, 'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY> {
         if self.active.is_some() {
             OrdinaryTxAccess::Active(OrdinaryTxActive { owner: self })
         } else if self.slot_state() == TxDmaState::Free {
@@ -681,7 +695,9 @@ where
         clippy::result_large_err,
         reason = "an unavailable phase retains the entire transmitter"
     )]
-    pub fn into_idle(self) -> Result<OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>, Self> {
+    pub fn into_idle(
+        self,
+    ) -> Result<OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE, LEGACY_ONLY>, Self> {
         if self.active.is_none() && self.slot_state() == TxDmaState::Free {
             Ok(OrdinaryTxIdleOwner { owner: self })
         } else {
@@ -1113,6 +1129,10 @@ where
         retry_rate_policy: OrdinaryRetryRatePolicy,
         single_attempt: Option<SingleAttempt>,
     ) -> Result<ActiveTx, OrdinaryTxError> {
+        if LEGACY_ONLY && !matches!(plan.exchange.initial_rate, TxPhyRate::Legacy(_)) {
+            return Err(OrdinaryTxError::UnsupportedPhyRate);
+        }
+
         assert!(
             self.active.is_none(),
             "idle authority excludes an active ordinary transaction"
@@ -1648,12 +1668,42 @@ where
         .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
         match rate {
             TxPhyRate::Legacy(rate) => {
-                let decision = self.select_protection(
-                    active.single_attempt,
-                    active.receiver,
-                    TxPhyRate::Legacy(rate),
-                    psdu_length.into(),
-                );
+                let decision = if LEGACY_ONLY {
+                    match active.single_attempt {
+                        None => self.policy.protection().select_legacy(
+                            rate,
+                            active.receiver,
+                            TxPsdu::Mpdu {
+                                length: psdu_length.into(),
+                            },
+                        ),
+                        Some(attempt) => TxProtectionDecision {
+                            protection: match attempt.protection {
+                                SingleAttemptProtection::None => TxProtection::None,
+                                SingleAttemptProtection::RtsCts => TxProtection::RtsCts {
+                                    rate: self
+                                        .policy
+                                        .protection()
+                                        .control_rate(TxPhyRate::Legacy(rate)),
+                                },
+                                SingleAttemptProtection::CtsToSelf => TxProtection::CtsToSelf {
+                                    rate: self
+                                        .policy
+                                        .protection()
+                                        .control_rate(TxPhyRate::Legacy(rate)),
+                                },
+                            },
+                            ..TxProtectionDecision::UNPROTECTED
+                        },
+                    }
+                } else {
+                    self.select_protection(
+                        active.single_attempt,
+                        active.receiver,
+                        TxPhyRate::Legacy(rate),
+                        psdu_length.into(),
+                    )
+                };
                 let mut config = LegacyTxConfig::management(rate, psdu_length);
                 config.control = self.control_frame(TxPhyRate::Legacy(rate), decision, ceiling);
                 config.data_power =
@@ -1671,7 +1721,7 @@ where
                     .submit_legacy(hardware, cookie, queue, config)?;
                 Ok(decision)
             }
-            TxPhyRate::Ht(rate) => {
+            TxPhyRate::Ht(rate) if !LEGACY_ONLY => {
                 let decision = self.select_protection(
                     active.single_attempt,
                     active.receiver,
@@ -1702,7 +1752,7 @@ where
                     .submit_ht(hardware, cookie, queue, config)?;
                 Ok(decision)
             }
-            TxPhyRate::He(rate) => {
+            TxPhyRate::He(rate) if !LEGACY_ONLY => {
                 let mpdu_length = u16::try_from(
                     active
                         .frame_length
@@ -1736,6 +1786,7 @@ where
                     .submit_he_smpdu(hardware, cookie, queue, config)?;
                 Ok(decision)
             }
+            _ => Err(OrdinaryTxError::UnsupportedPhyRate),
         }
     }
 
@@ -1829,4 +1880,21 @@ fn yield_once() -> impl Future<Output = ()> {
             core::task::Poll::Pending
         }
     })
+}
+
+impl<'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxOwner<'slot, P, E, T, N, false>
+{
+    pub fn new(resources: WifiTxResources<'slot, P, E, T, N>) -> Self {
+        Self::from_resources(resources)
+    }
+}
+impl<'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxOwner<'slot, P, E, T, N, true>
+{
+    /// An IRQ-context transmitter whose publication path admits legacy rates
+    /// only and excludes HE floating-point protection calculations.
+    pub fn new_legacy(resources: WifiTxResources<'slot, P, E, T, N>) -> Self {
+        Self::from_resources(resources)
+    }
 }

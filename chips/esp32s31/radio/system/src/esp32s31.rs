@@ -483,6 +483,9 @@ where
                 Ok(WifiTracked {
                     wifi,
                     report: TrackReport {
+                        probe_priority: crate::mac_sources::probe_priority(
+                            self.radio.coex_pti_table(),
+                        ),
                         tracking_micros,
                         temperature,
                         tx_power,
@@ -550,6 +553,7 @@ where
         Ok(WifiRetuned {
             wifi,
             report: RetuneReport {
+                probe_priority: crate::mac_sources::probe_priority(self.radio.coex_pti_table()),
                 micros: self.micros_since(start),
                 tx_power: state
                     .tx_target_power_profile()

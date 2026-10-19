@@ -10,7 +10,7 @@ error[E0382]: use of moved value: `idle`
 15 |     let _ = idle.start(hardware, plan); // ui-error: E0382
    |             ^^^^ value used here after move
    |
-note: `OrdinaryTxIdle::<'_, '_, P, E, T, N>::start` takes ownership of the receiver `self`, which moves `idle`
+note: `OrdinaryTxIdle::<'_, '_, P, E, T, N, LEGACY_ONLY>::start` takes ownership of the receiver `self`, which moves `idle`
   --> src/ordinary_tx.rs
    |
    |         self,

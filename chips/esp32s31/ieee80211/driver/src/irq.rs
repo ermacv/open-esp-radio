@@ -121,7 +121,7 @@ impl WifiIrqRequests {
 /// `E` is the active epoch: [`ActiveEpoch<Moderated>`] over the PAC banks
 /// on the chip, over the host models in tests.
 pub struct WifiIrqLine<E> {
-    epoch: E,
+    epoch: Option<E>,
     mac: &'static IrqPublisher<'static>,
     power: PowerIrqPublisher<'static>,
     requests: &'static WifiIrqRequests,
@@ -138,13 +138,32 @@ impl<E> WifiIrqLine<E> {
         counters: &'static WifiRxCounters,
     ) -> Self {
         Self {
-            epoch,
+            epoch: Some(epoch),
             mac,
             power,
             requests,
             counters,
             masked: false,
         }
+    }
+
+    /// Called only after the runner masked both banks and silenced CPU routes.
+    pub(crate) fn take_epoch(&mut self) -> Option<E> {
+        if !self.masked {
+            return None;
+        }
+        self.epoch.take()
+    }
+
+    /// Reattach a returned epoch while CPU routes are still silent.
+    pub(crate) fn put_epoch(&mut self, epoch: E) -> Result<(), E> {
+        if self.epoch.is_some() {
+            return Err(epoch);
+        }
+        self.requests.clear();
+        self.masked = false;
+        self.epoch = Some(epoch);
+        Ok(())
     }
 
     /// Whether the line masked both banks.
@@ -154,12 +173,12 @@ impl<E> WifiIrqLine<E> {
 
     /// The epoch, for a direct mask when the line never reached its cell.
     pub(crate) fn epoch_mut(&mut self) -> &mut E {
-        &mut self.epoch
+        self.epoch.as_mut().expect("the line has its active epoch")
     }
 
     #[cfg(test)]
-    pub(crate) const fn epoch(&self) -> &E {
-        &self.epoch
+    pub(crate) fn epoch(&self) -> &E {
+        self.epoch.as_ref().expect("the line has its active epoch")
     }
 }
 
@@ -170,8 +189,11 @@ impl<E> WifiIrqLine<E> {
 pub fn service_mac_line<I: MacInterrupt, P: MacPowerInterrupt>(
     line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
 ) {
+    let Some(epoch) = line.epoch.as_mut() else {
+        return;
+    };
     let entry = line.mac.begin_mac_entry();
-    let (disposition, snapshot) = line.epoch.service_mac();
+    let (disposition, snapshot) = epoch.service_mac();
     line.counters.mac_interrupt(
         disposition == IrqDisposition::Spurious,
         snapshot.had_auxiliary_event,
@@ -187,7 +209,10 @@ pub fn service_mac_line<I: MacInterrupt, P: MacPowerInterrupt>(
 pub fn service_power_line<I: MacInterrupt, P: MacPowerInterrupt>(
     line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
 ) {
-    let (disposition, snapshot) = line.epoch.service_power();
+    let Some(epoch) = line.epoch.as_mut() else {
+        return;
+    };
+    let (disposition, snapshot) = epoch.service_power();
     let posted = disposition == PowerIrqDisposition::Posted;
     line.counters.power_interrupt(!posted);
     if posted {
@@ -202,9 +227,12 @@ pub fn service_doorbell_line<I: MacInterrupt, P: MacPowerInterrupt>(
     line: &mut WifiIrqLine<ActiveEpoch<Moderated, I, P>>,
 ) {
     let pending = line.requests.take();
+    let Some(epoch) = line.epoch.as_mut() else {
+        return;
+    };
     if pending & MASK_ALL != 0 {
         if !line.masked {
-            line.epoch.mask_all();
+            epoch.mask_all();
             line.masked = true;
             line.mac.notify_masked();
         }
@@ -215,7 +243,7 @@ pub fn service_doorbell_line<I: MacInterrupt, P: MacPowerInterrupt>(
         if line.masked {
             line.counters.ignored_unmask();
         } else {
-            line.epoch.unmask_rx_after_drain();
+            epoch.unmask_rx_after_drain();
             line.counters.doorbell_unmask();
         }
     }

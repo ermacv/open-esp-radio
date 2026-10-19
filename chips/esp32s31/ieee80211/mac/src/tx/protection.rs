@@ -439,6 +439,53 @@ impl WifiTxProtectionPolicy {
         }
     }
 
+    /// Protection of a legacy PPDU without linking the HE floating-point
+    /// budget into an interrupt-context transmitter.
+    pub fn select_legacy(
+        &self,
+        rate: LegacyRate,
+        receiver: TxReceiver,
+        psdu: TxPsdu,
+    ) -> TxProtectionDecision {
+        struct LegacyBudget;
+        impl portable::HeTxopRtsBudget for LegacyBudget {
+            fn max_unprotected_apep_bytes(
+                &self,
+                _: portable::HeTxopDurationRtsThreshold,
+                _: portable::HePacketPadding,
+                _: oer_ieee80211_mac::phy::HeRate,
+            ) -> u16 {
+                unreachable!("a legacy PPDU never asks for an HE TXOP budget")
+            }
+        }
+        let decision = self.portable().select(
+            portable::ProtectedPpdu {
+                rate: PhyRate::Legacy(rate.phy_rate()),
+                receiver: match receiver {
+                    TxReceiver::Individual => portable::TxReceiver::Individual,
+                    TxReceiver::Group => portable::TxReceiver::Group,
+                },
+                psdu: match psdu {
+                    TxPsdu::Mpdu { length } => portable::TxPsdu::Mpdu { length },
+                    TxPsdu::Ampdu { length } => portable::TxPsdu::Ampdu { length },
+                },
+            },
+            &LegacyBudget,
+        );
+        TxProtectionDecision {
+            protection: match decision.protection {
+                portable::TxProtection::None => TxProtection::None,
+                portable::TxProtection::CtsToSelf { rate } => TxProtection::CtsToSelf {
+                    rate: LegacyRate::from_phy_rate(rate),
+                },
+                portable::TxProtection::RtsCts { rate } => TxProtection::RtsCts {
+                    rate: LegacyRate::from_phy_rate(rate),
+                },
+            },
+            reasons: TxProtectionReasons::from_portable(decision.reasons),
+        }
+    }
+
     /// Control-frame rate for one data rate.
     ///
     /// The fastest basic rate not faster than the data rate, or the slowest
