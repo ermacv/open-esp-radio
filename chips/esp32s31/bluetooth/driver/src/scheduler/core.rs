@@ -24,8 +24,6 @@ use crate::{
 #[cfg(any(target_arch = "riscv32", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerTimeAcquisitionError {
-    /// Another request or abandoned request still owns the latch worker.
-    Busy,
     /// The logical worker and lower sticky latch owner disagreed at begin.
     OwnershipCollision,
     /// The non-repeating request generation space was exhausted.
@@ -150,17 +148,60 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MOD
     }
 }
 
-#[cfg(any(target_arch = "riscv32", test))]
-impl ControllerPoweredTaskRuntime<'_> {
-    #[cfg(target_arch = "riscv32")]
-    pub fn request_controller_time(
-        &mut self,
+/// A short exclusive view of the durable controller-time phase.
+#[cfg(target_arch = "riscv32")]
+pub enum ControllerTimeAccess<'owner, 'cells> {
+    Idle(ControllerTimeReady<'owner, 'cells>),
+    Requested,
+    DrainingOrphan,
+    Faulted,
+}
+
+/// Permission to publish one request, valid only for this task's idle phase.
+///
+/// ```compile_fail,E0382
+/// # #![cfg_attr(target_arch = "riscv32", no_std)]
+/// # #![cfg_attr(target_arch = "riscv32", no_main)]
+/// # #[cfg(target_arch = "riscv32")]
+/// # #[panic_handler]
+/// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+/// use oer_esp32s31_bluetooth_driver::scheduler::ControllerTimeReady;
+/// fn duplicate(ready: ControllerTimeReady<'_, '_>) {
+///     let first = ready.request();
+///     let duplicate = ready.request();
+/// }
+/// ```
+#[cfg(target_arch = "riscv32")]
+pub struct ControllerTimeReady<'owner, 'cells> {
+    runtime: &'owner mut ControllerPoweredTaskRuntime<'cells>,
+}
+
+#[cfg(target_arch = "riscv32")]
+impl ControllerTimeReady<'_, '_> {
+    pub fn request(
+        self,
     ) -> Result<
         crate::controller_time::ControllerTimeRequest,
         crate::controller_time::ControllerTimeRequestError,
     > {
-        self._standalone_dtm_profile.gate_controller_time_request();
-        self.task.request_controller_time()
+        self.runtime
+            ._standalone_dtm_profile
+            .gate_controller_time_request();
+        self.runtime.task.request_idle_controller_time()
+    }
+}
+
+#[cfg(any(target_arch = "riscv32", test))]
+impl<'cells> ControllerPoweredTaskRuntime<'cells> {
+    #[cfg(target_arch = "riscv32")]
+    pub fn controller_time_access(&mut self) -> ControllerTimeAccess<'_, 'cells> {
+        use crate::controller_time::ControllerTimeWorkerPhase as Phase;
+        match self.task.controller_time_phase() {
+            Phase::Idle => ControllerTimeAccess::Idle(ControllerTimeReady { runtime: self }),
+            Phase::Requested => ControllerTimeAccess::Requested,
+            Phase::DrainingOrphan => ControllerTimeAccess::DrainingOrphan,
+            Phase::Faulted => ControllerTimeAccess::Faulted,
+        }
     }
 
     #[cfg(target_arch = "riscv32")]

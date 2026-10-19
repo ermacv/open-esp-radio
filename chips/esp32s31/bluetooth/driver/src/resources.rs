@@ -36,7 +36,7 @@ use {
 
 #[cfg(any(target_arch = "riscv32", test))]
 use crate::controller_time::ControllerTimeWorker;
-#[cfg(test)]
+#[cfg(any(target_arch = "riscv32", test))]
 use crate::controller_time::ControllerTimeWorkerPhase;
 #[cfg(target_arch = "riscv32")]
 use crate::controller_time::{
@@ -179,7 +179,7 @@ impl TaskResources {
     }
 
     /// Durable logical phase paired with this unique task owner.
-    #[cfg(test)]
+    #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) const fn controller_time_phase(&self) -> ControllerTimeWorkerPhase {
         self.controller_time.phase()
     }
@@ -190,9 +190,9 @@ impl TaskResources {
         self.controller_time.needs_recheck()
     }
 
-    /// Publish one request while retaining worker and PAC ownership together.
+    /// Publish through the scheduler's exclusive idle-task capability.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn request_controller_time(
+    pub(crate) fn request_idle_controller_time(
         &mut self,
     ) -> Result<ControllerTimeRequest, ControllerTimeRequestError> {
         let Self {
@@ -200,7 +200,14 @@ impl TaskResources {
             controller_time,
         } = self;
         let mut controller = registers.borrow_bluetooth_controller();
-        controller_time.request(&mut controller)
+        let ControllerTimeWorker::Idle(idle) =
+            core::mem::replace(controller_time, ControllerTimeWorker::Faulted)
+        else {
+            panic!("idle controller-time capability retains the idle worker");
+        };
+        let (next, result) = idle.request(&mut controller);
+        *controller_time = next;
+        result
     }
 
     /// Cancel only the matching logical request; a mismatch faults the worker.

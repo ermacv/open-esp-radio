@@ -19,6 +19,21 @@ use super::{
     drain_controller_time_orphan,
 };
 
+/// Fixtures explicitly move the idle phase; active phases expose no request.
+fn request_idle(
+    worker: &mut ControllerTimeWorker,
+    hardware: &mut impl ControllerTimeHardware,
+) -> Result<ControllerTimeRequest, ControllerTimeRequestError> {
+    let ControllerTimeWorker::Idle(idle) =
+        core::mem::replace(worker, ControllerTimeWorker::Faulted)
+    else {
+        panic!("request fixture owns the idle phase");
+    };
+    let (next, result) = idle.request(hardware);
+    *worker = next;
+    result
+}
+
 #[test]
 fn retirement_preserves_live_and_orphan_requests_until_their_actual_completion() {
     use super::ControllerTimeRetirementError as Error;
@@ -29,7 +44,7 @@ fn retirement_preserves_live_and_orphan_requests_until_their_actual_completion()
         BluetoothControllerTimeLatchStep::Ready(BluetoothControllerLatchedTime::from_bits(23)),
     ]);
     assert_eq!(worker.retirement_ready(), Ok(()));
-    let request = worker.request(&mut hardware).unwrap();
+    let request = request_idle(&mut worker, &mut hardware).unwrap();
     assert_eq!(worker.retirement_ready(), Err(Error::Requested));
     assert_eq!(hardware.operations, [Operation::Begin]);
     worker.cancel_owned(request).unwrap();
@@ -45,7 +60,7 @@ fn retirement_preserves_live_and_orphan_requests_until_their_actual_completion()
         Ok(ControllerTimeEventStep::OrphanDrained)
     );
     assert_eq!(worker.retirement_ready(), Ok(()));
-    let fresh = worker.request(&mut hardware).unwrap();
+    let fresh = request_idle(&mut worker, &mut hardware).unwrap();
     assert_ne!(fresh, request);
     assert!(matches!(
         worker.recheck_owned(fresh, &mut hardware),
@@ -307,7 +322,7 @@ fn request_and_each_recheck_are_separate_bounded_hardware_steps() {
     let mut worker = ControllerTimeWorker::new_idle();
 
     assert_eq!(worker.phase(), ControllerTimeWorkerPhase::Idle);
-    let request = worker.request(&mut hardware).expect("request is published");
+    let request = request_idle(&mut worker, &mut hardware).expect("request is published");
     assert_eq!(hardware.operations, [Operation::Begin]);
     assert!(worker.needs_recheck());
 
@@ -352,7 +367,7 @@ fn abandoned_request_is_drained_without_becoming_a_new_sample() {
     ]);
     let mut worker = ControllerTimeWorker::new_idle();
 
-    let abandoned = worker.request(&mut hardware).expect("request is published");
+    let abandoned = request_idle(&mut worker, &mut hardware).expect("request is published");
     assert_eq!(worker.cancel_owned(abandoned), Ok(()));
     assert_eq!(worker.phase(), ControllerTimeWorkerPhase::DrainingOrphan);
     assert_eq!(
@@ -361,9 +376,7 @@ fn abandoned_request_is_drained_without_becoming_a_new_sample() {
     );
     assert_eq!(worker.phase(), ControllerTimeWorkerPhase::Idle);
 
-    let fresh = worker
-        .request(&mut hardware)
-        .expect("fresh request is published");
+    let fresh = request_idle(&mut worker, &mut hardware).expect("fresh request is published");
     let sample = match worker
         .recheck_owned(fresh, &mut hardware)
         .expect("fresh request completes")
@@ -399,7 +412,7 @@ fn orphan_waiting_blocks_reuse_until_the_abandoned_request_is_drained() {
     ]);
     let mut worker = ControllerTimeWorker::new_idle();
 
-    let abandoned = worker.request(&mut hardware).expect("request is published");
+    let abandoned = request_idle(&mut worker, &mut hardware).expect("request is published");
     worker
         .cancel_owned(abandoned)
         .expect("the exact request can be abandoned");
@@ -411,10 +424,7 @@ fn orphan_waiting_blocks_reuse_until_the_abandoned_request_is_drained() {
     assert!(!worker.is_reunitable());
 
     let operations_before_retry = hardware.operations.clone();
-    assert_eq!(
-        worker.request(&mut hardware),
-        Err(ControllerTimeRequestError::Busy)
-    );
+    assert!(!matches!(worker, ControllerTimeWorker::Idle(_)));
     assert_eq!(hardware.operations, operations_before_retry);
 
     assert_eq!(
@@ -424,8 +434,7 @@ fn orphan_waiting_blocks_reuse_until_the_abandoned_request_is_drained() {
     assert!(worker.is_reunitable());
     assert!(!worker.needs_recheck());
 
-    let fresh = worker
-        .request(&mut hardware)
+    let fresh = request_idle(&mut worker, &mut hardware)
         .expect("the drained worker accepts a fresh request");
     assert!(matches!(
         worker.recheck_owned(fresh, &mut hardware),
@@ -442,7 +451,7 @@ fn mismatched_cancellation_faults_without_touching_newer_hardware() {
     ]);
     let mut worker = ControllerTimeWorker::new_idle();
 
-    let first = worker.request(&mut hardware).expect("first request");
+    let first = request_idle(&mut worker, &mut hardware).expect("first request");
     assert!(matches!(
         worker.recheck_owned(first, &mut hardware),
         Ok(ControllerTimeEventStep::Sample {
@@ -451,7 +460,7 @@ fn mismatched_cancellation_faults_without_touching_newer_hardware() {
         }) if request == first
     ));
 
-    let second = worker.request(&mut hardware).expect("second request");
+    let second = request_idle(&mut worker, &mut hardware).expect("second request");
     assert_ne!(first, second);
     assert_eq!(
         worker.cancel_owned(first),
@@ -480,12 +489,12 @@ fn mismatched_recheck_faults_before_hardware_observation() {
     ]);
     let mut worker = ControllerTimeWorker::new_idle();
 
-    let first = worker.request(&mut hardware).expect("first request");
+    let first = request_idle(&mut worker, &mut hardware).expect("first request");
     assert!(matches!(
         worker.recheck_owned(first, &mut hardware),
         Ok(ControllerTimeEventStep::Sample { request, .. }) if request == first
     ));
-    let second = worker.request(&mut hardware).expect("second request");
+    let second = request_idle(&mut worker, &mut hardware).expect("second request");
 
     assert_eq!(
         worker.recheck_owned(first, &mut hardware),
@@ -509,16 +518,13 @@ fn lower_ownership_collision_is_sticky_fail_stop() {
     hardware.in_flight = true;
 
     assert_eq!(
-        worker.request(&mut hardware),
+        request_idle(&mut worker, &mut hardware),
         Err(ControllerTimeRequestError::OwnershipCollision)
     );
     assert!(hardware.operations.is_empty());
     assert_eq!(worker.phase(), ControllerTimeWorkerPhase::Faulted);
     assert!(!worker.needs_recheck());
-    assert_eq!(
-        worker.request(&mut hardware),
-        Err(ControllerTimeRequestError::Faulted)
-    );
+    assert!(matches!(worker, ControllerTimeWorker::Faulted));
 }
 
 #[test]
@@ -532,11 +538,8 @@ fn idle_orphan_drain_and_duplicate_request_do_not_touch_hardware() {
     );
     assert!(hardware.operations.is_empty());
 
-    let _request = worker.request(&mut hardware).expect("request is published");
-    assert_eq!(
-        worker.request(&mut hardware),
-        Err(ControllerTimeRequestError::Busy)
-    );
+    let _request = request_idle(&mut worker, &mut hardware).expect("request is published");
+    assert!(!matches!(worker, ControllerTimeWorker::Idle(_)));
     assert_eq!(hardware.operations, [Operation::Begin]);
 }
 
@@ -545,7 +548,7 @@ fn ownership_loss_is_sticky_fail_stop_without_more_hardware_access() {
     let mut hardware = ModelHardware::new([]);
     let mut worker = ControllerTimeWorker::new_idle();
 
-    let request = worker.request(&mut hardware).expect("request is published");
+    let request = request_idle(&mut worker, &mut hardware).expect("request is published");
     hardware.in_flight = false;
     assert_eq!(
         worker.recheck_owned(request, &mut hardware),
@@ -558,10 +561,7 @@ fn ownership_loss_is_sticky_fail_stop_without_more_hardware_access() {
         worker.recheck_owned(request, &mut hardware),
         Err(ControllerTimeEventError::Faulted)
     );
-    assert_eq!(
-        worker.request(&mut hardware),
-        Err(ControllerTimeRequestError::Faulted)
-    );
+    assert!(matches!(worker, ControllerTimeWorker::Faulted));
     assert_eq!(hardware.operations, [Operation::Begin]);
 }
 
@@ -572,7 +572,7 @@ fn exhausted_generation_faults_before_hardware_publication() {
     worker.exhaust_generation_for_validation();
 
     assert_eq!(
-        worker.request(&mut hardware),
+        request_idle(&mut worker, &mut hardware),
         Err(ControllerTimeRequestError::GenerationExhausted)
     );
     assert!(hardware.operations.is_empty());

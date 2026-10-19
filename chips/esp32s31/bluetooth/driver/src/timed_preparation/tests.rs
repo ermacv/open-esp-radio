@@ -160,14 +160,16 @@ fn failed_recheck_rolls_back_the_exact_phase_before_fail_stop() {
 }
 
 #[test]
-fn begin_failure_rolls_back_but_seals_the_non_idle_controller() {
+fn hardware_ownership_collision_rolls_back_and_seals_the_controller() {
     let mut controller = ModelController::ready("controller-b");
-    controller.request = Some(Err(ControllerTimeAcquisitionError::Busy));
+    controller.request = Some(Err(ControllerTimeAcquisitionError::OwnershipCollision));
     let failure = TimedPreparationPending::begin(controller, Phase("sequence"), rollback)
-        .expect_err("a busy worker cannot accept another preparation");
+        .expect_err("a lower hardware ownership collision seals the preparation");
     assert_eq!(
         failure.cause(),
-        TimedPreparationFailStopCause::ControllerTime(ControllerTimeAcquisitionError::Busy)
+        TimedPreparationFailStopCause::ControllerTime(
+            ControllerTimeAcquisitionError::OwnershipCollision
+        )
     );
     let (controller, rollback_owner) = failure.into_parts();
     assert_eq!(controller.identity, "controller-b");

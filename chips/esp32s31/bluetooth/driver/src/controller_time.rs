@@ -122,8 +122,8 @@ mod worker {
         }
     }
 
-    /// Durable logical phase retained between executor events.
-    #[cfg(test)]
+    /// Copyable observation, without request authority.
+    #[cfg(any(target_arch = "riscv32", test))]
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub(crate) enum ControllerTimeWorkerPhase {
         /// No logical or hardware request belongs to this worker.
@@ -140,15 +140,11 @@ mod worker {
     /// Why a fresh logical controller-time request was not published.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum ControllerTimeRequestError {
-        /// Another logical request or orphan drain is active; no MMIO occurred.
-        Busy,
         /// The lower owner already held a request although the durable worker was
         /// idle. The worker entered fail-stop instead of stealing that request.
         OwnershipCollision,
         /// The non-repeating request generation space was exhausted before MMIO.
         GenerationExhausted,
-        /// A prior ownership mismatch put the worker into fail-stop.
-        Faulted,
     }
 
     /// Result of exactly one controller-time recheck event.
@@ -188,17 +184,56 @@ mod worker {
     /// while every method receives only a short HAL borrow. Each recheck performs
     /// at most one hardware observation and contains no loop, await, waker, timer,
     /// allocator or RTOS binding.
-    pub struct ControllerTimeWorker {
-        state: ControllerTimeWorkerState,
-        last_generation: u64,
-    }
-
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    enum ControllerTimeWorkerState {
-        Idle,
+    pub enum ControllerTimeWorker {
+        Idle(ControllerTimeIdle),
         Requested(ControllerTimeRequest),
         DrainingOrphan(ControllerTimeRequest),
         Faulted,
+    }
+
+    /// Sole permission to publish a fresh latch request.
+    /// Completion or the actual orphan drain returns this permission.
+    /// It carries the last generation, so dropping it cannot restart numbering.
+    ///
+    /// ```compile_fail,E0382
+    /// # #![cfg_attr(target_arch = "riscv32", no_std)]
+    /// # #![cfg_attr(target_arch = "riscv32", no_main)]
+    /// # #[cfg(target_arch = "riscv32")]
+    /// # #[panic_handler]
+    /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+    /// use oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeIdle;
+    /// fn duplicate(idle: ControllerTimeIdle) {
+    ///     let first = idle;
+    ///     let duplicate = idle;
+    /// }
+    /// ```
+    pub struct ControllerTimeIdle {
+        last_generation: u64,
+    }
+
+    impl ControllerTimeIdle {
+        pub(crate) fn request(
+            self,
+            hardware: &mut impl ControllerTimeHardware,
+        ) -> (
+            ControllerTimeWorker,
+            Result<ControllerTimeRequest, ControllerTimeRequestError>,
+        ) {
+            let Some(generation) = self.last_generation.checked_add(1) else {
+                return (
+                    ControllerTimeWorker::Faulted,
+                    Err(ControllerTimeRequestError::GenerationExhausted),
+                );
+            };
+            let request = ControllerTimeRequest(generation);
+            match hardware.begin_controller_time_latch() {
+                Ok(()) => (ControllerTimeWorker::Requested(request), Ok(request)),
+                Err(BluetoothControllerTimeLatchBeginError::AlreadyInFlight) => (
+                    ControllerTimeWorker::Faulted,
+                    Err(ControllerTimeRequestError::OwnershipCollision),
+                ),
+            }
+        }
     }
 
     impl ControllerTimeWorker {
@@ -209,33 +244,24 @@ mod worker {
         /// never reconstruct it from a borrowed HAL or clear a fault by dropping
         /// the worker.
         pub(crate) const fn new_idle() -> Self {
-            Self {
-                state: ControllerTimeWorkerState::Idle,
-                last_generation: 0,
-            }
+            Self::Idle(ControllerTimeIdle { last_generation: 0 })
         }
 
         /// Current durable logical phase.
-        #[cfg(test)]
+        #[cfg(any(target_arch = "riscv32", test))]
         pub(crate) const fn phase(&self) -> ControllerTimeWorkerPhase {
-            match self.state {
-                ControllerTimeWorkerState::Idle => ControllerTimeWorkerPhase::Idle,
-                ControllerTimeWorkerState::Requested(_) => ControllerTimeWorkerPhase::Requested,
-                ControllerTimeWorkerState::DrainingOrphan(_) => {
-                    ControllerTimeWorkerPhase::DrainingOrphan
-                }
-                ControllerTimeWorkerState::Faulted => ControllerTimeWorkerPhase::Faulted,
+            match self {
+                Self::Idle(_) => ControllerTimeWorkerPhase::Idle,
+                Self::Requested(_) => ControllerTimeWorkerPhase::Requested,
+                Self::DrainingOrphan(_) => ControllerTimeWorkerPhase::DrainingOrphan,
+                Self::Faulted => ControllerTimeWorkerPhase::Faulted,
             }
         }
 
         /// Whether an external durable wake or bounded timer must recheck hardware.
         #[cfg(test)]
         pub(crate) const fn needs_recheck(&self) -> bool {
-            matches!(
-                self.state,
-                ControllerTimeWorkerState::Requested(_)
-                    | ControllerTimeWorkerState::DrainingOrphan(_)
-            )
+            matches!(self, Self::Requested(_) | Self::DrainingOrphan(_))
         }
 
         /// Whether the complete task owner may return to the cold ownership state.
@@ -249,55 +275,20 @@ mod worker {
             &self,
         ) -> Result<(), super::ControllerTimeRetirementError> {
             use super::ControllerTimeRetirementError as Error;
-            match self.state {
-                ControllerTimeWorkerState::Idle => Ok(()),
-                ControllerTimeWorkerState::Requested(_) => Err(Error::Requested),
-                ControllerTimeWorkerState::DrainingOrphan(_) => Err(Error::OrphanPending),
-                ControllerTimeWorkerState::Faulted => Err(Error::Faulted),
+            match self {
+                Self::Idle(_) => Ok(()),
+                Self::Requested(_) => Err(Error::Requested),
+                Self::DrainingOrphan(_) => Err(Error::OrphanPending),
+                Self::Faulted => Err(Error::Faulted),
             }
         }
 
         #[cfg(test)]
         pub(crate) fn exhaust_generation_for_validation(&mut self) {
-            self.last_generation = u64::MAX;
-        }
-
-        /// Publish one fresh logical sample request.
-        ///
-        /// Non-idle phases return without MMIO. A lower-layer collision proves
-        /// desynchronized ownership and permanently faults this worker.
-        pub(crate) fn request(
-            &mut self,
-            hardware: &mut impl ControllerTimeHardware,
-        ) -> Result<ControllerTimeRequest, ControllerTimeRequestError> {
-            match self.state {
-                ControllerTimeWorkerState::Idle => {}
-                ControllerTimeWorkerState::Requested(_)
-                | ControllerTimeWorkerState::DrainingOrphan(_) => {
-                    return Err(ControllerTimeRequestError::Busy);
-                }
-                ControllerTimeWorkerState::Faulted => {
-                    return Err(ControllerTimeRequestError::Faulted);
-                }
-            }
-
-            let Some(generation) = self.last_generation.checked_add(1) else {
-                self.state = ControllerTimeWorkerState::Faulted;
-                return Err(ControllerTimeRequestError::GenerationExhausted);
+            let Self::Idle(idle) = self else {
+                panic!("generation fixture starts idle")
             };
-            let request = ControllerTimeRequest(generation);
-
-            match hardware.begin_controller_time_latch() {
-                Ok(()) => {
-                    self.last_generation = generation;
-                    self.state = ControllerTimeWorkerState::Requested(request);
-                    Ok(request)
-                }
-                Err(BluetoothControllerTimeLatchBeginError::AlreadyInFlight) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
-                    Err(ControllerTimeRequestError::OwnershipCollision)
-                }
-            }
+            idle.last_generation = u64::MAX;
         }
 
         /// Abandon the current logical caller without clearing hardware ownership.
@@ -308,16 +299,14 @@ mod worker {
             &mut self,
             request: ControllerTimeRequest,
         ) -> Result<(), ControllerTimeEventError> {
-            match self.state {
-                ControllerTimeWorkerState::Requested(owned) if owned == request => {
-                    self.state = ControllerTimeWorkerState::DrainingOrphan(request);
+            match self {
+                Self::Requested(owned) if *owned == request => {
+                    *self = Self::DrainingOrphan(request);
                     Ok(())
                 }
-                ControllerTimeWorkerState::Faulted => Err(ControllerTimeEventError::Faulted),
-                ControllerTimeWorkerState::Idle
-                | ControllerTimeWorkerState::Requested(_)
-                | ControllerTimeWorkerState::DrainingOrphan(_) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
+                Self::Faulted => Err(ControllerTimeEventError::Faulted),
+                Self::Idle(_) | Self::Requested(_) | Self::DrainingOrphan(_) => {
+                    *self = Self::Faulted;
                     Err(ControllerTimeEventError::RequestMismatch)
                 }
             }
@@ -329,32 +318,32 @@ mod worker {
             request: ControllerTimeRequest,
             hardware: &mut impl ControllerTimeHardware,
         ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
-            match self.state {
-                ControllerTimeWorkerState::Requested(owned) if owned == request => {}
-                ControllerTimeWorkerState::Faulted => {
+            match self {
+                Self::Requested(owned) if *owned == request => {}
+                Self::Faulted => {
                     return Err(ControllerTimeEventError::Faulted);
                 }
-                ControllerTimeWorkerState::Idle
-                | ControllerTimeWorkerState::Requested(_)
-                | ControllerTimeWorkerState::DrainingOrphan(_) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
+                Self::Idle(_) | Self::Requested(_) | Self::DrainingOrphan(_) => {
+                    *self = Self::Faulted;
                     return Err(ControllerTimeEventError::RequestMismatch);
                 }
-            }
+            };
 
             match hardware.step_controller_time_latch() {
                 Ok(BluetoothControllerTimeLatchStep::Waiting) => {
                     Ok(ControllerTimeEventStep::Waiting)
                 }
                 Ok(BluetoothControllerTimeLatchStep::Ready(latched_time)) => {
-                    self.state = ControllerTimeWorkerState::Idle;
+                    *self = Self::Idle(ControllerTimeIdle {
+                        last_generation: request.0,
+                    });
                     Ok(ControllerTimeEventStep::Sample {
                         request,
                         sample: ControllerTimeSample::from_live_latch(latched_time),
                     })
                 }
                 Err(BluetoothControllerTimeLatchStepError::NotInFlight) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
+                    *self = Self::Faulted;
                     Err(ControllerTimeEventError::OwnershipLost)
                 }
             }
@@ -365,30 +354,32 @@ mod worker {
             &mut self,
             hardware: &mut impl ControllerTimeHardware,
         ) -> Result<ControllerTimeEventStep, ControllerTimeEventError> {
-            match self.state {
-                ControllerTimeWorkerState::Idle => {
+            let request = match self {
+                Self::Idle(_) => {
                     return Ok(ControllerTimeEventStep::Idle);
                 }
-                ControllerTimeWorkerState::DrainingOrphan(_) => {}
-                ControllerTimeWorkerState::Faulted => {
+                Self::DrainingOrphan(request) => *request,
+                Self::Faulted => {
                     return Err(ControllerTimeEventError::Faulted);
                 }
-                ControllerTimeWorkerState::Requested(_) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
+                Self::Requested(_) => {
+                    *self = Self::Faulted;
                     return Err(ControllerTimeEventError::RequestMismatch);
                 }
-            }
+            };
 
             match hardware.step_controller_time_latch() {
                 Ok(BluetoothControllerTimeLatchStep::Waiting) => {
                     Ok(ControllerTimeEventStep::Waiting)
                 }
                 Ok(BluetoothControllerTimeLatchStep::Ready(_)) => {
-                    self.state = ControllerTimeWorkerState::Idle;
+                    *self = Self::Idle(ControllerTimeIdle {
+                        last_generation: request.0,
+                    });
                     Ok(ControllerTimeEventStep::OrphanDrained)
                 }
                 Err(BluetoothControllerTimeLatchStepError::NotInFlight) => {
-                    self.state = ControllerTimeWorkerState::Faulted;
+                    *self = Self::Faulted;
                     Err(ControllerTimeEventError::OwnershipLost)
                 }
             }
@@ -400,12 +391,12 @@ mod worker {
 pub(crate) use worker::ControllerTimeHardware;
 #[cfg(any(target_arch = "riscv32", test))]
 pub use worker::ControllerTimeRequest;
-#[cfg(test)]
+#[cfg(any(target_arch = "riscv32", test))]
 pub(crate) use worker::ControllerTimeWorkerPhase;
 #[cfg(any(target_arch = "riscv32", test))]
 pub use worker::{
-    ControllerTimeEventError, ControllerTimeEventStep, ControllerTimeRequestError,
-    ControllerTimeWorker,
+    ControllerTimeEventError, ControllerTimeEventStep, ControllerTimeIdle,
+    ControllerTimeRequestError, ControllerTimeWorker,
 };
 
 #[cfg(any(target_arch = "riscv32", test))]
