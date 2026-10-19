@@ -2282,7 +2282,32 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
 
 /// The WMM set of an access point whose best-effort category has a TXOP
 /// limit of `txop_units_32_us`.
+/// Capabilities whose EDCA bounds admit every record the element can
+/// carry: what the core's own policy then refuses.
+enum WideEdca {}
+
+impl oer_ieee80211_lower_mac::Ieee80211Capabilities for WideEdca {
+    type SppScope = oer_ieee80211_mac::security::spp::Association;
+    const CAPS: oer_ieee80211_lower_mac::LowerMacCapabilities = {
+        let mut caps = esp32s31_lower_mac_capabilities(BACKING);
+        caps.edca_max_cw_exponent = 15;
+        caps
+    };
+}
+
+fn edca(
+    parameters: oer_ieee80211_mac::extensions::wmm::WmmParameterSet,
+) -> oer_ieee80211_lower_mac::SupportedEdca<WideEdca> {
+    oer_ieee80211_lower_mac::SupportedEdca::new(parameters).unwrap()
+}
+
 fn wmm_with_best_effort_txop(
+    txop_units_32_us: u16,
+) -> oer_ieee80211_lower_mac::SupportedEdca<WideEdca> {
+    edca(wmm_set_with_best_effort_txop(txop_units_32_us))
+}
+
+fn wmm_set_with_best_effort_txop(
     txop_units_32_us: u16,
 ) -> oer_ieee80211_mac::extensions::wmm::WmmParameterSet {
     use oer_ieee80211_mac::extensions::wmm::WmmAcParameters;
@@ -2475,7 +2500,7 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        core.set_checked_edca(wmm_with_best_effort_txop(94))
+        core.set_checked_edca(VifRole::Station, wmm_with_best_effort_txop(94))
             .unwrap();
         // A best-effort ECWmax of 11 lies outside the hardware's exponents.
         let record = |aifsn, ecw_max| oer_ieee80211_mac::extensions::wmm::WmmAcParameters {
@@ -2490,14 +2515,64 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
             false,
             [record(3, 11), record(7, 10), record(2, 10), record(2, 10)],
         );
-        assert!(core.set_checked_edca(outside).is_err());
+        assert!(
+            core.set_checked_edca(VifRole::Station, edca(outside))
+                .is_err()
+        );
         assert_eq!(
             core.tx
                 .policy()
-                .access_policy(LegacyTxQueue::BestEffort)
+                .access_policy(VifRole::Station, LegacyTxQueue::BestEffort)
                 .txop_limit_units_32_us(),
             94
         );
+    });
+}
+
+#[test]
+fn each_interface_contends_with_its_own_edca_set() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let station = wmm_with_best_effort_txop(94);
+        let access_point = wmm_with_best_effort_txop(47);
+        // Each interface's applied set is the one it asked for.
+        assert_eq!(
+            core.set_checked_edca(VifRole::Station, station),
+            Ok(station)
+        );
+        assert_eq!(
+            core.set_checked_edca(VifRole::AccessPoint, access_point),
+            Ok(access_point)
+        );
+        let txop = |policy: &WifiTxRuntimePolicy, role| {
+            policy
+                .access_policy(role, LegacyTxQueue::BestEffort)
+                .txop_limit_units_32_us()
+        };
+        assert_eq!(txop(core.tx.policy(), VifRole::Station), 94);
+        assert_eq!(txop(core.tx.policy(), VifRole::AccessPoint), 47);
+        // A refused set of one interface leaves the other's.
+        let mut refused = wmm_set_with_best_effort_txop(0);
+        refused = oer_ieee80211_mac::extensions::wmm::WmmParameterSet::new(
+            0,
+            false,
+            [
+                oer_ieee80211_mac::extensions::wmm::WmmAcParameters {
+                    ecw_max: 11,
+                    ..refused.access_category(WmmAccessCategory::BestEffort)
+                },
+                refused.access_category(WmmAccessCategory::Background),
+                refused.access_category(WmmAccessCategory::Video),
+                refused.access_category(WmmAccessCategory::Voice),
+            ],
+        );
+        assert!(
+            core.set_checked_edca(VifRole::AccessPoint, edca(refused))
+                .is_err()
+        );
+        assert_eq!(txop(core.tx.policy(), VifRole::Station), 94);
+        assert_eq!(txop(core.tx.policy(), VifRole::AccessPoint), 47);
     });
 }
 
@@ -2799,7 +2874,7 @@ fn an_access_category_with_a_txop_limit_takes_ht_and_he_aggregates() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let source = backings();
-        core.set_checked_edca(wmm_with_best_effort_txop(94))
+        core.set_checked_edca(VifRole::Station, wmm_with_best_effort_txop(94))
             .unwrap();
         // The caller keeps an aggregate within the limit: the core refuses
         // neither format by it.

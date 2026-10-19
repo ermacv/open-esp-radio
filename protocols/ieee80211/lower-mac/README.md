@@ -197,7 +197,10 @@ back; its operations are synchronous and never wait:
   Disable drains these command terminals with their owners.
 - **Settings.** EDCA, BSS color, a TBTT plan, monitor reception and Block Ack
   desired state take effect before the next submission; the latest value
-  of each wins. They consume no FIFO command credit.
+  of each wins. They consume no FIFO command credit. EDCA belongs to an
+  interface: each keeps its own set, the backend reconciles the sets into
+  its queues and `set_edca` returns the set the interface's attempts
+  contend with.
 - **Gate evidence.** The install includes one `GatePool` in its declared pool set.
   Its private `GatePlace` starts inside `GateOpen`
   and retains one `GateIssuer` in the backend. Closing moves that place to

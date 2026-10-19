@@ -2199,6 +2199,12 @@ where
             phase.station().configure(pending, receive);
             return Ok(Follow::Nothing);
         }
+        StaAction::SetEdca(edca) => {
+            // The station's frames contend with whatever the backend
+            // reconciled; nothing in the station follows from that set.
+            let _applied = phase.station().set_edca(edca);
+            return Ok(Follow::Nothing);
+        }
         StaAction::InstallPairwiseKey {
             association,
             pending,

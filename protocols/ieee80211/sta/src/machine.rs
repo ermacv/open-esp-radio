@@ -79,7 +79,7 @@ use oer_ieee80211_arbiter::{
 use oer_ieee80211_lower_mac::{
     AckHeader, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength, ReceiveFilter,
     ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole,
-    StationReceive, SupportedChannel, SupportedFilter, TxBufferMemory, TxOutcome,
+    StationReceive, SupportedChannel, SupportedEdca, SupportedFilter, TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_mac::address::{Bssid, IndividualAddress, OwnAddress};
 use oer_ieee80211_mac::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
@@ -439,6 +439,10 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
             StaConfigurationContext<'id, T::EpochPath>,
         >,
     ),
+    /// Set the EDCA parameters the station's interface contends with: the
+    /// access point's, from its association on and whenever its beacons
+    /// announce another set. No input follows.
+    SetEdca(SupportedEdca<K>),
     /// Install a pairwise key ([`StaInput::PairwiseKeyInstalled`]).
     InstallPairwiseKey {
         /// Unique policy owner, returned inside the installed pairwise owner.
@@ -1417,6 +1421,12 @@ enum JoinStep<M> {
     },
     SaeAwait(StaSaeAuthentication),
     Associate(StaAssociationRuntime, AssociationKey),
+    /// The association's EDCA parameters to set, after its notice.
+    SetEdca {
+        association_id: u16,
+        peer: Peer<M>,
+        key: AssociationKey,
+    },
     NotifyAssociated {
         association_id: u16,
         peer: Peer<M>,
@@ -1520,6 +1530,9 @@ struct Connected<T: StaTokens, K> {
     qos_sequences: [StaSequenceCounter; 8],
     /// The upstream fact the arbiter has yet to hear.
     report: Option<UpstreamFact<K>>,
+    /// The access point's beacons announced another EDCA set, already in
+    /// `peer`, which the interface has yet to take.
+    edca: bool,
     /// The primary lease to exchange after the port moved.
     exchange: bool,
     /// What the access point knows of the station's power state.
@@ -1932,6 +1945,7 @@ enum Owed<'id, T: StaTokens, K> {
             StaConfigurationContext<'id, T::EpochPath>,
         >,
     ),
+    SetEdca(SupportedEdca<K>),
     Transmit(StaTransmit<'id, T, K>),
     /// Under the pairwise key of the connected link.
     TransmitProtected(StaTransmit<'id, T, K>),
@@ -3794,10 +3808,18 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             }
         }
         if let Ok(beacon) = parse_sta_beacon(frame, connected.bssid.get(), connected.association_id)
-            && connected.power.beacon(beacon.tim) == PowerSaveDecision::SendActive
-            && !connected.waking
         {
-            connected.wake = true;
+            if let Some(edca) = beacon.edca
+                && edca != connected.peer.associated.edca
+            {
+                connected.peer.associated.edca = edca;
+                connected.edca = true;
+            }
+            if connected.power.beacon(beacon.tim) == PowerSaveDecision::SendActive
+                && !connected.waking
+            {
+                connected.wake = true;
+            }
         }
         State::Connected(connected)
     }
@@ -3954,6 +3976,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             Owed::Release(lease) => StaAction::ReleaseChannel(lease),
             Owed::Upstream(fact) => StaAction::Upstream(fact),
             Owed::Configure(receive, pending) => StaAction::Configure(receive, pending),
+            Owed::SetEdca(edca) => StaAction::SetEdca(edca),
             Owed::Transmit(transmit) => StaAction::Transmit(transmit),
             // Owed only while the link is up in this very step, so the key
             // is there; without it the frame does not go and its tokens
@@ -4392,6 +4415,14 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             return (
                 State::Connected(connected),
                 ActionProgress::Action(Owed::Upstream(fact)),
+            );
+        }
+        if core::mem::take(&mut connected.edca)
+            && let Some(edca) = SupportedEdca::new(connected.peer.associated.edca)
+        {
+            return (
+                State::Connected(connected),
+                ActionProgress::Action(Owed::SetEdca(edca)),
             );
         }
         if connected.exchange {
@@ -5100,13 +5131,33 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 peer,
                 key,
             } => (
-                JoinStep::StartLink {
+                JoinStep::SetEdca {
                     association_id,
                     peer,
                     key,
                 },
                 Some(Owed::Associated(peer)),
             ),
+            // A set the backend cannot apply leaves the interface's
+            // previous one.
+            JoinStep::SetEdca {
+                association_id,
+                peer,
+                key,
+            } => {
+                let next = JoinStep::StartLink {
+                    association_id,
+                    peer,
+                    key,
+                };
+                match SupportedEdca::new(peer.associated.edca) {
+                    Some(edca) => (next, Some(Owed::SetEdca(edca))),
+                    None => {
+                        join.step = next;
+                        return (State::Join(join), ActionProgress::Transition);
+                    }
+                }
+            }
             JoinStep::StartLink {
                 association_id,
                 peer,
@@ -5145,6 +5196,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                     peer,
                     qos_sequences: QOS_SEQUENCES,
                     report: Some(UpstreamFact::Connected(channel)),
+                    edca: false,
                     exchange: false,
                     power: PowerSaveView::Awake,
                     wake: false,
@@ -5645,6 +5697,7 @@ fn confirm<T: StaTokens, K>(
                 peer,
                 qos_sequences,
                 report: None,
+                edca: false,
                 exchange: false,
                 power: PowerSaveView::Awake,
                 wake: false,

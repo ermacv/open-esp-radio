@@ -30,6 +30,7 @@ use oer_esp32s31_ieee80211_mac::{
         TxHardware, TxPhyRate, TxSlot,
     },
 };
+use oer_ieee80211_lower_mac::VifRole;
 use oer_ieee80211_mac::frame::FrameControl;
 use oer_ieee80211_softmac::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
 
@@ -69,6 +70,14 @@ impl OrdinaryTxInterface {
             Self::AccessPoint => 1,
         }
     }
+
+    /// The interface whose EDCA set the queue's attempts contend with.
+    const fn role(self) -> VifRole {
+        match self {
+            Self::Station => VifRole::Station,
+            Self::AccessPoint => VifRole::AccessPoint,
+        }
+    }
 }
 
 /// Compact hardware route retained across retries.
@@ -93,11 +102,22 @@ impl ActiveTxRoute {
         }
     }
 
+    /// Only [`Self::new`] writes the interface bit.
+    const fn interface(self) -> OrdinaryTxInterface {
+        match (self.0 >> 2) & 1 {
+            0 => OrdinaryTxInterface::Station,
+            _ => OrdinaryTxInterface::AccessPoint,
+        }
+    }
+
+    const fn role(self) -> VifRole {
+        self.interface().role()
+    }
+
     const fn mac_interface(self) -> MacInterface {
-        match (self.0 >> 2) & 0x03 {
-            0 => MacInterface::Station,
-            1 => MacInterface::AccessPoint,
-            _ => panic!("corrupt active TX interface route"),
+        match self.interface() {
+            OrdinaryTxInterface::Station => MacInterface::Station,
+            OrdinaryTxInterface::AccessPoint => MacInterface::AccessPoint,
         }
     }
 }
@@ -682,23 +702,26 @@ where
 
     pub fn contention_publication(
         &mut self,
+        role: VifRole,
         queue: LegacyTxQueue,
     ) -> (EdcaContentionParameters, u16) {
-        let parameters = self.policy.contention_parameters(queue);
-        let backoff = self.policy.select_backoff(queue, self.entropy.next_u32());
+        let parameters = self.policy.contention_parameters(role, queue);
+        let backoff = self
+            .policy
+            .select_backoff(role, queue, self.entropy.next_u32());
         (parameters, backoff)
     }
 
-    pub fn record_retry_failure(&mut self, queue: LegacyTxQueue) {
-        self.policy.record_retry_failure(queue);
+    pub fn record_retry_failure(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.policy.record_retry_failure(role, queue);
     }
 
-    pub fn record_success(&mut self, queue: LegacyTxQueue) {
-        self.policy.record_success(queue);
+    pub fn record_success(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.policy.record_success(role, queue);
     }
 
-    pub fn reset_terminal_exchange(&mut self, queue: LegacyTxQueue) {
-        self.policy.reset_terminal_exchange(queue);
+    pub fn reset_terminal_exchange(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.policy.reset_terminal_exchange(role, queue);
     }
 
     /// The next service deadline, including an in-progress hardware abort.
@@ -1058,6 +1081,7 @@ where
             return Err(OrdinaryTxError::Tx(TxError::Invalid));
         }
         let retry = OrdinaryMpduRetryState::new_with_rate_policy(
+            plan.interface.role(),
             LegacyTxQueue::from_access_category(plan.exchange.access_category),
             plan.exchange.initial_rate,
             retry_rate_policy,
@@ -1333,7 +1357,8 @@ where
             // One publication is the whole transaction: the retry state
             // never sees the completion, so it can never re-publish.
             if status == oer_ieee80211_lower_mac::TxStatus::Success {
-                self.policy.record_success(active.route.queue());
+                self.policy
+                    .record_success(active.route.role(), active.route.queue());
             } else {
                 active.retry.abort(&mut self.policy);
             }
@@ -1513,11 +1538,14 @@ where
         active: &ActiveTx,
     ) -> Result<TxProtectionDecision, OrdinaryTxError> {
         let queue = active.route.queue();
+        let role = active.route.role();
         let rate = active.retry.current_rate()?;
-        let contention = self.policy.contention_parameters(queue);
+        let contention = self.policy.contention_parameters(role, queue);
         let contention_window = match active.single_attempt {
             Some(attempt) => attempt.backoff_slots,
-            None => self.policy.select_backoff(queue, self.entropy.next_u32()),
+            None => self
+                .policy
+                .select_backoff(role, queue, self.entropy.next_u32()),
         };
         let ceiling = active
             .single_attempt

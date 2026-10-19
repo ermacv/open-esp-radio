@@ -5,7 +5,7 @@
 //! wait for interrupts, access MMIO, mutate DMA storage or produce entropy;
 //! those remain separate hardware/executor boundaries.
 
-use oer_ieee80211_lower_mac::TxStatus;
+use oer_ieee80211_lower_mac::{TxStatus, VifRole};
 use oer_ieee80211_mac::extensions::wmm::WmmParameterSet;
 use oer_ieee80211_mac::qos::{
     WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
@@ -145,7 +145,9 @@ pub enum WmmHardwareMediumRequest {
 pub struct WifiTxRuntimePolicy {
     ht_ampdu: HtPeerAmpduParameters,
     he_bss_color: u8,
-    edca: EdcaQueues,
+    /// Each interface's contention for the four queues: the station's,
+    /// then the access point's.
+    edca: [EdcaQueues; 2],
     protection: WifiTxProtectionPolicy,
 }
 
@@ -155,10 +157,26 @@ impl WifiTxRuntimePolicy {
         Self {
             ht_ampdu: HtPeerAmpduParameters::from_capability_byte(0),
             he_bss_color: 0,
-            edca: EdcaQueues::vendor_defaults(),
+            edca: [EdcaQueues::vendor_defaults(); 2],
             protection: WifiTxProtectionPolicy::new(Some(
                 crate::tx::protection::RtsLengthThreshold::VENDOR_DEFAULT,
             )),
+        }
+    }
+
+    const fn edca(&self, role: VifRole) -> &EdcaQueues {
+        let [station, access_point] = &self.edca;
+        match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        }
+    }
+
+    const fn edca_mut(&mut self, role: VifRole) -> &mut EdcaQueues {
+        let [station, access_point] = &mut self.edca;
+        match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
         }
     }
 
@@ -199,17 +217,26 @@ impl WifiTxRuntimePolicy {
         self.protection
     }
 
-    /// Atomically validate and install all four WMM access categories.
-    pub fn install_wmm(&mut self, parameters: WmmParameterSet) -> Result<(), EdcaParametersError> {
-        self.edca.configure_from_wmm(parameters)
+    /// Atomically validate and install all four WMM access categories of
+    /// the interface of `role`; the other interface keeps its own.
+    pub fn install_wmm(
+        &mut self,
+        role: VifRole,
+        parameters: WmmParameterSet,
+    ) -> Result<(), EdcaParametersError> {
+        self.edca_mut(role).configure_from_wmm(parameters)
     }
 
-    pub fn contention_parameters(&self, queue: LegacyTxQueue) -> EdcaContentionParameters {
-        self.edca.queue(queue).parameters()
+    pub fn contention_parameters(
+        &self,
+        role: VifRole,
+        queue: LegacyTxQueue,
+    ) -> EdcaContentionParameters {
+        self.edca(role).queue(queue).parameters()
     }
 
-    pub const fn access_policy(&self, queue: LegacyTxQueue) -> EdcaAccessPolicy {
-        self.edca.access_policy(queue)
+    pub const fn access_policy(&self, role: VifRole, queue: LegacyTxQueue) -> EdcaAccessPolicy {
+        self.edca(role).access_policy(queue)
     }
 
     /// Classify and admit one network frame under the active peer WMM policy.
@@ -220,12 +247,13 @@ impl WifiTxRuntimePolicy {
     /// admission, the request fails closed.
     pub fn select_network_traffic(
         &self,
+        role: VifRole,
         ethernet: &[u8],
         peer_qos: bool,
     ) -> Result<WifiTxTraffic, WifiTxTrafficError> {
         let requested = classify_ethernet_wmm(ethernet);
         if !peer_qos {
-            let selected = self.edca.access_policy(LegacyTxQueue::BestEffort);
+            let selected = self.edca(role).access_policy(LegacyTxQueue::BestEffort);
             return Ok(WifiTxTraffic {
                 requested,
                 user_priority: WmmUserPriority::UP0,
@@ -238,7 +266,7 @@ impl WifiTxRuntimePolicy {
         let mut category = requested.access_category;
         loop {
             let selected = self
-                .edca
+                .edca(role)
                 .access_policy(LegacyTxQueue::from_access_category(category));
             if !selected.admission_control_mandatory() {
                 let downgraded = category != requested.access_category;
@@ -283,25 +311,25 @@ impl WifiTxRuntimePolicy {
         }
     }
 
-    pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
-        self.edca.queue(queue).current_exponent()
+    pub fn contention_exponent(&self, role: VifRole, queue: LegacyTxQueue) -> u8 {
+        self.edca(role).queue(queue).current_exponent()
     }
 
     /// Select one hardware backoff slot from platform-provided entropy.
-    pub fn select_backoff(&self, queue: LegacyTxQueue, entropy: u32) -> u16 {
-        self.edca.select_slot(queue, entropy)
+    pub fn select_backoff(&self, role: VifRole, queue: LegacyTxQueue, entropy: u32) -> u16 {
+        self.edca(role).select_slot(queue, entropy)
     }
 
-    pub fn record_retry_failure(&mut self, queue: LegacyTxQueue) {
-        self.edca.record_retry_failure(queue);
+    pub fn record_retry_failure(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).record_retry_failure(queue);
     }
 
-    pub fn record_success(&mut self, queue: LegacyTxQueue) {
-        self.edca.record_success(queue);
+    pub fn record_success(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).record_success(queue);
     }
 
-    pub fn reset_terminal_exchange(&mut self, queue: LegacyTxQueue) {
-        self.edca.reset_terminal_exchange(queue);
+    pub fn reset_terminal_exchange(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).reset_terminal_exchange(queue);
     }
 }
 
@@ -415,6 +443,7 @@ pub use oer_ieee80211_upper_mac::{FrameClass, RetryCounters};
 /// the chip's rate ladders over [`TxPhyRate`] and applies the contention
 /// changes to the queue's EDCA state.
 pub struct OrdinaryMpduRetryState {
+    role: VifRole,
     queue: LegacyTxQueue,
     initial_rate: TxPhyRate,
     rate_policy: OrdinaryRetryRatePolicy,
@@ -423,6 +452,7 @@ pub struct OrdinaryMpduRetryState {
 
 impl OrdinaryMpduRetryState {
     pub const fn new(
+        role: VifRole,
         queue: LegacyTxQueue,
         initial_rate: TxPhyRate,
         mpdu_retry_limit: u8,
@@ -435,6 +465,7 @@ impl OrdinaryMpduRetryState {
             }
         };
         Ok(Self {
+            role,
             queue,
             initial_rate,
             rate_policy: OrdinaryRetryRatePolicy::Normal,
@@ -447,13 +478,14 @@ impl OrdinaryMpduRetryState {
     /// rate, preventing a caller from changing PHY only after the first ACK
     /// timeout.
     pub fn new_with_rate_policy(
+        role: VifRole,
         queue: LegacyTxQueue,
         initial_rate: TxPhyRate,
         rate_policy: OrdinaryRetryRatePolicy,
         mpdu_retry_limit: u8,
         frame_class: FrameClass,
     ) -> Result<Self, OrdinaryRetryError> {
-        let mut state = Self::new(queue, initial_rate, mpdu_retry_limit, frame_class)?;
+        let mut state = Self::new(role, queue, initial_rate, mpdu_retry_limit, frame_class)?;
         match rate_policy {
             OrdinaryRetryRatePolicy::Normal => {}
             OrdinaryRetryRatePolicy::Schedule(schedule) => {
@@ -564,10 +596,10 @@ impl OrdinaryMpduRetryState {
         let decision = self.retry.observe(status);
         match decision {
             RetryDecision::Complete(RetryOutcome::Delivered) => {
-                policy.record_success(self.queue);
+                policy.record_success(self.role, self.queue);
             }
-            RetryDecision::Complete(_) => policy.reset_terminal_exchange(self.queue),
-            RetryDecision::Retry { .. } => policy.record_retry_failure(self.queue),
+            RetryDecision::Complete(_) => policy.reset_terminal_exchange(self.role, self.queue),
+            RetryDecision::Retry { .. } => policy.record_retry_failure(self.role, self.queue),
         }
         match decision {
             RetryDecision::Complete(_) => OrdinaryRetryDecision::Complete,
@@ -590,7 +622,7 @@ impl OrdinaryMpduRetryState {
 
     /// End ownership after a non-retryable executor or hardware error.
     pub fn abort(&self, policy: &mut WifiTxRuntimePolicy) {
-        policy.reset_terminal_exchange(self.queue);
+        policy.reset_terminal_exchange(self.role, self.queue);
     }
 }
 

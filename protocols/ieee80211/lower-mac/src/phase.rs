@@ -799,9 +799,6 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
         gate: GateClosed<'id, <Self::Types as PhaseTypes<'id>>::GatePath>,
     ) -> GateOpen<'id, <Self::Types as PhaseTypes<'id>>::GatePath>;
 
-    /// The EDCA parameters every queue's attempts contend with.
-    fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>);
-
     /// The station interface.
     fn station(&mut self) -> Self::Station<'_>;
 
@@ -1097,6 +1094,12 @@ pub trait InterfacePhase<'p, 'id: 'p> {
         &mut self,
         attempt: InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<<Self::Types as PhaseTypes<'id>>::Fault>>;
+
+    /// The EDCA parameters this interface's attempts contend with, from
+    /// their next publication on. Each interface keeps its own set; the
+    /// backend reconciles the sets of all interfaces into its queues and
+    /// returns the set this interface's attempts contend with from then on.
+    fn set_edca(&mut self, parameters: SupportedEdca<Self::Caps>) -> SupportedEdca<Self::Caps>;
 
     /// Install `key` for frames with `peer` in `slot`.
     fn install_pairwise_key(

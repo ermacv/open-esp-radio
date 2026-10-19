@@ -1,11 +1,37 @@
 use super::{
-    WMM_OUI_AND_TYPE, WMM_PARAMETER_BODY_LEN, WmmAccessCategory, parse_wmm_parameter_element,
+    WMM_OUI_AND_TYPE, WMM_PARAMETER_BODY_LEN, WmmAccessCategory, WmmParameterSet,
+    parse_wmm_parameter_element,
 };
 
 const STANDARD_PARAMETER_ELEMENT: [u8; 26] = [
     221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x85, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42, 0x43,
     94, 0, 0x72, 0x32, 47, 0,
 ];
+
+#[test]
+fn the_standard_default_is_the_records_of_table_9_155() {
+    // The element above advertises the Table 9-155 contention for an OFDM
+    // PHY; its Voice record also sets admission control.
+    let advertised = parse_wmm_parameter_element(&STANDARD_PARAMETER_ELEMENT).unwrap();
+    let contention = |record: super::WmmAcParameters| {
+        (
+            record.aifsn,
+            record.ecw_min,
+            record.ecw_max,
+            record.txop_limit_units_32_us,
+        )
+    };
+    for category in WmmAccessCategory::ALL {
+        let default = WmmParameterSet::STANDARD_DEFAULT.access_category(category);
+        assert!(!default.admission_control_mandatory);
+        assert_eq!(
+            contention(default),
+            contention(advertised.access_category(category))
+        );
+        let dcf = WmmParameterSet::DCF.access_category(category);
+        assert_eq!(contention(dcf), (2, 4, 10, 0));
+    }
+}
 
 #[test]
 fn parses_all_four_access_categories_and_complete_txop() {

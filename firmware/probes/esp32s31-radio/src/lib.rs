@@ -1304,7 +1304,9 @@ oer_probe_macros::probe! {
             3 => LegacyTxQueue::Background,
             _ => panic!("verification ordinary queue is out of range"),
         };
+        // The vendor comparison runs the station interface's queues.
         let state = OrdinaryMpduRetryState::new(
+            oer_ieee80211_lower_mac::VifRole::Station,
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             mpdu_retry_limit as u8,
@@ -1347,7 +1349,7 @@ oer_probe_macros::probe! {
             .expect("the retry sequence starts with its reset entry");
         let decision = state.observe_completion(policy, disposition);
         let counters = state.counters();
-        let exponent = policy.contention_exponent(*queue);
+        let exponent = policy.contention_exponent(oer_ieee80211_lower_mac::VifRole::Station, *queue);
         // SAFETY: every retry case supplies writable descriptor, context and
         // frame objects covering these bytes.
         unsafe {
@@ -1735,10 +1737,10 @@ fn ordinary_tx_ack_timeout_state(output_address: u32) -> u32 {
             selected_rate: snapshot.current_rate.code(),
             decision: 1,
             retry_bit_mask: u8::from(snapshot.retry_bit_set) * 8,
-            contention_exponent: state
-                .owner
-                .policy()
-                .contention_exponent(oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue::BestEffort),
+            contention_exponent: state.owner.policy().contention_exponent(
+                oer_ieee80211_lower_mac::VifRole::Station,
+                oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue::BestEffort,
+            ),
         })
     };
     0

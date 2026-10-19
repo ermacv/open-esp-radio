@@ -125,6 +125,7 @@ use oer_ieee80211_lower_mac::association::{
 };
 use oer_ieee80211_mac::ccmp::Ccmp128Key;
 use oer_ieee80211_mac::ccmp::GroupKeyId;
+use oer_ieee80211_mac::extensions::wmm::WmmParameterSet;
 
 use oer_ieee80211_mac::phy::{HeMcs, HtMcs, PhyRate};
 use oer_radio_port::{
@@ -1456,6 +1457,8 @@ pub struct ModelAir {
     commands: Cell<u32>,
     /// The settings the driver applied.
     settings: Cell<u32>,
+    /// The EDCA set each interface's attempts contend with, by role.
+    edca: Cell<[Option<WmmParameterSet>; 2]>,
     /// The queues the air keeps busy: their attempts wait unpublished.
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
@@ -1809,6 +1812,11 @@ impl ModelAir {
     /// The settings the driver applied so far.
     pub fn settings(&self) -> u32 {
         self.settings.get()
+    }
+
+    /// The EDCA set the interface of `role` last set, if any.
+    pub fn edca(&self, role: VifRole) -> Option<WmmParameterSet> {
+        self.edca.get()[role as usize]
     }
 
     /// The frames the air holds for the driver yet.
@@ -3562,11 +3570,6 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, X: ModelContext> LowerMacPhase<'p, '
         open
     }
 
-    fn set_edca(&mut self, _: SupportedEdca<C>) {
-        self.held.settings.borrow_mut().other = true;
-        self.held.air.wake_driver();
-    }
-
     fn station(&mut self) -> ModelInterface<'p, '_, 'id, Station, C, X> {
         let [station, _] = self.backend.addresses;
         ModelInterface {
@@ -3869,6 +3872,16 @@ where
 
     fn address(&self) -> IndividualAddress {
         self.address
+    }
+
+    /// The model applies each interface's set exactly.
+    fn set_edca(&mut self, parameters: SupportedEdca<K>) -> SupportedEdca<K> {
+        let mut edca = self.held.air.edca.get();
+        edca[R::ROLE as usize] = Some(parameters.get());
+        self.held.air.edca.set(edca);
+        self.held.settings.borrow_mut().other = true;
+        self.held.air.wake_driver();
+        parameters
     }
 
     fn submit<'k>(
