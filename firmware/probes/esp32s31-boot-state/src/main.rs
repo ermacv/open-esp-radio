@@ -15,6 +15,7 @@
 
 #![no_std]
 #![no_main]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 use esp_backtrace as _;
 use esp_hal::{

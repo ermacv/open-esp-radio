@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 //! Link-time probes for compiled vendor/Rust analog I2C comparison.
 //!

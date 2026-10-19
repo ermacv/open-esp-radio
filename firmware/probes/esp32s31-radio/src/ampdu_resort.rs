@@ -247,10 +247,13 @@ oer_probe_macros::probe! {
             return INVALID_INPUT;
         }
         let pool = pool();
-        // SAFETY: each static is taken once for this entry's owner.
+        // Each static is taken once for this entry's owner.
         let Some(dma) = DMA.take() else {
             return RESOURCES_FAILED;
         };
+        // SAFETY: both entries reach here only through the one successful
+        // `DMA.take()` of the loaded image, so no other reference to
+        // `METADATA` exists.
         let resources = unsafe { HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), dma) };
         let Ok(resources) = resources else {
             return RESOURCES_FAILED;
@@ -426,10 +429,13 @@ oer_probe_macros::probe! {
             return INVALID_INPUT;
         }
         let pool = pool();
-        // SAFETY: each static is taken once for this sequence's owner.
+        // Each static is taken once for this sequence's owner.
         let Some(dma) = DMA.take() else {
             return RESOURCES_FAILED;
         };
+        // SAFETY: both entries reach here only through the one successful
+        // `DMA.take()` of the loaded image, so no other reference to
+        // `METADATA` exists.
         let resources = unsafe { HtAmpduTxResources::pin_static(&mut *METADATA.0.get(), dma) };
         let Ok(resources) = resources else {
             return RESOURCES_FAILED;
