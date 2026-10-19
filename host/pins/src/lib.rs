@@ -3,6 +3,7 @@
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-vendor-artifacts`.
 pub mod artifacts;
+pub mod provenance;
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};

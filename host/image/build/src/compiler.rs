@@ -7,7 +7,7 @@
 //! `move-size-limit`, `share-generics`) on the exact stable toolchain that
 //! `rust-toolchain.toml` pins.
 //!
-//! Every image links through the image linker (`oer-image-linker` of `host/image/checks`), which
+//! Every image links through the image linker (`oer-image-linker` of `tools/image-linker`), which
 //! refuses an input section named as zero-initialized that carries bytes and
 //! otherwise runs the target's `rust-lld` with the same arguments. The linker
 //! is built from the sources being built, the checkout or worktree at
@@ -138,7 +138,7 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
             "build",
             "--quiet",
             "-p",
-            "oer-image-checks",
+            "oer-tool-image-linker",
             "--bin",
             "oer-image-linker",
         ])
@@ -258,7 +258,7 @@ mod tests {
         assert!(rustflags(None, 4096, Path::new("/a b/linker")).is_err());
     }
 
-    /// A tree whose `oer-image-checks` builds an `oer-image-linker` stand-in
+    /// A tree whose `oer-tool-image-linker` builds an `oer-image-linker` stand-in
     /// that announces its tree.
     fn tree_with_linker(marker: &str) -> tempfile::TempDir {
         let tree = tempfile::tempdir().unwrap();
@@ -271,7 +271,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             package.join("Cargo.toml"),
-            "[package]\nname = \"oer-image-checks\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[[bin]]\nname = \"oer-image-linker\"\npath = \"src/main.rs\"\n",
+            "[package]\nname = \"oer-tool-image-linker\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[[bin]]\nname = \"oer-image-linker\"\npath = \"src/main.rs\"\n",
         )
         .unwrap();
         std::fs::write(

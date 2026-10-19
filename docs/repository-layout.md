@@ -136,12 +136,10 @@ and runs is a thin wrapper over `cargo fw` and the program.
 
 ## Known deviations
 
-The tree does not yet follow these rules in three places:
+The tree does not yet follow these rules in two places:
 
 - `portable/ieee80211/mac` holds the Wi-Fi frame formats and protocol state
   together; chip backends and the radio system depend on it for formats
   alone (the radio system for the channel type only).
 - `firmware/platform/<chip>/` holds chip data (`chip.toml`, partitions) and
   linker scripts that belong to `portable/<chip>/` and `chips/platform/`.
-- Packages in `host/` still carry executables (the HIL fixture helpers, the
-  fixture installer and its launchers, the image linker).

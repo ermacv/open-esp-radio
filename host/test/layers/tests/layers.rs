@@ -39,6 +39,44 @@ fn root_of(path: &str) -> Option<Root> {
     })
 }
 
+/// The domains of `host/`, lowest first: a host package depends only on
+/// its own domain and those before it.
+const HOST_DOMAINS: [&str; 11] = [
+    "os",
+    "test",
+    "analysis",
+    "chip",
+    "pins",
+    "registers",
+    "probe",
+    "image",
+    "lab",
+    "hil",
+    "vendor",
+];
+
+/// Why the host package `from` may not depend on the host package `to`, or
+/// `None` when the domain order allows it or either is outside `host/`.
+fn domain_refusal(from: &str, to: &str) -> Option<String> {
+    let domain = |path: &str| -> Option<Option<usize>> {
+        let mut parts = path.split('/');
+        (parts.next()? == "host").then(|| {
+            let name = parts.next().unwrap_or_default();
+            HOST_DOMAINS.iter().position(|domain| *domain == name)
+        })
+    };
+    match (domain(from)?, domain(to)?) {
+        (Some(source), Some(target)) if target <= source => None,
+        (Some(_), Some(_)) => Some(format!(
+            "{from} → {to}: a host domain depends only on the domains before it ({})",
+            HOST_DOMAINS.join(" → ")
+        )),
+        _ => Some(format!(
+            "{from} → {to}: a host package outside the domains of HOST_DOMAINS"
+        )),
+    }
+}
+
 /// How a package reaches a dependency.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {
@@ -189,10 +227,71 @@ fn every_dependency_goes_down_its_layers() {
         .flat_map(|package| {
             path_dependencies(&root, package)
                 .into_iter()
-                .filter_map(|(dependency, kind)| refusal(package, &dependency, kind))
+                .filter_map(|(dependency, kind)| {
+                    refusal(package, &dependency, kind)
+                        .or_else(|| domain_refusal(package, &dependency))
+                })
         })
         .collect::<Vec<_>>();
     assert!(refusals.is_empty(), "{}", refusals.join("\n"));
+}
+
+#[test]
+fn the_host_domains_go_down_their_order() {
+    for (from, to) in [
+        ("host/registers/generate", "host/vendor/provenance"),
+        ("host/os/process", "host/analysis/elf"),
+        ("host/image/build", "host/lab/board"),
+        ("host/unknown/x", "host/os/process"),
+    ] {
+        assert!(domain_refusal(from, to).is_some(), "{from} → {to}");
+    }
+    for (from, to) in [
+        ("host/vendor/provenance", "host/registers/model"),
+        ("host/image/build", "host/image/checks"),
+        ("host/hil/run", "host/os/process"),
+        ("tools/fw", "host/lab/board"),
+        ("host/os/process", "portable/base/time"),
+    ] {
+        assert_eq!(domain_refusal(from, to), None, "{from} → {to}");
+    }
+}
+
+/// The executable targets of `package`: `[[bin]]` sections, `src/main.rs`
+/// and `src/bin/`.
+fn executables(root: &Path, package: &str) -> Vec<String> {
+    let directory = root.join(package);
+    let manifest = std::fs::read_to_string(directory.join("Cargo.toml")).unwrap();
+    let mut found = Vec::new();
+    if manifest.lines().any(|line| line.trim() == "[[bin]]") {
+        found.push("[[bin]]".to_owned());
+    }
+    for target in ["src/main.rs", "src/bin"] {
+        if directory.join(target).exists() {
+            found.push(target.to_owned());
+        }
+    }
+    found
+}
+
+#[test]
+fn executables_live_only_in_firmware_and_tools() {
+    let root = root();
+    let misplaced = all_packages(&root)
+        .into_iter()
+        .filter(|package| {
+            matches!(
+                root_of(package),
+                Some(Root::Portable | Root::Chips | Root::Host)
+            )
+        })
+        .filter_map(|package| {
+            let found = executables(&root, &package);
+            (!found.is_empty()).then(|| format!("{package}: {}", found.join(", ")))
+        })
+        .collect::<Vec<_>>();
+    assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
+    assert!(!executables(&root, "tools/fw").is_empty());
 }
 
 #[test]

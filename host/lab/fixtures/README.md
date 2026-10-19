@@ -6,5 +6,5 @@ starts it through.
 
 It is a package of its own because its dependency closure is the
 root-executed surface: the privileged `open-radio-fixture-install` binary and
-the launchers link only this package, so nothing else of the stand (SSH, the
+the launchers (`tools/fixture-install`) link only this package, so nothing else of the stand (SSH, the
 router, the boards) reaches root through it.

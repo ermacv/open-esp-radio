@@ -41,9 +41,9 @@ pub(crate) fn run(
             "build",
             "--locked",
             "-p",
-            "oer-lab-fixtures",
+            "oer-tool-fixture-install",
             "-p",
-            "oer-hil-fixture",
+            "oer-tool-hil-fixture",
         ]);
         for binary in provider_binaries {
             build.args(["--bin", binary]);

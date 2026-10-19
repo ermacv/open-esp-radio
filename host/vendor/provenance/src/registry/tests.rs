@@ -129,18 +129,6 @@ fn neutral_blocks_cite_the_chips_they_name() {
     }
 }
 
-#[test]
-fn the_registry_round_trips() {
-    let entries = vec![Entry {
-        artifact: "libbtbb".into(),
-        member: "bt_bb_v2.o".into(),
-        symbol: "bt_bb_v2_init_cmplx".into(),
-        code: "ab".into(),
-        decisions: vec![],
-    }];
-    assert_eq!(parse_registry(&render_registry(&entries)).unwrap(), entries);
-}
-
 /// An untagged neutral block is a violation of exactly the chips whose pins
 /// define a function it names; a block citing only a standard passes.
 #[test]
@@ -241,18 +229,6 @@ fn a_changed_decision_function_names_the_exclusions_to_review() {
         "; re-review the exclusions in coverage.toml"
     );
     assert_eq!(review_hint(None), "");
-}
-
-#[test]
-fn the_registry_round_trips_decision_citations() {
-    let entries = vec![Entry {
-        artifact: "libpp".into(),
-        member: "hal_mac_tx.o".into(),
-        symbol: "mac_tx_set_txop_q".into(),
-        code: "abc".into(),
-        decisions: vec!["coverage.rs".into()],
-    }];
-    assert_eq!(parse_registry(&render_registry(&entries)).unwrap(), entries);
 }
 
 #[test]

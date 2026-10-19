@@ -3230,20 +3230,13 @@ dependencies = [
 name = "oer-hil-fixture"
 version = "0.1.0"
 dependencies = [
- "bt-hci",
- "bt-hci-transport",
  "clap",
- "embedded-io 0.7.1",
- "embedded-io-async 0.7.0",
  "libc",
- "oer-bluetooth-le-ll",
  "oer-hil-protocol",
  "oer-ieee80211-mac",
  "oer-lab-fixtures",
- "oer-os-process",
  "rustix",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -3916,7 +3909,6 @@ dependencies = [
  "oer-registers-contracts",
  "oer-registers-model",
  "oer-registers-review",
- "oer-vendor-provenance",
  "quote",
  "roxmltree",
  "serde",
@@ -3989,6 +3981,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-fixture-install"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-lab-fixtures",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-tool-fw"
 version = "0.1.0"
 dependencies = [
@@ -4038,6 +4039,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-hil-fixture"
+version = "0.1.0"
+dependencies = [
+ "bt-hci",
+ "bt-hci-transport",
+ "clap",
+ "embedded-io 0.7.1",
+ "embedded-io-async 0.7.0",
+ "libc",
+ "oer-bluetooth-le-ll",
+ "oer-hil-fixture",
+ "oer-hil-protocol",
+ "oer-lab-fixtures",
+ "oer-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-tool-hil-runner"
 version = "0.1.0"
 dependencies = [
@@ -4050,6 +4071,13 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "toml_edit",
+]
+
+[[package]]
+name = "oer-tool-image-linker"
+version = "0.1.0"
+dependencies = [
+ "oer-image-checks",
 ]
 
 [[package]]

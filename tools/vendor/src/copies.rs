@@ -436,7 +436,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         }
     };
     let mut cited: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for entry in oer_vendor_provenance::registry::registered(root, chip)? {
+    for entry in oer_pins::provenance::registered(root, chip)? {
         cited.entry(entry.symbol.clone()).or_default().push(format!(
             "{}[{}]::{}",
             entry.artifact, entry.member, entry.symbol

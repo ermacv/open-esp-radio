@@ -8,9 +8,6 @@ repository.workspace = true
 publish = false
 description = "The checks of an image: the stack, interrupt-stack and placement checks, the post-link input check, and the image linker that runs it"
 
-[[bin]]
-name = "oer-image-linker"
-path = "src/bin/oer-image-linker.rs"
 
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
