@@ -211,12 +211,16 @@ bounds) live in the code that applies them.
 - **ESP-NOW and FTM** are clients of the lower-MAC port.
 - **HE trigger-based and beamformee** stay fail-closed until a hardware path
   is verified.
+- **Standard before vendor.** What the standard defines (retry limits, the
+  rate of management and group frames) follows the standard; a vendor value
+  replaces it only with a stated reason. Data rate adaptation, which the
+  standard leaves open, is built from the vendor policy.
 - **No fixed rates.** No fixed data or control-frame rate, not even
-  temporarily: rate selection is its own portable machine built from the
-  vendor policy. Frames before association and to a group address use the
-  lowest rate the band and the BSS basic rate set allow; a control response
-  takes its rate from the eliciting frame by the standard's rule. Both are
-  derived, never constants.
+  temporarily: rate selection is its own portable machine. Frames before
+  association and to a group address use the lowest rate the band and the
+  BSS basic rate set allow, every attempt at that rate, within
+  `dot11ShortRetryLimit`; a control response takes its rate from the
+  eliciting frame by the standard's rule. Both are derived, never constants.
 
 ## Bluetooth LE
 
