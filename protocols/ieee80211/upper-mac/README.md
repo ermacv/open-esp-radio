@@ -14,7 +14,7 @@ plans and reports leave as values, and nothing waits.
 | `retry` | Whether an MPDU is sent again, whether that attempt sets the Retry bit, and the rate of each attempt; a backend drawing its own contention derives the window's reset or doubling from that `RetryDecision` | `TxStatus`, `RetryLimits`, a `RateLadder` |
 | `aggregate` | How many queued frames one A-MPDU carries: the agreement's window, the port's capabilities, the recipient's Maximum A-MPDU Length and Minimum MPDU Start Spacing, and the TXOP limit with its BlockAck | `AmpduLimits` |
 | `ampdu` | Which subframes of an A-MPDU the next attempt resends after its BlockAck, republication after a failed protection exchange, the BlockAckReq after repeated failures, individual retries, aging and the end of the exchange | `BlockAckReport`, `AmpduRetryPolicy` |
-| `rate_control` | The first rate of a peer's MPDUs and A-MPDUs, one controller per peer (a station's access point, each station of an access point), learning from each exchange, starting from the `LinkMetric` (signal over the noise floor, required) of the frame that made the link; `FixedRateControl` | `RatePeer`, `TxReport` outcomes |
+| `rate_control` | The first rate of a peer's MPDUs and A-MPDUs, one controller per peer (a station's access point, each station of an access point), learning from each exchange, starting from the `LinkMetric` (signal over the noise floor, required) of the frame that made the link | `RatePeer`, `TxReport` outcomes |
 | `rate_selection` | The retry plan of each frame an interface sends, by what it is for (`FrameRates`: probe, control, data), learning from each terminal and from the association with its peer; `RateSelection` is the seam a service drives, over the port's receive metadata and ACK evidence | `RatePeer`, `SingleOutcome` |
 | `protection` | RTS/CTS or CTS-to-self and the control-frame rate for each PPDU | `BssProtection`, dot11RTSThreshold, an `HeTxopRtsBudget` |
 | `tx` | `TxPlanner`: the next `TxAttemptPlan` (rate, protection, power, coexistence, content and Retry bits) of an MPDU or A-MPDU exchange, and its `TxReport` | `TxRequest`, `PublicationReport`, `RadioInstant` |
@@ -50,8 +50,8 @@ vendor:
 - `RetryLimits`: dot11ShortRetryLimit, dot11LongRetryLimit and whether an
   ACK timeout counts against the short or the frame-class counter
   (`RetryLimits::IEEE_DEFAULT` is seven, four and by frame class).
-- `RateLadder`: the rate of the attempt after `n` failures. `FixedRate`
-  keeps the first rate; a rate-control owner supplies its own.
+- `RateLadder`: the rate of the attempt after `n` failures, supplied by the
+  rate-control owner.
 - `AmpduRetryPolicy`: MSDU lifetime and aging margin, the retry limit of an
   unanswered aggregate and of failed protection exchanges, and whether one
   missing subframe stays aggregated.

@@ -73,8 +73,8 @@ pub use protection::{
     TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
 };
 pub use retry::{
-    AckFailureAccounting, FixedRate, FrameClass, MpduRetryState, RateLadder, RetryCounters,
-    RetryDecision, RetryLimits, RetryOutcome,
+    AckFailureAccounting, FrameClass, MpduRetryState, RateLadder, RetryCounters, RetryDecision,
+    RetryLimits, RetryOutcome,
 };
 pub use tx::{
     AmpduRequest, AttemptContent, MpduRequest, TxAttemptPlan, TxBody, TxExchange, TxPlanError,

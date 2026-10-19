@@ -92,16 +92,6 @@ pub trait RateLadder {
     fn rate(&self, initial: PhyRate, failures: u8) -> Option<PhyRate>;
 }
 
-/// Every attempt at the initial rate.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct FixedRate;
-
-impl RateLadder for FixedRate {
-    fn rate(&self, initial: PhyRate, _failures: u8) -> Option<PhyRate> {
-        Some(initial)
-    }
-}
-
 impl<L: RateLadder + ?Sized> RateLadder for &L {
     fn rate(&self, initial: PhyRate, failures: u8) -> Option<PhyRate> {
         (**self).rate(initial, failures)
