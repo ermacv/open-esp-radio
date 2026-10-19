@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::w1;
+use crate::{w1, w2};
 use oer_image_build::{Application, Gates, ImageSpec, Result, bundle::ImageBundle};
 use oer_image_checks::interrupts::Required;
 
@@ -45,6 +45,8 @@ pub enum Stand {
     W0 { country: [u8; 2] },
     /// Image `w1`: the stand's identity.
     W1(w1::Config),
+    /// Image `w2`: the stand identity with the explicit W2 laboratory cap.
+    W2(w1::Config),
 }
 
 /// The stand's variables a cargo build of `image`'s runtime sets (`Some`) or
@@ -53,6 +55,7 @@ pub enum Stand {
 /// the unconfigured one.
 pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<String>)> {
     match (image, stand) {
+        (w2::IMAGE, Some(Stand::W2(config))) => w2::runtime_env(config),
         (w1::IMAGE, Some(Stand::W1(config))) => config
             .runtime_env()
             .into_iter()
@@ -63,6 +66,7 @@ pub fn runtime_env(image: &str, stand: Option<&Stand>) -> Vec<(String, Option<St
         }
         _ => w1::ENV
             .into_iter()
+            .chain(w2::ENV)
             .chain([ENV_W0_COUNTRY])
             .map(|name| (name.to_owned(), None))
             .collect(),
@@ -161,9 +165,12 @@ mod tests {
             w1::ENV_BSSID,
             w1::ENV_SSID,
             w1::ENV_COUNTRY,
-            ENV_W0_COUNTRY,
         ]
-        .map(|name| (name.to_owned(), None));
+        .into_iter()
+        .chain(w2::ENV)
+        .chain([ENV_W0_COUNTRY])
+        .map(|name| (name.to_owned(), None))
+        .collect::<Vec<_>>();
         // The unconfigured w1 and another image remove them.
         assert_eq!(runtime_env("w1", None), removed);
         assert_eq!(runtime_env("w0", Some(&stand)), removed);

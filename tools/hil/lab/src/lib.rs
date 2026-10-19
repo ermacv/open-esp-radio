@@ -5,11 +5,12 @@
 //! failed repetition. The stand implements the link's `Dut` port for the
 //! board it leased.
 //!
-//! It actuates no hardware and writes no flash record itself: boards are
-//! reached through board I/O (`oer-hil-board`), exclusion and the board
-//! journal belong to the arbiter, flashing to the flash operation.
+//! Boards are reached through board I/O (`oer-lab-board`); the laptop air
+//! capture uses the installed radio helper. Exclusion and the board journal
+//! belong to the arbiter, flashing to the flash operation.
 #![forbid(unsafe_code)]
 
+pub mod air;
 pub mod config;
 mod dut;
 pub use dut::{attach_console, peer_console};
