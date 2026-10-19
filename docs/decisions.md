@@ -51,6 +51,12 @@ bounds) live in the code that applies them.
   `expect` instead of a bare `unwrap()`, each with a static message. The
   workspace warns on `unwrap_used`, `expect_used`, `panic`, `unreachable`,
   `indexing_slicing`; a crate moves to `deny` when its contract freezes.
+- **Air formats.** Fixed-width fields of frames (IEEE 802.11, Bluetooth LE,
+  IEEE 802.15.4) are declared with one `macro_rules!` macro of the portable
+  `oer-wire` crate, which generates checked accessors; frames are read and
+  written through its bounded cursor, which never panics. Optional fields and
+  element lists are code over that cursor. Each field names its clause of the
+  standard. No hand-written masks or shifts for these fields.
 - **Compile time first.** Every check that can run at compile time runs
   there.
 - **Knowledge stays, shape goes.** Code whose value is recovered knowledge or
