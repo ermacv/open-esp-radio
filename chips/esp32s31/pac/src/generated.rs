@@ -704,6 +704,29 @@ impl MacSlowClockCalibrationValue {
     }
 }
 
+/// The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct WifiDescriptorAddressLow(u32);
+
+impl WifiDescriptorAddressLow {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x000fffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x000fffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// One four-bit external coexistence priority or grant field image.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexNibble(u32);

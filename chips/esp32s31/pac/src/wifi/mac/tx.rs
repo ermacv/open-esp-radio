@@ -11,7 +11,7 @@ use crate::{
 };
 
 const ORDINARY_QUEUE_COUNT: u8 = 4;
-const DESCRIPTOR_ADDRESS_LOW_MASK: u32 = 0x000f_ffff;
+const DESCRIPTOR_ADDRESS_LOW_MASK: u32 = crate::WifiDescriptorAddressLow::MAX;
 
 /// Read-only state of one ordinary hardware TX queue.
 ///

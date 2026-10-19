@@ -91,3 +91,34 @@ fn the_mpdu_length_bound_is_the_length_field_width() {
     assert!(rx(0).with_length(bound).is_some());
     assert!(rx(0).with_length(bound + 1).is_none());
 }
+
+#[test]
+fn a_cursor_names_a_ring_descriptor_by_its_low_address_bits() {
+    // A ring base above the 20 cursor bits: only the low bits are held.
+    let base = 0x2f0c_0000_u32 + 0x1230;
+    let low = |index: u32| {
+        (base + index * DESCRIPTOR_BYTES) & oer_esp32s31_pac::WifiDescriptorAddressLow::MAX
+    };
+    assert_eq!(cursor_ring_index(low(0), base, 4), Some(0));
+    assert_eq!(cursor_ring_index(low(3), base, 4), Some(3));
+    assert_eq!(cursor_ring_index(low(4), base, 4), None);
+    assert_eq!(cursor_ring_index(low(1) + 1, base, 4), None);
+}
+
+#[test]
+fn a_descriptor_address_names_a_ring_index_only_inside_the_ring() {
+    let base = 0x2f0c_1230_u32;
+    assert_eq!(
+        descriptor_ring_index(base + 2 * DESCRIPTOR_BYTES, base, 4),
+        Some(2)
+    );
+    assert_eq!(
+        descriptor_ring_index(base + 4 * DESCRIPTOR_BYTES, base, 4),
+        None
+    );
+    assert_eq!(
+        descriptor_ring_index(base - DESCRIPTOR_BYTES, base, 4),
+        None
+    );
+    assert_eq!(descriptor_ring_index(base + 1, base, 4), None);
+}
