@@ -1436,8 +1436,8 @@ oer_probe_macros::probe! {
     /// suppresses FES end for 0xc0 with nonzero a3. +0x1a..+0x2c resolves
     /// virtual queue 10 through our_tx_eb, descriptor +52, word +4 bits 7:4;
     /// +0x42 requires an instance below five. Neither is a hardware decoder
-    /// input: the product retains LegacyTxQueue directly and libpp[lmac.o]::
-    /// lmacProcessTxComplete supplies zero at +0x19a and +0x1cc.
+    /// input: the product retains LegacyTxQueue directly and
+    /// libpp[lmac.o]::lmacProcessTxComplete supplies zero at +0x19a and +0x1cc.
     pub fn open_libpp_tx_retry_trace_lmac_process_tx_error(queue: u32, detail: u32, selector: u32) {
         use oer_esp32s31_ieee80211_mac::tx::{CompletionFault, CompletionObservation, CompletionRaw, decode};
         use oer_ieee80211_lower_mac::TxStatus;

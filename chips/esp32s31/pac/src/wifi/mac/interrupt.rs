@@ -319,7 +319,7 @@ impl MacPowerInterruptRegisters {
 
     /// Sample the complete masked WDEVPWR event image.
     ///
-    /// SOURCE: complete `libpp[hal_pwr.o]::hal_pwr_interrupt_get_event` reads `0x2010_d8bc`.
+    /// SOURCE: complete `libpp[hal_tsf.o]::hal_pwr_interrupt_get_event` reads `0x2010_d8bc`.
     pub fn power_interrupt_status(&self) -> MacPowerInterruptSnapshot {
         MacPowerInterruptSnapshot(interrupt_snapshot::sample_mac_power_interrupt(
             &self.peripheral,
@@ -328,7 +328,7 @@ impl MacPowerInterruptRegisters {
 
     /// Acknowledge the complete sampled WDEVPWR event image.
     ///
-    /// SOURCE: complete `libpp[hal_pwr.o]::hal_pwr_interrupt_clr_event` stores its argument to `0x2010_d8c0`.
+    /// SOURCE: complete `libpp[hal_tsf.o]::hal_pwr_interrupt_clr_event` stores its argument to `0x2010_d8c0`.
     pub fn acknowledge_power_interrupts(&mut self, snapshot: MacPowerInterruptSnapshot) {
         interrupt_snapshot::acknowledge_mac_power_interrupt(&self.peripheral, snapshot.0);
         device_fence();
