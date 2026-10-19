@@ -107,8 +107,8 @@ fn probe_mmu() {
         .write(|w| unsafe { w.bits(original) });
 }
 
-fn probe_pmu(delay: &Delay) {
-    let power = PMU::regs().imm_hp_ck_power_1();
+fn probe_pmu(pmu: &mut PMU<'_>, delay: &Delay) {
+    let power = pmu.register_block().imm_hp_ck_power_1();
     let before = power.read().bits();
     // The CPU runs from CPLL: tying it high keeps the state it has.
     power.modify(|_, w| {
@@ -123,11 +123,11 @@ fn probe_pmu(delay: &Delay) {
     );
 }
 
-fn print_trng(stage: &str) {
-    let trng = RNG::regs();
+fn print_trng(stage: &str, rng: &mut RNG<'_>, lp_peri: &mut LP_PERI<'_>) {
+    let trng = rng.register_block();
     println!(
         "PROBE trng {stage}: rng_ctrl {:#010x} date {:#010x} conf {:#010x} debug_conf {:#010x} int_raw {:#010x}",
-        LP_PERI::regs().rng_ctrl().read().bits(),
+        lp_peri.register_block().rng_ctrl().read().bits(),
         trng.date().read().bits(),
         trng.conf().read().bits(),
         trng.debug_conf().read().bits(),
@@ -152,21 +152,30 @@ fn probe_watchdog(timg0: TIMG0<'static>, delay: &Delay) {
 fn main() -> ! {
     println!("PROBE-BOOT");
     let bootloader_pma = pma();
-    let peripherals = esp_hal::init(esp_hal::Config::default());
+    let mut peripherals = esp_hal::init(esp_hal::Config::default());
     let delay = Delay::new();
 
     print_pma("bootloader", &bootloader_pma);
     print_pma("esp-hal", &pma());
     probe_mmu();
-    probe_pmu(&delay);
-    print_trng("after init");
+    probe_pmu(&mut peripherals.PMU, &delay);
+    print_trng("after init", &mut peripherals.RNG, &mut peripherals.LP_PERI);
     delay.delay_millis(100);
-    print_trng("after 100 ms");
+    print_trng(
+        "after 100 ms",
+        &mut peripherals.RNG,
+        &mut peripherals.LP_PERI,
+    );
     for _ in 0..4 {
         delay.delay_micros(100);
         println!(
             "PROBE trng crc_sync_data {:#010x}",
-            RNG::regs().crc_sync_data().read().bits()
+            peripherals
+                .RNG
+                .register_block()
+                .crc_sync_data()
+                .read()
+                .bits()
         );
     }
     probe_watchdog(peripherals.TIMG0, &delay);

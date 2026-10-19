@@ -257,8 +257,8 @@ fn bounds(range: &Range<usize>) -> [u32; 2] {
 
 /// Halt the image unless the TRNG produces health-tested entropy.
 #[cfg(feature = "system-watchdog")]
-pub(crate) fn check_entropy_source() {
-    if oer_espressif_esp_hal_soc::entropy::source_status().is_healthy() {
+pub(crate) fn check_entropy_source(entropy: &oer_espressif_esp_hal_soc::entropy::Entropy<'_>) {
+    if entropy.source_status().is_healthy() {
         print(c"OPEN_RADIO_HIL entropy=PASS\r\n");
     } else {
         fail(c"OPEN_RADIO_HIL runtime=FAIL reason=entropy-source\r\n");

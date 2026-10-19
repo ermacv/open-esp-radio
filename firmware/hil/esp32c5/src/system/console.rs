@@ -43,7 +43,8 @@ impl Platform for Chip {
 pub(crate) struct Console {
     usb: esp_hal::peripherals::USB_DEVICE<'static>,
     route: crate::ConsoleUsb,
-    service: &'static DeadlineWatchdog,
+    service: DeadlineWatchdog,
+    rng: esp_hal::rng::RngOwner<'static>,
 }
 
 impl Console {
@@ -51,12 +52,13 @@ impl Console {
         usb: esp_hal::peripherals::USB_DEVICE<'static>,
         route: crate::ConsoleUsb,
         watchdog: esp_hal::peripherals::TIMG1<'static>,
+        rng: esp_hal::peripherals::RNG<'static>,
     ) -> Self {
-        static SERVICE: StaticCell<DeadlineWatchdog> = StaticCell::new();
         Self {
             usb,
             route,
-            service: SERVICE.init(DeadlineWatchdog::new(watchdog)),
+            service: DeadlineWatchdog::new(watchdog),
+            rng: esp_hal::rng::RngOwner::new(rng),
         }
     }
 }
@@ -64,13 +66,12 @@ impl Console {
 /// Serve the host until the chip resets. It routes the console's source
 /// before the driver turns async, which requires the route.
 #[embassy_executor::task]
-pub(crate) async fn run(console: Console) {
+pub(crate) async fn run(mut console: Console) {
     oer_espressif_esp_hal_irq::enable(&console.route)
         .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
     let usb = UsbSerialJtag::new(console.usb).into_async();
     // The boot identity only has to differ between boots.
-    let rng = esp_hal::rng::Rng::new();
-    let boot = ((u64::from(rng.random()) << 32) | u64::from(rng.random())).max(1);
+    let boot = ((u64::from(console.rng.random()) << 32) | u64::from(console.rng.random())).max(1);
     CONSOLE.start(boot);
 
     // This image's keys: the same function of its Cargo features the host
@@ -106,22 +107,26 @@ pub(crate) async fn run(console: Console) {
 }
 
 /// Arms the SoC deadline watchdog for each test and misbehaves as asked.
-async fn test_watchdog(service: &'static DeadlineWatchdog) -> ! {
+async fn test_watchdog(mut service: DeadlineWatchdog) -> ! {
     loop {
         let (request, mode) = TESTS.receive().await;
         let budget = DeadlineBudget::from_micros(core::num::NonZeroU32::new(1_000_000).unwrap());
-        let Ok(lease) = service.arm(budget) else {
-            let refused = Rejected(RejectReason::InvalidState);
-            CONSOLE
-                .publish_reliably(request.session_id, request.request_id, &refused)
-                .await;
-            continue;
+        let lease = match service.arm(budget) {
+            Ok(lease) => lease,
+            Err((returned, _error)) => {
+                service = returned;
+                let refused = Rejected(RejectReason::InvalidState);
+                CONSOLE
+                    .publish_reliably(request.session_id, request.request_id, &refused)
+                    .await;
+                continue;
+            }
         };
         // The host finds this in the next boot's post-mortem.
         super::postmortem::checkpoint("watchdog.arm", mode as u32);
         let armed = WatchdogArmed(mode);
         if mode == WatchdogTestMode::Complete {
-            lease.complete().expect("immediate diagnostic completion");
+            service = lease.complete().expect("immediate diagnostic completion");
             CONSOLE
                 .publish_reliably(request.session_id, request.request_id, &armed)
                 .await;

@@ -2,7 +2,10 @@ use core::marker::PhantomData;
 
 use embassy_executor::{SendSpawner, Spawner, raw};
 use esp_hal::{
-    interrupt::{Priority, software::SoftwareInterrupt},
+    interrupt::{
+        Priority,
+        software::{SoftwareInterrupt, SoftwareInterruptAcknowledger, SoftwareInterruptSender},
+    },
     peripherals::Interrupt,
     system::Cpu,
 };
@@ -86,37 +89,71 @@ fn as_running(swi: u8, poll: impl FnOnce()) {
     running.store(preempted, Ordering::Relaxed);
 }
 
-/// Raise or reset software interrupt `swi`.
-///
-/// The software interrupts' registers are per interrupt: raising one writes
-/// only its own word, so any context may raise any of them without a lock.
-pub(crate) fn software_interrupt(swi: u8, raise: bool) {
-    macro_rules! touch {
-        ($number:literal, $peripheral:ident) => {{
-            #[allow(
-                unsafe_code,
-                reason = "raising or resetting a software interrupt only writes its own register"
-            )]
-            // SAFETY: the executor or the doorbell of this software
-            // interrupt consumed its peripheral token when it was made; this
-            // value is only used for that owner's raise and reset, each one
-            // write of the interrupt's own register.
-            let interrupt = SoftwareInterrupt::<'static, $number>::new(unsafe {
-                esp_hal::peripherals::$peripheral::steal()
-            });
-            if raise {
-                interrupt.raise();
-            } else {
-                interrupt.reset();
-            }
-        }};
+// The sender is published once for wakers; only the line's ISR borrows
+// its acknowledger. Boot resets the line before either half is published.
+enum Sender {
+    Zero(SoftwareInterruptSender<'static, 0>),
+    One(SoftwareInterruptSender<'static, 1>),
+    Two(SoftwareInterruptSender<'static, 2>),
+    Three(SoftwareInterruptSender<'static, 3>),
+}
+enum Acknowledger {
+    Zero(SoftwareInterruptAcknowledger<'static, 0>),
+    One(SoftwareInterruptAcknowledger<'static, 1>),
+    Two(SoftwareInterruptAcknowledger<'static, 2>),
+    Three(SoftwareInterruptAcknowledger<'static, 3>),
+}
+static SENDERS: [oer_memory::zeroed::ZeroedOnce<Sender>; SOFTWARE_INTERRUPT_COUNT] =
+    [const { oer_memory::zeroed::ZeroedOnce::new() }; SOFTWARE_INTERRUPT_COUNT];
+static ACK_STORAGE: [static_cell::StaticCell<Acknowledger>; SOFTWARE_INTERRUPT_COUNT] =
+    [const { static_cell::StaticCell::new() }; SOFTWARE_INTERRUPT_COUNT];
+static ACKNOWLEDGERS: [oer_memory::HandlerCell<Acknowledger>; SOFTWARE_INTERRUPT_COUNT] =
+    [const { oer_memory::HandlerCell::new() }; SOFTWARE_INTERRUPT_COUNT];
+
+impl Acknowledger {
+    fn reset(&mut self) {
+        match self {
+            Self::Zero(ack) => ack.reset(),
+            Self::One(ack) => ack.reset(),
+            Self::Two(ack) => ack.reset(),
+            Self::Three(ack) => ack.reset(),
+        }
     }
-    match swi {
-        0 => touch!(0, FROM_CPU_INTR0),
-        1 => touch!(1, FROM_CPU_INTR1),
-        2 => touch!(2, FROM_CPU_INTR2),
-        _ => touch!(3, FROM_CPU_INTR3),
+}
+
+fn install_line(swi: usize, sender: Sender, mut ack: Acknowledger) {
+    ack.reset();
+    assert!(
+        SENDERS[swi].get().is_none(),
+        "software interrupt owner is already installed"
+    );
+    let _sender = SENDERS[swi].get_or_init(|| sender);
+    if ACKNOWLEDGERS[swi]
+        .install(ACK_STORAGE[swi].init(ack))
+        .is_err()
+    {
+        panic!("software interrupt acknowledger is already installed");
     }
+}
+
+#[inline(always)]
+fn raise_interrupt(swi: u8) {
+    let sender = SENDERS[swi as usize]
+        .get()
+        .expect("software interrupt sender is installed before use");
+    match sender {
+        Sender::Zero(sender) => sender.raise(),
+        Sender::One(sender) => sender.raise(),
+        Sender::Two(sender) => sender.raise(),
+        Sender::Three(sender) => sender.raise(),
+    }
+}
+
+#[inline(always)]
+fn acknowledge_interrupt(swi: u8) {
+    ACKNOWLEDGERS[swi as usize]
+        .with(Acknowledger::reset)
+        .expect("only the installed software interrupt handler acknowledges its line");
 }
 
 /// The level of the image's three execution contexts, checked when the image
@@ -287,7 +324,6 @@ impl<const SWI: u8> Executor<SWI> {
             )
         };
         let current_core = Cpu::current() as usize;
-        software_interrupt(SWI, false);
         if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
@@ -333,7 +369,7 @@ static SIGNAL_LISTS: [SignalList; SOFTWARE_INTERRUPT_COUNT] =
 /// wakes no task itself.
 #[esp_hal::ram]
 fn pend_signal<const SWI: u8>(_: &'static IrqSignal) {
-    software_interrupt(SWI, true);
+    raise_interrupt(SWI);
 }
 
 /// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
@@ -419,7 +455,6 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
         // the executor and a pend raises its interrupt.
         EMBASSY_EXECUTORS_MODE[SWI as usize].store(true, Ordering::Release);
         EMBASSY_EXECUTORS[SWI as usize].store(inner.id(), Ordering::Release);
-        software_interrupt(SWI, false);
         if let Err(error) = oer_espressif_esp_hal_irq::enable(&wake) {
             panic!("executor software interrupt {SWI}: {error:?}");
         }
@@ -428,11 +463,15 @@ impl<const SWI: u8> InterruptExecutor<SWI> {
 }
 
 macro_rules! impl_executor_constructors {
-    ($number:literal) => {
+    ($number:literal, $variant:ident) => {
         impl Executor<$number> {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
-                // The executor owns its software interrupt from here on.
-                let _owned = interrupt;
+                let (sender, ack) = interrupt.split();
+                install_line(
+                    $number,
+                    Sender::$variant(sender),
+                    Acknowledger::$variant(ack),
+                );
                 Self {
                     inner: raw::Executor::new((THREAD_MODE_CONTEXT + $number) as *mut ()),
                     not_send: PhantomData,
@@ -442,8 +481,12 @@ macro_rules! impl_executor_constructors {
 
         impl InterruptExecutor<$number> {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
-                // The executor owns its software interrupt from here on.
-                let _owned = interrupt;
+                let (sender, ack) = interrupt.split();
+                install_line(
+                    $number,
+                    Sender::$variant(sender),
+                    Acknowledger::$variant(ack),
+                );
                 Self {
                     inner: raw::Executor::new((INTERRUPT_MODE_CONTEXT + $number) as *mut ()),
                 }
@@ -452,10 +495,10 @@ macro_rules! impl_executor_constructors {
     };
 }
 
-impl_executor_constructors!(0);
-impl_executor_constructors!(1);
-impl_executor_constructors!(2);
-impl_executor_constructors!(3);
+impl_executor_constructors!(0, Zero);
+impl_executor_constructors!(1, One);
+impl_executor_constructors!(2, Two);
+impl_executor_constructors!(3, Three);
 
 /// The peripheral interrupt source of software interrupt `SWI`.
 pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
@@ -471,7 +514,7 @@ pub(crate) const fn software_interrupt_source(swi: u8) -> Interrupt {
 /// (`FROM_CPU_INTR<SWI>`): it wakes the executor.
 #[esp_hal::ram]
 pub fn wake_handler<const SWI: u8>() {
-    software_interrupt(SWI, false);
+    acknowledge_interrupt(SWI);
 }
 
 /// The interrupt-table handler of an interrupt-mode executor's software
@@ -479,7 +522,7 @@ pub fn wake_handler<const SWI: u8>() {
 /// it.
 #[esp_hal::ram]
 pub fn interrupt_handler<const SWI: u8>() {
-    software_interrupt(SWI, false);
+    acknowledge_interrupt(SWI);
     let id = EMBASSY_EXECUTORS[SWI as usize].load(Ordering::Acquire);
     if id == 0 {
         return;
@@ -518,13 +561,13 @@ pub(crate) fn mark_work(swi: u8) {
 /// at its next wake, an interrupt-mode executor's handler runs.
 pub(crate) fn pend(swi: u8) {
     if EMBASSY_EXECUTORS_MODE[swi as usize].load(Ordering::Acquire) {
-        software_interrupt(swi, true);
+        raise_interrupt(swi);
         return;
     }
     mark_work(swi);
     let target_core = EMBASSY_EXECUTOR_CORE[swi as usize].load(Ordering::Acquire);
     if target_core != UNASSIGNED_CORE && target_core != Cpu::current() as usize {
-        software_interrupt(swi, true);
+        raise_interrupt(swi);
     }
 }
 
@@ -555,7 +598,7 @@ pub(crate) fn executor_core(executor: usize) -> Option<usize> {
 #[cfg(oer_profile)]
 pub(crate) fn raise(executor: usize) {
     if executor_core(executor).is_some() {
-        software_interrupt(executor as u8, true);
+        raise_interrupt(executor as u8);
     }
 }
 

@@ -205,9 +205,6 @@ impl<T> SharedRadioState<T> {
     }
 }
 
-/// Identity of the one concurrent planner epoch; the radio is a singleton.
-static CONCURRENT_CLOCK_IDENTITY: ModemClockPlannerIdentity = ModemClockPlannerIdentity::new();
-
 /// Modem clock planner and the module lease each client holds.
 #[allow(
     clippy::large_enum_variant,
@@ -215,23 +212,23 @@ static CONCURRENT_CLOCK_IDENTITY: ModemClockPlannerIdentity = ModemClockPlannerI
 )]
 enum ModemClocks {
     Ready {
-        planner: ModemClockPlanner<'static>,
-        leases: [Option<ModemClockLease<'static>>; CLOCK_SLOTS],
+        planner: ModemClockPlanner,
+        leases: [Option<ModemClockLease>; CLOCK_SLOTS],
     },
     /// A transaction failed at a physical edge; the retained owner prevents
     /// any further modem clock change.
     Poisoned {
-        _acquire: Option<PoisonedModemClockAcquire<'static>>,
-        _release: Option<PoisonedModemClockRelease<'static, 'static>>,
+        _acquire: Option<PoisonedModemClockAcquire>,
+        _release: Option<PoisonedModemClockRelease>,
     },
     /// Transient state while one transaction owns the planner.
     InFlight,
 }
 
 impl ModemClocks {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self::Ready {
-            planner: ModemClockPlanner::managed(&CONCURRENT_CLOCK_IDENTITY),
+            planner: ModemClockPlanner::managed(ModemClockPlannerIdentity::new()),
             leases: [const { None }; CLOCK_SLOTS],
         }
     }

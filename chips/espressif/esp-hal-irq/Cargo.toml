@@ -14,7 +14,9 @@ esp32s31 = ["dep:esp-hal", "esp-hal/esp32s31"]
 esp32c5 = ["dep:esp-hal", "esp-hal/esp32c5"]
 
 [dependencies]
-esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["static-interrupts", "unstable"], optional = true }
+oer-memory = { path = "../../../portable/memory" }
+static_cell = "2.1.1"
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "2b665dd27104c6ec9983b675113551fc696050c9", default-features = false, features = ["static-interrupts", "unstable"], optional = true }
 oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 
 [lints]

@@ -49,7 +49,7 @@ fn the_pll_source_brackets_the_modem_gate_and_the_analog_clock_goes_to_the_platf
     let (log, mut port, platform) = setup();
     let mut held_clocks = ModemPlatformClocks::default();
     let identity = ModemClockPlannerIdentity::new();
-    let planner = ModemClockPlanner::managed(&identity);
+    let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Phy.dependencies())
         .unwrap_or_else(|_| panic!("PHY"));
@@ -101,7 +101,7 @@ fn a_refused_platform_request_poisons_the_transaction_before_the_gate() {
     platform.set_refused(PlatformClock::Pll160m, true);
     let mut held_clocks = ModemPlatformClocks::default();
     let identity = ModemClockPlannerIdentity::new();
-    let planner = ModemClockPlanner::managed(&identity);
+    let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Coexistence.dependencies())
         .unwrap_or_else(|_| panic!("coexistence"));
@@ -120,7 +120,7 @@ fn a_poisoned_acquisition_is_abandoned_with_its_references_on() {
     platform.set_refused(PlatformClock::AnalogI2cMaster, true);
     let mut held_clocks = ModemPlatformClocks::default();
     let identity = ModemClockPlannerIdentity::new();
-    let planner = ModemClockPlanner::managed(&identity);
+    let planner = ModemClockPlanner::managed(identity);
     let prepared = planner
         .prepare_acquire(ModemClockModule::Phy.dependencies())
         .unwrap_or_else(|_| panic!("PHY"));

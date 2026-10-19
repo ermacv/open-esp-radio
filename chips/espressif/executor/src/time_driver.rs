@@ -31,7 +31,7 @@ use esp_hal::{
     peripherals::{Interrupt, SYSTIMER},
     system::Cpu,
     time::Instant,
-    timer::systimer::SystemTimer,
+    timer::systimer::{AlarmAcknowledger, AlarmBank, SystemTimer},
 };
 use oer_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
@@ -41,6 +41,38 @@ use crate::{
     executor::{NO_EXECUTOR, SOFTWARE_INTERRUPT_COUNT, executor_of, pend, running},
     timer_queue::WakeQueue,
 };
+
+enum Acknowledger {
+    Zero(AlarmAcknowledger<'static, 0>),
+    One(AlarmAcknowledger<'static, 1>),
+    Two(AlarmAcknowledger<'static, 2>),
+}
+impl Acknowledger {
+    fn bind(&mut self, bank: &mut AlarmBank<'static>) {
+        match self {
+            Self::Zero(ack) => bank.bind(ack),
+            Self::One(ack) => bank.bind(ack),
+            Self::Two(ack) => bank.bind(ack),
+        }
+    }
+    #[inline(always)]
+    fn acknowledge(&mut self) {
+        match self {
+            Self::Zero(ack) => ack.acknowledge(),
+            Self::One(ack) => ack.acknowledge(),
+            Self::Two(ack) => ack.acknowledge(),
+        }
+    }
+}
+
+// The boot context hands the bank to its one writer executor. Alarm ISRs
+// receive independent W1C owners and never borrow BANK.
+static BANK_STORAGE: static_cell::StaticCell<AlarmBank<'static>> = static_cell::StaticCell::new();
+static BANK: oer_memory::HandlerCell<AlarmBank<'static>> = oer_memory::HandlerCell::new();
+static ACK_STORAGE: [static_cell::StaticCell<Acknowledger>; COMPARATOR_COUNT] =
+    [const { static_cell::StaticCell::new() }; COMPARATOR_COUNT];
+static ACKNOWLEDGERS: [oer_memory::HandlerCell<Acknowledger>; COMPARATOR_COUNT] =
+    [const { oer_memory::HandlerCell::new() }; COMPARATOR_COUNT];
 
 const COMPARATOR_COUNT: usize = 3;
 const NO_COMPARATOR: u8 = u8::MAX;
@@ -151,7 +183,25 @@ pub fn init<const WRITER_SWI: u8, A>(systimer: SYSTIMER<'static>, alarm: A)
 where
     A: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    let _owned = systimer;
+    let (bank, zero, one, two) = AlarmBank::adopt(systimer);
+    if BANK.install(BANK_STORAGE.init(bank)).is_err() {
+        panic!("the SYSTIMER bank owner is already installed");
+    }
+    for (index, ack) in [
+        Acknowledger::Zero(zero),
+        Acknowledger::One(one),
+        Acknowledger::Two(two),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if ACKNOWLEDGERS[index]
+            .install(ACK_STORAGE[index].init(ack))
+            .is_err()
+        {
+            panic!("the SYSTIMER acknowledger is already installed");
+        }
+    }
     assert!(
         WRITER
             .compare_exchange(NO_EXECUTOR, WRITER_SWI, Ordering::AcqRel, Ordering::Acquire)
@@ -211,26 +261,16 @@ where
                 .is_ok(),
         "executor {SWI} or comparator {comparator} is bound already"
     );
-    // Interrupts are still disabled: these read-modify-writes of shared
-    // words have no other writer yet.
-    let regs = SYSTIMER::regs();
-    regs.target_conf(comparator as usize)
-        .modify(|_, w| w.period_mode().clear_bit().timer_unit_sel().clear_bit());
-    set_alarm_enabled(comparator, false);
-    regs.int_clr()
-        .write(|w| w.target(comparator).clear_bit_by_one());
-    regs.int_ena().modify(|_, w| w.target(comparator).set_bit());
+    // Setup still owns both halves before this alarm's route is enabled.
+    BANK.with(|bank| {
+        ACKNOWLEDGERS[comparator as usize]
+            .with(|ack| ack.bind(bank))
+            .expect("the comparator owner is installed before its route");
+    })
+    .expect("the SYSTIMER bank is installed before binding");
     if let Err(error) = oer_espressif_esp_hal_irq::enable(&alarm) {
         panic!("time driver alarm {comparator}: {error:?}");
     }
-}
-
-fn set_alarm_enabled(comparator: u8, enabled: bool) {
-    SYSTIMER::regs().conf().modify(|_, w| match comparator {
-        0 => w.target0_work_en().bit(enabled),
-        1 => w.target1_work_en().bit(enabled),
-        _ => w.target2_work_en().bit(enabled),
-    });
 }
 
 /// Program `comparator` for `deadline` (microseconds), in the writer's
@@ -238,20 +278,13 @@ fn set_alarm_enabled(comparator: u8, enabled: bool) {
 /// raises its interrupt when enabled with a target behind the counter
 /// (ESP-IDF `SYSTIMER_LL_ALARM_MISS_COMPENSATE`).
 fn program(comparator: u8, deadline: u64) {
-    set_alarm_enabled(comparator, false);
-    if deadline == u64::MAX {
-        return;
-    }
-    let ticks = deadline
-        .saturating_mul(u64::from(TICKS_PER_MICROSECOND.load(Ordering::Relaxed)))
-        .min(TICK_MASK);
-    let regs = SYSTIMER::regs();
-    let target = regs.trgt(comparator as usize);
-    target.hi().write(|w| w.hi().set((ticks >> 32) as u32));
-    target.lo().write(|w| w.lo().set(ticks as u32));
-    regs.comp_load(comparator as usize)
-        .write(|w| w.load().set_bit());
-    set_alarm_enabled(comparator, true);
+    let ticks = (deadline != u64::MAX).then(|| {
+        deadline
+            .saturating_mul(u64::from(TICKS_PER_MICROSECOND.load(Ordering::Relaxed)))
+            .min(TICK_MASK)
+    });
+    BANK.with(|bank| bank.program(comparator, ticks))
+        .expect("only the SYSTIMER writer programs the bank");
 }
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
@@ -343,9 +376,9 @@ fn program_published(writer: &mut Slot) {
 pub fn alarm_interrupt<const COMPARATOR: u8>() {
     #[cfg(oer_profile)]
     let entered = now();
-    SYSTIMER::regs()
-        .int_clr()
-        .write(|w| w.target(COMPARATOR).clear_bit_by_one());
+    ACKNOWLEDGERS[COMPARATOR as usize]
+        .with(Acknowledger::acknowledge)
+        .expect("only the alarm handler acknowledges its installed comparator");
     #[cfg(oer_profile)]
     {
         let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];

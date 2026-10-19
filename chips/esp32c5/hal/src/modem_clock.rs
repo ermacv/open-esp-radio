@@ -162,25 +162,19 @@ fn perform(
     Ok(())
 }
 
-type Planner<'identity> =
-    oer_espressif_modem_clock::ModemClockPlanner<'identity, ModemClockDependency>;
-type Lease<'identity> = oer_espressif_modem_clock::ModemClockLease<'identity, ModemClockDependency>;
-type PoisonedAcquire<'identity> =
-    oer_espressif_modem_clock::PoisonedModemClockAcquire<'identity, ModemClockDependency>;
-type PoisonedRelease<'identity> = oer_espressif_modem_clock::PoisonedModemClockRelease<
-    'identity,
-    'identity,
-    ModemClockDependency,
->;
+type Planner = oer_espressif_modem_clock::ModemClockPlanner<ModemClockDependency>;
+type Lease = oer_espressif_modem_clock::ModemClockLease<ModemClockDependency>;
+type PoisonedAcquire = oer_espressif_modem_clock::PoisonedModemClockAcquire<ModemClockDependency>;
+type PoisonedRelease = oer_espressif_modem_clock::PoisonedModemClockRelease<ModemClockDependency>;
 
 /// One enabled module's hold on its modem clocks.
 #[must_use = "an enabled module's clocks stay on until the grant is returned"]
-pub struct ModemClockGrant<'identity> {
+pub struct ModemClockGrant {
     module: ModemClockModule,
-    lease: Lease<'identity>,
+    lease: Lease,
 }
 
-impl ModemClockGrant<'_> {
+impl ModemClockGrant {
     pub const fn module(&self) -> ModemClockModule {
         self.module
     }
@@ -203,10 +197,10 @@ pub enum ModemClockError {
 
 /// Why [`ModemClocks::disable`] did not return a module's clocks.
 #[must_use = "a rejected release returns the grant it could not consume"]
-pub enum ModemClockDisableError<'identity> {
+pub enum ModemClockDisableError {
     /// The planner rejected the grant before any edge; it is returned.
     Rejected(
-        ModemClockGrant<'identity>,
+        ModemClockGrant,
         ModemClockReleasePreparationError<ModemClockDependency>,
     ),
     /// A transaction failed at a physical edge, now or earlier; the clocks
@@ -214,7 +208,7 @@ pub enum ModemClockDisableError<'identity> {
     Poisoned,
 }
 
-impl core::fmt::Debug for ModemClockDisableError<'_> {
+impl core::fmt::Debug for ModemClockDisableError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Rejected(grant, error) => formatter
@@ -231,13 +225,13 @@ impl core::fmt::Debug for ModemClockDisableError<'_> {
     clippy::large_enum_variant,
     reason = "the owner keeps the allocation-free planner or its poisoned transaction inline"
 )]
-enum State<'identity> {
-    Ready(Planner<'identity>),
+enum State {
+    Ready(Planner),
     /// A transaction failed at a physical edge. The failed transaction is
     /// retained so that no further clock change is planned.
     Poisoned {
-        _acquire: Option<PoisonedAcquire<'identity>>,
-        _release: Option<PoisonedRelease<'identity>>,
+        _acquire: Option<PoisonedAcquire>,
+        _release: Option<PoisonedRelease>,
     },
     /// Transient state while one transaction owns the planner.
     InFlight,
@@ -246,15 +240,12 @@ enum State<'identity> {
 /// Unique owner of the ESP32-C5 modem clocks and the IEEE 802.15.4 MAC
 /// reset.
 #[must_use = "dropping the modem clock owner loses the modem clock registers"]
-pub struct ModemClocks<'identity>(Core<'identity, ModemClockRegisters>);
+pub struct ModemClocks(Core<ModemClockRegisters>);
 
-impl<'identity> ModemClocks<'identity> {
+impl ModemClocks {
     /// Take ownership of the modem clock registers with a managed planner:
     /// this owner is the only one that changes the modem clock gates.
-    pub fn new(
-        registers: ModemClockRegisters,
-        identity: &'identity ModemClockPlannerIdentity,
-    ) -> Self {
+    pub fn new(registers: ModemClockRegisters, identity: ModemClockPlannerIdentity) -> Self {
         Self(Core::with_port(registers, identity))
     }
 
@@ -263,10 +254,7 @@ impl<'identity> ModemClocks<'identity> {
     /// # Errors
     ///
     /// The planner rejected the request, or the owner is poisoned.
-    pub fn enable(
-        &mut self,
-        module: ModemClockModule,
-    ) -> Result<ModemClockGrant<'identity>, ModemClockError> {
+    pub fn enable(&mut self, module: ModemClockModule) -> Result<ModemClockGrant, ModemClockError> {
         self.0.enable(module)
     }
 
@@ -276,10 +264,7 @@ impl<'identity> ModemClocks<'identity> {
     ///
     /// The planner rejected the grant, which is returned unchanged, or the
     /// owner is poisoned.
-    pub fn disable(
-        &mut self,
-        grant: ModemClockGrant<'identity>,
-    ) -> Result<(), ModemClockDisableError<'identity>> {
+    pub fn disable(&mut self, grant: ModemClockGrant) -> Result<(), ModemClockDisableError> {
         self.0.disable(grant)
     }
 
@@ -290,10 +275,7 @@ impl<'identity> ModemClocks<'identity> {
     /// # Errors
     ///
     /// The grant is not an IEEE 802.15.4 grant; nothing is written.
-    pub fn reset_ieee802154_mac(
-        &mut self,
-        grant: &ModemClockGrant<'identity>,
-    ) -> Result<(), ModemClockError> {
+    pub fn reset_ieee802154_mac(&mut self, grant: &ModemClockGrant) -> Result<(), ModemClockError> {
         self.0.reset_ieee802154_mac(grant)
     }
 
@@ -312,14 +294,14 @@ impl<'identity> ModemClocks<'identity> {
 }
 
 /// The owner over any modem clock port, for host tests.
-pub(crate) struct Core<'identity, Port> {
+pub(crate) struct Core<Port> {
     port: Port,
-    state: State<'identity>,
+    state: State,
     held: u8,
 }
 
-impl<'identity, Port: ModemClockPort> Core<'identity, Port> {
-    pub(crate) fn with_port(port: Port, identity: &'identity ModemClockPlannerIdentity) -> Self {
+impl<Port: ModemClockPort> Core<Port> {
+    pub(crate) fn with_port(port: Port, identity: ModemClockPlannerIdentity) -> Self {
         Self {
             port,
             state: State::Ready(Planner::managed(identity)),
@@ -335,7 +317,7 @@ impl<'identity, Port: ModemClockPort> Core<'identity, Port> {
     pub(crate) fn enable(
         &mut self,
         module: ModemClockModule,
-    ) -> Result<ModemClockGrant<'identity>, ModemClockError> {
+    ) -> Result<ModemClockGrant, ModemClockError> {
         let planner = match core::mem::replace(&mut self.state, State::InFlight) {
             State::Ready(planner) => planner,
             other => {
@@ -374,10 +356,7 @@ impl<'identity, Port: ModemClockPort> Core<'identity, Port> {
     ///
     /// The planner rejected the grant, which is returned unchanged, or the
     /// owner is poisoned.
-    pub(crate) fn disable(
-        &mut self,
-        grant: ModemClockGrant<'identity>,
-    ) -> Result<(), ModemClockDisableError<'identity>> {
+    pub(crate) fn disable(&mut self, grant: ModemClockGrant) -> Result<(), ModemClockDisableError> {
         let planner = match core::mem::replace(&mut self.state, State::InFlight) {
             State::Ready(planner) => planner,
             other => {
@@ -425,7 +404,7 @@ impl<'identity, Port: ModemClockPort> Core<'identity, Port> {
     /// The grant is not an IEEE 802.15.4 grant; nothing is written.
     pub(crate) fn reset_ieee802154_mac(
         &mut self,
-        grant: &ModemClockGrant<'identity>,
+        grant: &ModemClockGrant,
     ) -> Result<(), ModemClockError> {
         if grant.module != ModemClockModule::Ieee802154 {
             return Err(ModemClockError::WrongModule);

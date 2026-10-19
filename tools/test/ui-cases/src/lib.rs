@@ -696,3 +696,6 @@ error: aborting due to 3 previous errors
         assert!(found[1].met(&[("test-support", false)]).is_err());
     }
 }
+
+mod chip;
+pub use chip::run_chip;

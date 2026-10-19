@@ -289,7 +289,7 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
 
 #[main]
 fn main() -> ! {
-    let _peripherals = esp_hal::init(esp_hal::Config::default());
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
     let mut failures = 0;
     let RadioPartitions {
@@ -297,7 +297,17 @@ fn main() -> ! {
         mut modem_clock,
         mut phy_i2c,
         ..
-    } = RadioPartitions::take().expect("first radio partition acquisition");
+    } = oer_esp32c5_esp_hal_soc::radio::take_radio(
+        oer_esp32c5_esp_hal_soc::radio::RadioSingletons {
+            i2c_ana_mst: peripherals.I2C_ANA_MST,
+            modem_syscon: peripherals.MODEM_SYSCON,
+            modem_lpcon: peripherals.MODEM_LPCON,
+            wifi: peripherals.WIFI,
+            bt: peripherals.BT,
+            ieee802154: peripherals.IEEE802154,
+        },
+    )
+    .into_partitions();
     probe_modem_clock(&mut modem_clock, &mut failures);
     check(
         &mut failures,

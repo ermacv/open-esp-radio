@@ -97,18 +97,16 @@ impl ModemClockDependency for Dependency {
     }
 }
 
-pub(crate) type ModemClockPlanner<'identity> =
-    oer_espressif_modem_clock::ModemClockPlanner<'identity, Dependency>;
-pub(crate) type ModemClockLease<'identity> =
-    oer_espressif_modem_clock::ModemClockLease<'identity, Dependency>;
-pub(crate) type PreparedModemClockAcquire<'identity> =
-    oer_espressif_modem_clock::PreparedModemClockAcquire<'identity, Dependency>;
-pub(crate) type PreparedModemClockRelease<'planner, 'lease> =
-    oer_espressif_modem_clock::PreparedModemClockRelease<'planner, 'lease, Dependency>;
-pub(crate) type PoisonedModemClockAcquire<'identity> =
-    oer_espressif_modem_clock::PoisonedModemClockAcquire<'identity, Dependency>;
-pub(crate) type PoisonedModemClockRelease<'planner, 'lease> =
-    oer_espressif_modem_clock::PoisonedModemClockRelease<'planner, 'lease, Dependency>;
+pub(crate) type ModemClockPlanner = oer_espressif_modem_clock::ModemClockPlanner<Dependency>;
+pub(crate) type ModemClockLease = oer_espressif_modem_clock::ModemClockLease<Dependency>;
+pub(crate) type PreparedModemClockAcquire =
+    oer_espressif_modem_clock::PreparedModemClockAcquire<Dependency>;
+pub(crate) type PreparedModemClockRelease =
+    oer_espressif_modem_clock::PreparedModemClockRelease<Dependency>;
+pub(crate) type PoisonedModemClockAcquire =
+    oer_espressif_modem_clock::PoisonedModemClockAcquire<Dependency>;
+pub(crate) type PoisonedModemClockRelease =
+    oer_espressif_modem_clock::PoisonedModemClockRelease<Dependency>;
 
 /// Radio modules that request modem clocks, with their vendor dependency sets.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,4 +1,11 @@
 disallowed-methods = [
+    { path = "esp_hal::rng::Rng::new", reason = "random reads require the unique RNG owner" },
+    { path = "esp_hal::rng::Trng::try_new", reason = "TRNG reads borrow the entropy source owner" },
+    { path = "esp_hal::peripherals::SYSTIMER::regs", reason = "the time driver uses its alarm-bank owner" },
+    { path = "esp_hal::peripherals::USB_DEVICE::regs", reason = "USB register access belongs to the endpoint and pad owners" },
+    { path = "esp_hal::peripherals::PMU::regs", reason = "PMU supply snapshots borrow the PSRAM owner" },
+    { path = "esp_hal::peripherals::RNG::regs", reason = "entropy status borrows the source owner" },
+    { path = "esp_hal::peripherals::LP_PERI::regs", reason = "entropy clock status borrows the source owner" },
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     # esp-hal's `regs()` reaches a block without its singleton; these blocks
     # pass to the radio HAL at the handoff (oer-espressif-esp-hal-radio).

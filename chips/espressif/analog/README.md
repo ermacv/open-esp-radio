@@ -32,3 +32,8 @@ The ESP32-C5 bus is `oer_esp32c5_hal::analog::AnalogI2c`, polled through the
 drivers. The ESP32-S31 PHY drives the transitions from its own executor; its
 HAL configuration transaction and retained-wake parallel stage use
 `ConfigurationTransition` and `ParallelTransition` over the PAC bus.
+
+Polled transactions retain an exclusive borrow of one bus from construction
+until they are dropped. `poll` takes no bus argument, and live transactions
+are neither `Clone` nor `Copy`. Pure transitions remain values a chip's own
+executor can drive while it owns the bus.

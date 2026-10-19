@@ -25,3 +25,8 @@ edge was performed and the transaction commits. Leases are opaque, bound to
 one planner epoch and checked against stale, duplicate and cross-planner
 release. The crate performs no MMIO; the ESP32-S31 table and executor are in
 `oer_esp32s31_hal::power::clock`.
+
+Each planner consumes a unique `ModemClockPlannerIdentity` by value. Its
+monotonic key follows the owner through moves and poisoned transactions;
+leases retain that key for cross-manager rejection. Keys never wrap or get
+reused, so neither a dropped planner nor address reuse can admit an old lease.

@@ -21,3 +21,8 @@ the MODEM state to the analog I2C master map on revision v1.0 (see the
 [hardware errata](../../../docs/hardware-errata.md)). The PHY and the MAC
 lifecycle around these owners are not owned by this crate yet, so no
 ESP32-C5 composition starts the MAC.
+
+The radio root is created only from the platform's `RadioHandoff` and
+transfers every PAC partition by value. The esp-hal adapter consumes the
+whole-block radio singletons to issue that handoff; the PAC has no independent
+production `take` path. `ModemClocks` consumes its planner identity by value.
