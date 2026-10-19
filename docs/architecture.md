@@ -1,18 +1,18 @@
 # Architecture
 
-This page describes what exists and the rules new code follows. It grows as
-the Wi-Fi slice reaches hardware; [decisions](decisions.md) records why.
+This page describes what exists and the rules new code follows;
+[decisions](decisions.md) lists the choices behind them.
 
 ## Layers
 
 ```text
 application          credentials, network stack (embassy-net), sockets
-  ieee80211 runtime  one async loop per role set, over the lower-MAC port   (W3)
+  ieee80211 runtime  one async loop per role set, over the lower-MAC port
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
   chip drivers       ESP32-S31 Wi-Fi DMA, MAC and driver core
-  radio system       one owner of the shared RF front-end              (R0..)
+  radio system       one owner of the shared RF front-end
   PHY                calibration, tracking, channel, TX power (Rust port of libphy)
   HAL                typed register ownership: root, partitions, phased sequences
   PAC                generated from registers/ (raw) plus single transactions
@@ -113,24 +113,23 @@ sides can write has one runtime writer, listed and reviewed in
 
 Structures the hardware reads and writes in RAM (DMA descriptors, the RX
 control prefix, TX descriptor words, BLE exchange memory) are part of the
-hardware too: [hardware memory](hardware-memory.md) proposes describing them
-in the register model, with the protocol in the HAL.
+hardware too: [hardware memory](hardware-memory.md) describes them in the
+register model, with the protocol in the HAL.
 
 ## Radio system
 
-One actor on the P2 executor will own the shared RF front-end: PHY
+One actor on the P2 executor owns the shared RF front-end: PHY
 registration, calibration and tracking, channel retune, modem clocks,
 coexistence timers and sleep. Clients reach it through per-client cells with
 lock-free wakers; PHY membership is a typestate (`Untracked`, `Tracked`,
-`Suspended`). It owns the HAL's `RadioDomain` by value. It is built in steps
-with the Wi-Fi slice (R0 at W0); coexistence claims arrive with the second
-radio.
+`Suspended`). It owns the HAL's `RadioDomain` by value. Coexistence claims
+are not implemented.
 
 ## Radio port
 
 `oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-lower-mac`) are
-carried unfrozen. Steps W0–W2 drive the chip driver directly; the port backend
-is written at W3 and the contract is frozen after W4.
+not frozen. The S31 has no lower-MAC port backend yet: the Wi-Fi images drive
+the chip driver directly.
 [Radio ports](radio-ports.md) states the principles they follow,
 [time](time.md) the clock domains and their relations.
 

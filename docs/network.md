@@ -163,10 +163,10 @@ completions cannot bypass the settle interval.
   exhaustion waits for its credit-return edge. RX availability, general pool
   availability and SRAM completion are separate domains.
 
-## Access point egress (predecessor runtime, not carried)
+## Access point egress
 
-The predecessor's AP runtime, built around an AP serving two stations with
-interleaved destinations, kept these rules; the AP rebuild starts from them.
+Rules for an access point serving several stations with interleaved
+destinations:
 
 - Retained active frames, awake unicast power-save backlog and producer queues
   share one destination cursor: a destination present in several gets one
@@ -184,8 +184,8 @@ interleaved destinations, kept these rules; the AP rebuild starts from them.
   frames to PS storage and updates the TIM; a peer that sleeps after
   selection returns its unpublished grant.
 - Airtime accounting, an HT aggregate byte ceiling from the grant and
-  deficit-based destination selection were optional modes, off by default;
-  round-robin by destination was the default. Equal throughput or full
+  deficit-based destination selection are optional modes, off by default;
+  round-robin by destination is the default. Equal throughput or full
   aggregates do not show airtime fairness when peers use different rates.
-- The predecessor's AP advertised only CCK rates as basic, so the generic
-  highest-basic-rate rule was not a valid HT BlockAck timing assumption.
+- An access point that advertises only CCK rates as basic makes the generic
+  highest-basic-rate rule an invalid HT BlockAck timing assumption.

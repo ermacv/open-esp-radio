@@ -1,30 +1,27 @@
 # Memory the hardware reads and writes
 
-Status: approved by the owner (2026-10-18).
-
 Some hardware state is not in registers but in RAM: structures whose format
 the silicon defines and which the CPU and the hardware hand to each other.
 They are part of the hardware just as registers are, and need the same
 discipline: one reviewed description, evidence for every field, `_OPAQUE` for
 what is unknown, generated accessors, no hand-written masks. This document
-proposes how the register model, the PAC and the HAL describe them.
+describes how the register model, the PAC and the HAL describe them.
 
-## What exists today
+## Which structures
 
-| Structure | Where it is described now | Shared how |
-| --- | --- | --- |
-| Wi-Fi DMA descriptor (12-byte node: control word, buffer address, next) | `hal/src/ieee80211/dma/descriptor.rs`: hand-written masks and shifts (`SIZE_MASK`, `LENGTH_SHIFT`, owner and done bits) | CPU arms, the walker fills, owner bit 31 hands it over |
-| Wi-Fi RX control prefix (metadata the MAC writes at the start of each received buffer: RSSI, PHY info, local timestamp) | `ieee80211/mac/src/rx/prefix.rs`: hand-written byte offsets | hardware writes, CPU reads after completion |
-| Wi-Fi TX descriptor words (flags, security, HE control, rate context) | `ieee80211/mac/src/tx/policy.rs`: shifts and fields named by offset (`byte_0x38`, `byte_0x2f_bit_2`) | CPU writes, hardware reads at transmission |
-| A-MPDU internal and external descriptors | `hal/src/ieee80211/dma/tx_ampdu_storage.rs` | CPU builds, hardware walks |
-| BLE controller exchange memory (packet headers, scheduler lists, CTE ring) | evidence descriptions and `knowledge/esp32s31/bluetooth/` only | CPU and controller both, by protocol |
-| IEEE 802.15.4 frame buffers (length byte, PSDU) | `portable/espressif/ieee802154-engine` | CPU and engine |
-| The DMA-capable window `0x2f00_0000..0x2f08_0000` | three hand-written copies (`dma/src/descriptor.rs`, `hal/src/ieee802154.rs`, the esp-hal adapter's mem2mem) | placement rule |
+| Structure | Shared how |
+| --- | --- |
+| Wi-Fi DMA descriptor (12-byte node: control word, buffer address, next) | CPU arms, the walker fills, owner bit 31 hands it over |
+| Wi-Fi RX control prefix (metadata the MAC writes at the start of each received buffer: RSSI, PHY info, local timestamp) | hardware writes, CPU reads after completion |
+| Wi-Fi TX descriptor words (flags, security, HE control, rate context) | CPU writes, hardware reads at transmission |
+| A-MPDU internal and external descriptors | CPU builds, hardware walks |
+| BLE controller exchange memory (packet headers, scheduler lists, CTE ring) | CPU and controller both, by protocol |
+| IEEE 802.15.4 frame buffers (length byte, PSDU) | CPU and engine |
 
-None of these pass through the register model, so none have its review,
-evidence or naming rules. The hardware facts we measured on the stand (the
-walker checks the owner bit, it does not clear it on completion) live in
-comments and `knowledge/`, not next to the field they describe.
+The Wi-Fi DMA descriptor and the RX control prefix are generated from the
+register model; the TX descriptor words, the A-MPDU descriptors, BLE exchange
+memory and the 802.15.4 frame buffers are still described by hand, with
+fields named by offset where their meaning is unknown.
 
 ## How it differs from MMIO
 
@@ -135,7 +132,7 @@ No protocol logic in the PAC: no ordering, no fences, no ownership.
 
 ### 2. Protocol: the HAL
 
-Hand-written and typed, as today in `rx_ring.rs`, `rx_storage.rs` and the TX
+Hand-written and typed, as in `rx_ring.rs`, `rx_storage.rs` and the TX
 storage: the ownership machine (armed, completed, detached, rearmed), the
 publication order (buffer address, then `CONTROL` with `OWNER = 1`, a fence,
 the doorbell), the proofs (`RxDmaWalkerStopped` naming its arena), the
@@ -173,8 +170,6 @@ the loan is made, with the first such buffer.
 
 ## Where registers, layouts and the protocol meet
 
-Approved by the owner (2026-10-18).
-
 - **One IP block, one description.** A layout belongs to the peripheral that
   consumes it, beside its registers. A register field the hardware reads as
   a pointer names its target in the model (`points-to =
@@ -203,31 +198,13 @@ Approved by the owner (2026-10-18).
   after the completion proof and where a buffer is handed back to the
   hardware. Crates above the HAL carry `#![forbid(unsafe_code)]`.
 
-## Order of work
-
-1. Pilot: the Wi-Fi DMA descriptor and the RX control prefix, both proven on
-   hardware by W1. The tool learns the layout kind, `memory.toml` the RAM
-   regions; `descriptor.rs` and `prefix.rs` switch to the generated types; all
-   their tests keep passing. During the predecessor port, before the
-   ESP32-C5 HAL and W2's TX structures, so both start on the new kind.
-2. Typed links, then within the same port wave: `points-to` in the model and
-   typed references in the PAC; placement through the macro and the linker
-   assertion; the RX DMA engine in the HAL as the only owner of its registers
-   and arena; the run-time address checks removed; `forbid(unsafe_code)` in
-   the driver and above.
-3. W2: the TX descriptor words and the A-MPDU descriptors; the offset-named
-   fields become `_OPAQUE` fields with their evidence until their meaning is
-   known.
-4. The second radio block: BLE exchange memory or the 802.15.4 frame buffers.
-
 ## Open questions
 
 - **Home of a layout shared by chips.** The Wi-Fi descriptor is likely common
-  to several Espressif chips. We are S31-only, so the pilot keeps it in the
-  chip model; it moves to a library when a second chip appears.
+  to several Espressif chips; it lives in the S31 model, and moves to a
+  shared model when a second chip's Wi-Fi DMA is described.
 - **SVD and the binding index.** A layout has no address, so it does not go
-  into the SVD. Whether vendor analysis needs it in the binding index is
-  decided when binary analysis returns.
+  into the SVD; whether vendor analysis needs it in the binding index is open.
 - **Phase per field.** `writer` names one writer. Fields written by the CPU in
   one phase and by the hardware in another (none known yet) would need a
   phase list; added only when one appears.

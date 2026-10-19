@@ -3,9 +3,8 @@
 A radio port is the contract between the protocol logic of one radio
 protocol and the backend that executes it: a chip, a family driver or a host
 model. Everything above a port is written once for every backend; everything
-below it is the backend's. The ports are unfrozen until W4
-([decisions](decisions.md)); this page states the principles the carried
-port crates follow. The shared lifecycle and vocabulary are in
+below it is the backend's. The ports are not frozen; this page states the
+principles the port crates follow. The shared lifecycle and vocabulary are in
 [`oer-radio-port`](../portable/radio/port/README.md), the Wi-Fi port in
 [`oer-ieee80211-lower-mac`](../portable/ieee80211/lower-mac/README.md).
 

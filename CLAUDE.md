@@ -1,8 +1,8 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31 and ESP32-C5;
-ESP32-C6 later): Wi-Fi, Bluetooth (LE; BR/EDR later) and IEEE 802.15.4,
-without vendor radio binaries. Owner decisions are in
+Rust 2024 `no_std` radio stack for Espressif chips (ESP32-S31 and ESP32-C5):
+Wi-Fi, Bluetooth LE and IEEE 802.15.4,
+without vendor radio binaries. Decisions are in
 [docs/decisions.md](docs/decisions.md), the system in
 [docs/architecture.md](docs/architecture.md).
 
@@ -45,17 +45,20 @@ without vendor radio binaries. Owner decisions are in
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
-  ([docs/source-policy.md](docs/source-policy.md)); the predecessor's
-  Bluetooth LE code is the owner's exception, carried as it is.
+  ([docs/source-policy.md](docs/source-policy.md)); the Bluetooth LE hardware
+  engine is the one exception and keeps what it takes from `esp32s31-bt-lib`.
 - **GitHub.** Act only in the owner's repositories; never write to upstream
   projects (fixes to esp-hal go to the owner's fork).
-- **Decisions.** Only the owner decides. Add a line to `docs/decisions.md` only
-  for an answer the owner stated explicitly, in the same change.
+- **Decisions.** Only the owner decides. Add or change a line in
+  `docs/decisions.md` only for an answer the owner stated explicitly, in the
+  same change, without attribution or date.
+- **Documents state the current state.** No plans, work lists, migration
+  maps, history or "the owner decided" in the repository; notes and plans
+  live outside it.
 
 ## Where code goes
 
-The layout is [docs/repository-layout.md](docs/repository-layout.md); the
-tree is migrating to it, and new packages go to their target root now.
+The layout is [docs/repository-layout.md](docs/repository-layout.md).
 
 - **Libraries by what they touch:** `portable/` touches neither hardware nor
   an OS (protocol cores, the HIL protocol, chip knowledge such as tables and
