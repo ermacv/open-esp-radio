@@ -3,7 +3,7 @@
 //! host, the host fixtures and their software installation. HIL test
 //! commands are `cargo hil`, which builds on the stand's libraries; this
 //! binary links none of HIL.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 mod board;
 mod command;

@@ -1,5 +1,7 @@
 //! Compile declarations shared with the verification image's root collector.
 
+#![forbid(unsafe_code)]
+
 /// Declare a C entry point using a Rust signature followed by `=> expression;`
 /// or an explicit function body. Conversions, owner setup and result projections
 /// belong in the expression/body. Naked entries retain their explicit attribute.

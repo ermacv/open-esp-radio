@@ -16,6 +16,8 @@
 //! pure code moves between crates; `cargo fw compare` calls
 //! [`compare_elf`] and `compare images` builds both sides with the HIL image
 //! classes first (`oer_hil_run::image::compare_images`).
+
+#![forbid(unsafe_code)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,

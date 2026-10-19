@@ -1,4 +1,6 @@
 //! Borrowed RV32 static ELF image. No loading, relocation or environment models.
+
+#![forbid(unsafe_code)]
 pub mod facts;
 pub mod mapping;
 pub mod tables;

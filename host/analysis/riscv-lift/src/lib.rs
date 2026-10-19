@@ -1,4 +1,6 @@
 //! ISA-only function decoder and relocation interpretation; no I/O authority.
+
+#![forbid(unsafe_code)]
 use oer_analysis_elf::rv32::{self, Role};
 pub use oer_analysis_riscv_decode::register_name;
 use oer_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction};

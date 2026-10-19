@@ -8,7 +8,7 @@
 //! It actuates no hardware and writes no flash record itself: boards are
 //! reached through board I/O (`oer-hil-board`), exclusion and the board
 //! journal belong to the arbiter, flashing to the flash operation.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod config;
 mod dut;

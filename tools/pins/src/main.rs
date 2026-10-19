@@ -3,6 +3,8 @@
 //! every checkout's `target/vendor` links to. This binary parses the command
 //! line and calls `oer-vendor-artifacts`.
 
+#![forbid(unsafe_code)]
+
 use std::{
     path::{Path, PathBuf},
     process::ExitCode,

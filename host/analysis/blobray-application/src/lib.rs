@@ -5,6 +5,8 @@
 //! that identity. No project, store, journal or worker participates, and every
 //! result stays with the caller.
 
+#![forbid(unsafe_code)]
+
 use oer_analysis_blobray_artifacts::{MemberCursor, inspect_source};
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;

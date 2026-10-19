@@ -4,6 +4,8 @@
 //! `blobray` CLI with requests built from Blobray's own types, and checks
 //! independent expectations. Chip addresses and source identities belong to
 //! this verification owner; generic Blobray has no chip dependency.
+
+#![forbid(unsafe_code)]
 pub mod bluetooth;
 pub mod coexistence;
 pub mod decisions;

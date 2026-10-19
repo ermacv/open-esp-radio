@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 //! The HIL platform's own trace events: the triggers that freeze the trace
 //! when a boot ends badly. They carry no words; the post-mortem record holds
 //! the details, and the trace holds what happened before.

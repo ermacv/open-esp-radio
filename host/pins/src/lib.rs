@@ -2,6 +2,8 @@
 //! `knowledge/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-vendor-artifacts`.
+
+#![forbid(unsafe_code)]
 pub mod artifacts;
 pub mod provenance;
 

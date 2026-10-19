@@ -3,6 +3,8 @@
 //! command line; its modules hold the commands, over the image pipeline
 //! (`oer-image-build`) and the stand's one board path (`oer-lab-board`).
 
+#![forbid(unsafe_code)]
+
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};

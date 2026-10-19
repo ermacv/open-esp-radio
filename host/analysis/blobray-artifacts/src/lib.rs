@@ -1,6 +1,8 @@
 //! Streaming structural inventory over captured byte sources. No path access.
 //! Archive framing and ELF inspection have one implementation each; consumers
 //! choose storage or presentation through synchronous borrowed-record ports.
+
+#![forbid(unsafe_code)]
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 mod definition;

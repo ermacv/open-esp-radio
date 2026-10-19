@@ -1,5 +1,5 @@
 //! System HIL workloads: boot smoke, watchdog, panic reset and stand recovery.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod scenario;
 pub mod workload;

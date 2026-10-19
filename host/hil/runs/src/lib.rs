@@ -10,7 +10,7 @@
 //!   run's images; the image builder fills their provenance.
 //! - [`replay`]: the archived firmware of an earlier run, its build records
 //!   checked against the image builder's recipe before a run replays it.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod format;
 

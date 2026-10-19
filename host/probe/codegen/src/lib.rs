@@ -4,6 +4,8 @@
 //! behavior. Generated files live in Cargo's output directory. The catalog
 //! describes declared Rust boundary types; it does not infer private layouts.
 
+#![forbid(unsafe_code)]
+
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use serde::{Deserialize, Serialize};

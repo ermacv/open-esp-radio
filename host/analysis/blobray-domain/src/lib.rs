@@ -1,6 +1,8 @@
 //! Captured inventory, execution, comparison and request records over the
 //! identities and contracts of `oer-analysis-riscv-model`. No filesystem access.
 
+#![forbid(unsafe_code)]
+
 use oer_analysis_riscv_model::*;
 use serde::{Deserialize, Serialize};
 

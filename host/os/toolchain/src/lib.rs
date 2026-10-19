@@ -9,6 +9,8 @@
 //!
 //! [`versions`] records the tools a build ran.
 
+#![forbid(unsafe_code)]
+
 use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},

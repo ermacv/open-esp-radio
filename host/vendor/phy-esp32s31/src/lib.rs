@@ -14,6 +14,8 @@
 //! `src/tolerances.toml` as the review, yielding a
 //! MATCH, DIFF or INCOMPLETE [`compare::Summary`].
 
+#![forbid(unsafe_code)]
+
 pub mod family;
 
 pub mod compare;

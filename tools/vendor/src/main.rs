@@ -2,6 +2,8 @@
 //! checks provenance, runs the typed scenarios, regenerates and checks the
 //! evidence shards, builds the comparison probes and host stands, carries
 //! symbol lineage and audits the PHY archive. The gate runs it as a process.
+
+#![forbid(unsafe_code)]
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
