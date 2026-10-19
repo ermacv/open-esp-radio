@@ -466,7 +466,8 @@ where
 
         let mut sources = MacSources {
             pti: MAC_COEX_EVENTS.map(|event| {
-                MacCoexPti::from_osi_value(self.radio.coex_pti(event.coex_event()).value())
+                MacCoexPti::new(self.radio.coex_pti(event.coex_event()).value())
+                    .expect("the coexistence table holds four-bit priorities")
             }),
             tx_power,
             slow_clock,

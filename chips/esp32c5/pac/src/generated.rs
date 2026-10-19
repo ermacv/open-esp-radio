@@ -648,6 +648,54 @@ pub(crate) fn assert_phy_rx_evm_memory_reset_2(registers: &crate::svd::PhyBaseba
     crate::svd::field_or_modify::assert_phy_rx_evm_memory_reset_2(registers);
 }
 
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_all(registers);
+}
+
 /// Typed bridge for the reviewed `set_ieee802154_apb_clock` field-replacement transaction.
 #[inline]
 pub(crate) fn set_ieee802154_apb_clock(
@@ -1018,4 +1066,22 @@ pub(crate) fn release_phy_rx_evm_memory_reset(registers: &crate::svd::PhyBaseban
 #[inline]
 pub(crate) fn release_phy_rx_evm_memory_reset_2(registers: &crate::svd::PhyBasebandConfig) {
     crate::svd::field_replace_modify::release_phy_rx_evm_memory_reset_2(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_ed_operation` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_ed_operation(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_tx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_tx_abort_baseline(registers);
 }

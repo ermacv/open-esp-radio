@@ -681,6 +681,29 @@ impl BluetoothDeviceTableEntryCount {
     }
 }
 
+/// The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MacSlowClockCalibrationValue(u32);
+
+impl MacSlowClockCalibrationValue {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x0003ffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x0003ffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// One four-bit external coexistence priority or grant field image.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexNibble(u32);
@@ -727,17 +750,17 @@ impl ExternalCoexWorkMode {
     }
 }
 
-/// The eight-bit grant delay image hal_set_extern_coex_delay publishes.
+/// The grant delay in microseconds: the upper nibble of the byte hal_set_extern_coex_delay publishes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexGrantDelay(u32);
 
 impl ExternalCoexGrantDelay {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = 0x000000ff;
+    pub const MAX: u32 = 0x0000000f;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= 0x000000ff {
+        if value <= 0x0000000f {
             Some(Self(value))
         } else {
             None
@@ -2374,38 +2397,6 @@ impl AgcSaturationGainHigh {
     }
 }
 
-/// Register-positioned receive-beacon PTI nibble accepted only by the reviewed masked RMW helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxBeaconPtiMaskedInput(u32);
-
-impl MacRxBeaconPtiMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-/// Register-positioned shared receive PTI nibble accepted only by the reviewed masked replacement helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacSharedRxPtiMaskedInput(u32);
-
-impl MacSharedRxPtiMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MacItwtControlMaskedInput(u32);
@@ -3281,24 +3272,6 @@ pub(crate) fn publish_pbus_force_test(registers: &crate::svd::PhyPbus, value: Pb
     crate::svd::masked_register_modify::publish_pbus_force_test(registers, value.get());
 }
 
-/// Typed bridge for the reviewed `publish_mac_rx_beacon_pti` masked transaction.
-#[inline]
-pub(crate) fn publish_mac_rx_beacon_pti(
-    registers: &crate::svd::WifiMacCoexRuntime,
-    value: MacRxBeaconPtiMaskedInput,
-) {
-    crate::svd::masked_register_modify::publish_mac_rx_beacon_pti(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `publish_mac_shared_rx_pti` masked transaction.
-#[inline]
-pub(crate) fn publish_mac_shared_rx_pti(
-    registers: &crate::svd::WifiMacCoexRuntime,
-    value: MacSharedRxPtiMaskedInput,
-) {
-    crate::svd::masked_register_modify::publish_mac_shared_rx_pti(registers, value.get());
-}
-
 /// Typed bridge for the reviewed `publish_mac_itwt_control` masked transaction.
 #[inline]
 pub(crate) fn publish_mac_itwt_control(
@@ -3489,6 +3462,54 @@ pub(crate) fn preserve_bluetooth_memory_list_2_initial_control(
     crate::svd::field_or_modify::preserve_bluetooth_memory_list_2_initial_control(registers);
 }
 
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_all(registers);
+}
+
 /// Typed bridge for the reviewed `configure_bluetooth_cte_six_buffer_limit` fixed field-replacement transaction.
 #[inline]
 pub(crate) fn configure_bluetooth_cte_six_buffer_limit(
@@ -3655,6 +3676,27 @@ pub(crate) fn raise_phy_pbus_work_mode_pulse(registers: &crate::svd::PhyAgcOracl
 #[inline]
 pub(crate) fn lower_phy_pbus_work_mode_pulse(registers: &crate::svd::PhyAgcOracle) {
     crate::svd::field_replace_modify::lower_phy_pbus_work_mode_pulse(registers);
+}
+
+/// Typed bridge for the reviewed `publish_mac_rx_beacon_pti` field-replacement transaction.
+#[inline]
+pub(crate) fn publish_mac_rx_beacon_pti(registers: &crate::svd::WifiMacCoexRuntime, value: MacPti) {
+    crate::svd::field_replace_modify::publish_mac_rx_beacon_pti(registers, value.get());
+}
+
+/// Typed bridge for the reviewed `publish_mac_shared_rx_pti` field-replacement transaction.
+#[inline]
+pub(crate) fn publish_mac_shared_rx_pti(registers: &crate::svd::WifiMacCoexRuntime, value: MacPti) {
+    crate::svd::field_replace_modify::publish_mac_shared_rx_pti(registers, value.get());
+}
+
+/// Typed bridge for the reviewed `set_mac_slow_clock_calibration` field-replacement transaction.
+#[inline]
+pub(crate) fn set_mac_slow_clock_calibration(
+    registers: &crate::svd::WifiMacRtcTimerUpdate,
+    value: MacSlowClockCalibrationValue,
+) {
+    crate::svd::field_replace_modify::set_mac_slow_clock_calibration(registers, value.get());
 }
 
 /// Typed bridge for the reviewed `set_coex_external_priority_0` field-replacement transaction.
@@ -8403,6 +8445,24 @@ pub(crate) fn clear_bluetooth_scheduler_cancellation_control(
     registers: &crate::svd::BluetoothControllerCore,
 ) {
     crate::svd::field_replace_modify::clear_bluetooth_scheduler_cancellation_control(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_ed_operation` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_ed_operation(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_tx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_tx_abort_baseline(registers);
 }
 
 /// Typed bridge for the reviewed `restore_modem_source_clocks` multi-argument field-replacement transaction.

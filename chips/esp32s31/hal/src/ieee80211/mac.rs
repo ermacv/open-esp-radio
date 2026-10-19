@@ -109,14 +109,21 @@ impl<'registers> WifiMacColdHal<'registers> {
 
     pub fn initialize_coex(
         &mut self,
-        rx_ack: u8,
-        wifi_default: u8,
-        tb: [u8; 7],
-        beamforming: [u8; 3],
-        multi_target: [u8; 2],
+        rx_ack: MacPti,
+        wifi_default: MacPti,
+        tb: [MacPti; 7],
+        beamforming: [MacPti; 3],
+        multi_target_0: u8,
+        multi_target_1: MacPti,
     ) {
-        self.mac()
-            .initialize_mac_coex(rx_ack, wifi_default, tb, beamforming, multi_target);
+        self.mac().initialize_mac_coex(
+            rx_ack,
+            wifi_default,
+            tb,
+            beamforming,
+            multi_target_0,
+            multi_target_1,
+        );
     }
 
     pub fn initialize_crypto_bypass(&mut self) {

@@ -71,18 +71,14 @@ pub fn event_status_events(
 /// Select exactly ED_ABORT, ED_STOP and ED_COEX_REJECT abort reasons.
 #[inline]
 pub fn enable_ed_abort_reasons(registers: &mut crate::svd::Ieee802154Mac) {
-    registers
-        .rx_abort_enable()
-        .modify(|_, writer| writer.events().ed_operation_reasons());
+    crate::generated::replace_ieee802154_rx_abort_ed_operation(registers);
     order_device_accesses();
 }
 
 /// Mask every RX-abort reason during terminal cleanup.
 #[inline]
 pub fn disable_all_rx_abort_reasons(registers: &mut crate::svd::Ieee802154Mac) {
-    registers
-        .rx_abort_enable()
-        .modify(|_, writer| writer.events().none());
+    crate::generated::disable_ieee802154_rx_abort_all(registers);
     order_device_accesses();
 }
 

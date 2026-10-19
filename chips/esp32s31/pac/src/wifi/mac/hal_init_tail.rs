@@ -2,23 +2,30 @@
 
 #![forbid(unsafe_code)]
 
+use crate::generated::MacSlowClockCalibrationValue;
 use crate::{MacInterruptMask, MacInterruptSetup, WifiRadioRegisters};
 
 /// The RTC calibration field after the vendor OS-interface conversion.
 /// It carries only a register value, not evidence that a clock was measured.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacRtcCalibration(u32);
+pub struct MacRtcCalibration(MacSlowClockCalibrationValue);
 
 impl MacRtcCalibration {
-    pub const ZERO: Self = Self(0);
+    pub const ZERO: Self = Self(match MacSlowClockCalibrationValue::new(0) {
+        Some(zero) => zero,
+        None => unreachable!(),
+    });
 
     /// Preserve the exact truncation performed by `hal_timer_update_by_rtc`.
     pub const fn from_osi_value(value: u32) -> Self {
-        Self(value & 0x0003_ffff)
+        match MacSlowClockCalibrationValue::new(value & MacSlowClockCalibrationValue::MAX) {
+            Some(fitted) => Self(fitted),
+            None => unreachable!(),
+        }
     }
 
     pub const fn value(self) -> u32 {
-        self.0
+        self.0.get()
     }
 }
 
@@ -59,7 +66,6 @@ impl WifiRadioRegisters {
         let rtc = &self.peripherals.wifi_mac.wifi_mac_rtc_timer_update;
         rtc.control()
             .modify(|_, w| w.lp_clock_sync_enable().set_bit());
-        rtc.slow_clock_calibration()
-            .modify(|_, w| w.value().set(slow_clock_calibration.value()));
+        crate::generated::set_mac_slow_clock_calibration(rtc, slow_clock_calibration.0);
     }
 }

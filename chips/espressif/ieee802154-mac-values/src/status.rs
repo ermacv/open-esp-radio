@@ -137,17 +137,6 @@ pub enum Ieee802154RxAbortEnableSet {
     All,
 }
 
-impl Ieee802154RxAbortEnableSet {
-    /// Bit `reason - 1` of every reason in the set.
-    #[doc(hidden)]
-    pub const fn mask(self) -> u32 {
-        match self {
-            Self::RuntimeBaseline => (1 << (16 - 1)) | (1 << (18 - 1)),
-            Self::All => 0x7fff_ffff,
-        }
-    }
-}
-
 /// A transmit-abort enable set named by the public LL.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Ieee802154TxAbortEnableSet {
@@ -156,23 +145,6 @@ pub enum Ieee802154TxAbortEnableSet {
     RuntimeBaseline,
     /// `IEEE802154_TX_ABORT_ALL`.
     All,
-}
-
-impl Ieee802154TxAbortEnableSet {
-    /// Bit `reason - 1` of every reason in the set.
-    #[doc(hidden)]
-    pub const fn mask(self) -> u32 {
-        match self {
-            Self::RuntimeBaseline => {
-                (1 << (16 - 1))
-                    | (1 << (18 - 1))
-                    | (1 << (19 - 1))
-                    | (1 << (24 - 1))
-                    | (1 << (25 - 1))
-            }
-            Self::All => 0x7fff_ffff,
-        }
-    }
 }
 
 /// Transmit-security failure (`ieee802154_ll_tx_security_failed_reason_t`).

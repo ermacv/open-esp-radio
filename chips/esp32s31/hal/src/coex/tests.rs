@@ -16,3 +16,20 @@ fn the_vendor_external_levels_become_the_published_priorities() {
     };
     assert_eq!(high_first.priorities()[1], expected[2]);
 }
+
+/// The grant delay is the 4-bit hardware field: 16 µs and above are not
+/// representable and are refused rather than wrapped.
+#[test]
+fn a_grant_delay_above_the_field_is_refused() {
+    let config = ExternalCoexConfig::vendor(ExternalCoexRole::Leader, ExternalCoexWires::Three);
+    let delay = |grant_delay_us| {
+        ExternalCoexConfig {
+            grant_delay_us,
+            ..config
+        }
+        .grant_delay()
+    };
+    assert_eq!(delay(15).map(|delay| delay.get()), Some(15));
+    assert_eq!(delay(16), None);
+    assert_eq!(delay(u8::MAX), None);
+}

@@ -270,7 +270,7 @@ const EXTERNAL_COEX_BASE_PRIORITY: u8 = 0x3;
 pub struct ExternalCoexConfig {
     pub role: ExternalCoexRole,
     pub wires: ExternalCoexWires,
-    /// Grant delay in microseconds; the hardware keeps the low four bits.
+    /// Grant delay in microseconds; the hardware holds 0 to 15.
     pub grant_delay_us: u8,
     /// Whether the external grant is valid high.
     pub validate_high: bool,
@@ -292,6 +292,11 @@ impl ExternalCoexConfig {
         }
     }
 
+    /// The delay the hardware field holds, or `None` above 15 µs.
+    pub(crate) fn grant_delay(self) -> Option<oer_esp32s31_pac::ExternalCoexGrantDelay> {
+        oer_esp32s31_pac::ExternalCoexGrantDelay::new(u32::from(self.grant_delay_us))
+    }
+
     pub(crate) fn priorities(self) -> [oer_esp32s31_pac::ExternalCoexPriority; 3] {
         let priority = |value| {
             oer_esp32s31_pac::ExternalCoexPriority::new(value)
@@ -310,6 +315,8 @@ impl ExternalCoexConfig {
 pub enum ExternalCoexError {
     /// External coexistence already runs.
     AlreadyActive,
+    /// The grant delay exceeds the 15 µs the hardware field holds.
+    GrantDelayOutOfRange,
     /// The coexistence module clock could not change.
     Clock(crate::domain::ModemClockError),
 }

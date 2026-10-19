@@ -449,6 +449,74 @@ pub enum OperationEventEnableReadback {
     Unexpected,
 }
 
+/// Whether no receive-abort reason is enabled.
+fn rx_aborts_all_masked(r: &crate::svd::ieee802154_mac::rx_abort_enable::R) -> bool {
+    !(r.rx_stop().bit()
+        || r.sfd_timeout().bit()
+        || r.crc_error().bit()
+        || r.invalid_length().bit()
+        || r.filter_fail().bit()
+        || r.no_rss().bit()
+        || r.coexistence_break().bit()
+        || r.unexpected_ack().bit()
+        || r.rx_restart().bit()
+        || r.bits_9_14_opaque().bits() != 0
+        || r.tx_ack_timeout().bit()
+        || r.tx_ack_stop().bit()
+        || r.tx_ack_coexistence_break().bit()
+        || r.enhanced_ack_security_error().bit()
+        || r.bits_19_22_opaque().bits() != 0
+        || r.ed_abort().bit()
+        || r.ed_stop().bit()
+        || r.ed_coexistence_reject().bit()
+        || r.bits_26_30_opaque().bits() != 0)
+}
+
+/// Whether exactly the finite ED/CCA receive-abort reasons are enabled.
+fn rx_aborts_ed_operation_only(r: &crate::svd::ieee802154_mac::rx_abort_enable::R) -> bool {
+    r.ed_abort().bit()
+        && r.ed_stop().bit()
+        && r.ed_coexistence_reject().bit()
+        && !(r.rx_stop().bit()
+            || r.sfd_timeout().bit()
+            || r.crc_error().bit()
+            || r.invalid_length().bit()
+            || r.filter_fail().bit()
+            || r.no_rss().bit()
+            || r.coexistence_break().bit()
+            || r.unexpected_ack().bit()
+            || r.rx_restart().bit()
+            || r.bits_9_14_opaque().bits() != 0
+            || r.tx_ack_timeout().bit()
+            || r.tx_ack_stop().bit()
+            || r.tx_ack_coexistence_break().bit()
+            || r.enhanced_ack_security_error().bit()
+            || r.bits_19_22_opaque().bits() != 0
+            || r.bits_26_30_opaque().bits() != 0)
+}
+
+/// Whether no transmit-abort reason is enabled.
+fn tx_aborts_all_masked(r: &crate::svd::ieee802154_mac::tx_abort_enable::R) -> bool {
+    !(r.rx_ack_stop().bit()
+        || r.rx_ack_sfd_timeout().bit()
+        || r.rx_ack_crc_error().bit()
+        || r.rx_ack_invalid_length().bit()
+        || r.rx_ack_filter_fail().bit()
+        || r.rx_ack_no_rss().bit()
+        || r.rx_ack_coexistence_break().bit()
+        || r.rx_ack_type_not_ack().bit()
+        || r.rx_ack_restart().bit()
+        || r.bits_9_14_opaque().bits() != 0
+        || r.rx_ack_timeout().bit()
+        || r.tx_stop().bit()
+        || r.tx_coexistence_break().bit()
+        || r.tx_security_error().bit()
+        || r.bits_19_22_opaque().bits() != 0
+        || r.cca_failed().bit()
+        || r.cca_busy().bit()
+        || r.bits_25_30_opaque().bits() != 0)
+}
+
 /// Closed classification of `RX_ABORT_ENABLE` for one finite ED/CCA operation.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -761,41 +829,31 @@ impl TaskRegisters {
     /// Mask every receive-abort reason through the generated field variant.
     #[doc(hidden)]
     pub fn mask_all_rx_aborts(&mut self) {
-        self.registers
-            .rx_abort_enable()
-            .modify(|_, writer| writer.events().none());
+        crate::generated::disable_ieee802154_rx_abort_all(&self.registers);
     }
 
     /// Enable exactly the receive-abort reasons owned by finite ED/CCA.
     #[doc(hidden)]
     pub fn enable_ed_operation_rx_abort_reasons(&mut self) {
-        self.registers
-            .rx_abort_enable()
-            .modify(|_, writer| writer.events().ed_operation_reasons());
+        crate::generated::replace_ieee802154_rx_abort_ed_operation(&self.registers);
     }
 
     /// Enable the reviewed runtime receive-abort baseline.
     #[doc(hidden)]
     pub fn enable_runtime_rx_aborts(&mut self) {
-        self.registers
-            .rx_abort_enable()
-            .modify(|_, writer| writer.events().runtime_baseline());
+        crate::generated::replace_ieee802154_rx_abort_baseline(&self.registers);
     }
 
     /// Mask every transmit-abort reason through the generated field variant.
     #[doc(hidden)]
     pub fn mask_all_tx_aborts(&mut self) {
-        self.registers
-            .tx_abort_enable()
-            .modify(|_, writer| writer.events().none());
+        crate::generated::disable_ieee802154_tx_abort_all(&self.registers);
     }
 
     /// Enable the reviewed runtime transmit-abort baseline.
     #[doc(hidden)]
     pub fn enable_runtime_tx_aborts(&mut self) {
-        self.registers
-            .tx_abort_enable()
-            .modify(|_, writer| writer.events().runtime_baseline());
+        crate::generated::replace_ieee802154_tx_abort_baseline(&self.registers);
     }
 
     /// Select the source-confirmed average ED sample mode.
@@ -828,10 +886,10 @@ impl TaskRegisters {
     /// Classify `RX_ABORT_ENABLE` without exporting its physical field image.
     #[doc(hidden)]
     pub fn operation_rx_abort_enable_readback(&self) -> OperationRxAbortEnableReadback {
-        let events = self.registers.rx_abort_enable().read().events();
-        if events.is_none() {
+        let events = self.registers.rx_abort_enable().read();
+        if rx_aborts_all_masked(&events) {
             OperationRxAbortEnableReadback::AllMasked
-        } else if events.is_ed_operation_reasons() {
+        } else if rx_aborts_ed_operation_only(&events) {
             OperationRxAbortEnableReadback::EdOperationReasons
         } else {
             OperationRxAbortEnableReadback::Unexpected
@@ -1216,8 +1274,8 @@ impl TaskRegisters {
         let txrx_switch_delay = self.registers.txrx_switch_delay().read();
         FoundationReadback {
             events_masked: Ieee802154EventReadback::from_event_enable(&event_enable).is_clear(),
-            rx_aborts_masked: rx_abort_enable.events().is_none(),
-            tx_aborts_masked: tx_abort_enable.events().is_none(),
+            rx_aborts_masked: rx_aborts_all_masked(&rx_abort_enable),
+            tx_aborts_masked: tx_aborts_all_masked(&tx_abort_enable),
             ed_uses_average: ed_config.ed_sample_mode().is_average(),
             txrx_pti: coex_pti.txrx_pti().bits(),
             ack_pti: coex_pti.ack_pti().bits(),

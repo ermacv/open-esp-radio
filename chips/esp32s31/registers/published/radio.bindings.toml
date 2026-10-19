@@ -10275,10 +10275,136 @@ scope = []
 register-method = "rx_abort_enable"
 
 [[registers.fields]]
-svd-name = "EVENTS"
-method = "events"
+svd-name = "RX_STOP"
+method = "rx_stop"
 bit-offset = 0
-bit-width = 31
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SFD_TIMEOUT"
+method = "sfd_timeout"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CRC_ERROR"
+method = "crc_error"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INVALID_LENGTH"
+method = "invalid_length"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FILTER_FAIL"
+method = "filter_fail"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NO_RSS"
+method = "no_rss"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEXISTENCE_BREAK"
+method = "coexistence_break"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UNEXPECTED_ACK"
+method = "unexpected_ack"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_RESTART"
+method = "rx_restart"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_14_OPAQUE"
+method = "bits_9_14_opaque"
+bit-offset = 9
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_TIMEOUT"
+method = "tx_ack_timeout"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_STOP"
+method = "tx_ack_stop"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_COEXISTENCE_BREAK"
+method = "tx_ack_coexistence_break"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ENHANCED_ACK_SECURITY_ERROR"
+method = "enhanced_ack_security_error"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_19_22_OPAQUE"
+method = "bits_19_22_opaque"
+bit-offset = 19
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_ABORT"
+method = "ed_abort"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_STOP"
+method = "ed_stop"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_COEXISTENCE_REJECT"
+method = "ed_coexistence_reject"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_30_OPAQUE"
+method = "bits_26_30_opaque"
+bit-offset = 26
+bit-width = 5
 access = "read-write"
 
 [[registers]]
@@ -10336,10 +10462,129 @@ scope = []
 register-method = "tx_abort_enable"
 
 [[registers.fields]]
-svd-name = "EVENTS"
-method = "events"
+svd-name = "RX_ACK_STOP"
+method = "rx_ack_stop"
 bit-offset = 0
-bit-width = 31
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_SFD_TIMEOUT"
+method = "rx_ack_sfd_timeout"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_CRC_ERROR"
+method = "rx_ack_crc_error"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_INVALID_LENGTH"
+method = "rx_ack_invalid_length"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_FILTER_FAIL"
+method = "rx_ack_filter_fail"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_NO_RSS"
+method = "rx_ack_no_rss"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_COEXISTENCE_BREAK"
+method = "rx_ack_coexistence_break"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_TYPE_NOT_ACK"
+method = "rx_ack_type_not_ack"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_RESTART"
+method = "rx_ack_restart"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_14_OPAQUE"
+method = "bits_9_14_opaque"
+bit-offset = 9
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_TIMEOUT"
+method = "rx_ack_timeout"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_STOP"
+method = "tx_stop"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_COEXISTENCE_BREAK"
+method = "tx_coexistence_break"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_SECURITY_ERROR"
+method = "tx_security_error"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_19_22_OPAQUE"
+method = "bits_19_22_opaque"
+bit-offset = 19
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CCA_FAILED"
+method = "cca_failed"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CCA_BUSY"
+method = "cca_busy"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_25_30_OPAQUE"
+method = "bits_25_30_opaque"
+bit-offset = 25
+bit-width = 6
 access = "read-write"
 
 [[registers]]
@@ -32555,17 +32800,17 @@ access = "read-write"
 address = 537942016
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD0"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW0"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
+register-method = "entry_peer_low"
 register-index = 0
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -32574,32 +32819,95 @@ access = "read-write"
 address = 537942020
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD1"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL0"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 1
+register-method = "entry_peer_control"
+register-index = 0
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942024
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD2"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_00"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 2
+register-method = "entry_key_word_0"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32612,13 +32920,13 @@ access = "read-write"
 address = 537942028
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD3"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_10"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 3
+register-method = "entry_key_word_1"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32631,13 +32939,13 @@ access = "read-write"
 address = 537942032
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD4"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_20"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 4
+register-method = "entry_key_word_2"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32650,13 +32958,13 @@ access = "read-write"
 address = 537942036
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD5"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_30"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 5
+register-method = "entry_key_word_3"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32669,13 +32977,13 @@ access = "read-write"
 address = 537942040
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD6"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_00"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 6
+register-method = "entry_tail_word_0"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32688,13 +32996,13 @@ access = "read-write"
 address = 537942044
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD7"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_10"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 7
+register-method = "entry_tail_word_1"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32707,13 +33015,13 @@ access = "read-write"
 address = 537942048
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD8"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_20"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 8
+register-method = "entry_tail_word_2"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32726,13 +33034,13 @@ access = "read-write"
 address = 537942052
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD9"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_30"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 9
+register-method = "entry_tail_word_3"
+register-index = 0
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32745,17 +33053,17 @@ access = "read-write"
 address = 537942056
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD10"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW1"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 10
+register-method = "entry_peer_low"
+register-index = 1
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -32764,32 +33072,95 @@ access = "read-write"
 address = 537942060
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD11"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL1"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 11
+register-method = "entry_peer_control"
+register-index = 1
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942064
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD12"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_01"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 12
+register-method = "entry_key_word_0"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32802,13 +33173,13 @@ access = "read-write"
 address = 537942068
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD13"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_11"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 13
+register-method = "entry_key_word_1"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32821,13 +33192,13 @@ access = "read-write"
 address = 537942072
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD14"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_21"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 14
+register-method = "entry_key_word_2"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32840,13 +33211,13 @@ access = "read-write"
 address = 537942076
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD15"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_31"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 15
+register-method = "entry_key_word_3"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32859,13 +33230,13 @@ access = "read-write"
 address = 537942080
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD16"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_01"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 16
+register-method = "entry_tail_word_0"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32878,13 +33249,13 @@ access = "read-write"
 address = 537942084
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD17"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_11"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 17
+register-method = "entry_tail_word_1"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32897,13 +33268,13 @@ access = "read-write"
 address = 537942088
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD18"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_21"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 18
+register-method = "entry_tail_word_2"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32916,13 +33287,13 @@ access = "read-write"
 address = 537942092
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD19"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_31"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 19
+register-method = "entry_tail_word_3"
+register-index = 1
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32935,17 +33306,17 @@ access = "read-write"
 address = 537942096
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD20"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW2"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 20
+register-method = "entry_peer_low"
+register-index = 2
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -32954,32 +33325,95 @@ access = "read-write"
 address = 537942100
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD21"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL2"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 21
+register-method = "entry_peer_control"
+register-index = 2
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942104
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD22"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_02"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 22
+register-method = "entry_key_word_0"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -32992,13 +33426,13 @@ access = "read-write"
 address = 537942108
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD23"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_12"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 23
+register-method = "entry_key_word_1"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33011,13 +33445,13 @@ access = "read-write"
 address = 537942112
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD24"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_22"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 24
+register-method = "entry_key_word_2"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33030,13 +33464,13 @@ access = "read-write"
 address = 537942116
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD25"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_32"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 25
+register-method = "entry_key_word_3"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33049,13 +33483,13 @@ access = "read-write"
 address = 537942120
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD26"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_02"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 26
+register-method = "entry_tail_word_0"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33068,13 +33502,13 @@ access = "read-write"
 address = 537942124
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD27"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_12"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 27
+register-method = "entry_tail_word_1"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33087,13 +33521,13 @@ access = "read-write"
 address = 537942128
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD28"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_22"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 28
+register-method = "entry_tail_word_2"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33106,13 +33540,13 @@ access = "read-write"
 address = 537942132
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD29"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_32"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 29
+register-method = "entry_tail_word_3"
+register-index = 2
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33125,17 +33559,17 @@ access = "read-write"
 address = 537942136
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD30"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW3"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 30
+register-method = "entry_peer_low"
+register-index = 3
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -33144,32 +33578,95 @@ access = "read-write"
 address = 537942140
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD31"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL3"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 31
+register-method = "entry_peer_control"
+register-index = 3
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942144
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD32"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_03"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 32
+register-method = "entry_key_word_0"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33182,13 +33679,13 @@ access = "read-write"
 address = 537942148
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD33"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_13"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 33
+register-method = "entry_key_word_1"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33201,13 +33698,13 @@ access = "read-write"
 address = 537942152
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD34"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_23"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 34
+register-method = "entry_key_word_2"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33220,13 +33717,13 @@ access = "read-write"
 address = 537942156
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD35"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_33"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 35
+register-method = "entry_key_word_3"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33239,13 +33736,13 @@ access = "read-write"
 address = 537942160
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD36"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_03"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 36
+register-method = "entry_tail_word_0"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33258,13 +33755,13 @@ access = "read-write"
 address = 537942164
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD37"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_13"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 37
+register-method = "entry_tail_word_1"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33277,13 +33774,13 @@ access = "read-write"
 address = 537942168
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD38"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_23"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 38
+register-method = "entry_tail_word_2"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33296,13 +33793,13 @@ access = "read-write"
 address = 537942172
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD39"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_33"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 39
+register-method = "entry_tail_word_3"
+register-index = 3
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33315,17 +33812,17 @@ access = "read-write"
 address = 537942176
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD40"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW4"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 40
+register-method = "entry_peer_low"
+register-index = 4
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -33334,32 +33831,95 @@ access = "read-write"
 address = 537942180
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD41"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL4"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 41
+register-method = "entry_peer_control"
+register-index = 4
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942184
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD42"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_04"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 42
+register-method = "entry_key_word_0"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33372,13 +33932,13 @@ access = "read-write"
 address = 537942188
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD43"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_14"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 43
+register-method = "entry_key_word_1"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33391,13 +33951,13 @@ access = "read-write"
 address = 537942192
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD44"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_24"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 44
+register-method = "entry_key_word_2"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33410,13 +33970,13 @@ access = "read-write"
 address = 537942196
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD45"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_34"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 45
+register-method = "entry_key_word_3"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33429,13 +33989,13 @@ access = "read-write"
 address = 537942200
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD46"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_04"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 46
+register-method = "entry_tail_word_0"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33448,13 +34008,13 @@ access = "read-write"
 address = 537942204
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD47"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_14"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 47
+register-method = "entry_tail_word_1"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33467,13 +34027,13 @@ access = "read-write"
 address = 537942208
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD48"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_24"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 48
+register-method = "entry_tail_word_2"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33486,13 +34046,13 @@ access = "read-write"
 address = 537942212
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD49"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_34"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 49
+register-method = "entry_tail_word_3"
+register-index = 4
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33505,17 +34065,17 @@ access = "read-write"
 address = 537942216
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD50"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW5"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 50
+register-method = "entry_peer_low"
+register-index = 5
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -33524,32 +34084,95 @@ access = "read-write"
 address = 537942220
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD51"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL5"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 51
+register-method = "entry_peer_control"
+register-index = 5
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942224
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD52"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_05"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 52
+register-method = "entry_key_word_0"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33562,13 +34185,13 @@ access = "read-write"
 address = 537942228
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD53"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_15"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 53
+register-method = "entry_key_word_1"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33581,13 +34204,13 @@ access = "read-write"
 address = 537942232
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD54"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_25"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 54
+register-method = "entry_key_word_2"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33600,13 +34223,13 @@ access = "read-write"
 address = 537942236
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD55"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_35"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 55
+register-method = "entry_key_word_3"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33619,13 +34242,13 @@ access = "read-write"
 address = 537942240
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD56"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_05"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 56
+register-method = "entry_tail_word_0"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33638,13 +34261,13 @@ access = "read-write"
 address = 537942244
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD57"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_15"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 57
+register-method = "entry_tail_word_1"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33657,13 +34280,13 @@ access = "read-write"
 address = 537942248
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD58"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_25"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 58
+register-method = "entry_tail_word_2"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33676,13 +34299,13 @@ access = "read-write"
 address = 537942252
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD59"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_35"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 59
+register-method = "entry_tail_word_3"
+register-index = 5
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33695,17 +34318,17 @@ access = "read-write"
 address = 537942256
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD60"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW6"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 60
+register-method = "entry_peer_low"
+register-index = 6
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -33714,32 +34337,95 @@ access = "read-write"
 address = 537942260
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD61"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL6"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 61
+register-method = "entry_peer_control"
+register-index = 6
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942264
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD62"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_06"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 62
+register-method = "entry_key_word_0"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33752,13 +34438,13 @@ access = "read-write"
 address = 537942268
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD63"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_16"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 63
+register-method = "entry_key_word_1"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33771,13 +34457,13 @@ access = "read-write"
 address = 537942272
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD64"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_26"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 64
+register-method = "entry_key_word_2"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33790,13 +34476,13 @@ access = "read-write"
 address = 537942276
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD65"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_36"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 65
+register-method = "entry_key_word_3"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33809,13 +34495,13 @@ access = "read-write"
 address = 537942280
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD66"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_06"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 66
+register-method = "entry_tail_word_0"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33828,13 +34514,13 @@ access = "read-write"
 address = 537942284
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD67"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_16"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 67
+register-method = "entry_tail_word_1"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33847,13 +34533,13 @@ access = "read-write"
 address = 537942288
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD68"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_26"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 68
+register-method = "entry_tail_word_2"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33866,13 +34552,13 @@ access = "read-write"
 address = 537942292
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD69"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_36"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 69
+register-method = "entry_tail_word_3"
+register-index = 6
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33885,17 +34571,17 @@ access = "read-write"
 address = 537942296
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD70"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW7"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 70
+register-method = "entry_peer_low"
+register-index = 7
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -33904,32 +34590,95 @@ access = "read-write"
 address = 537942300
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD71"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL7"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 71
+register-method = "entry_peer_control"
+register-index = 7
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942304
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD72"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_07"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 72
+register-method = "entry_key_word_0"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33942,13 +34691,13 @@ access = "read-write"
 address = 537942308
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD73"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_17"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 73
+register-method = "entry_key_word_1"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33961,13 +34710,13 @@ access = "read-write"
 address = 537942312
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD74"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_27"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 74
+register-method = "entry_key_word_2"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33980,13 +34729,13 @@ access = "read-write"
 address = 537942316
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD75"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_37"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 75
+register-method = "entry_key_word_3"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -33999,13 +34748,13 @@ access = "read-write"
 address = 537942320
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD76"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_07"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 76
+register-method = "entry_tail_word_0"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34018,13 +34767,13 @@ access = "read-write"
 address = 537942324
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD77"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_17"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 77
+register-method = "entry_tail_word_1"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34037,13 +34786,13 @@ access = "read-write"
 address = 537942328
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD78"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_27"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 78
+register-method = "entry_tail_word_2"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34056,13 +34805,13 @@ access = "read-write"
 address = 537942332
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD79"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_37"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 79
+register-method = "entry_tail_word_3"
+register-index = 7
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34075,17 +34824,17 @@ access = "read-write"
 address = 537942336
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD80"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW8"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 80
+register-method = "entry_peer_low"
+register-index = 8
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -34094,32 +34843,95 @@ access = "read-write"
 address = 537942340
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD81"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL8"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 81
+register-method = "entry_peer_control"
+register-index = 8
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942344
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD82"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_08"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 82
+register-method = "entry_key_word_0"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34132,13 +34944,13 @@ access = "read-write"
 address = 537942348
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD83"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_18"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 83
+register-method = "entry_key_word_1"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34151,13 +34963,13 @@ access = "read-write"
 address = 537942352
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD84"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_28"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 84
+register-method = "entry_key_word_2"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34170,13 +34982,13 @@ access = "read-write"
 address = 537942356
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD85"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_38"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 85
+register-method = "entry_key_word_3"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34189,13 +35001,13 @@ access = "read-write"
 address = 537942360
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD86"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_08"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 86
+register-method = "entry_tail_word_0"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34208,13 +35020,13 @@ access = "read-write"
 address = 537942364
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD87"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_18"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 87
+register-method = "entry_tail_word_1"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34227,13 +35039,13 @@ access = "read-write"
 address = 537942368
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD88"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_28"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 88
+register-method = "entry_tail_word_2"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34246,13 +35058,13 @@ access = "read-write"
 address = 537942372
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD89"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_38"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 89
+register-method = "entry_tail_word_3"
+register-index = 8
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34265,17 +35077,17 @@ access = "read-write"
 address = 537942376
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD90"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW9"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 90
+register-method = "entry_peer_low"
+register-index = 9
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -34284,32 +35096,95 @@ access = "read-write"
 address = 537942380
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD91"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL9"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 91
+register-method = "entry_peer_control"
+register-index = 9
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942384
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD92"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_09"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 92
+register-method = "entry_key_word_0"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34322,13 +35197,13 @@ access = "read-write"
 address = 537942388
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD93"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_19"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 93
+register-method = "entry_key_word_1"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34341,13 +35216,13 @@ access = "read-write"
 address = 537942392
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD94"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_29"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 94
+register-method = "entry_key_word_2"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34360,13 +35235,13 @@ access = "read-write"
 address = 537942396
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD95"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_39"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 95
+register-method = "entry_key_word_3"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34379,13 +35254,13 @@ access = "read-write"
 address = 537942400
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD96"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_09"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 96
+register-method = "entry_tail_word_0"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34398,13 +35273,13 @@ access = "read-write"
 address = 537942404
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD97"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_19"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 97
+register-method = "entry_tail_word_1"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34417,13 +35292,13 @@ access = "read-write"
 address = 537942408
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD98"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_29"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 98
+register-method = "entry_tail_word_2"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34436,13 +35311,13 @@ access = "read-write"
 address = 537942412
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD99"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_39"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 99
+register-method = "entry_tail_word_3"
+register-index = 9
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34455,17 +35330,17 @@ access = "read-write"
 address = 537942416
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD100"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW10"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 100
+register-method = "entry_peer_low"
+register-index = 10
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -34474,32 +35349,95 @@ access = "read-write"
 address = 537942420
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD101"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL10"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 101
+register-method = "entry_peer_control"
+register-index = 10
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942424
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD102"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_010"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 102
+register-method = "entry_key_word_0"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34512,13 +35450,13 @@ access = "read-write"
 address = 537942428
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD103"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_110"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 103
+register-method = "entry_key_word_1"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34531,13 +35469,13 @@ access = "read-write"
 address = 537942432
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD104"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_210"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 104
+register-method = "entry_key_word_2"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34550,13 +35488,13 @@ access = "read-write"
 address = 537942436
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD105"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_310"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 105
+register-method = "entry_key_word_3"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34569,13 +35507,13 @@ access = "read-write"
 address = 537942440
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD106"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_010"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 106
+register-method = "entry_tail_word_0"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34588,13 +35526,13 @@ access = "read-write"
 address = 537942444
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD107"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_110"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 107
+register-method = "entry_tail_word_1"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34607,13 +35545,13 @@ access = "read-write"
 address = 537942448
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD108"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_210"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 108
+register-method = "entry_tail_word_2"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34626,13 +35564,13 @@ access = "read-write"
 address = 537942452
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD109"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_310"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 109
+register-method = "entry_tail_word_3"
+register-index = 10
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34645,17 +35583,17 @@ access = "read-write"
 address = 537942456
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD110"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW11"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 110
+register-method = "entry_peer_low"
+register-index = 11
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -34664,32 +35602,95 @@ access = "read-write"
 address = 537942460
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD111"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL11"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 111
+register-method = "entry_peer_control"
+register-index = 11
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942464
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD112"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_011"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 112
+register-method = "entry_key_word_0"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34702,13 +35703,13 @@ access = "read-write"
 address = 537942468
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD113"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_111"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 113
+register-method = "entry_key_word_1"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34721,13 +35722,13 @@ access = "read-write"
 address = 537942472
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD114"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_211"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 114
+register-method = "entry_key_word_2"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34740,13 +35741,13 @@ access = "read-write"
 address = 537942476
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD115"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_311"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 115
+register-method = "entry_key_word_3"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34759,13 +35760,13 @@ access = "read-write"
 address = 537942480
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD116"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_011"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 116
+register-method = "entry_tail_word_0"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34778,13 +35779,13 @@ access = "read-write"
 address = 537942484
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD117"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_111"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 117
+register-method = "entry_tail_word_1"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34797,13 +35798,13 @@ access = "read-write"
 address = 537942488
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD118"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_211"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 118
+register-method = "entry_tail_word_2"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34816,13 +35817,13 @@ access = "read-write"
 address = 537942492
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD119"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_311"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 119
+register-method = "entry_tail_word_3"
+register-index = 11
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34835,17 +35836,17 @@ access = "read-write"
 address = 537942496
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD120"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW12"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 120
+register-method = "entry_peer_low"
+register-index = 12
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -34854,32 +35855,95 @@ access = "read-write"
 address = 537942500
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD121"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL12"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 121
+register-method = "entry_peer_control"
+register-index = 12
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942504
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD122"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_012"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 122
+register-method = "entry_key_word_0"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34892,13 +35956,13 @@ access = "read-write"
 address = 537942508
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD123"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_112"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 123
+register-method = "entry_key_word_1"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34911,13 +35975,13 @@ access = "read-write"
 address = 537942512
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD124"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_212"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 124
+register-method = "entry_key_word_2"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34930,13 +35994,13 @@ access = "read-write"
 address = 537942516
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD125"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_312"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 125
+register-method = "entry_key_word_3"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34949,13 +36013,13 @@ access = "read-write"
 address = 537942520
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD126"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_012"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 126
+register-method = "entry_tail_word_0"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34968,13 +36032,13 @@ access = "read-write"
 address = 537942524
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD127"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_112"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 127
+register-method = "entry_tail_word_1"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -34987,13 +36051,13 @@ access = "read-write"
 address = 537942528
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD128"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_212"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 128
+register-method = "entry_tail_word_2"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35006,13 +36070,13 @@ access = "read-write"
 address = 537942532
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD129"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_312"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 129
+register-method = "entry_tail_word_3"
+register-index = 12
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35025,17 +36089,17 @@ access = "read-write"
 address = 537942536
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD130"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW13"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 130
+register-method = "entry_peer_low"
+register-index = 13
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35044,32 +36108,95 @@ access = "read-write"
 address = 537942540
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD131"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL13"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 131
+register-method = "entry_peer_control"
+register-index = 13
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942544
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD132"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_013"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 132
+register-method = "entry_key_word_0"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35082,13 +36209,13 @@ access = "read-write"
 address = 537942548
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD133"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_113"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 133
+register-method = "entry_key_word_1"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35101,13 +36228,13 @@ access = "read-write"
 address = 537942552
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD134"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_213"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 134
+register-method = "entry_key_word_2"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35120,13 +36247,13 @@ access = "read-write"
 address = 537942556
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD135"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_313"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 135
+register-method = "entry_key_word_3"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35139,13 +36266,13 @@ access = "read-write"
 address = 537942560
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD136"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_013"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 136
+register-method = "entry_tail_word_0"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35158,13 +36285,13 @@ access = "read-write"
 address = 537942564
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD137"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_113"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 137
+register-method = "entry_tail_word_1"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35177,13 +36304,13 @@ access = "read-write"
 address = 537942568
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD138"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_213"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 138
+register-method = "entry_tail_word_2"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35196,13 +36323,13 @@ access = "read-write"
 address = 537942572
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD139"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_313"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 139
+register-method = "entry_tail_word_3"
+register-index = 13
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35215,17 +36342,17 @@ access = "read-write"
 address = 537942576
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD140"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW14"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 140
+register-method = "entry_peer_low"
+register-index = 14
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35234,32 +36361,95 @@ access = "read-write"
 address = 537942580
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD141"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL14"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 141
+register-method = "entry_peer_control"
+register-index = 14
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942584
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD142"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_014"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 142
+register-method = "entry_key_word_0"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35272,13 +36462,13 @@ access = "read-write"
 address = 537942588
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD143"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_114"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 143
+register-method = "entry_key_word_1"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35291,13 +36481,13 @@ access = "read-write"
 address = 537942592
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD144"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_214"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 144
+register-method = "entry_key_word_2"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35310,13 +36500,13 @@ access = "read-write"
 address = 537942596
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD145"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_314"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 145
+register-method = "entry_key_word_3"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35329,13 +36519,13 @@ access = "read-write"
 address = 537942600
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD146"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_014"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 146
+register-method = "entry_tail_word_0"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35348,13 +36538,13 @@ access = "read-write"
 address = 537942604
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD147"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_114"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 147
+register-method = "entry_tail_word_1"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35367,13 +36557,13 @@ access = "read-write"
 address = 537942608
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD148"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_214"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 148
+register-method = "entry_tail_word_2"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35386,13 +36576,13 @@ access = "read-write"
 address = 537942612
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD149"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_314"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 149
+register-method = "entry_tail_word_3"
+register-index = 14
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35405,17 +36595,17 @@ access = "read-write"
 address = 537942616
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD150"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW15"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 150
+register-method = "entry_peer_low"
+register-index = 15
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35424,32 +36614,95 @@ access = "read-write"
 address = 537942620
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD151"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL15"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 151
+register-method = "entry_peer_control"
+register-index = 15
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942624
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD152"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_015"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 152
+register-method = "entry_key_word_0"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35462,13 +36715,13 @@ access = "read-write"
 address = 537942628
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD153"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_115"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 153
+register-method = "entry_key_word_1"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35481,13 +36734,13 @@ access = "read-write"
 address = 537942632
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD154"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_215"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 154
+register-method = "entry_key_word_2"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35500,13 +36753,13 @@ access = "read-write"
 address = 537942636
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD155"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_315"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 155
+register-method = "entry_key_word_3"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35519,13 +36772,13 @@ access = "read-write"
 address = 537942640
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD156"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_015"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 156
+register-method = "entry_tail_word_0"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35538,13 +36791,13 @@ access = "read-write"
 address = 537942644
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD157"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_115"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 157
+register-method = "entry_tail_word_1"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35557,13 +36810,13 @@ access = "read-write"
 address = 537942648
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD158"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_215"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 158
+register-method = "entry_tail_word_2"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35576,13 +36829,13 @@ access = "read-write"
 address = 537942652
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD159"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_315"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 159
+register-method = "entry_tail_word_3"
+register-index = 15
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35595,17 +36848,17 @@ access = "read-write"
 address = 537942656
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD160"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW16"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 160
+register-method = "entry_peer_low"
+register-index = 16
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35614,32 +36867,95 @@ access = "read-write"
 address = 537942660
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD161"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL16"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 161
+register-method = "entry_peer_control"
+register-index = 16
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942664
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD162"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_016"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 162
+register-method = "entry_key_word_0"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35652,13 +36968,13 @@ access = "read-write"
 address = 537942668
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD163"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_116"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 163
+register-method = "entry_key_word_1"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35671,13 +36987,13 @@ access = "read-write"
 address = 537942672
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD164"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_216"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 164
+register-method = "entry_key_word_2"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35690,13 +37006,13 @@ access = "read-write"
 address = 537942676
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD165"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_316"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 165
+register-method = "entry_key_word_3"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35709,13 +37025,13 @@ access = "read-write"
 address = 537942680
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD166"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_016"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 166
+register-method = "entry_tail_word_0"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35728,13 +37044,13 @@ access = "read-write"
 address = 537942684
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD167"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_116"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 167
+register-method = "entry_tail_word_1"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35747,13 +37063,13 @@ access = "read-write"
 address = 537942688
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD168"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_216"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 168
+register-method = "entry_tail_word_2"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35766,13 +37082,13 @@ access = "read-write"
 address = 537942692
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD169"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_316"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 169
+register-method = "entry_tail_word_3"
+register-index = 16
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35785,17 +37101,17 @@ access = "read-write"
 address = 537942696
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD170"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW17"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 170
+register-method = "entry_peer_low"
+register-index = 17
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35804,32 +37120,95 @@ access = "read-write"
 address = 537942700
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD171"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL17"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 171
+register-method = "entry_peer_control"
+register-index = 17
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942704
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD172"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_017"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 172
+register-method = "entry_key_word_0"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35842,13 +37221,13 @@ access = "read-write"
 address = 537942708
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD173"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_117"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 173
+register-method = "entry_key_word_1"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35861,13 +37240,13 @@ access = "read-write"
 address = 537942712
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD174"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_217"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 174
+register-method = "entry_key_word_2"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35880,13 +37259,13 @@ access = "read-write"
 address = 537942716
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD175"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_317"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 175
+register-method = "entry_key_word_3"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35899,13 +37278,13 @@ access = "read-write"
 address = 537942720
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD176"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_017"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 176
+register-method = "entry_tail_word_0"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35918,13 +37297,13 @@ access = "read-write"
 address = 537942724
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD177"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_117"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 177
+register-method = "entry_tail_word_1"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35937,13 +37316,13 @@ access = "read-write"
 address = 537942728
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD178"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_217"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 178
+register-method = "entry_tail_word_2"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35956,13 +37335,13 @@ access = "read-write"
 address = 537942732
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD179"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_317"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 179
+register-method = "entry_tail_word_3"
+register-index = 17
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -35975,17 +37354,17 @@ access = "read-write"
 address = 537942736
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD180"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW18"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 180
+register-method = "entry_peer_low"
+register-index = 18
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -35994,32 +37373,95 @@ access = "read-write"
 address = 537942740
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD181"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL18"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 181
+register-method = "entry_peer_control"
+register-index = 18
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942744
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD182"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_018"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 182
+register-method = "entry_key_word_0"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36032,13 +37474,13 @@ access = "read-write"
 address = 537942748
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD183"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_118"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 183
+register-method = "entry_key_word_1"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36051,13 +37493,13 @@ access = "read-write"
 address = 537942752
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD184"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_218"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 184
+register-method = "entry_key_word_2"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36070,13 +37512,13 @@ access = "read-write"
 address = 537942756
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD185"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_318"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 185
+register-method = "entry_key_word_3"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36089,13 +37531,13 @@ access = "read-write"
 address = 537942760
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD186"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_018"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 186
+register-method = "entry_tail_word_0"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36108,13 +37550,13 @@ access = "read-write"
 address = 537942764
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD187"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_118"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 187
+register-method = "entry_tail_word_1"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36127,13 +37569,13 @@ access = "read-write"
 address = 537942768
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD188"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_218"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 188
+register-method = "entry_tail_word_2"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36146,13 +37588,13 @@ access = "read-write"
 address = 537942772
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD189"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_318"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 189
+register-method = "entry_tail_word_3"
+register-index = 18
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36165,17 +37607,17 @@ access = "read-write"
 address = 537942776
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD190"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW19"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 190
+register-method = "entry_peer_low"
+register-index = 19
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -36184,32 +37626,95 @@ access = "read-write"
 address = 537942780
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD191"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL19"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 191
+register-method = "entry_peer_control"
+register-index = 19
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942784
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD192"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_019"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 192
+register-method = "entry_key_word_0"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36222,13 +37727,13 @@ access = "read-write"
 address = 537942788
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD193"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_119"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 193
+register-method = "entry_key_word_1"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36241,13 +37746,13 @@ access = "read-write"
 address = 537942792
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD194"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_219"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 194
+register-method = "entry_key_word_2"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36260,13 +37765,13 @@ access = "read-write"
 address = 537942796
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD195"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_319"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 195
+register-method = "entry_key_word_3"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36279,13 +37784,13 @@ access = "read-write"
 address = 537942800
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD196"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_019"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 196
+register-method = "entry_tail_word_0"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36298,13 +37803,13 @@ access = "read-write"
 address = 537942804
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD197"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_119"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 197
+register-method = "entry_tail_word_1"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36317,13 +37822,13 @@ access = "read-write"
 address = 537942808
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD198"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_219"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 198
+register-method = "entry_tail_word_2"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36336,13 +37841,13 @@ access = "read-write"
 address = 537942812
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD199"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_319"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 199
+register-method = "entry_tail_word_3"
+register-index = 19
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36355,17 +37860,17 @@ access = "read-write"
 address = 537942816
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD200"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW20"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 200
+register-method = "entry_peer_low"
+register-index = 20
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -36374,32 +37879,95 @@ access = "read-write"
 address = 537942820
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD201"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL20"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 201
+register-method = "entry_peer_control"
+register-index = 20
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942824
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD202"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_020"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 202
+register-method = "entry_key_word_0"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36412,13 +37980,13 @@ access = "read-write"
 address = 537942828
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD203"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_120"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 203
+register-method = "entry_key_word_1"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36431,13 +37999,13 @@ access = "read-write"
 address = 537942832
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD204"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_220"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 204
+register-method = "entry_key_word_2"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36450,13 +38018,13 @@ access = "read-write"
 address = 537942836
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD205"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_320"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 205
+register-method = "entry_key_word_3"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36469,13 +38037,13 @@ access = "read-write"
 address = 537942840
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD206"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_020"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 206
+register-method = "entry_tail_word_0"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36488,13 +38056,13 @@ access = "read-write"
 address = 537942844
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD207"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_120"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 207
+register-method = "entry_tail_word_1"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36507,13 +38075,13 @@ access = "read-write"
 address = 537942848
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD208"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_220"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 208
+register-method = "entry_tail_word_2"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36526,13 +38094,13 @@ access = "read-write"
 address = 537942852
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD209"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_320"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 209
+register-method = "entry_tail_word_3"
+register-index = 20
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36545,17 +38113,17 @@ access = "read-write"
 address = 537942856
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD210"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW21"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 210
+register-method = "entry_peer_low"
+register-index = 21
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -36564,32 +38132,95 @@ access = "read-write"
 address = 537942860
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD211"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL21"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 211
+register-method = "entry_peer_control"
+register-index = 21
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942864
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD212"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_021"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 212
+register-method = "entry_key_word_0"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36602,13 +38233,13 @@ access = "read-write"
 address = 537942868
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD213"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_121"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 213
+register-method = "entry_key_word_1"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36621,13 +38252,13 @@ access = "read-write"
 address = 537942872
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD214"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_221"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 214
+register-method = "entry_key_word_2"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36640,13 +38271,13 @@ access = "read-write"
 address = 537942876
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD215"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_321"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 215
+register-method = "entry_key_word_3"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36659,13 +38290,13 @@ access = "read-write"
 address = 537942880
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD216"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_021"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 216
+register-method = "entry_tail_word_0"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36678,13 +38309,13 @@ access = "read-write"
 address = 537942884
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD217"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_121"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 217
+register-method = "entry_tail_word_1"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36697,13 +38328,13 @@ access = "read-write"
 address = 537942888
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD218"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_221"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 218
+register-method = "entry_tail_word_2"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36716,13 +38347,13 @@ access = "read-write"
 address = 537942892
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD219"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_321"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 219
+register-method = "entry_tail_word_3"
+register-index = 21
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36735,17 +38366,17 @@ access = "read-write"
 address = 537942896
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD220"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW22"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 220
+register-method = "entry_peer_low"
+register-index = 22
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -36754,32 +38385,95 @@ access = "read-write"
 address = 537942900
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD221"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL22"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 221
+register-method = "entry_peer_control"
+register-index = 22
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942904
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD222"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_022"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 222
+register-method = "entry_key_word_0"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36792,13 +38486,13 @@ access = "read-write"
 address = 537942908
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD223"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_122"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 223
+register-method = "entry_key_word_1"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36811,13 +38505,13 @@ access = "read-write"
 address = 537942912
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD224"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_222"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 224
+register-method = "entry_key_word_2"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36830,13 +38524,13 @@ access = "read-write"
 address = 537942916
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD225"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_322"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 225
+register-method = "entry_key_word_3"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36849,13 +38543,13 @@ access = "read-write"
 address = 537942920
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD226"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_022"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 226
+register-method = "entry_tail_word_0"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36868,13 +38562,13 @@ access = "read-write"
 address = 537942924
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD227"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_122"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 227
+register-method = "entry_tail_word_1"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36887,13 +38581,13 @@ access = "read-write"
 address = 537942928
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD228"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_222"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 228
+register-method = "entry_tail_word_2"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36906,13 +38600,13 @@ access = "read-write"
 address = 537942932
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD229"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_322"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 229
+register-method = "entry_tail_word_3"
+register-index = 22
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36925,17 +38619,17 @@ access = "read-write"
 address = 537942936
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD230"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW23"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 230
+register-method = "entry_peer_low"
+register-index = 23
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -36944,32 +38638,95 @@ access = "read-write"
 address = 537942940
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD231"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL23"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 231
+register-method = "entry_peer_control"
+register-index = 23
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942944
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD232"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_023"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 232
+register-method = "entry_key_word_0"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -36982,13 +38739,13 @@ access = "read-write"
 address = 537942948
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD233"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_123"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 233
+register-method = "entry_key_word_1"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37001,13 +38758,13 @@ access = "read-write"
 address = 537942952
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD234"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_223"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 234
+register-method = "entry_key_word_2"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37020,13 +38777,13 @@ access = "read-write"
 address = 537942956
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD235"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_323"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 235
+register-method = "entry_key_word_3"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37039,13 +38796,13 @@ access = "read-write"
 address = 537942960
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD236"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_023"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 236
+register-method = "entry_tail_word_0"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37058,13 +38815,13 @@ access = "read-write"
 address = 537942964
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD237"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_123"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 237
+register-method = "entry_tail_word_1"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37077,13 +38834,13 @@ access = "read-write"
 address = 537942968
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD238"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_223"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 238
+register-method = "entry_tail_word_2"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37096,13 +38853,13 @@ access = "read-write"
 address = 537942972
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD239"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_323"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 239
+register-method = "entry_tail_word_3"
+register-index = 23
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37115,17 +38872,17 @@ access = "read-write"
 address = 537942976
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD240"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_LOW24"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 240
+register-method = "entry_peer_low"
+register-index = 24
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_LOW"
+method = "peer_low"
 bit-offset = 0
 bit-width = 32
 access = "read-write"
@@ -37134,32 +38891,95 @@ access = "read-write"
 address = 537942980
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD241"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_PEER_CONTROL24"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 241
+register-method = "entry_peer_control"
+register-index = 24
 
 [[registers.fields]]
-svd-name = "VALUE"
-method = "value"
+svd-name = "PEER_HIGH"
+method = "peer_high"
 bit-offset = 0
-bit-width = 32
+bit-width = 16
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_16_17_OPAQUE"
+method = "bits_16_17_opaque"
+bit-offset = 16
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ALGORITHM"
+method = "algorithm"
+bit-offset = 18
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_20_OPAQUE"
+method = "bit_20_opaque"
+bit-offset = 20
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "DIRECTION"
+method = "direction"
+bit-offset = 21
+bit-width = 3
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INTERFACE"
+method = "interface"
+bit-offset = 24
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BIT_26_OPAQUE"
+method = "bit_26_opaque"
+bit-offset = 26
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_INDEX_NOT_THREE"
+method = "logical_index_not_three"
+bit-offset = 27
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_28_29_OPAQUE"
+method = "bits_28_29_opaque"
+bit-offset = 28
+bit-width = 2
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "LOGICAL_KEY_INDEX"
+method = "logical_key_index"
+bit-offset = 30
+bit-width = 2
 access = "read-write"
 
 [[registers]]
 address = 537942984
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD242"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_024"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 242
+register-method = "entry_key_word_0"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37172,13 +38992,13 @@ access = "read-write"
 address = 537942988
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD243"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_124"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 243
+register-method = "entry_key_word_1"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37191,13 +39011,13 @@ access = "read-write"
 address = 537942992
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD244"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_224"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 244
+register-method = "entry_key_word_2"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37210,13 +39030,13 @@ access = "read-write"
 address = 537942996
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD245"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_KEY_WORD_324"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 245
+register-method = "entry_key_word_3"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37229,13 +39049,13 @@ access = "read-write"
 address = 537943000
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD246"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_024"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 246
+register-method = "entry_tail_word_0"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37248,13 +39068,13 @@ access = "read-write"
 address = 537943004
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD247"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_124"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 247
+register-method = "entry_tail_word_1"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37267,13 +39087,13 @@ access = "read-write"
 address = 537943008
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD248"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_224"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 248
+register-method = "entry_tail_word_2"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -37286,13 +39106,13 @@ access = "read-write"
 address = 537943012
 width = 32
 access = "read-write"
-identity = "WIFI_MAC_KEY_TABLE.ENTRY_WORD249"
+identity = "WIFI_MAC_KEY_TABLE.ENTRY_TAIL_WORD_324"
 peripheral = "WIFI_MAC_KEY_TABLE"
 peripheral-type = "WifiMacKeyTable"
 peripheral-module = "wifi_mac_key_table"
 scope = []
-register-method = "entry_word"
-register-index = 249
+register-method = "entry_tail_word_3"
+register-index = 24
 
 [[registers.fields]]
 svd-name = "VALUE"
@@ -43690,8 +45510,8 @@ access = "read-write"
 [[registers.fields]]
 svd-name = "GRANT_DELAY"
 method = "grant_delay"
-bit-offset = 1
-bit-width = 8
+bit-offset = 5
+bit-width = 4
 access = "read-write"
 
 [[registers.fields]]

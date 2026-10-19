@@ -265,54 +265,52 @@ impl TaskRegisters {
             });
     }
 
-    /// `ieee802154_ll_enable_rx_abort_events` (`|=`) and
-    /// `ieee802154_ll_disable_rx_abort_events` (`&= ~`) of one reviewed mask.
+    /// The LL's `|=` of the rx-abort baseline set.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the thirty-one-bit mask is one of the reviewed public LL masks"
-    )]
-    pub fn update_rx_abort_enable(&mut self, mask: u32, enable: bool) {
-        assert!(
-            mask <= 0x7fff_ffff,
-            "receive-abort mask exceeds thirty-one bits"
-        );
-        self.registers.rx_abort_enable().modify(|read, writer| {
-            let current = read.events().bits();
-            let next = if enable {
-                current | mask
-            } else {
-                current & !mask
-            };
-            // SAFETY: `next` stays within the thirty-one-bit field and is
-            // composed only from the current image and a reviewed LL mask.
-            unsafe { writer.events().bits(next) }
-        });
+    pub fn enable_rx_abort_baseline(&mut self) {
+        crate::generated::enable_ieee802154_rx_abort_baseline(&self.registers);
     }
 
-    /// `ieee802154_ll_enable_tx_abort_events` (`|=`) and
-    /// `ieee802154_ll_disable_tx_abort_events` (`&= ~`) of one reviewed mask.
+    /// The LL's `|=` of the rx-abort all set.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the thirty-one-bit mask is one of the reviewed public LL masks"
-    )]
-    pub fn update_tx_abort_enable(&mut self, mask: u32, enable: bool) {
-        assert!(
-            mask <= 0x7fff_ffff,
-            "transmit-abort mask exceeds thirty-one bits"
-        );
-        self.registers.tx_abort_enable().modify(|read, writer| {
-            let current = read.events().bits();
-            let next = if enable {
-                current | mask
-            } else {
-                current & !mask
-            };
-            // SAFETY: `next` stays within the thirty-one-bit field and is
-            // composed only from the current image and a reviewed LL mask.
-            unsafe { writer.events().bits(next) }
-        });
+    pub fn enable_rx_abort_all(&mut self) {
+        crate::generated::enable_ieee802154_rx_abort_all(&self.registers);
+    }
+
+    /// The LL's `|=` of the tx-abort baseline set.
+    #[doc(hidden)]
+    pub fn enable_tx_abort_baseline(&mut self) {
+        crate::generated::enable_ieee802154_tx_abort_baseline(&self.registers);
+    }
+
+    /// The LL's `|=` of the tx-abort all set.
+    #[doc(hidden)]
+    pub fn enable_tx_abort_all(&mut self) {
+        crate::generated::enable_ieee802154_tx_abort_all(&self.registers);
+    }
+
+    /// The LL's `&= !` of the rx-abort baseline set.
+    #[doc(hidden)]
+    pub fn disable_rx_abort_baseline(&mut self) {
+        crate::generated::disable_ieee802154_rx_abort_baseline(&self.registers);
+    }
+
+    /// The LL's `&= !` of the rx-abort all set.
+    #[doc(hidden)]
+    pub fn disable_rx_abort_all(&mut self) {
+        crate::generated::disable_ieee802154_rx_abort_all(&self.registers);
+    }
+
+    /// The LL's `&= !` of the tx-abort baseline set.
+    #[doc(hidden)]
+    pub fn disable_tx_abort_baseline(&mut self) {
+        crate::generated::disable_ieee802154_tx_abort_baseline(&self.registers);
+    }
+
+    /// The LL's `&= !` of the tx-abort all set.
+    #[doc(hidden)]
+    pub fn disable_tx_abort_all(&mut self) {
+        crate::generated::disable_ieee802154_tx_abort_all(&self.registers);
     }
 
     /// `ieee802154_ll_get_rx_status`, decoded field by field.

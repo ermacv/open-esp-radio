@@ -4,7 +4,7 @@ use super::*;
 
 fn sources() -> MacSources {
     MacSources {
-        pti: [1, 3, 10, 15].map(MacCoexPti::from_osi_value),
+        pti: [1, 3, 10, 15].map(|value| MacCoexPti::new(value).expect("a four-bit priority")),
         tx_power: PhyState::default().tx_target_power_profile(),
         slow_clock: MacSlowClockCalibration::Unavailable,
         delay_random: 0x1234_5678,

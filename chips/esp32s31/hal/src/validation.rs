@@ -310,14 +310,16 @@ pub mod coex_external {
         delay_us: u32,
         validate_high: bool,
     ) -> u32 {
-        let (Some(role), Some(wires), Ok(delay_us)) =
-            (role(mode), wires(wire), u8::try_from(delay_us))
-        else {
+        let (Some(role), Some(wires), Some(delay)) = (
+            role(mode),
+            wires(wire),
+            oer_esp32s31_pac::ExternalCoexGrantDelay::new(delay_us),
+        ) else {
             return REJECTED;
         };
         with_registers(|registers| {
             registers.configure_external_coex_mode(role, wires);
-            registers.configure_external_coex_grant(delay_us, validate_high);
+            registers.configure_external_coex_grant(delay, validate_high);
         })
     }
 }
