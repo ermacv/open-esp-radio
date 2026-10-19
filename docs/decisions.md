@@ -76,8 +76,7 @@ bounds) live in the code that applies them.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`
   sets, for a probe image, in its own target directory; no crate has a
   probe feature. A probe uses the public API where it can; production has no
-  item that only a probe uses. CI on main builds the probe images and shows
-  the S31 product images unchanged by the hooks.
+  item that only a probe uses. CI on main builds the probe images.
 - **Instrumentation** is no probe, and its classes share no logic: `trace`
   (what happened: values and events), `profile` (what execution costs:
   time, cycles, load) and `debug-control` (knobs that force execution
