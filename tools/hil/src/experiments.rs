@@ -1,9 +1,9 @@
-//! `cargo hil ab`, `cargo hil bisect` and `cargo hil revision`: their
+//! `cargo hil ab` and `cargo hil bisect`: their
 //! arguments, and calls into `oer-hil-experiment`.
 
 use std::{ffi::OsString, num::NonZeroU32};
 
-use crate::experiment::{ab, bisect, launch::Runner, revision};
+use crate::experiment::{ab, bisect, launch::Runner};
 use oer_hil_model::schema::run::Outcome;
 use oer_hil_runs::RunId;
 use oer_os_process::Checkout;
@@ -70,16 +70,19 @@ pub(crate) fn ab(
 
 #[derive(clap::Parser)]
 #[command(name = "cargo hil bisect")]
+/// One step of a manual bisection: run SCENARIO on REVISION and exit as
+/// `git bisect run` reads it (0 pass, 1 fail, 125 skip, 128 stop). Run it
+/// from `git bisect start --no-checkout BAD GOOD` with
+/// `git bisect run cargo hil bisect BISECT_HEAD --scenario S [--chip C]`.
 pub(crate) struct BisectCli {
-    /// A commit at which the scenario passes.
-    #[arg(long)]
-    good: String,
-    /// A later commit, descending from GOOD, at which it does not.
-    #[arg(long)]
-    bad: String,
+    /// The revision to test: a commit, tag, branch or `BISECT_HEAD`.
+    revision: String,
     #[arg(long)]
     scenario: String,
-    /// Build every tested image with this code layout seed.
+    /// The chip, for a scenario that runs on more than one.
+    #[arg(long)]
+    chip: Option<String>,
+    /// Build the image with this code layout seed.
     #[arg(long, value_name = "SEED")]
     layout_seed: Option<NonZeroU32>,
     #[command(flatten)]
@@ -95,63 +98,27 @@ pub(crate) fn bisect(
     let cli = BisectCli::try_parse_from(
         std::iter::once(OsString::from("cargo hil bisect")).chain(args.iter().cloned()),
     )?;
-    let finished = bisect::run(
-        &ctx.root,
-        owner,
-        &bisect::Spec {
-            good: cli.good,
-            bad: cli.bad,
-            scenario: cli.scenario,
-            layout_seed: cli.layout_seed,
-            boards: cli.boards.arguments(),
-        },
-        |line| eprintln!("hil: {line}"),
-    )?;
-    print!("{}", bisect::summary(&finished.report));
-    Ok(std::process::ExitCode::from(finished.code))
-}
-
-#[derive(clap::Parser)]
-#[command(name = "cargo hil revision")]
-pub(crate) struct RevisionCli {
-    /// The revision: a commit, tag or branch.
-    #[arg(long)]
-    rev: String,
-    /// A scenario to run, in run order; repeat for each. The revision's own
-    /// runner takes the revision's scenario ids, this checkout's runner (the
-    /// same HIL wire) this checkout's.
-    #[arg(long = "scenario", required = true)]
-    scenarios: Vec<String>,
-    /// Build every image with this code layout seed.
-    #[arg(long, value_name = "SEED")]
-    layout_seed: Option<NonZeroU32>,
-    #[command(flatten)]
-    boards: crate::jobs::BoardChoiceArgs,
-}
-
-/// Run the scenario set `args` names on its revision; exits 0 when every
-/// scenario passed, 1 when one failed, 2 when the revision was not judged.
-pub(crate) fn revision(
-    ctx: &Checkout,
-    owner: &str,
-    args: &[OsString],
-) -> Result<std::process::ExitCode> {
-    use clap::Parser as _;
-    let cli = RevisionCli::try_parse_from(
-        std::iter::once(OsString::from("cargo hil revision")).chain(args.iter().cloned()),
-    )?;
-    let finished = revision::run(
-        &ctx.root,
-        owner,
-        &revision::Spec {
-            revision: cli.rev,
-            scenarios: cli.scenarios,
-            layout_seed: cli.layout_seed,
-            boards: cli.boards.arguments(),
-        },
-        |line| eprintln!("hil: {line}"),
-    )?;
-    print!("{}", revision::summary(&finished.report));
-    println!("report: {}", finished.path.display());
-    Ok(std::process::ExitCode::from(finished.report.code()))
+    // The commit names the step in its line, even when the step fails.
+    let revision = oer_os_process::git::commit(&ctx.root, &cli.revision).unwrap_or(cli.revision);
+    let spec = bisect::Spec {
+        revision,
+        scenario: cli.scenario,
+        chip: cli.chip,
+        layout_seed: cli.layout_seed,
+        boards: cli.boards.arguments(),
+    };
+    // Whatever stops the step before it judged the revision stops the
+    // search too: an error exits as an unjudged step.
+    let (commit, step) = match bisect::step(&ctx.root, owner, &spec) {
+        Ok(found) => found,
+        Err(error) => {
+            let step = bisect::Step::Unjudged {
+                why: error.to_string(),
+            };
+            println!("bisect {}", step.line(&spec.revision));
+            return Ok(std::process::ExitCode::from(step.code()));
+        }
+    };
+    println!("bisect {}", step.line(&commit));
+    Ok(std::process::ExitCode::from(step.code()))
 }

@@ -1,19 +1,21 @@
-//! Bisection: find the first commit at which a scenario stops passing.
+//! One step of a manual bisection: run a scenario on one revision and say
+//! whether it passes, in the exit code `git bisect run` reads.
 //!
-//! Every tested revision is checked out, detached, in the bisection's own
-//! worktree below `target/hil/bisect/<id>/`, and runs its scenario with the
-//! runner that speaks its HIL wire, as [`crate::experiment::revision`] launches it: this
-//! checkout's with the revision's firmware for the same wire, otherwise the
-//! revision's own inside the bisection's whole-stand lease.
+//! The revision is checked out, detached, in a worktree of its own below
+//! `target/hil/bisect/`, and this checkout's runner builds its firmware
+//! from there (`cargo hil run --source`), as an A/B arm's; the run is an
+//! ordinary run of the store. The search is git's: with
+//! `git bisect start --no-checkout`, the working copy, and with it this
+//! tool, stays at the current revision while git moves `BISECT_HEAD`.
 //!
-//! A revision whose image does not build or does not link, or whose own
-//! runner cannot run, is broken: it is neither good nor bad, and the search
-//! steps around it. A step that could not judge the revision for another
-//! reason (a blocked or broken run, an interrupted one, a quarantined board)
-//! ends the bisection, since its later steps would meet the same stand. One
-//! typed report, `report.json`, records every step and the result.
+//! A revision whose image does not build or does not link, or that speaks
+//! another HIL wire than this checkout, cannot be judged by this runner: git
+//! skips it. A run that judged nothing for another reason (a blocked or
+//! broken run, an interrupted one, a quarantined board) stops the search,
+//! since its later steps would meet the same stand.
 
 use std::{
+    ffi::OsString,
     fs,
     num::NonZeroU32,
     path::{Path, PathBuf},
@@ -21,132 +23,64 @@ use std::{
 
 use oer_hil_analysis::Run;
 use oer_hil_model::schema::run::{FailureKind, Outcome};
+use oer_hil_runs::RunStore;
 use oer_os_process::git::Worktree;
-use serde::{Deserialize, Serialize};
 
 use crate::experiment::{
     Result,
-    revision::{Ran, Revision, Runner},
+    job::Running,
+    launch::{self, Launch, launch_run},
 };
 
-const REPORT_SCHEMA: u16 = 2;
+/// The file naming a revision's HIL wire: revisions with equal locks speak
+/// the same protocol.
+const MESSAGES_LOCK: &str = "portable/hil/protocol/messages.lock";
 
-/// What one tested revision showed.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "verdict", rename_all = "kebab-case")]
-pub enum Verdict {
-    Good { run: String },
-    Bad { run: String },
-    Broken { why: Broken, run: Option<String> },
+/// The HIL wire of the tree at `root`, or `None` for a revision older than
+/// the keyed protocol, whose wire no lock names.
+pub(crate) fn messages_lock(root: &Path) -> Option<String> {
+    fs::read_to_string(root.join(MESSAGES_LOCK)).ok()
 }
 
-/// Why a revision could not be judged good or bad.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Broken {
-    /// The image failed to compile.
-    DoesNotBuild,
-    /// The image compiled but did not link.
-    DoesNotLink,
-    /// The revision's own runner could not build or start a run.
-    RunnerUnavailable,
-}
-
-impl std::fmt::Display for Broken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::DoesNotBuild => "does not build",
-            Self::DoesNotLink => "does not link",
-            Self::RunnerUnavailable => "its runner cannot run",
-        })
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Step {
-    pub commit: String,
-    pub subject: String,
-    #[serde(flatten)]
-    pub runner: Runner,
-    #[serde(flatten)]
-    pub verdict: Verdict,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "result", rename_all = "kebab-case")]
-pub enum Conclusion {
-    /// The first commit at which the scenario does not pass.
-    FirstBad { commit: String },
-    /// Broken revisions hide which of these is the first bad one.
-    Ambiguous { candidates: Vec<String> },
-    /// A step could not judge its revision; the search stopped.
-    Aborted { reason: String },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Report {
-    pub schema: u16,
-    pub scenario: String,
-    pub layout_seed: Option<NonZeroU32>,
-    pub good: String,
-    pub bad: String,
-    /// The commits between GOOD (excluded) and BAD (included), oldest first.
-    pub commits: Vec<String>,
-    pub steps: Vec<Step>,
-    pub conclusion: Option<Conclusion>,
-}
-
-/// What a probe of one index showed, for the search.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Probe {
-    Good,
-    Bad,
-    Broken,
-}
-
-/// Where the search ended, as indices into the commits.
+/// What one step showed, and the exit code `git bisect run` reads from it.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Found {
-    FirstBad(usize),
-    Ambiguous(std::ops::RangeInclusive<usize>),
+pub enum Step {
+    /// The scenario passed in `run`.
+    Pass { run: String },
+    /// The scenario failed in `run`.
+    Fail { run: String },
+    /// This runner cannot judge the revision; git skips it.
+    Skip { why: String },
+    /// The run judged nothing; git stops the search.
+    Unjudged { why: String },
 }
 
-/// Binary search over `len` commits whose last is known bad and whose
-/// predecessor (outside the list) is known good. A broken index is skipped:
-/// the next probe is the untested index closest to the middle.
-pub fn search(len: usize, mut probe: impl FnMut(usize) -> Result<Probe>) -> Result<Found> {
-    if len == 0 {
-        return Err("the bisection has no commits".into());
+impl Step {
+    /// `git bisect run`'s convention: 0 good, 1 bad, 125 skip, and above
+    /// 127 an abort.
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::Pass { .. } => 0,
+            Self::Fail { .. } => 1,
+            Self::Skip { .. } => 125,
+            Self::Unjudged { .. } => 128,
+        }
     }
-    let mut good: Option<usize> = None;
-    let mut bad = len - 1;
-    let mut broken = std::collections::BTreeSet::new();
-    loop {
-        let low = good.map_or(0, |index| index + 1);
-        let middle = (low + bad) / 2;
-        let next = (low..bad)
-            .filter(|index| !broken.contains(index))
-            .min_by_key(|index| index.abs_diff(middle));
-        let Some(index) = next else {
-            return Ok(if (low..bad).any(|index| broken.contains(&index)) {
-                Found::Ambiguous(low..=bad)
-            } else {
-                Found::FirstBad(bad)
-            });
-        };
-        match probe(index)? {
-            Probe::Good => good = Some(index),
-            Probe::Bad => bad = index,
-            Probe::Broken => {
-                broken.insert(index);
-            }
+
+    pub fn line(&self, commit: &str) -> String {
+        let short = &commit[..12.min(commit.len())];
+        match self {
+            Self::Pass { run } => format!("{short} pass (run {run})"),
+            Self::Fail { run } => format!("{short} fail (run {run})"),
+            Self::Skip { why } => format!("{short} skip: {why}"),
+            Self::Unjudged { why } => format!("{short} not judged: {why}"),
         }
     }
 }
 
 /// Whether an image build log shows a link failure rather than a compile
 /// failure.
-fn build_failure(log: &str) -> Broken {
+fn build_failure(log: &str) -> &'static str {
     const LINK_ERRORS: [&str; 5] = [
         "error: linking with",
         "rust-lld: error:",
@@ -155,26 +89,25 @@ fn build_failure(log: &str) -> Broken {
         "relocation R_",
     ];
     if LINK_ERRORS.iter().any(|marker| log.contains(marker)) {
-        Broken::DoesNotLink
+        "the image does not link"
     } else {
-        Broken::DoesNotBuild
+        "the image does not build"
     }
 }
 
-/// The verdict of a finished run of the bisected scenario, or why it judged
-/// nothing: the scenario's own outcome decides, and a scenario whose image
-/// did not build is broken, told from a link failure by its build log.
-fn judge(run: &Run) -> std::result::Result<Verdict, String> {
+/// The step a finished run of the scenario shows: the scenario's own
+/// outcome decides, and a scenario whose image did not build is skipped,
+/// told from a link failure by its build log.
+fn judge(run: &Run) -> Step {
     let id = run.id().to_owned();
     let Some(scenario) = run.scenarios().first() else {
-        return Err(format!(
-            "run {id} ended {} without judging the revision",
-            run.status()
-        ));
+        return Step::Unjudged {
+            why: format!("run {id} ended {} without the scenario", run.status()),
+        };
     };
     match scenario.outcome {
-        Outcome::Passed => return Ok(Verdict::Good { run: id }),
-        Outcome::Failed => return Ok(Verdict::Bad { run: id }),
+        Outcome::Passed => return Step::Pass { run: id },
+        Outcome::Failed => return Step::Fail { run: id },
         _ => {}
     }
     let build = scenario
@@ -196,223 +129,107 @@ fn judge(run: &Run) -> std::result::Result<Verdict, String> {
                     .join("build.log"),
             )
             .unwrap_or_default();
-            Ok(Verdict::Broken {
-                why: build_failure(&format!("{}\n{log}", failure.message)),
-                run: Some(id),
-            })
+            Step::Skip {
+                why: format!(
+                    "{} (run {id})",
+                    build_failure(&format!("{}\n{log}", failure.message))
+                ),
+            }
         }
-        None => Err(format!(
-            "run {id} ended {} without judging the revision",
-            scenario.outcome
-        )),
+        None => Step::Unjudged {
+            why: format!("run {id} ended {}", scenario.outcome),
+        },
     }
 }
 
-/// What one bisection searches.
+/// The step the run at `directory` shows; why it does not read, with its
+/// path, when it does not.
+fn judge_run(directory: &Path) -> Step {
+    let unreadable = |error: &dyn std::fmt::Display| Step::Unjudged {
+        why: format!("the run at {} does not read: {error}", directory.display()),
+    };
+    let bundle = match oer_hil_runs::format::RunBundle::open(directory) {
+        Ok(Some(bundle)) => bundle,
+        Ok(None) => return unreadable(&"it has no manifest"),
+        Err(error) => return unreadable(&error),
+    };
+    match Run::of(bundle) {
+        Ok(run) => judge(&run),
+        Err(error) => unreadable(&error),
+    }
+}
+
+/// What one step runs.
 #[derive(Clone, Debug)]
 pub struct Spec {
-    /// A commit at which the scenario passes.
-    pub good: String,
-    /// A later commit, descending from `good`, at which it does not.
-    pub bad: String,
+    /// The revision: a commit, tag, branch or `BISECT_HEAD`.
+    pub revision: String,
     pub scenario: String,
-    /// Build every tested image with this code layout seed.
+    /// The chip, for a scenario that runs on more than one.
+    pub chip: Option<String>,
+    /// Build the image with this code layout seed.
     pub layout_seed: Option<NonZeroU32>,
-    /// The runner arguments naming the boards every run uses; a revision's
-    /// own runner from before the stand file does not know them.
+    /// The runner arguments naming the boards the run uses.
     pub boards: Vec<String>,
 }
 
-/// A finished bisection: its report, where it is written, and the exit
-/// status its conclusion gives: 0 first bad commit found, 1 ambiguous, 2
-/// aborted.
-pub struct Finished {
-    pub report: Report,
-    pub path: PathBuf,
-    pub code: u8,
-}
-
-/// Bisect `spec` in the checkout at `checkout` for `owner`, reporting each
-/// step as it ends.
-pub fn run(
-    checkout: &Path,
-    owner: &str,
-    spec: &Spec,
-    mut progress: impl FnMut(&str),
-) -> Result<Finished> {
-    let good = oer_os_process::git::commit(checkout, &spec.good)?;
-    let bad = oer_os_process::git::commit(checkout, &spec.bad)?;
-    if oer_os_process::git::run(checkout, ["merge-base", "--is-ancestor", &good, &bad]).is_err() {
-        return Err(format!(
-            "--good {} is not an ancestor of --bad {}",
-            spec.good, spec.bad
-        )
-        .into());
-    }
-    let commits = oer_os_process::git::lines(
-        checkout,
-        [
-            "rev-list",
-            "--ancestry-path",
-            "--reverse",
-            &format!("{good}..{bad}"),
-        ],
-    )?;
-    let id = oer_os_durable::unix_millis().to_string();
-    let directory = checkout.join("target/hil/bisect").join(&id);
-    fs::create_dir_all(&directory)?;
-    let mut report = Report {
-        schema: REPORT_SCHEMA,
-        scenario: spec.scenario.clone(),
-        layout_seed: spec.layout_seed,
-        good,
-        bad,
-        commits: commits.clone(),
-        steps: Vec::new(),
-        conclusion: None,
-    };
-    let path = directory.join("report.json");
-    write_report(&path, &report)?;
-    progress(&format!(
-        "bisecting {} over {} commits; report {}",
-        spec.scenario,
-        commits.len(),
-        path.display()
-    ));
-    let bisection = Bisection {
-        spec,
-        revision: Revision::new(checkout, owner, &directory)?,
-    };
-    let mut worktree = None;
-    let found = search(commits.len(), |index| {
-        let step = bisection.step(&mut worktree, &commits[index])?;
-        progress(&format!("bisect {}", step_line(&step)));
-        let probe = match step.verdict {
-            Verdict::Good { .. } => Probe::Good,
-            Verdict::Bad { .. } => Probe::Bad,
-            Verdict::Broken { .. } => Probe::Broken,
-        };
-        report.steps.push(step);
-        write_report(&path, &report)?;
-        Ok(probe)
-    });
-    if let Some(worktree) = worktree
-        && let Err(error) = worktree.remove()
-    {
-        progress(&format!(
-            "the bisection's worktree was not removed: {error}"
-        ));
-    }
-    let (conclusion, code) = match found {
-        Ok(Found::FirstBad(index)) => (
-            Conclusion::FirstBad {
-                commit: commits[index].clone(),
-            },
-            0,
-        ),
-        Ok(Found::Ambiguous(range)) => (
-            Conclusion::Ambiguous {
-                candidates: commits[range].to_vec(),
-            },
-            1,
-        ),
-        Err(error) => (
-            Conclusion::Aborted {
-                reason: error.to_string(),
-            },
-            2,
-        ),
-    };
-    report.conclusion = Some(conclusion);
-    write_report(&path, &report)?;
-    Ok(Finished { report, path, code })
-}
-
-struct Bisection<'a> {
-    spec: &'a Spec,
-    revision: Revision<'a>,
-}
-
-impl Bisection<'_> {
-    fn step(&self, worktree: &mut Option<Worktree>, commit: &str) -> Result<Step> {
-        self.revision.checkout(worktree, commit)?;
-        let subject = self.revision.subject()?;
-        let (runner, ran) = self.revision.launch(
-            std::slice::from_ref(&self.spec.scenario),
-            &crate::experiment::revision::seed_and_boards(self.spec.layout_seed, &self.spec.boards),
-            &format!("bisect {} with the revision's runner", self.spec.scenario),
-        )?;
-        let verdict = match ran {
-            Ran::Run { directory, .. } => judge_run(&directory)?,
-            Ran::RunnerUnavailable => Verdict::Broken {
-                why: Broken::RunnerUnavailable,
-                run: None,
-            },
-        };
-        Ok(Step {
-            commit: commit.to_owned(),
-            subject,
-            runner,
-            verdict,
+/// Run one step of `spec` in the checkout at `checkout` for `owner`; returns
+/// the revision's commit and what the step showed.
+pub fn step(checkout: &Path, owner: &str, spec: &Spec) -> Result<(String, Step)> {
+    let commit = oer_os_process::git::commit(checkout, &spec.revision)?;
+    let current = messages_lock(checkout).ok_or("this checkout names no HIL wire")?;
+    let directory = checkout.join("target/hil/bisect").join(&commit);
+    let worktree = Worktree::detached(checkout, &directory, &commit)?;
+    let step = if messages_lock(worktree.path()).as_deref() != Some(&current) {
+        Ok(Step::Skip {
+            why: String::from(
+                "it speaks another HIL wire than this checkout (its \
+                 portable/hil/protocol/messages.lock differs)",
+            ),
         })
-    }
-}
-
-/// The verdict of the run at `directory`; why it does not read, with its
-/// path, when it does not.
-fn judge_run(directory: &Path) -> Result<Verdict> {
-    let unreadable = |error: &dyn std::fmt::Display| {
-        format!("the run at {} does not read: {error}", directory.display())
+    } else {
+        run_scenario(checkout, owner, worktree.path(), spec)
     };
-    let bundle = oer_hil_runs::format::RunBundle::open(directory)
-        .map_err(|error| unreadable(&error))?
-        .ok_or_else(|| unreadable(&"it has no manifest"))?;
-    let run = Run::of(bundle).map_err(|error| unreadable(&error))?;
-    Ok(judge(&run)?)
-}
-
-fn step_line(step: &Step) -> String {
-    let short = &step.commit[..12.min(step.commit.len())];
-    let runner = match step.runner {
-        Runner::Current => String::new(),
-        Runner::Revision => String::from(" [own runner]"),
-    };
-    let verdict = match &step.verdict {
-        Verdict::Good { run } => format!("good (run {run})"),
-        Verdict::Bad { run } => format!("bad (run {run})"),
-        Verdict::Broken { why, run } => match run {
-            Some(run) => format!("broken: {why} (run {run})"),
-            None => format!("broken: {why}"),
-        },
-    };
-    format!("{short} {verdict}{runner}  {}", step.subject)
-}
-
-pub fn summary(report: &Report) -> String {
-    let mut text = format!("bisect {}:\n", report.scenario);
-    for step in &report.steps {
-        text.push_str(&format!("  {}\n", step_line(step)));
+    if let Err(error) = worktree.remove() {
+        eprintln!("hil: the step's worktree was not removed: {error}");
     }
-    match &report.conclusion {
-        Some(Conclusion::FirstBad { commit }) => {
-            text.push_str(&format!("first bad commit: {commit}\n"));
-        }
-        Some(Conclusion::Ambiguous { candidates }) => {
-            text.push_str("broken revisions hide the first bad commit among:\n");
-            for commit in candidates {
-                text.push_str(&format!("  {commit}\n"));
-            }
-        }
-        Some(Conclusion::Aborted { reason }) => {
-            text.push_str(&format!("bisection stopped: {reason}\n"));
-        }
-        None => text.push_str("bisection unfinished\n"),
-    }
-    text
+    Ok((commit, step?))
 }
 
-fn write_report(path: &Path, report: &Report) -> Result<()> {
-    oer_os_durable::atomic_json(path, report)
+/// This checkout's runner on the scenario, building the revision's firmware
+/// from `worktree`, as a job of its own.
+fn run_scenario(checkout: &Path, owner: &str, worktree: &Path, spec: &Spec) -> Result<Step> {
+    let mut arguments = vec![
+        String::from("run"),
+        spec.scenario.clone(),
+        String::from("--source"),
+        worktree.to_string_lossy().into_owned(),
+    ];
+    if let Some(chip) = &spec.chip {
+        arguments.extend([String::from("--chip"), chip.clone()]);
+    }
+    if let Some(seed) = spec.layout_seed {
+        arguments.extend([String::from("--layout-seed"), seed.to_string()]);
+    }
+    arguments.extend(spec.boards.iter().cloned());
+    let arguments: Vec<OsString> = arguments.into_iter().map(OsString::from).collect();
+    let store = RunStore::shared()?;
+    let runner = launch::Runner::prepare(checkout)?;
+    let mut job = Running::new(checkout, owner, &arguments)?;
+    let launched = launch_run(
+        &Launch::new(checkout, &runner)
+            .args(arguments)
+            .env(oer_lab_arbiter::owner::OWNER_ENV, owner)
+            .context(
+                oer_os_process::Context::current()?
+                    .clone()
+                    .with(oer_lab_arbiter::owner::OWNER_KEY, owner)
+                    .with(oer_lab_arbiter::jobs::JOB_KEY, job.id()),
+            ),
+    )?;
+    job.finish_with(&store, &launched.runs)?;
+    let directory: PathBuf = store.runs().join(launched.run()?.to_string());
+    Ok(judge_run(&directory))
 }
 
 #[cfg(test)]

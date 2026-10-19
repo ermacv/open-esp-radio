@@ -265,69 +265,32 @@ with `wait`, never by looking for process names.
 ## Bisecting a scenario
 
 ```console
-cargo hil bisect --good <commit> --bad <commit> --scenario <id> [--layout-seed N]
+git bisect start --no-checkout <bad> <good>
+git bisect run cargo hil bisect BISECT_HEAD --scenario <id> [--chip C] [--layout-seed N]
+git bisect reset
 ```
 
-`bisect` searches the commits after `--good` up to `--bad` (which must
-descend from it) for the first one at which the scenario does not pass. Each
-tested commit is checked out, detached, in the bisection's worktree below
-`target/hil/bisect/<id>/`. When its `hil/protocol/messages.lock` equals this
-checkout's, it speaks this checkout's wire and this checkout's runner judges
-it: `run --source DIR` builds the revision's firmware from the worktree and
-runs this checkout's host code and scenario. A commit with
-another wire, or none named, runs its own
-runner, built in the worktree, while the bisection holds a whole-stand lease;
-that runner uses a private arbiter directory with a copy of the stand file
-(and of the older `devices.json` registry, for revisions before it).
+`cargo hil bisect REV --scenario S` is one step of a bisection that git
+drives. It checks REV out, detached, in a worktree of its own below
+`target/hil/bisect/`, runs S with this checkout's runner building the
+revision's firmware from there (`run --source DIR`, as an A/B arm), and
+prints one line: the commit, `pass` or `fail`, and the run. The run is an
+ordinary run of the store; the step keeps no record of its own. Its exit
+status is what `git bisect run` reads: 0 when S passed, 1 when it failed,
+125 when this runner cannot judge the revision (its image does not compile
+or does not link, told apart from the run's archived build log, or its
+`portable/hil/protocol/messages.lock` differs from this checkout's), and 128
+when the run judged nothing for another reason (blocked, broken,
+interrupted, a quarantined board), which stops the search, since its next
+steps would meet the same stand.
 
-Every step's run is launched through `oer-tool-hil`'s one
-`launch_run`, which learns the run from the runner's launch run list, through the
-same revision launch as [a revision's scenario set](#a-revisions-scenario-set):
-a revision's own runner is built with `oer-hil-observer`, and its runs reach
-the shared store through the worktree's `target/hil/runs` link, or, when an
-older runner keeps them in a directory of its own below `target/hil`, are
-moved to the store's `revision-runs/` directory beside its `runs/`. The scenario's outcome
-judges the commit: passed makes it good, failed bad. A commit whose image
-does not compile or does not link (told apart from the run's archived build
-log), or whose own runner does not build or starts no run, is broken: neither good nor bad, and
-the search probes the untested commit nearest the middle instead. Any other
-run outcome (blocked, broken, interrupted, a quarantined board) stops the
-bisection, since the next steps would meet the same stand. `report.json`
-records every step (commit, subject, runner, verdict and run) and the
-conclusion: the first bad commit (exit 0), the commits broken revisions leave
-ambiguous (exit 1), or why it stopped (exit 2). Its runs record no evidence.
-
-## A revision's scenario set
-
-```console
-cargo hil revision --rev <revision> --scenario <id> [--scenario <id>...] [--layout-seed N]
-```
-
-`revision` runs a scenario set on one revision with the runner that speaks
-its HIL wire, as a bisection step does: the revision is checked out,
-detached, below `target/hil/revision/<id>/`, and the same `messages.lock`
-comparison chooses this checkout's runner (with the revision's firmware built
-from the worktree) or the revision's own runner inside a whole-stand lease
-with a private arbiter directory. That runner gets the private arbiter and
-the owner under every environment name a revision has read them from
-(`OER_STAND_ARBITER_DIR` and `OER_HIL_ARBITER_DIR`, `OER_STAND_OWNER` and
-`OER_HIL_OWNER`). A run it keeps below the worktree's `target/hil` (an older
-runner's per-chip run directory) is moved to the store's `revision-runs/`
-directory beside its `runs/` before the worktree is removed, so it outlives
-this checkout, and its `suite.json` gives the outcomes. `cargo hil runs`
-does not read such a run, whose bundle is in the revision's own format; it
-is found at `<store>/revision-runs/<run>`. It is
-how a revision whose wire differs
-from this checkout's, such as an older tag, is checked for regressions,
-which `ab` cannot do. The scenarios run in the order given. With the
-revision's own runner their ids and definitions are the revision's; with
-this checkout's runner (the same wire) they are this checkout's, and only
-the firmware is the revision's. `report.json` records the revision, its commit and subject, the
-runner and the run with each scenario's outcome; it pairs no measurement
-with another revision's. The exit status is 0 when every scenario passed, 1
-when one failed and 2 when the revision was not judged (a scenario that
-neither passed nor failed, or a runner that could not run). Its runs record
-no evidence.
+`--no-checkout` matters: git then moves only `BISECT_HEAD` and leaves the
+working copy, and with it `cargo hil` itself, at the current revision. A
+plain `git bisect start` would check every tested revision out and run that
+revision's `cargo hil`. `cargo` itself exits 101 when `cargo hil` does not
+build, which `git bisect run` takes for a bad revision: check that
+`cargo hil bisect --help` runs before starting. As for an A/B arm, a revision older than the commit
+that completes the repository layout move does not build.
 
 ## A/B comparison
 
@@ -439,11 +402,7 @@ a size budget, `OER_HIL_RUN_STORE_BUDGET_GIB` (40 GiB by default): over it, it
 deletes the oldest runs that only their age kept until the store fits, and
 every other reason above still keeps its runs. Run by hand without `--apply` it only lists the other runs and
 the bytes only they hold; hard-linked firmware shared with kept runs is not
-counted. Neither the rule nor the size budget touches the store's
-`revision-runs/`: a run that another revision's runner wrote in its own
-format (a [revision run](#a-revisions-scenario-set) or a bisection step on
-an older wire) is a record of that revision, kept for comparison. It stays until someone
-deletes `<store>/revision-runs/<run>` by hand. Pins live in the store's `pins.json`. Pruning with `--apply`, and the
+counted. Pins live in the store's `pins.json`. Pruning with `--apply`, and the
 automatic rule, also delete the observer builds in the store's `observers/`
 that no remaining run names and that were stored more than an hour ago; a
 starting run stores its build before its manifest names it. They also delete the firmware

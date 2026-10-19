@@ -166,7 +166,7 @@ pub fn run(checkout: &Path, owner: &str, runner: &Runner, spec: &Spec) -> Result
     let order_seed = spec.order_seed.unwrap_or(started);
     let directory = checkout.join("target/hil/ab").join(&id);
     std::fs::create_dir_all(&directory)?;
-    let current = crate::experiment::revision::messages_lock(checkout)
+    let current = crate::experiment::bisect::messages_lock(checkout)
         .ok_or("this checkout names no HIL wire")?;
     let arms = [(Arm::A, &spec.a), (Arm::B, &spec.b)]
         .into_iter()
@@ -389,7 +389,7 @@ fn prepare(
 ) -> Result<PreparedArm> {
     let commit = oer_os_process::git::commit(checkout, &spec.revision)?;
     let worktree = Worktree::detached(checkout, &directory.join(format!("arm-{arm}")), &commit)?;
-    if crate::experiment::revision::messages_lock(worktree.path()).as_deref() != Some(current) {
+    if crate::experiment::bisect::messages_lock(worktree.path()).as_deref() != Some(current) {
         return Err(format!(
             "arm {arm} ({}) speaks another HIL wire than this checkout (its \
              hil/protocol/messages.lock differs); an A/B comparison runs both arms on this \
