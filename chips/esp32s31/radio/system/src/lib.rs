@@ -97,6 +97,8 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
     ) -> Result<K::Joined, Failed<K::JoinReturned>>;
     /// Run `K`'s initial tracking and what its client contract adds to it.
     async fn track(&mut self, track: K::Track) -> Result<K::Tracked, Failed<K::TrackReturned>>;
+    /// Change a stopped tracked client's channel without changing membership.
+    async fn retune(&mut self, retune: K::Retune) -> Result<K::Retuned, Failed<K::RetuneReturned>>;
     /// Exit `K` from the domain, coexistence included.
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit);
 }
@@ -191,6 +193,26 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                             payload,
                         })
                     }
+                    Err(Failed { returned, cause }) => {
+                        if cause == Failure::Poisoned {
+                            self.state.poisoned = true;
+                        }
+                        Err(Failed {
+                            returned: (member, returned),
+                            cause,
+                        })
+                    }
+                })
+            }
+            Request::Retune(member, retune) => {
+                if self.state.poisoned {
+                    return Answer::Retune(Err(Failed {
+                        returned: (member, K::retune_returned(retune)),
+                        cause: Failure::Poisoned,
+                    }));
+                }
+                Answer::Retune(match self.backend.retune(retune).await {
+                    Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
                     Err(Failed { returned, cause }) => {
                         if cause == Failure::Poisoned {
                             self.state.poisoned = true;

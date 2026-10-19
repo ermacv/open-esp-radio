@@ -19,8 +19,8 @@ use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
 use oer_esp32s31_radio_client::{
     ClientCells, Leaving, RcSlow, claim_for_host_test,
     wifi::{
-        TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiReturned, WifiTrack,
-        WifiTracked,
+        RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
+        WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
@@ -34,6 +34,7 @@ enum Event {
     Prepare(Result<PhyPreparation, Fault>),
     Enter,
     Track,
+    Retune,
     Exit,
     CloseRf,
     Tick,
@@ -47,6 +48,7 @@ struct Script {
     refuse_enter: bool,
     client_fails_enter: bool,
     poison_track: bool,
+    poison_retune: bool,
     not_last: bool,
     close_recoverable: bool,
     deadline: Option<Instant>,
@@ -157,6 +159,24 @@ impl ClientBackend<Wifi, RcSlow> for Model {
                     handshake_samples: 1,
                     handshake_observations: 2,
                 },
+            },
+        })
+    }
+
+    async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
+        self.push(Event::Retune);
+        if self.0.borrow().poison_retune {
+            return Err(Failed {
+                returned: retune.wifi,
+                cause: Failure::Poisoned,
+            });
+        }
+        Ok(WifiRetuned {
+            wifi: retune.wifi,
+            report: RetuneReport {
+                micros: 11,
+                temperature: PhyState::default().temperature_observation(),
+                tx_power: PhyState::default().tx_target_power_profile(),
             },
         })
     }
@@ -528,6 +548,120 @@ fn a_client_failure_keeps_the_domain_healthy_and_closes_rf_it_opened() {
             Event::Enter,
             Event::CloseRf,
             Event::Prepare(Ok(PhyPreparation::Woke { micros: 3 }))
+        ]
+    );
+}
+
+#[test]
+fn retune_preserves_membership_and_the_last_leave_still_closes_rf() {
+    let model = model(Script::default());
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let tracked = tracked.ok().expect("track");
+        let config = track_request(tracked.payload.wifi);
+        let (cell, tuned) = cell
+            .retune(
+                tracked.member,
+                WifiRetune {
+                    wifi: config.wifi,
+                    channel: config.channel,
+                    tx_ceiling: config.tx_ceiling,
+                },
+            )
+            .await;
+        let tuned = tuned.ok().expect("retune");
+        assert_eq!(tuned.payload.report.micros, 11);
+        let (_, left) = cell
+            .leave(
+                Leaving::Tracked(tuned.member),
+                WifiLeave {
+                    wifi: tuned.payload.wifi,
+                },
+            )
+            .await;
+        assert_eq!(left.domain, DomainHealth::Healthy);
+    });
+    assert_eq!(
+        model.log(),
+        [
+            REGISTERED,
+            Event::Enter,
+            Event::Track,
+            Event::Retune,
+            Event::Exit,
+            Event::CloseRf
+        ]
+    );
+}
+
+#[test]
+fn a_poisoned_retune_returns_custody_and_refuses_further_hardware_work() {
+    let model = model(Script {
+        poison_retune: true,
+        ..Default::default()
+    });
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await;
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await;
+        let tracked = tracked.ok().expect("track");
+        let config = track_request(tracked.payload.wifi);
+        let (cell, answer) = cell
+            .retune(
+                tracked.member,
+                WifiRetune {
+                    wifi: config.wifi,
+                    channel: config.channel,
+                    tx_ceiling: config.tx_ceiling,
+                },
+            )
+            .await;
+        let Err(Failed {
+            returned: (member, wifi),
+            cause,
+        }) = answer
+        else {
+            panic!("retune fails");
+        };
+        assert_eq!(cause, Failure::Poisoned);
+        let config = track_request(wifi);
+        let (cell, answer) = cell
+            .retune(
+                member,
+                WifiRetune {
+                    wifi: config.wifi,
+                    channel: config.channel,
+                    tx_ceiling: config.tx_ceiling,
+                },
+            )
+            .await;
+        let Err(Failed {
+            returned: (member, wifi),
+            cause,
+        }) = answer
+        else {
+            panic!("poison is retained");
+        };
+        assert_eq!(cause, Failure::Poisoned);
+        let (_, left) = cell
+            .leave(Leaving::Tracked(member), WifiLeave { wifi })
+            .await;
+        assert_eq!(left.domain, DomainHealth::Poisoned);
+    });
+    assert_eq!(
+        model.log(),
+        [
+            REGISTERED,
+            Event::Enter,
+            Event::Track,
+            Event::Retune,
+            Event::Exit
         ]
     );
 }

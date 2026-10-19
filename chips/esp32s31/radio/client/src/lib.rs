@@ -68,6 +68,10 @@ pub trait Client: sealed::Sealed + Sized + 'static {
     type Tracked: Send;
     /// What a failed `track` gives back beside the membership.
     type TrackReturned: Send;
+    /// Stopped-client channel transaction and its returned ownership.
+    type Retune: Send;
+    type Retuned: Send;
+    type RetuneReturned: Send;
     /// What `leave` lends.
     type Leave: Send;
     /// What `leave` gives back.
@@ -77,12 +81,14 @@ pub trait Client: sealed::Sealed + Sized + 'static {
     fn join_returned(join: Self::Join) -> Self::JoinReturned;
     /// A `track` handed back unchanged.
     fn track_returned(track: Self::Track) -> Self::TrackReturned;
+    fn retune_returned(retune: Self::Retune) -> Self::RetuneReturned;
 }
 
 /// A request in a client's cell.
 pub enum Request<K: Client> {
     Join(K::Join),
     Track(Member<K, Untracked>, K::Track),
+    Retune(Member<K, Tracked>, K::Retune),
     Leave(Leaving<K>, K::Leave),
 }
 
@@ -90,6 +96,7 @@ pub enum Request<K: Client> {
 pub enum Answer<K: Client> {
     Join(JoinAnswer<K>),
     Track(TrackAnswer<K>),
+    Retune(RetuneAnswer<K>),
     Leave(Left<K>),
 }
 
@@ -158,6 +165,15 @@ pub struct TrackedMember<K: Client> {
 pub type TrackAnswer<K> =
     Result<TrackedMember<K>, Failed<(Member<K, Untracked>, <K as Client>::TrackReturned)>>;
 
+/// A stopped member after its channel transaction.
+pub struct RetunedMember<K: Client> {
+    pub member: Member<K, Tracked>,
+    pub payload: K::Retuned,
+}
+
+pub type RetuneAnswer<K> =
+    Result<RetunedMember<K>, Failed<(Member<K, Tracked>, <K as Client>::RetuneReturned)>>;
+
 /// Whether the PHY domain survived.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainHealth {
@@ -208,6 +224,21 @@ impl<K: Client> MembershipCell<K> {
             |answer| match answer {
                 Answer::Track(answer) => answer,
                 _ => unreachable!("the actor answers a track with a track answer"),
+            },
+        )
+    }
+
+    /// Retune a tracked client while its DMA and interrupt routes are stopped.
+    pub fn retune(
+        self,
+        member: Member<K, Tracked>,
+        retune: K::Retune,
+    ) -> Pending<K, RetuneAnswer<K>> {
+        Pending::new(
+            self.poster.post(Request::Retune(member, retune)),
+            |answer| match answer {
+                Answer::Retune(answer) => answer,
+                _ => unreachable!("the actor answers a retune with a retune answer"),
             },
         )
     }

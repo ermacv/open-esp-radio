@@ -102,6 +102,31 @@ pub struct WifiReleaseFailure<W> {
     pub stopped: WifiStopped<W>,
 }
 
+/// A failed channel transaction retains custody for release only. In
+/// particular, a partially changed/poisoned PHY cannot resume an RF role.
+pub struct WifiRetuneFailure<W> {
+    pub cause: WifiRetuneError,
+    stopped: WifiStopped<W>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WifiRetuneError {
+    NotStopped(oer_esp32s31_hal::owner::maintenance::Error),
+    Radio(oer_esp32s31_radio_client::Failure),
+}
+
+impl<W> WifiRetuneFailure<W> {
+    pub async fn release(
+        self,
+        cell: MembershipCell<Wifi>,
+    ) -> (
+        MembershipCell<Wifi>,
+        Result<WifiReleased<W>, WifiReleaseFailure<W>>,
+    ) {
+        self.stopped.release(cell).await
+    }
+}
+
 /// Wi-Fi left the radio system.
 pub struct WifiReleased<W> {
     /// The partition, cold on success; at the stage the exit reached when
@@ -174,6 +199,108 @@ impl<W> WifiStopped<W> {
                 platform,
                 domain,
             }),
+        )
+    }
+
+    /// Retune through the actor after the role returned its stopped DMA/IRQ
+    /// ownership. Both admission and channel failure keep the resources;
+    /// failed transactions expose only release, never a new RF role.
+    pub async fn retune(
+        self,
+        cell: MembershipCell<Wifi>,
+        channel: oer_radio_regulatory::Permitted<WifiChannel>,
+        tx_ceiling: oer_radio_regulatory::TxCeiling,
+    ) -> (
+        MembershipCell<Wifi>,
+        Result<(Self, oer_esp32s31_radio_client::wifi::RetuneReport), WifiRetuneFailure<W>>,
+    )
+    where
+        W: crate::startup::WifiMacPlatform,
+    {
+        use oer_esp32s31_radio_client::{
+            Failed, RetunedMember,
+            wifi::{WifiRetune, WifiRetuned},
+        };
+        let Self {
+            mut platform,
+            registers,
+            interrupt_setup,
+            clocks,
+            member,
+            start_report,
+            transition_report,
+            current_channel,
+        } = self;
+        let (registers, interrupt_setup) = match registers.try_confirm_phy_stopped(interrupt_setup)
+        {
+            Ok(frontier) => frontier,
+            Err(failure) => {
+                return (
+                    cell,
+                    Err(WifiRetuneFailure {
+                        cause: WifiRetuneError::NotStopped(failure.error),
+                        stopped: Self {
+                            platform,
+                            registers: failure.registers,
+                            interrupt_setup: failure.interrupts,
+                            clocks,
+                            member,
+                            start_report,
+                            transition_report,
+                            current_channel,
+                        },
+                    }),
+                );
+            }
+        };
+        let wifi = WifiClocked::from_running(registers, interrupt_setup, clocks);
+        let (cell, answer) = cell
+            .retune(
+                member,
+                WifiRetune {
+                    wifi,
+                    channel,
+                    tx_ceiling,
+                },
+            )
+            .await;
+        let (wifi, member, report) = match answer {
+            Ok(RetunedMember {
+                member,
+                payload: WifiRetuned { wifi, report },
+            }) => (wifi, member, Ok(report)),
+            Err(Failed {
+                returned: (member, wifi),
+                cause,
+            }) => (wifi, member, Err(cause)),
+        };
+        let (registers, interrupt_setup, clocks) = wifi.into_running();
+        if let Ok(report) = report {
+            platform.install_phy_tx_power_profile(report.tx_power);
+        }
+        let stopped = Self {
+            platform,
+            registers,
+            interrupt_setup,
+            clocks,
+            member,
+            start_report,
+            transition_report,
+            current_channel: if report.is_ok() {
+                channel.channel()
+            } else {
+                current_channel
+            },
+        };
+        (
+            cell,
+            match report {
+                Ok(report) => Ok((stopped, report)),
+                Err(cause) => Err(WifiRetuneFailure {
+                    cause: WifiRetuneError::Radio(cause),
+                    stopped,
+                }),
+            },
         )
     }
 

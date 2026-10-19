@@ -408,6 +408,10 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>> ClientBackend<K, S> for Tic
         self.0.track(track).await
     }
 
+    async fn retune(&mut self, retune: K::Retune) -> Result<K::Retuned, Failed<K::RetuneReturned>> {
+        self.0.retune(retune).await
+    }
+
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit) {
         self.0.exit(leave).await
     }

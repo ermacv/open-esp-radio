@@ -37,11 +37,18 @@ impl Client for Wifi {
     type Track = WifiTrack;
     type Tracked = WifiTracked;
     type TrackReturned = WifiClocked;
+    type Retune = WifiRetune;
+    type Retuned = WifiRetuned;
+    type RetuneReturned = WifiClocked;
     type Leave = WifiLeave;
     type Left = WifiLeft;
 
     fn join_returned(join: WifiJoin) -> WifiReturned {
         WifiReturned::Cold(join.wifi)
+    }
+
+    fn retune_returned(retune: WifiRetune) -> WifiClocked {
+        retune.wifi
     }
 
     fn track_returned(track: WifiTrack) -> WifiClocked {
@@ -110,4 +117,24 @@ pub struct WifiLeave {
 /// release kept.
 pub struct WifiLeft {
     pub wifi: WifiReturned,
+}
+
+/// A channel transaction with the Wi-Fi runtime completely stopped.
+pub struct WifiRetune {
+    pub wifi: WifiClocked,
+    pub channel: Permitted<WifiChannel>,
+    pub tx_ceiling: TxCeiling,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RetuneReport {
+    /// Full channel transaction on the radio system's timer.
+    pub micros: u64,
+    pub tx_power: PhyTxTargetPowerProfile,
+    pub temperature: TemperatureObservation,
+}
+
+pub struct WifiRetuned {
+    pub wifi: WifiClocked,
+    pub report: RetuneReport,
 }
