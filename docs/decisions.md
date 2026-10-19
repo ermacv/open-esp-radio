@@ -26,7 +26,10 @@ bounds) live in the code that applies them.
   license only facts. The exception is the Bluetooth LE hardware engine (the
   S31 driver, controller memory, the PAC's Bluetooth initialization and the
   HAL's scheduler locks), kept as it is, including what it takes from
-  `esp32s31-bt-lib`.
+  `esp32s31-bt-lib`. Inside it the controller memory lends the interrupt
+  owner to a task, serialized with the interrupt service: a known exception
+  to the shared-lock rule until the Bluetooth LE block replaces it with
+  lock-free queues between the interrupt and task halves.
 - **Vendor libraries in local and CI work.** Pinned vendor static libraries
   and ROMs, licensed or not, may be used in any form locally and in CI:
   analysed, executed in emulation, linked into comparison images. They are
@@ -51,7 +54,7 @@ bounds) live in the code that applies them.
 - **Knowledge stays, shape goes.** Code whose value is recovered knowledge or
   a pure algorithm is kept; ownership, orchestration and wiring are rebuilt.
 - **No critical sections in portable protocols:** no `critical-section` or
-  blocking mutex there, checked by the build with a reasoned allow-list.
+  blocking mutex there; review enforces it, the build does not check it.
 - **Hardware-shared memory** ([hardware memory](hardware-memory.md)). Memory
   the hardware reads and writes (DMA descriptors, the RX control prefix, TX
   descriptor words, BLE exchange memory) is described in the register model
@@ -76,7 +79,10 @@ bounds) live in the code that applies them.
   radio-system actor. P1: role bodies, network stack, application. The level
   order is to be checked at compile time.
 - **No shared lock** between an interrupt handler and a task; no blocking
-  waits or spin loops in drivers.
+  waits or spin loops in drivers, with one exception: a named settle of a
+  known length up to 20 µs may busy-wait, and it counts against the step
+  bound of its context. A wait for an event of unknown duration (a
+  handshake, a ring poll) is a timer-woken step with a deadline.
 - **Interrupt handlers** reach tasks through static typed signals, never
   through an executor's waker vtable.
 - **Interrupt code placement.** Code reachable from interrupts runs from SRAM
@@ -190,7 +196,10 @@ bounds) live in the code that applies them.
   is verified.
 - **No fixed rates.** No fixed data or control-frame rate, not even
   temporarily: rate selection is its own portable machine built from the
-  vendor policy.
+  vendor policy. Frames before association and to a group address use the
+  lowest rate the band and the BSS basic rate set allow; a control response
+  takes its rate from the eliciting frame by the standard's rule. Both are
+  derived, never constants.
 
 ## Bluetooth LE
 
