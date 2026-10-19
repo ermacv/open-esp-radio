@@ -9,7 +9,7 @@ use oer_esp32s31_pac::{
     BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticReadBudget, BluetoothDiagnosticUnsettled};
+use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
 
 #[derive(Debug)]
 enum Phase {
@@ -89,14 +89,14 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'a>,
 }
 
 impl Hardware<'_> {
     fn sample_busy(
         &mut self,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.budget, || self.interrupts.capture_scheduler_busy())
+        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
     }
 }
 
@@ -128,7 +128,7 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     stop: BluetoothSchedulerStop,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'_>,
 ) -> Result<BluetoothSchedulerStopStep, BluetoothDiagnosticUnsettled> {
     Ok(
         match step(
@@ -136,7 +136,7 @@ pub(crate) fn step_hardware(
             &mut Hardware {
                 task,
                 interrupts,
-                budget,
+                settle,
             },
         )? {
             Progress::Pending(stop) => BluetoothSchedulerStopStep::Pending(stop),

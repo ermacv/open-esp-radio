@@ -45,7 +45,9 @@ pub use controller_time::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchRequest,
     BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError,
 };
-pub use diagnostic::{BluetoothDiagnosticReadBudget, BluetoothDiagnosticUnsettled};
+pub use diagnostic::{
+    BluetoothDiagnosticSettle, BluetoothDiagnosticSettleLimit, BluetoothDiagnosticUnsettled,
+};
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::{BluetoothSchedulerStop, BluetoothSchedulerStopStep};
@@ -988,12 +990,12 @@ impl InterruptRegistersOwner {
     }
 
     /// Sample scheduler BUSY through the diagnostic pair for the bank-one
-    /// source-3 reference gate, within `budget` attempts.
+    /// source-3 reference gate, within `settle`.
     pub fn capture_scheduler_reference_gate(
         &mut self,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(budget, || self.registers.capture_scheduler_reference_gate())
+        diagnostic::settle(settle, || self.registers.capture_scheduler_reference_gate())
     }
 
     /// Clear the scheduler reference selected by the source-124 gate.
@@ -1012,12 +1014,12 @@ impl InterruptRegistersOwner {
     }
 
     /// Sample scheduler BUSY through the diagnostic pair for one task-side
-    /// scheduler decision, within `budget` attempts.
+    /// scheduler decision, within `settle`.
     pub fn capture_scheduler_busy(
         &mut self,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(budget, || self.registers.capture_scheduler_busy())
+        diagnostic::settle(settle, || self.registers.capture_scheduler_busy())
     }
 
     /// Acknowledge interrupt source 7 for one indexed scheduler
@@ -1032,13 +1034,13 @@ impl InterruptRegistersOwner {
 
     /// Sample scheduler BUSY through the interrupt-owned diagnostic pair for
     /// one lock/modify decision without borrowing task-side controller
-    /// registers, within `budget` attempts.
+    /// registers, within `settle`.
     pub fn capture_scheduler_lock_modify_interrupt(
         &mut self,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, BluetoothDiagnosticUnsettled>
     {
-        diagnostic::settle(budget, || {
+        diagnostic::settle(settle, || {
             self.registers.capture_scheduler_lock_modify_interrupt()
         })
     }
@@ -1066,12 +1068,12 @@ pub struct InterruptOutputAfterRoutesOwner {
 }
 
 impl InterruptOutputAfterRoutesOwner {
-    /// Sample scheduler BUSY within `budget` attempts for one release step.
+    /// Sample scheduler BUSY within `settle` for one release step.
     fn capture_scheduler_busy(
         &self,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
-        diagnostic::settle(budget, || self._registers.capture_scheduler_busy()).map_err(
+        diagnostic::settle(settle, || self._registers.capture_scheduler_busy()).map_err(
             |BluetoothDiagnosticUnsettled| {
                 BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled
             },
@@ -1082,12 +1084,12 @@ impl InterruptOutputAfterRoutesOwner {
     pub fn validate_idle_controller(
         &self,
         task: &mut TaskOwner,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         if task.time_latch.in_flight() {
             return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
         }
-        let busy = self.capture_scheduler_busy(budget)?;
+        let busy = self.capture_scheduler_busy(settle)?;
         self._registers
             .validate_idle_controller(&mut task.registers, busy)
     }
@@ -1097,9 +1099,9 @@ impl InterruptOutputAfterRoutesOwner {
     pub fn try_reactivate_idle_controller_output(
         self,
         task: &mut TaskOwner,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<InterruptRegistersOwner, (BluetoothControllerOutputReleaseError, Self)> {
-        if let Err(error) = self.validate_idle_controller(task, budget) {
+        if let Err(error) = self.validate_idle_controller(task, settle) {
             return Err((error, self));
         }
         Ok(InterruptRegistersOwner {
@@ -1113,12 +1115,12 @@ impl InterruptOutputAfterRoutesOwner {
     /// can leave RUN disabled; it never authorizes reactivation, memory
     /// reclamation or cold reunion.
     ///
-    /// BUSY is sampled twice within `budget` attempts each: before the
+    /// BUSY is sampled twice within `settle` each: before the
     /// dynamic sources are masked and after the fence that disables RUN.
     pub fn try_release_idle_controller_output(
         self,
         task: &mut TaskOwner,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<InterruptOutputReleasedOwner, (BluetoothControllerOutputReleaseError, Self)> {
         if task.time_latch.in_flight() {
             return Err((
@@ -1126,14 +1128,14 @@ impl InterruptOutputAfterRoutesOwner {
                 self,
             ));
         }
-        let quiesced = match self.capture_scheduler_busy(budget).and_then(|busy| {
+        let quiesced = match self.capture_scheduler_busy(settle).and_then(|busy| {
             self._registers
                 .quiesce_idle_controller_output(&mut task.registers, busy)
         }) {
             Ok(quiesced) => quiesced,
             Err(error) => return Err((error, self)),
         };
-        let busy = match self.capture_scheduler_busy(budget) {
+        let busy = match self.capture_scheduler_busy(settle) {
             Ok(busy) => busy,
             Err(error) => return Err((error, self)),
         };
@@ -1772,18 +1774,18 @@ impl ControllerHal<'_> {
     /// Advance one finite execution-lock step under interrupt serialization:
     /// the engine-idle preamble, publication of command zero and one
     /// observation of it. Pending retains the request; the caller owns its
-    /// deadline. Each BUSY sample takes at most `budget` attempts.
+    /// deadline. Each BUSY sample settles within `settle`.
     pub fn step_scheduler_execution_lock(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         lock: &mut BluetoothSchedulerExecutionLock,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
         scheduler_execution_lock::step_hardware(
             self.registers,
             &mut interrupts.registers,
             lock,
-            budget,
+            settle,
         )
     }
 
@@ -1820,18 +1822,18 @@ impl ControllerHal<'_> {
     /// serialization: the engine-idle preamble, publication, the progress
     /// and completion waits, the settle wait and a repeated request after a
     /// conflict. Pending retains the request; the caller owns its deadline.
-    /// Each diagnostic sample takes at most `budget` attempts.
+    /// Each diagnostic sample settles within `settle`.
     pub fn step_scheduler_execution_modify(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         modify: &mut BluetoothSchedulerExecutionModify,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
         scheduler_execution_modify::step_hardware(
             self.registers,
             &mut interrupts.registers,
             modify,
-            budget,
+            settle,
         )
     }
 
@@ -1982,14 +1984,14 @@ impl ControllerHal<'_> {
 
     /// Advance the common stop preamble/request/idle sequence under interrupt
     /// serialization. Pending retains the request; the caller owns its deadline.
-    /// Each BUSY sample takes at most `budget` attempts.
+    /// Each BUSY sample settles within `settle`.
     pub fn step_scheduler_stop(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         stop: BluetoothSchedulerStop,
-        budget: BluetoothDiagnosticReadBudget,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<BluetoothSchedulerStopStep, BluetoothDiagnosticUnsettled> {
-        scheduler_stop::step_hardware(self.registers, &mut interrupts.registers, stop, budget)
+        scheduler_stop::step_hardware(self.registers, &mut interrupts.registers, stop, settle)
     }
 
     /// Retire the exact stopped RUN head without clearing a foreign item.

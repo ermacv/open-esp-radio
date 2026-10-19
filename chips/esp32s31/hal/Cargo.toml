@@ -17,6 +17,7 @@ pin-project = "1.1.13"
 vcell = "0.1.3"
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-memory = { path = "../../../portable/memory" }
+oer-time = { path = "../../../portable/time" }
 oer-esp32s31-pac = { path = "../pac" }
 oer-espressif-coex = { path = "../../espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
