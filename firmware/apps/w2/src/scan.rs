@@ -528,12 +528,12 @@ async fn drive(
                 }
             }
             Either3::Third(()) => {
-                if tx.next_deadline().is_some_and(|d| CLOCK.now() >= d) {
-                    if let OrdinaryTxAccess::Active(active) = tx.access() {
-                        active
-                            .service(&mut registers.wifi_mac_hal(), WifiTxWake::Deadline)
-                            .map_err(|_| "tx-deadline")?;
-                    }
+                if tx.next_deadline().is_some_and(|d| CLOCK.now() >= d)
+                    && let OrdinaryTxAccess::Active(active) = tx.access()
+                {
+                    active
+                        .service(&mut registers.wifi_mac_hal(), WifiTxWake::Deadline)
+                        .map_err(|_| "tx-deadline")?;
                 }
             }
         }
@@ -549,31 +549,30 @@ fn observe(
     report: &mut Report,
     visit: Option<usize>,
 ) {
-    if let Ok(frame) = frames.normalize(&held) {
+    if let Ok(frame) = frames.normalize(held) {
         let channel = visit.map_or(config.channel, |i| report.visits[i].channel);
-        if let Some(record) = parse_management(frame.mpdu, channel, frame.rssi_dbm) {
-            if record.bssid.get() == config.stand
-                && record.ssid_bytes() == config.ssid
-                && record.channel == config.channel
+        if let Some(record) = parse_management(frame.mpdu, channel, frame.rssi_dbm)
+            && record.bssid.get() == config.stand
+            && record.ssid_bytes() == config.ssid
+            && record.channel == config.channel
+        {
+            report.supported_len = record.supported_rates_bytes().len();
+            report.supported[..report.supported_len]
+                .copy_from_slice(record.supported_rates_bytes());
+            report.extended_len = record.extended_supported_rates_bytes().len();
+            report.extended[..report.extended_len]
+                .copy_from_slice(record.extended_supported_rates_bytes());
+            *basic = Some(BasicRates::from_rate_elements(
+                record.supported_rates_bytes(),
+                record.extended_supported_rates_bytes(),
+            ));
+            if frame.mpdu.first().is_some_and(|v| v >> 4 == 5)
+                && frame.mpdu.get(4..10) == Some(station.as_slice())
             {
-                report.supported_len = record.supported_rates_bytes().len();
-                report.supported[..report.supported_len]
-                    .copy_from_slice(record.supported_rates_bytes());
-                report.extended_len = record.extended_supported_rates_bytes().len();
-                report.extended[..report.extended_len]
-                    .copy_from_slice(record.extended_supported_rates_bytes());
-                *basic = Some(BasicRates::from_rate_elements(
-                    record.supported_rates_bytes(),
-                    record.extended_supported_rates_bytes(),
-                ));
-                if frame.mpdu.first().is_some_and(|v| v >> 4 == 5)
-                    && frame.mpdu.get(4..10) == Some(station.as_slice())
-                {
-                    if let Some(i) = visit {
-                        report.visits[i].responses += 1;
-                    } else {
-                        report.unicast_responses += 1;
-                    }
+                if let Some(i) = visit {
+                    report.visits[i].responses += 1;
+                } else {
+                    report.unicast_responses += 1;
                 }
             }
         }

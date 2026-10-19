@@ -171,7 +171,7 @@ async fn reporting(
             break report;
         }
         use oer_time::Timer;
-        EmbassyClock
+        let _ = EmbassyClock
             .wait_for(oer_time::Duration::from_millis(10))
             .await;
     };
