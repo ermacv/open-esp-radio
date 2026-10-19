@@ -29,7 +29,7 @@ const RX_CAPACITY: u32 = 1 << 4;
 /// owner of the interrupt line posts it once, after applying the mask.
 const MASKED: u32 = 1 << 5;
 
-/// One finite snapshot in vendor order: RX, TX completion, timeout, collision.
+/// One finite snapshot in vendor order: RX, TX completion, timeout, BSS-color collision.
 /// Multiplicity stays in the descriptor/completion rings. Facts published
 /// after this snapshot remain pending for the following driver step.
 #[must_use = "process or transfer every fact before discarding the batch"]
@@ -214,8 +214,7 @@ impl IrqPublisher<'_> {
                 u32::from(publication.added & EVENT_RX_SUCCESS != 0),
                 Ordering::Relaxed,
             );
-            const TX: u32 =
-                super::EVENT_TX_COMPLETE | super::EVENT_TX_TIMEOUT | super::EVENT_COLLISION;
+            const TX: u32 = super::EVENT_TX_COMPLETE | super::EVENT_TX_TIMEOUT;
             self.storage.tx_epochs.fetch_add(
                 u32::from(publication.added & TX != 0 && publication.previous & TX == 0),
                 Ordering::Relaxed,

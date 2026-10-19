@@ -222,7 +222,6 @@ impl OrdinaryTxOutcome {
 pub enum TxResetReason {
     CompletionInterruptWithoutState,
     TimeoutInterruptWithoutState,
-    CollisionInterruptWithoutState,
     ConflictingInterruptEvents(u32),
     ExecutorDeadline,
 }
@@ -967,10 +966,10 @@ where
     /// Consume one interrupt or deadline edge for a queued attempt.
     ///
     /// Several queues share one MAC interrupt, and its task-side events
-    /// (`EVENT_TX_COMPLETE`, `EVENT_TX_TIMEOUT`, `EVENT_COLLISION`) do not name
+    /// (`EVENT_TX_COMPLETE`, `EVENT_TX_TIMEOUT`) do not name
     /// a queue, so every queued attempt is serviced with the same edge and
-    /// claims only its own queue's state: the completion bank, then (on a
-    /// collision edge) the collision detach, then (on a timeout edge or its
+    /// claims only its own queue's state: the completion bank, then its per-queue
+    /// collision state, then (on a timeout edge or its
     /// expired publication deadline) the timeout abort. An edge its queue does
     /// not show leaves the attempt pending; unlike [`OrdinaryTxActive::service`], several
     /// simultaneous causes are not a fault, since they may belong to different
@@ -1027,7 +1026,7 @@ where
         wake: WifiTxWake,
         may_begin_timeout_abort: bool,
     ) -> Result<Step, OrdinaryTxError> {
-        use oer_esp32s31_ieee80211_mac::irq::{EVENT_COLLISION, EVENT_TX_TIMEOUT};
+        use oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT;
 
         if matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
             return self.service_abort_settle(hardware, active);
@@ -1048,11 +1047,10 @@ where
                 CompletionObservation::NoEffect => {}
             }
         }
-        if events & EVENT_COLLISION != 0
-            && self
-                .slot
-                .as_mut()
-                .abort_collision(hardware, active.cookie)?
+        if self
+            .slot
+            .as_mut()
+            .abort_collision(hardware, active.cookie)?
         {
             return self.finish_aborted_attempt(hardware, active, false);
         }
@@ -1258,8 +1256,7 @@ where
         };
         let tx_events = interrupt_events
             & (oer_esp32s31_ieee80211_mac::irq::EVENT_TX_COMPLETE
-                | oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT
-                | oer_esp32s31_ieee80211_mac::irq::EVENT_COLLISION);
+                | oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT);
         if tx_events.count_ones() > 1 {
             return self
                 .reset_required(active, TxResetReason::ConflictingInterruptEvents(tx_events));
@@ -1280,9 +1277,16 @@ where
             }
         }
 
-        use oer_esp32s31_ieee80211_mac::irq::{
-            EVENT_COLLISION, EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT,
-        };
+        use oer_esp32s31_ieee80211_mac::irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT};
+        // A global HE BSS-color event is never evidence about this queue.
+        // The PAC detaches only when its per-queue collision state is set.
+        if self
+            .slot
+            .as_mut()
+            .abort_collision(hardware, active.cookie)?
+        {
+            return self.finish_aborted_attempt(hardware, active, false);
+        }
         if tx_events == EVENT_TX_COMPLETE && !diagnostic {
             return self.reset_required(active, TxResetReason::CompletionInterruptWithoutState);
         }
@@ -1301,16 +1305,6 @@ where
                 return self.reset_required(active, reason);
             }
             return self.start_abort_settle(active);
-        }
-        if tx_events == EVENT_COLLISION {
-            if !self
-                .slot
-                .as_mut()
-                .abort_collision(hardware, active.cookie)?
-            {
-                return self.reset_required(active, TxResetReason::CollisionInterruptWithoutState);
-            }
-            return self.finish_aborted_attempt(hardware, active, false);
         }
 
         Ok(Step::Pending(active))

@@ -1434,6 +1434,12 @@ value = 0x19a879e0
 description = "Complete mask published by the qualified cold receive initializer."
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
+[[flag-domains.values]]
+name = "STATION"
+value = 0x19a878e0
+description = "Station mask: the cold receive image with HE BSS-color collision disabled until its consumer exists."
+sources = ["POLICY_STATION_BSS_COLOR_MASK"]
+
 [[opaque-domains]]
 name = "MacInterruptClearImage"
 description = "Register-specific event image written to the MAC interrupt clear register."
@@ -2392,6 +2398,13 @@ peripheral = "WIFI_MAC_INTERRUPT"
 register = "ENABLE"
 value = 0x19A879E0
 sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+
+[[fixed-register-images]]
+name = "enable_station_mac_interrupts"
+peripheral = "WIFI_MAC_INTERRUPT"
+register = "ENABLE"
+value = 0x19A878E0
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL", "POLICY_STATION_BSS_COLOR_MASK"]
 
 [[fixed-register-images]]
 name = "prepare_bluetooth_interrupt_output"

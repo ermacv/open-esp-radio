@@ -14,7 +14,7 @@ use oer_esp32s31_ieee80211_driver::rx::{
     counters::{WifiRxExhaustion, WifiRxReport},
     receive::RELOAD_SETTLE_LIMIT,
 };
-use oer_esp32s31_ieee80211_mac::init::MAC_COLD_RX_INTERRUPT_MASK;
+use oer_esp32s31_ieee80211_mac::init::MAC_STATION_INTERRUPT_MASK;
 use oer_espressif_executor::poll_timing::CycleHistogram;
 use oer_ieee80211_mac::address::Bssid;
 use oer_ieee80211_runtime::survey::{BssTally, Survey};
@@ -670,7 +670,7 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
         Masked(run.stand),
         ssid_matches(run),
         run.window_ms,
-        MAC_COLD_RX_INTERRUPT_MASK.bits(),
+        MAC_STATION_INTERRUPT_MASK.bits(),
     ))?;
     for (index, (record, tally)) in run.survey.entries().enumerate() {
         let who = if record.bssid == run.stand {

@@ -29,7 +29,9 @@ pub enum MacInterruptEnableState {
     Disabled,
     /// Exact complete mask published by the reviewed cold receive initializer.
     ColdRx,
-    /// A field combination outside the two reviewed writable images.
+    /// Station mask with the independent HE BSS-color event disabled.
+    Station,
+    /// A field combination outside the reviewed writable images.
     Unknown,
 }
 
@@ -42,12 +44,16 @@ pub(crate) fn publish_mac_interrupt_mask(
         return;
     }
 
-    assert_eq!(
-        event_mask,
-        MacInterruptMask::COLD_RX,
-        "MAC interrupt domain gained an unpublished register image"
-    );
-    svd::fixed_register_image::enable_cold_rx_mac_interrupts(interrupt);
+    if event_mask == MacInterruptMask::STATION {
+        svd::fixed_register_image::enable_station_mac_interrupts(interrupt);
+    } else {
+        assert_eq!(
+            event_mask,
+            MacInterruptMask::COLD_RX,
+            "MAC interrupt domain gained an unpublished register image"
+        );
+        svd::fixed_register_image::enable_cold_rx_mac_interrupts(interrupt);
+    }
 }
 
 pub(crate) fn observe_mac_interrupt_enable(
@@ -84,7 +90,6 @@ pub(crate) fn observe_mac_interrupt_enable(
         && enable.rx_associated_auxiliary_5().bit_is_set()
         && enable.bit_6_opaque().bit_is_set()
         && enable.tx_complete().bit_is_set()
-        && enable.bss_color_collision().bit_is_set()
         && enable.bits_9_10_opaque().bits() == 0
         && enable.watchdog().bit_is_set()
         && enable.bit_12_opaque().bit_is_set()
@@ -103,7 +108,11 @@ pub(crate) fn observe_mac_interrupt_enable(
         && enable.bit_28_opaque().bit_is_set()
         && enable.bits_29_31_opaque().bits() == 0;
     if cold_rx {
-        MacInterruptEnableState::ColdRx
+        if enable.bss_color_collision().bit_is_set() {
+            MacInterruptEnableState::ColdRx
+        } else {
+            MacInterruptEnableState::Station
+        }
     } else {
         MacInterruptEnableState::Unknown
     }

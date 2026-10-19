@@ -1,3 +1,7 @@
 # Register review uses the closed provenance/accuracy/completeness enums from
 # the generic contracts crate; evidence catalogs only define source identity.
 schema = 1
+
+[[sources]]
+id = "POLICY_STATION_BSS_COLOR_MASK"
+description = "docs/decisions.md, BSS-color collision: station interrupt policy keeps the HE BSS-color collision event masked until an HE consumer exists. It is not a TX queue collision; queue collision detach is qualified only by TX_COMMON.collision_pending."

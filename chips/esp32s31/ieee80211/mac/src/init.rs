@@ -46,12 +46,13 @@ pub use crate::{
 
 pub use oer_esp32s31_hal::types::{MacInterruptMask, MacTxPowerPair, MacTxPowerTable};
 
-/// Complete event mask published by the recovered cold receive initializer.
+/// Station event mask, with HE BSS-color collision disabled.
 ///
 /// Applications activate the disjoint ISR register capability only after
 /// installing their final handler storage, but the bit policy itself remains
-/// part of the MAC lifecycle recovered from `libpp.a[hal_mac.o]::hal_init`.
-pub const MAC_COLD_RX_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::COLD_RX;
+/// part of the MAC lifecycle. Queue collisions are sampled from TX_COMMON;
+/// the independent HE color event has no station consumer yet.
+pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATION;
 
 /// Vendor-proven outer MAC quiescence used while no RX descriptor epoch is
 /// allowed to exist.
@@ -222,7 +223,7 @@ pub async fn initialize_wifi_mac<
     // callback result retains whether the platform actually supplied a
     // calibration. The hardware mapping remains explicit in the HAL adapter.
     let slow_clock_calibration = platform.mac_slow_clock_calibration();
-    mmio.initialize_hal_tail(MAC_COLD_RX_INTERRUPT_MASK, slow_clock_calibration);
+    mmio.initialize_hal_tail(MAC_STATION_INTERRUPT_MASK, slow_clock_calibration);
 
     // Complete seventeen-edge COEX/PTI tail. Query values in the blob's exact
     // callback order before handing the finite program to its PAC owner.
@@ -232,7 +233,7 @@ pub async fn initialize_wifi_mac<
     // Complete `hal_enable_mac`: clear the four common disable gates, then
     // publish the interrupt mask. This does not route the peripheral interrupt
     // to a CPU; the platform interrupt owner still installs that route and ISR.
-    mmio.enable_mac_interrupts(MAC_COLD_RX_INTERRUPT_MASK);
+    mmio.enable_mac_interrupts(MAC_STATION_INTERRUPT_MASK);
 
     // `wifi_set_rx_policy(0)` publishes both valid interface addresses after
     // `hal_init`; the address-valid bits are part of the S31 RX start gate even

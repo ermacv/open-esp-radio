@@ -323,14 +323,14 @@ impl RadioPartitions {
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MacInterruptEvents {
     pub(crate) tx_complete: bool,
-    pub(crate) collision: bool,
+    pub(crate) bss_color_collision: bool,
     pub(crate) rx_success: bool,
     pub(crate) tx_timeout: bool,
 }
 
 impl MacInterruptEvents {
     pub const TX_COMPLETE: Self = Self::from_causes(true, false, false, false);
-    pub const COLLISION: Self = Self::from_causes(false, true, false, false);
+    pub const BSS_COLOR_COLLISION: Self = Self::from_causes(false, true, false, false);
     pub const RX_SUCCESS: Self = Self::from_causes(false, false, true, false);
     pub const TX_TIMEOUT: Self = Self::from_causes(false, false, false, true);
 
@@ -340,13 +340,13 @@ impl MacInterruptEvents {
 
     pub const fn from_causes(
         tx_complete: bool,
-        collision: bool,
+        bss_color_collision: bool,
         rx_success: bool,
         tx_timeout: bool,
     ) -> Self {
         Self {
             tx_complete,
-            collision,
+            bss_color_collision,
             rx_success,
             tx_timeout,
         }
@@ -355,7 +355,7 @@ impl MacInterruptEvents {
     pub const fn union(self, other: Self) -> Self {
         Self::from_causes(
             self.tx_complete || other.tx_complete,
-            self.collision || other.collision,
+            self.bss_color_collision || other.bss_color_collision,
             self.rx_success || other.rx_success,
             self.tx_timeout || other.tx_timeout,
         )
@@ -363,21 +363,21 @@ impl MacInterruptEvents {
 
     pub const fn contains(self, other: Self) -> bool {
         (!other.tx_complete || self.tx_complete)
-            && (!other.collision || self.collision)
+            && (!other.bss_color_collision || self.bss_color_collision)
             && (!other.rx_success || self.rx_success)
             && (!other.tx_timeout || self.tx_timeout)
     }
 
     pub const fn is_empty(self) -> bool {
-        !self.tx_complete && !self.collision && !self.rx_success && !self.tx_timeout
+        !self.tx_complete && !self.bss_color_collision && !self.rx_success && !self.tx_timeout
     }
 
     pub const fn tx_complete(self) -> bool {
         self.tx_complete
     }
 
-    pub const fn collision(self) -> bool {
-        self.collision
+    pub const fn bss_color_collision(self) -> bool {
+        self.bss_color_collision
     }
 
     pub const fn rx_success(self) -> bool {

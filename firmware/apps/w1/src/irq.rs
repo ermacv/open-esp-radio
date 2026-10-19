@@ -27,7 +27,7 @@ use oer_esp32s31_ieee80211_driver::{
     },
 };
 use oer_esp32s31_ieee80211_mac::{
-    init::MAC_COLD_RX_INTERRUPT_MASK,
+    init::MAC_STATION_INTERRUPT_MASK,
     irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
 };
 use oer_espressif_executor::{
@@ -246,7 +246,7 @@ pub async fn rx_task(
     let publisher = QueueSink::new(sender, &CLOCK);
     let admission = CountingAdmission::new(counters);
     let activate = move || {
-        InactiveEpoch::new(interrupt_setup).activate_rx_moderated(MAC_COLD_RX_INTERRUPT_MASK)
+        InactiveEpoch::new(interrupt_setup).activate_rx_moderated(MAC_STATION_INTERRUPT_MASK)
     };
     let (mut mac, rx_dma) = registers.split_rx_dma();
     let receiving = receive(

@@ -63288,6 +63288,19 @@ pub mod fixed_register_image {
         }
     }
 
+    /// Publish the SVD-qualified image `0x19a878e0` to `WIFI_MAC_INTERRUPT`.`ENABLE`.
+    #[inline]
+    pub fn enable_station_mac_interrupts(registers: &crate::WifiMacInterrupt) {
+        // SAFETY: generator validation proves that the target is a
+        // writable 32-bit ordinary or write-one-to-clear register,
+        // while reviewed provenance qualifies this exact image.
+        unsafe {
+            registers
+                .enable()
+                .write_with_zero(|writer| writer.bits(0x19a878e0));
+        }
+    }
+
     /// Publish the SVD-qualified image `0x00000001` to `BLUETOOTH_INTERRUPT_BANK`.`IRQ_CONTROL_0`.
     #[inline]
     pub fn prepare_bluetooth_interrupt_output(registers: &crate::BluetoothInterruptBank) {
