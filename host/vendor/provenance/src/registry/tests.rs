@@ -179,8 +179,11 @@ fn decisions_cite_the_code_shaped_names_their_places_quote() {
         r#"("phy/src/target_port.rs", "self.registers,"), Place::Function("mac_tx_set_txop_q")"#,
     )
     .unwrap();
-    std::fs::write(directory.path().join("notes.md"), r#""ignored_file_name""#).unwrap();
-    let words = decision_words(directory.path()).unwrap();
+    let words = decision_words(&[
+        directory.path().join("coverage.toml"),
+        directory.path().join("state.rs"),
+    ])
+    .unwrap();
     assert_eq!(
         words.keys().collect::<Vec<_>>(),
         ["hal_mac_fill_hwtxop", "mac_tx_set_txop_q"]
@@ -192,11 +195,32 @@ fn decisions_cite_the_code_shaped_names_their_places_quote() {
 }
 
 #[test]
+fn every_decision_file_of_this_checkout_is_read_and_a_missing_one_fails() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let project = Project::new(&root, "esp32s31").unwrap();
+    let files = decision_files(&root, &project).unwrap();
+    let names: Vec<_> = files
+        .iter()
+        .map(|file| file.file_name().unwrap().to_str().unwrap())
+        .collect();
+    for name in [
+        "coverage.toml",
+        "accepted-losses.toml",
+        "state.rs",
+        "observation.rs",
+    ] {
+        assert!(names.contains(&name), "{names:?}");
+    }
+    let empty = tempfile::tempdir().unwrap();
+    assert!(decision_words(&[empty.path().join("coverage.toml")]).is_err());
+}
+
+#[test]
 fn a_changed_decision_function_names_the_exclusions_to_review() {
     let files: BTreeSet<String> = ["coverage.toml".to_owned()].into();
     assert_eq!(
         review_hint(Some(&files)),
-        "; re-review the exclusions in decisions/coverage.toml"
+        "; re-review the exclusions in coverage.toml"
     );
     assert_eq!(review_hint(None), "");
 }

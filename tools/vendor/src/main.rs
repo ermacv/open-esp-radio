@@ -145,16 +145,7 @@ enum Check {
 
 /// The chips with pinned vendor artifacts.
 fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
-    Ok(oer_pins::artifacts::project::supported(&ctx.root)?
-        .into_iter()
-        .filter(|chip| {
-            ctx.root
-                .join("verification")
-                .join(chip)
-                .join("artifacts.toml")
-                .is_file()
-        })
-        .collect())
+    Ok(oer_pins::artifacts::project::projects(&ctx.root)?)
 }
 
 fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
