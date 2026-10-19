@@ -94,11 +94,8 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
         },
         None => oer_hil_experiment::launch::Runner::prepare(&ctx.root)?,
     };
-    let mut runner_args = match frozen
-        .as_ref()
-        .and_then(|frozen| frozen.snapshot.as_deref())
-    {
-        Some(snapshot) => with_source_snapshot(args, snapshot),
+    let mut runner_args = match frozen.as_ref().and_then(|frozen| frozen.images.as_deref()) {
+        Some(images) => with_images(args, images),
         None => args.to_vec(),
     };
     apply_quarantine(&mut runner_args)?;
@@ -625,7 +622,6 @@ fn runs(
                 None,
                 apply,
                 unreadable,
-                &captures()?,
             )?;
             for (run, bytes) in &pruned.removed_unreadable {
                 let schema = run
@@ -654,14 +650,6 @@ fn runs(
                     println!(
                         "deleted {} observer builds no kept run names",
                         pruned.observers
-                    );
-                }
-                if pruned.sources.objects > 0 || pruned.sources.captures > 0 {
-                    println!(
-                        "deleted {} source objects ({} MiB) and {} captures nothing uses",
-                        pruned.sources.objects,
-                        pruned.sources.bytes >> 20,
-                        pruned.sources.captures
                     );
                 }
                 let objects = collect_objects(ctx);
@@ -757,15 +745,6 @@ fn run_store_budget() -> Result<u64> {
 const RUN_STORE_BUDGET_ENV: &str = "OER_HIL_RUN_STORE_BUDGET_GIB";
 const RUN_STORE_BUDGET_GIB: u64 = 40;
 
-/// The captures source collection weighs: the host's capture store and what
-/// queued or running jobs hold.
-fn captures() -> Result<oer_hil_analysis::runs::Captures> {
-    Ok(oer_hil_analysis::runs::Captures {
-        stores: vec![oer_hil_image::source_snapshot_store()?],
-        held: crate::sweep::held_by_jobs()?,
-    })
-}
-
 fn prune_automatically(ctx: &Checkout, store: &oer_hil_run_bundle::RunStore) -> Result<()> {
     let marker = store.root().join("last-prune");
     if std::fs::metadata(&marker)
@@ -786,7 +765,6 @@ fn prune_automatically(ctx: &Checkout, store: &oer_hil_run_bundle::RunStore) -> 
         Some(run_store_budget()?),
         true,
         false,
-        &captures()?,
     )?;
     let objects = collect_objects(ctx);
     if objects.objects > 0 {
@@ -814,10 +792,9 @@ fn use_shared_store(ctx: &Checkout) -> Result<()> {
 
 /// Check an enqueued `run`'s scenarios and options with the runner now, so
 /// a mistake shows in the terminal instead of in a job that ends no-run
-/// minutes later.
-/// Check an enqueued command and fix what it runs with: this binary, the
-/// runner and, for a `run` that builds, a source snapshot of the checkout
-/// taken now with the run's own source options.
+/// minutes later, and fix what it runs with: this binary, the runner and,
+/// for a `run` that builds, its images, built now into the job's own
+/// directory of images.
 fn freeze_enqueued(ctx: &Checkout, args: &[OsString]) -> Result<crate::jobs::Frozen> {
     let mut frozen = crate::jobs::Frozen::capture(ctx)?;
     if args.first().and_then(|arg| arg.to_str()) != Some("run") {
@@ -836,52 +813,30 @@ fn freeze_enqueued(ctx: &Checkout, args: &[OsString]) -> Result<crate::jobs::Fro
         )
         .into());
     }
-    if has_flag(args, "--firmware-from") {
+    if has_flag(args, "--firmware-from") || has_flag(args, "--images") {
         return Ok(frozen);
     }
-    if has_flag(args, "--source-snapshot") {
-        build_before_queue(ctx, &frozen, args)?;
-        return Ok(frozen);
-    }
-    let output = oer_os_process::output(
-        ctx.command(&frozen.runner)
-            .args(["image", "snapshot"])
-            .args(source_options(args)),
-        Some(std::time::Duration::from_secs(600)),
-    )?;
-    if !output.status.success() {
-        return Err(format!(
-            "not enqueued: the source snapshot failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )
-        .into());
-    }
-    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    let directory = snapshot["directory"]
-        .as_str()
-        .ok_or("the source snapshot names no directory")?;
-    frozen.snapshot = Some(PathBuf::from(directory));
-    build_before_queue(
-        ctx,
-        &frozen,
-        &with_source_snapshot(args, Path::new(directory)),
-    )?;
+    let images = crate::jobs::images_directory(ctx)?;
+    build_before_queue(ctx, &frozen, args, &images)?;
+    frozen.images = Some(images);
     Ok(frozen)
 }
 
-/// Build and audit a run's images with its fixed runner before the job
-/// waits: a build or audit that fails does so now, in the terminal, not
-/// after the queue.
+/// Build and audit a run's images with its fixed runner into `images`
+/// before the job waits: a build or audit that fails does so now, in the
+/// terminal, not after the queue, and the job flashes exactly these.
 fn build_before_queue(
     ctx: &Checkout,
     frozen: &crate::jobs::Frozen,
     run_args: &[OsString],
+    images: &Path,
 ) -> Result<()> {
     eprintln!("hil: building the run's images before it queues");
     let status = ctx
         .command(&frozen.runner)
         .args(run_args)
         .arg("--build-only")
+        .arg(images)
         .status()?;
     if !status.success() {
         return Err("not enqueued: the run's images did not build (see above)".into());
@@ -928,45 +883,37 @@ fn has_flag(args: &[OsString], name: &str) -> bool {
     })
 }
 
-/// The options of `args` that choose a run's sources: they make its snapshot.
-const SOURCE_OPTIONS: [(&str, bool); 2] =
-    [("--source-include", true), ("--include-untracked", false)];
+/// The options of a `run` that say how its images are built; the images
+/// an enqueued run was built with replace them.
+const BUILD_OPTIONS: [(&str, bool); 3] = [
+    ("--source", true),
+    ("--layout-seed", true),
+    ("--features", true),
+];
 
-/// `args`' source options, with their values.
-fn source_options(args: &[OsString]) -> Vec<OsString> {
-    split_source_options(args).0
-}
-
-/// `args` split into the source options and the rest.
-fn split_source_options(args: &[OsString]) -> (Vec<OsString>, Vec<OsString>) {
-    let (mut sources, mut rest) = (Vec::new(), Vec::new());
-    let mut arguments = args.iter();
-    while let Some(argument) = arguments.next() {
+/// The runner arguments of a run whose images were built into `images`
+/// when it was enqueued: its build options already made them.
+fn with_images(args: &[OsString], images: &Path) -> Vec<OsString> {
+    let mut arguments = Vec::new();
+    let mut rest = args.iter();
+    while let Some(argument) = rest.next() {
         let text = argument.to_str().unwrap_or_default();
-        match SOURCE_OPTIONS.iter().find(|(name, _)| {
+        match BUILD_OPTIONS.iter().find(|(name, _)| {
             text == *name
                 || text
                     .strip_prefix(name)
-                    .is_some_and(|rest| rest.starts_with('='))
+                    .is_some_and(|value| value.starts_with('='))
         }) {
             Some((name, takes_value)) => {
-                sources.push(argument.clone());
                 if *takes_value && text == *name {
-                    sources.extend(arguments.next().cloned());
+                    rest.next();
                 }
             }
-            None => rest.push(argument.clone()),
+            None => arguments.push(argument.clone()),
         }
     }
-    (sources, rest)
-}
-
-/// The runner arguments of a run whose sources were captured into
-/// `snapshot` when it was enqueued: its source options already made it.
-fn with_source_snapshot(args: &[OsString], snapshot: &Path) -> Vec<OsString> {
-    let mut arguments = split_source_options(args).1;
-    arguments.push("--source-snapshot".into());
-    arguments.push(snapshot.into());
+    arguments.push("--images".into());
+    arguments.push(images.into());
     arguments
 }
 
@@ -1246,52 +1193,39 @@ mod tests {
         assert_eq!(super::HilCommand::named("status"), None);
     }
 
-    use super::{OsString, has_flag, source_options, with_source_snapshot};
+    use super::{OsString, has_flag, with_images};
 
     #[test]
-    fn an_enqueued_run_builds_from_its_snapshot_instead_of_its_source_options() {
+    fn an_enqueued_run_flashes_its_built_images_instead_of_its_build_options() {
         let args = [
             "run",
             "a",
-            "--source-include",
-            "x.rs",
-            "--source-include=y.rs",
-            "--include-untracked",
+            "--source",
+            "/tmp/arm-a",
+            "--features=+trace",
             "--layout-seed",
             "3",
+            "--repetitions",
+            "2",
         ]
         .map(OsString::from);
         assert_eq!(
-            source_options(&args),
-            [
-                "--source-include",
-                "x.rs",
-                "--source-include=y.rs",
-                "--include-untracked"
-            ]
-            .map(OsString::from)
-        );
-        assert_eq!(
-            with_source_snapshot(&args, Path::new("/snapshots/s1")),
+            with_images(&args, Path::new("/jobs/7/images")),
             [
                 "run",
                 "a",
-                "--layout-seed",
-                "3",
-                "--source-snapshot",
-                "/snapshots/s1"
+                "--repetitions",
+                "2",
+                "--images",
+                "/jobs/7/images"
             ]
             .map(OsString::from)
         );
         assert!(has_flag(&args, "--layout-seed"));
         assert!(!has_flag(&args, "--firmware-from"));
         // A flag that only begins with the name is another flag.
-        assert!(!has_flag(
-            &[OsString::from("--source-includes")],
-            "--source-include"
-        ));
+        assert!(!has_flag(&[OsString::from("--sources")], "--source"));
     }
-
     #[test]
     fn a_profile_report_stays_outside_the_finished_run() {
         let root = Path::new("/checkout");

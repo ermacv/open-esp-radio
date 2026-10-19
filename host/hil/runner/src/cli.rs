@@ -57,26 +57,18 @@ pub(crate) enum CliCommand {
         /// Scenarios in execution order within each image class.
         #[arg(required = true, num_args = 1..)]
         scenarios: Vec<String>,
-        /// Explicit nonignored untracked source file; repeat for each included file.
-        #[arg(
-            long = "source-include",
-            value_name = "FILE",
-            conflicts_with = "firmware_from"
-        )]
-        source_include: Vec<String>,
-        /// Archive every untracked file inside a package the image builds,
-        /// recorded as such in the snapshot manifest.
-        #[arg(long, conflicts_with = "firmware_from")]
-        include_untracked: bool,
-        /// Build from this verified source snapshot directory (`image
-        /// snapshot`, possibly of another checkout) instead of capturing the
-        /// live checkout.
+        /// Build the images from the tree at this directory (a worktree of
+        /// another revision) instead of this checkout.
+        #[arg(long, value_name = "DIR", conflicts_with = "firmware_from")]
+        source: Option<PathBuf>,
+        /// Flash the images built before the run into this directory
+        /// (`--build-only DIR`; an enqueued run's) instead of building them.
         #[arg(
             long,
             value_name = "DIR",
-            conflicts_with_all = ["firmware_from", "source_include", "include_untracked"]
+            conflicts_with_all = ["firmware_from", "source", "layout_seed", "features"]
         )]
-        source_snapshot: Option<PathBuf>,
+        images: Option<PathBuf>,
         /// Use the scenarios' image class from a finished earlier HIL run; every
         /// selected scenario must use that class.
         #[arg(long, value_name = "RUN_ID")]
@@ -106,27 +98,26 @@ pub(crate) enum CliCommand {
         /// chip whose HIL agent builds every image they use.
         #[arg(long, value_name = "CHIP")]
         chip: Option<String>,
-        /// Check the scenarios, chip and options, then exit without a
-        /// snapshot, a build or a run: what `--enqueue` checks at once.
+        /// Check the scenarios, chip and options, then exit without a build
+        /// or a run: what `--enqueue` checks at once.
         #[arg(long, hide = true)]
         validate_only: bool,
-        /// Build and audit every image the scenarios use from their sources,
-        /// then exit without a run: `--enqueue` builds this way before the
-        /// job waits, so a failing build or audit shows at once.
-        #[arg(long, hide = true, conflicts_with_all = ["firmware_from", "validate_only"])]
-        build_only: bool,
+        /// Build and audit every image the scenarios use, and the recovery
+        /// image, into this new directory of images, then exit without a run:
+        /// `--enqueue` builds this way before the job waits, so a failing
+        /// build or audit shows at once and the job flashes exactly these.
+        #[arg(
+            long,
+            hide = true,
+            value_name = "DIR",
+            conflicts_with_all = ["firmware_from", "validate_only", "images"]
+        )]
+        build_only: Option<PathBuf>,
     },
     /// Execute catalog scenarios, flashing once per selected image class.
     /// The whole catalog runs only with an explicit `--all`.
     #[command(group(clap::ArgGroup::new("selection").required(true).args(["tag", "role", "all"])))]
     RunAll {
-        /// Explicit nonignored untracked source file; repeat for each included file.
-        #[arg(long = "source-include", value_name = "FILE")]
-        source_include: Vec<String>,
-        /// Archive every untracked file inside a package the image builds,
-        /// recorded as such in the snapshot manifest.
-        #[arg(long)]
-        include_untracked: bool,
         /// Shuffle the runtime's code and read-only data by this nonzero
         /// seed, recorded with the image; without it the linker keeps its
         /// natural order.
@@ -214,24 +205,10 @@ pub(crate) enum ScenarioCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ImageCommand {
-    /// Capture exact source inputs offline. Does not build, flash or qualify firmware.
-    Snapshot {
-        /// Explicit untracked file: repository-relative path or ROLE:path for a local override.
-        #[arg(long = "source-include", value_name = "FILE")]
-        source_include: Vec<String>,
-        /// Archive every untracked file inside a package the image builds,
-        /// recorded as such in the snapshot manifest.
-        #[arg(long)]
-        include_untracked: bool,
-    },
     Build {
-        /// Image classes, built one after the other; with a source snapshot
-        /// they share one materialization of it.
+        /// Image classes, built one after the other.
         #[arg(required = true, num_args = 1..)]
         classes: Vec<oer_hil_schema::image::ImageClass>,
-        /// Build only from a verified source snapshot directory, not the live checkout.
-        #[arg(long)]
-        source_snapshot: Option<PathBuf>,
         /// Shuffle the runtime's code and read-only data by this nonzero
         /// seed, recorded with the image; without it the linker keeps its
         /// natural order.

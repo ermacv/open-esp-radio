@@ -10,20 +10,16 @@ use oer_hil_run_bundle_format::run::FirmwareArtifact;
 use oer_hil_run_bundle_format::run::FirmwareReplayOrigin;
 use oer_hil_schema::image::ImageClass;
 
-/// Where a run's firmware is archived: the bundle, the object store and the
-/// sources and materials its build provenance cites.
+/// Where a run's firmware is archived: the bundle and the object store.
 pub struct FirmwareArchive<'a> {
     pub directory: &'a Path,
     pub target_directory: &'a Path,
-    pub source_root: PathBuf,
-    pub source_materials: &'a [oer_hil_run_bundle_format::build::SourceMaterial],
-    pub snapshot_materials: &'a [oer_hil_run_bundle_format::build::BuildFileMaterial],
 }
 
 impl RunSession {
     /// Where the image builder archives the `image` firmware of this run:
-    /// the bundle, the object store and the run's frozen sources, which must
-    /// be unchanged. Refuses an image the run already has.
+    /// the bundle and the object store. Refuses an image the run already
+    /// has.
     pub fn firmware_archive(&self, image: ImageClass) -> Result<FirmwareArchive<'_>> {
         if self
             .manifest
@@ -33,17 +29,9 @@ impl RunSession {
         {
             return Err("firmware already bound to this run cannot be replaced".into());
         }
-        let frozen = self
-            .frozen_sources
-            .as_ref()
-            .ok_or("firmware requires a bound source snapshot")?;
-        frozen.verify_unchanged()?;
         Ok(FirmwareArchive {
             directory: &self.directory,
             target_directory: &self.target_directory,
-            source_root: frozen.repository(),
-            source_materials: &self.source_materials,
-            snapshot_materials: &self.snapshot_materials,
         })
     }
 
@@ -95,65 +83,16 @@ impl RunSession {
         }
 
         let mut artifact = source.clone();
-        artifact.replayed_from = Some(FirmwareReplayOrigin {
-            source_run_id: archived.run_id.clone(),
-            firmware_repository: source
-                .replayed_from
-                .as_ref()
-                .map(|origin| origin.firmware_repository.clone())
-                .unwrap_or_else(|| archived.repository.clone()),
-            source_build_id: source.build_id.clone(),
-        });
-        if let Some(mut provenance) = archived.build_provenance.clone() {
-            for (index, source_material) in provenance.sources.iter_mut().enumerate() {
-                let Some(source_path) = source_material.tracked_patch_path.clone() else {
-                    continue;
-                };
-                validate_replayed_source_path(&source_path)?;
-                let destination = firmware_directory
-                    .join("source-patches")
-                    .join(format!("{index:02}.patch"));
-                archive_expected_file(
-                    &archived.source_directory.join(source_path),
-                    &self.directory.join(&destination),
-                    &self.target_directory,
-                    source_material
-                        .tracked_patch_size_bytes
-                        .ok_or("replayed source patch has no size")?,
-                    source_material
-                        .tracked_patch_sha256
-                        .as_deref()
-                        .ok_or("replayed source patch has no digest")?,
-                )?;
-                source_material.tracked_patch_path = Some(destination);
-            }
-            for (index, file) in provenance.files.iter_mut().enumerate() {
-                let Some(source_path) = file.archive_path.clone() else {
-                    continue;
-                };
-                validate_replayed_source_path(&source_path)?;
-                let destination = if file.name == "embedded-lock" {
-                    firmware_directory.join("effective-Cargo.lock")
-                } else if file.name.starts_with("source-snapshot-") {
-                    firmware_directory.join("source-snapshot").join(&file.path)
-                } else {
-                    firmware_directory
-                        .join("build-materials")
-                        .join(format!("{index:02}"))
-                };
-                archive_expected_file(
-                    &archived.source_directory.join(source_path),
-                    &self.directory.join(&destination),
-                    &self.target_directory,
-                    file.size_bytes,
-                    &file.sha256,
-                )?;
-                file.archive_path = Some(destination);
-            }
-            let provenance_path = firmware_directory.join("build-provenance.json");
-            atomic_json(&self.directory.join(&provenance_path), &provenance)?;
-            artifact.build_provenance_path = Some(provenance_path);
-        }
+        // A replay of a replay names the run that built the image.
+        artifact.replayed_from =
+            Some(
+                source
+                    .replayed_from
+                    .clone()
+                    .unwrap_or_else(|| FirmwareReplayOrigin {
+                        source_run_id: archived.run_id.clone(),
+                    }),
+            );
         self.manifest
             .firmware
             .retain(|entry| entry.image != artifact.image);

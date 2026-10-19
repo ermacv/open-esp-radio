@@ -4,8 +4,7 @@
 //!
 //! A bundle holds the runtime ELF, the encoded flash contents (application,
 //! bootloader, partition table and, where the chip selects slots by OTA
-//! data, the OTA selection), the gate reports and
-//! `source-inputs.json`. [`ImageBundle::segments`] is what a flash writes:
+//! data, the OTA selection) and the gate reports. [`ImageBundle::segments`] is what a flash writes:
 //! the files at the chip's flash map offsets, the OTA selection last.
 //!
 //! A bundle is **published** whole: a builder fills a staging directory, a
@@ -46,7 +45,6 @@ pub mod files {
     pub const BOOTLOADER: &str = "bootloader.bin";
     pub const PARTITIONS: &str = "partitions.bin";
     pub const OTADATA: &str = "otadata.bin";
-    pub const SOURCE_INPUTS: &str = "source-inputs.json";
     pub const PLACEMENT_REPORT: &str = "placement.txt";
     pub const BUILD_LOG: &str = "build.log";
     /// The results of a build's requested checks when one of them failed:
@@ -374,10 +372,6 @@ impl ImageBundle {
         self.staged
             .as_ref()
             .map(|_| self.path(files::BOOTSTRAP_ELF))
-    }
-
-    pub fn source_inputs(&self) -> PathBuf {
-        self.path(files::SOURCE_INPUTS)
     }
 
     /// The bundle of this bundle's flash files published in `output`, with

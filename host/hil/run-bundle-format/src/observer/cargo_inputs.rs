@@ -1,4 +1,4 @@
-//! Package closure shared by build provenance and applicability evaluation.
+//! The package closure applicability evaluation reads.
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},

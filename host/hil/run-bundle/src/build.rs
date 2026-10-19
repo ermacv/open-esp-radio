@@ -1,75 +1,24 @@
-//! Firmware subjects and source materials: the content-addressed object
-//! store and the capture of a build's sources.
+//! Firmware subjects: the content-addressed object store, and the
+//! repository state an image is built from.
 
 use std::{
-    env,
     fs::{self, File},
     io,
-    path::{Path, PathBuf},
+    path::Path,
 };
-
-use sha2::{Digest, Sha256};
 
 use crate::Result;
 use oer_hil_run_bundle_format::archived::{
     DEFLATE, compressed, read_archived, stored_identity, stored_path,
 };
-use oer_hil_run_bundle_format::build::*;
-use oer_hil_source_snapshot::FrozenSources;
-use oer_os_durable::{atomic_write, sha256_file};
+use oer_hil_run_bundle_format::run::RepositoryProvenance;
+use oer_os_durable::atomic_write;
 use oer_os_process::lock::{FileLock, Mode};
-
-/// Query the tools the image builder runs. Call it when the build runs,
-/// so the record names the tools that produced the image.
-pub fn capture_environment() -> BuildEnvironment {
-    BuildEnvironment {
-        tools: oer_image_toolchain::versions()
-            .into_iter()
-            .map(|tool| BuildTool {
-                name: tool.tool.name().to_owned(),
-                program: tool.program,
-                version: tool.version,
-            })
-            .collect(),
-        inherited_rustflags: env::var("RUSTFLAGS").ok(),
-        inherited_encoded_rustflags: env::var("CARGO_ENCODED_RUSTFLAGS").ok(),
-        cargo_incremental: String::from("0"),
-        source_date_epoch: env::var("SOURCE_DATE_EPOCH").ok(),
-    }
-}
-
-/// A fixed environment in which every recorded tool reports a version,
-/// independent of the tools installed on the test host.
-#[cfg(any(test, feature = "test-support"))]
-pub fn synthetic_environment() -> BuildEnvironment {
-    BuildEnvironment {
-        tools: oer_image_toolchain::Tool::ALL
-            .into_iter()
-            .map(|tool| BuildTool {
-                name: tool.name().to_owned(),
-                program: tool.name().to_owned(),
-                version: Some(format!("{} synthetic-test-version", tool.name())),
-            })
-            .collect(),
-        inherited_rustflags: None,
-        inherited_encoded_rustflags: None,
-        cargo_incremental: String::from("0"),
-        source_date_epoch: None,
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct ArchivedFile {
     pub size_bytes: u64,
     pub sha256: String,
-}
-
-struct GitSourceState {
-    commit: String,
-    status: String,
-    tracked_diff: Vec<u8>,
-    untracked_files: Vec<SourceFileIdentity>,
-    workspace_sha256: String,
 }
 
 /// Where a file to archive comes from.
@@ -232,262 +181,24 @@ fn copy_regular_file(source: &Path, destination: &Path) -> Result<()> {
     oer_os_durable::atomic_write(destination, &fs::read(source)?)
 }
 
-pub fn capture_sources(root: &Path, run_directory: &Path) -> Result<Vec<SourceMaterial>> {
-    Ok(vec![capture_source_material(
-        "repository",
-        root,
-        run_directory,
-        Path::new("source/repository.patch"),
-    )?])
-}
-
-pub fn capture_source_material(
-    name: &str,
-    root: &Path,
-    run_directory: &Path,
-    patch_path: &Path,
-) -> Result<SourceMaterial> {
-    let checkout_path = fs::canonicalize(root).unwrap_or_else(|_| root.to_owned());
-    let state = match capture_git_source_state(root)? {
-        Some(state) => state,
-        None => {
-            return Ok(SourceMaterial {
-                name: name.to_owned(),
-                checkout_path,
-                remote: None,
-                commit: String::new(),
-                dirty: true,
-                workspace_sha256: oer_os_durable::sha256_bytes(&[]),
-                rebuild_status: SourceRebuildStatus::Incomplete,
-                tracked_patch_path: None,
-                tracked_patch_size_bytes: None,
-                tracked_patch_sha256: None,
-                untracked_files: Vec::new(),
-                limitations: vec![SourceLimitation::RepositoryStateNotCaptured],
-            });
-        }
-    };
-    let (tracked_patch_path, tracked_patch_size_bytes, tracked_patch_sha256) =
-        if state.tracked_diff.is_empty() {
-            (None, None, None)
-        } else {
-            atomic_write(&run_directory.join(patch_path), &state.tracked_diff)?;
-            (
-                Some(patch_path.to_owned()),
-                Some(u64::try_from(state.tracked_diff.len())?),
-                Some(oer_os_durable::sha256_bytes(&state.tracked_diff)),
-            )
-        };
-    let mut limitations = Vec::new();
-    if !state.untracked_files.is_empty() {
-        limitations.push(SourceLimitation::UntrackedContentNotArchived);
-    }
-    if !state.status.is_empty() && state.tracked_diff.is_empty() && state.untracked_files.is_empty()
-    {
-        limitations.push(SourceLimitation::RepositoryStateNotCaptured);
-    }
-    let remote = oer_os_process::git::text(root, ["remote", "get-url", "origin"])
-        .ok()
-        .filter(|remote| !remote.is_empty())
-        .map(sanitize_git_remote);
-    if remote.is_none() {
-        limitations.push(SourceLimitation::SourceRemoteUnavailable);
-    }
-    let rebuild_status = if !limitations.is_empty() {
-        SourceRebuildStatus::Incomplete
-    } else if state.status.is_empty() {
-        SourceRebuildStatus::CleanCommit
-    } else {
-        SourceRebuildStatus::TrackedPatch
-    };
-    Ok(SourceMaterial {
-        name: name.to_owned(),
-        checkout_path,
-        remote,
-        commit: state.commit,
-        dirty: !state.status.is_empty(),
-        workspace_sha256: state.workspace_sha256,
-        rebuild_status,
-        tracked_patch_path,
-        tracked_patch_size_bytes,
-        tracked_patch_sha256,
-        untracked_files: state.untracked_files,
-        limitations,
-    })
-}
-
-fn capture_git_source_state(root: &Path) -> Result<Option<GitSourceState>> {
-    let commit = match oer_os_process::git::text(root, ["rev-parse", "HEAD"]) {
-        Ok(commit) => commit,
-        Err(_) => return Ok(None),
+/// The repository state of the tree at `root`: its commit, and whether it
+/// has changes the commit does not hold (tracked or untracked); a tree
+/// outside git has no commit and is dirty.
+pub fn repository(root: &Path) -> Result<RepositoryProvenance> {
+    let Ok(commit) = oer_os_process::git::text(root, ["rev-parse", "HEAD"]) else {
+        return Ok(RepositoryProvenance {
+            commit: String::new(),
+            dirty: true,
+        });
     };
     let status = oer_os_process::git::text(
         root,
         ["status", "--porcelain=v1", "--untracked-files=normal"],
     )?;
-    let tracked_diff = oer_os_process::git::output(root, ["diff", "--binary", "HEAD", "--"])?;
-    let untracked =
-        oer_os_process::git::output(root, ["ls-files", "--others", "--exclude-standard", "-z"])?;
-    let mut digest = Sha256::new();
-    digest.update(status.as_bytes());
-    digest.update(&tracked_diff);
-    let mut untracked_files = Vec::new();
-    for path in untracked
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
-    {
-        digest.update(path);
-        let path = String::from_utf8(path.to_vec())?;
-        let absolute = root.join(&path);
-        if !fs::symlink_metadata(&absolute)?.file_type().is_file() {
-            return Err(format!(
-                "untracked HIL source identity is not a regular file: {}",
-                absolute.display()
-            )
-            .into());
-        }
-        let contents = fs::read(&absolute)?;
-        digest.update(&contents);
-        untracked_files.push(SourceFileIdentity {
-            path: PathBuf::from(path),
-            size_bytes: u64::try_from(contents.len())?,
-            sha256: oer_os_durable::sha256_bytes(&contents),
-        });
-    }
-    untracked_files.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(Some(GitSourceState {
+    Ok(RepositoryProvenance {
         commit,
-        status,
-        tracked_diff,
-        untracked_files,
-        workspace_sha256: format!("{:x}", digest.finalize()),
-    }))
-}
-
-fn sanitize_git_remote(remote: String) -> String {
-    let Some((scheme, remainder)) = remote.split_once("://") else {
-        return remote;
-    };
-    let authority_end = remainder.find('/').unwrap_or(remainder.len());
-    let authority = &remainder[..authority_end];
-    let sanitized_authority = authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, host)| host);
-    format!(
-        "{scheme}://{sanitized_authority}{}",
-        &remainder[authority_end..]
-    )
-}
-
-pub fn build_id(subjects: &[BuildSubject]) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"open-esp-radio-hil-build-v1\0");
-    for subject in subjects {
-        digest.update(format!("{:?}", subject.role).as_bytes());
-        digest.update([0]);
-        digest.update(subject.path.as_os_str().as_encoded_bytes());
-        digest.update([0]);
-        digest.update(subject.sha256.as_bytes());
-        digest.update(subject.size_bytes.to_le_bytes());
-    }
-    format!("{:x}", digest.finalize())
-}
-
-/// The material of the repository file `path`, named `name`.
-pub fn build_file_material(root: &Path, name: &str, path: &Path) -> Result<BuildFileMaterial> {
-    let absolute = root.join(path);
-    let metadata = fs::symlink_metadata(&absolute)?;
-    if !metadata.file_type().is_file() {
-        return Err(format!(
-            "build material is not a regular file: {}",
-            absolute.display()
-        )
-        .into());
-    }
-    Ok(BuildFileMaterial {
-        name: name.to_owned(),
-        path: path.to_owned(),
-        archive_path: None,
-        size_bytes: metadata.len(),
-        sha256: sha256_file(&absolute)?,
+        dirty: !status.is_empty(),
     })
-}
-
-pub fn archived_file_material(
-    name: &str,
-    path: &Path,
-    archive_path: PathBuf,
-    archived: &ArchivedFile,
-) -> BuildFileMaterial {
-    BuildFileMaterial {
-        name: name.to_owned(),
-        path: path.to_owned(),
-        archive_path: Some(archive_path),
-        size_bytes: archived.size_bytes,
-        sha256: archived.sha256.clone(),
-    }
-}
-
-/// The build file materials a source snapshot archives into a run: its
-/// record and its manifest, by material name and file name.
-pub const SNAPSHOT_MATERIALS: [(&str, &str); 2] = [
-    ("source-snapshot-metadata", "snapshot.json"),
-    ("source-snapshot-manifest", "manifest.json"),
-];
-
-/// Archive the snapshot in `directory` (its record and manifest) into the
-/// bundle at `output`, content-addressed in the object store below `target`,
-/// and open the archived copy, its files read from the source objects in
-/// `objects`, in a free build workspace of `build_slots`.
-pub fn archive_snapshot(
-    directory: &Path,
-    objects: &Path,
-    output: &Path,
-    target: &Path,
-    build_slots: &Path,
-) -> Result<(FrozenSources, Vec<SourceMaterial>, Vec<BuildFileMaterial>)> {
-    let destination = output.join("source/snapshot");
-    let mut files: Vec<BuildFileMaterial> = Vec::new();
-    // The files themselves are objects in `objects`, which the manifest
-    // names by digest; only the manifest and its record are archived.
-    for (name, filename) in SNAPSHOT_MATERIALS {
-        let relative = PathBuf::from("source/snapshot").join(filename);
-        let archived = archive_content_addressed(
-            Source::Built(&directory.join(filename)),
-            &output.join(&relative),
-            target,
-        )?;
-        files.push(archived_file_material(
-            name,
-            Path::new(filename),
-            relative,
-            &archived,
-        ));
-    }
-    // A persistent host build slot keeps unchanged sources, so Cargo
-    // rebuilds only the packages whose sources changed on each run.
-    let frozen = FrozenSources::open_in_free_workspace(&destination, objects, build_slots)?;
-    let sources = frozen
-        .sources()
-        .iter()
-        .map(|source| {
-            Ok(SourceMaterial {
-                name: source.name.clone(),
-                checkout_path: PathBuf::from(&source.name),
-                remote: None,
-                commit: source.commit.clone(),
-                dirty: source.dirty,
-                workspace_sha256: oer_hil_source_snapshot::identity(source)?,
-                rebuild_status: SourceRebuildStatus::SourceSnapshot,
-                tracked_patch_path: None,
-                tracked_patch_size_bytes: None,
-                tracked_patch_sha256: None,
-                untracked_files: Vec::new(),
-                limitations: Vec::new(),
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok((frozen, sources, files))
 }
 
 #[cfg(test)]

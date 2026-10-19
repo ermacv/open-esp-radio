@@ -240,11 +240,10 @@ scenarios, target and options (`run --validate-only`), so a mistake such as
 an unknown scenario fails in the terminal instead of in the job. It also
 fixes what the job runs with before it waits: a copy of the `cargo hil`
 binary below `target/hil/jobs/cli/`, the runner built now and, for a `run` that builds,
-a source snapshot of the checkout taken now with the run's own
-`--source-include` and `--include-untracked`. It then builds the run's images
-from that snapshot and runs their audits (`run --build-only`), so a failing
-build or audit ends the command in the terminal instead of the job after its
-wait. Edits, pulls and rebuilds of the
+its images: the runner builds them now with their audits into the job's own
+directory, `target/hil/jobs/images/<job>` (`run --build-only DIR`), and the
+job flashes exactly those (`run --images DIR`), so a failing build or audit
+ends the command in the terminal instead of the job after its wait. Edits, pulls and rebuilds of the
 checkout while the job waits or runs do not reach it; a job whose fixed parts
 were deleted meanwhile fails and asks to be enqueued again. `wait JOB` blocks until the job ends and exits with its outcome:
 0 passed, 1 failed, 2 interrupted (or on a quarantined board), 3 blocked or
@@ -274,8 +273,8 @@ descend from it) for the first one at which the scenario does not pass. Each
 tested commit is checked out, detached, in the bisection's worktree below
 `target/hil/bisect/<id>/`. When its `hil/protocol/messages.lock` equals this
 checkout's, it speaks this checkout's wire and this checkout's runner judges
-it: `run --source-snapshot DIR` builds the revision's firmware from a snapshot
-of the worktree and runs this checkout's host code and scenario. A commit with
+it: `run --source DIR` builds the revision's firmware from the worktree and
+runs this checkout's host code and scenario. A commit with
 another wire, or none named, runs its own
 runner, built in the worktree, while the bisection holds a whole-stand lease;
 that runner uses a private arbiter directory with a copy of the stand file
@@ -307,8 +306,8 @@ cargo hil revision --rev <revision> --scenario <id> [--scenario <id>...] [--layo
 `revision` runs a scenario set on one revision with the runner that speaks
 its HIL wire, as a bisection step does: the revision is checked out,
 detached, below `target/hil/revision/<id>/`, and the same `messages.lock`
-comparison chooses this checkout's runner (with the revision's firmware from
-a source snapshot) or the revision's own runner inside a whole-stand lease
+comparison chooses this checkout's runner (with the revision's firmware built
+from the worktree) or the revision's own runner inside a whole-stand lease
 with a private arbiter directory. That runner gets the private arbiter and
 the owner under every environment name a revision has read them from
 (`OER_STAND_ARBITER_DIR` and `OER_HIL_ARBITER_DIR`, `OER_STAND_OWNER` and
@@ -333,7 +332,7 @@ no evidence.
 ## A/B comparison
 
 ```console
-cargo hil ab --a 'rev=main' --b 'rev=main;override:esp-hal=~/src/esp-hal' \
+cargo hil ab --a 'rev=main' --b 'rev=main;features=+usb-jtag-off' \
   --scenario system-watchdog --repetitions 3 --layout-seeds 2 \
   --order-seed 7
 ```
@@ -350,9 +349,9 @@ accepts, the build record keeps the delta, the preflight accepts the flashed
 image by the image keys of its class's features with the delta applied (an arm
 without an instrument reports fewer keys than its class), and `report
 verify` checks the image's features against it. Each arm's revision is
-checked out in a worktree below `target/hil/ab/<id>/` and captured with its
-overrides into a source snapshot; this checkout's runner builds and runs
-both, so both revisions must have this checkout's `messages.lock`. For
+checked out in a worktree below `target/hil/ab/<id>/`, which this checkout's
+runner builds the arm's images from (`run --source`) and runs, so both
+revisions must have this checkout's `messages.lock`. For
 every layout seed `1..=K` the preparation round (round 0) runs A, then B,
 building their images and warming the stand up, each run under a lease of
 its own; it is recorded with the `preparation` phase and never paired. The
@@ -362,7 +361,7 @@ whole-stand lease, so drift of the air and the calibrations falls on both
 arms, and releases it: shorter work of owners with a higher balance goes
 between rounds, and the queue estimates the next
 round from the rounds before it. Every run records `experiment` (its id, arm, variant: the
-commit and each override's path, commit and dirtiness, and its round: layout
+commit and the feature delta, and its round: layout
 seed, index, phase, order and order seed) in its manifest and no evidence. A comparison takes hours, so like a run it is a job: `--enqueue`
 starts it detached and prints the job id for `cargo hil wait`, and `--after
 JOB` orders it after another job. Every run of an arm is a job of its own,
@@ -447,13 +446,7 @@ an older wire) is a record of that revision, kept for comparison. It stays until
 deletes `<store>/revision-runs/<run>` by hand. Pins live in the store's `pins.json`. Pruning with `--apply`, and the
 automatic rule, also delete the observer builds in the store's `observers/`
 that no remaining run names and that were stored more than an hour ago; a
-starting run stores its build before its manifest names it. They delete the captures in
-the host's capture store that no queued or running job holds (was fixed with,
-or names with `--source-snapshot`) and that were
-last written or used (a build or run from `--source-snapshot` uses it) more
-than a week ago, then the source objects in the
-store's `sources/` that neither a remaining run's snapshot manifest nor a
-remaining capture names and that were stored or reused more than a day ago. They also delete the firmware
+starting run stores its build before its manifest names it. They also delete the firmware
 objects of this checkout's and every registered checkout's
 `target/hil/<target>/objects/` that no run links to any more: a run's
 firmware is a hard link to its object, so an object with a single link serves

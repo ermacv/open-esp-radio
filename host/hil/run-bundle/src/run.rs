@@ -11,12 +11,11 @@ use std::{
 
 use crate::Result;
 use crate::build;
-use oer_hil_run_bundle_format::build::SourceMaterial;
 use oer_hil_schema::image::ImageClass;
 
 mod archive;
 pub use archive::FirmwareArchive;
-mod snapshot;
+mod target;
 
 // The documents this writer writes are the format's.
 use oer_hil_run_bundle_format::run::*;
@@ -25,9 +24,6 @@ pub(crate) use oer_os_durable::{atomic_json, atomic_write, sha256_file, unix_mil
 pub struct RunSession {
     target_directory: PathBuf,
     directory: PathBuf,
-    source_materials: Vec<SourceMaterial>,
-    frozen_sources: Option<oer_hil_source_snapshot::FrozenSources>,
-    snapshot_materials: Vec<oer_hil_run_bundle_format::build::BuildFileMaterial>,
     manifest: RunManifest,
     started: Instant,
     events: File,
@@ -108,15 +104,7 @@ impl RunSession {
             .and_then(|name| name.to_str())
             .ok_or("HIL run directory does not have a UTF-8 name")?
             .to_owned();
-        let source_materials = build::capture_sources(root, &directory)?;
-        let repository_source = source_materials
-            .first()
-            .ok_or("HIL source material set has no primary repository")?;
-        let repository = RepositoryProvenance {
-            commit: repository_source.commit.clone(),
-            dirty: repository_source.dirty,
-            workspace_sha256: repository_source.workspace_sha256.clone(),
-        };
+        let repository = build::repository(root)?;
         let mut runner = runner_provenance()?;
         // The observer build is shared by the runs of one observer: it is
         // stored once beside the runs directory, where that directory really
@@ -161,9 +149,6 @@ impl RunSession {
         let mut session = Self {
             target_directory,
             directory,
-            source_materials,
-            frozen_sources: None,
-            snapshot_materials: Vec::new(),
             manifest,
             started,
             events,

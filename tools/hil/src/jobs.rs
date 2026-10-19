@@ -5,8 +5,8 @@
 //! A job is the arbiter's ticket model ([`oer_lab_stand_arbiter::jobs`]): its
 //! record lives in the arbiter directory and every stand request its process
 //! and runner make carries its id. This module keeps what a job needs of the
-//! command line: a copy of this binary, the checkout's runner and the source
-//! snapshot fixed when it was enqueued, and its detached process.
+//! command line: a copy of this binary, the checkout's runner and the images
+//! built when it was enqueued, and its detached process.
 
 use std::{ffi::OsString, fs, path::PathBuf};
 
@@ -19,9 +19,9 @@ use oer_os_process::Checkout;
 /// when it was enqueued (or, for an experiment, when it started).
 pub const FROZEN_CLI_ENV: &str = "OER_HIL_JOB_CLI";
 pub const FROZEN_RUNNER_ENV: &str = "OER_HIL_JOB_RUNNER";
-/// The source snapshot an enqueued `run` builds from, captured when it was
+/// The directory of images an enqueued `run` flashes, built when it was
 /// enqueued.
-pub const FROZEN_SNAPSHOT_ENV: &str = "OER_HIL_JOB_SNAPSHOT";
+pub const FROZEN_IMAGES_ENV: &str = "OER_HIL_JOB_IMAGES";
 pub const ENQUEUE: &str = "--enqueue";
 pub use oer_hil_experiment::job::{AFTER, AFTER_ANY};
 
@@ -30,14 +30,14 @@ fn jobs() -> Result<oer_lab_stand_arbiter::jobs::Jobs> {
 }
 
 /// What a job runs with, fixed before it waits: a copy of this binary, the
-/// checkout's runner, and for a `run` the source snapshot.
+/// checkout's runner, and for a `run` its images.
 /// Edits, pulls and rebuilds of the checkout after that do not reach the job,
 /// which otherwise built them in the middle of an experiment.
 #[derive(Clone, Debug)]
 pub struct Frozen {
     pub cli: PathBuf,
     pub runner: PathBuf,
-    pub snapshot: Option<PathBuf>,
+    pub images: Option<PathBuf>,
 }
 
 impl Frozen {
@@ -65,7 +65,7 @@ impl Frozen {
         Ok(Self {
             cli,
             runner,
-            snapshot: None,
+            images: None,
         })
     }
 
@@ -88,7 +88,7 @@ impl Frozen {
         Ok(Some(Self {
             cli,
             runner,
-            snapshot: variable(FROZEN_SNAPSHOT_ENV),
+            images: variable(FROZEN_IMAGES_ENV),
         }))
     }
 
@@ -97,7 +97,7 @@ impl Frozen {
         [&self.cli, &self.runner]
             .into_iter()
             .cloned()
-            .chain(self.snapshot.clone())
+            .chain(self.images.clone())
             .collect()
     }
 
@@ -110,12 +110,27 @@ impl Frozen {
             .arg(&ctx.root)
             .env(FROZEN_CLI_ENV, &self.cli)
             .env(FROZEN_RUNNER_ENV, &self.runner);
-        match &self.snapshot {
-            Some(snapshot) => command.env(FROZEN_SNAPSHOT_ENV, snapshot),
-            None => command.env_remove(FROZEN_SNAPSHOT_ENV),
+        match &self.images {
+            Some(images) => command.env(FROZEN_IMAGES_ENV, images),
+            None => command.env_remove(FROZEN_IMAGES_ENV),
         };
         command
     }
+}
+
+/// A new directory for an enqueued run's images below the checkout's
+/// `target/hil/jobs/images`, its own copy: a later build of the checkout
+/// writes elsewhere.
+pub fn images_directory(ctx: &Checkout) -> Result<PathBuf> {
+    let parent = ctx.root.join("target/hil/jobs/images");
+    fs::create_dir_all(&parent)?;
+    // A fresh name, which the runner creates the directory under.
+    let reserved = tempfile::Builder::new()
+        .prefix("job-")
+        .tempdir_in(&parent)?;
+    let directory = reserved.path().to_owned();
+    drop(reserved);
+    Ok(directory)
 }
 
 /// `--enqueue` and `--after JOB` (or `--after-any JOB`) taken from `cargo

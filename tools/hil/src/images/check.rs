@@ -5,12 +5,10 @@
 
 use std::{
     collections::BTreeSet,
-    path::PathBuf,
     time::{Duration, Instant},
 };
 
 use oer_hil_schema::image::ImageClass;
-use oer_hil_source_snapshot::FrozenSources;
 
 use crate::Result;
 use oer_os_process::Checkout;
@@ -101,49 +99,6 @@ pub fn default_jobs() -> usize {
     std::thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).clamp(1, 8))
 }
 
-/// The classes whose image a change of `changed` (repository-relative
-/// paths) can alter or whose audits it can change: those whose last build in
-/// the host build root read a changed file, as its `source-inputs.json`
-/// records (sources, workspace and Cargo configuration, policies and the
-/// image builder itself), and every class that has no complete record yet.
-pub fn affected(chip: &str, changed: &[PathBuf]) -> Result<Vec<ImageClass>> {
-    Ok(affected_in(&oer_hil_image::chip_build_root(chip)?, changed))
-}
-
-fn affected_in(builds: &std::path::Path, changed: &[PathBuf]) -> Vec<ImageClass> {
-    ImageClass::ALL
-        .into_iter()
-        .filter(|class| match last_inputs(builds, *class) {
-            Some(inputs) => changed.iter().any(|path| inputs.contains(path)),
-            None => true,
-        })
-        .collect()
-}
-
-/// Every input the newest build of `class` in the host build root recorded,
-/// or `None` when it has none or an older record that listed only the
-/// compiled sources.
-fn last_inputs(
-    builds: &std::path::Path,
-    class: ImageClass,
-) -> Option<std::collections::BTreeSet<PathBuf>> {
-    #[derive(serde::Deserialize)]
-    struct SourceInputs {
-        schema: u32,
-        files: Vec<PathBuf>,
-    }
-    let name = format!("{}-{}", class.id(), oer_hil_image_class::NETWORK);
-    let newest = std::fs::read_dir(builds.join("snapshot-builds"))
-        .ok()?
-        .flatten()
-        .map(|snapshot| snapshot.path().join(&name).join("source-inputs.json"))
-        .filter_map(|path| Some((std::fs::metadata(&path).ok()?.modified().ok()?, path)))
-        .max()?;
-    let inputs: SourceInputs = serde_json::from_slice(&std::fs::read(newest.1).ok()?).ok()?;
-    (inputs.schema == oer_image_build::source_inputs::SCHEMA)
-        .then(|| inputs.files.into_iter().collect())
-}
-
 /// The image classes to type-check for chip code in `changed` packages:
 /// every class whose image's package graph (`graphs`) compiles one of them,
 /// in catalog order.
@@ -163,27 +118,14 @@ pub fn image_classes(
 }
 
 /// The classes a change reaches: every class whose image compiles one of
-/// the `packages` with changed chip code and, with
-/// `changed` files, every class whose last build read one of them.
-pub fn reached(
-    root: &std::path::Path,
-    chip: &str,
-    packages: &[String],
-    changed: &[PathBuf],
-) -> Result<Vec<ImageClass>> {
+/// the `packages` with changed chip code.
+pub fn reached(root: &std::path::Path, chip: &str, packages: &[String]) -> Result<Vec<ImageClass>> {
     let packages: BTreeSet<&str> = packages.iter().map(String::as_str).collect();
     let mut graphs = Vec::new();
     for class in served(root, chip, &[])? {
         graphs.push((class, oer_hil_image::packages(root, chip, class)?));
     }
-    let mut classes = image_classes(&packages, &graphs);
-    if !changed.is_empty() {
-        for class in affected(chip, changed)? {
-            if !classes.contains(&class) {
-                classes.push(class);
-            }
-        }
-    }
+    let classes = image_classes(&packages, &graphs);
     println!(
         "images check: {} package(s) with chip code; {} image class(es)",
         packages.len(),
@@ -210,26 +152,6 @@ pub fn run(
     depth: Depth,
     jobs: usize,
 ) -> Result<()> {
-    // A full build compiles a snapshot of this checkout in one of the host's
-    // build slots, whose paths and caches every checkout shares.
-    let frozen = match depth {
-        Depth::Build => {
-            let snapshot = oer_hil_source_snapshot::capture(
-                &ctx.root,
-                &[],
-                true,
-                &oer_hil_image::source_snapshot_store()?,
-                &oer_hil_image::source_objects()?,
-            )?;
-            Some(FrozenSources::open_in_free_workspace(
-                snapshot.directory(),
-                &oer_hil_image::source_objects()?,
-                &oer_hil_image::frozen::build_slots(chip)?,
-            )?)
-        }
-        Depth::TypeCheck => None,
-    };
-    let frozen = frozen.as_ref();
     let classes: Vec<(usize, ImageClass)> = served(&ctx.root, chip, selected)?
         .into_iter()
         .enumerate()
@@ -251,7 +173,7 @@ pub fn run(
                     let Some((index, class)) = next else {
                         break;
                     };
-                    let outcome = build_one(ctx, chip, frozen, class, index, total, depth);
+                    let outcome = build_one(ctx, chip, class, index, total, depth);
                     lock().outcomes.push((index, outcome));
                 }
             });
@@ -301,7 +223,6 @@ fn stale_summaries(reviewed: &[String], outcomes: &[Outcome]) -> Result<()> {
 fn build_one(
     ctx: &Checkout,
     chip: &str,
-    frozen: Option<&FrozenSources>,
     class: ImageClass,
     index: usize,
     total: usize,
@@ -318,14 +239,8 @@ fn build_one(
     );
     let started = Instant::now();
     let result = match depth {
-        Depth::Build => match frozen {
-            Some(frozen) => {
-                oer_hil_image::frozen::build(frozen, chip, class, None, &Default::default())
-                    .map(|artifacts| artifacts.bundle.rom_summaries.clone())
-            }
-            None => Err("a full build needs the frozen sources".into()),
-        },
-
+        Depth::Build => oer_hil_image::build(&ctx.root, chip, class, None, &Default::default())
+            .map(|artifacts| artifacts.bundle.rom_summaries.clone()),
         Depth::TypeCheck => oer_hil_image::check(&ctx.root, chip, class).map(|()| BTreeSet::new()),
     };
     let (summaries, failure) = match result {
@@ -419,85 +334,6 @@ mod tests {
             failure: failure.map(str::to_owned),
             summaries: BTreeSet::new(),
         }
-    }
-
-    #[test]
-    fn a_change_affects_the_classes_whose_last_build_compiled_it() {
-        let builds = tempfile::tempdir().unwrap();
-        let record = |class: ImageClass, files: &[&str]| {
-            let directory = builds.path().join("snapshot-builds/abc").join(format!(
-                "{}-{}",
-                class.id(),
-                oer_hil_image_class::NETWORK
-            ));
-            std::fs::create_dir_all(&directory).unwrap();
-            std::fs::write(
-                directory.join("source-inputs.json"),
-                serde_json::json!({
-                    "schema": oer_image_build::source_inputs::SCHEMA,
-                    "files": files,
-                })
-                .to_string(),
-            )
-            .unwrap();
-        };
-        for class in ImageClass::ALL {
-            record(class, &["crates/common/src/lib.rs"]);
-        }
-        let [wifi, other] = [ImageClass::SystemPanicReset, ImageClass::SystemWatchdog];
-        record(
-            wifi,
-            &["crates/common/src/lib.rs", "crates/wifi/src/lib.rs"],
-        );
-        let changed = |paths: &[&str]| -> Vec<ImageClass> {
-            affected_in(
-                builds.path(),
-                &paths.iter().map(PathBuf::from).collect::<Vec<_>>(),
-            )
-        };
-        assert_eq!(changed(&["crates/wifi/src/lib.rs"]), [wifi]);
-        assert!(changed(&["docs/guide.md"]).is_empty());
-        assert_eq!(
-            changed(&["crates/common/src/lib.rs"]).len(),
-            ImageClass::ALL.len()
-        );
-        assert!(!changed(&["crates/wifi/src/lib.rs"]).contains(&other));
-        // Configuration and builder files are inputs like any other: a
-        // class is rebuilt when its record names one.
-        record(
-            wifi,
-            &[
-                "crates/wifi/src/lib.rs",
-                "hil/targets/chip-a/stack.toml",
-                "tools/image/pipeline/src/lib.rs",
-            ],
-        );
-        assert_eq!(changed(&["tools/image/pipeline/src/lib.rs"]), [wifi]);
-        for unread in ["Cargo.lock", "host/hil/runner/src/main.rs", "docs/guide.md"] {
-            assert!(changed(&[unread]).is_empty(), "{unread}");
-        }
-        // A record that lists only the compiled sources is incomplete.
-        let old = builds.path().join("snapshot-builds/abc").join(format!(
-            "{}-{}",
-            wifi.id(),
-            oer_hil_image_class::NETWORK
-        ));
-        std::fs::write(
-            old.join("source-inputs.json"),
-            serde_json::json!({"schema": 1, "files": ["crates/wifi/src/lib.rs"]}).to_string(),
-        )
-        .unwrap();
-        assert_eq!(changed(&["docs/guide.md"]), [wifi]);
-        std::fs::remove_dir_all(builds.path().join("snapshot-builds/abc").join(format!(
-            "{}-{}",
-            other.id(),
-            oer_hil_image_class::NETWORK
-        )))
-        .unwrap();
-        assert!(
-            changed(&["docs/guide.md"]).contains(&other),
-            "no record: build it"
-        );
     }
 
     #[test]

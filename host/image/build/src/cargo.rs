@@ -27,9 +27,8 @@ pub fn command() -> Command {
 
 /// Inherited Cargo variables that would change a firmware image without
 /// appearing in the checkout: profiles, build and target settings. The build
-/// relies on the repository's Cargo configuration instead. `RUSTFLAGS` stays
-/// and is recorded in the build provenance; job count and target directory do
-/// not change the image.
+/// relies on the repository's Cargo configuration instead. `RUSTFLAGS` stays;
+/// job count and target directory do not change the image.
 fn inherited_build_overrides(names: impl Iterator<Item = OsString>) -> Vec<OsString> {
     names
         .filter(|name| {

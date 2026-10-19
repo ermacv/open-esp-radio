@@ -154,12 +154,6 @@ impl RunStore {
         &self.root
     }
 
-    /// The directory holding the source files of every snapshot and run, by
-    /// their SHA-256 (`oer_hil_schema::snapshot::OBJECTS`).
-    pub fn sources(&self) -> PathBuf {
-        self.root.join(oer_hil_schema::snapshot::OBJECTS)
-    }
-
     /// Where the store caches derived per-run summaries.
     pub fn cache(&self, name: &str) -> PathBuf {
         self.root.join(format!("{name}-cache"))

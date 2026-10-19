@@ -1,8 +1,5 @@
 use super::test_support::{integrated_session, manifest, session, temporary_directory};
 use super::*;
-use crate::build::capture_source_material;
-use oer_hil_run_bundle_format::build::SourceLimitation;
-use oer_hil_run_bundle_format::build::SourceRebuildStatus;
 
 #[test]
 fn messages_used_collects_both_directions_from_every_capture() {
@@ -131,80 +128,6 @@ fn unique_run_directories_never_replace_a_previous_run() {
 }
 
 #[test]
-fn repository_archive_keeps_tracked_patch_and_marks_untracked_content_incomplete() {
-    let base = temporary_directory("source-archive");
-    let repository = base.join("repository");
-    fs::create_dir(&repository).unwrap();
-    for arguments in [
-        &["init", "-q", "-b", "main"][..],
-        &["config", "user.name", "HIL Test"],
-        &["config", "user.email", "hil@example.invalid"],
-        &[
-            "remote",
-            "add",
-            "origin",
-            "https://example.invalid/repository.git",
-        ],
-    ] {
-        oer_os_process::git::run(&repository, arguments).unwrap();
-    }
-    fs::write(repository.join("tracked.txt"), b"base\n").unwrap();
-    oer_os_process::git::run(&repository, ["add", "tracked.txt"]).unwrap();
-    oer_os_process::git::run(&repository, ["commit", "-m", "base"]).unwrap();
-    fs::write(repository.join("tracked.txt"), b"changed\n").unwrap();
-    let tracked_run = base.join("tracked-run");
-    fs::create_dir(&tracked_run).unwrap();
-    let tracked_source = capture_source_material(
-        "repository",
-        &repository,
-        &tracked_run,
-        Path::new("source/repository.patch"),
-    )
-    .unwrap();
-    assert!(tracked_source.dirty);
-    assert_eq!(
-        tracked_source.rebuild_status,
-        SourceRebuildStatus::TrackedPatch
-    );
-    assert!(tracked_source.limitations.is_empty());
-    assert!(tracked_source.tracked_patch_size_bytes.unwrap() != 0);
-    assert!(
-        fs::read_to_string(
-            tracked_run.join(tracked_source.tracked_patch_path.expect("tracked patch"))
-        )
-        .unwrap()
-        .contains("+changed")
-    );
-
-    fs::write(repository.join("untracked.txt"), b"untracked\n").unwrap();
-    let incomplete_run = base.join("incomplete-run");
-    fs::create_dir(&incomplete_run).unwrap();
-    let incomplete_source = capture_source_material(
-        "repository",
-        &repository,
-        &incomplete_run,
-        Path::new("source/repository.patch"),
-    )
-    .unwrap();
-    assert_eq!(
-        incomplete_source.rebuild_status,
-        SourceRebuildStatus::Incomplete
-    );
-    assert_eq!(
-        incomplete_source.limitations,
-        [SourceLimitation::UntrackedContentNotArchived]
-    );
-    assert_eq!(incomplete_source.untracked_files.len(), 1);
-    assert_eq!(
-        incomplete_source.untracked_files[0].path,
-        Path::new("untracked.txt")
-    );
-    assert_eq!(incomplete_source.untracked_files[0].size_bytes, 10);
-    assert_eq!(incomplete_source.untracked_files[0].sha256.len(), 64);
-    fs::remove_dir_all(base).unwrap();
-}
-
-#[test]
 fn attachments_are_sorted_and_content_addressed() {
     let root = temporary_directory("attachments");
     fs::create_dir(root.join("nested")).unwrap();
@@ -310,6 +233,7 @@ fn broken_or_interrupted_repetitions_can_retain_failed_measurements() {
 fn a_staged_image_keeps_its_runtime_and_bootstrap_subjects() {
     let staged = serde_json::json!({
         "image": "boot-smoke",
+        "repository": { "commit": "abc", "dirty": false },
         "application_path": "firmware/boot-smoke/application.bin",
         "application_size_bytes": 1,
         "application_sha256": "00",

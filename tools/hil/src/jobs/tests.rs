@@ -28,7 +28,7 @@ fn a_job_names_what_it_was_fixed_with_and_older_records_still_read() {
     let frozen = Frozen {
         cli: PathBuf::from("/c/target/hil/jobs/cli/1/oer-hil-cli"),
         runner: PathBuf::from("/c/target/hil/runners/2/runner"),
-        snapshot: Some(PathBuf::from("/c/target/hil/chip-a/source-snapshots/4")),
+        images: Some(PathBuf::from("/c/target/hil/jobs/images/job-4")),
     };
     let mut fixed = job("1-a", JobState::Pending);
     fixed.fixed = frozen.paths();
@@ -37,7 +37,7 @@ fn a_job_names_what_it_was_fixed_with_and_older_records_still_read() {
     assert_eq!(read.fixed.len(), 3);
     assert!(
         read.fixed
-            .contains(&PathBuf::from("/c/target/hil/chip-a/source-snapshots/4"))
+            .contains(&PathBuf::from("/c/target/hil/jobs/images/job-4"))
     );
     // A record written before jobs were fixed has no such list.
     let mut older: serde_json::Value = serde_json::from_str(&text).unwrap();

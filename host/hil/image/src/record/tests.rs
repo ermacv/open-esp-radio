@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_hil_run_bundle::run::test_support::TEST_CHIP;
 use oer_hil_run_bundle::run::test_support::session;
 use oer_hil_run_bundle::run::test_support::session_for;
 use oer_hil_run_bundle::run::test_support::temporary_directory;
@@ -45,11 +44,6 @@ fn test_artifacts(
     }
     fs::write(directory.join(files::BOOTLOADER), b"bootloader").unwrap();
     fs::write(directory.join(files::PARTITIONS), b"partitions").unwrap();
-    fs::write(
-        directory.join(files::SOURCE_INPUTS),
-        r#"{"schema":2,"files":[]}"#,
-    )
-    .unwrap();
     bundle.staged = Some(Staged {
         bootstrap_package: "oer-chip-a-platform-bootstrap".into(),
     });
@@ -57,7 +51,10 @@ fn test_artifacts(
     Artifacts {
         bundle,
         features: oer_hil_schema::image::FeatureDelta::default(),
-        environment: oer_hil_run_bundle::build::synthetic_environment(),
+        repository: oer_hil_run_bundle_format::run::RepositoryProvenance {
+            commit: "0123456789abcdef".into(),
+            dirty: true,
+        },
     }
 }
 
@@ -77,15 +74,6 @@ fn firmware_record_archives_the_exact_application() {
     fs::write(&bootstrap_elf, b"bootstrap elf").unwrap();
 
     let mut first_session = session(&run_directory);
-    let (_snapshot_root, snapshot) = oer_hil_source_snapshot::test_snapshot(&root);
-    let slots = root.join("slots/source-build");
-    first_session
-        .bind_source_snapshot(
-            snapshot.directory(),
-            &oer_hil_source_snapshot::test_objects_of(&snapshot),
-            &slots,
-        )
-        .unwrap();
     firmware::record(
         &mut first_session,
         ImageClass::SystemWatchdog,
@@ -140,35 +128,13 @@ fn firmware_record_archives_the_exact_application() {
         .unwrap(),
         b"bootstrap elf"
     );
-    let provenance_path = artifact
-        .build_provenance_path
-        .as_ref()
-        .expect("build provenance path");
-    let provenance: oer_hil_run_bundle_format::build::BuildProvenance =
-        serde_json::from_slice(&fs::read(run_directory.join(provenance_path)).unwrap()).unwrap();
-    assert_eq!(provenance.build_id, artifact.build_id.clone().unwrap());
-    assert_eq!(provenance.subjects.len(), 4);
-    // The fixture chip has no HIL agent: its record follows the class's
-    // own recipe on it, which links no network.
-    assert_eq!(
-        provenance.parameters.network.as_deref(),
-        oer_hil_image_class::network_on(ImageClass::SystemWatchdog, TEST_CHIP)
-    );
-    assert_eq!(
-        provenance.parameters.runtime_features,
-        oer_hil_image_class::build_features_on(ImageClass::SystemWatchdog, TEST_CHIP)
-    );
-    // One workspace lock: the agent and the bootstrap resolve against it.
-    for name in ["embedded-lock"] {
-        assert!(provenance.files.iter().any(|file| file.name == name));
-    }
-    assert!(provenance.source_reconstructable);
+    // The record keeps the tree the image was built from.
+    assert_eq!(artifact.repository.commit, "0123456789abcdef");
+    assert!(artifact.repository.dirty);
     let object_root = root.join("objects/sha256");
     let first_objects = inventory(&object_root).unwrap();
-    // The application, both ELFs, the runtime binary, the lock, the build
-    // provenance, the source inputs and the snapshot's record and manifest
-    // (its files are source objects of their own).
-    assert_eq!(first_objects.len(), 8);
+    // The application, both ELFs and the runtime binary.
+    assert_eq!(first_objects.len(), 4);
     assert!(
         firmware::record(
             &mut first_session,
@@ -183,13 +149,6 @@ fn firmware_record_archives_the_exact_application() {
     let second_run_directory = root.join("run-2");
     fs::create_dir(&second_run_directory).unwrap();
     let mut second = session(&second_run_directory);
-    second
-        .bind_source_snapshot(
-            snapshot.directory(),
-            &oer_hil_source_snapshot::test_objects_of(&snapshot),
-            &slots,
-        )
-        .unwrap();
     firmware::record(
         &mut second,
         ImageClass::SystemWatchdog,
@@ -221,19 +180,7 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
 
     let source_directory = runs_directory.join("source-run");
     fs::create_dir(&source_directory).unwrap();
-    let mut source = session_for(&source_directory, &target_directory, &repository_root);
-    let slots = root.join("slots/source-build");
-    // The runs' store holds the source objects, as the shared store does for
-    // every capture and run.
-    let objects = runs_directory
-        .parent()
-        .unwrap()
-        .join(oer_hil_schema::snapshot::OBJECTS);
-    let (_snapshot_root, snapshot) =
-        oer_hil_source_snapshot::test_snapshot_into(&repository_root, Some(&objects));
-    source
-        .bind_source_snapshot(snapshot.directory(), &objects, &slots)
-        .unwrap();
+    let mut source = session_for(&source_directory, &target_directory);
     firmware::record(
         &mut source,
         ImageClass::SystemWatchdog,
@@ -249,12 +196,11 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
         "chip-a",
         "source-run",
         ImageClass::SystemWatchdog,
-        &oer_hil_run_bundle::run::test_support::TestRecipe,
     )
     .unwrap();
     let replay_directory = runs_directory.join("replay-run");
     fs::create_dir(&replay_directory).unwrap();
-    let mut replay = session_for(&replay_directory, &target_directory, &repository_root);
+    let mut replay = session_for(&replay_directory, &target_directory);
     let replayed_application = replay.record_replayed_firmware(&archived).unwrap();
     assert_eq!(
         fs::read(&replayed_application).unwrap(),
@@ -281,7 +227,6 @@ fn replayed_firmware_bundle_is_self_contained_after_origin_removal() {
         "chip-a",
         "replay-run",
         ImageClass::SystemWatchdog,
-        &oer_hil_run_bundle::run::test_support::TestRecipe,
     )
     .unwrap();
     assert_eq!(again.run_id, "replay-run");

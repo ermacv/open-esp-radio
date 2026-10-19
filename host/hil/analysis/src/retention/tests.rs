@@ -101,15 +101,15 @@ fn a_prune_lists_then_deletes_what_no_rule_keeps_and_holds_the_budget() {
         keep_failed: 0,
     };
     // `old-pass` is pinned and `new-pass` the latest pass: nothing goes.
-    let listed = prune(&store, &rule, None, false, false, &Default::default()).unwrap();
+    let listed = prune(&store, &rule, None, false, false).unwrap();
     assert!(listed.removed.is_empty());
     assert_eq!((listed.kept, listed.total), (2, 2));
     // Over a budget of nothing, a run only its age keeps still stays: the
     // budget never overrides another rule.
-    let pruned = prune(&store, &rule, Some(0), true, false, &Default::default()).unwrap();
+    let pruned = prune(&store, &rule, Some(0), true, false).unwrap();
     assert!(pruned.removed.is_empty(), "{:?}", pruned.removed.len());
     store.note(Sidecar::Pins, "old-pass", None).unwrap();
-    let pruned = prune(&store, &rule, None, true, false, &Default::default()).unwrap();
+    let pruned = prune(&store, &rule, None, true, false).unwrap();
     assert_eq!(
         pruned
             .removed
@@ -177,7 +177,7 @@ fn unreadable_runs_go_only_when_asked() {
     };
     // The automatic rule: nothing unreadable goes, not even over a budget
     // of nothing.
-    let pruned = prune(&store, &rule, Some(0), true, false, &Default::default()).unwrap();
+    let pruned = prune(&store, &rule, Some(0), true, false).unwrap();
     assert!(pruned.removed_unreadable.is_empty());
     assert_eq!(pruned.unreadable_kept.len(), 5);
     for kept in [
@@ -189,13 +189,13 @@ fn unreadable_runs_go_only_when_asked() {
     ] {
         assert!(store.run(kept).is_dir(), "{kept}");
     }
-    let listed = prune(&store, &rule, None, false, true, &Default::default()).unwrap();
+    let listed = prune(&store, &rule, None, false, true).unwrap();
     assert_eq!(
         ids(&listed.removed_unreadable),
         ["current-broken", "older-old", "older-recent"]
     );
     assert!(store.run("older-old").is_dir(), "listing deletes nothing");
-    prune(&store, &rule, None, true, true, &Default::default()).unwrap();
+    prune(&store, &rule, None, true, true).unwrap();
     for gone in ["older-old", "older-recent", "current-broken"] {
         assert!(!store.run(gone).exists(), "{gone}");
     }
@@ -223,8 +223,7 @@ fn pruning_waits_for_a_pin_change_holding_the_lock() {
     std::thread::scope(|scope| {
         let (store, rule) = (&store, &rule);
         scope.spawn(move || {
-            done.send(prune(store, rule, None, true, false, &Default::default()))
-                .unwrap();
+            done.send(prune(store, rule, None, true, false)).unwrap();
         });
         assert!(
             finished

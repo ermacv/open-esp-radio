@@ -1,12 +1,11 @@
 {
-  "schema": 10,
+  "schema": 11,
   "run_id": "1791582140859-002c088b",
   "selection": "scenarios: system-watchdog, system-panic-reset",
   "firmware": {
     "source": "replay",
     "source_run_id": "1790000000000-00000001",
     "image": "system-watchdog",
-    "build_id": "2222222222222222222222222222222222222222222222222222222222222222",
     "application_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
   },
   "entries": [

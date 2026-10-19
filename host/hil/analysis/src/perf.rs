@@ -57,12 +57,12 @@ pub fn summary(run: &Run) -> Result<RunSummary> {
         .collect::<Vec<_>>();
     layout_seeds.sort_unstable();
     layout_seeds.dedup();
-    // The network implementations recorded in the run's build provenance.
+    // The network implementations the run's images link.
     let mut networks = manifest
         .firmware
         .iter()
-        .filter_map(|firmware| run.bundle.build_provenance(firmware).ok().flatten())
-        .filter_map(|provenance| provenance.parameters.network)
+        .filter_map(|firmware| oer_hil_image_class::network_on(firmware.image, &manifest.target))
+        .map(str::to_owned)
         .collect::<Vec<_>>();
     networks.sort();
     networks.dedup();

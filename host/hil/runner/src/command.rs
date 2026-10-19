@@ -91,65 +91,20 @@ pub(crate) fn run() -> Result<()> {
             }
         }
         CliCommand::Image { command } => match command {
-            ImageCommand::Snapshot {
-                source_include,
-                include_untracked,
-            } => {
-                let snapshot = oer_hil_source_snapshot::capture(
-                    &root,
-                    &source_include,
-                    include_untracked,
-                    &image::source_snapshot_store()?,
-                    &image::source_objects()?,
-                )?;
-                emit_json(&snapshot, true)
-            }
             ImageCommand::Build {
                 classes,
-                source_snapshot,
                 layout_seed,
                 chip,
             } => {
                 let chip = image::chip_for(&root, &classes, chip.as_deref())?;
-                let frozen = source_snapshot
-                    .as_deref()
-                    .map(|snapshot| {
-                        oer_hil_source_snapshot::mark_used(snapshot)?;
-                        oer_hil_source_snapshot::FrozenSources::open_in_free_workspace(
-                            snapshot,
-                            &image::source_objects()?,
-                            &image::frozen::build_slots(&chip)?,
-                        )
-                    })
-                    .transpose()?;
                 for class in classes {
-                    let artifacts = match (&frozen, &source_snapshot) {
-                        (Some(frozen), Some(snapshot)) => {
-                            let artifacts = image::frozen::build(
-                                frozen,
-                                &chip,
-                                class,
-                                layout_seed,
-                                &oer_hil_schema::image::FeatureDelta::default(),
-                            )?;
-                            let record = oer_hil_image::record::publish(
-                                &root,
-                                snapshot,
-                                &image::source_objects()?,
-                                class,
-                                &artifacts,
-                            )?;
-                            eprintln!("build_record={}", record.display());
-                            artifacts
-                        }
-                        _ => image::build(
-                            &root,
-                            &chip,
-                            class,
-                            layout_seed,
-                            &oer_hil_schema::image::FeatureDelta::default(),
-                        )?,
-                    };
+                    let artifacts = image::build(
+                        &root,
+                        &chip,
+                        class,
+                        layout_seed,
+                        &oer_hil_schema::image::FeatureDelta::default(),
+                    )?;
                     emit_json(&image::artifact_report(class, &artifacts)?, true)?;
                 }
                 Ok(())
@@ -157,9 +112,8 @@ pub(crate) fn run() -> Result<()> {
         },
         CliCommand::Run {
             scenarios,
-            source_include,
-            include_untracked,
-            source_snapshot,
+            source,
+            images,
             firmware_from,
             layout_seed,
             features,
@@ -203,41 +157,23 @@ pub(crate) fn run() -> Result<()> {
                 );
                 return Ok(());
             }
-            let snapshot = match (&firmware_from, source_snapshot) {
-                (Some(_), _) => None,
-                (None, Some(directory)) => {
-                    oer_hil_source_snapshot::mark_used(&directory)?;
-                    Some(oer_hil_source_snapshot::Snapshot::load(
-                        &directory,
-                        &image::source_objects()?,
-                    )?)
-                }
-                (None, None) => Some(oer_hil_source_snapshot::capture(
-                    &root,
-                    &source_include,
-                    include_untracked,
-                    &image::source_snapshot_store()?,
-                    &image::source_objects()?,
-                )?),
-            };
-            if build_only {
-                let snapshot = snapshot
-                    .as_ref()
-                    .ok_or("--build-only builds from the sources, not a replay")?;
+            let tree = source.clone().unwrap_or_else(|| root.clone());
+            if let Some(directory) = build_only {
                 let selected = selected.iter().collect::<Vec<_>>();
-                let frozen = oer_hil_source_snapshot::FrozenSources::open_in_free_workspace(
-                    snapshot.directory(),
-                    &image::source_objects()?,
-                    &image::frozen::build_slots(&chip)?,
+                let mut built = image::images::Images::create(
+                    &directory,
+                    &tree,
+                    &chip,
+                    layout_seed,
+                    &features.clone().unwrap_or_default(),
                 )?;
-                for class in orchestration::image_classes(&selected) {
-                    let artifacts = image::frozen::build(
-                        &frozen,
-                        &chip,
-                        class,
-                        layout_seed,
-                        &features.clone().unwrap_or_default(),
-                    )?;
+                let mut classes = orchestration::image_classes(&selected);
+                // The run may need the recovery image on a silent board.
+                if !classes.contains(&orchestration::RECOVERY_IMAGE) {
+                    classes.push(orchestration::RECOVERY_IMAGE);
+                }
+                for class in classes {
+                    let artifacts = built.build(&tree, class)?;
                     emit_json(&image::artifact_report(class, &artifacts)?, true)?;
                 }
                 return Ok(());
@@ -246,16 +182,23 @@ pub(crate) fn run() -> Result<()> {
                 Some(run_id) => {
                     let class = orchestration::single_image_class(&selected)?;
                     RunFirmware::Replay(Box::new(oer_hil_run_bundle::replay::archived_firmware(
-                        &root,
-                        &chip,
-                        &run_id,
-                        class,
-                        &oer_hil_image::record::Recipe,
+                        &root, &chip, &run_id, class,
                     )?))
                 }
-                None => RunFirmware::BuildCurrent(oer_hil_image::CurrentBuild {
-                    layout_seed,
-                    features: features.clone().unwrap_or_default(),
+                None => RunFirmware::BuildCurrent(match &images {
+                    Some(directory) => {
+                        let built = image::images::Images::open(directory)?;
+                        oer_hil_image::CurrentBuild {
+                            source: oer_hil_image::ImageSource::Built(directory.clone()),
+                            layout_seed: built.manifest().layout_seed,
+                            features: built.manifest().features.clone(),
+                        }
+                    }
+                    None => oer_hil_image::CurrentBuild {
+                        source: oer_hil_image::ImageSource::Tree(tree),
+                        layout_seed,
+                        features: features.clone().unwrap_or_default(),
+                    },
                 }),
             };
             let selected = selected.iter().collect::<Vec<_>>();
@@ -267,7 +210,6 @@ pub(crate) fn run() -> Result<()> {
             }
             let invocation = orchestration::Invocation {
                 arguments: invocation,
-                snapshot,
                 then,
             };
             // Orchestration builds the images, then leases the stand and
@@ -285,8 +227,6 @@ pub(crate) fn run() -> Result<()> {
             tag,
             role,
             layout_seed,
-            source_include,
-            include_untracked,
             all: _,
             exclude,
             chip,
@@ -303,13 +243,6 @@ pub(crate) fn run() -> Result<()> {
             let chip = orchestration::select_chip(&root, &selected, chip.as_deref())?;
             let lab = lab::config::LabConfig::load(&lab_path, &chip, &choice)?
                 .with_peer_images(&peer_images(selected.iter().copied()))?;
-            let snapshot = oer_hil_source_snapshot::capture(
-                &root,
-                &source_include,
-                include_untracked,
-                &image::source_snapshot_store()?,
-                &image::source_objects()?,
-            )?;
             let required = requirements(&selected);
             for provider in crate::scenario::Families::FIXTURES {
                 provider.admit(&lab, required)?;
@@ -323,12 +256,12 @@ pub(crate) fn run() -> Result<()> {
                 &selected,
                 orchestration::selection_description(&tag),
                 oer_hil_image::CurrentBuild {
+                    source: oer_hil_image::ImageSource::Tree(root.clone()),
                     layout_seed,
                     features: oer_hil_schema::image::FeatureDelta::default(),
                 },
                 orchestration::Invocation {
                     arguments: invocation,
-                    snapshot: Some(snapshot),
                     then: None,
                 },
             )

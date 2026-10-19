@@ -20,7 +20,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_hil_run_bundle_format::build::{BUILD_PROVENANCE_SCHEMA, BuildProvenance};
 use oer_hil_run_bundle_format::lab::{FixtureObservation, LAB_PROVENANCE_SCHEMA, LabProvenance};
 use oer_hil_run_bundle_format::run::fixtures::{AirMonitor, Applied, Protection, Reception};
 use oer_hil_run_bundle_format::run::{
@@ -28,7 +27,6 @@ use oer_hil_run_bundle_format::run::{
     RunPlan, ScenarioResult, SuiteResult, UsbEvent,
 };
 use oer_hil_schema::run::RunEvent;
-use oer_hil_schema::snapshot::{MANIFEST_SCHEMA, Manifest as SnapshotManifest};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -119,11 +117,6 @@ fn every_document_of_the_current_schema_reads_and_writes_back() {
     assert_eq!(lab.schema, LAB_PROVENANCE_SCHEMA);
     assert!(matches!(lab.fixture, FixtureObservation::OpenWrt(_)));
     assert!(lab.host.interfaces[0].wireless_link.is_some() && !lab.host.ipv4_routes.is_empty());
-    let build: BuildProvenance = read("build-provenance.json");
-    assert_eq!(build.schema, BUILD_PROVENANCE_SCHEMA);
-    assert!(build.parameters.layout_seed.is_some() && !build.parameters.features.is_empty());
-    let snapshot: SnapshotManifest = read("source-snapshot-manifest.json");
-    assert_eq!(snapshot.schema, MANIFEST_SCHEMA);
     // The fixture records a repetition carries; `helper.json` wraps a
     // family's own type and has no shape of the bundle's.
     let openwrt: Applied = read("fixture-applied-openwrt.json");

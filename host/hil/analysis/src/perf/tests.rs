@@ -136,6 +136,7 @@ fn the_layout_seed_comes_from_each_flashed_image() {
         let mut firmware: oer_hil_run_bundle_format::run::FirmwareArtifact =
             serde_json::from_value(serde_json::json!({
                 "image": "system-panic-reset",
+                "repository": { "commit": "0123456789abcdef", "dirty": false },
                 "application_path": "firmware/performance/application.bin",
                 "application_size_bytes": 1,
                 "application_sha256": "00",

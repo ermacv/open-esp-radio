@@ -1,53 +1,29 @@
 use super::*;
 
 #[test]
-fn source_snapshot_accepts_only_explicit_repeated_file_arguments() {
-    let cli = Cli::try_parse_from([
-        "cargo-hil",
-        "image",
-        "snapshot",
-        "--source-include",
-        "new.rs",
-        "--source-include",
-        "esp-hal:src/new.rs",
-    ])
-    .unwrap();
-    let CliCommand::Image {
-        command:
-            ImageCommand::Snapshot {
-                source_include,
-                include_untracked,
-            },
-    } = cli.command
-    else {
-        panic!("snapshot expected")
-    };
-    assert_eq!(source_include, ["new.rs", "esp-hal:src/new.rs"]);
-    assert!(!include_untracked);
-}
-
-#[test]
-fn include_untracked_is_a_run_flag_that_replaying_firmware_excludes() {
+fn a_source_tree_is_a_run_flag_that_replaying_firmware_excludes() {
     let run =
-        Cli::try_parse_from(["cargo-hil", "run", "boot-smoke", "--include-untracked"]).unwrap();
+        Cli::try_parse_from(["cargo-hil", "run", "boot-smoke", "--source", "/tmp/arm-a"]).unwrap();
     assert!(matches!(
         run.command,
         CliCommand::Run {
-            include_untracked: true,
+            source: Some(ref source),
             ..
-        }
+        } if source == std::path::Path::new("/tmp/arm-a")
     ));
     assert!(
         Cli::try_parse_from([
             "cargo-hil",
             "run",
             "boot-smoke",
-            "--include-untracked",
+            "--source",
+            "/tmp/arm-a",
             "--firmware-from",
-            "sealed-run-1",
+            "run-1",
         ])
         .is_err()
     );
+    assert!(Cli::try_parse_from(["cargo-hil", "image", "snapshot"]).is_err());
 }
 
 #[test]
@@ -157,23 +133,47 @@ fn run_repetitions_replace_the_scenarios_counts_within_the_evidence_range() {
 }
 
 #[test]
-fn a_build_only_run_builds_its_own_sources_and_is_no_replay() {
-    let cli = Cli::try_parse_from(["cargo-hil", "run", "a", "--build-only"]).unwrap();
+fn a_build_only_run_builds_into_a_directory_and_is_no_replay() {
+    let cli =
+        Cli::try_parse_from(["cargo-hil", "run", "a", "--build-only", "/jobs/7/images"]).unwrap();
     let CliCommand::Run { build_only, .. } = cli.command else {
         panic!("expected run");
     };
-    assert!(build_only);
-    assert!(
-        Cli::try_parse_from([
-            "cargo-hil",
-            "run",
-            "a",
-            "--build-only",
-            "--firmware-from",
-            "r"
-        ])
-        .is_err()
-    );
+    assert_eq!(build_only, Some(std::path::PathBuf::from("/jobs/7/images")));
+    for conflicting in [["--firmware-from", "r"], ["--images", "/jobs/6/images"]] {
+        assert!(
+            Cli::try_parse_from(
+                ["cargo-hil", "run", "a", "--build-only", "/jobs/7/images"]
+                    .into_iter()
+                    .chain(conflicting)
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn a_run_of_built_images_takes_neither_a_tree_nor_build_options() {
+    let cli = Cli::try_parse_from(["cargo-hil", "run", "a", "--images", "/jobs/7/images"]).unwrap();
+    let CliCommand::Run { images, .. } = cli.command else {
+        panic!("expected run");
+    };
+    assert_eq!(images, Some(std::path::PathBuf::from("/jobs/7/images")));
+    for conflicting in [
+        ["--source", "/tmp/arm-a"],
+        ["--layout-seed", "3"],
+        ["--features", "+trace"],
+        ["--firmware-from", "r"],
+    ] {
+        assert!(
+            Cli::try_parse_from(
+                ["cargo-hil", "run", "a", "--images", "/jobs/7/images"]
+                    .into_iter()
+                    .chain(conflicting)
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]

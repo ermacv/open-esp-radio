@@ -7,7 +7,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use oer_hil_run_bundle::RunStore;
@@ -656,115 +656,6 @@ pub fn collect_observers(store: &RunStore) -> Result<usize> {
     )
     .map_err(|error| error.to_string())?
     .len())
-}
-
-/// How long a source object no run names is kept: a capture stores its
-/// objects (or refreshes their time) before a run archives its manifest, and
-/// a capture can be reused for a while with `--source-snapshot`.
-pub const SOURCE_GRACE: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
-
-/// How long a capture no job holds is kept after its record was last
-/// written or used (`--source-snapshot` marks it used): a snapshot taken for
-/// reuse lasts a week. Owner decision:
-/// <https://github.com/the predecessor repository/issues/417#issuecomment->
-pub const CAPTURE_GRACE: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
-
-/// The captures source collection weighs: the capture stores, and the paths
-/// queued or running jobs were fixed with.
-#[derive(Debug, Default)]
-pub struct Captures {
-    pub stores: Vec<PathBuf>,
-    pub held: Vec<PathBuf>,
-}
-
-/// What [`collect_sources`] removed.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct CollectedSources {
-    pub objects: usize,
-    pub bytes: u64,
-    /// Capture directories no job holds that were last written or used
-    /// more than [`CAPTURE_GRACE`] ago.
-    pub captures: usize,
-}
-
-/// Remove the captures in `captures.stores` that no job holds and that were
-/// last written or used more than [`CAPTURE_GRACE`] ago, then the source
-/// objects of `store` that neither a run's snapshot manifest nor a remaining
-/// capture names and that were stored more than [`SOURCE_GRACE`] ago. A
-/// queued job, or a later `--source-snapshot`, reads a capture before any run
-/// names its objects; a capture nothing uses any more no longer keeps them.
-pub fn collect_sources(store: &RunStore, captures: &Captures) -> Result<CollectedSources> {
-    let mut collected = CollectedSources::default();
-    let mut named = BTreeSet::new();
-    let mut name = |manifest: &Path| {
-        let Some(manifest) = fs::read(manifest).ok().and_then(|bytes| {
-            serde_json::from_slice::<oer_hil_schema::snapshot::Manifest>(&bytes).ok()
-        }) else {
-            return;
-        };
-        for source in manifest.sources {
-            named.extend(source.files.into_iter().map(|file| file.sha256));
-        }
-    };
-    for id in store.ids_newest_first()? {
-        name(&store.run(&id).join("source/snapshot/manifest.json"));
-    }
-    for capture_store in &captures.stores {
-        let Ok(schemas) = fs::read_dir(capture_store) else {
-            continue;
-        };
-        // Captures of this layout lie in `schema-<n>/<id>`; the store's
-        // other entries are earlier layouts' and are not weighed here.
-        for schema in schemas.flatten().filter(|entry| {
-            entry.file_name().to_string_lossy().starts_with("schema-")
-                && entry.file_type().is_ok_and(|kind| kind.is_dir())
-        }) {
-            for snapshot in fs::read_dir(schema.path())?.flatten() {
-                let directory = snapshot.path();
-                let held = captures
-                    .held
-                    .iter()
-                    .any(|path| path.starts_with(&directory) || directory.starts_with(path));
-                let young = fs::metadata(directory.join("snapshot.json"))
-                    .and_then(|metadata| metadata.modified())
-                    .ok()
-                    .and_then(|modified| modified.elapsed().ok())
-                    .is_none_or(|age| age < CAPTURE_GRACE);
-                if held || young {
-                    name(&directory.join("manifest.json"));
-                } else {
-                    fs::remove_dir_all(&directory)?;
-                    collected.captures += 1;
-                }
-            }
-        }
-    }
-    let objects = store.sources();
-    let Ok(prefixes) = fs::read_dir(&objects) else {
-        return Ok(collected);
-    };
-    for prefix in prefixes {
-        let prefix = prefix?;
-        if !prefix.file_type()?.is_dir() {
-            continue;
-        }
-        for object in fs::read_dir(prefix.path())? {
-            let object = object?;
-            let name = object.file_name().to_string_lossy().into_owned();
-            let metadata = object.metadata()?;
-            let young = metadata
-                .modified()?
-                .elapsed()
-                .is_ok_and(|age| age < SOURCE_GRACE);
-            if named.contains(&name) || young || !metadata.is_file() {
-                continue;
-            }
-            fs::remove_file(object.path())?;
-            collected.objects += 1;
-            collected.bytes += metadata.len();
-        }
-    }
-    Ok(collected)
 }
 
 /// Follow the run in `directory`, handing `report` each step its events

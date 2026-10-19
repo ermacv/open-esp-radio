@@ -13,9 +13,7 @@
 //! the complete flash contents at build time with the `espflash` library:
 //! the application, the bootloader, the partition table and the OTA
 //! selection, at the offsets of the chip's [`FlashMap`]. A flash only writes
-//! a bundle's files (`ImageBundle::segments`). Each bundle records the
-//! repository files it was built from (`source-inputs.json`), with the
-//! builder sources the caller names.
+//! a bundle's files (`ImageBundle::segments`).
 
 mod around;
 pub mod build_log;
@@ -25,12 +23,10 @@ pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
 pub mod fw;
-pub mod source_inputs;
 pub mod staged;
 mod test_support;
 
 use std::{
-    collections::BTreeSet,
     num::NonZeroU32,
     path::{Path, PathBuf},
 };
@@ -43,11 +39,6 @@ pub use oer_image_profile::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// The packages of the pipeline itself: a caller that records its builder
-/// sources starts from their closure. The checks package holds the image
-/// linker, which every image links with.
-pub const PIPELINE: [&str; 2] = ["oer-image-build", "oer-image-checks"];
-
 pub use oer_image_checks::{CheckInput, CheckOutcome, CheckRecord, CheckResult, CheckedElf, Gates};
 
 /// The Cargo profile every image builds with (the root `Cargo.toml`).
@@ -55,7 +46,7 @@ pub const FIRMWARE_PROFILE: &str = "firmware";
 
 /// What to build.
 pub struct ImageSpec {
-    /// The tree the image is built from: a checkout or a source snapshot.
+    /// The tree the image is built from: a checkout or a worktree.
     pub root: PathBuf,
     /// The chip id; its profile names the boot kind and the flash map.
     pub chip: String,
@@ -68,12 +59,6 @@ pub struct ImageSpec {
     /// Variables the runtime's Cargo build sets (`Some`) or removes
     /// (`None`); the bootstrap's build removes every one.
     pub runtime_environment: Vec<(String, Option<String>)>,
-    /// The sources of the code that drives the build (a HIL image builder
-    /// records its dependency closure), relative to `root`: they join the
-    /// source inputs.
-    pub builder_inputs: BTreeSet<PathBuf>,
-    /// Further repository files the build reads, relative to `root`.
-    pub reads: Vec<PathBuf>,
     /// The bundle's directory; every build of an image has its own. The
     /// compile cache is the host's one [`compile_cache`].
     pub output: PathBuf,

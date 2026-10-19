@@ -53,6 +53,7 @@ pub(crate) fn bundle(runs: &Path, id: &str, started: u64, passed: bool, replay: 
             manifest.firmware.push(
                 serde_json::from_value::<FirmwareArtifact>(serde_json::json!({
                     "image": "system-watchdog",
+                    "repository": { "commit": "0123456789abcdef", "dirty": false },
                     "application_path": "firmware/system-watchdog/application.bin",
                     "application_size_bytes": 1,
                     "application_sha256": "aabbccddeeff",
@@ -72,7 +73,6 @@ pub(crate) fn bundle(runs: &Path, id: &str, started: u64, passed: bool, replay: 
                 firmware: Some(PlannedFirmware::Replay {
                     source_run_id: source.into(),
                     image: ImageClass::SystemWatchdog,
-                    build_id: None,
                     application_sha256: "aabbccddeeff".into(),
                 }),
                 entries: Vec::new(),
@@ -442,114 +442,4 @@ fn why_shows_the_failure_that_blocked_a_scenario_before_any_repetition() {
     let text = why(&Run::load(&run).unwrap(), 0);
     assert!(text.contains("failure (image-build):"), "{text}");
     assert!(text.contains("      frame grew to 9248 bytes"), "{text}");
-}
-
-/// A source object a run's snapshot manifest names stays; an unnamed one goes
-/// once it is older than the grace, and a fresh one stays.
-#[test]
-fn source_objects_no_run_names_are_collected_after_the_grace() {
-    use oer_hil_schema::snapshot::object;
-    let directory = tempfile::tempdir().unwrap();
-    let store = RunStore::at(directory.path());
-    let put = |bytes: &[u8]| {
-        let sha256 = oer_os_durable::sha256_bytes(bytes);
-        let path = object(&store.sources(), &sha256);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, bytes).unwrap();
-        (sha256, path)
-    };
-    let (named, named_path) = put(b"named");
-    let (_, old_path) = put(b"orphan");
-    let (_, young_path) = put(b"young");
-    let run = store.run("1000-a");
-    write_run(&run, 1, RunState::Completed, Vec::new(), |_| {});
-    fs::create_dir_all(run.join("source/snapshot")).unwrap();
-    fs::write(
-        run.join("source/snapshot/manifest.json"),
-        serde_json::to_vec(&serde_json::json!({"schema": 1, "sources": [{
-            "name": "repository", "commit": "abc", "dirty": false,
-            "files": [{"path": "a.rs", "size_bytes": 5, "sha256": named, "mode": 0o644}],
-        }]}))
-        .unwrap(),
-    )
-    .unwrap();
-    let old = std::time::SystemTime::now() - 2 * SOURCE_GRACE;
-    for path in [&named_path, &old_path] {
-        fs::File::options()
-            .append(true)
-            .open(path)
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-    }
-    // Captures no run names yet: a recent one and one a queued job holds
-    // keep their objects; a stale one nobody holds goes, and so do the
-    // objects only it named.
-    let captures = directory.path().join("captures");
-    let capture = |id: &str, bytes: &[u8], age: Option<std::time::SystemTime>| {
-        let (sha256, path) = put(bytes);
-        let capture = captures.join("schema-2").join(id);
-        fs::create_dir_all(&capture).unwrap();
-        fs::write(
-            capture.join("manifest.json"),
-            serde_json::to_vec(&serde_json::json!({"schema": 1, "sources": [{
-                "name": "repository", "commit": "abc", "dirty": false,
-                "files": [{"path": "b.rs", "size_bytes": bytes.len(), "sha256": sha256, "mode": 0o644}],
-            }]}))
-            .unwrap(),
-        )
-        .unwrap();
-        fs::write(capture.join("snapshot.json"), b"{}").unwrap();
-        if let Some(age) = age {
-            fs::File::options()
-                .append(true)
-                .open(capture.join("snapshot.json"))
-                .unwrap()
-                .set_modified(age)
-                .unwrap();
-        }
-        (capture, path)
-    };
-    let unused = std::time::SystemTime::now() - 2 * CAPTURE_GRACE;
-    let (recent, recent_object) = capture("recent", b"recent", None);
-    // Used two days ago: a capture is kept for a week after its last use.
-    let (used, used_object) = capture("used", b"used!!", Some(old));
-    let (queued, queued_object) = capture("queued", b"queued", Some(unused));
-    let (stale, stale_object) = capture("stale", b"stale!", Some(unused));
-    for path in [
-        &named_path,
-        &old_path,
-        &recent_object,
-        &used_object,
-        &queued_object,
-        &stale_object,
-    ] {
-        fs::File::options()
-            .append(true)
-            .open(path)
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-    }
-    let collected = collect_sources(
-        &store,
-        &Captures {
-            stores: vec![captures],
-            held: vec![queued.join("snapshot.json")],
-        },
-    )
-    .unwrap();
-    assert_eq!(
-        collected,
-        CollectedSources {
-            objects: 2,
-            bytes: 12,
-            captures: 1,
-        }
-    );
-    assert!(named_path.is_file() && young_path.is_file());
-    assert!(recent.is_dir() && recent_object.is_file());
-    assert!(used.is_dir() && used_object.is_file());
-    assert!(queued.is_dir() && queued_object.is_file());
-    assert!(!stale.exists() && !stale_object.exists() && !old_path.exists());
 }
