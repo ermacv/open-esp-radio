@@ -124,7 +124,9 @@ since svd2rust has no notion of an unplaced layout):
   `write(Value)` only; for each word a `Value` type with typed getters and
   `with_*` builders, as the PAC's register values have;
 - for `owned` byte layouts, a decoder from `&[u8; N]` (fixed-size arrays, no
-  panics), the shape `prefix.rs` already follows by hand;
+  panics), the shape `prefix.rs` already follows by hand; a byte layout
+  with CPU-written fields also gets a writer over `&mut [u8; N]` with typed
+  setters;
 - the placement as constants the HAL checks against (`StableDmaRange`,
   `placement.rs`).
 
