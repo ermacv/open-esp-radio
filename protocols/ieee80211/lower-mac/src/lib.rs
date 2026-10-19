@@ -73,6 +73,9 @@ pub mod phase;
 pub mod rx;
 pub mod tx;
 
+mod management;
+pub use management::ManagementTxPlan;
+
 pub use oer_ieee80211_mac::channel::{Band, Channel, ChannelError, ChannelWidth};
 pub use oer_ieee80211_mac::phy::PhyRate;
 
