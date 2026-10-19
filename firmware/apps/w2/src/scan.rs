@@ -273,6 +273,7 @@ async fn run(
             begin_probe(
                 &mut tx,
                 &mut registers,
+                channel,
                 config,
                 station,
                 BROADCAST_ADDRESS,
@@ -340,6 +341,7 @@ async fn run(
     begin_probe(
         &mut tx,
         &mut registers,
+        initial,
         config,
         station,
         config.stand,
@@ -390,6 +392,7 @@ fn after(duration: Duration) -> Instant {
 fn begin_probe(
     tx: &mut Tx,
     registers: &mut RadioAccess,
+    channel: oer_radio_regulatory::Permitted<WifiChannel>,
     config: W2Config,
     station: [u8; 6],
     destination: [u8; 6],
@@ -397,6 +400,9 @@ fn begin_probe(
     sequence: SequenceNumber,
     priority: ProbePriority,
 ) -> Result<(), &'static str> {
+    if channel.initiate() != Initiate::Allowed {
+        return Err("probe-no-ir");
+    }
     let management = if destination == BROADCAST_ADDRESS {
         ManagementTxPlan::broadcast(rate)
     } else {
