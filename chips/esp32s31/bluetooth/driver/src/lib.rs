@@ -31,6 +31,16 @@ pub mod controller_hal;
 /// Event-driven controller-time latch and scheduler-epoch projection.
 pub mod controller_time;
 pub mod interrupt;
+
+/// The named settle of a scheduler diagnostic sample on `clock`.
+pub(crate) fn diagnostic_settle(
+    clock: &dyn oer_time::Clock,
+) -> oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettle<'_> {
+    oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettle::new(
+        oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE,
+        clock,
+    )
+}
 #[cfg(any(target_arch = "riscv32", test))]
 pub mod low_power;
 pub mod modem_lp_timer_queue;

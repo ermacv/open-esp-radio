@@ -13,6 +13,8 @@
 
 #![deny(unsafe_code)]
 
+use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettle;
+
 use crate::ControllerSramLinkAddress;
 
 use crate::scheduler::{
@@ -74,6 +76,7 @@ pub(crate) trait SchedulerHardwareBackend {
     fn observe(
         &mut self,
         wait: SchedulerWait,
+        settle: BluetoothDiagnosticSettle<'_>,
         lock: Option<&mut Lock<Self>>,
         modify: Option<&mut Modify<Self>>,
         cancellation: Option<&mut Cancellation<Self>>,
@@ -101,7 +104,7 @@ pub enum SchedulerHardwareError {
     /// The hardware head does not decode to a controller link.
     ForeignHead,
     /// A scheduler diagnostic sample never settled within
-    /// [`DIAGNOSTIC_READ_BUDGET`](super::DIAGNOSTIC_READ_BUDGET).
+    /// [`DIAGNOSTIC_SETTLE`](super::DIAGNOSTIC_SETTLE).
     DiagnosticUnsettled,
 }
 
@@ -111,7 +114,7 @@ pub enum SchedulerStopError {
     /// Platform storage does not hold the stable interrupt owner.
     InterruptOwnerUnavailable,
     /// A BUSY sample never settled within
-    /// [`DIAGNOSTIC_READ_BUDGET`](super::DIAGNOSTIC_READ_BUDGET).
+    /// [`DIAGNOSTIC_SETTLE`](super::DIAGNOSTIC_SETTLE).
     DiagnosticUnsettled,
 }
 
@@ -237,11 +240,13 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         }
     }
 
-    /// Take one fresh observation of the awaited publication.
+    /// Take one fresh observation of the awaited publication; each
+    /// diagnostic sample settles within `settle`.
     pub(crate) fn observe<B: SchedulerHardwareBackend<Publications = P>>(
         &mut self,
         backend: &mut B,
         wait: SchedulerWait,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let awaiting = match wait {
             SchedulerWait::ExecutionLock => self.lock.is_some(),
@@ -257,6 +262,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         }
         let observation = backend.observe(
             wait,
+            settle,
             self.lock.as_mut(),
             self.modify.as_mut(),
             self.cancellation.as_mut(),

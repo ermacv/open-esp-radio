@@ -3,13 +3,14 @@
 
 use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
-    BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
-    BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerExecutionModify,
-    BluetoothSchedulerHardwareListHead, BluetoothSchedulerHardwareListIndex,
-    BluetoothSchedulerHardwareRunCommandPublished, BluetoothSchedulerLockModifyObservation,
-    BluetoothSchedulerLockModifyPublished, BluetoothSchedulerLockModifyRequest,
-    BluetoothSchedulerSkipPublished, BluetoothSchedulerSkipRequest, ControllerHal,
+    BluetoothDiagnosticSettle, BluetoothSchedulerCancellationIndexed,
+    BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,
+    BluetoothSchedulerExecutionLock, BluetoothSchedulerExecutionLockRequest,
+    BluetoothSchedulerExecutionModify, BluetoothSchedulerHardwareListHead,
+    BluetoothSchedulerHardwareListIndex, BluetoothSchedulerHardwareRunCommandPublished,
+    BluetoothSchedulerLockModifyObservation, BluetoothSchedulerLockModifyPublished,
+    BluetoothSchedulerLockModifyRequest, BluetoothSchedulerSkipPublished,
+    BluetoothSchedulerSkipRequest, ControllerHal,
 };
 
 use super::{
@@ -169,6 +170,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
     fn observe(
         &mut self,
         wait: SchedulerWait,
+        settle: BluetoothDiagnosticSettle<'_>,
         lock: Option<&mut BluetoothSchedulerExecutionLock>,
         modify: Option<&mut BluetoothSchedulerExecutionModify>,
         cancellation: Option<&mut BluetoothSchedulerCancellationRequested>,
@@ -182,11 +184,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
             let disposition = self
                 .storage
                 .with_interrupt_registers(lock, |interrupts, lock| {
-                    controller.step_scheduler_execution_lock(
-                        interrupts,
-                        lock,
-                        super::super::DIAGNOSTIC_READ_BUDGET,
-                    )
+                    controller.step_scheduler_execution_lock(interrupts, lock, settle)
                 })
                 .map_err(|_| SchedulerHardwareError::InterruptOwnerUnavailable)?
                 .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -200,11 +198,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
             let disposition = self
                 .storage
                 .with_interrupt_registers(modify, |interrupts, modify| {
-                    controller.step_scheduler_execution_modify(
-                        interrupts,
-                        modify,
-                        super::super::DIAGNOSTIC_READ_BUDGET,
-                    )
+                    controller.step_scheduler_execution_modify(interrupts, modify, settle)
                 })
                 .map_err(|_| SchedulerHardwareError::InterruptOwnerUnavailable)?
                 .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -214,9 +208,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
             let interrupt = self
                 .storage
                 .with_interrupt_registers((), |interrupts, ()| {
-                    interrupts.capture_scheduler_lock_modify_interrupt(
-                        super::super::DIAGNOSTIC_READ_BUDGET,
-                    )
+                    interrupts.capture_scheduler_lock_modify_interrupt(settle)
                 })
                 .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
                 .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -228,7 +220,7 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         let busy = self
             .storage
             .with_interrupt_registers((), |interrupts, ()| {
-                interrupts.capture_scheduler_busy(super::super::DIAGNOSTIC_READ_BUDGET)
+                interrupts.capture_scheduler_busy(settle)
             })
             .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
             .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -304,18 +296,20 @@ impl SchedulerHardware<HalPublications> {
         self.perform(&mut backend, step)
     }
 
-    /// Take one fresh observation of the awaited publication.
+    /// Take one fresh observation of the awaited publication; each
+    /// diagnostic sample settles within `settle`.
     pub fn observe_live(
         &mut self,
         controller: &mut ControllerHal<'_>,
         storage: &impl SchedulerRunInterruptStorage,
         wait: SchedulerWait,
+        settle: BluetoothDiagnosticSettle<'_>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut backend = LiveSchedulerBackend {
             controller,
             storage,
         };
-        self.observe(&mut backend, wait)
+        self.observe(&mut backend, wait, settle)
     }
 
     /// Clear what a faulted list transaction left published.

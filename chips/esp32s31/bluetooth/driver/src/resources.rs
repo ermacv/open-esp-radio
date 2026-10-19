@@ -118,6 +118,7 @@ impl TaskResources {
     pub fn release_controller_output(
         &mut self,
         output: oer_esp32s31_hal::bluetooth::InterruptOutputAfterRoutesOwner,
+        clock: &dyn oer_time::Clock,
     ) -> Result<
         oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
         (
@@ -127,7 +128,7 @@ impl TaskResources {
     > {
         output.try_release_idle_controller_output(
             &mut self.registers,
-            oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
+            crate::diagnostic_settle(clock),
         )
     }
 }

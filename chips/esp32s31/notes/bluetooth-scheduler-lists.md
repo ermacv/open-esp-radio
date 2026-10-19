@@ -102,9 +102,9 @@ MAC diagnostic pair instead of that register: it writes the complete selector
 image `0x38` to `0x2010_11e8`, reads `0x2010_11ec` until two consecutive
 complete reads are equal and tests bit 7. BUSY below always means this
 sample. The vendor loop is unbounded. Here one PAC call is one selection and
-two reads, and the HAL repeats it at most `DIAGNOSTIC_READ_BUDGET` times (the
-driver's attempt budget); the Controller treats an exhausted budget as a
-scheduler fault.
+two reads, and the HAL repeats it until the named settle `DIAGNOSTIC_SETTLE`
+(20 µs on the caller's clock) has passed; the Controller treats an unsettled
+sample as a scheduler fault.
 
 The BLE stack reserves thirteen lists: `r_sched_txn_init` stores 13 as the
 list count and `0x1fff` as the free-index bitmap. Hardware indexes are a

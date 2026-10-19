@@ -2677,6 +2677,7 @@ version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
  "oer-esp32s31-knowledge",
+ "oer-time",
  "pin-project",
  "vcell",
 ]
@@ -2704,6 +2705,7 @@ dependencies = [
  "oer-memory",
  "oer-radio-coex",
  "oer-test-ui-cases",
+ "oer-time",
  "pin-project",
  "vcell",
 ]

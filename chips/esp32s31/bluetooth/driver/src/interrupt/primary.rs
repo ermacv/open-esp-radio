@@ -26,7 +26,7 @@ pub enum PrimaryInterruptStep {
     /// A reviewed baseline fault preempted ordinary scheduler work.
     Fault(PrimaryControllerFault),
     /// The reference-gate BUSY sample never settled within
-    /// [`DIAGNOSTIC_READ_BUDGET`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET).
+    /// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE).
     /// The reference is preserved and no work is published.
     DiagnosticUnsettled(PrimaryInterruptClassification),
     /// The epoch contained no reviewed dynamic scheduler source.
@@ -113,25 +113,30 @@ trait PrimaryInterruptBackend {
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation;
 }
 
-impl PrimaryInterruptBackend for InterruptRegistersOwner {
+/// The interrupt owner and the clock of its diagnostic settle.
+struct PrimaryHardware<'a> {
+    interrupts: &'a mut InterruptRegistersOwner,
+    clock: &'a dyn oer_time::Clock,
+}
+
+impl PrimaryInterruptBackend for PrimaryHardware<'_> {
     fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch {
-        self.capture_primary_and_acknowledge()
+        self.interrupts.capture_primary_and_acknowledge()
     }
 
     fn capture_scheduler_reference_gate(
         &mut self,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled> {
-        self.capture_scheduler_reference_gate(
-            oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
-        )
+        self.interrupts
+            .capture_scheduler_reference_gate(crate::diagnostic_settle(self.clock))
     }
 
     fn clear_scheduler_reference(&mut self) {
-        let _cleared = InterruptRegistersOwner::clear_scheduler_reference(self);
+        let _cleared = self.interrupts.clear_scheduler_reference();
     }
 
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation {
-        self.capture_scheduler_work()
+        self.interrupts.capture_scheduler_work()
     }
 }
 
@@ -169,12 +174,15 @@ fn execute_primary_interrupt_step(
 /// Capture, acknowledge and classify one primary source-124 interrupt epoch.
 ///
 /// This function is finite. It performs at most the PAC acknowledgement
-/// transaction, one reference-gate sample of at most
-/// [`DIAGNOSTIC_READ_BUDGET`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET)
-/// attempts and one later work read. It never
-/// invokes a callback, waits for hardware, allocates or wakes an executor.
-pub fn step_primary_interrupt(interrupts: &mut InterruptRegistersOwner) -> PrimaryInterruptStep {
-    execute_primary_interrupt_step(interrupts)
+/// transaction, one reference-gate sample that settles within
+/// [`DIAGNOSTIC_SETTLE`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_SETTLE)
+/// on `clock`, and one later work read. It never invokes a callback, waits
+/// for hardware beyond that settle, allocates or wakes an executor.
+pub fn step_primary_interrupt(
+    interrupts: &mut InterruptRegistersOwner,
+    clock: &dyn oer_time::Clock,
+) -> PrimaryInterruptStep {
+    execute_primary_interrupt_step(&mut PrimaryHardware { interrupts, clock })
 }
 
 #[cfg(test)]

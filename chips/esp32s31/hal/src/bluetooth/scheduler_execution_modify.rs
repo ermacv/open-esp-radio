@@ -17,7 +17,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticReadBudget, BluetoothDiagnosticUnsettled};
+use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
 
 #[derive(Debug)]
 enum Phase {
@@ -152,7 +152,7 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'a>,
 }
 
 #[allow(
@@ -163,7 +163,7 @@ impl Control for Hardware<'_> {
     type Published = BluetoothSchedulerExecutionModifyPublished;
 
     fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.budget, || self.interrupts.capture_scheduler_busy())
+        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -190,7 +190,7 @@ impl Control for Hardware<'_> {
         }
     }
     fn repeats(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.budget, || {
+        diagnostic::settle(self.settle, || {
             self.task
                 .scheduler_execution_modify_repeats(self.interrupts)
         })
@@ -203,7 +203,7 @@ impl Control for Hardware<'_> {
             .select_scheduler_execution_modify_settle(self.interrupts);
     }
     fn settled(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.budget, || {
+        diagnostic::settle(self.settle, || {
             self.task
                 .scheduler_execution_modify_settled(self.interrupts)
         })
@@ -226,7 +226,7 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     modify: &mut BluetoothSchedulerExecutionModify,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'_>,
 ) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
     step(
         State {
@@ -239,7 +239,7 @@ pub(crate) fn step_hardware(
         &mut Hardware {
             task,
             interrupts,
-            budget,
+            settle,
         },
     )
 }

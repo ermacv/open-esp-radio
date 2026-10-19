@@ -15,7 +15,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerInsertionCommand, BluetoothTaskRegisters,
 };
 
-use super::diagnostic::{self, BluetoothDiagnosticReadBudget, BluetoothDiagnosticUnsettled};
+use super::diagnostic::{self, BluetoothDiagnosticSettle, BluetoothDiagnosticUnsettled};
 
 /// One execution-lock request and its progress.
 #[derive(Debug)]
@@ -69,7 +69,7 @@ fn step<C: Control>(
 struct Hardware<'a> {
     task: &'a mut BluetoothTaskRegisters,
     interrupts: &'a mut BluetoothInterruptRegisters,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'a>,
 }
 
 #[allow(
@@ -80,7 +80,7 @@ impl Control for Hardware<'_> {
     type Published = BluetoothSchedulerExecutionLockPublished;
 
     fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(self.budget, || self.interrupts.capture_scheduler_busy())
+        diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())
             .map(|busy| busy.is_busy())
     }
     fn engines_idle(&mut self) -> bool {
@@ -97,7 +97,7 @@ impl Control for Hardware<'_> {
     fn observe(
         &mut self,
     ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
-        let busy = diagnostic::settle(self.budget, || self.interrupts.capture_scheduler_busy())?;
+        let busy = diagnostic::settle(self.settle, || self.interrupts.capture_scheduler_busy())?;
         Ok(self.task.observe_scheduler_execution_lock(busy))
     }
 }
@@ -108,7 +108,7 @@ pub(crate) fn step_hardware(
     task: &mut BluetoothTaskRegisters,
     interrupts: &mut BluetoothInterruptRegisters,
     lock: &mut BluetoothSchedulerExecutionLock,
-    budget: BluetoothDiagnosticReadBudget,
+    settle: BluetoothDiagnosticSettle<'_>,
 ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
     step(
         lock.request,
@@ -116,7 +116,7 @@ pub(crate) fn step_hardware(
         &mut Hardware {
             task,
             interrupts,
-            budget,
+            settle,
         },
     )
 }

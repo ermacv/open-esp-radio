@@ -17,17 +17,19 @@ pub mod window;
 
 pub use config::SchedulerSoftwareConfig;
 
-use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticReadBudget;
+use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettleLimit;
 
-/// Attempt budget of one scheduler diagnostic-pair sample.
+/// The named settle of one scheduler diagnostic-pair sample.
 ///
 /// The vendor repeats the pair until both reads agree; they disagree only
 /// while the multiplexed value crosses from the MAC clock domain, and one
-/// attempt takes well under a microsecond. After this many disagreeing pairs
-/// the Controller stops on a scheduler fault instead of spinning, in the
-/// interrupt handler as in the task.
-pub const DIAGNOSTIC_READ_BUDGET: BluetoothDiagnosticReadBudget =
-    BluetoothDiagnosticReadBudget::new(64).expect("a nonzero attempt budget");
+/// attempt takes well under a microsecond. When the pair still disagrees
+/// after the longest settle a driver may busy-wait, the Controller stops on
+/// a scheduler fault instead of spinning, in the interrupt handler as in the
+/// task.
+pub const DIAGNOSTIC_SETTLE: BluetoothDiagnosticSettleLimit =
+    BluetoothDiagnosticSettleLimit::new(BluetoothDiagnosticSettleLimit::MAX)
+        .expect("the longest settle is a valid limit");
 
 /// Stable task-side access to the shared interrupt owner.
 ///

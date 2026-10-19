@@ -135,7 +135,8 @@ pub struct ControllerShutDown {
 
 /// Retire a stopped epoch: take the task owner from its endpoint, release
 /// the Controller output and leave the shared PHY domain and BTBB. Returns
-/// whether Bluetooth was the last PHY client.
+/// whether Bluetooth was the last PHY client. The BUSY samples of the output
+/// release settle on `clock`.
 ///
 /// # Errors
 ///
@@ -151,6 +152,7 @@ pub fn retire(
     retained: BlePhyRetainedOwners,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
+    clock: &dyn oer_time::Clock,
 ) -> Result<(ControllerRetired, bool), ControllerShutdownFailure> {
     let mut task = match task.retire() {
         Ok(task) => task,
@@ -166,7 +168,7 @@ pub fn retire(
             });
         }
     };
-    let output = match task.release_controller_output(output) {
+    let output = match task.release_controller_output(output, clock) {
         Ok(output) => output,
         Err((error, output)) => {
             return Err(ControllerShutdownFailure {

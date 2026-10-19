@@ -57,16 +57,21 @@ impl ControllerPoweredTaskRuntime<'_> {
             .perform_live(&mut controller, storage, items, step)
     }
 
-    /// Take one fresh observation of the awaited publication.
+    /// Take one fresh observation of the awaited publication; each
+    /// diagnostic sample settles on `clock`.
     pub fn observe_scheduler(
         &mut self,
         storage: &impl SchedulerRunInterruptStorage,
         wait: SchedulerWait,
+        clock: &dyn oer_time::Clock,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut controller = self.task.controller();
-        self.runtime
-            .scheduler_hardware
-            .observe_live(&mut controller, storage, wait)
+        self.runtime.scheduler_hardware.observe_live(
+            &mut controller,
+            storage,
+            wait,
+            crate::diagnostic_settle(clock),
+        )
     }
 
     /// Clear what a faulted list transaction left published.
@@ -98,12 +103,11 @@ impl ControllerPoweredTaskRuntime<'_> {
     pub fn observe_scheduler_hardware(
         &mut self,
         storage: &impl SchedulerRunInterruptStorage,
+        clock: &dyn oer_time::Clock,
     ) -> Result<SchedulerHardwareView, SchedulerHardwareError> {
         let busy = storage
             .with_interrupt_registers((), |interrupts, ()| {
-                interrupts.capture_scheduler_busy(
-                    oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
-                )
+                interrupts.capture_scheduler_busy(crate::diagnostic_settle(clock))
             })
             .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
             .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -144,15 +148,12 @@ impl ControllerPoweredTaskRuntime<'_> {
         &mut self,
         storage: &impl SchedulerRunInterruptStorage,
         stop: BluetoothSchedulerStop,
+        clock: &dyn oer_time::Clock,
     ) -> Result<BluetoothSchedulerStopStep, SchedulerStopError> {
         let mut controller = self.task.controller();
         storage
             .with_interrupt_registers(stop, |interrupts, stop| {
-                controller.step_scheduler_stop(
-                    interrupts,
-                    stop,
-                    oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
-                )
+                controller.step_scheduler_stop(interrupts, stop, crate::diagnostic_settle(clock))
             })
             .map_err(|_| SchedulerStopError::InterruptOwnerUnavailable)?
             .map_err(|_| SchedulerStopError::DiagnosticUnsettled)
