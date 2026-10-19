@@ -35,7 +35,7 @@ use oer_ieee80211_lower_mac::{ManagementTxPlan, VifRole};
 use oer_ieee80211_mac::frame::FrameControl;
 use oer_ieee80211_softmac::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
 
-use crate::tx::{WifiTxProgress, WifiTxWake};
+use crate::tx::{WifiTxProgress, WifiTxWake, capped_power};
 
 pub const TX_METADATA_SIZE: usize = 8;
 /// Hardware-appended CCMP MIC bytes accounted for by descriptor publication.
@@ -293,31 +293,6 @@ fn capped_control_frame<P: WifiTxPowerProfile>(
     control.power_primary = pair.primary as u8;
     control.power_alternate = pair.alternate as u8;
     control
-}
-
-/// Bound a calibrated power pair by a caller's ceiling.
-///
-/// The S31 power code is the vendor's quarter-dBm target arithmetic-shifted
-/// right by two (`phy/src/tx/power.rs`, `PhyTxTargetPowerProfile::pair`,
-/// after `phy_get_max_pwr`), so one code step is one dBm of the calibrated
-/// target and a ceiling in dBm compares with it directly. The codes are
-/// the vendor's table convention, not a measured radiated power.
-const fn capped_power(pair: WifiTxPowerPair, ceiling: Option<i8>) -> WifiTxPowerPair {
-    match ceiling {
-        None => pair,
-        Some(ceiling) => WifiTxPowerPair {
-            primary: if pair.primary < ceiling {
-                pair.primary
-            } else {
-                ceiling
-            },
-            alternate: if pair.alternate < ceiling {
-                pair.alternate
-            } else {
-                ceiling
-            },
-        },
-    }
 }
 
 /// Everything needed to publish one already encoded MPDU.

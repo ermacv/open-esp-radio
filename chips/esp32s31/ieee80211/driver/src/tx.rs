@@ -9,6 +9,7 @@ use core::pin::Pin;
 
 use oer_esp32s31_ieee80211_mac::{tx::TxSlot, tx::runtime::WifiTxRuntimePolicy};
 use oer_esp32s31_phy::PhyTxTargetPowerProfile;
+use oer_radio_regulatory::TxCeiling;
 
 /// State of one finite ESP32-S31 Wi-Fi TX transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,4 +85,101 @@ pub struct WifiTxResources<'slot, P, E, T, const BUFFER_SIZE: usize> {
     pub power: P,
     pub entropy: E,
     pub timer: T,
+}
+
+/// A calibrated lookup bounded by the same conducted ceiling that the radio
+/// client installs in the PHY profile. Every publication and retry, including
+/// its control rate, goes through this lookup.
+#[derive(Clone, Copy, Debug)]
+pub struct CappedTxPowerProfile<P> {
+    calibrated: P,
+    ceiling: TxCeiling,
+}
+
+impl<P> CappedTxPowerProfile<P> {
+    pub const fn new(calibrated: P, ceiling: TxCeiling) -> Self {
+        Self {
+            calibrated,
+            ceiling,
+        }
+    }
+}
+
+impl<P: WifiTxPowerProfile> WifiTxPowerProfile for CappedTxPowerProfile<P> {
+    fn power_pair(&self, rate_code: u8) -> WifiTxPowerPair {
+        capped_power(
+            self.calibrated.power_pair(rate_code),
+            Some(self.ceiling.dbm()),
+        )
+    }
+}
+
+/// Bound a calibrated power pair by a caller's ceiling.
+///
+/// The S31 power code is the vendor's quarter-dBm target arithmetic-shifted
+/// right by two (`phy/src/tx/power.rs`, `PhyTxTargetPowerProfile::pair`,
+/// after `phy_get_max_pwr`), so one code step is one dBm of the calibrated
+/// target and a ceiling in dBm compares with it directly. The codes are
+/// the vendor's table convention, not a measured radiated power.
+pub(crate) const fn capped_power(pair: WifiTxPowerPair, ceiling: Option<i8>) -> WifiTxPowerPair {
+    match ceiling {
+        None => pair,
+        Some(ceiling) => WifiTxPowerPair {
+            primary: if pair.primary < ceiling {
+                pair.primary
+            } else {
+                ceiling
+            },
+            alternate: if pair.alternate < ceiling {
+                pair.alternate
+            } else {
+                ceiling
+            },
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
+    use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
+
+    struct Calibrated;
+    impl WifiTxPowerProfile for Calibrated {
+        fn power_pair(&self, rate: u8) -> WifiTxPowerPair {
+            WifiTxPowerPair {
+                primary: rate as i8 - 12,
+                alternate: 21,
+            }
+        }
+    }
+
+    #[test]
+    fn domain_antenna_chip_and_lab_cap_bound_every_rate_and_both_codes() {
+        let domain = RegulatoryDomain::of(Country::new(*b"DE").expect("country")).expect("domain");
+        let channel = domain
+            .permit(WifiChannel::new_2_4_ghz(1, WifiChannelWidth::Mhz20).expect("channel"))
+            .expect("permitted");
+        for (eirp_gain, chip, owner) in [
+            (233, 2100, Some(1000)),
+            (1233, 2100, None),
+            (233, 600, None),
+        ] {
+            let ceiling = channel.tx_ceiling(PowerLimits {
+                antenna_gain_mbm: eirp_gain,
+                chip_maximum_mbm: chip,
+                owner_cap_mbm: owner,
+            });
+            let profile = CappedTxPowerProfile::new(Calibrated, ceiling);
+            for rate in 0..=42 {
+                let original = Calibrated.power_pair(rate);
+                let pair = profile.power_pair(rate);
+                assert_eq!(pair.primary, original.primary.min(ceiling.dbm()));
+                assert_eq!(pair.alternate, original.alternate.min(ceiling.dbm()));
+                assert!(i32::from(pair.primary) * 100 <= ceiling.mbm());
+                assert!(i32::from(pair.alternate) * 100 <= ceiling.mbm());
+            }
+        }
+    }
 }
