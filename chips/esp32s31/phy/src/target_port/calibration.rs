@@ -317,14 +317,11 @@ fn rx_gain_rfpll_direct<D: PhyShortDelay>(
         RfpllFrequencyAction, RfpllFrequencyExternalBinding, RfpllFrequencyRequest,
         RfpllFrequencyTransition,
     };
-    let mut transition = RfpllFrequencyTransition::channel(
-        clock,
-        RfpllFrequencyRequest {
-            crystal_selector,
-            frequency_code: 0x9b4,
-            offset: 0,
-        },
-    );
+    let mut transition = RfpllFrequencyTransition::channel(RfpllFrequencyRequest {
+        crystal_selector,
+        frequency_code: 0x9b4,
+        offset: 0,
+    });
     loop {
         match transition.action() {
             RfpllFrequencyAction::Complete(_) => return Ok(()),

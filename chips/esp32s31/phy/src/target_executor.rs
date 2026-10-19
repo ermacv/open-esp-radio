@@ -65,8 +65,8 @@ use crate::{
 use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 /// Execute one complete rev0 PBus force command with the vendor's direct
-/// status polling shape. The finite observation ceiling is OER's fail-closed
-/// extension; no executor edge exists inside this transaction.
+/// status polling shape. A named 20 µs settle on the caller's clock
+/// bounds completion; no executor edge exists inside this transaction.
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn force_pbus_direct(
@@ -157,7 +157,7 @@ pub(crate) fn write_i2c_field_direct(
 }
 
 /// Execute the four masked analog-I²C writes of complete ROM
-/// `phy_reset_ckgen` with direct finite polling.
+/// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_clock_generator_direct(
     clock: &dyn oer_time::Clock,
@@ -361,7 +361,7 @@ pub fn complete_rx_gain_i2c(
 
 /// Complete an admitted RFPLL I2C command with the ROM's immediate status
 /// polling. Publication, retries and terminal recognition share the existing
-/// finite edge budget. Bus status reads have no mandatory settling interval;
+/// named 20 µs settle on the caller's clock. Bus status reads have no mandatory settling interval;
 /// analog settling remains an explicit responsibility of the caller.
 pub(crate) fn complete_rfpll_i2c_direct(
     clock: &dyn oer_time::Clock,

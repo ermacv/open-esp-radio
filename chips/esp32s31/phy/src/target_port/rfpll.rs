@@ -6,7 +6,7 @@
 //! `search` and `correct` are children requiring that boundary from the caller.
 //! Runtime execution polls I2C directly and retains the required 2/5-us ROM
 //! settles. These futures do not suspend inside the admitted RFPLL transaction;
-//! finite edge limits are observation bounds, not wall-clock guarantees.
+//! each direct completion has a named 20 µs settle on the caller's clock.
 
 use oer_esp32s31_hal::owner::SharedPhyAccess;
 

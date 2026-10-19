@@ -118,7 +118,6 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
     registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
     operation: oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation,
 ) -> Result<(), PhyTargetPortError> {
-    let clock: &dyn oer_time::Clock = timer;
     use oer_esp32s31_hal::phy::i2c::{
         PhyI2cConfigurationAction, PhyI2cConfigurationError, PhyI2cConfigurationObservation,
         PhyI2cConfigurationTransaction,
@@ -463,6 +462,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 }
                 PhyRfWakeOperation::PublishRetainedFrequencyI2c => {
                     publish_wake_frequency_i2c(
+                        clock,
                         registers,
                         frequency_control.front_end_parameter_bit,
                     )?;

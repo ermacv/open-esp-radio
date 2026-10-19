@@ -268,11 +268,12 @@ runs in one caller poll without a timer suspension. Longer registration,
 tracking and lifecycle operations wait on the caller's `oer_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
-RX gain PBus completion matches the rev0 ROM command loop while retaining
-bounded attempts and typed timeout failure. Its I2C commands use direct status
-reads with the same edge budget, and DC/IQ readiness samples directly on first
-and subsequent attempts. The finite observation bounds are correctness limits,
-not elapsed-time guarantees.
+PBus, analog-I2C and TX-DC/PWDET readiness complete inside named 20 µs
+settles on the caller's clock. W2 measurements on s31-a exercised thermal
+calibration, RFPLL tracking and retained RF wake; the longest direct edge
+was 2,976 cycles at 160 MHz (18.6 µs). Timeout remains a typed failure.
+The retained-wake frequency-ready edge already belongs to an asynchronous
+transaction and retries through the timer in 10 µs steps.
 
 The execution limits have different scopes:
 
