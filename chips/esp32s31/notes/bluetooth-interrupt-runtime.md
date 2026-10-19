@@ -160,11 +160,11 @@ runs. Consequently the required deferred contract is:
 4. dequeue atomically consumes pending plus marker;
 5. a racing publication after dequeue opens a new epoch and emits a new wake.
 
-`SchedulerWakeCell` implements this contract with one `AtomicU8`.
-It is not an async primitive by itself: the platform forwards each
-`WakeWorker` publication to the radio runtime signal, and the runtime drains
-the real scheduler list before it considers the epoch complete; a driver
-keeps that order.
+`SchedulerWakeCell` implements this contract with two facts of the image's
+static `IrqSignal` of the worker's interrupt-mode executor: the handler ORs
+them in and pends that executor, which wakes the worker in its own context;
+no waker crosses the interrupt. The worker drains the real scheduler list
+before it considers the epoch complete; a driver keeps that order.
 
 The drained list is not a hidden hardware FIFO. Complete producer review shows
 that task-side scheduler item removal/reordering inserts items into a

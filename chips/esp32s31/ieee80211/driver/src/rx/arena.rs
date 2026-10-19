@@ -35,6 +35,14 @@ use super::{
 };
 use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 
+/// The image's two static signals of the radio executor that carry the
+/// line's facts to the receive runner: the MAC facts and the power facts.
+#[derive(Clone, Copy)]
+pub struct WifiIrqSignals {
+    pub mac: &'static oer_interrupt_table::signal::IrqSignal,
+    pub power: &'static oer_interrupt_table::signal::IrqSignal,
+}
+
 /// The static arena of one receive epoch.
 ///
 /// `COUNT` descriptors of `BUFFER` bytes (`STORAGE` with the recycle
@@ -114,7 +122,8 @@ impl<
     /// Place the DMA storage, write the values whose zero bytes are not
     /// valid, and lend every part: the runner's parts, the application's
     /// stop handle and the two ends of the staged-frame queue (the runner's
-    /// publisher end and the application's receiver).
+    /// publisher end and the application's receiver). The line's facts
+    /// travel in `signals`, whose task is the runner on their executor.
     ///
     /// The static is `placed` in the DMA window
     /// ([`oer_esp32s31_hal::dma_static!`]): the storage's descriptors and
@@ -130,6 +139,7 @@ impl<
     )]
     pub fn bind(
         placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>>,
+        signals: WifiIrqSignals,
     ) -> Result<
         (
             WifiRxParts<'static, COUNT, BUFFER, STORAGE, STAGE_SLOTS, S, E>,
@@ -163,9 +173,9 @@ impl<
         } = arena.into_inner();
         let (requests, counters): (&'static WifiIrqRequests, &'static WifiRxCounters) =
             (requests, counters);
-        let (irq_publisher, irq) = irq.write(IrqStorage::new()).split();
+        let (irq_publisher, irq) = irq.write(IrqStorage::new(signals.mac)).split();
         let irq_publisher: &'static IrqPublisher<'static> = publisher_slot.write(irq_publisher);
-        let (power_publisher, power) = power.write(PowerIrqStorage::new()).split();
+        let (power_publisher, power) = power.write(PowerIrqStorage::new(signals.power)).split();
         let (control, stop) = control.write(ReceiveControl::new()).split();
         let returns = RxReturnNotifier::new(irq_publisher);
         let frames = frames.write(RxFrameQueue::new()).split(counters, returns);

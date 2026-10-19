@@ -14,8 +14,10 @@ oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-bluetooth-memory = { path = "../memory" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-time = { path = "../../../../portable/time" }
+oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 
 [dev-dependencies]
+oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 # Host tests need the std implementation; chip doctests build without it.

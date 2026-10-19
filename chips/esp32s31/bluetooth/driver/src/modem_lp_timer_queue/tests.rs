@@ -81,15 +81,16 @@ fn full_event_cell_applies_backpressure_without_overwrite() {
 
 #[test]
 fn source_127_task_readiness_survives_late_acquisition_and_coalesces_reentry() {
-    let cell = ModemLpTimerWorkerWakeCell::new();
+    let cell =
+        ModemLpTimerWorkerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
 
     assert_eq!(
         ModemLpTimerStableInterruptStep::SoftwarePending.publish(&cell),
         ModemLpTimerPublishedInterruptStep::SoftwarePending(
-            ModemLpTimerWorkerWakePublication::WakeWorker,
+            ModemLpTimerWorkerWakePublication::Pended,
         )
     );
-    assert!(cell.is_pending());
+    assert_eq!(cell.is_pending(), Ok(true));
     assert_eq!(
         ModemLpTimerStableInterruptStep::AwaitingSoftware.publish(&cell),
         ModemLpTimerPublishedInterruptStep::AwaitingSoftware(
@@ -97,12 +98,35 @@ fn source_127_task_readiness_survives_late_acquisition_and_coalesces_reentry() {
         )
     );
 
-    assert!(cell.take());
-    assert!(!cell.is_pending());
+    assert_eq!(cell.take(), Ok(true));
+    assert_eq!(cell.is_pending(), Ok(false));
     assert_eq!(
         ModemLpTimerStableInterruptStep::SoftwarePending.publish(&cell),
         ModemLpTimerPublishedInterruptStep::SoftwarePending(
-            ModemLpTimerWorkerWakePublication::WakeWorker,
+            ModemLpTimerWorkerWakePublication::Pended,
         )
+    );
+}
+
+#[test]
+fn source_127_readiness_wakes_the_worker_without_being_taken() {
+    use core::task::{Context, Poll, Waker};
+
+    let cell = ModemLpTimerWorkerWakeCell::new(oer_interrupt_table::signal::host::signal());
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(cell.poll_pending(&mut cx), Poll::Pending);
+    let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&cell);
+    assert_eq!(cell.poll_pending(&mut cx), Poll::Ready(Ok(())));
+    // Readiness stays until the worker acquires the owner and takes it.
+    assert_eq!(cell.is_pending(), Ok(true));
+    assert_eq!(cell.take(), Ok(true));
+    assert_eq!(cell.poll_pending(&mut cx), Poll::Pending);
+
+    let foreign =
+        ModemLpTimerWorkerWakeCell::new(oer_interrupt_table::signal::host::foreign_signal());
+    let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&foreign);
+    assert_eq!(
+        foreign.poll_pending(&mut cx),
+        Poll::Ready(Err(oer_interrupt_table::signal::ForeignContext))
     );
 }

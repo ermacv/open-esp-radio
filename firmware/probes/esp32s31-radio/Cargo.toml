@@ -25,6 +25,7 @@ oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
 oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
 oer-time = { path = "../../../portable/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 
 [lib]
 crate-type = ["rlib", "staticlib"]
