@@ -9,7 +9,8 @@
 //! expansion: a value does not prove that the path reaching the call runs.
 use crate::listing::{ImageSymbols, signed_hex};
 use oer_analysis_riscv_model::{
-    AbstractValue, Expression, FunctionRecord, ReferenceKind, SymbolId, ValueAlternative,
+    AbstractValue, Expression, FunctionIndex, FunctionRecord, ReferenceKind, Result, RunControl,
+    ValueAlternative,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -98,52 +99,25 @@ impl ArgumentValue {
     }
 }
 
-/// Every call site among `records` whose target `targets` names.
+/// Every call site among the indexed records whose target `targets` names.
 ///
 /// In a relocatable object a call is a `Call` relocation to the name, whose
 /// register state is at the `jalr` four bytes after its `auipc`, or a
 /// `Branch` (JAL or branch) relocation, whose state is at its own offset. Without relocations, `image` supplies the addresses of the named
 /// functions and a transfer to one of them is a call site.
 pub fn call_sites(
-    records: &[FunctionRecord],
+    facts: &FunctionIndex<'_, '_>,
     targets: &[String],
     image: Option<&ImageSymbols>,
-) -> Vec<CallSite> {
-    let mut names: BTreeMap<&SymbolId, &[u8]> = BTreeMap::new();
-    let mut expressions: BTreeMap<u32, &Expression> = BTreeMap::new();
-    let mut inputs: BTreeMap<u64, &[AbstractValue]> = BTreeMap::new();
-    for record in records {
-        match record {
-            FunctionRecord::Reference { target, .. } => {
-                names.insert(&target.symbol, &target.name);
-            }
-            FunctionRecord::Expression { id, expression, .. } => {
-                expressions.insert(*id, expression);
-            }
-            FunctionRecord::CallInputs { offset, registers } => {
-                inputs.insert(*offset, registers);
-            }
-            _ => {}
-        }
-    }
+    c: &mut dyn RunControl,
+) -> Result<Vec<CallSite>> {
     let wanted = |name: &[u8]| targets.iter().any(|target| target.as_bytes() == name);
-    let arguments = |registers: Option<&&[AbstractValue]>| {
-        registers
-            .map(|registers| {
-                registers
-                    .get(ARGUMENTS)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|value| argument(value, &names, &expressions))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
     let image_targets: BTreeMap<u64, &str> = image
         .map(|image| image.starts_named(targets))
         .unwrap_or_default();
     let mut sites = Vec::new();
-    for record in records {
+    for record in facts.records() {
+        c.checkpoint(1)?;
         match record {
             FunctionRecord::Reference {
                 raw,
@@ -161,7 +135,7 @@ pub fn call_sites(
                 sites.push(CallSite {
                     offset: site,
                     target: target.name.clone(),
-                    arguments: arguments(inputs.get(&site)),
+                    arguments: arguments(facts, site, c)?,
                 });
             }
             FunctionRecord::Transfer {
@@ -173,26 +147,45 @@ pub fn call_sites(
                     sites.push(CallSite {
                         offset: *offset,
                         target: name.as_bytes().to_vec(),
-                        arguments: arguments(inputs.get(offset)),
+                        arguments: arguments(facts, *offset, c)?,
                     });
                 }
             }
             _ => {}
         }
     }
+    c.checkpoint(sites.len() as u64 * (sites.len().max(1).ilog2() as u64 + 1))?;
     sites.sort_by_key(|site| site.offset);
     sites.dedup();
-    sites
+    Ok(sites)
+}
+
+fn arguments(
+    facts: &FunctionIndex<'_, '_>,
+    offset: u64,
+    c: &mut dyn RunControl,
+) -> Result<Vec<ArgumentValue>> {
+    let Some(input) = facts.call_inputs(offset, c)? else {
+        return Ok(Vec::new());
+    };
+    input
+        .registers
+        .get(ARGUMENTS)
+        .unwrap_or_default()
+        .iter()
+        .map(|value| argument(value, facts, c))
+        .collect()
 }
 
 fn argument(
     value: &AbstractValue,
-    names: &BTreeMap<&SymbolId, &[u8]>,
-    expressions: &BTreeMap<u32, &Expression>,
-) -> ArgumentValue {
-    match value {
+    facts: &FunctionIndex<'_, '_>,
+    c: &mut dyn RunControl,
+) -> Result<ArgumentValue> {
+    c.checkpoint(1)?;
+    Ok(match value {
         AbstractValue::Unknown => ArgumentValue::Unknown,
-        AbstractValue::Expression { id } => match expressions.get(id) {
+        AbstractValue::Expression { id } => match facts.expression(*id, c)? {
             Some(Expression::EntryRegister { register })
                 if ARGUMENTS.contains(&usize::from(*register)) =>
             {
@@ -209,16 +202,23 @@ fn argument(
             values: values
                 .values()
                 .iter()
-                .map(|value| leaf(value, names))
-                .collect(),
+                .map(|value| leaf(value, facts, c))
+                .collect::<Result<_>>()?,
         },
-        _ => ValueAlternative::from_value(value)
-            .map_or(ArgumentValue::Unknown, |value| leaf(&value, names)),
-    }
+        _ => match ValueAlternative::from_value(value) {
+            Some(value) => leaf(&value, facts, c)?,
+            None => ArgumentValue::Unknown,
+        },
+    })
 }
 
-fn leaf(value: &ValueAlternative, names: &BTreeMap<&SymbolId, &[u8]>) -> ArgumentValue {
-    match value {
+fn leaf(
+    value: &ValueAlternative,
+    facts: &FunctionIndex<'_, '_>,
+    c: &mut dyn RunControl,
+) -> Result<ArgumentValue> {
+    c.checkpoint(1)?;
+    Ok(match value {
         ValueAlternative::Constant { value } => ArgumentValue::Constant { value: *value },
         ValueAlternative::ImageAddress { address } => {
             ArgumentValue::ImageAddress { address: *address }
@@ -228,14 +228,14 @@ fn leaf(value: &ValueAlternative, names: &BTreeMap<&SymbolId, &[u8]>) -> Argumen
             offset: *offset,
         },
         ValueAlternative::Symbol { symbol, addend } => ArgumentValue::Symbol {
-            name: names
-                .get(symbol)
-                .map(|name| name.to_vec())
+            name: facts
+                .reference(symbol, c)?
+                .map(|target| target.name.clone())
                 .unwrap_or_else(|| format!("symbol{}", symbol.index).into_bytes()),
             addend: *addend,
         },
         ValueAlternative::EntryStack { offset } => ArgumentValue::EntryStack { offset: *offset },
-    }
+    })
 }
 
 #[cfg(test)]

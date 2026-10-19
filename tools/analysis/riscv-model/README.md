@@ -1,7 +1,7 @@
 # RV32 program model
 
 `oer-analysis-riscv-model` owns the identities, errors, run control, working memory
-and the ISA-neutral function decoding and lifting contracts that the
+and the ISA-neutral function decoding, lifting and record-navigation contracts that the
 [analysis](../riscv-analysis/README.md), the [RV32 lifting](../riscv-lift/README.md) and
 Blobray share. It has no internal dependency, no filesystem access and no ISA.
 
@@ -71,3 +71,20 @@ constants; `NoTables` is a build whose facts hold no table. The value
 analysis locates tables for it with `FunctionRecord::Dispatch`: a jump
 through `load4[base + (index << scale)]` whose load, addition and scaling
 its own block computes, from a constant, image-address or symbol base.
+
+[Record navigation](src/navigation.rs) `FunctionIndex` borrows one function's
+records and admits expression, symbol-reference, call-input and transfer indexes
+in the operation's existing `WorkingMemory`. Exact callsite offsets and original
+record positions are retained; absent facts stay absent. Construction, indexed
+expression/reference/callsite queries and memory-access visits charge the same
+`RunControl`. Blobray's canonical evaluators retain a borrowed constant-time
+operand primitive, `value_expression`, within their own metered traversals.
+
+`RecordPolicy::Canonical` requires sequential expression IDs in definition order
+and earlier Integer/Load operands, rejects duplicate instruction/input/transfer
+offsets and inconsistent symbol targets, and permits identical references.
+`RecordPolicy::Dictionary` accepts sparse IDs, forward references and cycles and
+selects the last source definition for each expression, symbol and input offset.
+Neither mode requires complete instruction streams, symbol names, transfer states
+or full register arrays. Consumers retain cycle limits, field interpretation,
+argument selection and callee selection; the index makes no completeness claim.

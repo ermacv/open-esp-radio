@@ -6,7 +6,7 @@ use oer_analysis_riscv_model::{
     SymbolId, SymbolTableKind,
 };
 
-use super::{FieldRoot, field_accesses, unknown_addresses};
+use super::{FieldRoot, unknown_addresses};
 
 fn symbol() -> SymbolId {
     SymbolId {
@@ -163,4 +163,132 @@ fn an_unresolved_base_keeps_its_exact_displacements() {
     assert_eq!(accesses[0].root, FieldRoot::Unknown);
     assert_eq!(accesses[0].path, [148]);
     assert_eq!(unknown_addresses(&records), 1);
+}
+
+#[test]
+fn dictionary_ids_forward_definitions_and_last_definition_are_preserved() {
+    let records = vec![
+        store(20, 4, u32::MAX),
+        expression(
+            u32::MAX,
+            add(AbstractValue::Expression { id: 7 }, (-8_i32) as u32),
+        ),
+        expression(7, Expression::EntryRegister { register: 12 }),
+        expression(7, Expression::EntryRegister { register: 10 }),
+        store(4, 4, u32::MAX),
+    ];
+    let accesses = field_accesses(&records, -8, None);
+    assert_eq!(
+        accesses.iter().map(|a| a.offset).collect::<Vec<_>>(),
+        [20, 4]
+    );
+    for access in accesses {
+        assert_eq!(access.root, FieldRoot::EntryRegister { register: 10 });
+        assert_eq!(access.path, [-8]);
+    }
+}
+
+#[test]
+fn missing_expressions_stay_unknown_and_cycles_do_not_match() {
+    let missing = [
+        expression(3, add(AbstractValue::Expression { id: 99 }, 148)),
+        store(0, 1, 3),
+    ];
+    let accesses = field_accesses(&missing, 148, None);
+    assert_eq!(accesses.len(), 1);
+    assert_eq!(accesses[0].root, FieldRoot::Unknown);
+    assert_eq!(accesses[0].path, [148]);
+    let cycle = [
+        expression(3, add(AbstractValue::Expression { id: 3 }, 148)),
+        store(0, 1, 3),
+    ];
+    assert!(field_accesses(&cycle, 148, None).is_empty());
+}
+
+#[test]
+fn late_names_use_the_last_reference_and_missing_names_stay_absent() {
+    let mut records = records();
+    let FunctionRecord::Reference { target, .. } = &records[0] else {
+        unreachable!("fixture contains a reference record")
+    };
+    let mut late = target.as_ref().clone();
+    late.name = b"last\xff".to_vec();
+    let mut reference = records[0].clone();
+    let FunctionRecord::Reference { target, .. } = &mut reference else {
+        unreachable!("fixture contains a reference record")
+    };
+    *target = Arc::new(late);
+    records.push(reference);
+    assert_eq!(
+        field_accesses(&records, 148, None)[0].root,
+        FieldRoot::Symbol {
+            symbol: symbol(),
+            name: Some("last\u{fffd}".into())
+        }
+    );
+    records.retain(|r| !matches!(r, FunctionRecord::Reference { .. }));
+    assert_eq!(
+        field_accesses(&records, 148, None)[0].root,
+        FieldRoot::Symbol {
+            symbol: symbol(),
+            name: None
+        }
+    );
+}
+
+fn field_accesses(
+    records: &[FunctionRecord],
+    offset: i64,
+    width: Option<u8>,
+) -> Vec<super::FieldAccess> {
+    let memory = oer_analysis_riscv_model::WorkingMemory::new(8192)
+        .expect("navigation fixture should succeed");
+    let facts = oer_analysis_riscv_model::FunctionIndex::new(
+        records,
+        oer_analysis_riscv_model::RecordPolicy::Dictionary,
+        &memory,
+        &mut || Ok(()),
+    )
+    .expect("navigation fixture should succeed");
+    super::field_accesses(&facts, offset, width, &mut || Ok(()))
+        .expect("navigation fixture should succeed")
+}
+
+#[test]
+fn field_errors_during_folding_and_name_lookup_reach_the_caller() {
+    use oer_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    let records = records();
+    let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
+    let facts = FunctionIndex::new(&records, RecordPolicy::Dictionary, &memory, &mut || Ok(()))
+        .expect("navigation fixture should succeed");
+    let mut checkpoints = 0;
+    assert!(
+        !super::field_accesses(&facts, 148, None, &mut || {
+            checkpoints += 1;
+            Ok(())
+        })
+        .expect("navigation fixture should succeed")
+        .is_empty()
+    );
+    for fail_at in 0..checkpoints {
+        for code in [
+            ErrorCode::Cancelled,
+            ErrorCode::TimedOut,
+            ErrorCode::ResourceLimited,
+            ErrorCode::Integrity,
+        ] {
+            let mut remaining = fail_at;
+            let error = super::field_accesses(&facts, 148, None, &mut || {
+                if remaining == 0 {
+                    return Err(Error::new(code, "stop"));
+                }
+                remaining -= 1;
+                Ok(())
+            })
+            .unwrap_err();
+            assert_eq!(error, Error::new(code, "stop"));
+        }
+    }
+    drop(facts);
+    assert_eq!(memory.used(), 0);
 }

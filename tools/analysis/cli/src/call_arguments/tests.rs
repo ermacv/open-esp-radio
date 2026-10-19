@@ -6,7 +6,7 @@ use oer_analysis_riscv_model::{
     ValueAlternative, ValueAlternatives,
 };
 
-use super::{ArgumentValue, CallSite, call_sites};
+use super::{ArgumentValue, CallSite};
 use crate::listing::ImageSymbols;
 
 fn symbol(index: u64) -> SymbolId {
@@ -224,4 +224,217 @@ fn a_jump_without_its_own_register_state_never_borrows_the_next_call() {
         ArgumentValue::Constant { value: 0x67 },
         "a linked `jal` relocation carries its own state"
     );
+}
+
+#[test]
+fn late_dictionary_facts_and_duplicate_inputs_use_last_definitions() {
+    let records = vec![
+        reference(0x28, "callee", 1, ReferenceKind::Call),
+        inputs(0x2c, &[(10, constant(9))]),
+        inputs(
+            0x2c,
+            &[
+                (10, AbstractValue::Expression { id: u32::MAX }),
+                (
+                    11,
+                    AbstractValue::Symbol {
+                        symbol: symbol(2),
+                        addend: -8,
+                    },
+                ),
+                (
+                    12,
+                    AbstractValue::Symbol {
+                        symbol: symbol(3),
+                        addend: 0,
+                    },
+                ),
+            ],
+        ),
+        FunctionRecord::Expression {
+            id: u32::MAX,
+            offset: 0,
+            expression: Expression::EntryRegister { register: 12 },
+        },
+        FunctionRecord::Expression {
+            id: u32::MAX,
+            offset: 0,
+            expression: Expression::EntryRegister { register: 17 },
+        },
+        reference(0, "first", 2, ReferenceKind::Address),
+        reference(0, "last", 2, ReferenceKind::Address),
+    ];
+    let sites = call_sites(&records, &["callee".into()], None);
+    assert_eq!(
+        &sites[0].arguments[..3],
+        [
+            ArgumentValue::EntryArgument { index: 7 },
+            ArgumentValue::Symbol {
+                name: b"last".to_vec(),
+                addend: -8
+            },
+            ArgumentValue::Symbol {
+                name: b"symbol3".to_vec(),
+                addend: 0
+            }
+        ]
+    );
+}
+
+#[test]
+fn incomplete_state_missing_and_cyclic_expressions_remain_unknown() {
+    let mut records = vec![
+        reference(0, "callee", 1, ReferenceKind::Branch),
+        FunctionRecord::CallInputs {
+            offset: 0,
+            registers: vec![constant(7); 17],
+        },
+    ];
+    assert!(
+        call_sites(&records, &["callee".into()], None)[0]
+            .arguments
+            .is_empty()
+    );
+    records.push(inputs(
+        0,
+        &[
+            (10, AbstractValue::Expression { id: 999 }),
+            (11, AbstractValue::Expression { id: 4 }),
+        ],
+    ));
+    records.push(FunctionRecord::Expression {
+        id: 4,
+        offset: 0,
+        expression: Expression::Load {
+            address: AbstractValue::Expression { id: 4 },
+            width: 4,
+            signed: false,
+        },
+    });
+    assert!(
+        call_sites(&records, &["callee".into()], None)[0]
+            .arguments
+            .iter()
+            .all(|a| *a == ArgumentValue::Unknown)
+    );
+}
+
+fn call_sites(
+    records: &[FunctionRecord],
+    targets: &[String],
+    image: Option<&ImageSymbols>,
+) -> Vec<CallSite> {
+    let memory = oer_analysis_riscv_model::WorkingMemory::new(8192)
+        .expect("navigation fixture should succeed");
+    let facts = oer_analysis_riscv_model::FunctionIndex::new(
+        records,
+        oer_analysis_riscv_model::RecordPolicy::Dictionary,
+        &memory,
+        &mut || Ok(()),
+    )
+    .expect("navigation fixture should succeed");
+    super::call_sites(&facts, targets, image, &mut || Ok(()))
+        .expect("navigation fixture should succeed")
+}
+
+#[test]
+fn call_argument_lookup_errors_reach_the_caller_after_any_checkpoint() {
+    use oer_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    let records = [
+        reference(0, "callee", 1, ReferenceKind::Call),
+        inputs(
+            4,
+            &[(
+                10,
+                AbstractValue::Symbol {
+                    symbol: symbol(2),
+                    addend: 0,
+                },
+            )],
+        ),
+        reference(0, "data", 2, ReferenceKind::Address),
+    ];
+    let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
+    let facts = FunctionIndex::new(&records, RecordPolicy::Dictionary, &memory, &mut || Ok(()))
+        .expect("navigation fixture should succeed");
+    let targets = ["callee".into()];
+    let mut checkpoints = 0;
+    assert_eq!(
+        super::call_sites(&facts, &targets, None, &mut || {
+            checkpoints += 1;
+            Ok(())
+        })
+        .expect("navigation fixture should succeed")
+        .len(),
+        1
+    );
+    for fail_at in 0..checkpoints {
+        for code in [
+            ErrorCode::Cancelled,
+            ErrorCode::TimedOut,
+            ErrorCode::ResourceLimited,
+            ErrorCode::Integrity,
+        ] {
+            let mut remaining = fail_at;
+            let error = super::call_sites(&facts, &targets, None, &mut || {
+                if remaining == 0 {
+                    return Err(Error::new(code, "stop"));
+                }
+                remaining -= 1;
+                Ok(())
+            })
+            .unwrap_err();
+            assert_eq!(error, Error::new(code, "stop"));
+        }
+    }
+    drop(facts);
+    assert_eq!(memory.used(), 0);
+}
+
+#[test]
+fn selected_targets_keep_their_own_names_and_unknown_transfers_stay_absent() {
+    let image = ImageSymbols::new([
+        (0x100, 4, "image_target".to_string()),
+        (0x200, 4, "other_target".to_string()),
+    ]);
+    let records = [
+        reference(0x20, "callee", 1, ReferenceKind::Branch),
+        reference(0x20, "callee", 1, ReferenceKind::Branch),
+        reference(0x10, "callee", 1, ReferenceKind::Call),
+        reference(0, "last_name", 1, ReferenceKind::Address),
+        FunctionRecord::Transfer {
+            offset: 0x30,
+            target: AbstractValue::Unknown,
+            call: true,
+        },
+        FunctionRecord::Transfer {
+            offset: 0x40,
+            target: AbstractValue::ImageAddress { address: 0x100 },
+            call: false,
+        },
+    ];
+    let mut records = records.to_vec();
+    records.push(FunctionRecord::Transfer {
+        offset: 0x40,
+        target: AbstractValue::ImageAddress { address: 0x200 },
+        call: true,
+    });
+    let sites = call_sites(
+        &records,
+        &[
+            "callee".into(),
+            "image_target".into(),
+            "other_target".into(),
+        ],
+        Some(&image),
+    );
+    assert_eq!(
+        sites.iter().map(|site| site.offset).collect::<Vec<_>>(),
+        [0x14, 0x20, 0x40, 0x40]
+    );
+    assert_eq!(sites[0].target, b"callee");
+    assert_eq!(sites[1].target, b"callee");
+    assert_eq!(sites[2].target, b"image_target");
+    assert_eq!(sites[3].target, b"other_target");
+    assert!(sites.iter().all(|site| site.arguments.is_empty()));
 }

@@ -6,10 +6,9 @@
 //! access lands 148 bytes after the loaded pointer. Additions of constants
 //! fold into the current displacement; every load starts the next one.
 
-use std::collections::HashMap;
-
 use oer_analysis_riscv_model::{
-    AbstractValue, Expression, FunctionRecord, IntegerOp, MemoryKind, SymbolId,
+    AbstractValue, Expression, FunctionIndex, FunctionRecord, IntegerOp, MemoryKind, Result,
+    RunControl, SymbolId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -49,69 +48,47 @@ pub struct FieldAccess {
     pub path: Vec<i64>,
 }
 
-/// The memory accesses of one function's `records` whose address folds to
+/// The memory accesses of one function's indexed records whose address folds to
 /// a root and a path ending at `offset`, and, when given, of `width` bytes.
 /// An unresolved base is the [`FieldRoot::Unknown`] root; absolute addresses
 /// are not fields.
 pub fn field_accesses(
-    records: &[FunctionRecord],
+    facts: &FunctionIndex<'_, '_>,
     offset: i64,
     width: Option<u8>,
-) -> Vec<FieldAccess> {
-    let expressions: HashMap<u32, &Expression> = records
-        .iter()
-        .filter_map(|record| match record {
-            FunctionRecord::Expression { id, expression, .. } => Some((*id, expression)),
-            _ => None,
-        })
-        .collect();
-    let names: HashMap<SymbolId, String> = records
-        .iter()
-        .filter_map(|record| match record {
-            FunctionRecord::Reference { target, .. } => Some((
-                target.symbol.clone(),
-                String::from_utf8_lossy(&target.name).into_owned(),
-            )),
-            _ => None,
-        })
-        .collect();
-    records
-        .iter()
-        .filter_map(|record| {
-            let FunctionRecord::MemoryAccess {
-                offset: at,
-                access,
-                width: accessed,
-                address,
-                ..
-            } = record
-            else {
-                return None;
-            };
-            if width.is_some_and(|width| width != *accessed) {
-                return None;
-            }
-            let (root, mut path, last) = fold(address, &expressions, 0)?;
-            if last != offset {
-                return None;
-            }
-            path.push(last);
-            let root = match root {
-                FieldRoot::Symbol { symbol, .. } => FieldRoot::Symbol {
-                    name: names.get(&symbol).cloned(),
-                    symbol,
-                },
-                other => other,
-            };
-            Some(FieldAccess {
-                offset: *at,
-                access: *access,
-                width: *accessed,
-                root,
-                path,
-            })
-        })
-        .collect()
+    c: &mut dyn RunControl,
+) -> Result<Vec<FieldAccess>> {
+    let mut accesses = Vec::new();
+    facts.accesses(c, &mut |access, c| {
+        if width.is_some_and(|width| width != access.width) {
+            return Ok(());
+        }
+        let Some((root, mut path, last)) = fold(access.address, facts, 0, c)? else {
+            return Ok(());
+        };
+        if last != offset {
+            return Ok(());
+        }
+        path.push(last);
+        let root = match root {
+            FieldRoot::Symbol { symbol, .. } => FieldRoot::Symbol {
+                name: facts
+                    .reference(&symbol, c)?
+                    .map(|target| String::from_utf8_lossy(&target.name).into_owned()),
+                symbol,
+            },
+            other => other,
+        };
+        accesses.push(FieldAccess {
+            offset: access.offset,
+            access: access.access,
+            width: access.width,
+            root,
+            path,
+        });
+        Ok(())
+    })?;
+    Ok(accesses)
 }
 
 /// The memory accesses of `records` whose address is not known at all:
@@ -131,21 +108,22 @@ pub fn unknown_addresses(records: &[FunctionRecord]) -> u64 {
         .count() as u64
 }
 
-/// The deepest folds a chain may take; the expressions form a DAG of earlier
-/// records, so this only bounds pathological inputs.
+/// The deepest folds a chain may take, including dictionary inputs with cycles.
 const MAX_DEPTH: usize = 64;
 
 /// `value` as a root, the displacements loaded before the last, and the
 /// last displacement.
 fn fold(
     value: &AbstractValue,
-    expressions: &HashMap<u32, &Expression>,
+    facts: &FunctionIndex<'_, '_>,
     depth: usize,
-) -> Option<(FieldRoot, Vec<i64>, i64)> {
+    c: &mut dyn RunControl,
+) -> Result<Option<(FieldRoot, Vec<i64>, i64)>> {
+    c.checkpoint(1)?;
     if depth > MAX_DEPTH {
-        return None;
+        return Ok(None);
     }
-    match value {
+    Ok(match value {
         AbstractValue::Symbol { symbol, addend } => Some((
             FieldRoot::Symbol {
                 symbol: symbol.clone(),
@@ -160,15 +138,15 @@ fn fold(
             Vec::new(),
             *offset,
         )),
-        AbstractValue::Expression { id } if expressions.contains_key(id) => match expressions[id] {
-            Expression::EntryRegister { register } => Some((
+        AbstractValue::Expression { id } => match facts.expression(*id, c)? {
+            Some(Expression::EntryRegister { register }) => Some((
                 FieldRoot::EntryRegister {
                     register: *register,
                 },
                 Vec::new(),
                 0,
             )),
-            Expression::CallResult { callsite, register } => Some((
+            Some(Expression::CallResult { callsite, register }) => Some((
                 FieldRoot::CallResult {
                     callsite: *callsite,
                     register: *register,
@@ -176,34 +154,36 @@ fn fold(
                 Vec::new(),
                 0,
             )),
-            Expression::Integer {
+            Some(Expression::Integer {
                 op: IntegerOp::Add,
                 left,
                 right,
-            } => match (left, right) {
+            }) => match (left, right) {
                 (base, AbstractValue::Constant { value })
                 | (AbstractValue::Constant { value }, base) => {
-                    let (root, path, last) = fold(base, expressions, depth + 1)?;
+                    let Some((root, path, last)) = fold(base, facts, depth + 1, c)? else {
+                        return Ok(None);
+                    };
                     Some((root, path, last + i64::from(*value as i32)))
                 }
                 _ => Some((FieldRoot::Unknown, Vec::new(), 0)),
             },
-            Expression::Load { address, .. } => {
-                let (root, mut path, last) = fold(address, expressions, depth + 1)?;
+            Some(Expression::Load { address, .. }) => {
+                let Some((root, mut path, last)) = fold(address, facts, depth + 1, c)? else {
+                    return Ok(None);
+                };
                 path.push(last);
                 Some((root, path, 0))
             }
-            Expression::Integer { .. } => Some((FieldRoot::Unknown, Vec::new(), 0)),
+            Some(Expression::Integer { .. }) | None => Some((FieldRoot::Unknown, Vec::new(), 0)),
         },
-        // An expression the records do not define, a base with several
-        // possible values or none known: the displacements after it stay
-        // exact.
-        AbstractValue::Expression { .. }
-        | AbstractValue::Alternatives { .. }
-        | AbstractValue::Unknown => Some((FieldRoot::Unknown, Vec::new(), 0)),
+        // Missing expressions and unresolved bases keep exact displacements.
+        AbstractValue::Alternatives { .. } | AbstractValue::Unknown => {
+            Some((FieldRoot::Unknown, Vec::new(), 0))
+        }
         // A known absolute address is no field of anything.
         AbstractValue::Constant { .. } | AbstractValue::ImageAddress { .. } => None,
-    }
+    })
 }
 
 #[cfg(test)]
