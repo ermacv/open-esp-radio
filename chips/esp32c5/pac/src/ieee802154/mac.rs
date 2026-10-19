@@ -14,7 +14,7 @@ pub use crate::generated::{
     Ieee802154Timer1ThresholdWord, Ieee802154Timer1ValueWord, Ieee802154TxPowerCode,
 };
 use crate::{Ieee802154InterruptRegisters, Ieee802154InterruptSetup, Ieee802154TaskRegisters};
-pub use oer_espressif_ieee802154_pac::{
+pub use oer_espressif_ieee802154_mac_values::{
     Ieee802154AckTimeoutUnits, Ieee802154CcaMode, Ieee802154EdCommand, Ieee802154EdSampleMode,
     Ieee802154EdSampleRate, Ieee802154Event, Ieee802154EventEnableState, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154EventObservationError, Ieee802154MacCommand,
@@ -28,7 +28,7 @@ pub use oer_espressif_ieee802154_pac::{
     Ieee802154TxSecurityErrorObservation, Ieee802154TxStateCode, Ieee802154TxStatus,
     Ieee802154ValidationEdDurationState, Ieee802154ValidationEventEnableState,
 };
-use oer_espressif_ieee802154_pac::{
+use oer_espressif_ieee802154_mac_values::{
     Ieee802154InterruptActivationPlan, Ieee802154InterruptTransitionPort,
     execute_interrupt_activation, execute_interrupt_deactivation,
 };

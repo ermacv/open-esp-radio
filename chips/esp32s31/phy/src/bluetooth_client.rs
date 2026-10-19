@@ -65,7 +65,7 @@ pub enum BluetoothPhyClientError {
 pub fn join_bluetooth<'l>(
     ready: PhyReady<'l>,
     task: &TaskOwner,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<Joined<'l, BluetoothPhyMembership>, JoinRefused<'l, BluetoothPhyClientError>> {
     let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the

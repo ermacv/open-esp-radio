@@ -9,8 +9,6 @@
 //! layout entry reports where those backings hold each MPDU, so the vendor
 //! side can compare the same bytes.
 
-use oer_base_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
-use oer_base_time::RadioDuration;
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaStorage, RetainedAmpduDmaStorage,
 };
@@ -34,6 +32,8 @@ use oer_ieee80211_lower_mac::{
     GenerationSource, Ieee80211ClockGeneration, Ieee80211Instant, Ieee80211Stamp,
 };
 use oer_ieee80211_mac::sequence::SequenceNumber;
+use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
+use oer_time::RadioDuration;
 
 /// MPDUs one compared aggregate may hold.
 const SLOTS: usize = 8;

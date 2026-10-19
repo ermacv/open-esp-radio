@@ -8,8 +8,8 @@
 //! resets, and the next boot's [`report_previous`] prints the record once.
 
 use esp_hal::system::Cpu;
-use oer_platform_esp32s31_board::rom;
-use oer_platform_staged_runtime::trap::{self, TrapRegisters};
+use oer_esp32s31_board::rom;
+use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OFTL");
 #[cfg(feature = "panic-hook")]
@@ -76,13 +76,13 @@ impl Slot {
     }
 }
 
-oer_platform_staged_runtime::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     /// The fatal record. The fatal path takes it without waiting: while the
     /// other hart records its own failure, this one's is skipped.
     static SLOT: Slot;
 }
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in rwtext "fatal";
     /// Record a panic's machine state; the platform resets the chip next.
     #[cfg(feature = "panic-hook")]
@@ -91,7 +91,7 @@ oer_platform_staged_runtime::sram_fn! {
     }
 }
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in rwtext "fatal";
     /// Record an exception's machine state and its `ra`, then reset.
     pub(crate) fn record_exception(ra: u32) -> ! {
@@ -100,7 +100,7 @@ oer_platform_staged_runtime::sram_fn! {
     }
 }
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in rwtext "fatal";
     fn record(kind: u32, ra: u32, stage: u32) {
         let TrapRegisters {

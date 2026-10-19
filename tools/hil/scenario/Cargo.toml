@@ -1,0 +1,35 @@
+[package]
+name = "oer-hil-scenario"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL scenarios: the family-independent envelope, catalog, campaign plan, requirements and target settings"
+
+[features]
+# The campaign constructor of the runner's cross-package tests.
+test-support = []
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
+oer-hil-model = { path = "../model" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.1"
+oer-hil-runs = { path = "../runs" }
+oer-image-build = { path = "../../image/build" }
+oer-hil-lab = { path = "../lab" }
+oer-lab-board = { path = "../../lab/board" }
+oer-hil-link = { path = "../link" }
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+oer-os-process = { path = "../../os/process" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-hil-lab = { path = "../lab", features = ["test-support"] }
+oer-hil-link = { path = "../link", features = ["test-support"] }

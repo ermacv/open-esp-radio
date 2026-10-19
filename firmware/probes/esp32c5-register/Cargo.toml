@@ -16,7 +16,7 @@ esp32c5 = { git = "https://github.com/ermacv/esp-pacs", rev = "a1f6cf68e", defau
 oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal" }
 oer-esp32c5-pac = { path = "../../../chips/esp32c5/pac" }
 oer-esp32c5-pac-raw = { path = "../../../chips/esp32c5/pac-raw" }
-oer-espressif-analog = { path = "../../../portable/espressif/analog" }
+oer-espressif-analog = { path = "../../../chips/espressif/analog" }
 
 [lints]
 workspace = true

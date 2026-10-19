@@ -11,7 +11,7 @@ use std::{
 };
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_pins::artifacts;
+use oer_tool_pins::artifacts;
 
 #[derive(Parser)]
 #[command(about = "Fetch and verify pinned vendor artifacts")]

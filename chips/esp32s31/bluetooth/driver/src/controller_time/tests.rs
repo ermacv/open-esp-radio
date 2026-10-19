@@ -720,7 +720,7 @@ fn post_enable_projection_retains_the_existing_scheduler_epoch() {
 #[test]
 fn physical_duration_admission_enforces_the_retained_scales_half_range() {
     use super::ControllerDurationError;
-    use oer_base_time::RadioDuration;
+    use oer_time::RadioDuration;
     for (period, minimum, maximum, ticks) in [
         (
             BluetoothHalInitPeriod::Image500,

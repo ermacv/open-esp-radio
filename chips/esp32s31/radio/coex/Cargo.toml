@@ -9,7 +9,7 @@ description = "ESP32-S31 binding of the Espressif coexistence policy to the radi
 
 [dependencies]
 oer-esp32s31-hal = { path = "../../hal" }
-oer-espressif-coex = { path = "../../../../portable/espressif/coex" }
+oer-espressif-coex = { path = "../../../espressif/coex" }
 
 [lints]
 workspace = true

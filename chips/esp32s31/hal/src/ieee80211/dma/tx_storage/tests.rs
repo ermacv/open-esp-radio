@@ -130,7 +130,7 @@ fn impossible_sequence_can_only_quarantine_backing() {
 
 #[test]
 fn zeroed_storage_is_the_free_storage_new_builds() {
-    let zeroed = oer_base_memory::zeroed::zeroed::<TxDmaStorage<64>>();
+    let zeroed = oer_memory::zeroed::zeroed::<TxDmaStorage<64>>();
     let new = TxDmaStorage::<64>::new();
     assert_eq!(zeroed.state, new.state);
     assert_eq!(zeroed.state, TxDmaState::Free);

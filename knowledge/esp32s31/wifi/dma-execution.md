@@ -2,7 +2,7 @@
 
 Source: a Wi-Fi execution form outside this repository, whose interrupt model
 (a critical section shared by ISR and task) this repository replaces with the
-P3/P2 contexts. The buffer-level custody rules live in `oer-base-memory`
+P3/P2 contexts. The buffer-level custody rules live in `oer-memory`
 (`indexed_custody`) and the Wi-Fi DMA and MAC crates; the rules below are the
 execution-level ones the receive and transmit DMA keep.
 

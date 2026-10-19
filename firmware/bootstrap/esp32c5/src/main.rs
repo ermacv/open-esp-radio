@@ -3,7 +3,7 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 //! The ESP32-C5 bootstrap: the staged boot's chip-neutral steps
-//! (`oer-platform-staged-bootstrap`) around the module's PSRAM. The chip's
+//! (`oer-espressif-staged-bootstrap`) around the module's PSRAM. The chip's
 //! flash stays at the image header's 80 MHz, so no tuning follows the copy.
 //!
 //! The bootstrap enables no radio or modem clock. ESP-IDF's modem clock
@@ -19,15 +19,15 @@ esp_bootloader_esp_idf::esp_app_desc!(
     "00:00:00",
     "2026-10-05",
     "6.1",
-    oer_platform_esp32c5_board::FLASH_MMU_PAGE_SIZE_BYTES,
+    oer_esp32c5_board::FLASH_MMU_PAGE_SIZE_BYTES,
     0,
     u16::MAX,
     0
 );
 
-use oer_platform_esp32c5_board as board;
-use oer_platform_esp32c5_layout::LAYOUT;
-use oer_platform_staged_bootstrap::{self as staged, print};
+use oer_esp32c5_board as board;
+use oer_esp32c5_layout::LAYOUT;
+use oer_espressif_staged_bootstrap::{self as staged, print};
 
 // This is the load image, not its runtime placement: the bootstrap copies
 // and verifies it into PSRAM.

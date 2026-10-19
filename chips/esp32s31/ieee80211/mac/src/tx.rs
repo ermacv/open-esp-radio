@@ -14,8 +14,8 @@ extern crate alloc;
 #[cfg(any(test, feature = "test-support"))]
 use alloc::boxed::Box;
 
-pub use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
 pub use oer_esp32s31_hal::types::MacLegacyTxResponse;
+pub use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use oer_esp32s31_hal::types::{
     MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate, MacHeTbTidLimit, MacHeTid,

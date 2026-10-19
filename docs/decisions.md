@@ -240,8 +240,8 @@ bounds) live in the code that applies them.
   stack analyzer, vendor comparison, provenance and copy checks, image checks.
 - **Vendor comparison** is a tool used by hand.
 - **ELF** is read through `object`: convenient reading in
-  `host/analysis/elf`, bounded reading of untrusted vendor input in
-  `host/analysis/blobray-artifacts`; there is no other ELF parser.
+  `tools/analysis/elf`, bounded reading of untrusted vendor input in
+  `tools/analysis/blobray-artifacts`; there is no other ELF parser.
 
 ## Repository and work
 

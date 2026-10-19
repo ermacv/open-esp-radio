@@ -374,7 +374,7 @@ reason = """
 a software HE-Control image: the driver never supplies one, so the \
 hardware BSR path stays selected and `mac_tx_set_tb` is reached"""
 port_status = "present"
-port = ["portable/ieee80211/mac/src/data.rs DataHeControl"]
+port = ["protocols/ieee80211/mac/src/data.rs DataHeControl"]
 [[decision.place]]
 function = "hal_mac_tx_set_ppdu"
 start = 0x1aa
@@ -425,7 +425,7 @@ reason = """
 the BSS color of an interface other than the station: the access point \
 transmits no HE"""
 port_status = "present"
-port = ["portable/ieee80211/mac/src/he.rs effective_bss_color"]
+port = ["protocols/ieee80211/mac/src/he.rs effective_bss_color"]
 [[decision.place]]
 function = "hal_he_get_bss_color"
 start = 0x4
@@ -875,7 +875,7 @@ port = [
 ]
 review = """
 the portable `WifiChannel::new_2_4_ghz` \
-(portable/ieee80211/mac/src/channel.rs) admits channel 14 at 20 MHz; the S31 \
+(protocols/ieee80211/mac/src/channel.rs) admits channel 14 at 20 MHz; the S31 \
 PHY request validation rejects it"""
 [[decision.place]]
 function = "phy_mhz2ieee"
@@ -1081,7 +1081,7 @@ reason = """
 repeated analog I2C busy polls before a write: the poll count is hardware \
 timing and the command itself is compared"""
 port_status = "present"
-port = ["portable/espressif/analog/src/lib.rs Busy"]
+port = ["chips/espressif/analog/src/lib.rs Busy"]
 [[decision.place]]
 function = "phy_chip_i2c_writeReg"
 start = 0x3a

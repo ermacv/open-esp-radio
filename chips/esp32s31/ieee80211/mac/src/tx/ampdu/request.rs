@@ -33,7 +33,7 @@ impl AmpduFrameSize {
 /// by the S31 TX descriptor path. This value describes a region; it does not
 /// grant access to it. [`super::RetainedDmaAmpduTx`] remains the sole owner
 /// allowed to resolve the offset inside a retained
-/// [`oer_base_memory::StableDmaBacking`].
+/// [`oer_memory::StableDmaBacking`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduFrameLayout {
     dma_offset: usize,

@@ -120,7 +120,7 @@ use core::pin::Pin;
 use oer_radio_port::{PoolPath, Root};
 
 #[cfg(test)]
-use oer_base_time::Clock;
+use oer_time::Clock;
 
 use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
 use oer_ieee80211_lower_mac::TsfGeneration;
@@ -236,7 +236,7 @@ const RX_BLOCK_ACK_BANKS: usize = RESOURCES.rx_block_ack_entries as usize;
 const MAX_PROGRAM_PSDU: usize = 0x0fff;
 /// Light-sleep wake lead the vendor power manager publishes beside the
 /// station TBTT lead (`g_pm_cfg[16]`, as
-/// `portable/ieee80211/sta/src/modem_sleep.rs` records it in
+/// `protocols/ieee80211/sta/src/modem_sleep.rs` records it in
 /// `TBTT_WAKE_WINDOW_MICROS`). The port
 /// reports TBTTs only; it keeps the vendor relation between the two leads.
 const STATION_TBTT_WAKE_WINDOW_MICROS: u16 = 1_500;
@@ -643,7 +643,7 @@ pub struct LowerMacConfig {
     /// The channel the radio is tuned to.
     pub channel: WifiChannel,
     /// Executor watchdog of one publication.
-    pub publication_timeout: oer_base_time::Duration,
+    pub publication_timeout: oer_time::Duration,
     /// The epoch of the core's TSF relations, a number no other owner of a
     /// TSF relation took.
     pub tsf_epoch: u32,
@@ -731,7 +731,7 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
 
     /// The pending deadline of a published attempt, and whether it is the
     /// end of a timeout abort's settle.
-    const fn deadline(&self) -> Option<(oer_base_time::Instant, bool)> {
+    const fn deadline(&self) -> Option<(oer_time::Instant, bool)> {
         match self {
             Self::Published(queued) => Some((queued.deadline(), queued.abort_settling())),
             Self::Held { .. } | Self::Quarantined { .. } => None,
@@ -780,7 +780,7 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_base_time::Timer, const N: usize>(
+/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
 ///     core: &LowerMacCore<'_, '_, P, E, T, N>,
 /// ) {
 ///     core.tx();
@@ -795,9 +795,9 @@ impl StationTbtt {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 /// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
 /// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_base_time::Timer, const N: usize>(
+/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, const N: usize>(
 ///     core: &LowerMacCore<'_, '_, P, E, T, N>,
-/// ) -> Option<oer_base_time::Instant> {
+/// ) -> Option<oer_time::Instant> {
 ///     core.next_deadline()
 /// }
 /// ```
@@ -841,7 +841,7 @@ impl<'core, 'slot, P, E, T, const BUFFER_SIZE: usize, Path: PoolPath, const TICK
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_base_time::Timer,
+    T: oer_time::Timer,
 {
     /// A disabled core over an idle ordinary TX owner. `coex` is the shared
     /// radio the core shares its RF with: beacon reception and connection
@@ -903,7 +903,7 @@ where
 
     /// The radio clock: the ordinary TX owner's timer.
     #[cfg(test)]
-    fn now(&self) -> oer_base_time::Instant {
+    fn now(&self) -> oer_time::Instant {
         self.tx.now()
     }
 
@@ -911,7 +911,7 @@ where
     /// abort settling, which the runtime turns into [`WifiTxWake::Deadline`].
     /// While an abort settles, no other queue's deadline comes before its
     /// end: that queue's abort waits for it.
-    pub fn next_deadline(&self) -> Option<oer_base_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         let deadlines = || {
             self.queues
                 .iter()

@@ -15,18 +15,18 @@ test-support = ["oer-esp32s31-pac/test-support"]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
 vcell = "0.1.3"
-oer-espressif-analog = { path = "../../../portable/espressif/analog" }
-oer-base-memory = { path = "../../../portable/base/memory" }
+oer-espressif-analog = { path = "../../espressif/analog" }
+oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-pac = { path = "../pac" }
-oer-espressif-coex = { path = "../../../portable/espressif/coex" }
-oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
-oer-espressif-modem-clock = { path = "../../../portable/espressif/modem-clock" }
-oer-radio-coex = { path = "../../../portable/radio/coex" }
+oer-espressif-coex = { path = "../../espressif/coex" }
+oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
+oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
+oer-radio-coex = { path = "../../../protocols/radio/coex" }
 
 [dev-dependencies]
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-esp32s31-pac = { path = "../pac", features = ["test-support"] }
-oer-test-ui-cases = { path = "../../../host/test/ui-cases" }
+oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

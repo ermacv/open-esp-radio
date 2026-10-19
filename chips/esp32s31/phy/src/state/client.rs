@@ -106,7 +106,7 @@ impl PhyClientSnapshot {
     /// The reviewed due predicate is strictly greater than the interval, so
     /// the first due microsecond is `previous + period + 1`. An active class
     /// never tracked in this registration epoch is due at once: its deadline
-    /// is `0`, [`oer_base_time::Instant::EPOCH`]. Inactive classes do not arm a
+    /// is `0`, [`oer_time::Instant::EPOCH`]. Inactive classes do not arm a
     /// timer. An unrepresentable deadline is an error, not an immediately due
     /// timer or a silently disabled tracker.
     pub fn next_tracking_deadline_micros(self) -> Result<Option<u64>, PhyTrackTimeError> {
@@ -253,7 +253,7 @@ impl PhyClientState {
     pub fn acquire(
         mut self,
         client: RadioClient,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let bit = client_bit(client);
         if self.bits & bit != 0 {
@@ -335,7 +335,7 @@ impl PhyClientState {
     /// hardware work.
     pub fn evaluate_immediate_tracking(
         mut self,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let evaluation = match self.evaluate_for_bits(self.bits, clock) {
             Ok(evaluation) => evaluation,
@@ -357,7 +357,7 @@ impl PhyClientState {
     /// a request and refreshes its timestamp on every callback.
     pub fn evaluate_periodic_tracking(
         mut self,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let wifi_active = self.bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = self.bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -379,7 +379,7 @@ impl PhyClientState {
     fn evaluate_for_bits(
         &self,
         bits: u8,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         let wifi_active = bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -414,7 +414,7 @@ impl PhyClientState {
         wifi_active: bool,
         bluetooth_ieee802154_active: bool,
         request_due: bool,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         if !request_due {
             return Ok(TrackEvaluation {

@@ -14,7 +14,7 @@
 //!   claimed once with the actor's end by [`claim`], which returns `None` on a
 //!   second call. Posting consumes the cell token and the answer returns it,
 //!   so a cell holds at most one request. The protocol is lock-free: two
-//!   atomic wakers and a CAS on the cell's state (`oer_base_memory::RequestSlot`). Dropping a
+//!   atomic wakers and a CAS on the cell's state (`oer_memory::RequestSlot`). Dropping a
 //!   [`Pending`] future loses nothing: the answer stays in the cell for the
 //!   next poll of the same `Pending`.
 //! - **Membership.** `join` answers [`Member<K, Untracked>`](Member) and the
@@ -44,11 +44,11 @@ use core::{
 
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
-pub use oer_base_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
+pub use oer_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 
 /// The provisional bound of one poll of the actor future
 /// (docs/decisions.md, "Radio system").
-pub const ACTOR_STEP_BOUND: oer_base_time::Duration = oer_base_time::Duration::from_micros(50);
+pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros(50);
 
 mod sealed {
     pub trait Sealed {}

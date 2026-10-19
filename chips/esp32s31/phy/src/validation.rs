@@ -35,7 +35,7 @@ pub fn configure_and_select_phy_i2c_host(
 /// selection only through a registered owner.
 #[cfg(target_arch = "riscv32")]
 pub async fn select_channel<D: crate::PhyShortDelay, P, O: crate::PhyTargetObserver>(
-    timer: &impl oer_base_time::Timer,
+    timer: &impl oer_time::Timer,
     state: &mut crate::PhyState,
     channel_or_frequency: u16,
     cbw: u8,

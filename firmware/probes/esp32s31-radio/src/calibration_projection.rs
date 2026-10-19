@@ -3,7 +3,7 @@
 //! committed state words.
 //!
 //! The probe publishes these words for the Blobray tracking scenario, which
-//! compares them through `oer_esp32s31_phy_relation::committed`. The module
+//! compares them through `oer_esp32s31_knowledge::phy_relation::committed`. The module
 //! depends only on `oer_esp32s31_phy`.
 
 /// Committed calibration state in the vendor `phy_param` byte order: the eight

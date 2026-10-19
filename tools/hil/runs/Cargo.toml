@@ -1,0 +1,33 @@
+[package]
+name = "oer-hil-runs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL run bundle: format, writer and seal, the one typed reader, integrity, the run store and firmware records"
+
+[features]
+# The run-session fixtures of the image builder's record tests.
+test-support = []
+
+[dependencies]
+oer-hil-model = { path = "../model" }
+oer-os-toolchain = { path = "../../os/toolchain" }
+oer-os-durable = { path = "../../os/durable" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", features = ["registry"] }
+oer-os-process = { path = "../../os/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3"
+flate2 = "1.1.9"
+
+[dev-dependencies]
+oer-hil-scenario = { path = "../scenario", features = ["test-support"] }
+tempfile = "3"
+
+[lints]
+workspace = true
+

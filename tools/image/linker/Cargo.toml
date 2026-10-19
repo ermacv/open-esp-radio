@@ -1,0 +1,20 @@
+[package]
+name = "oer-tool-image-linker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The image linker: link-input checks, then the target's rust-lld; rustc runs it for every image"
+
+# The cargo configuration and the image pipeline name the linker binary.
+[[bin]]
+name = "oer-image-linker"
+path = "src/main.rs"
+
+[dependencies]
+oer-image-checks = { path = "../checks" }
+
+[lints]
+workspace = true

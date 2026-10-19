@@ -17,7 +17,7 @@ use crate::channel::lower_wifi_channel;
 /// stopped and therefore owns no asynchronous access to these registers.
 #[expect(dead_code, reason = "retune joins the client contract at R1")]
 pub(crate) async fn switch_wifi_channel<O: PhyTargetObserver>(
-    timer: &impl oer_base_time::Timer,
+    timer: &impl oer_time::Timer,
     domain: &mut RadioDomain<ConcurrentPhy>,
     radio: &mut RadioRuntimeOwner,
     channel: WifiChannel,
@@ -44,7 +44,7 @@ pub(crate) async fn switch_wifi_channel<O: PhyTargetObserver>(
 /// refused or deferred until the switch returns.
 #[expect(dead_code, reason = "retune joins the client contract at R1")]
 pub(crate) async fn switch_published_wifi_channel<O: PhyTargetObserver>(
-    timer: &impl oer_base_time::Timer,
+    timer: &impl oer_time::Timer,
     radio: &mut RadioDomain<ConcurrentPhy>,
     registers: &oer_esp32s31_hal::ieee80211::arena::RadioAccess<'_>,
     channel: WifiChannel,

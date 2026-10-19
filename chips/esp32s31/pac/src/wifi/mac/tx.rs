@@ -4,7 +4,7 @@
 
 use core::marker::PhantomData;
 
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::{
     MacInterface, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiRadioRegisters, device_fence,

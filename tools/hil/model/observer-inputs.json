@@ -1,0 +1,49 @@
+{
+  "schema": 4,
+  "data": [
+    "tools/hil/model/scenario-v5-defaults.json"
+  ],
+  "dependencies": {
+    "common": [
+      "oer-hil-scenario",
+      "oer-lab-board",
+      "oer-lab-arbiter",
+      "oer-image-build",
+      "oer-hil-model",
+      "oer-os-durable",
+      "oer-hil-runs",
+      "oer-hil-analysis",
+      "oer-hil-run",
+      "oer-image-checks",
+      "oer-chip-profile",
+      "oer-hil-link",
+      "oer-hil-lab",
+      "rustix",
+      "oer-os-process",
+      "oer-os-toolchain",
+      "oer-os-command-tree",
+      "oer-tool-lab-fixture-install",
+      "clap",
+      "tempfile",
+      "oer-hil-protocol",
+      "serde",
+      "serde_json",
+      "oer-hil-observer",
+      "sha2",
+      "toml_edit",
+      "oer-hil-family-ieee80211-fixture"
+    ],
+    "system": [
+      "oer-hil-family-system"
+    ]
+  },
+  "timing": {
+    "system/boot-smoke": false,
+    "system/watchdog": true,
+    "system/panic-reset": true,
+    "system/stand-recovery": true
+  },
+  "build": {
+    "profile": "debug"
+  }
+}

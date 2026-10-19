@@ -10,7 +10,7 @@ use crate::dma_static::Placed;
 use core::{marker::PhantomPinned, pin::Pin};
 
 use crate::types::MacTxQueueDetached;
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::ieee80211::dma::space::DmaSpace;

@@ -2,7 +2,7 @@
 //!
 //! The block runs from `OER-W1-BEGIN v=1` to `OER-W1-END lines=<n>`, one
 //! `keyword key=value …` line each, values without spaces; `cargo fw`
-//! recomputes every gate from the block's other lines (`tools/fw/src/w1.rs`
+//! recomputes every gate from the block's other lines (`tools/image/cli/src/w1.rs`
 //! holds its spec). BSSIDs are masked to their last two octets, SSIDs are
 //! printed only as their length and, per BSS, whether the stored SSID is the
 //! stand's (`ssid_ok=`).
@@ -15,7 +15,7 @@ use oer_esp32s31_ieee80211_driver::rx::{
     counters::{WifiRxExhaustion, WifiRxReport},
 };
 use oer_esp32s31_ieee80211_mac::init::MAC_COLD_RX_INTERRUPT_MASK;
-use oer_exec_executor::poll_timing::CycleHistogram;
+use oer_espressif_executor::poll_timing::CycleHistogram;
 use oer_ieee80211_mac::address::Bssid;
 use oer_ieee80211_runtime::survey::{BssTally, Survey};
 
@@ -82,7 +82,7 @@ impl LagLog {
 
     /// Log a unit stamped `stamp` and handed off at `handoff`, while there
     /// is room.
-    pub fn take(&mut self, stamp: u32, handoff: oer_base_time::Instant) {
+    pub fn take(&mut self, stamp: u32, handoff: oer_time::Instant) {
         let lag_us = (handoff.as_micros() as u32).wrapping_sub(stamp);
         let _full = self.0.push(Lag { stamp, lag_us });
     }
@@ -177,7 +177,7 @@ impl TsfLog {
         survey: &Survey<BSS>,
         stand: Bssid,
         before: Option<(u32, u32)>,
-        handoff: oer_base_time::Instant,
+        handoff: oer_time::Instant,
     ) {
         if self.stand.is_none() {
             self.stand = survey

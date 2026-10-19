@@ -3,7 +3,7 @@ use oer_esp32s31_ieee80211_driver::{
     lower_mac::{EnabledCore, FreeQueue, LowerMacCore, LowerMacHardware, MpduValues, TxAdmission},
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
-use oer_base_time::Timer;
+use oer_time::Timer;
 
 use oer_radio_port::{Child, Root};
 pub fn submit<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, H: LowerMacHardware>(

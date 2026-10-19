@@ -36,7 +36,6 @@ use super::{FreeQueue, TxAdmission};
 use core::fmt;
 use oer_radio_port::{PoolPath, Root};
 
-use oer_base_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 use oer_esp32s31_hal::dma_static::{PlacedBacking, PlacedTxLease};
 use oer_esp32s31_ieee80211_mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
@@ -48,6 +47,7 @@ use oer_esp32s31_ieee80211_mac::tx::{
     },
 };
 use oer_ieee80211_lower_mac::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
+use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 
 use crate::{
     ampdu_tx::{AmpduTxRoleAdapter, HtAmpduPublicationInputs, ht_ampdu_publication_config},
@@ -95,7 +95,7 @@ pub trait AmpduBacking {
 /// Stable DMA memory the core lends as aggregate subframes.
 ///
 /// Dropping a backing returns it to its source, as
-/// `oer_base_memory::ReturningStableDmaBacking` returns a pool slot.
+/// `oer_memory::ReturningStableDmaBacking` returns a pool slot.
 pub trait AmpduBackingSource: AmpduBacking {
     /// A free backing, or `None` when every one is in use.
     fn backing(&self) -> Option<Self::Backing>;
@@ -306,12 +306,12 @@ pub struct PublishedAmpdu<'core, 'slot, B, const SLOTS: usize, Path: PoolPath = 
     owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     cookie: TxCookie,
     /// The publication deadline, or the end of the abort settle.
-    deadline: oer_base_time::Instant,
+    deadline: oer_time::Instant,
     settling: bool,
 }
 
 impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Path> {
-    pub const fn deadline(&self) -> oer_base_time::Instant {
+    pub const fn deadline(&self) -> oer_time::Instant {
         self.deadline
     }
 
@@ -420,8 +420,8 @@ pub fn publish<'core, 'slot, S, H, const SLOTS: usize, Path: PoolPath>(
     hardware: &mut H,
     buffer: Esp32s31AmpduBuffer<'slot, S, SLOTS>,
     plan: AmpduPlan<'core, Path>,
-    now: oer_base_time::Instant,
-    publication_timeout: oer_base_time::Duration,
+    now: oer_time::Instant,
+    publication_timeout: oer_time::Duration,
 ) -> Result<
     PublishedAmpdu<'core, 'slot, S::Backing, SLOTS, Path>,
     AmpduFault<'core, 'slot, S::Backing, SLOTS, Path>,
@@ -549,7 +549,7 @@ pub fn service<'core, 'slot, B, H, const SLOTS: usize, Path: PoolPath>(
     mut published: PublishedAmpdu<'core, 'slot, B, SLOTS, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
-    now: oer_base_time::Instant,
+    now: oer_time::Instant,
 ) -> Result<AmpduProgress<'core, 'slot, B, SLOTS, Path>, AmpduFault<'core, 'slot, B, SLOTS, Path>>
 where
     B: PlacedBacking,
@@ -577,7 +577,7 @@ fn service_step<B, H, const SLOTS: usize, Path: PoolPath>(
     published: &mut PublishedAmpdu<'_, '_, B, SLOTS, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
-    now: oer_base_time::Instant,
+    now: oer_time::Instant,
 ) -> Result<Option<AmpduOutcome>, HtAmpduTxError>
 where
     B: PlacedBacking,

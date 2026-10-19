@@ -13,7 +13,7 @@ use core::{
 
 use crate::dma_static::Placed;
 use crate::layouts::WifiRxDmaDescriptorControl;
-use oer_base_memory::ExternalRxBuffer;
+use oer_memory::ExternalRxBuffer;
 
 use crate::ieee80211::dma::{
     descriptor::RxDescriptor,

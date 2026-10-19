@@ -1,0 +1,48 @@
+[package]
+name = "oer-tool-hil-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The `cargo hil` command line: argument parsing and calls into the stand, run store, analysis and experiment packages"
+
+[[bin]]
+name = "hil"
+path = "src/main.rs"
+
+[dependencies]
+oer-image-esp-idf = { path = "../../image/esp-idf" }
+oer-hil-runs = { path = "../runs" }
+oer-chip-profile = { path = "../../chip/profile" }
+oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-lab-arbiter = { path = "../../lab/arbiter" }
+oer-lab-board = { path = "../../lab/board" }
+oer-hil-analysis = { path = "../analysis" }
+oer-image-build = { path = "../../image/build" }
+oer-image-checks = { path = "../../image/checks" }
+oer-image-compare = { path = "../../image/compare" }
+oer-hil-run = { path = "../run" }
+oer-hil-model = { path = "../model" }
+oer-hil-observer = { path = "../observer" }
+oer-hil-lab = { path = "../lab" }
+oer-lab-router = { path = "../../lab/router" }
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
+oer-os-toolchain = { path = "../../os/toolchain" }
+clap = { version = "=4.5.48", features = ["derive"] }
+rustix = { version = "=1.1.4", features = ["process"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+tempfile = "=3.27.0"
+toml = "=1.1.4"
+oer-lab-model = { path = "../../lab/model" }
+
+[dev-dependencies]
+oer-hil-runs = { path = "../runs", features = ["test-support"] }
+tempfile = "3"
+
+[lints]
+workspace = true
+

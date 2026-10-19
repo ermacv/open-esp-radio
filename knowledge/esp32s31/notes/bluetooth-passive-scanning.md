@@ -20,7 +20,7 @@ require distinct contracts.
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
-  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../../../knowledge/esp32s31/vendor/facts/names/).
+  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../vendor/facts/names/).
 
 All behavioral claims come from complete pinned bodies. A role name comes
 from the lineage, or, where the lineage does not name the body, from its

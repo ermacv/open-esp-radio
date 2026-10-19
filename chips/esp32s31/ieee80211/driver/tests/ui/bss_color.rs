@@ -4,7 +4,7 @@ use oer_esp32s31_ieee80211_driver::{
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
 use oer_ieee80211_lower_mac::BssColor;
-use oer_base_time::Timer;
+use oer_time::Timer;
 
 pub fn install<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer>(
     core: &mut LowerMacCore<'_, '_, P, E, T, 512>,

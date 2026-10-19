@@ -26,14 +26,14 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
-use oer_exec_executor::Executor;
+use oer_espressif_executor::Executor;
 use static_cell::StaticCell;
 
-oer_platform_staged_runtime::interrupt_table! {
+oer_espressif_staged_runtime::interrupt_table! {
     /// Wakes the core-0 Embassy executor.
-    wake: ExecutorWake = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
+    wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority1, ProCpu;
+    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu;
     #[cfg(any(feature = "system-watchdog", feature = "system-panic-reset"))]
     /// The USB Serial/JTAG console, to esp-hal's async driver.
     console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu;
@@ -66,7 +66,7 @@ static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 /// initializer once the runtime has loaded or zeroed that section.
 static INITIALIZED_DATA: AtomicU32 = AtomicU32::new(DATA_SENTINEL);
 static BSS_PROBE: AtomicU32 = AtomicU32::new(0);
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     #[used]
     static ISR_RODATA_PROBE: u32 = 0x4953_5231, in isr_rodata "profile_probe";
     #[used]
@@ -74,19 +74,19 @@ oer_platform_staged_runtime::placed_static! {
     #[used]
     static DMA_DATA_PROBE: AtomicU32 = AtomicU32::new(0x444d_4131), in dma_data "profile_probe";
 }
-oer_base_memory::zeroed_static! {
+oer_memory::zeroed_static! {
     #[used]
     static DMA_BSS_PROBE: AtomicU32 =
         zeroed in ".dma.bss.profile_probe";
 }
 
-use oer_platform_staged_runtime as _;
+use oer_espressif_staged_runtime as _;
 
 #[cfg(feature = "panic-hook")]
-oer_platform_staged_runtime::panic_hook!(panic_hook);
+oer_espressif_staged_runtime::panic_hook!(panic_hook);
 
 #[cfg(feature = "panic-hook")]
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in critical_text "panic_hook";
     /// The image's record of a panic, which the platform's panic entry calls
     /// after its own record and before it resets the chip (feature
@@ -94,7 +94,7 @@ oer_platform_staged_runtime::sram_fn! {
     /// formatting nothing, so the panic path stays a leaf in every stack
     /// bound. The next boot reports what it recorded.
     #[inline(always)]
-    fn panic_hook(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+    fn panic_hook(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
         #[cfg(feature = "system-watchdog")]
         system::postmortem::record_panic(details);
         #[cfg(not(feature = "system-watchdog"))]
@@ -104,10 +104,10 @@ oer_platform_staged_runtime::sram_fn! {
     }
 }
 
-oer_platform_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main);
 
-fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
-    oer_platform_esp32s31_board::rom::install_usb_printf();
+fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
+    oer_esp32s31_board::rom::install_usb_printf();
     print(c"OPEN_RADIO_HIL runtime=START profile=");
     print(PROFILE_NAME);
     print(c"\r\n");
@@ -130,12 +130,12 @@ fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
     // hardware mapping without reinitializing the PSRAM device or MMU.
     let (_psram, adopted) = handoff.adopt(
         INTERRUPT_TABLE,
-        oer_platform_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
+        oer_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
     );
     exception::report_stack_guard();
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
-    oer_exec_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
+    oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
 
     let executor = EXECUTOR.init(Executor::<0>::new(software_interrupt::executor0(
         peripherals.FROM_CPU_INTR0,
@@ -183,7 +183,7 @@ async fn boot_smoke(mut console: boot_smoke_console::BootSmokeConsole) {
 }
 
 fn validate_runtime_layout() {
-    let sections = oer_platform_staged_runtime::layout::sections();
+    let sections = oer_espressif_staged_runtime::layout::sections();
     let [image_start, payload_end] = [sections.image.start, sections.image.end].map(word);
     let data_load_start = word(sections.data_load_start);
     let [data_start, data_end] = bounds(&sections.data);
@@ -193,23 +193,23 @@ fn validate_runtime_layout() {
     let [dma_data_start, dma_data_end] = bounds(&sections.dma_data);
     let [dma_bss_start, dma_bss_end] = bounds(&sections.dma_bss);
     let [stack_bottom, stack_top] = bounds(&sections.task_stack);
-    let stack = word(oer_platform_staged_runtime::trap::stack_pointer());
+    let stack = word(oer_espressif_staged_runtime::trap::stack_pointer());
 
     let interrupt_stacks_valid = {
         let [cpu0_bottom, cpu0_top] = bounds(&sections.irq_stacks[0]);
         let [cpu1_bottom, cpu1_top] = bounds(&sections.irq_stacks[1]);
         range_in_internal_sram(cpu0_bottom, cpu0_top)
             && range_in_internal_sram(cpu1_bottom, cpu1_top)
-            && cpu0_top - cpu0_bottom == oer_platform_esp32s31_layout::LAYOUT.irq_stack_bytes
-            && cpu1_top - cpu1_bottom == oer_platform_esp32s31_layout::LAYOUT.irq_stack_bytes
+            && cpu0_top - cpu0_bottom == oer_esp32s31_layout::LAYOUT.irq_stack_bytes
+            && cpu1_top - cpu1_bottom == oer_esp32s31_layout::LAYOUT.irq_stack_bytes
     };
     let task_stack_valid = stack_bottom >= PROFILE_DATA_START
         && stack_top <= PROFILE_DATA_END
-        && stack_top - stack_bottom == oer_platform_esp32s31_layout::LAYOUT.cpu0_task_stack_bytes;
+        && stack_top - stack_bottom == oer_esp32s31_layout::LAYOUT.cpu0_task_stack_bytes;
 
     let initialized_data = INITIALIZED_DATA.load(Ordering::Relaxed);
     let bss_probe = BSS_PROBE.load(Ordering::Relaxed);
-    let isr_probe = oer_base_memory::read_volatile(&ISR_RODATA_PROBE);
+    let isr_probe = oer_memory::read_volatile(&ISR_RODATA_PROBE);
     let critical_probe = CRITICAL_DATA_PROBE.load(Ordering::Relaxed);
     let dma_probe = DMA_DATA_PROBE.load(Ordering::Relaxed);
     let dma_bss_probe = DMA_BSS_PROBE.load(Ordering::Relaxed);
@@ -258,7 +258,7 @@ fn bounds(range: &Range<usize>) -> [u32; 2] {
 /// Halt the image unless the TRNG produces health-tested entropy.
 #[cfg(feature = "system-watchdog")]
 pub(crate) fn check_entropy_source() {
-    if oer_adapters_esp_hal_soc::entropy::source_status().is_healthy() {
+    if oer_espressif_esp_hal_soc::entropy::source_status().is_healthy() {
         print(c"OPEN_RADIO_HIL entropy=PASS\r\n");
     } else {
         fail(c"OPEN_RADIO_HIL runtime=FAIL reason=entropy-source\r\n");
@@ -266,7 +266,7 @@ pub(crate) fn check_entropy_source() {
 }
 
 fn print(message: &'static CStr) {
-    oer_platform_esp32s31_board::rom::print(message);
+    oer_esp32s31_board::rom::print(message);
 }
 
 fn fail(message: &'static CStr) -> ! {
@@ -275,5 +275,5 @@ fn fail(message: &'static CStr) -> ! {
 }
 
 fn halt() -> ! {
-    oer_platform_staged_runtime::idle()
+    oer_espressif_staged_runtime::idle()
 }

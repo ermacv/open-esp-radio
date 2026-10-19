@@ -21,11 +21,11 @@ use crate::tx::runtime::{AmpduRetryDecision, AmpduRetryPolicy, AmpduRetryState};
 use crate::tx::{
     HeAmpduTxConfig, HeEdcaTxopLimit, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
-use oer_base_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 use oer_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
+use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -558,7 +558,7 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         SequenceNumber::new(0).unwrap(),
         4,
         AmpduRetryPolicy {
-            lifetime: oer_base_time::RadioDuration::from_micros(
+            lifetime: oer_time::RadioDuration::from_micros(
                 crate::tx::runtime::VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
             retain_single_mpdu: true,

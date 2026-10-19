@@ -2,9 +2,9 @@
 
 This workspace builds the esp32c5's HIL runtime, `oer-firmware-hil-esp32c5`,
 for `riscv32imac-unknown-none-elf`, as the stage two of the
-[staged boot](../../../chips/platform/esp32c5-board/README.md): the platform bootstrap
+[staged boot](../../../chips/esp32c5/board/README.md): the platform bootstrap
 copies it into PSRAM and enters it. It runs the scheduler-free Embassy
-executor of `oer-exec-executor` on the image's interrupt table.
+executor of `oer-espressif-executor` on the image's interrupt table.
 
 `boot-smoke` reports `OPEN_RADIO_HIL hal=INIT`
 after esp-hal initialization, `OPEN_RADIO_HIL embassy=START` once the
@@ -25,7 +25,7 @@ cargo hil run --chip esp32c5 boot-smoke
 `system-watchdog` serves the HIL wire protocol on the USB Serial/JTAG
 console and serves `system::WatchdogTest`,
 and nothing radio. Its SoC deadline watchdog is the production service of
-[`oer-adapters-esp-hal-soc-esp32c5`](../../../chips/adapters/esp-hal/esp32c5/soc/)
+[`oer-esp32c5-esp-hal-soc`](../../../chips/adapters/esp-hal/esp32c5/soc/)
 on TIMG1's main watchdog; its boot evidence maps the chip's reset reasons
 (`CoreMwdt1` is `MainWatchdog1`) and reads the reset-retained post-mortem and the
 platform panic record in LP RAM. The runner classifies a flashed esp32c5 image from its

@@ -10,7 +10,7 @@ build = "build.rs"
 [features]
 # The HIL report of a panic instead of the product's record-and-reset; every
 # image but `system-panic-reset` has it.
-panic-hook = ["oer-platform-staged-runtime/panic-hook"]
+panic-hook = ["oer-espressif-staged-runtime/panic-hook"]
 boot-smoke = ["panic-hook"]
 system-watchdog = [
     "panic-hook",
@@ -18,7 +18,7 @@ system-watchdog = [
     "dep:embassy-sync",
     "dep:log",
     "dep:oer-hil-agent",
-    "dep:oer-hil-image-keys",
+    "dep:oer-hil-protocol",
     "dep:critical-section",
 ]
 # The system image that, on request, switches its USB Serial/JTAG off its
@@ -31,11 +31,11 @@ system-panic-reset = [
     "dep:embassy-sync",
     "dep:log",
     "dep:oer-hil-agent",
-    "dep:oer-hil-image-keys",
+    "dep:oer-hil-protocol",
     "dep:critical-section",
 ]
 [dependencies]
-oer-base-memory = { path = "../../../portable/base/memory" }
+oer-memory = { path = "../../../portable/memory" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 embassy-executor.workspace = true
 embassy-sync = { workspace = true, optional = true }
@@ -43,20 +43,19 @@ embassy-time.workspace = true
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 log = { workspace = true, optional = true }
 critical-section = { version = "1.2.0", optional = true }
-oer-adapters-esp-hal-soc.workspace = true
-oer-exec-executor = { workspace = true, features = ["esp32s31"] }
-oer-exec-esp-hal-irq.workspace = true
+oer-espressif-esp-hal-soc.workspace = true
+oer-espressif-executor = { workspace = true, features = ["esp32s31"] }
+oer-espressif-esp-hal-irq.workspace = true
 oer-hil-protocol = { workspace = true, optional = true, features = ["async-io"] }
-oer-hil-agent = { path = "../../../portable/hil/agent", optional = true, default-features = false }
-oer-hil-image-keys = { workspace = true, optional = true }
-oer-platform-staged-runtime = { path = "../../../chips/platform/staged-runtime", features = ["esp32s31", "two-harts"] }
-oer-platform-esp32s31-board = { path = "../../../chips/platform/esp32s31-board" }
-oer-platform-esp32s31-layout = { path = "../../../portable/platform/esp32s31-layout" }
+oer-hil-agent = { path = "../../../portable/hil-agent", optional = true, default-features = false }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true
 
 [lints]
 workspace = true
 
 [build-dependencies]
-oer-platform-esp32s31-layout = { path = "../../../portable/platform/esp32s31-layout", features = ["build"] }
+oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["build"] }
 

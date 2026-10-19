@@ -6,16 +6,23 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "`cargo pins`: fetch and verify a chip's pinned vendor artifacts into the host-wide store"
-
-[[bin]]
-name = "pins"
-path = "src/main.rs"
+description = "The pins of a chip's vendor artifacts: the one reader of artifacts.toml and where a pinned artifact lies in a checkout"
 
 [dependencies]
-oer-pins = { path = "../../host/pins" }
-oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
+oer-chip-profile = { path = "../chip/profile" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+oer-os-process = { path = "../os/process" }
+oer-os-durable = { path = "../os/durable" }
+oer-os-command-tree = { path = "../os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[[bin]]
+name = "pins"
+path = "src/main.rs"

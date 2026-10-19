@@ -3,7 +3,7 @@
 //! in the `usb-jtag-off` image, the switch of the USB Serial/JTAG off its
 //! pads.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use oer_adapters_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
+use oer_espressif_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};

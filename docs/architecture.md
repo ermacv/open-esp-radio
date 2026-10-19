@@ -22,7 +22,7 @@ platform (firmware/) staged boot, interrupt table, panic record, linker layout
 Protocols are **sans-IO**: frames, completed operations and the current time
 enter as values; actions and the next deadline leave as values. They never
 await, so they run under any executor and in host tests with virtual time
-(`oer-base-time-virtual`). Drivers own hardware and wait; adapters bind executors
+(`oer-time-virtual`). Drivers own hardware and wait; adapters bind executors
 and `embassy-time`.
 
 ## Execution contexts

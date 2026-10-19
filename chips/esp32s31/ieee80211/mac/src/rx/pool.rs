@@ -16,13 +16,13 @@ use crate::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, RxPhyInfo, decode_normalized_rx_metadata,
     view_normalized_rx_frame,
 };
-use oer_base_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
 use oer_esp32s31_hal::ieee80211::dma::{
     rx_dma::RxDma,
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
 };
 use oer_ieee80211_softmac::MacRxMetadata;
+use oer_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
 
 pub const VENDOR_LARGE_RX_SLOT_COUNT: usize = 32;
 pub const VENDOR_LARGE_RX_PAYLOAD_CAPACITY: usize = 1_700;
@@ -232,7 +232,7 @@ pub struct NetworkRxFrame<'pool, const SLOTS: usize, const CAPACITY: usize> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxTimes {
     /// The monotonic time of the frame's first executor-visible handoff.
-    pub handoff: oer_base_time::Instant,
+    pub handoff: oer_time::Instant,
     /// The frame's receive timestamp: the raw MAC local time the hardware
     /// wrote into its RX-control prefix (`rx::decode_rx_local_timestamp`).
     pub stamp: Option<u32>,

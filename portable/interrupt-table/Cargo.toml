@@ -1,0 +1,15 @@
+[package]
+name = "oer-interrupt-table"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Each image's static table of peripheral interrupt sources: handler, level and core per source, unique tokens to enable and disable them"
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "runtime"
+platform = "portable"

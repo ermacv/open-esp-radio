@@ -1,7 +1,7 @@
 //! Fatal CPU exception reporting independent of the executor and USB logger.
 
-use oer_platform_esp32s31_board::rom;
-use oer_platform_staged_runtime::trap::{self, TrapFrame};
+use oer_esp32s31_board::rom;
+use oer_espressif_staged_runtime::trap::{self, TrapFrame};
 
 /// Print the task stack's watchpoint, which the runtime's handoff armed on
 /// the stack's bottom word. HAL reserves watchpoint zero for stack monitoring
@@ -14,9 +14,9 @@ pub fn report_stack_guard() {
     ));
 }
 
-oer_platform_staged_runtime::exception_handler!(exception);
+oer_espressif_staged_runtime::exception_handler!(exception);
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in rwtext "exception";
     /// A fatal exception cannot rely on a live executor or acquire a logger
     /// lock that the interrupted code may already hold: it records the

@@ -28,7 +28,7 @@ use crate::{
 /// rest of the program, as [`RadioHardware::take`] requires.
 ///
 /// The platform that owns the master hands it out once: on ESP-HAL,
-/// `oer-adapters-esp-hal-radio`'s `take_radio`, which consumes the
+/// `oer-espressif-esp-hal-radio`'s `take_radio`, which consumes the
 /// `I2C_ANA_MST` singleton. Without it there is no radio root:
 ///
 /// ```compile_fail
