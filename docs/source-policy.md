@@ -69,7 +69,9 @@ the same change:
 - **the crate** becomes `Apache-2.0` when it holds a port of Apache-2.0 code
   (as the ESP-IDF port crates are), and stays `MIT OR Apache-2.0` for
   BSD-3-Clause material, whose notice `NOTICE` keeps; a crate depending on an
-  `Apache-2.0` crate states its effective license.
+  `Apache-2.0` crate states its effective license. Code written from the
+  vendor libraries and ROMs (libphy, libpp, the ROM) records facts, not a
+  port, and keeps `MIT OR Apache-2.0`.
 
 Copyleft code (GPL, such as Linux `mac80211`) is never translated: such a
 project may be cited for observed behaviour that a specification also fixes.
