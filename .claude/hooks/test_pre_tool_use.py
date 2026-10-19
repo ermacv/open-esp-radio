@@ -35,6 +35,10 @@ class Edits(unittest.TestCase):
             ("Edit", "registers/esp32s31/published/platform.bindings.toml", "cargo registers generate"),
             ("Edit", "/w/knowledge/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
             ("Write", "knowledge/esp32s31/vendor/facts/names/libble_app.toml", "re-deriving"),
+            ("Edit", "/w/chips/esp32s31/registers/published/radio.svd", "cargo registers generate"),
+            ("Edit", "chips/espressif/registers/ieee80211/published/mac.bindings.toml", "cargo registers generate"),
+            ("Edit", "/w/chips/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
+            ("Write", "chips/esp32c5/vendor/facts/names/libpp.toml", "re-deriving"),
             ("Edit", "/w/firmware/platform/esp32s31/linker/dma-window.x", "cargo registers generate"),
             ("Edit", "/w/portable/platform/esp32s31-layout/linker/dma-window.x", "cargo registers generate"),
         ]:
@@ -44,6 +48,9 @@ class Edits(unittest.TestCase):
         for path in [
             "/w/chips/esp32s31/pac/src/lib.rs",
             "/w/registers/esp32s31/model/device.toml",
+            "/w/chips/esp32s31/registers/model/device.toml",
+            "/w/chips/esp32s31/vendor/artifacts.toml",
+            "/w/chips/esp32s31/vendor/facts/names/README.md",
             "/w/knowledge/esp32s31/vendor/facts/names/README.md",
             "/w/knowledge/esp32s31/vendor/artifacts.toml",
             "/w/.claude/hooks/pre_tool_use.py",

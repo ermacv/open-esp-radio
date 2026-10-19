@@ -22,9 +22,9 @@ GENERATED = re.compile(
     r"(?:^|/)(?:"
     r"chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
     r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
-    r"|registers/[^/]+/published/[^/]+\.(?:svd|bindings\.toml)"
-    r"|knowledge/[^/]+/vendor/facts/provenance\.toml"
-    r"|knowledge/[^/]+/vendor/facts/names/[^/]+\.toml"
+    r"|registers/(?:[^/]+/)?published/[^/]+\.(?:svd|bindings\.toml)"
+    r"|vendor/facts/provenance\.toml"
+    r"|vendor/facts/names/[^/]+\.toml"
     r")$"
 )
 GENERATED_HINT = (
@@ -36,13 +36,13 @@ GENERATED_HINT = (
 REGENERATED = [
     (re.compile(r"(?:^|/)(?:chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
                 r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
-                r"|registers/[^/]+/published/[^/]+\.(?:svd|bindings\.toml))$"),
+                r"|registers/(?:[^/]+/)?published/[^/]+\.(?:svd|bindings\.toml))$"),
      "`cargo registers generate --manifest registers/<chip>/publication/<publication>.toml` "
      "after editing the register model or policy"),
     (re.compile(r"(?:^|/)linker/dma-window\.x$"),
      "`cargo registers generate --manifest registers/<chip>/publication/registers.toml` "
      "after editing the memory map or the register model"),
-    (re.compile(r"(?:^|/)knowledge/[^/]+/vendor/facts/(?:provenance\.toml|names/[^/]+\.toml)$"),
+    (re.compile(r"(?:^|/)vendor/facts/(?:provenance\.toml|names/[^/]+\.toml)$"),
      "no tool in this repository writes it: a machine-written vendor fact registry "
      "changes only by re-deriving it, which the owner decides"),
 ]
