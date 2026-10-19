@@ -234,23 +234,6 @@ impl StackPolicy {
             .collect()
     }
 
-    /// The image compiler setup of an image under this policy, built from
-    /// the tree at `root` with the image linker's build in `linker_target`.
-    pub fn image_compiler<'a>(
-        &self,
-        root: &'a Path,
-        linker_target: &'a Path,
-        rust_target: &'a str,
-    ) -> oer_image_toolchain::image::ImageCompiler<'a> {
-        oer_image_toolchain::image::ImageCompiler {
-            root,
-            linker_target,
-            rust_target,
-            max_move_bytes: self.max_move_bytes,
-            runtime_environment: self.runtime_environment(),
-        }
-    }
-
     /// The headroom reserves the runtime's stack painting enforces, as the
     /// build environment hands them to the firmware.
     pub fn runtime_environment(&self) -> Vec<(&'static str, String)> {

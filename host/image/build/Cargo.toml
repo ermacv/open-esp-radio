@@ -12,8 +12,8 @@ description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
-oer-image-profile = { path = "../profile" }
-oer-image-toolchain = { path = "../toolchain" }
+oer-chip-profile = { path = "../../chip/profile" }
+oer-os-toolchain = { path = "../../os/toolchain" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
 espflash = { version = "=4.5.0", default-features = false }

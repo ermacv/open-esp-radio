@@ -23,7 +23,7 @@ use std::{collections::BTreeSet, path::Path};
 use serde::{Deserialize, Serialize};
 
 use crate::interrupts::Required;
-use oer_image_profile::{Profile, policy::StackPolicy};
+use oer_chip_profile::{Profile, policy::StackPolicy};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -173,16 +173,16 @@ const AUDIT: &str = "audit";
 
 /// The code sections of the mask ROM, from `profile`'s pinned `[rom]` ELF at
 /// `root`; none for a chip without one.
-fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_image_profile::Region>> {
+fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_chip_profile::Region>> {
     let Some(rom) = &profile.rom else {
         return Ok(Vec::new());
     };
-    let bytes = std::fs::read(oer_vendor_artifacts::ensure(root, &profile.id, &rom.elf)?)?;
+    let bytes = std::fs::read(oer_pins::artifacts::ensure(root, &profile.id, &rom.elf)?)?;
     let elf = oer_analysis_elf::Elf::parse(&bytes)?;
     elf.sections()
         .filter(|section| section.allocated && section.executable && section.size > 0)
         .map(|section| {
-            Ok(oer_image_profile::Region {
+            Ok(oer_chip_profile::Region {
                 origin: u32::try_from(section.address)?,
                 length: u32::try_from(section.size)?,
             })

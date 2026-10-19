@@ -12,7 +12,7 @@ fn main() {
         root.join("firmware/platform").display()
     );
     let mut entries = String::new();
-    for profile in oer_image_profile::Profile::all(&root).expect("the chip profiles load") {
+    for profile in oer_chip_profile::Profile::all(&root).expect("the chip profiles load") {
         let agent = root.join(profile.hil_agent_directory());
         let manifest = agent.join("Cargo.toml");
         println!("cargo::rerun-if-changed={}", agent.display());

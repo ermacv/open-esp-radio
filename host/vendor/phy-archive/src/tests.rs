@@ -18,7 +18,7 @@ fn compile_rlib(source: &str, bitcode: bool) -> (tempfile::TempDir, PathBuf) {
     std::fs::write(&input, source).unwrap();
     let ctx = context();
     let mut command =
-        ctx.command(oer_image_toolchain::program(oer_image_toolchain::Tool::Rustc).unwrap());
+        ctx.command(oer_os_toolchain::program(oer_os_toolchain::Tool::Rustc).unwrap());
     command
         .args([
             "--edition=2024",

@@ -17,7 +17,7 @@ const MESSAGE_FORMAT: &str = "--message-format=json-render-diagnostics";
 const VERDICT_DEP_INFO: &str = "--verdict-dep-info";
 
 pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process::ExitCode> {
-    let chip = oer_vendor_artifacts::project::Project::new(&ctx.root, chip)?;
+    let chip = oer_pins::artifacts::project::Project::new(&ctx.root, chip)?;
     let scenarios = chip.scenarios();
     if !ctx
         .root
@@ -39,12 +39,12 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
     // Cargo keeps a `.d` only beside a root unit's output, so the verdict
     // libraries are built as roots first; the binary links the same units.
     let verdict = super::phase::timed("build vendor scenarios", || -> Result<Vec<PathBuf>> {
-        let libraries = oer_image_toolchain::cargo_in(&ctx.root)
+        let libraries = oer_os_toolchain::cargo_in(&ctx.root)
             .args([
                 "build",
                 "--locked",
                 "--profile",
-                oer_image_toolchain::workspace::PROFILE,
+                oer_os_toolchain::workspace::PROFILE,
                 "-p",
                 ENGINE_PACKAGE,
                 "-p",
@@ -58,11 +58,11 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
             return Err(format!("building {ENGINE_PACKAGE} and {library} failed").into());
         }
         let verdict = verdict_dep_info(&libraries.stdout, &[ENGINE_PACKAGE, library])?;
-        process::run(oer_image_toolchain::cargo_in(&ctx.root).args([
+        process::run(oer_os_toolchain::cargo_in(&ctx.root).args([
             "build",
             "--locked",
             "--profile",
-            oer_image_toolchain::workspace::PROFILE,
+            oer_os_toolchain::workspace::PROFILE,
             "-p",
             package,
             "--bin",
@@ -70,7 +70,7 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
         ]))?;
         Ok(verdict)
     })?;
-    let mut command = ctx.command(oer_image_toolchain::workspace::binary(&ctx.root, binary));
+    let mut command = ctx.command(oer_os_toolchain::workspace::binary(&ctx.root, binary));
     command.arg(scenario).args(rest);
     for file in verdict {
         command.arg(VERDICT_DEP_INFO).arg(file);

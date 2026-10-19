@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 oer-image-esp-idf = { path = "../../host/image/esp-idf" }
 oer-hil-run-bundle-format = { path = "../../host/hil/run-bundle-format" }
-oer-image-profile = { path = "../../host/image/profile" }
+oer-chip-profile = { path = "../../host/chip/profile" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 oer-lab-arbiter = { path = "../../host/lab/arbiter" }
 oer-lab-board = { path = "../../host/lab/board" }
@@ -33,7 +33,7 @@ oer-hil-lab = { path = "../../host/hil/lab" }
 oer-lab-router = { path = "../../host/lab/router" }
 oer-os-durable = { path = "../../host/os/durable" }
 oer-os-process = { path = "../../host/os/process" }
-oer-image-toolchain = { path = "../../host/image/toolchain" }
+oer-os-toolchain = { path = "../../host/os/toolchain" }
 clap = { version = "=4.5.48", features = ["derive"] }
 rustix = { version = "=1.1.4", features = ["process"] }
 serde = { version = "=1.0.229", features = ["derive"] }

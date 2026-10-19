@@ -2,7 +2,7 @@
 
 The chip-neutral capture of the vendor-versus-production PHY calibration
 cross-check: what the HIL `phy` family
-([`oer-hil-family-phy`](../../host/family/phy/README.md)) records on the
+([`oer-vendor-phy`](../../host/family/phy/README.md)) records on the
 board under test and a chip's comparison reads.
 
 - `boots`: the lifecycle point, each vendor and production boot and the

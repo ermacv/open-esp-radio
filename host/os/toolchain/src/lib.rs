@@ -7,8 +7,7 @@
 //! `lib/rustlib/<host>/bin`, never an unrelated LLVM on `PATH`, whose bitcode
 //! and relocation support need not match the compiler's.
 //!
-//! [`versions`] records the tools an image build ran for its evidence, and
-//! [`image`] configures the Cargo build of an image.
+//! [`versions`] records the tools a build ran.
 
 use std::{
     ffi::{OsStr, OsString},
@@ -16,7 +15,6 @@ use std::{
     process::Command,
 };
 
-pub mod image;
 pub mod workspace;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

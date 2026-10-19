@@ -100,7 +100,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     // The tool's work is file and device I/O: the incremental dev profile
     // rebuilds in seconds where the release profile took minutes.
     process::run(
-        oer_image_toolchain::cargo_in(&ctx.root)
+        oer_os_toolchain::cargo_in(&ctx.root)
             .current_dir(&source)
             .args(["build", "--locked", "-p", PACKAGE]),
     )?;
@@ -130,7 +130,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
 /// package the tool's package depends on.
 fn build_inputs(ctx: &Checkout, source: &Path) -> Result<Vec<String>> {
     let output = process::capture(
-        oer_image_toolchain::cargo_in(&ctx.root)
+        oer_os_toolchain::cargo_in(&ctx.root)
             .current_dir(source)
             .args(["metadata", "--format-version", "1", "--locked"]),
     )?;

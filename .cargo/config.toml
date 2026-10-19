@@ -6,7 +6,7 @@ registers = "run --quiet --profile tools -p oer-tool-registers --"
 # boards (tools/fw/README.md).
 fw = "run --quiet --profile tools -p oer-tool-fw --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
-# (host/vendor/artifacts).
+# (host/pins).
 pins = "run --quiet --profile tools -p oer-tool-pins --"
 # The stand: boards, leases, power, fixtures (tools/stand).
 stand = "run --quiet --profile tools -p oer-tool-stand --"

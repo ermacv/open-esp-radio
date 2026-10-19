@@ -83,8 +83,8 @@ pub struct Artifacts {
 }
 
 /// The profile of `chip` in the repository this runner was built from.
-pub fn chip_profile(chip: &str) -> Result<oer_image_profile::Profile> {
-    oer_image_profile::Profile::load(&oer_os_process::built_root(), chip)
+pub fn chip_profile(chip: &str) -> Result<oer_chip_profile::Profile> {
+    oer_chip_profile::Profile::load(&oer_os_process::built_root(), chip)
         .map_err(|error| error.to_string().into())
 }
 
@@ -97,8 +97,7 @@ pub fn builds_on(_root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
 /// Whether `chip`'s HIL agent at `root` builds `class`: the agent declares
 /// every feature the class selects.
 pub fn serves(root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
-    let profile =
-        oer_image_profile::Profile::load(root, chip).map_err(|error| error.to_string())?;
+    let profile = oer_chip_profile::Profile::load(root, chip).map_err(|error| error.to_string())?;
     let path = profile.hil_agent_manifest(root);
     let manifest: toml::Value = toml::from_str(&std::fs::read_to_string(&path)?)?;
     let declared = manifest
@@ -115,7 +114,7 @@ pub fn serves(root: &Path, chip: &str, class: ImageClass) -> Result<bool> {
 /// for.
 pub fn chips_building(root: &Path, classes: &[ImageClass]) -> Result<Vec<String>> {
     let mut chips = Vec::new();
-    for chip in oer_image_profile::supported(root).map_err(|error| error.to_string())? {
+    for chip in oer_chip_profile::supported(root).map_err(|error| error.to_string())? {
         let mut builds = true;
         for class in classes {
             builds &= builds_on(root, &chip, *class)?;
@@ -183,7 +182,7 @@ pub(crate) fn spec(
     (layout_seed, features): (LayoutSeed, &FeatureDelta),
     output: PathBuf,
 ) -> Result<ImageSpec> {
-    let profile = oer_image_profile::Profile::load(root, chip)?;
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
     let class_features = oer_hil_image_class::build_features_on(class, chip);
     let package = profile.hil_agent_package();
     Ok(ImageSpec {
@@ -322,9 +321,9 @@ pub fn packages(
     chip: &str,
     class: ImageClass,
 ) -> Result<std::collections::BTreeSet<String>> {
-    let profile = oer_image_profile::Profile::load(root, chip)?;
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
     let features = oer_hil_image_class::build_features_on(class, chip);
-    let mut command = oer_os_process::command(oer_image_toolchain::cargo_program());
+    let mut command = oer_os_process::command(oer_os_toolchain::cargo_program());
     command
         .current_dir(root)
         .args(["tree"])
@@ -372,7 +371,7 @@ pub(crate) fn seed_suffix(layout_seed: LayoutSeed) -> String {
 /// package the chip's profile forbids its HIL agent (`[hil]
 /// forbidden-packages`): the source-only radio graph.
 pub fn ensure_vendor_dependencies_absent(root: &Path) -> Result<()> {
-    for profile in oer_image_profile::Profile::all(root)? {
+    for profile in oer_chip_profile::Profile::all(root)? {
         let Some(hil) = &profile.hil else {
             continue;
         };

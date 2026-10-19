@@ -237,7 +237,7 @@ fn size(path: &Path) -> u64 {
 /// List, or with `apply` remove, the caches of the checkout at `root`;
 /// returns the bytes that were (or would be) freed.
 pub fn run(root: &Path, policy: Policy, apply: bool) -> Result<u64> {
-    let chips: Vec<String> = oer_image_profile::Profile::all(root)?
+    let chips: Vec<String> = oer_chip_profile::Profile::all(root)?
         .into_iter()
         .map(|profile| profile.id)
         .collect();

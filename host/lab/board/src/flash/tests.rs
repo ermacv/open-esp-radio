@@ -134,9 +134,9 @@ fn a_link_that_keeps_failing_ends_after_the_last_attempt() {
 
 #[test]
 fn a_start_by_power_leaves_the_chip_in_its_rom() {
-    assert_eq!(After::of(oer_image_profile::Start::Reset), After::HardReset);
+    assert_eq!(After::of(oer_chip_profile::Start::Reset), After::HardReset);
     assert_eq!(
-        After::of(oer_image_profile::Start::PowerOn),
+        After::of(oer_chip_profile::Start::PowerOn),
         After::StayInBootloader
     );
 }

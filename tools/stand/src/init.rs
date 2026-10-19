@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_image_profile::{BluetoothMode, Profile, Start, WifiBand};
+use oer_chip_profile::{BluetoothMode, Profile, Start, WifiBand};
 use oer_lab_model::Stand;
 
 use crate::Result;

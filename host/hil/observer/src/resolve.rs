@@ -10,7 +10,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RUNNER: &str = "oer-hil-runner";
 
 pub fn resolve(root: &Path, target: &str) -> Result<Value> {
-    let output = Command::new(oer_image_toolchain::cargo_program())
+    let output = Command::new(oer_os_toolchain::cargo_program())
         .current_dir(root)
         .args([
             "tree",
@@ -219,7 +219,7 @@ mod tests {
             ),
         )
         .unwrap();
-        let status = Command::new(oer_image_toolchain::cargo_program())
+        let status = Command::new(oer_os_toolchain::cargo_program())
             .current_dir(&root)
             .args(["generate-lockfile", "--offline"])
             .status()

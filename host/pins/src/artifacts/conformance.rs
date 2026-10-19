@@ -3,13 +3,13 @@
 //! riscv-arch-test checkout at its pinned revision, holding only the test
 //! environment and the suites the pin lists, and the Sail release archive
 //! verified against its SHA-256. Both live in the host-wide store
-//! ([`crate::store`]) like every other pinned input.
+//! ([`crate::artifacts::store`]) like every other pinned input.
 
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::Result;
+use crate::artifacts::Result;
 
 /// The pin, relative to the repository root.
 pub const INPUTS: &str = "tools/blobray/tests/riscv_conformance/inputs.toml";
@@ -80,7 +80,7 @@ fn located(store: &Path, pin: &Pin) -> Inputs {
 /// The fetched inputs, or an error naming `cargo pins conformance` when
 /// either is missing.
 pub fn inputs(root: &Path) -> Result<Inputs> {
-    let inputs = located(&crate::store()?, &pin(root)?);
+    let inputs = located(&crate::artifacts::store()?, &pin(root)?);
     if !inputs.arch_test.join(".git").is_dir() || !inputs.sail.is_file() {
         return Err("the conformance inputs are not fetched: run `cargo pins conformance`".into());
     }
@@ -162,7 +162,7 @@ fn fetch_sail(sail: &Sail, directory: &Path) -> Result<()> {
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging)?;
     let archive = staging.join("sail.tar.gz");
-    crate::download(&sail.url, &archive)?;
+    crate::artifacts::download(&sail.url, &archive)?;
     let actual = oer_os_durable::sha256_file(&archive)?;
     if actual != sail.sha256 {
         return Err(format!("{}: sha256 {actual}, pinned {}", sail.url, sail.sha256).into());
@@ -183,7 +183,7 @@ fn fetch_sail(sail: &Sail, directory: &Path) -> Result<()> {
 /// Fetch whichever input the store lacks and return where both lie.
 pub fn fetch(root: &Path) -> Result<Inputs> {
     let pin = pin(root)?;
-    let store = crate::store()?;
+    let store = crate::artifacts::store()?;
     let inputs = located(&store, &pin);
     if !inputs.arch_test.join(".git").is_dir() {
         std::fs::create_dir_all(store.join("riscv-arch-test"))?;
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn the_tracked_pin_parses_and_locates_its_inputs_by_revision_and_hash() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let pin = pin(&root).unwrap();
         assert!(!pin.arch_test.suite.is_empty());
         let inputs = located(Path::new("/store"), &pin);

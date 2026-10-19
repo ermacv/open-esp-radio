@@ -26,7 +26,7 @@ struct Input {
 /// applications linked from these binaries, and sources are not code.
 fn inputs(ctx: &Checkout, chip: &str) -> Result<Vec<Input>> {
     let mut inputs = vec![];
-    for pinned in oer_vendor_artifacts::pinned(&ctx.root, chip)? {
+    for pinned in oer_pins::artifacts::pinned(&ctx.root, chip)? {
         if pinned.firmware {
             continue;
         }
@@ -96,12 +96,12 @@ fn accesses(
 /// Build the inventory of `chip` into `output`, by default
 /// `target/register-inventory/<chip>`.
 pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
-    oer_vendor_artifacts::project::Project::new(&ctx.root, chip)?;
+    oer_pins::artifacts::project::Project::new(&ctx.root, chip)?;
     let directory = output.unwrap_or_else(|| ctx.root.join("target/register-inventory").join(chip));
     fs::create_dir_all(&directory)?;
     let inputs = inputs(ctx, chip)?;
     let (registers, regions) = inventory::model(&ctx.root, chip)?;
-    let host = oer_image_toolchain::workspace::blobray_host(&ctx.root)?;
+    let host = oer_os_toolchain::workspace::blobray_host(&ctx.root)?;
     let accesses = accesses(ctx, &directory, &host, chip, &inputs, &regions)?;
     let ids: Vec<String> = inputs.iter().map(|input| input.id.clone()).collect();
     let observations = inventory::observations(&fs::read_to_string(&accesses)?, &ids)?;

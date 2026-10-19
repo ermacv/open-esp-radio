@@ -17,7 +17,7 @@ use std::{env, fs, path::PathBuf, process::Command};
 const ATTRIBUTES: &str = "+m,+a,+f,+c,+zba,+zbb,+zbs,+zcb,+zcmp";
 
 fn objdump() -> PathBuf {
-    oer_image_toolchain::program(oer_image_toolchain::Tool::LlvmObjdump)
+    oer_os_toolchain::program(oer_os_toolchain::Tool::LlvmObjdump)
         .unwrap()
         .into()
 }

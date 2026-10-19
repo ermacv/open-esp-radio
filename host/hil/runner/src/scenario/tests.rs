@@ -251,7 +251,7 @@ fn the_system_scenarios_need_no_fixture_service() {
 fn a_scenario_is_marked_unsupported_exactly_when_no_current_image_serves_it() {
     let root = oer_os_process::built_root();
     // A chip whose agent builds every class.
-    let staged = oer_image_profile::Profile::all(&root)
+    let staged = oer_chip_profile::Profile::all(&root)
         .unwrap()
         .into_iter()
         .find(|profile| oer_hil_image_class::declares(&profile.id, "system-panic-reset"))

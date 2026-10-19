@@ -10,7 +10,7 @@ description = "The HIL flash operation: a leased board written by the devices la
 
 [dependencies]
 oer-image-build = { path = "../../image/build" }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-os-durable = { path = "../../os/durable" }
 oer-lab-board = { path = "../../lab/board" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }

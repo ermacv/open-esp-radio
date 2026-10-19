@@ -47,7 +47,7 @@ pub(crate) fn run(root: &Path, lab: &LabConfig, scenarios: &[&Scenario]) -> Resu
     let required = requirements(scenarios);
     let mut checks = Checks::default();
     checks.run("firmware-agent", || {
-        let profile = oer_image_profile::Profile::load(root, lab.chip())?;
+        let profile = oer_chip_profile::Profile::load(root, lab.chip())?;
         let manifest = profile.hil_agent_manifest(root);
         manifest
             .is_file()
@@ -55,9 +55,9 @@ pub(crate) fn run(root: &Path, lab: &LabConfig, scenarios: &[&Scenario]) -> Resu
             .ok_or_else(|| format!("missing HIL agent {}", manifest.display()).into())
     })?;
     checks.run("serial-device", || fs_device_exists(&lab.dut.serial))?;
-    for tool in oer_image_toolchain::Tool::ALL {
+    for tool in oer_os_toolchain::Tool::ALL {
         checks.run(format!("tool-{}", tool.name()), || {
-            oer_image_toolchain::require(tool)
+            oer_os_toolchain::require(tool)
         })?;
     }
     checks.run("source-dependencies", || {

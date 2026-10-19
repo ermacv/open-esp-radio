@@ -1,4 +1,4 @@
-# oer-hil-family-phy
+# oer-vendor-phy
 
 The host half of the vendor-versus-production PHY calibration cross-check:
 the comparison port (`comparison::Comparison`) a chip implements, and the
@@ -15,5 +15,5 @@ and return with the HIL architecture of . The tag
 `vendor-calibration` workload.
 
 ```console
-cargo test -p oer-hil-family-phy
+cargo test -p oer-vendor-phy
 ```

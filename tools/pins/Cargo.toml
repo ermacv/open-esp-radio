@@ -13,7 +13,7 @@ name = "pins"
 path = "src/main.rs"
 
 [dependencies]
-oer-vendor-artifacts = { path = "../../host/vendor/artifacts" }
+oer-pins = { path = "../../host/pins" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }
 

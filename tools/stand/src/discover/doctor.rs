@@ -32,7 +32,7 @@ fn check(name: &'static str, result: Result<()>) -> Check {
 pub fn doctor(root: &Path, path: &Path) -> Vec<Check> {
     let stand = Stand::load(path);
     let stand_check = match &stand {
-        Ok(stand) => oer_image_profile::Profile::all(root)
+        Ok(stand) => oer_chip_profile::Profile::all(root)
             .map_err(|error| error.to_string().into())
             .and_then(|chips| stand.validate_chips(&chips).map_err(Into::into)),
         Err(error) => Err(error.to_string().into()),

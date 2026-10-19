@@ -12,7 +12,7 @@ use std::{
 
 use crate::image::{Receipt, Store, Transport};
 use crate::lock::{DeviceAccess, DeviceId};
-use oer_image_profile::Start;
+use oer_chip_profile::Start;
 use oer_lab_model::{BoardRef, ResetStep, Stand};
 
 use crate::console;
@@ -70,7 +70,7 @@ impl Board {
         board: &oer_lab_model::Board,
         port: PathBuf,
     ) -> crate::stand::Result<Self> {
-        let profile = oer_image_profile::Profile::load(root, &board.chip)?;
+        let profile = oer_chip_profile::Profile::load(root, &board.chip)?;
         let reset_cause = profile
             .reset_cause
             .as_ref()
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn a_bundle_of_another_chip_is_refused_before_the_port_is_touched() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let profile = oer_image_profile::Profile::load(&root, "esp32c5").unwrap();
+        let profile = oer_chip_profile::Profile::load(&root, "esp32c5").unwrap();
         let directory = tempfile::tempdir().unwrap();
         let bundle = oer_image_build::bundle::ImageBundle::new(
             directory.path(),

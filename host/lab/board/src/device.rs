@@ -12,8 +12,8 @@ use std::{
     time::Duration,
 };
 
+use oer_chip_profile::{Profile, Start};
 use oer_image_build::bundle::ImageBundle;
-use oer_image_profile::{Profile, Start};
 use serde::Serialize;
 
 use crate::discovery as ports;

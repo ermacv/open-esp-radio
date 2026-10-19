@@ -101,7 +101,7 @@ fn a_power_loss_also_needs_a_power_on_reset() {
 fn the_reset_cause_is_the_profile_field_of_the_platform_publication() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for (chip, power_on_word) in [("esp32s31", 0x03), ("esp32c5", 0x21)] {
-        let profile = oer_image_profile::Profile::load(&root, chip).unwrap();
+        let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
         let field =
             ResetCauseField::resolve(&root, chip, profile.reset_cause.as_ref().unwrap()).unwrap();
         // Words the stand read after a power cycle and after a JTAG reset.
@@ -109,7 +109,7 @@ fn the_reset_cause_is_the_profile_field_of_the_platform_publication() {
         let jtag = if chip == "esp32s31" { 0x31 } else { 0x38 };
         assert_eq!(field.cause(jtag).code, 0x18, "{chip}");
     }
-    let missing = oer_image_profile::ResetCause {
+    let missing = oer_chip_profile::ResetCause {
         field: String::from("LP_CLKRST.RESET_CAUSE.ABSENT"),
         power_on: 1,
     };

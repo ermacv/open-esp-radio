@@ -5,9 +5,9 @@
 
 use std::path::Path;
 
-use oer_hil_family_phy::comparison::{Compared, Comparison, RegisterImages};
+use crate::{compare, registers};
+use oer_vendor_phy::comparison::{Compared, Comparison, RegisterImages};
 use oer_vendor_phy_calibration_capture::boots::{Images, Lifecycle, ProductionBoot, VendorBoot};
-use oer_vendor_phy_esp32s31::{compare, registers};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

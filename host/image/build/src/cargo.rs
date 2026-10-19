@@ -17,7 +17,7 @@ pub const LAYOUT_SEED_ENV: &str = "OER_LAYOUT_SEED";
 /// image without appearing in the checkout are removed, and so is any
 /// layout seed (a seed reaches a build only as its recorded seed).
 pub fn command() -> Command {
-    let mut command = oer_os_process::command(oer_image_toolchain::cargo_program());
+    let mut command = oer_os_process::command(oer_os_toolchain::cargo_program());
     for variable in inherited_build_overrides(env::vars_os().map(|(name, _)| name)) {
         command.env_remove(variable);
     }

@@ -18,7 +18,7 @@ oer-lab-board = { path = "../../lab/board" }
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-scenario-catalog = { path = "../scenario-catalog" }
 oer-analysis-elf = { path = "../../analysis/elf" }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }
 oer-hil-fixture = { path = "../fixture" }
 oer-lab-model = { path = "../../lab/model" }

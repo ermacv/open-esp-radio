@@ -1108,7 +1108,7 @@ fn parse_input(value: OsString) -> Result<Input> {
         let (chip, id) = pin
             .split_once('/')
             .ok_or_else(|| invalid("expected pin:CHIP/ID"))?;
-        let path = oer_vendor_artifacts::ensure(&root()?, chip, id)
+        let path = oer_pins::artifacts::ensure(&root()?, chip, id)
             .map_err(|error| invalid(&format!("pin {pin}: {error}")))?;
         return Ok(Input { role, path });
     }
@@ -1120,8 +1120,8 @@ fn parse_input(value: OsString) -> Result<Input> {
 /// Refuse `path` when it lies in the vendor store: a vendor artifact is
 /// read by its pin, which verifies it.
 fn refuse_store_path(path: &std::path::Path) -> Result<()> {
-    let store = oer_vendor_artifacts::store()
-        .map_err(|error| invalid(&format!("vendor store: {error}")))?;
+    let store =
+        oer_pins::artifacts::store().map_err(|error| invalid(&format!("vendor store: {error}")))?;
     refuse_inside(path, &[&store, &root()?.join("target/vendor")])
 }
 

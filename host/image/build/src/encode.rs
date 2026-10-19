@@ -53,7 +53,7 @@ impl Encoding {
 
     /// The application image's encoding of the chip flash map `flash`, with
     /// MMU pages of `mmu_page_size` bytes.
-    pub fn application(flash: &oer_image_profile::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn application(flash: &oer_chip_profile::FlashMap, mmu_page_size: u32) -> Result<Self> {
         let settings = &flash.application_encoding;
         Ok(Self {
             mode: Some(mode(settings.mode)),
@@ -65,7 +65,7 @@ impl Encoding {
 
     /// The encoding the ROM reads the bootloader in: the application's, in
     /// the flash map's bootloader mode.
-    pub fn bootloader(flash: &oer_image_profile::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn bootloader(flash: &oer_chip_profile::FlashMap, mmu_page_size: u32) -> Result<Self> {
         Ok(Self {
             mode: Some(mode(flash.bootloader_mode)),
             ..Self::application(flash, mmu_page_size)?
@@ -73,12 +73,12 @@ impl Encoding {
     }
 }
 
-fn mode(mode: oer_image_profile::FlashMode) -> FlashMode {
+fn mode(mode: oer_chip_profile::FlashMode) -> FlashMode {
     match mode {
-        oer_image_profile::FlashMode::Qio => FlashMode::Qio,
-        oer_image_profile::FlashMode::Qout => FlashMode::Qout,
-        oer_image_profile::FlashMode::Dio => FlashMode::Dio,
-        oer_image_profile::FlashMode::Dout => FlashMode::Dout,
+        oer_chip_profile::FlashMode::Qio => FlashMode::Qio,
+        oer_chip_profile::FlashMode::Qout => FlashMode::Qout,
+        oer_chip_profile::FlashMode::Dio => FlashMode::Dio,
+        oer_chip_profile::FlashMode::Dout => FlashMode::Dout,
     }
 }
 

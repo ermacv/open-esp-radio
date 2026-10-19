@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 oer-image-build = { path = "../../host/image/build" }
 oer-image-checks = { path = "../../host/image/checks" }
-oer-image-profile = { path = "../../host/image/profile" }
+oer-chip-profile = { path = "../../host/chip/profile" }
 oer-lab-board = { path = "../../host/lab/board" }
 oer-lab-model = { path = "../../host/lab/model" }
 oer-lab-router = { path = "../../host/lab/router" }

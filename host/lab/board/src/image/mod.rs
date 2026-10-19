@@ -54,8 +54,8 @@ use crate::Result;
 
 use crate::flash::After;
 pub use crate::lock::{DeviceAccess, DeviceId};
+pub use oer_chip_profile::Start;
 use oer_image_build::bundle::{ImageBundle, Snapshot};
-pub use oer_image_profile::Start;
 use serde::{Deserialize, Serialize};
 
 /// Format of a receipt file.

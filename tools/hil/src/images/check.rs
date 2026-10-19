@@ -65,7 +65,7 @@ pub fn chips(
 ) -> Result<Vec<String>> {
     let candidates = match requested {
         Some(chip) => vec![chip.to_owned()],
-        None => oer_image_profile::supported(root)?,
+        None => oer_chip_profile::supported(root)?,
     };
     let mut chips = Vec::new();
     for chip in candidates {
@@ -185,7 +185,7 @@ pub fn run(
         .outcomes;
     outcomes.sort_by_key(|(index, _)| *index);
     let outcomes: Vec<Outcome> = outcomes.into_iter().map(|(_, outcome)| outcome).collect();
-    let profile = oer_image_profile::Profile::load(&ctx.root, chip)?;
+    let profile = oer_chip_profile::Profile::load(&ctx.root, chip)?;
     print!("{}", summary(&outcomes));
     verdict(&outcomes)?;
     // Only the whole catalog, built, shows which summaries no image uses.

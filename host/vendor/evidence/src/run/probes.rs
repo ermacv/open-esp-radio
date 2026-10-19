@@ -14,12 +14,12 @@ const JOBS: &str = "OPEN_RADIO_ANALYSIS_BUILD_JOBS";
 struct Probe {
     /// The chip whose `firmware/probes/` (`<chip>-<name>`) holds the image.
     chip: String,
-    probe: oer_image_profile::Probe,
+    probe: oer_chip_profile::Probe,
 }
 
 /// Every chip's probe images, from the chip profiles at `root`.
 fn all(root: &std::path::Path) -> Result<Vec<Probe>> {
-    Ok(oer_image_profile::Profile::all(root)?
+    Ok(oer_chip_profile::Profile::all(root)?
         .into_iter()
         .flat_map(|profile| {
             let chip = profile.id.clone();

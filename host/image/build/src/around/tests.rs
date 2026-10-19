@@ -8,7 +8,7 @@ fn repository() -> PathBuf {
 /// This checkout's first chip; a catalog image of it boots through its own
 /// ESP-IDF bootloader.
 fn application_chip() -> String {
-    oer_image_profile::Profile::all(&repository()).unwrap()[0]
+    oer_chip_profile::Profile::all(&repository()).unwrap()[0]
         .id
         .clone()
 }
@@ -17,7 +17,7 @@ fn application_chip() -> String {
 /// image header of the chip standing in for its bootloader, and the binary
 /// form of the chip's partition table.
 fn boot_files(root: &Path) -> (Vec<u8>, Vec<u8>) {
-    let profile = oer_image_profile::Profile::load(root, &application_chip()).unwrap();
+    let profile = oer_chip_profile::Profile::load(root, &application_chip()).unwrap();
     let chip = crate::encode::chip(&profile.espflash_chip).unwrap();
     let mut bootloader = vec![0; 24];
     bootloader[0] = 0xe9;

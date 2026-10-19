@@ -490,7 +490,7 @@ fn a_run_takes_the_named_chip_or_the_only_one_that_builds_its_images() {
         .try_into()
         .unwrap();
     assert_eq!(select_chip(&root, &[panic], None).unwrap(), full);
-    let others: Vec<String> = oer_image_profile::supported(&root)
+    let others: Vec<String> = oer_chip_profile::supported(&root)
         .unwrap()
         .into_iter()
         .filter(|chip| *chip != full)

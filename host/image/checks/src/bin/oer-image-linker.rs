@@ -1,6 +1,6 @@
 //! The image linker: rustc runs it in place of `rust-lld` for every
 //! image (`-C linker`, set by
-//! `oer_image_toolchain::image::configure`, which builds it from the tree being
+//! `oer_image_build::compiler::configure`, which builds it from the tree being
 //! built).
 
 fn main() {

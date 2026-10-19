@@ -104,7 +104,7 @@ fn is_bitcode(bytes: &[u8]) -> bool {
 /// The `llvm-nm` of the active Rust toolchain: an LLVM on `PATH` need not
 /// read the compiler's bitcode.
 fn matched_llvm_nm() -> Result<PathBuf> {
-    Ok(oer_image_toolchain::program(oer_image_toolchain::Tool::LlvmNm)?.into())
+    Ok(oer_os_toolchain::program(oer_os_toolchain::Tool::LlvmNm)?.into())
 }
 
 fn bitcode_symbols(ctx: &Checkout, tool: &Path, input: &Path, symbols: &mut Symbols) -> Result<()> {

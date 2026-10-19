@@ -36,7 +36,7 @@ pub(crate) fn run(
             ],
             Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
-        let mut build = oer_os_process::command(oer_image_toolchain::cargo_program());
+        let mut build = oer_os_process::command(oer_os_toolchain::cargo_program());
         build.current_dir(root).args([
             "build",
             "--locked",
