@@ -13,7 +13,9 @@
 //! library's own, which the working memory does not account.
 use crate::cha::{TypeFacts, TypeWalk};
 use oer_analysis_elf::dwarf::{DebugSections, SliceReader, Symbolizer, gimli};
-use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_analysis_riscv_model::{
+    CallBehavior, Callee, Error, ErrorCode, Ledger, Result, RunControl,
+};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -26,6 +28,9 @@ pub struct Dwarf {
     symbolizer: Symbolizer,
     /// A function's entry address and the qualified name of its return type.
     returns: BTreeMap<u32, String>,
+    /// Every concrete subprogram entry at this address explicitly agrees
+    /// on DW_AT_noreturn=true. Missing or conflicting facts answer false.
+    noreturn: BTreeMap<u32, bool>,
     /// Each named subprogram's path, by its offset in `.debug_info`.
     paths: BTreeMap<usize, String>,
     /// Each copy's start and the offset of the subprogram it copies.
@@ -141,6 +146,7 @@ pub fn read(
     let mut out = Dwarf {
         symbolizer,
         returns: BTreeMap::new(),
+        noreturn: BTreeMap::new(),
         paths: copies.paths,
         copies: copies.copies,
     };
@@ -161,6 +167,7 @@ struct Returns<'d> {
     types: Vec<usize>,
     /// Each subprogram's entry and its return type's offset.
     returned: Vec<(u32, usize)>,
+    noreturn: BTreeMap<u32, bool>,
 }
 
 impl<'d> Returns<'d> {
@@ -200,10 +207,20 @@ impl<'d> Returns<'d> {
                 scratch.push(&mut self.scope, (depth, offset), control)?;
             }
         } else if tag == gimli::DW_TAG_subprogram {
-            let low = entry.attr_value(gimli::DW_AT_low_pc);
-            let returns = entry.attr_value(gimli::DW_AT_type);
-            if let (Some(gimli::AttributeValue::Addr(low)), Some(returns)) = (low, returns)
-                && let (Ok(low), Some(target)) = (u32::try_from(low), reference(unit, returns))
+            let Some(gimli::AttributeValue::Addr(low)) = entry.attr_value(gimli::DW_AT_low_pc)
+            else {
+                return Ok(());
+            };
+            let Ok(low) = u32::try_from(low) else {
+                return Ok(());
+            };
+            let noreturn =
+                entry.attr_value(gimli::DW_AT_noreturn) == Some(gimli::AttributeValue::Flag(true));
+            let proof = scratch.entry(&mut self.noreturn, low, || noreturn, control)?;
+            *proof &= noreturn;
+            if let Some(target) = entry
+                .attr_value(gimli::DW_AT_type)
+                .and_then(|returns| reference(unit, returns))
             {
                 scratch.push(&mut self.returned, (low, target), control)?;
             }
@@ -230,6 +247,9 @@ impl<'d> Returns<'d> {
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
+        for (&low, &proof) in &self.noreturn {
+            keep.insert(&mut out.noreturn, low, proof, control)?;
+        }
         for &(low, target) in &self.returned {
             control.checkpoint(1)?;
             if self.types.binary_search(&target).is_ok() {
@@ -238,6 +258,12 @@ impl<'d> Returns<'d> {
             }
         }
         Ok(())
+    }
+}
+
+impl CallBehavior for Dwarf {
+    fn noreturn(&self, callee: Callee<'_>) -> bool {
+        matches!(callee, Callee::Address(address) if self.noreturn.get(&address) == Some(&true))
     }
 }
 

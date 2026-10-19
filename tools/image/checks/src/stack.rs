@@ -168,7 +168,15 @@ impl Image {
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
         let mut keep = Ledger::new(&memory, &mut control)?;
-        let analysis = analyze(&facts, &companions, summaries, &mut keep, &mut control)?;
+        let (dwarf, types) = read_debug(&elf, &mut keep, &mut control)?;
+        let analysis = analyze(
+            &facts,
+            &companions,
+            summaries,
+            &dwarf,
+            &mut keep,
+            &mut control,
+        )?;
         let mut functions = Vec::new();
         let mut names = BTreeMap::new();
         for function in facts.functions() {
@@ -184,7 +192,6 @@ impl Image {
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
-        let (dwarf, types) = read_debug(&elf, &mut keep, &mut control)?;
         let vtables = waker_vtables(&facts, &dwarf, &analysis, &mut keep, &mut control)?;
         let mut resolutions =
             waker_resolutions(&analysis, &dwarf, &vtables, &mut keep, &mut control)?;

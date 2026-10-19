@@ -146,6 +146,14 @@ struct Operation {
     gap: Option<SemanticGapReason>,
 }
 
+impl Operation {
+    fn name_callee(&mut self, callee: CalleeAt) {
+        if self.callee.replace(callee).is_some() {
+            self.gap = Some(SemanticGapReason::UnresolvedRelocation);
+        }
+    }
+}
+
 /// Where a call names its callee: an address in an image, or the
 /// relocation (by index) a relocatable object's call carries.
 #[derive(Clone, Copy)]
@@ -207,7 +215,7 @@ fn prepare(
             if matches!(isa.lift(&input.bytes[start..start + 4]), SemanticOp::Upper { dest, pc_relative: true, .. } if dest == base && dest != 0)
             {
                 result.opaque_call = true;
-                result.callee = Some(CalleeAt::Relocation(site));
+                result.name_callee(CalleeAt::Relocation(site));
             }
         }
         if raw.offset != node.offset {
@@ -218,7 +226,7 @@ fn prepare(
         if matches!(node.decoded.flow, InstructionFlow::Jump { link: true, .. })
             && input.relocations.normalized(site).kind == ReferenceKind::Branch
         {
-            result.callee = Some(CalleeAt::Relocation(site));
+            result.name_callee(CalleeAt::Relocation(site));
         }
         let role = isa.value_relocation(raw, op);
         if role == ValueRelocation::Ignore {
@@ -798,7 +806,18 @@ pub(super) fn analyze(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<SemanticSummary> {
-    analyze_with(input, nodes, edges, isa, memory, control, sink, false, None)
+    analyze_with(
+        input,
+        nodes,
+        edges,
+        isa,
+        memory,
+        control,
+        sink,
+        false,
+        None,
+        &mut AdmittedVec::new(memory),
+    )
 }
 #[allow(clippy::too_many_arguments)]
 pub(super) fn analyze_with(
@@ -811,6 +830,7 @@ pub(super) fn analyze_with(
     sink: &mut dyn FunctionSink,
     symbolic: bool,
     abi: Option<CallAbi>,
+    noreturn: &mut AdmittedVec<'_, u64>,
 ) -> Result<SemanticSummary> {
     control.phase(RunPhase::AnalyzeValues)?;
     let bytes_per_node = std::mem::size_of::<Option<State>>()
@@ -939,6 +959,11 @@ pub(super) fn analyze_with(
             control,
         )?;
         let Some(state) = states[i] else { continue };
+        if proven_noreturn(operations[i], node, input, &state, &symbols.sets, control)? {
+            // Nodes are sorted by offset, so this is also the sorted set
+            // the next CFG pass uses to omit impossible continuations.
+            noreturn.push(node.offset, control.position())?;
+        }
         if let SemanticOp::Fence {
             fm,
             predecessor,
@@ -1514,6 +1539,54 @@ fn callee<'a>(
     }
 }
 
+/// Every possible callee must have an explicit behavior proof. Reuse the
+/// result analysis's callee identity for direct and relocated calls; a
+/// register merge additionally needs every exact alternative, with no
+/// unknown leaf. No proof depends on pruning a continuation first.
+fn proven_noreturn(
+    op: Operation,
+    node: &Node,
+    input: &FunctionInput<'_>,
+    incoming: &State,
+    sets: &Sets<'_>,
+    control: &mut dyn RunControl,
+) -> Result<bool> {
+    if !op.opaque_call || op.gap.is_some() || node.conflict {
+        return Ok(false);
+    }
+    if let Some(CalleeAt::Relocation(site)) = op.callee
+        && input.relocations.normalized(site).addend != Some(0)
+    {
+        return Ok(false);
+    }
+    if let Some(callee) = callee(op, node, input, incoming) {
+        return Ok(input.call_behavior.noreturn(callee));
+    }
+    if op.callee.is_some() || input.image.is_none() {
+        return Ok(false);
+    }
+    let Some((base, displacement, true)) = node.decoded.flow.through_register() else {
+        return Ok(false);
+    };
+    let targets = sets.get(
+        incoming
+            .get(usize::from(base))
+            .copied()
+            .unwrap_or(Value::Unknown),
+    );
+    for value in targets.values.iter().take(targets.len) {
+        control.checkpoint(1)?;
+        let (Value::Constant(address) | Value::Image(address)) = value else {
+            return Ok(false);
+        };
+        let address = address.wrapping_add(displacement as u32) & !1;
+        if !input.call_behavior.noreturn(Callee::Address(address)) {
+            return Ok(false);
+        }
+    }
+    Ok(targets.len != 0)
+}
+
 /// The value a call's result register holds: the constants its callee
 /// returns, while they fit one set of alternatives.
 fn returned(
@@ -1649,6 +1722,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
         let mut sink = Records::default();
@@ -1783,6 +1857,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
         let mut sink = Records::default();
@@ -1905,6 +1980,7 @@ mod tests {
                 data_ranges: &[],
                 jumps,
                 returns: &NoReturns,
+                call_behavior: &UnknownCallBehavior,
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
             let mut sink = Records::default();
@@ -1918,6 +1994,7 @@ mod tests {
                 &mut sink,
                 true,
                 None,
+                &mut AdmittedVec::new(&memory),
             )
             .unwrap();
             (summary.complete, sink.0)
@@ -2002,6 +2079,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let node = Node {
             offset: 0,
@@ -2099,6 +2177,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let mut node = Node {
             offset: 0,
@@ -2166,6 +2245,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let nodes: Vec<_> = [0, 2]
             .into_iter()
@@ -2234,6 +2314,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let node = Node {
             offset: 0,
@@ -2404,6 +2485,7 @@ mod tests {
             data_ranges: &[],
             jumps: &[],
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
         let mut sink = Records::default();
@@ -2417,6 +2499,7 @@ mod tests {
             &mut sink,
             true,
             None,
+            &mut AdmittedVec::new(&memory),
         )
         .unwrap();
         sink.0

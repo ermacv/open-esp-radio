@@ -1,4 +1,5 @@
 use super::*;
+use oer_analysis_riscv_model::UnknownCallBehavior;
 
 #[path = "waker_scope_tests.rs"]
 mod waker_scopes;
@@ -50,7 +51,8 @@ fn analyze_within(
         .collect::<Result<Vec<_>>>()?;
     let companions: Vec<&ImageFacts<'_>> = companions.iter().collect();
     let mut keep = Ledger::new(memory, control)?;
-    crate::analyze(&image, &companions, summaries, &mut keep, control)
+    let (dwarf, _) = crate::read_debug(&std::rc::Rc::from(elf), &mut keep, control)?;
+    crate::analyze(&image, &companions, summaries, &dwarf, &mut keep, control)
 }
 
 /// [`crate::analyze`] without a work budget.
@@ -2233,15 +2235,41 @@ fn the_working_memory_and_the_work_budget_bound_the_analysis() {
     };
     let memory = WorkingMemory::new(needed + 1).unwrap();
     let facts = ImageFacts::new(&image, &[], &memory, &mut || Ok(())).unwrap();
-    let error = crate::analyze(&facts, &[], &[], &mut kept(&memory), &mut || Ok(())).unwrap_err();
+    let error = crate::analyze(
+        &facts,
+        &[],
+        &[],
+        &UnknownCallBehavior,
+        &mut kept(&memory),
+        &mut || Ok(()),
+    )
+    .unwrap_err();
     assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
     assert!(error.memory.is_some(), "{error:?}");
 
     let memory = WorkingMemory::new(TEST_MEMORY).unwrap();
     let facts = ImageFacts::new(&image, &[], &memory, &mut || Ok(())).unwrap();
-    let error = crate::analyze(&facts, &[], &[], &mut kept(&memory), &mut Units(1)).unwrap_err();
+    let error = crate::analyze(
+        &facts,
+        &[],
+        &[],
+        &UnknownCallBehavior,
+        &mut kept(&memory),
+        &mut Units(1),
+    )
+    .unwrap_err();
     assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
-    assert!(crate::analyze(&facts, &[], &[], &mut kept(&memory), &mut Units(u64::MAX)).is_ok());
+    assert!(
+        crate::analyze(
+            &facts,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut kept(&memory),
+            &mut Units(u64::MAX)
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -2501,7 +2529,15 @@ fn the_analyzers_own_structures_fail_on_working_memory() {
     let facts = ImageFacts::new(&elf, &[], &memory, &mut || Ok(())).unwrap();
     let before = memory.used();
     let mut keep = kept(&memory);
-    crate::analyze(&facts, &[], &[], &mut keep, &mut || Ok(())).unwrap();
+    crate::analyze(
+        &facts,
+        &[],
+        &[],
+        &UnknownCallBehavior,
+        &mut keep,
+        &mut || Ok(()),
+    )
+    .unwrap();
     assert!(keep.bytes() > 0);
     assert_eq!(memory.used(), before + keep.bytes());
     drop(keep);

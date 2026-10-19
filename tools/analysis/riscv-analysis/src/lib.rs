@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 use oer_analysis_riscv_model::*;
 mod dispatch;
+#[cfg(test)]
+mod noreturn_tests;
 mod references;
 mod tables;
 mod value_sets;
@@ -24,6 +26,9 @@ pub struct FunctionInput<'a> {
     /// The constant results of the functions this one calls, which a call
     /// takes for its result registers ([`CallReturns`]).
     pub returns: &'a dyn CallReturns,
+    /// Explicit proofs of non-returning callees. Unknown behavior keeps
+    /// the call's possible continuation; result values imply no behavior.
+    pub call_behavior: &'a dyn CallBehavior,
 }
 /// The targets of one indirect jump that the build's facts name, such as
 /// the entries a jump table's relocations hold: the control-flow graph
@@ -110,6 +115,47 @@ fn analyze_with(
     symbolic: bool,
     abi: Option<CallAbi>,
 ) -> Result<AnalysisSummary> {
+    // Prove call targets on the graph with every possible continuation.
+    // In particular, AUIPC/JALR needs the value analysis, including all
+    // incoming paths, rather than a guess from the preceding instruction.
+    let mut records = RecordBuffer::new(memory);
+    let (summary, noreturn) = analyze_pass(
+        &input,
+        decoder,
+        memory,
+        control,
+        &mut tables::Buffer(&mut records),
+        symbolic,
+        abi,
+        &[],
+    )?;
+    if noreturn.is_empty() {
+        for record in records.iter() {
+            sink.record(record, control)?;
+        }
+        return Ok(summary);
+    }
+    drop(records);
+    // The first pass proved a superset of the runtime targets without
+    // relying on any pruned edge. Rebuild so unreachable decode gaps and
+    // their outgoing paths contribute neither records nor coverage holes.
+    analyze_pass(
+        &input, decoder, memory, control, sink, symbolic, abi, &noreturn,
+    )
+    .map(|(summary, _)| summary)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn analyze_pass<'m>(
+    input: &FunctionInput<'_>,
+    decoder: &dyn FunctionSemantics,
+    memory: &'m WorkingMemory,
+    control: &mut dyn RunControl,
+    sink: &mut dyn FunctionSink,
+    symbolic: bool,
+    abi: Option<CallAbi>,
+    noreturn: &[u64],
+) -> Result<(AnalysisSummary, AdmittedVec<'m, u64>)> {
     control.phase(RunPhase::AnalyzeFunction)?;
     let end = input
         .extent
@@ -371,7 +417,7 @@ fn analyze_with(
                     destination(displacement),
                     if link { EdgeKind::Call } else { EdgeKind::Jump },
                 ));
-                if link {
+                if link && noreturn.binary_search(&offset).is_err() {
                     outgoing.push((Some(next), EdgeKind::PossibleContinuation));
                 }
             }
@@ -403,7 +449,7 @@ fn analyze_with(
                             EdgeKind::Indirect
                         },
                     ));
-                    if link {
+                    if link && noreturn.binary_search(&offset).is_err() {
                         outgoing.push((Some(next), EdgeKind::PossibleContinuation));
                     }
                 }
@@ -470,8 +516,18 @@ fn analyze_with(
         node.conflict = conflicts[index] || (node.decoded.length == 4 && conflicts[index + 1]);
     }
     edges.sort_unstable_by_key(|e| (e.from, e.target, e.relation as u8));
+    let mut found_noreturn = AdmittedVec::new(memory);
     summary.semantics = values::analyze_with(
-        &input, &nodes, &edges, decoder, memory, control, sink, symbolic, abi,
+        input,
+        &nodes,
+        &edges,
+        decoder,
+        memory,
+        control,
+        sink,
+        symbolic,
+        abi,
+        &mut found_noreturn,
     )?;
     summary.semantics.complete &= summary.coverage.decoding && summary.coverage.control_flow;
     summary.instructions = nodes.len() as u64;
@@ -542,7 +598,7 @@ fn analyze_with(
             &mut summary,
         )?;
     }
-    Ok(summary)
+    Ok((summary, found_noreturn))
 }
 
 fn emit(
@@ -670,6 +726,7 @@ mod tests {
                 data_ranges: &[],
                 jumps,
                 returns: &NoReturns,
+                call_behavior: &UnknownCallBehavior,
             };
             let memory = WorkingMemory::new(1024 * 1024).unwrap();
             let mut meter = Meter(0);
@@ -712,6 +769,7 @@ mod tests {
             data_ranges: &[],
             jumps: &jumps,
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         struct Budget(u64);
         impl RunControl for Budget {
@@ -756,6 +814,7 @@ mod tests {
             data_ranges: &[],
             jumps: &jumps,
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         // The graph's own capacity fits; the known jumps' edges do not.
         let memory = WorkingMemory::new(8 * 1024).unwrap();
@@ -825,6 +884,7 @@ mod tests {
             data_ranges: &[],
             jumps: known,
             returns: &NoReturns,
+            call_behavior: &UnknownCallBehavior,
         };
         let memory = WorkingMemory::new(1024 * 1024).unwrap();
         let source = Proves {
