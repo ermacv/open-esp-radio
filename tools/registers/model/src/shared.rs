@@ -386,7 +386,7 @@ mod tests {
     fn library_paths_climb_then_descend() {
         assert!(validate_library_path("../../ieee80211/model/library.toml").is_ok());
         assert!(validate_library_path("library.toml").is_ok());
-        assert!(validate_library_path("../b.toml").is_err());
+        assert!(validate_library_path("../a/../b.toml").is_err());
         assert!(validate_library_path("/abs/library.toml").is_err());
         assert!(validate_library_path("..").is_err());
     }

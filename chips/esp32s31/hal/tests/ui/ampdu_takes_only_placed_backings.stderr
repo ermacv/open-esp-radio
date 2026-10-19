@@ -4,7 +4,7 @@ error[E0599]: the method `push_backing` exists for mutable reference `&mut Retai
 21 |       let _ = owner.push_backing(lease); // ui-error: E0599
    |                     ^^^^^^^^^^^^
    |
-  ::: $WORKSPACE/portable/base/memory/src/pinned_tx.rs
+  ::: $WORKSPACE/portable/memory/src/pinned_tx.rs
    |
    | / pub struct PinnedDmaTxRadioLease<
    | |     'pool,

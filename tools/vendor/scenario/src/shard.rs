@@ -24,7 +24,7 @@ pub struct ProbeImages {
 const TOOL_MANIFEST: &str = "Cargo.toml";
 /// The roots of the production libraries, which shards track by executed
 /// file.
-const PRODUCTION_ROOTS: [&str; 2] = ["portable", "chips"];
+const PRODUCTION_ROOTS: [&str; 3] = ["protocols", "portable", "chips"];
 /// The pinned toolchain, and the lock file and package manifest names.
 const TOOLCHAIN: &str = "rust-toolchain.toml";
 /// The directory name Cargo writes build outputs below; like

@@ -41,7 +41,7 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
 /// Sources scanned for `SOURCE:` blocks: Rust files, with `#` comments TOML
 /// files such as the platform's ROM function summaries, and Markdown, such as
 /// the recovered facts of `knowledge/`.
-const PRODUCTION: [&str; 4] = ["portable", "chips", "firmware", "knowledge"];
+const PRODUCTION: [&str; 5] = ["protocols", "portable", "chips", "firmware", "knowledge"];
 
 /// Whether `file` is generated data, which holds no recovered fact of its
 /// own: the fact files below `knowledge/<chip>/vendor/facts/`.

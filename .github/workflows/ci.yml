@@ -76,12 +76,13 @@ jobs:
       - name: Toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
       - name: Portable and chip libraries for the chip target
-        # Every library of portable/ and chips/ builds for the chip; the
-        # platform packages of chips/platform are checked with the images.
+        # Every library of protocols/, portable/ and chips/ builds for the chip;
+        # the platform packages (the boards and the staged runtime and
+        # bootstrap) are checked with the images.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
-            | jq -r '.packages[] | select(.manifest_path | test("/(portable|chips)/"))
-              | select(.manifest_path | test("/chips/platform/") | not) | "-p " + .name')
+            | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
+              | select(.manifest_path | test("/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
@@ -95,7 +96,7 @@ jobs:
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/platform/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | "-p " + .name' <<<"$meta"
           }
@@ -110,7 +111,7 @@ jobs:
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/platform/"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | "-p " + .name' <<<"$meta"
           }

@@ -60,10 +60,10 @@ pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
 mod tests {
     #[test]
     fn an_image_with_test_support_is_named() {
-        let tree = "oer-firmware-apps-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-base-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
+        let tree = "oer-firmware-apps-w1 v0.1.0 (/w1)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
         assert_eq!(
             super::packages(tree),
-            ["oer-memory v0.1.0", "oer-esp32s31-hal v0.1.0"]
+            ["oer-esp32s31-hal v0.1.0", "oer-memory v0.1.0"]
         );
         assert!(super::packages("a v1|derive\n").is_empty());
     }

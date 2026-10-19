@@ -102,7 +102,7 @@ fn shard(index: &Path) -> Result<()> {
         matched.push(scenario.name.to_owned());
     }
     let directory = Path::new(oer_vendor_ieee802154_esp32s31::DIRECTORY);
-    let root = directory.join("../../../..");
+    let root = directory.join("../../..");
     let inputs = oer_tool_pins::artifacts::pinned(&root, CHIP)?
         .into_iter()
         .filter(|artifact| artifact.source == SOURCE)

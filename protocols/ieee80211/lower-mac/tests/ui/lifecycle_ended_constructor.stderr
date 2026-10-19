@@ -9,7 +9,7 @@ error[E0308]: mismatched types
   = note: expected struct `oer_radio_port::FailStopped<'_, B>`
           found unit type `()`
 note: associated function defined here
- --> $WORKSPACE/portable/radio/port/src/lifecycle.rs
+ --> $WORKSPACE/protocols/radio/port/src/lifecycle.rs
   |
   |     pub fn fail_stopped(proof: FailStopped<'id, B>, output: Out) -> Self {
   |            ^^^^^^^^^^^^

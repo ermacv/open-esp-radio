@@ -5,7 +5,7 @@ error[E0061]: this method takes 4 arguments but 3 arguments were supplied
    |          ^^^^^^^^^^^^^^^^^^^^ ---- argument #1 of type `&ModelAssociation<'id, oer_ieee80211_lower_mac::Station>` is missing
    |
 note: method defined here
-  --> $WORKSPACE/portable/ieee80211/lower-mac/src/phase.rs
+  --> $WORKSPACE/protocols/ieee80211/lower-mac/src/phase.rs
    |
    |     fn install_pairwise_key(
    |        ^^^^^^^^^^^^^^^^^^^^

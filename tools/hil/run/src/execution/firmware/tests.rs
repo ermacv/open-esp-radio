@@ -13,21 +13,21 @@ fn build_inputs(root: &Path) -> Artifacts {
         "Cargo.lock",
         "firmware/hil/chip-a/Cargo.toml",
         "firmware/hil/chip-a/stack.toml",
-        "portable/chip-a/platform/stack.toml",
+        "chips/chip-a/platform/stack.toml",
         "Cargo.lock",
-        "portable/chip-a/platform/partitions/applications.csv",
+        "chips/chip-a/platform/partitions/applications.csv",
     ] {
         write(&root.join(relative), relative.as_bytes());
     }
     // The fixture chip's profile and the HIL policy's base, which the build
     // provenance reads.
     write(
-        &root.join("portable/chip-a/platform/chip.toml"),
+        &root.join("chips/chip-a/platform/chip.toml"),
         oer_hil_runs::run::test_support::TEST_CHIP_PROFILE.as_bytes(),
     );
     write(
         &root.join("firmware/hil/chip-a/stack.toml"),
-        b"extends = \"../../../portable/chip-a/platform/stack.toml\"\n",
+        b"extends = \"../../../chips/chip-a/platform/stack.toml\"\n",
     );
     let build = root.join("build");
     for (name, bytes) in [

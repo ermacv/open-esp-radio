@@ -1,8 +1,7 @@
 //! The repository's packages and their path closures, as `cargo metadata`
 //! resolves the one workspace.
 //!
-//! A package's class is its folder (the layers of `tools/README.md`); no
-//! manifest carries metadata for it. The evidence policy reads two classes
+//! A package's class is its folder; no manifest carries metadata for it. The evidence policy reads two classes
 //! from it: report packages ([`Package::is_report`]) and host stands
 //! ([`Workspace::host_stands`]).
 
@@ -15,13 +14,27 @@ use crate::Result;
 
 /// The report service: it renders findings and decides no verdict.
 pub const REPORT_SERVICE: &str = "tools/vendor/scenario-report";
-/// The programs, which only render and dispatch.
-pub const CLI_LAYER: &str = "tools/";
+/// The programs, which only render and dispatch, and the report service. A
+/// library that carries its own binaries keeps its library's class.
+pub const REPORT_PACKAGES: &[&str] = &[
+    "tools/analysis/cli",
+    "tools/hil/cli",
+    "tools/hil/runner",
+    "tools/image/cli",
+    "tools/image/linker",
+    "tools/lab/cli",
+    "tools/registers/cli",
+    "tools/vendor/cli",
+    "tools/vendor/ieee802154-esp32s31-cli",
+    "tools/vendor/scenarios-esp32c5-cli",
+    "tools/vendor/scenarios-esp32s31-cli",
+    REPORT_SERVICE,
+];
 /// The folder of the vendor packages; a host stand's library is one of them.
 pub const VENDOR_LAYER: &str = "tools/vendor/";
 /// The engines a host stand compares, each one stand per chip: the library
 /// `tools/vendor/<engine>-<chip>`, which decides the verdicts, and its
-/// program `tools/vendor-<engine>-<chip>`, a report package.
+/// program `tools/vendor/<engine>-<chip>-cli`, a report package.
 pub const HOST_STAND_ENGINES: &[&str] = &["ieee802154"];
 
 /// One host stand's packages, by manifest relative to the root.
@@ -45,9 +58,9 @@ pub struct Package {
 
 impl Package {
     /// Whether the package only renders findings, so no shard may record
-    /// one of its files: the command-line layer and the report service.
+    /// one of its files: the programs and the report service.
     pub fn is_report(&self) -> bool {
-        self.directory.starts_with(CLI_LAYER) || self.directory == REPORT_SERVICE
+        REPORT_PACKAGES.contains(&self.directory.as_str())
     }
 }
 
@@ -232,7 +245,7 @@ impl Workspace {
                 if !HOST_STAND_ENGINES.contains(&engine) {
                     return None;
                 }
-                let program = format!("{CLI_LAYER}vendor-{engine}-{chip}");
+                let program = format!("{}-cli", package.directory);
                 let program = self.packages().find(|p| p.directory == program)?;
                 Some((
                     format!("{engine}-host"),
@@ -281,17 +294,20 @@ mod tests {
     fn a_stand_is_its_library_with_its_program() {
         let both = workspace(&[
             "tools/vendor/ieee802154-chip-a",
-            "tools/vendor-ieee802154-chip-a",
+            "tools/vendor/ieee802154-chip-a-cli",
         ]);
         assert_eq!(
             both.host_stands("chip-a").get("ieee802154-host"),
             Some(&HostStand {
                 library: "tools/vendor/ieee802154-chip-a/Cargo.toml".into(),
-                program: "tools/vendor-ieee802154-chip-a/Cargo.toml".into(),
+                program: "tools/vendor/ieee802154-chip-a-cli/Cargo.toml".into(),
             })
         );
         // A library without its program, or another engine, is no stand.
-        let alone = workspace(&["tools/vendor/ieee802154-chip-a", "tools/vendor-x-chip-a"]);
+        let alone = workspace(&[
+            "tools/vendor/ieee802154-chip-a",
+            "tools/vendor/x-chip-a-cli",
+        ]);
         assert!(alone.host_stands("chip-a").is_empty());
     }
 
@@ -317,7 +333,7 @@ mod tests {
         assert!(
             !closure
                 .iter()
-                .any(|directory| directory.starts_with(CLI_LAYER))
+                .any(|directory| REPORT_PACKAGES.contains(directory))
         );
     }
 }

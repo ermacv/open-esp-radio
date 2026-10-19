@@ -42,7 +42,7 @@ Below it are, by directory (`/` ends a domain):
 | --- | --- |
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32s31/hal` |
-| Platform, executor and framework bindings | `chips/platform/`, `chips/exec/`, `chips/adapters/`, `portable/adapters/` |
+| Platform, executor and framework bindings | `chips/esp32c5/board`, `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/executor`, `chips/espressif/esp-hal-irq`, `chips/espressif/esp-hal/`, `chips/esp32c5/esp-hal-soc`, `portable/embassy/` |
 | Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout`, `chips/esp32s31/bluetooth/memory` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
@@ -197,7 +197,7 @@ The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
-The platform crates (`chips/platform/*`), the bootstrap images
+The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap images
 (`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them
 needs:

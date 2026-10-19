@@ -223,7 +223,7 @@ names! {
     ContractName: Path;
     /// A capability the HIL agent serves, by its `hil/protocol` module and
     /// name, such as `conformance.lower-mac`; the image keys derive from
-    /// these through `oer-hil-image-keys`.
+    /// these through `oer_hil_protocol::feature_keys`.
     CapabilityKey: Dotted;
 }
 

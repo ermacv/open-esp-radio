@@ -29,7 +29,7 @@ fn manifest() -> (tempfile::TempDir, PathBuf, String) {
                 .is_ok_and(|document| document.contains_key("api"))
         })
         .unwrap();
-    // All relative inputs/outputs in this concrete composition start with ..
+    // All relative inputs/outputs in this concrete composition start with ../.
     let source = source.replace("\"../", &format!("\"{}/../", base.display()));
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registers.toml");
