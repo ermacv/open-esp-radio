@@ -9,6 +9,8 @@
 //! layout entry reports where those backings hold each MPDU, so the vendor
 //! side can compare the same bytes.
 
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaStorage, RetainedAmpduDmaStorage,
 };
@@ -127,16 +129,26 @@ struct CompletionDouble {
 impl TxHardware for CompletionDouble {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _: &dyn PreparedTxDma,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: u8,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
     }
 
-    fn start_bound_legacy_tx(&mut self, _: &dyn HardwareOwnedTxDma, _: u8) {}
+    fn start_bound_legacy_tx(
+        &mut self,
+        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+    ) {
+    }
 
-    fn prepare_bound_ht_tx(&mut self, _: &dyn PreparedTxDma, _: u8, _: MacHtTxProgram) -> bool {
+    fn prepare_bound_ht_tx(
+        &mut self,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+        _: MacHtTxProgram,
+    ) -> bool {
         true
     }
 

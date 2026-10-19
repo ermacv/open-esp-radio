@@ -67,6 +67,18 @@ pub struct Placed<T: 'static> {
 }
 
 impl<T: 'static> Placed<T> {
+    /// Retain the allocation and its complete DMA range in space `S`.
+    #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
+    pub(crate) fn into_dma_parts<S: crate::ieee80211::dma::space::DmaSpace>(
+        self,
+    ) -> Option<(&'static mut T, oer_memory::StableDmaRange<'static>)> {
+        let start = S::address(self.value, core::ptr::from_ref(self.value))?;
+        // SAFETY: Placed owns this unique static allocation in the DMA window.
+        // The returned storage owner must synchronize access for its complete
+        // DMA lifecycle; the proof contains no reference aliasing that owner.
+        unsafe { oer_memory::StableDmaRange::from_owner(self.value, start) }
+    }
+
     /// The placed value.
     pub fn into_inner(self) -> &'static mut T {
         self.value

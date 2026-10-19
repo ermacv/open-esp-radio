@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use core::marker::PhantomData;
 
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
@@ -69,10 +71,13 @@ pub struct MacTxPtiProgram {
     pub count: MacTxPtiCount,
 }
 
-fn assert_tx_descriptor_head(authority_head: u32, descriptor_address_low: u32) {
+fn assert_tx_descriptor_head(
+    authority_head: DmaRef<WifiTxDmaDescriptor>,
+    descriptor_address_low: u32,
+) {
     assert_eq!(
         descriptor_address_low,
-        authority_head & DESCRIPTOR_ADDRESS_LOW_MASK,
+        authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK,
         "TX control register does not reference the retained DMA chain",
     );
 }
@@ -207,7 +212,7 @@ pub struct MacLegacyTxParameters {
 /// geometry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacLegacyTxProgram {
-    descriptor_head: u32,
+    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacLegacyTxParameters,
 }
 
@@ -223,7 +228,10 @@ impl MacLegacyTxProgram {
     }
 
     /// Bind one semantic legacy publication to its prepared DMA authority.
-    pub fn new(dma: &dyn PreparedTxDma, parameters: MacLegacyTxParameters) -> Option<Self> {
+    pub fn new(
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        parameters: MacLegacyTxParameters,
+    ) -> Option<Self> {
         if parameters.signal > 0x0fff
             || parameters.timeout > 0x0fff
             || parameters.scheduler_priority > 0x0f
@@ -403,7 +411,7 @@ pub struct MacHtTxParameters {
 /// authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHtTxProgram {
-    descriptor_head: u32,
+    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacHtTxParameters,
 }
 
@@ -414,7 +422,10 @@ impl MacHtTxProgram {
     }
 
     /// Bind one semantic HT publication to its prepared DMA authority.
-    pub fn new(dma: &dyn PreparedTxDma, parameters: MacHtTxParameters) -> Option<Self> {
+    pub fn new(
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        parameters: MacHtTxParameters,
+    ) -> Option<Self> {
         if parameters.length == 0
             || parameters.descriptor_count == 0
             || parameters.descriptor_count > 0x7f
@@ -552,7 +563,7 @@ pub struct MacHeTxParameters {
 /// PAC-owned transaction for one bounded HE SU PPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeTxProgram {
-    descriptor_head: u32,
+    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacHeTxParameters,
 }
 
@@ -562,7 +573,10 @@ impl MacHeTxProgram {
         self.parameters.control
     }
 
-    pub fn new(dma: &dyn PreparedTxDma, parameters: MacHeTxParameters) -> Option<Self> {
+    pub fn new(
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        parameters: MacHeTxParameters,
+    ) -> Option<Self> {
         if parameters.apep_length == 0
             || parameters.descriptor_count == 0
             || parameters.descriptor_count > 32
@@ -902,7 +916,7 @@ impl WifiRadioRegisters {
     /// Prepare one legacy queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_legacy_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -921,7 +935,7 @@ impl WifiRadioRegisters {
     /// Prepare one HT queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_ht_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
@@ -940,7 +954,7 @@ impl WifiRadioRegisters {
     /// Prepare one HE queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_he_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {
@@ -957,7 +971,11 @@ impl WifiRadioRegisters {
     }
 
     /// Publish the final ENABLE|VALID edge for a hardware-owned TX chain.
-    pub fn start_bound_mac_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    pub fn start_bound_mac_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         assert!(queue < ORDINARY_QUEUE_COUNT);
         let control = self
             .peripherals
@@ -1039,7 +1057,7 @@ impl WifiRadioRegisters {
         crate::svd::zero_based_field_write::publish_mac_tx_prepared_control(
             control_bank,
             bank,
-            program.descriptor_head,
+            program.descriptor_head.bits(),
             2,
             true,
             parameters.response.plcp_format(),
@@ -1173,7 +1191,7 @@ impl WifiRadioRegisters {
         crate::svd::zero_based_field_write::publish_mac_tx_prepared_control(
             control_bank,
             bank,
-            program.descriptor_head,
+            program.descriptor_head.bits(),
             2,
             true,
             match parameters.format {
@@ -1345,7 +1363,7 @@ impl WifiRadioRegisters {
         crate::svd::zero_based_field_write::publish_mac_tx_prepared_control(
             control_bank,
             bank,
-            program.descriptor_head,
+            program.descriptor_head.bits(),
             2,
             true,
             match parameters.format {

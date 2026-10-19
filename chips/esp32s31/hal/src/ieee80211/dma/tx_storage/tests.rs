@@ -1,5 +1,7 @@
 extern crate std;
 
+use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use super::*;
 fn free<const N: usize>(owner: &mut PinnedTxDmaStorage<N>) -> TxDmaFree<'_, N> {
     match owner.access() {
@@ -22,12 +24,12 @@ fn storage() -> PinnedTxDmaStorage<64> {
     .unwrap()
 }
 
-fn prepared_head(authority: &dyn PreparedTxDma) -> u32 {
-    authority.descriptor_head()
+fn prepared_head(authority: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
+    authority.descriptor_head().bits()
 }
 
-fn hardware_owned_head(authority: &dyn HardwareOwnedTxDma) -> u32 {
-    authority.descriptor_head()
+fn hardware_owned_head(authority: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
+    authority.descriptor_head().bits()
 }
 
 #[test]

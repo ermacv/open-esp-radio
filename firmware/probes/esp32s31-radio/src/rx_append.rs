@@ -58,7 +58,7 @@ type Placed = PlacedRxDma<RX_APPEND_COUNT, RX_APPEND_CAPACITY, RX_APPEND_STORAGE
 
 /// The storage, placed on first use; later entries of the session see the
 /// same placement.
-fn placed() -> Option<Placed> {
+fn placed() -> Option<&'static mut Option<Placed>> {
     static mut PLACED: Option<Placed> = None;
     // SAFETY: Blobray executes this probe image on one thread and invokes
     // its exported entries serially, so no two references are alive.
@@ -66,7 +66,7 @@ fn placed() -> Option<Placed> {
     if slot.is_none() {
         *slot = RxDmaStorage::place(STORAGE.take()?).ok();
     }
-    *slot
+    Some(slot)
 }
 
 oer_probe_macros::probe! {
@@ -77,7 +77,7 @@ oer_probe_macros::probe! {
     /// `output` must point to `LAYOUT_HEADER_WORDS + RX_APPEND_COUNT`
     /// writable words.
     pub unsafe fn open_libpp_rx_append_trace_layout(output: *mut u32) -> u32 {
-        let Some(placed) = placed() else {
+        let Some(placed) = placed().and_then(|slot| slot.as_ref()) else {
             return PREPARE_FAILED;
         };
         // SAFETY: the caller provides the output words.
@@ -105,7 +105,7 @@ oer_probe_macros::probe! {
         if count == 0 || completed > RX_APPEND_COUNT || length as usize > RX_APPEND_CAPACITY {
             return INVALID_UNIT;
         }
-        let Some(placed) = placed() else {
+        let Some(placed) = placed().and_then(Option::take) else {
             return PREPARE_FAILED;
         };
         let (storage, base) = (placed.storage(), placed.descriptor_base());

@@ -1,3 +1,5 @@
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use crate::*;
 use oer_esp32s31_hal::dma_static::Placed;
 pub(super) use oer_esp32s31_hal::ieee80211::dma::rx_dma::model::{
@@ -488,7 +490,7 @@ impl MacColdRxBufferHardware for MockMmio {
 impl TxHardware for MockMmio {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -498,7 +500,7 @@ impl TxHardware for MockMmio {
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
@@ -508,7 +510,7 @@ impl TxHardware for MockMmio {
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
@@ -516,12 +518,20 @@ impl TxHardware for MockMmio {
         true
     }
 
-    fn start_bound_legacy_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {
+    fn start_bound_legacy_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
         self.record_fence();
         self.record_fence();
     }
 
-    fn start_bound_ht_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {
+    fn start_bound_ht_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
         self.record_fence();
         self.record_fence();
     }

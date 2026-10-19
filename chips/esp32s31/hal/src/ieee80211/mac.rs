@@ -4,6 +4,8 @@
 //! physical registers belong to the 802.11 MAC and are not reusable by
 //! Bluetooth, BLE or IEEE 802.15.4 PHY paths.
 
+use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 pub use crate::types::{
     ExtraSoftApRxBlockAckEntrySnapshot, MacApReceivePolicySnapshot, MacCoexPrioritySnapshot,
     MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti, MacRoleReceivePolicy,
@@ -535,7 +537,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -543,13 +545,17 @@ impl<'registers> WifiMacHal<'registers> {
             .prepare_bound_legacy_mac_tx(dma, queue, program)
     }
 
-    pub fn start_bound_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    pub fn start_bound_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         self.pac_mut().start_bound_mac_tx(dma, queue);
     }
 
     pub fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
@@ -558,7 +564,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     pub fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {

@@ -59,6 +59,8 @@ pub use volatile::read_volatile;
 /// This trait deliberately exposes only the chain head, not its underlying
 /// [`StableDmaRange`]. Register adapters can therefore validate a TX control
 /// image without treating the same authority as an RX-walker allocation.
+/// `Address` is the register adapter's typed descriptor address; this crate
+/// imposes no chip-specific address representation.
 ///
 /// # Safety
 ///
@@ -70,8 +72,8 @@ pub use volatile::read_volatile;
     unsafe_code,
     reason = "TX prepare authority is implemented only by audited DMA owners"
 )]
-pub unsafe trait PreparedTxDma {
-    fn descriptor_head(&self) -> u32;
+pub unsafe trait PreparedTxDma<Address> {
+    fn descriptor_head(&self) -> Address;
 }
 
 /// Start authority for one TX chain already recorded as hardware-owned.
@@ -90,9 +92,12 @@ pub unsafe trait PreparedTxDma {
     unsafe_code,
     reason = "TX start authority is implemented only by audited DMA owners"
 )]
-pub unsafe trait HardwareOwnedTxDma {
-    fn descriptor_head(&self) -> u32;
+pub unsafe trait HardwareOwnedTxDma<Address> {
+    fn descriptor_head(&self) -> Address;
 }
+
+#[cfg(test)]
+mod dma_range_tests;
 
 /// Non-forgeable proof that one address range remains valid for DMA.
 ///
@@ -107,11 +112,15 @@ pub struct StableDmaRange<'storage> {
 }
 
 impl<'storage> StableDmaRange<'storage> {
-    /// Bind a DMA range to an owner borrow after validating its lifecycle.
+    /// Bind the complete allocation to its DMA address and return its owner.
+    ///
+    /// The extent comes from the storage itself. Returning the unique borrow
+    /// lets the audited owner continue its CPU/DMA handovers without retaining
+    /// an aliased Rust reference inside this address proof.
     ///
     /// # Safety
     ///
-    /// `start..start + len` must name storage governed by `owner`. That
+    /// `start` must be the DMA address of the first byte of `owner`. That
     /// storage must remain at the same address, and all CPU/hardware access
     /// must remain synchronized, for the hardware's complete use of the
     /// range. If a safe owner may be dropped or forgotten while DMA remains
@@ -121,29 +130,28 @@ impl<'storage> StableDmaRange<'storage> {
         unsafe_code,
         reason = "constructor is the audited DMA-address authority boundary"
     )]
-    pub unsafe fn from_owner<T: ?Sized>(_owner: &'storage T, start: u32, len: u32) -> Option<Self> {
+    pub unsafe fn from_owner<T: ?Sized>(
+        owner: &'storage mut T,
+        start: u32,
+    ) -> Option<(&'storage mut T, Self)> {
+        let len = u32::try_from(core::mem::size_of_val(owner)).ok()?;
         start.checked_add(len)?;
-        (len != 0).then_some(Self {
-            start,
-            len,
-            _storage: PhantomData,
-        })
+        (len != 0).then_some((
+            owner,
+            Self {
+                start,
+                len,
+                _storage: PhantomData,
+            },
+        ))
     }
 
-    /// Construct synthetic/raw authority for a target validation boundary.
-    ///
-    /// # Safety
-    ///
-    /// The complete range must remain valid and exclusively governed by the
-    /// caller until the hardware walker is stopped. Native models may use
-    /// this only when no asynchronous DMA actor exists.
-    #[allow(
-        unsafe_code,
-        reason = "raw validation harnesses cannot carry a Rust storage owner"
-    )]
-    pub unsafe fn from_raw_parts(start: u32, len: u32) -> Option<StableDmaRange<'static>> {
-        start.checked_add(len)?;
-        (len != 0).then_some(StableDmaRange {
+    /// Narrow this allocation's proof to a nonempty range within it.
+    pub const fn subrange(&self, start: u32, len: u32) -> Option<Self> {
+        if !self.contains(start, len) {
+            return None;
+        }
+        Some(Self {
             start,
             len,
             _storage: PhantomData,

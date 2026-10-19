@@ -194,6 +194,14 @@ ring, and the TX storages pin only placed storage (`TxDmaStorage::pin`,
 firmware placement warning's DMA rules are gone: the link proves what they
 checked. `cargo fw` refuses an image that enables `test-support`.
 
+TX prepare and start authorities carry `DmaRef<WifiTxDmaDescriptor>` through
+the chip-independent `PreparedTxDma<Address>` and `HardwareOwnedTxDma<Address>`
+traits. `Placed` supplies a stable range whose extent comes from its complete
+allocation; descriptor and buffer ranges are checked subranges of it. The
+range proof retains the storage lifetime without holding a Rust reference
+that would alias the owner's mutable borrow. Only the final PAC register
+publication extracts the descriptor address bits.
+
 A transmit pool is placed the same way: `PlacedTxPool::pin` takes a
 `Placed<PinnedDmaTxPool>`, and its radio leases are `PlacedTxLease`s. The
 sealed `PlacedBacking` marks them, and the pool's wrappers around them, as
