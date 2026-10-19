@@ -73,13 +73,13 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat, _] = resources.operation;
-            let configured = owner.setup().configure(resources.interface0.interface);
+            let mut configured = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             let end = oer_radio_port::EventEnd::Quarantined { cause: ModelFault };
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let client = parts.clients.client(&configured);
+                let client = parts.clients.client(&mut configured);
                 let permit = ready(client.operation(&mut seat));
                 let token = client.transmit(permit, transmission(&DATA)).unwrap();
                 self.0
@@ -143,15 +143,15 @@ fn the_operation_permit_comes_back_before_its_terminal_is_handed_out() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat0, mut seat1] = resources.operation;
-            let zero = owner.setup().configure(resources.interface0.interface);
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             let handle = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let events = &mut parts.events;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
+                let first = parts.clients.client(&mut zero);
+                let second = parts.clients.client(&mut one);
                 let permit = ready(first.operation(&mut seat0));
                 let work = first
                     .transmit(permit, transmission(&DATA))
@@ -221,14 +221,14 @@ fn takers_of_the_operation_are_served_in_arrival_order_across_interfaces() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat0, mut seat1] = resources.operation;
-            let zero = owner.setup().configure(resources.interface0.interface);
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
+                let first = parts.clients.client(&mut zero);
+                let second = parts.clients.client(&mut one);
                 let held = ready(first.operation(&mut seat0));
                 // A taker that gives up its place before it is served
                 // stalls no one: its future ends with this block.
@@ -271,12 +271,12 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat0, _] = resources.operation;
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             let id = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let client = parts.clients.client(&zero);
+                let client = parts.clients.client(&mut zero);
                 let permit = ready(client.operation(&mut seat0));
                 let scan = SupportedEnergyScan::new(channel(20), 128)
                     .unwrap_or_else(|| panic!("the model scans"));
@@ -303,7 +303,7 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let client = parts.clients.client(&zero);
+                let client = parts.clients.client(&mut zero);
                 assert!(poll_once(pin!(client.operation(&mut seat0))).is_ready());
             }
             let owner = owner
@@ -327,12 +327,12 @@ fn rejected_disable_terminal_and_later_events_remain_in_the_uninstalled_model() 
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat, _] = resources.operation;
-            let configured = owner.setup().configure(resources.interface0.interface);
+            let mut configured = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.ok().expect("enabled");
             let handle = parts_handle();
             {
                 let phase = owner.phase();
-                let client = phase.clients.client(&configured);
+                let client = phase.clients.client(&mut configured);
                 ready(client.receive(channel(11))).unwrap();
                 let permit = ready(client.operation(&mut seat));
                 let scan = SupportedEnergyScan::new(channel(11), 128).unwrap();
@@ -376,14 +376,14 @@ fn the_radio_receives_while_any_interface_asks_on_one_shared_channel() {
             mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
-            let zero = owner.setup().configure(resources.interface0.interface);
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
+                let first = parts.clients.client(&mut zero);
+                let second = parts.clients.client(&mut one);
                 let handle = parts_handle();
                 ready(first.receive(channel(11))).unwrap_or_else(|_| panic!("not poisoned"));
                 assert_eq!(handle.receiving(), Some(channel(11)));
@@ -423,13 +423,13 @@ fn a_window_is_a_wish_that_owes_no_event() {
             mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let events = &mut parts.events;
-                let client = parts.clients.client(&zero);
+                let client = parts.clients.client(&mut zero);
                 let handle = parts_handle();
                 let window = || {
                     SupportedScheduledReceive::new(
@@ -483,13 +483,13 @@ fn a_cancel_ends_the_operation_once() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [_, mut seat1] = resources.operation;
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let events = &mut parts.events;
-                let client = parts.clients.client(&one);
+                let client = parts.clients.client(&mut one);
                 let permit = ready(client.operation(&mut seat1));
                 let cca =
                     SupportedCca::new(channel(26)).unwrap_or_else(|| panic!("the model assesses"));
@@ -534,13 +534,13 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat0, _] = resources.operation;
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let events = &mut parts.events;
-                let client = parts.clients.client(&zero);
+                let client = parts.clients.client(&mut zero);
                 ready(client.receive(channel(15))).unwrap_or_else(|_| panic!("not poisoned"));
                 let permit = ready(client.operation(&mut seat0));
                 let work = client
@@ -595,13 +595,13 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
             let [mut seat0, _] = resources.operation;
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let events = &mut parts.events;
-                let client = parts.clients.client(&zero);
+                let client = parts.clients.client(&mut zero);
                 let handle = parts_handle();
                 ready(client.receive(channel(11))).unwrap_or_else(|_| panic!("not poisoned"));
                 for _ in 0..MODEL_RECEIVED_FRAMES + 2 {
@@ -687,8 +687,8 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
                 interface1,
                 ..
             } = resources;
-            let zero = owner.setup().configure(interface0.interface);
-            let one = owner.setup().configure(interface1.interface);
+            let mut zero = owner.setup().configure(interface0.interface);
+            let mut one = owner.setup().configure(interface1.interface);
             let has = Has::<ModelCaps, SourceMatch>::from_const();
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             let [short, _] = interface1.short;
@@ -696,12 +696,18 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
             let (short, extended) = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
-                second.set_pending_mode(has, AutoPendingMode::Enhanced);
+                parts
+                    .control
+                    .set_pending_mode(&mut one, has, AutoPendingMode::Enhanced);
                 (
-                    second.add_pending_short(short, [0x34, 0x12]),
-                    first.add_pending_extended(extended, [1, 2, 3, 4, 5, 6, 7, 8]),
+                    parts
+                        .control
+                        .add_pending_short(&mut one, short, [0x34, 0x12]),
+                    parts.control.add_pending_extended(
+                        &mut zero,
+                        extended,
+                        [1, 2, 3, 4, 5, 6, 7, 8],
+                    ),
                 )
             };
             let handle = parts_handle();
@@ -723,10 +729,8 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let second = parts.clients.client(&one);
-                let first = parts.clients.client(&zero);
-                let _slot = second.remove_pending_short(short);
-                let _slot = first.remove_pending_extended(extended);
+                let _slot = parts.control.remove_pending_short(&mut one, short);
+                let _slot = parts.control.remove_pending_extended(&mut zero, extended);
             }
             assert_eq!(handle.interface(Interface::new(1)).pending_short[0], None);
             assert_eq!(
@@ -761,7 +765,7 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 );
                 setup.set_promiscuous(Has::from_const(), true);
             }
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let handle = parts_handle();
             // A request above the highest level radiates the highest.
             assert_eq!(handle.radio().transmit_power_dbm, Some(0));
@@ -776,12 +780,17 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 parts.control.set_enhanced_ack_header_ies(
                     SupportedHeaderIes::new(&[1, 2, 3]).unwrap_or_else(|| panic!("short")),
                 );
-                let client = parts.clients.client(&zero);
-                client.set_pan_id(0xabcd);
-                client.set_mac_keys(2, [0; 16], [1; 16], [2; 16]);
-                client.update_frame_counter(FrameCounterUpdate::SetIfLarger(7));
-                client.update_frame_counter(FrameCounterUpdate::SetIfLarger(3));
-                assert_eq!(client.frame_counter(), Some(7));
+                parts.control.set_pan_id(&mut zero, 0xabcd);
+                parts
+                    .control
+                    .set_mac_keys(&mut zero, 2, [0; 16], [1; 16], [2; 16]);
+                parts
+                    .control
+                    .update_frame_counter(&mut zero, FrameCounterUpdate::SetIfLarger(7));
+                parts
+                    .control
+                    .update_frame_counter(&mut zero, FrameCounterUpdate::SetIfLarger(3));
+                assert_eq!(parts.control.frame_counter(&zero), Some(7));
             }
             assert_eq!(handle.radio().cca_threshold_dbm, Some(-60));
             // The generator is off; its IEs are kept for when it is on.
@@ -792,6 +801,12 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
+            // The disabled owner sets the configured interface too.
+            owner.setup().set_short_address(&mut zero, 0x1234);
+            assert_eq!(
+                handle.interface(Interface::new(0)).short_address,
+                Some(0x1234)
+            );
             let _slot = owner.setup().remove(zero);
             assert!(!handle.interface(Interface::new(0)).configured);
             oer_radio_port::Ended::uninstall(owner, (), ())
@@ -1091,14 +1106,14 @@ fn a_change_of_wish_wakes_waiting_receives_and_a_window_preempts() {
             mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
-            let zero = owner.setup().configure(resources.interface0.interface);
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
+                let first = parts.clients.client(&mut zero);
+                let second = parts.clients.client(&mut one);
                 let counter = Arc::new(Counter(AtomicUsize::new(0)));
                 let waker = Waker::from(counter.clone());
                 let mut context = Context::from_waker(&waker);
@@ -1149,14 +1164,14 @@ fn interfaces_moving_to_one_channel_admit_each_other() {
             mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
-            let zero = owner.setup().configure(resources.interface0.interface);
-            let one = owner.setup().configure(resources.interface1.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut one = owner.setup().configure(resources.interface1.interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let first = parts.clients.client(&zero);
-                let second = parts.clients.client(&one);
+                let first = parts.clients.client(&mut zero);
+                let second = parts.clients.client(&mut one);
                 ready(first.receive(channel(11))).unwrap_or_else(|_| panic!("not poisoned"));
                 ready(second.receive(channel(11))).unwrap_or_else(|_| panic!("not poisoned"));
                 // Both PANs move to 15: the first waits while the second
@@ -1189,13 +1204,13 @@ fn removing_an_interface_keeps_its_pending_entries() {
             mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
             resources: ModelResources<'id>,
         ) -> Ended<'id, OwnedModel, ()> {
-            let zero = owner.setup().configure(resources.interface0.interface);
+            let mut zero = owner.setup().configure(resources.interface0.interface);
             let [slot, _] = resources.interface0.short;
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             let entry = {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                parts.clients.client(&zero).add_pending_short(slot, [7, 7])
+                parts.control.add_pending_short(&mut zero, slot, [7, 7])
             };
             let mut owner = owner
                 .disable(&mut |_| core::ops::ControlFlow::Continue(()))
@@ -1209,12 +1224,12 @@ fn removing_an_interface_keeps_its_pending_entries() {
                 Some([7, 7])
             );
             assert!(!handle.interface(Interface::new(0)).configured);
-            let zero = owner.setup().configure(interface);
+            let mut zero = owner.setup().configure(interface);
             let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
             {
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
-                let _slot = parts.clients.client(&zero).remove_pending_short(entry);
+                let _slot = parts.control.remove_pending_short(&mut zero, entry);
             }
             assert_eq!(handle.interface(Interface::new(0)).pending_short[0], None);
             let owner = owner
@@ -1261,4 +1276,62 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
         let token = ready(permits.pool().take(&mut first));
         drop(permits.guard(token));
     }));
+}
+
+#[test]
+fn a_running_phase_configures_sets_and_removes_an_interface() {
+    struct Body;
+    impl PortBody<OwnedModel> for Body {
+        type Output = ();
+
+        async fn run<'p, 'id>(
+            self,
+            mut owner: Owner<'p, 'id, OwnedModel, oer_radio_port::Disabled>,
+            resources: ModelResources<'id>,
+        ) -> Ended<'id, OwnedModel, ()> {
+            let mut zero = owner.setup().configure(resources.interface0.interface);
+            let mut owner = owner.enable().await.unwrap_or_else(|_| panic!("enabled"));
+            let handle = parts_handle();
+            let slot = {
+                let mut phase = owner.phase();
+                let parts = &mut *phase;
+                // Interface 1 joins while the radio runs, with its settings.
+                let mut one = parts.control.configure(resources.interface1.interface);
+                assert!(handle.interface(Interface::new(1)).configured);
+                parts.control.set_pan_id(&mut one, 0x0102);
+                parts.control.set_extended_address(&mut one, [9; 8]);
+                assert_eq!(handle.interface(Interface::new(1)).pan_id, Some(0x0102));
+                assert_eq!(
+                    handle.interface(Interface::new(1)).extended_address,
+                    Some([9; 8])
+                );
+                ready(parts.clients.client(&mut one).receive(channel(11)))
+                    .unwrap_or_else(|_| panic!("not poisoned"));
+                let first = parts.clients.client(&mut zero);
+                let mut other = pin!(first.receive(channel(25)));
+                assert!(poll_once(other.as_mut()).is_pending());
+                // Removing the receiving interface ends its wish: the other
+                // channel is free.
+                let slot = parts.control.remove(one);
+                assert!(!handle.interface(Interface::new(1)).configured);
+                assert_eq!(poll_once(other.as_mut()), Poll::Ready(Ok(())));
+                assert_eq!(handle.receiving(), Some(channel(25)));
+                slot
+            };
+            // The slot configures it again in the next phase.
+            let mut one = owner.phase().control.configure(slot);
+            owner.phase().control.set_short_address(&mut one, 0xbeef);
+            assert_eq!(
+                handle.interface(Interface::new(1)).short_address,
+                Some(0xbeef)
+            );
+            let mut owner = owner
+                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .await
+                .unwrap_or_else(|_| panic!("not poisoned"));
+            let _slot = owner.setup().remove(one);
+            oer_radio_port::Ended::uninstall(owner, (), ())
+        }
+    }
+    run(Body);
 }

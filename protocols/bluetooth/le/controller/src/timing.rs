@@ -274,7 +274,8 @@ pub enum AdvertisingResponse {
 /// LE 1M air time of a legacy PDU of `length` bytes, header included.
 pub const fn legacy_air_micros(length: LegacyPduLength) -> NonZeroU32 {
     // Preamble, access address, header and CRC.
-    const OVERHEAD: NonZeroU32 = NonZeroU32::new((1 + 4 + 2 + 3) * 8).unwrap();
+    const OVERHEAD: NonZeroU32 =
+        NonZeroU32::new((1 + 4 + 2 + 3) * 8).expect("the PDU overhead is nonzero");
     // The length holds the header and at most 37 payload bytes: it never
     // underflows or saturates.
     OVERHEAD.saturating_add((length.0 as u32 - 2) * 8)
