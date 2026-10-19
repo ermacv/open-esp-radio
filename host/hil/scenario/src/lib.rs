@@ -6,6 +6,8 @@
 //! [`Plan`] projection every family-independent consumer reads: the firmware
 //! image, laboratory requirements, target initialization and named checks.
 
+pub mod workload;
+
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -13,11 +15,11 @@ use std::{
 
 use serde::{Serialize, de::DeserializeOwned};
 
-use oer_hil_scenario_catalog::link::WifiLabUse;
-use oer_hil_scenario_catalog::{
+use oer_hil_model::catalog::link::WifiLabUse;
+use oer_hil_model::catalog::{
     HEADER_FIELDS, Header, ProfileHarts, ProfileRequest, Role, requirements::Requirements,
 };
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
 
 pub mod campaign;
 pub mod catalog;

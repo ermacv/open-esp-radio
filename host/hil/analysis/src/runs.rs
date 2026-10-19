@@ -10,13 +10,13 @@ use std::{
     path::Path,
 };
 
-use oer_hil_run_bundle::RunStore;
-use oer_hil_run_bundle::store::Notes;
-use oer_hil_run_bundle_format::run::FailureKind;
-use oer_hil_run_bundle_format::run::Observations;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::RunState;
-use oer_hil_schema::run::RunEventKind;
+use oer_hil_model::schema::run::RunEventKind;
+use oer_hil_runs::RunStore;
+use oer_hil_runs::format::run::FailureKind;
+use oer_hil_runs::format::run::Observations;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::RunState;
+use oer_hil_runs::store::Notes;
 
 use crate::{
     Result,
@@ -643,13 +643,13 @@ pub fn collect_observers(store: &RunStore) -> Result<usize> {
                 .manifest()
                 .observer()
                 .filter(|record| {
-                    record["schema"] == oer_hil_run_bundle_format::observer::store::REFERENCED
+                    record["schema"] == oer_hil_runs::format::observer::store::REFERENCED
                 })
-                .and_then(oer_hil_run_bundle_format::observer::store::build_digest)
+                .and_then(oer_hil_runs::format::observer::store::build_digest)
                 .map(str::to_owned)
         })
         .collect();
-    Ok(oer_hil_run_bundle_format::observer::store::collect_garbage(
+    Ok(oer_hil_runs::format::observer::store::collect_garbage(
         store.observers(),
         &named,
         OBSERVER_GRACE,

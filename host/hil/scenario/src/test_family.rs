@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{AirUse, Plan, ScenarioFamily};
 use crate::Result;
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]

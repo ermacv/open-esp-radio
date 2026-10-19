@@ -1,15 +1,15 @@
 use std::path::Path;
 
-use oer_hil_run_bundle::run::test_support::repetition;
-use oer_hil_run_bundle::run::test_support::write_run;
-use oer_hil_run_bundle_format::experiment::{Experiment, Variant};
-use oer_hil_run_bundle_format::run::Comparison;
-use oer_hil_run_bundle_format::run::Measurement;
-use oer_hil_run_bundle_format::run::MeasurementUnit;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::RunState;
-use oer_hil_run_bundle_format::run::ScenarioResult;
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
+use oer_hil_runs::format::experiment::{Experiment, Variant};
+use oer_hil_runs::format::run::Comparison;
+use oer_hil_runs::format::run::Measurement;
+use oer_hil_runs::format::run::MeasurementUnit;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::RunState;
+use oer_hil_runs::format::run::ScenarioResult;
+use oer_hil_runs::run::test_support::repetition;
+use oer_hil_runs::run::test_support::write_run;
 
 use super::*;
 use crate::samples::Verdict;

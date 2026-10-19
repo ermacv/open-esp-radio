@@ -1,6 +1,6 @@
-use oer_hil_run_bundle::RunStore;
-use oer_hil_run_bundle::run::test_support::write_run;
-use oer_hil_run_bundle::store::Sidecar;
+use oer_hil_runs::RunStore;
+use oer_hil_runs::run::test_support::write_run;
+use oer_hil_runs::store::Sidecar;
 
 use super::*;
 use crate::runs::tests::bundle;
@@ -89,7 +89,7 @@ fn a_prune_lists_then_deletes_what_no_rule_keeps_and_holds_the_budget() {
         .note(
             Sidecar::Pins,
             "old-pass",
-            Some(oer_hil_run_bundle::store::Note {
+            Some(oer_hil_runs::store::Note {
                 by: "wifi".into(),
                 reason: "baseline".into(),
                 unix_millis: 0,
@@ -128,7 +128,7 @@ fn a_prune_lists_then_deletes_what_no_rule_keeps_and_holds_the_budget() {
 /// schema always stay.
 #[test]
 fn unreadable_runs_go_only_when_asked() {
-    use oer_hil_run_bundle_format::run::RUN_SCHEMA;
+    use oer_hil_runs::format::run::RUN_SCHEMA;
     let directory = tempfile::tempdir().unwrap();
     let store = RunStore::at(directory.path());
     let now = oer_os_durable::unix_millis();
@@ -156,7 +156,7 @@ fn unreadable_runs_go_only_when_asked() {
         .note(
             Sidecar::Pins,
             "older-pinned",
-            Some(oer_hil_run_bundle::store::Note {
+            Some(oer_hil_runs::store::Note {
                 by: "wifi".into(),
                 reason: "baseline".into(),
                 unix_millis: 0,

@@ -10,11 +10,11 @@
 
 use std::{collections::BTreeMap, fs};
 
-use oer_hil_run_bundle::RunStore;
-use oer_hil_run_bundle::store::Sidecar;
-use oer_hil_run_bundle_format::run::MeasurementUnit;
-use oer_hil_run_bundle_format::run::MetricId;
-use oer_hil_run_bundle_format::run::RunState;
+use oer_hil_runs::RunStore;
+use oer_hil_runs::format::run::MeasurementUnit;
+use oer_hil_runs::format::run::MetricId;
+use oer_hil_runs::format::run::RunState;
+use oer_hil_runs::store::Sidecar;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -61,7 +61,9 @@ pub fn summary(run: &Run) -> Result<RunSummary> {
     let mut networks = manifest
         .firmware
         .iter()
-        .filter_map(|firmware| oer_hil_image_class::network_on(firmware.image, &manifest.target))
+        .filter_map(|firmware| {
+            oer_hil_model::image_class::network_on(firmware.image, &manifest.target)
+        })
         .map(str::to_owned)
         .collect::<Vec<_>>();
     networks.sort();

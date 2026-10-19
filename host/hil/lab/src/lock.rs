@@ -36,7 +36,7 @@ pub struct FixtureLock {
 /// How a run leases the stand.
 #[derive(Clone, Debug)]
 pub struct LeaseRequest {
-    pub required: oer_hil_scenario_catalog::requirements::Requirements,
+    pub required: oer_hil_model::catalog::requirements::Requirements,
     /// Named in the lease so their durations estimate later budgets.
     pub scenarios: Vec<String>,
     /// The frequency ranges the work uses; empty when it never enables a
@@ -52,7 +52,7 @@ pub struct LeaseRequest {
 }
 
 impl LeaseRequest {
-    pub fn device(required: oer_hil_scenario_catalog::requirements::Requirements) -> Self {
+    pub fn device(required: oer_hil_model::catalog::requirements::Requirements) -> Self {
         Self {
             required,
             scenarios: Vec::new(),
@@ -72,7 +72,7 @@ impl FixtureLock {
     pub fn acquire(lab: &super::config::LabConfig) -> Result<Self> {
         Self::acquire_for(
             lab,
-            oer_hil_scenario_catalog::requirements::Requirements::default(),
+            oer_hil_model::catalog::requirements::Requirements::default(),
         )
     }
 
@@ -80,14 +80,14 @@ impl FixtureLock {
     /// then take their locks.
     pub fn acquire_for(
         lab: &super::config::LabConfig,
-        required: oer_hil_scenario_catalog::requirements::Requirements,
+        required: oer_hil_model::catalog::requirements::Requirements,
     ) -> Result<Self> {
         Self::lease(lab, LeaseRequest::device(required))
     }
 
     pub fn acquire_without_device(
         lab: &super::config::LabConfig,
-        required: oer_hil_scenario_catalog::requirements::Requirements,
+        required: oer_hil_model::catalog::requirements::Requirements,
     ) -> Result<Self> {
         Self::lease(
             lab,
@@ -204,7 +204,7 @@ impl FixtureLock {
     /// Check that the device and fixture are free now, without queueing.
     pub fn probe_for(
         lab: &super::config::LabConfig,
-        required: oer_hil_scenario_catalog::requirements::Requirements,
+        required: oer_hil_model::catalog::requirements::Requirements,
     ) -> Result<()> {
         let keys = resource_keys(lab, required)?;
         let claims = claims(lab, &LeaseRequest::device(required), &keys);
@@ -338,7 +338,7 @@ pub fn acquire_stand(
 /// boot, including callers using different SSH aliases or radio interfaces.
 fn resource_keys(
     lab: &super::config::LabConfig,
-    required: oer_hil_scenario_catalog::requirements::Requirements,
+    required: oer_hil_model::catalog::requirements::Requirements,
 ) -> Result<Vec<String>> {
     use super::config::StationFixtureConfig;
     let mut keys = Vec::new();

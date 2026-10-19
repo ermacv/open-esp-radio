@@ -7,7 +7,7 @@ use std::{
     process::Command,
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-const RUNNER: &str = "oer-hil-runner";
+const RUNNER: &str = "oer-tool-hil-runner";
 
 pub fn resolve(root: &Path, target: &str) -> Result<Value> {
     let output = Command::new(oer_os_toolchain::cargo_program())

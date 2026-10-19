@@ -16,7 +16,7 @@ pub mod secure_gatt;
 
 use model::{Adapter, Check, DtmProfile, DtmVersion};
 use oer_hil_protocol::bluetooth::BluetoothPeripheralTermination;
-use oer_hil_run_bundle_format::run::fixtures::{self, Helper};
+use oer_hil_runs::format::run::fixtures::{self, Helper};
 use std::{
     fs,
     path::Path,

@@ -3,7 +3,7 @@
 `oer-lab-board` is everything the host does to a board of the stand. It
 encodes nothing (the image pipeline, `oer-image-build`, builds every bundle),
 leases nothing (the arbiter does) and journals nothing (the board journal
-does); the flash operation, [`oer-hil-flash`](../../hil/host/flash/README.md), puts them
+does); the flash operation, [`oer-hil-run`](../../hil/host/flash/README.md), puts them
 together.
 
 | Module | Owns |

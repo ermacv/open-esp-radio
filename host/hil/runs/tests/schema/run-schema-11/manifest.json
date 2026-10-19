@@ -1,0 +1,115 @@
+{
+  "schema": 11,
+  "run_id": "1791582140859-002c088b",
+  "target": "esp32s31",
+  "state": "completed",
+  "started_unix_millis": 1791582140859,
+  "finished_unix_millis": 1791582427481,
+  "duration_millis": 286622,
+  "invocation": [
+    "/home/user/dev/oer-radio-unified-port/target/hil/runners/532b53c1d5b780072206cc4ff299f91804bac2b96930b28951bc2de293fac7e3/runner",
+    "run"
+  ],
+  "repository": {
+    "commit": "4222556456399199d4e9dcecf4c7e527fb4de269",
+    "dirty": false
+  },
+  "runner": {
+    "observer": {
+      "build_sha256": "79c7753a7c8bf4e3923a413a1616bd7cbe5b7fd740f4b747d1685948ec2d9112",
+      "executable_sha256": "532b53c1d5b780072206cc4ff299f91804bac2b96930b28951bc2de293fac7e3",
+      "schema": 2
+    },
+    "package": "oer-tool-hil-runner",
+    "version": "0.1.0",
+    "messages_lock_sha256": "9406a3d39868cbbb53d56775500d89fc30f6688c1092d260807c7dbde109c847",
+    "host_os": "linux",
+    "host_arch": "x86_64",
+    "tools": [
+      {
+        "name": "rustc",
+        "version": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6"
+      },
+      {
+        "name": "cargo",
+        "version": "cargo 1.97.1 (c980f4866 2026-06-30)\nrelease: 1.97.1\ncommit-hash: c980f4866141969fab6254a680546a277789d6f0\ncommit-date: 2026-06-30\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.20.0-DEV (sys:0.4.88+curl-8.20.0 vendored ssl:OpenSSL/3.6.2)\nssl: OpenSSL 3.6.2 7 Apr 2026\nos: CachyOS Linux Rolling Release [64-bit]"
+      }
+    ]
+  },
+  "cell": {
+    "cell_id": "example-lab",
+    "device_id": "s31-a",
+    "serial_device": "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_02:00:00:00:F6:D0-if00"
+  },
+  "lab_provenance_path": "lab-provenance.json",
+  "firmware": [
+    {
+      "image": "system-panic-reset",
+      "repository": {
+        "commit": "4222556456399199d4e9dcecf4c7e527fb4de269",
+        "dirty": false
+      },
+      "application_path": "firmware/system-panic-reset/application.bin",
+      "application_size_bytes": 1261472,
+      "application_sha256": "f14a419d893a7aec5b7774de270f6a2eb879c6a9c400edb993043da6b59734ce",
+      "runtime_elf_path": "firmware/system-panic-reset/runtime.elf",
+      "runtime_elf_size_bytes": 32764688,
+      "runtime_elf_sha256": "aeda9013dcbd6f391911f9494ae987268b3d083260fb55bbe7e7b0f23341843b",
+      "runtime_bin_path": "firmware/system-panic-reset/runtime.bin",
+      "runtime_bin_size_bytes": 1127697,
+      "runtime_bin_sha256": "328d686fc6a8fe05a7d31b311f9260a0ddb99ae053ed99b99c1310b04d217270",
+      "bootstrap_elf_path": "firmware/system-panic-reset/bootstrap.elf",
+      "bootstrap_elf_size_bytes": 3249212,
+      "bootstrap_elf_sha256": "c7e365e3d11886dd394d2ba8bbc88bc23d7286afe8c35525ad5e0f2899f7d1d2",
+      "replayed_from": {
+        "source_run_id": "1790000000000-00000001"
+      },
+      "layout_seed": 7
+    },
+    {
+      "image": "system-watchdog",
+      "repository": {
+        "commit": "4222556456399199d4e9dcecf4c7e527fb4de269",
+        "dirty": false
+      },
+      "application_path": "firmware/system-watchdog/application.bin",
+      "application_size_bytes": 1064864,
+      "application_sha256": "1d339046b8b1b1b7a060c2f2d4d0df48ea8e486558d792efcee9d3349196bd01",
+      "runtime_elf_path": "firmware/system-watchdog/runtime.elf",
+      "runtime_elf_size_bytes": 27469916,
+      "runtime_elf_sha256": "076f0aef61869359e46cf996b4dcf594cb034a1604bf4165162765388026b5e8",
+      "runtime_bin_path": "firmware/system-watchdog/runtime.bin",
+      "runtime_bin_size_bytes": 928065,
+      "runtime_bin_sha256": "af612e9346e20e720740f2d8536e03efab8a39fb3426fdadb8e3dfa77280b784",
+      "bootstrap_elf_path": "firmware/system-watchdog/bootstrap.elf",
+      "bootstrap_elf_size_bytes": 3048508,
+      "bootstrap_elf_sha256": "9c27b93ec5caa9952ca3d6b4b47445b40454a134eb51699ccfd9889826776551"
+    }
+  ],
+  "messages_used": [
+    "base/boot",
+    "base/boot/get"
+  ],
+  "experiment": {
+    "id": "fixture-experiment",
+    "arm": "b",
+    "variant": {
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "features": {
+        "add": [
+          "probe"
+        ],
+        "remove": [
+          "trace"
+        ]
+      }
+    },
+    "round": {
+      "layout_seed": 7,
+      "index": 1,
+      "phase": "measurement",
+      "order": "ba",
+      "order_seed": 42
+    }
+  }
+}

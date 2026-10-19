@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
 
 use crate::Result;
 use oer_os_process::Checkout;
@@ -40,7 +40,7 @@ pub fn list() -> String {
         text.push_str(&format!(
             "{:<36} {}\n",
             class.id(),
-            class.build_features(oer_hil_image_class::NETWORK_FEATURE)
+            class.build_features(oer_hil_model::image_class::NETWORK_FEATURE)
         ));
     }
     text.push_str("type-check one class: cargo hil images check --class <class> --type-check\n");
@@ -84,7 +84,7 @@ pub fn served(
 ) -> Result<Vec<ImageClass>> {
     let mut served = Vec::new();
     for class in classes(selected) {
-        if oer_hil_image::builds_on(root, chip, class)? {
+        if oer_hil_run::image::builds_on(root, chip, class)? {
             served.push(class);
         }
     }
@@ -123,7 +123,7 @@ pub fn reached(root: &std::path::Path, chip: &str, packages: &[String]) -> Resul
     let packages: BTreeSet<&str> = packages.iter().map(String::as_str).collect();
     let mut graphs = Vec::new();
     for class in served(root, chip, &[])? {
-        graphs.push((class, oer_hil_image::packages(root, chip, class)?));
+        graphs.push((class, oer_hil_run::image::packages(root, chip, class)?));
     }
     let classes = image_classes(&packages, &graphs);
     println!(
@@ -239,9 +239,13 @@ fn build_one(
     );
     let started = Instant::now();
     let result = match depth {
-        Depth::Build => oer_hil_image::build(&ctx.root, chip, class, None, &Default::default())
-            .map(|artifacts| artifacts.bundle.rom_summaries.clone()),
-        Depth::TypeCheck => oer_hil_image::check(&ctx.root, chip, class).map(|()| BTreeSet::new()),
+        Depth::Build => {
+            oer_hil_run::image::build(&ctx.root, chip, class, None, &Default::default())
+                .map(|artifacts| artifacts.bundle.rom_summaries.clone())
+        }
+        Depth::TypeCheck => {
+            oer_hil_run::image::check(&ctx.root, chip, class).map(|()| BTreeSet::new())
+        }
     };
     let (summaries, failure) = match result {
         Ok(summaries) => (summaries, None),

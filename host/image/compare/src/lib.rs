@@ -15,7 +15,7 @@
 //! aliases; reviewed scheduling ties are listed explicitly. It is the gate for
 //! pure code moves between crates; `cargo fw compare` calls
 //! [`compare_elf`] and `compare images` builds both sides with the HIL image
-//! classes first (`oer_hil_image::compare_images`).
+//! classes first (`oer_hil_run::image::compare_images`).
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,

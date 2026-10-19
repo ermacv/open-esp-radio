@@ -10,19 +10,16 @@ description = "Analysis of HIL run bundles: measurement samples, statistics and 
 
 [dependencies]
 oer-os-process = { path = "../../os/process" }
-oer-hil-run-bundle-format = { path = "../run-bundle-format" }
+oer-hil-runs = { path = "../runs" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
 oer-os-durable = { path = "../../os/durable" }
-oer-hil-run-bundle = { path = "../run-bundle" }
-oer-hil-schema = { path = "../schema" }
-oer-hil-image-class = { path = "../image-class" }
-oer-hil-stats = { path = "../stats" }
+oer-hil-model = { path = "../model" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [dev-dependencies]
-oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
+oer-hil-runs = { path = "../runs", features = ["test-support"] }
 roxmltree = "0.20"
 tempfile = "3"
 

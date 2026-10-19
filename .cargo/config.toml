@@ -10,7 +10,7 @@ fw = "run --quiet --profile tools -p oer-tool-fw --"
 pins = "run --quiet --profile tools -p oer-tool-pins --"
 # The stand: boards, leases, power, fixtures (tools/stand).
 stand = "run --quiet --profile tools -p oer-tool-stand --"
-# HIL runs (host/hil/runner/HIL.md).
+# HIL runs (host/hil/run/HIL.md).
 hil = "run --quiet --profile tools -p oer-tool-hil --"
 # The vendor comparison: pins, scenarios, evidence shards and the probe
 # images (tools/verification).

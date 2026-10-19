@@ -6,7 +6,7 @@ use oer_hil_protocol::{
     base::{GetBootStatus, PlatformPanic, ResetReason},
     system::{InjectPanic, PanicInjected},
 };
-use oer_hil_workload::{context::Context, require_keys};
+use oer_hil_scenario::workload::{context::Context, require_keys};
 use std::{path::Path, time::Duration};
 
 /// The agent source that raises the panic, as its record ends.

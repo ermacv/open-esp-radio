@@ -1,18 +1,18 @@
 use std::path::Path;
 
-use oer_hil_run_bundle::run::test_support::repetition;
-use oer_hil_run_bundle::run::test_support::write_run;
-use oer_hil_run_bundle::store::Note;
-use oer_hil_run_bundle_format::run::Comparison;
-use oer_hil_run_bundle_format::run::Failure;
-use oer_hil_run_bundle_format::run::FirmwareArtifact;
-use oer_hil_run_bundle_format::run::Measurement;
-use oer_hil_run_bundle_format::run::MeasurementUnit;
-use oer_hil_run_bundle_format::run::PlannedFirmware;
-use oer_hil_run_bundle_format::run::RUN_SCHEMA;
-use oer_hil_run_bundle_format::run::RunPlan;
-use oer_hil_run_bundle_format::run::ScenarioResult;
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
+use oer_hil_runs::format::run::Comparison;
+use oer_hil_runs::format::run::Failure;
+use oer_hil_runs::format::run::FirmwareArtifact;
+use oer_hil_runs::format::run::Measurement;
+use oer_hil_runs::format::run::MeasurementUnit;
+use oer_hil_runs::format::run::PlannedFirmware;
+use oer_hil_runs::format::run::RUN_SCHEMA;
+use oer_hil_runs::format::run::RunPlan;
+use oer_hil_runs::format::run::ScenarioResult;
+use oer_hil_runs::run::test_support::repetition;
+use oer_hil_runs::run::test_support::write_run;
+use oer_hil_runs::store::Note;
 
 use super::*;
 
@@ -371,7 +371,7 @@ fn waiting_ends_at_the_run_end_with_its_outcome() {
 
 #[test]
 fn observer_builds_no_run_names_are_collected_after_a_grace() {
-    use oer_hil_run_bundle_format::observer::store as observer_store;
+    use oer_hil_runs::format::observer::store as observer_store;
     use serde_json::json;
     let directory = tempfile::tempdir().unwrap();
     let store = RunStore::at(directory.path());

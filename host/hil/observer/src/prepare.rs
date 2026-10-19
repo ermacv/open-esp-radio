@@ -9,7 +9,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 /// Where a checkout keeps the private copies of the runners it built,
 /// relative to its root: one directory per executable digest. (The observer *builds* runs refer to live in the run store's
-/// [`oer_hil_run_bundle_format::observer::store::DIRECTORY`].)
+/// [`oer_hil_runs::format::observer::store::DIRECTORY`].)
 pub const RUNNERS: &str = "target/hil/runners";
 
 /// Build the runner of the checkout at `root` and keep a content-addressed

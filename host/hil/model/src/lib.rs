@@ -25,6 +25,10 @@
 //! [#761]: https://github.com/the predecessor repository/issues/761
 #![forbid(unsafe_code)]
 
+pub mod catalog;
+pub mod image_class;
+pub mod schema;
+
 mod arithmetic;
 mod capabilities;
 mod digest;

@@ -2,7 +2,7 @@
 
 `oer-image-build` is the one image pipeline of the repository: `build(ImageSpec)
 -> ImageBundle`. `cargo fw` ([tools/fw](../../../tools/fw/README.md)) and the HIL image
-classes (`oer-hil-image`, through `cargo hil image build`, the runner and
+classes (`oer-hil-run`, through `cargo hil image build`, the runner and
 `cargo hil images check`) build every image here; nothing else compiles,
 checks or encodes one. Every image builds with the `firmware` profile against
 the workspace's one `Cargo.lock` (`--locked`).

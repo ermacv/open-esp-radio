@@ -22,14 +22,14 @@
 
 use std::collections::BTreeMap;
 
-use oer_hil_run_bundle_format::experiment::Arm;
-use oer_hil_run_bundle_format::run::MetricId;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::SuiteResult;
-use oer_hil_run_bundle_format::run::Threshold;
+use oer_hil_runs::format::experiment::Arm;
+use oer_hil_runs::format::run::MetricId;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::SuiteResult;
+use oer_hil_runs::format::run::Threshold;
 use serde::{Deserialize, Serialize};
 
-pub use oer_hil_run_bundle_format::run::Better;
+pub use oer_hil_runs::format::run::Better;
 
 use crate::Result;
 
@@ -239,7 +239,7 @@ fn half_width(standard_error: f64, freedom: f64) -> f64 {
     if standard_error == 0.0 {
         0.0
     } else {
-        oer_hil_stats::student_t_critical(CONFIDENCE, freedom)
+        crate::stats::student_t_critical(CONFIDENCE, freedom)
             .map_or(f64::INFINITY, |critical| critical * standard_error)
     }
 }

@@ -8,4 +8,4 @@
 pub mod comparison;
 pub mod reference;
 
-pub(crate) use oer_hil_workload::Result;
+pub(crate) use oer_hil_scenario::workload::Result;

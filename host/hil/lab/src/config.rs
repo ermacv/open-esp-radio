@@ -11,7 +11,7 @@ use serde::Deserialize;
 use zeroize::Zeroizing;
 
 use crate::Result;
-use oer_hil_scenario_catalog::link::{PhyExpectation, WifiLabUse};
+use oer_hil_model::catalog::link::{PhyExpectation, WifiLabUse};
 
 /// The stand file's view a run uses: the pool and the fixture sections, with
 /// the run's device under test taken from the pool.

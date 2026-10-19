@@ -23,7 +23,7 @@ pub const FROZEN_RUNNER_ENV: &str = "OER_HIL_JOB_RUNNER";
 /// enqueued.
 pub const FROZEN_IMAGES_ENV: &str = "OER_HIL_JOB_IMAGES";
 pub const ENQUEUE: &str = "--enqueue";
-pub use oer_hil_experiment::job::{AFTER, AFTER_ANY};
+pub use crate::experiment::job::{AFTER, AFTER_ANY};
 
 fn jobs() -> Result<oer_lab_arbiter::jobs::Jobs> {
     Ok(oer_lab_arbiter::Arbiter::open()?.jobs())
@@ -191,7 +191,7 @@ pub fn enqueue(
     }
     let mut job = Job::new(
         owner,
-        oer_hil_experiment::job::command_of(args),
+        crate::experiment::job::command_of(args),
         ctx.root.clone(),
         after.as_ref(),
     );

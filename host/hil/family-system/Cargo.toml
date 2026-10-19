@@ -10,9 +10,8 @@ description = "System HIL workloads: boot smoke, watchdog, panic reset and stand
 
 [dependencies]
 oer-lab-board = { path = "../../lab/board" }
-oer-hil-schema = { path = "../schema" }
+oer-hil-model = { path = "../model" }
 oer-hil-scenario = { path = "../scenario" }
-oer-hil-workload = { path = "../workload" }
 oer-os-process = { path = "../../os/process" }
 oer-hil-protocol = { path = "../../../portable/hil/protocol" }
 serde = { version = "1.0", features = ["derive"] }

@@ -36,7 +36,7 @@ pub fn compile(root: &Path) -> Result<Compilation> {
         }
     }
     let registry: Value = serde_json::from_slice(&std::fs::read(
-        root.join("host/hil/schema/observer-inputs.json"),
+        root.join("host/hil/model/observer-inputs.json"),
     )?)?;
     let profile = registry["build"]["profile"]
         .as_str()
@@ -52,9 +52,9 @@ pub fn compile(root: &Path) -> Result<Compilation> {
             profile,
             "--locked",
             "-p",
-            "oer-hil-runner",
+            "oer-tool-hil-runner",
             "--bin",
-            "oer-hil-runner",
+            "oer-tool-hil-runner",
             "--message-format=json-render-diagnostics",
         ])
         .stdin(Stdio::null())
@@ -69,7 +69,7 @@ pub fn compile(root: &Path) -> Result<Compilation> {
         let message: Value = serde_json::from_str(line)?;
         if message["reason"] == "compiler-artifact" || message["reason"] == "build-script-executed"
         {
-            if message["target"]["name"] == "oer-hil-runner" {
+            if message["target"]["name"] == "oer-tool-hil-runner" {
                 executable = message["executable"].as_str().map(PathBuf::from);
             }
         }

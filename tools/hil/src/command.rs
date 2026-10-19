@@ -22,7 +22,7 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     }
     match first.and_then(HilCommand::named) {
         Some(HilCommand::Dashboard) => {
-            return crate::dashboard::serve(&oer_hil_run_bundle::RunStore::shared()?, &args[1..]);
+            return crate::dashboard::serve(&oer_hil_runs::RunStore::shared()?, &args[1..]);
         }
         Some(HilCommand::Peer) => {
             return crate::peer::peer(ctx, options.owner(ctx)?, &args[1..]);
@@ -75,7 +75,7 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     };
     // Only a command that produces runs is a job; a read-only one is not.
     let mut job = if produces_runs(&args) {
-        Some(oer_hil_experiment::job::Running::begin(
+        Some(crate::experiment::job::Running::begin(
             &ctx.root,
             owner.as_deref().unwrap_or("unregistered"),
             &args,
@@ -89,17 +89,17 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     // enqueued.
     let frozen = crate::jobs::Frozen::inherited()?;
     let runner = match &frozen {
-        Some(frozen) => oer_hil_experiment::launch::Runner {
+        Some(frozen) => crate::experiment::launch::Runner {
             executable: frozen.runner.clone(),
         },
-        None => oer_hil_experiment::launch::Runner::prepare(&ctx.root)?,
+        None => crate::experiment::launch::Runner::prepare(&ctx.root)?,
     };
     let mut runner_args = match frozen.as_ref().and_then(|frozen| frozen.images.as_deref()) {
         Some(images) => with_images(args, images),
         None => args.to_vec(),
     };
     apply_quarantine(&mut runner_args)?;
-    let mut launch = oer_hil_experiment::launch::Launch::new(&ctx.root, &runner).args(runner_args);
+    let mut launch = crate::experiment::launch::Launch::new(&ctx.root, &runner).args(runner_args);
     // The runner's stand requests are the job's tickets.
     let mut context = oer_os_process::Context::current()?.clone();
     if let Some(owner) = owner {
@@ -110,11 +110,11 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
         context.set(oer_lab_arbiter::jobs::JOB_KEY, job.id());
     }
     launch = launch.context(context);
-    let launched = oer_hil_experiment::launch::launch_run(&launch)?;
+    let launched = crate::experiment::launch::launch_run(&launch)?;
     if produces_runs(args) {
         // Name the runs in the receipt of whatever invoked this command.
-        oer_hil_run_bundle::launch_runs::record(&launched.runs)?;
-        let store = oer_hil_run_bundle::RunStore::shared()?;
+        oer_hil_runs::launch_runs::record(&launched.runs)?;
+        let store = oer_hil_runs::RunStore::shared()?;
         if let Some(job) = job.as_mut() {
             job.finish_with(&store, &launched.runs)?;
         }
@@ -406,14 +406,14 @@ fn ab(ctx: &Checkout, owner: &str, args: &[OsString]) -> Result<std::process::Ex
         println!("{id}");
         return Ok(std::process::ExitCode::SUCCESS);
     }
-    let mut job = oer_hil_experiment::job::Running::begin(&ctx.root, owner, &args, after.as_ref())?;
+    let mut job = crate::experiment::job::Running::begin(&ctx.root, owner, &args, after.as_ref())?;
     // Every round runs the runner of the experiment's start: a pull into the
     // checkout meanwhile must not change the arms' protocol.
     let frozen = match crate::jobs::Frozen::inherited()? {
         Some(frozen) => frozen,
         None => crate::jobs::Frozen::capture(ctx)?,
     };
-    let runner = oer_hil_experiment::launch::Runner {
+    let runner = crate::experiment::launch::Runner {
         executable: frozen.runner,
     };
     let runs = crate::experiments::ab(ctx, owner, &runner, &args[1..])?;
@@ -433,7 +433,7 @@ fn wait(args: &[OsString]) -> Result<std::process::ExitCode> {
     if oer_lab_arbiter::Arbiter::open()?.jobs().read(text).is_ok() {
         return crate::jobs::wait_command(args);
     }
-    let run = oer_hil_analysis::Run::open(&oer_hil_run_bundle::RunStore::shared()?, text)
+    let run = oer_hil_analysis::Run::open(&oer_hil_runs::RunStore::shared()?, text)
         .map_err(|_| format!("{text} is neither a job nor a run"))?;
     Ok(std::process::ExitCode::from(oer_hil_analysis::runs::wait(
         run.directory(),
@@ -455,7 +455,7 @@ fn perf(
 ) -> Result<std::process::ExitCode> {
     use clap::Parser as _;
     use oer_hil_analysis::perf;
-    let store = oer_hil_run_bundle::RunStore::shared()?;
+    let store = oer_hil_runs::RunStore::shared()?;
     let now = oer_os_durable::unix_millis();
     let find = |id: &str| -> Result<perf::RunSummary> {
         perf::summary(&oer_hil_analysis::Run::open(&store, id)?)
@@ -512,10 +512,10 @@ fn runs(
 ) -> Result<std::process::ExitCode> {
     use clap::Parser as _;
     use oer_hil_analysis::{Run, retention, runs};
-    use oer_hil_run_bundle::store::Note;
-    use oer_hil_run_bundle::store::Notes;
-    use oer_hil_run_bundle::store::Sidecar;
-    let store = oer_hil_run_bundle::RunStore::shared()?;
+    use oer_hil_runs::store::Note;
+    use oer_hil_runs::store::Notes;
+    use oer_hil_runs::store::Sidecar;
+    let store = oer_hil_runs::RunStore::shared()?;
     let parsed = RunsCli::try_parse_from(args)?;
     // Reading every run takes long; commands about one run read only it.
     let all = || Run::all(&store);
@@ -686,7 +686,7 @@ fn firmware(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode>
 /// Delete the firmware objects no run links to from this checkout's object
 /// store and those of the other registered checkouts; a checkout that
 /// cannot be collected is reported and skipped.
-fn collect_objects(ctx: &Checkout) -> oer_hil_run_bundle::build::CollectedObjects {
+fn collect_objects(ctx: &Checkout) -> oer_hil_runs::build::CollectedObjects {
     let mut checkouts = vec![ctx.root.clone()];
     if let Ok(owners) = oer_lab_arbiter::owner::Owners::open()
         && let Ok(registered) = owners.checkouts()
@@ -695,7 +695,7 @@ fn collect_objects(ctx: &Checkout) -> oer_hil_run_bundle::build::CollectedObject
     }
     checkouts.sort();
     checkouts.dedup();
-    let mut total = oer_hil_run_bundle::build::CollectedObjects::default();
+    let mut total = oer_hil_runs::build::CollectedObjects::default();
     for checkout in checkouts {
         // Build objects stay per chip.
         let chips = oer_chip_profile::supported(&checkout).unwrap_or_default();
@@ -703,7 +703,7 @@ fn collect_objects(ctx: &Checkout) -> oer_hil_run_bundle::build::CollectedObject
             .iter()
             .map(|chip| checkout.join("target/hil").join(chip))
         {
-            match oer_hil_run_bundle::build::collect_objects(&target) {
+            match oer_hil_runs::build::collect_objects(&target) {
                 Ok(collected) => {
                     total.objects += collected.objects;
                     total.bytes += collected.bytes;
@@ -741,7 +741,7 @@ fn run_store_budget() -> Result<u64> {
 const RUN_STORE_BUDGET_ENV: &str = "OER_HIL_RUN_STORE_BUDGET_GIB";
 const RUN_STORE_BUDGET_GIB: u64 = 40;
 
-fn prune_automatically(ctx: &Checkout, store: &oer_hil_run_bundle::RunStore) -> Result<()> {
+fn prune_automatically(ctx: &Checkout, store: &oer_hil_runs::RunStore) -> Result<()> {
     let marker = store.root().join("last-prune");
     if std::fs::metadata(&marker)
         .and_then(|metadata| metadata.modified())
@@ -782,7 +782,7 @@ fn prune_automatically(ctx: &Checkout, store: &oer_hil_run_bundle::RunStore) -> 
 
 /// Make this checkout's run directory a link to the shared store.
 fn use_shared_store(ctx: &Checkout) -> Result<()> {
-    oer_hil_run_bundle::RunStore::shared()?.link(&ctx.root)?;
+    oer_hil_runs::RunStore::shared()?.link(&ctx.root)?;
     Ok(())
 }
 
@@ -843,8 +843,8 @@ fn build_before_queue(
 /// Leave quarantined scenarios out of a `run-all`, and warn of a `run` that
 /// names one.
 fn apply_quarantine(args: &mut Vec<OsString>) -> Result<()> {
-    let quarantined: oer_hil_run_bundle::store::Notes = oer_hil_run_bundle::RunStore::shared()?
-        .read(oer_hil_run_bundle::store::Sidecar::Quarantine)?;
+    let quarantined: oer_hil_runs::store::Notes =
+        oer_hil_runs::RunStore::shared()?.read(oer_hil_runs::store::Sidecar::Quarantine)?;
     match args.first().and_then(|arg| arg.to_str()) {
         Some("run-all") => {
             for scenario in quarantined.keys() {
@@ -984,7 +984,7 @@ fn profile_report_path(root: &Path, run: &str, scenario: &str, relative: &Path) 
 fn profile(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> {
     use clap::Parser as _;
     let cli = ProfileCli::try_parse_from(args)?;
-    let run = oer_hil_run_bundle::RunStore::shared()?
+    let run = oer_hil_runs::RunStore::shared()?
         .open(&cli.run)?
         .directory()
         .to_owned();
@@ -1009,8 +1009,8 @@ fn profile(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
             .and_then(|result| result["image"].as_str().map(str::to_owned));
         let elf = image
             .map(|image| run.join("firmware").join(image).join("runtime.elf"))
-            .filter(|elf| oer_hil_run_bundle_format::archived::stored_path(elf).is_file())
-            .map(|elf| oer_hil_run_bundle_format::archived::read_archived(&elf))
+            .filter(|elf| oer_hil_runs::format::archived::stored_path(elf).is_file())
+            .map(|elf| oer_hil_runs::format::archived::read_archived(&elf))
             .transpose()?;
         let mut profiles = Vec::new();
         collect_profiles(&scenario, &mut profiles)?;

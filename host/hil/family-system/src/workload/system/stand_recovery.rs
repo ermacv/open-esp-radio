@@ -9,7 +9,7 @@
 //!    ROM's download mode, where a flash finds it; an RTS reset then boots
 //!    the image again.
 use crate::Result;
-use oer_hil_workload::context::Context;
+use oer_hil_scenario::workload::context::Context;
 use oer_lab_board::reset;
 use oer_lab_board::reset::{Ladder, LadderEnd, RecoveryStep};
 use serde::Serialize;

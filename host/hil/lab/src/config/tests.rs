@@ -208,7 +208,7 @@ fn independent_observer_accepts_only_safe_identifiers_and_managed_ap() {
 #[test]
 fn a_wifi_link_occupies_its_channel_and_secondary_channel() {
     let lab = LabConfig::for_test();
-    let link = |phy| oer_hil_scenario_catalog::link::WifiLabUse {
+    let link = |phy| oer_hil_model::catalog::link::WifiLabUse {
         link: Some(phy),
         ..Default::default()
     };

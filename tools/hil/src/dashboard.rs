@@ -18,7 +18,7 @@ use std::{
     path::Path,
 };
 
-use oer_hil_run_bundle::RunStore;
+use oer_hil_runs::RunStore;
 use serde_json::{Value, json};
 
 use crate::Result;
@@ -370,10 +370,10 @@ mod tests {
     use super::*;
 
     fn run(store: &RunStore, id: &str) {
-        oer_hil_run_bundle::run::test_support::write_run(
+        oer_hil_runs::run::test_support::write_run(
             &store.run(id),
             1,
-            oer_hil_run_bundle_format::run::RunState::Completed,
+            oer_hil_runs::format::run::RunState::Completed,
             Vec::new(),
             |_| {},
         );

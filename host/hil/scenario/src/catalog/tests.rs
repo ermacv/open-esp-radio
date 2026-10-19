@@ -4,9 +4,9 @@ type Catalog = super::Catalog<TestFamily>;
 use std::{fs, path::PathBuf};
 
 const ALPHA: &str =
-    include_str!("../../../runner/tests-fixtures/fixtures/catalog/z-system/alpha-system.toml");
+    include_str!("../../../run/tests-fixtures/fixtures/catalog/z-system/alpha-system.toml");
 const BETA: &str =
-    include_str!("../../../runner/tests-fixtures/fixtures/catalog/a-system/beta-system.toml");
+    include_str!("../../../run/tests-fixtures/fixtures/catalog/a-system/beta-system.toml");
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 struct Tree(PathBuf);
 impl Tree {

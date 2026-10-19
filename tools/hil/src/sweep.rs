@@ -140,7 +140,7 @@ fn incremental(target: &Path, policy: Policy, now: SystemTime, found: &mut Vec<C
 /// output (`check-<class>-<network>`).
 fn class_output(name: &str) -> bool {
     name.starts_with("check-")
-        || oer_hil_schema::image::ImageClass::ALL
+        || oer_hil_model::schema::image::ImageClass::ALL
             .iter()
             .any(|class| name.starts_with(&format!("{}-", class.runtime_profile())))
 }
