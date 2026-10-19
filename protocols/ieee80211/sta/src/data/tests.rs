@@ -4,9 +4,8 @@ use super::*;
 use core::num::NonZeroU16;
 use oer_ieee80211_lower_mac::association::KEY_BANK_CAPACITY;
 use oer_ieee80211_lower_mac::{
-    BandSet, Channel, ChannelWidth, CoexPriority, CoexPrioritySet, HardwareServices,
-    Ieee80211Capabilities, LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter,
-    RxEvidence, WidthSet,
+    BandSet, Channel, ChannelWidth, HardwareServices, Ieee80211Capabilities, LowerMacCapabilities,
+    PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
 use oer_ieee80211_lower_mac::{IndeterminateCause, WithdrawCause};
 use oer_ieee80211_mac::ccmp::{CcmpRxReplayEpoch, GroupKeyId};
@@ -38,7 +37,6 @@ impl Ieee80211Capabilities for Caps {
         tx_queues: 4,
         max_mpdu_length: 2304,
         tx_power_ceiling_min_dbm: None,
-        coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER,
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,

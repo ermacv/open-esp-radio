@@ -137,11 +137,11 @@ use oer_time::RadioInstant;
 
 use oer_ieee80211_lower_mac::{
     AccessPoint, AccessPointPhase, BandSet, BssColor, Channel, CheckedAggregate, CheckedPoolSource,
-    CheckedSubframe, CheckedTxSource, CoexPriority, CoexPrioritySet, ConfigurePermission,
-    Configured, ConnectionEpochKind, ExecutionPayload, FreshSource, FreshSubframe, GateClosed,
-    GateIssuer, GateOpen, HardwareServices, Ieee80211Capabilities, Ieee80211Radio, InFlight,
-    IndeterminateCause, InterfaceCommandPool, InterfacePermissions, InterfacePhase, KeyTypes,
-    LinkMetric, LowerMacBackend, LowerMacCapabilities, LowerMacEvent, LowerMacPhase, LowerMacSetup,
+    CheckedSubframe, CheckedTxSource, ConfigurePermission, Configured, ConnectionEpochKind,
+    ExecutionPayload, FreshSource, FreshSubframe, GateClosed, GateIssuer, GateOpen,
+    HardwareServices, Ieee80211Capabilities, Ieee80211Radio, InFlight, IndeterminateCause,
+    InterfaceCommandPool, InterfacePermissions, InterfacePhase, KeyTypes, LinkMetric,
+    LowerMacBackend, LowerMacCapabilities, LowerMacEvent, LowerMacPhase, LowerMacSetup,
     LowerMacTerminal, MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError,
     PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, Removed, RemovedKey,
     RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
@@ -187,8 +187,6 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     tx_queues: 4,
     max_mpdu_length: MODEL_MAX_MPDU as u16,
     tx_power_ceiling_min_dbm: Some(0),
-    coex_priorities: CoexPrioritySet::only(CoexPriority::Normal)
-        .union(CoexPrioritySet::only(CoexPriority::Elevated)),
     individual_no_ack: PhyFormatSet::NON_HT,
     station_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
     access_point_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::PROBE_REQUESTS),

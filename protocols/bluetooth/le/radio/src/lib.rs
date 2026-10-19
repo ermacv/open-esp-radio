@@ -33,7 +33,6 @@ pub use capabilities::{
 pub use channel::{
     AdvertisingChannel, AdvertisingChannels, ChannelError, DataChannel, TestChannel,
 };
-pub use oer_radio_coex::CoexPriority;
 pub use oer_time::{NonZeroRadioDuration, RadioDuration, WindowError};
 
 /// The clock domain of the LE radio: its instants never mix with another
@@ -49,10 +48,10 @@ pub use outcome::{EventResult, ReceivedPdu, TestReport};
 pub use pdu::{AdvertisingPdu, DataPdu, DataPduKind, PduError, TestPayloadType};
 pub use request::{
     AboveCeiling, AcceptListChange, AcceptListDevice, AccessAddress, AdvertisingConfiguration,
-    AdvertisingEvent, AdvertisingReception, AdvertisingSetId, CoexistenceLevel,
-    ConnectionAllowances, ConnectionConfiguration, ConnectionEvent, ConnectionEventTiming,
-    ConnectionId, CrcInit, IdlePriority, LeBand, LeTxCeiling, OutsideEpoch, RadioTiming,
-    ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration, ScannerId, TestPhy, TestReceive,
-    TestTransmit, TxPower,
+    AdvertisingEvent, AdvertisingEventKind, AdvertisingReception, AdvertisingSetId,
+    ConnectionAllowances, ConnectionConfiguration, ConnectionEvent, ConnectionEventKind,
+    ConnectionEventTiming, ConnectionId, CrcInit, LeBand, LeTxCeiling, Operation, OutsideEpoch,
+    RadioTiming, ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration, ScannerId, TestPhy,
+    TestReceive, TestTransmit, TxPower,
 };
 pub use supported::{Capability, Supported, Timed, Unplaced, Untimed};

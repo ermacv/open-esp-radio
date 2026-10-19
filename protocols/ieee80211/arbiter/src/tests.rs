@@ -2,8 +2,8 @@
 
 use super::*;
 use oer_ieee80211_lower_mac::{
-    BandSet, Channel, ChannelWidth, CoexPriority, CoexPrioritySet, GateIssuer, HardwareServices,
-    LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
+    BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
+    PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
 };
 use oer_ieee80211_mac::phy::{HeMcs, HtMcs};
 use oer_radio_port::{Mint, branded};
@@ -44,7 +44,6 @@ impl Ieee80211Capabilities for Caps {
         tx_queues: 4,
         max_mpdu_length: 2304,
         tx_power_ceiling_min_dbm: Some(0),
-        coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER,
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,

@@ -106,10 +106,12 @@
 //! # Limits
 //!
 //! The S31 draws its backoff in software, at most
-//! `MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS` slots. Coexistence maps `CoexPriority::Normal` onto the static
+//! `MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS` slots. Coexistence maps `TxOperation::Data` onto the static
 //! per-access-category priority of
-//! [`LegacyTxQueue::vendor_data_packet_priority`] and
-//! `CoexPriority::Elevated` onto the connection-frame priorities. An
+//! [`LegacyTxQueue::vendor_data_packet_priority`]; a
+//! `TxOperation::Connection` frame takes the connection-frame priorities
+//! while the coexistence owner's reconnect policy is on and that static
+//! priority otherwise. An
 //! individually addressed frame without acknowledgement is published at legacy
 //! rates only, the one program with a response field; hardware has not
 //! confirmed its on-air behaviour. A published attempt cannot be withdrawn: the
@@ -154,10 +156,10 @@ use oer_esp32s31_ieee80211_mac::{
     },
 };
 use oer_ieee80211_lower_mac::{
-    BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, CoexPriority, CoexPrioritySet,
-    LinkMetric, LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
+    BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
+    LowerMacCapabilities, MacAddress, PhyFormatSet, PhyRate, Protection, RateSupport,
     ReceiveFilter, RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TsfTimingError,
-    TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
+    TxOperation, TxStatus, VifRole, VifRoleSet, VifTsf, WidthSet,
 };
 use oer_ieee80211_mac::{
     ccmp::CCMP_HEADER_LEN,
@@ -329,8 +331,6 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
             usable as u16
         },
         tx_power_ceiling_min_dbm: Some(0),
-        coex_priorities: CoexPrioritySet::only(CoexPriority::Normal)
-            .union(CoexPrioritySet::only(CoexPriority::Elevated)),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: STATION_RECEIVE_FILTERS,
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER
@@ -381,14 +381,19 @@ pub trait RadioCoexPriorities {
     /// beacon reception asks for the air with.
     fn beacon_window_pti(&self) -> MacPti;
 
-    /// The priorities a connection frame carries under the reconnect
-    /// policy (`CoexPriority::Elevated`): event 46's as the packet
-    /// priority, and the lesser of it and the slice event's as the
-    /// scheduler priority.
+    /// The priorities `frame` carries: while the coexistence owner's
+    /// reconnect policy is on, the priorities of its event (46's as the
+    /// packet priority, and the lesser of it and the slice event's as the
+    /// scheduler priority); `None` keeps the ordinary priorities of the
+    /// frame's access category, as outside the policy and for a Probe
+    /// Request, which only requests the air.
     ///
     /// SOURCE(esp32s31): complete pinned `libpp[pp.o]::pp_coex_tx_request`
     /// and `libpp[hal_mac.o]::mac_tx_set_pti`.
-    fn connection_frame_priorities(&self) -> ConnectionFramePriorities;
+    fn connection_frame_priorities(
+        &self,
+        frame: ConnectionFrame,
+    ) -> Option<ConnectionFramePriorities>;
 }
 
 /// The packet and scheduler priorities of a connection frame.
@@ -1031,7 +1036,7 @@ where
             protection,
             power_ceiling_dbm,
             backoff_slots,
-            coex,
+            operation,
             retry,
         } = values;
         if let Some(fault) = self.fault {
@@ -1098,7 +1103,7 @@ where
             power_ceiling_dbm,
             backoff_slots,
         );
-        let planned = self.plan_mpdu(common, len, access_category, coex, no_ack);
+        let planned = self.plan_mpdu(common, len, access_category, operation, no_ack);
         let index = usize::from(planned.queue.hardware_index());
         let work = if publish {
             match self
@@ -1171,23 +1176,23 @@ where
         common: CommonAdmission,
         length: usize,
         access_category: WmmAccessCategory,
-        coex: CoexPriority,
+        operation: TxOperation,
         no_ack: bool,
     ) -> Admission {
         let queue = common.queue;
-        let (scheduler_priority, packet_priority, priority_count) = match coex {
-            // A connection frame under the reconnect policy.
-            CoexPriority::Elevated => {
-                let connection = self.coex.connection_frame_priorities();
-                (
-                    connection.scheduler,
-                    connection.packet,
-                    CONNECTION_FRAME_PRIORITY_COUNT,
-                )
-            }
-            // The static priority vendor data encapsulation assigns the
-            // access category.
-            _ => (
+        // The static priority vendor data encapsulation assigns the access
+        // category, unless the coexistence owner raises a connection frame.
+        let raised = match operation {
+            TxOperation::Connection(frame) => self.coex.connection_frame_priorities(frame),
+            TxOperation::Data => None,
+        };
+        let (scheduler_priority, packet_priority, priority_count) = match raised {
+            Some(connection) => (
+                connection.scheduler,
+                connection.packet,
+                CONNECTION_FRAME_PRIORITY_COUNT,
+            ),
+            None => (
                 queue.vendor_data_scheduler_priority(),
                 queue.vendor_data_packet_priority(),
                 1,
@@ -1309,15 +1314,10 @@ where
             protection,
             power_ceiling_dbm,
             backoff_slots,
-            coex,
             min_mpdu_start_spacing,
         } = values;
         if !buffer.matches_admission(role, admission) {
             return Err(AmpduRefusal::KeyUseMismatch);
-        }
-        // Connection frames are single MPDUs: an aggregate is ordinary data.
-        if coex != CoexPriority::Normal {
-            return Err(AmpduRefusal::ElevatedCoexistence);
         }
         let common = self.plan_common(
             access_category,
@@ -1409,7 +1409,7 @@ where
                 .contention_parameters(common.role, queue)
                 .aifsn(),
             contention_window: common.single.backoff_slots,
-            // `CoexPriority::Normal`, as for an MPDU.
+            // `TxOperation::Data`, as for an MPDU.
             scheduler_priority: queue.vendor_data_scheduler_priority(),
             packet_priority: queue.vendor_data_packet_priority(),
         };
@@ -2235,7 +2235,7 @@ pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     power_ceiling_dbm: Option<i8>,
     /// The backoff selected for this publication, in slots.
     backoff_slots: u16,
-    coex: CoexPriority,
+    operation: TxOperation,
     /// A transmission of an MPDU the plan sends again.
     retry: bool,
 }
@@ -2250,7 +2250,7 @@ pub struct MpduParameters {
     pub protection: Protection,
     pub power_ceiling_dbm: Option<i8>,
     pub backoff_slots: u16,
-    pub coex: CoexPriority,
+    pub operation: TxOperation,
     pub retry: bool,
 }
 
@@ -2260,7 +2260,6 @@ pub enum MpduValueError {
     Length,
     Rate,
     Backoff,
-    Coexistence,
     PowerCeiling,
     NoAck,
 }
@@ -2290,9 +2289,6 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
             if values.backoff_slots > MAX_SINGLE_ATTEMPT_BACKOFF_SLOTS {
                 return Err(MpduValueError::Backoff);
             }
-            if !matches!(values.coex, CoexPriority::Normal | CoexPriority::Elevated) {
-                return Err(MpduValueError::Coexistence);
-            }
             if values.power_ceiling_dbm.is_some_and(|ceiling| ceiling < 0) {
                 return Err(MpduValueError::PowerCeiling);
             }
@@ -2312,7 +2308,7 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
                 protection: values.protection,
                 power_ceiling_dbm: values.power_ceiling_dbm,
                 backoff_slots: values.backoff_slots,
-                coex: values.coex,
+                operation: values.operation,
                 retry: values.retry,
             }),
             Err(reason) => Err(MpduValuesRefused { slot, reason }),
@@ -2332,7 +2328,6 @@ pub struct AmpduValues {
     pub power_ceiling_dbm: Option<i8>,
     /// The backoff selected for this publication, in slots.
     pub backoff_slots: u16,
-    pub coex: CoexPriority,
     /// The recipient's Minimum MPDU Start Spacing encoding, 0 to 7.
     pub min_mpdu_start_spacing: u8,
 }
@@ -2356,9 +2351,6 @@ impl<Path: PoolPath> core::fmt::Debug for AmpduPlanningRefused<'_, Path> {
 /// Why an aggregate cannot go as one publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduRefusal {
-    /// A connection frame's coexistence level: an aggregate is ordinary
-    /// data.
-    ElevatedCoexistence,
     /// No subframe.
     Empty,
     /// More subframes than the aggregate owner holds.

@@ -322,7 +322,7 @@ impl PortBody<ModelBackend> for Case {
                             aggregate,
                             protection: Protection::None,
                             power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                            coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                            coex_operation: TxOperation::Data,
                             min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                         })
                         .admit(),
@@ -350,7 +350,7 @@ impl PortBody<ModelBackend> for Case {
                             access_category: WmmAccessCategory::BestEffort,
                             protection: Protection::None,
                             power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                            coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                            coex_operation: TxOperation::Data,
                         })
                         .admit(),
                     )

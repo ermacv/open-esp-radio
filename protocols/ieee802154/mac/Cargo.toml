@@ -9,6 +9,7 @@ description = "Allocation-free hardware-independent IEEE 802.15.4 radio contract
 
 [dependencies]
 scopeguard = { version = "1.2.0", default-features = false }
+oer-radio-coex = { path = "../../radio/coex" }
 oer-radio-port = { path = "../../radio/port" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }
 oer-time = { path = "../../../portable/time" }

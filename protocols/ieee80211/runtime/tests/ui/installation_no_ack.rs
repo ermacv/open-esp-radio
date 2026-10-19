@@ -1,8 +1,8 @@
 #![no_std]
 use oer_ieee80211_lower_mac::{
-    Attempt, Channel, ChannelWidth, ClassFrame, CoexPriority, HeaderSpec, InterfacePhase,
+    Attempt, Channel, ChannelWidth, ClassFrame, TxOperation, HeaderSpec, InterfacePhase,
     LowerMacPhase, MpduLength, NoAckHeader, PhyRate, Protection, SizedFrame, Station,
-    SupportedCoex, SupportedPower, TxBufferPool, TxFrame, TxPower, TxProtection, TxSource,
+    SupportedPower, TxBufferPool, TxFrame, TxPower, TxProtection, TxSource,
 };
 use oer_ieee80211_mac::{
     address::IndividualAddress, frame::FrameControl, phy::LegacyRate, qos::WmmAccessCategory,
@@ -121,7 +121,7 @@ impl PortBody<ModelBackend> for Target<'_, '_, '_> {
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                coex_operation: TxOperation::Data,
             };
             #[cfg(ui_reject)]
             destination.station().submit((attempt).admit()).unwrap();

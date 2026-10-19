@@ -200,11 +200,11 @@ use oer_radio_port::PortPhase;
 use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
 
 use crate::{
-    Channel, PhyRate, Protection, TbttEvent,
+    Channel, PhyRate, Protection, TbttEvent, TxOperation,
     owner::{
         AccessPoint, BssColor, Ieee80211Capabilities, InterfaceRole, PhaseRate, Station,
-        StationReceive, SupportedBlockAck, SupportedCoex, SupportedEdca, SupportedFilter,
-        SupportedNoAck, SupportedPower, TxFrame,
+        StationReceive, SupportedBlockAck, SupportedEdca, SupportedFilter, SupportedNoAck,
+        SupportedPower, TxFrame,
     },
 };
 use oer_ieee80211_mac::address::IndividualAddress;
@@ -807,7 +807,7 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
 }
 
 /// One attempt awaiting preparation: its ticket, its MPDU in a
-/// buffer, its context, body, protection, key, power and coexistence level.
+/// buffer, its context, body, protection, key, power and the operation it asks the air for.
 /// The frame's kind sets its response and
 /// its retry plan ([`RetryPlan`]) or one rate; its access category picks
 /// its queue, whose contention the backend draws.
@@ -826,8 +826,8 @@ pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root> {
     pub protection: Protection,
     /// Its transmit power.
     pub power: SupportedPower<K>,
-    /// Its coexistence level.
-    pub coex: SupportedCoex<K>,
+    /// What the attempt is, for the radio it shares the air with.
+    pub coex_operation: TxOperation,
 }
 
 /// An operation sealed before it crosses into backend custody. Execution
@@ -843,8 +843,8 @@ pub struct AdmittedAttempt<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath = Ro
     pub protection: Protection,
     /// Transmit power selected by the caller.
     pub power: SupportedPower<K>,
-    /// Coexistence level selected by the caller.
-    pub coex: SupportedCoex<K>,
+    /// Operation selected by the caller.
+    pub coex_operation: TxOperation,
     proof: core::marker::PhantomData<fn(M) -> M>,
 }
 
@@ -858,7 +858,7 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> Attempt<'id, T, M, K, X, 
             access_category: self.access_category,
             protection: self.protection,
             power: self.power,
-            coex: self.coex,
+            coex_operation: self.coex_operation,
             proof: core::marker::PhantomData,
         }
     }

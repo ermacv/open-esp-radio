@@ -4,16 +4,19 @@
 //! The vocabulary every radio protocol and backend shares for one RF path.
 //!
 //! [`RadioClient`] names a protocol that joins the shared radio, and
-//! [`CoexPriority`] how urgently one of its operations needs the antenna.
-//! Protocols express their own priority levels in this vocabulary; each
-//! backend maps a client and a priority onto its own arbitration (event
-//! numbers, hardware priority values, request kinds), which stay below the
-//! backend's port. Neither value acquires anything: joining the radio and
-//! requesting the antenna are operations of the backend that owns it.
+//! [`Operation`] marks an enum of one protocol's operations (a beacon, an
+//! acknowledgement, a connection event, ...). Each protocol's port owns its
+//! operation kinds; the chip family's coexistence owner maps a client and an
+//! operation onto its own arbitration (event numbers, hardware priority
+//! values, request kinds), which stay below the backend's port. There is no
+//! urgency level: what an operation is decides how it is served. Neither
+//! value acquires anything: joining the radio and requesting the antenna are
+//! operations of the backend that owns it.
 //!
-//! No backend reports whether the antenna was granted or denied: the
-//! Espressif arbiter decides by priority in hardware and gives software no
-//! acknowledgement. This crate therefore defines no grant outcome.
+//! No backend reports whether the antenna was granted or denied for an
+//! operation served by priority alone: the Espressif arbiter decides by
+//! priority in hardware and gives software no acknowledgement. This crate
+//! therefore defines no grant outcome.
 
 /// A radio protocol that shares the powered radio and its RF path.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -31,40 +34,32 @@ impl RadioClient {
     pub const ALL: [Self; 3] = [Self::Wifi, Self::Bluetooth, Self::Ieee802154];
 }
 
-/// How urgently one operation of a client needs the shared antenna.
-///
-/// The levels are ordered and relative to the client: a backend maps each
-/// client's levels onto its own arbitration priorities, so equal levels of
-/// two clients need not win alike. A protocol that distinguishes fewer
-/// levels uses a subset.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum CoexPriority {
-    /// No operation runs; the client keeps only its idle claim, such as a
-    /// receiver left on.
-    Idle,
-    /// The client's ordinary priority.
-    #[default]
-    Normal,
-    /// Above the ordinary priority.
-    Elevated,
-    /// The client's highest priority.
-    Critical,
+/// How an operation is served on the shared antenna.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum AirClass {
+    /// By hardware priority alone; the operation may lose the air.
+    PtiOnly,
+    /// An operation with a deadline the protocol cannot move: it claims the
+    /// air and waits for a grant, or, when shorter than a grant, is enforced
+    /// by priority and reported as a blackout.
+    HardDeadline,
 }
 
-impl CoexPriority {
-    /// Every level, from the lowest.
-    pub const ALL: [Self; 4] = [Self::Idle, Self::Normal, Self::Elevated, Self::Critical];
+/// One kind of operation of a [`RadioClient`].
+///
+/// A protocol port implements it for the enum that names what its requests
+/// are.
+pub trait Operation: Copy {
+    /// The protocol the operation belongs to.
+    const CLIENT: RadioClient;
+
+    /// How the operation is served on the shared antenna.
+    fn class(&self) -> AirClass;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn priorities_order_from_idle_to_critical() {
-        assert!(CoexPriority::ALL.windows(2).all(|pair| pair[0] < pair[1]));
-        assert_eq!(CoexPriority::default(), CoexPriority::Normal);
-    }
 
     #[test]
     fn every_client_is_listed_once() {

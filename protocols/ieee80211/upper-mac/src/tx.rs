@@ -28,7 +28,7 @@
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
-use oer_ieee80211_lower_mac::{BlockAckReport, CoexPriority, TxPower, TxResponse, TxStatus};
+use oer_ieee80211_lower_mac::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
 use oer_ieee80211_mac::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
 use oer_ieee80211_softmac::{
     MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacTxResult, MacTxStatus,
@@ -173,7 +173,7 @@ pub struct TxRequest {
     pub initial_rate: PhyRate,
     pub receiver: TxReceiver,
     pub power: TxPower,
-    pub coex: CoexPriority,
+    pub coex_operation: TxOperation,
     /// Unacknowledged transmissions one MPDU of the exchange may make.
     pub mpdu_retry_limit: u8,
     pub body: TxBody,
@@ -187,7 +187,7 @@ struct RequestContext {
     initial_rate: PhyRate,
     receiver: TxReceiver,
     power: TxPower,
-    coex: CoexPriority,
+    coex_operation: TxOperation,
     mpdu_retry_limit: u8,
 }
 
@@ -198,7 +198,7 @@ impl RequestContext {
             initial_rate: request.initial_rate,
             receiver: request.receiver,
             power: request.power,
-            coex: request.coex,
+            coex_operation: request.coex_operation,
             mpdu_retry_limit: request.mpdu_retry_limit,
         }
     }
@@ -209,7 +209,7 @@ impl RequestContext {
             initial_rate: self.initial_rate,
             receiver: self.receiver,
             power: self.power,
-            coex: self.coex,
+            coex_operation: self.coex_operation,
             mpdu_retry_limit: self.mpdu_retry_limit,
             body,
         }
@@ -242,7 +242,7 @@ pub struct TxAttemptPlan {
     pub rate: PhyRate,
     pub protection: TxProtectionDecision,
     pub power: TxPower,
-    pub coex: CoexPriority,
+    pub coex_operation: TxOperation,
     pub content: AttemptContent,
 }
 
@@ -892,7 +892,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                     rate,
                     protection: TxProtectionDecision::UNPROTECTED,
                     power: request.power,
-                    coex: request.coex,
+                    coex_operation: request.coex_operation,
                     content: AttemptContent::BlockAckRequest {
                         tid: ampdu.tid,
                         starting_sequence: state.block_ack_request_start(),
@@ -912,7 +912,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                     rate,
                     protection: TxProtectionDecision::UNPROTECTED,
                     power: request.power,
-                    coex: request.coex,
+                    coex_operation: request.coex_operation,
                     content: AttemptContent::BlockAckRequest {
                         tid: ampdu.tid,
                         starting_sequence,
@@ -952,7 +952,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
             rate,
             protection,
             power: request.power,
-            coex: request.coex,
+            coex_operation: request.coex_operation,
             content,
         }
     }

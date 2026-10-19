@@ -10,8 +10,8 @@ use oer_ieee80211_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterPolicy, NoReservation,
 };
 use oer_ieee80211_lower_mac::{
-    BandSet, Channel, ChannelWidth, CoexPriority, CoexPrioritySet, GateIssuer, HardwareServices,
-    LowerMacCapabilities, PhyFormatSet, RateSupport, RxMeta, WidthSet,
+    BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
+    PhyFormatSet, RateSupport, RxMeta, WidthSet,
 };
 use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
 use oer_ieee80211_mac::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
@@ -63,7 +63,6 @@ impl Ieee80211Capabilities for Caps {
         tx_queues: 4,
         max_mpdu_length: 2304,
         tx_power_ceiling_min_dbm: Some(0),
-        coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER
             .union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
@@ -699,13 +698,13 @@ impl<'id, const G: usize> World<'id, G> {
             StaFrame::Group(frame) => frame.frame().len().get(),
         };
         self.frames.push(frame[..length].to_vec());
-        let connection = matches!(subtype, 0x00b0 | 0x0000) || eapol;
         assert_eq!(
             transmit.class,
-            if connection {
-                StaFrameClass::Connection
-            } else {
-                StaFrameClass::Normal
+            match subtype {
+                _ if eapol => StaFrameClass::Connection(ConnectionFrame::Eapol),
+                0x00b0 => StaFrameClass::Connection(ConnectionFrame::Authentication),
+                0x0000 => StaFrameClass::Connection(ConnectionFrame::Association),
+                _ => StaFrameClass::Normal,
             }
         );
         if subtype == 0x00c0 {

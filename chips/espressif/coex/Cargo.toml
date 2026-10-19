@@ -9,6 +9,8 @@ description = "Coexistence priority table, timer policy and time-slice schedule 
 readme = "README.md"
 
 [dependencies]
+oer-ieee80211-lower-mac = { path = "../../../protocols/ieee80211/lower-mac" }
+oer-ieee802154-mac = { path = "../../../protocols/ieee802154/mac" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
 
 [lints]

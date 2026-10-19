@@ -95,7 +95,6 @@ impl Work for Results {
                                 aggregate,
                                 protection: Protection::None,
                                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
                                 min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                             })
                             .admit(),

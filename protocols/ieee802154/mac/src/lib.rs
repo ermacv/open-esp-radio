@@ -50,6 +50,9 @@ pub mod mac {
 /// Hardware-independent radio values.
 pub mod radio;
 
+mod coexistence;
+pub use coexistence::RadioOperation;
+
 #[cfg(test)]
 pub mod model;
 pub mod owner;

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable identities and priorities of the radio protocols that share one RF path"
+description = "Portable identities and operation kinds of the radio protocols that share one RF path"
 readme = "README.md"
 
 [lints]

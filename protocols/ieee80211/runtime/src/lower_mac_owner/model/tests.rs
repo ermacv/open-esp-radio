@@ -5,7 +5,7 @@ use super::*;
 use core::num::NonZeroU8;
 use oer_ieee80211_lower_mac::{
     AckHeader, ChannelWidth, ClassFrame, HeaderSpec, InstalledGroup, MpduLength, Protection,
-    RetryPlan, RetryStage, SizedFrame, SupportedCoex, SupportedPower, TxPower,
+    RetryPlan, RetryStage, SizedFrame, SupportedPower, TxPower,
 };
 use oer_ieee80211_mac::ccmp::GroupKeyId;
 use oer_ieee80211_mac::frame::FrameControl;
@@ -222,7 +222,7 @@ fn submit_frame<'k, 'p, 'id: 'p + 'k, C: ModelClass>(
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
             })
             .admit(),
         )
@@ -1237,7 +1237,6 @@ impl Work for AggregateRetransmission<'_> {
             aggregate,
             protection: Protection::None,
             power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-            coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
             min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
         };
         // Three new subframes, sequence numbers 0 to 2; the Block Ack

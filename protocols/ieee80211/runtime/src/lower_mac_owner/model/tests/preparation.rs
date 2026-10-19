@@ -60,7 +60,7 @@ fn try_source<'k, 'p, 'id: 'p + 'k>(
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
             })
             .admit(),
         )
@@ -539,7 +539,6 @@ impl Work for AggregateBoundaries {
                     aggregate,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
                     min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                 })
                 .admit(),
@@ -642,7 +641,7 @@ impl Work for PreparedRemoval {
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                        coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                     })
                     .admit(),
                 )
@@ -719,7 +718,7 @@ impl Work for RetryRole {
                     access_category: WmmAccessCategory::BestEffort,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                 })
                 .admit(),
             )

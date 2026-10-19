@@ -5,7 +5,6 @@ use oer_ieee80211_mac::{
     phy::{FecCoding, HeMcs, HtMcs, PhyRate},
     qos::WmmAccessCategory,
 };
-use oer_radio_coex::CoexPriority;
 
 use crate::control::{ReceiveFilter, VifRole};
 
@@ -90,30 +89,6 @@ impl PhyFormatSet {
             PhyRate::He(_) => Self::HE.0,
         };
         self.0 & bit != 0
-    }
-}
-
-/// A set of coexistence priority levels.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct CoexPrioritySet(u8);
-
-impl CoexPrioritySet {
-    /// No coexistence priority levels.
-    pub const NONE: Self = Self(0);
-
-    /// The set of one level.
-    pub const fn only(priority: CoexPriority) -> Self {
-        Self(1 << priority as u8)
-    }
-
-    /// All priority levels present in either set.
-    pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-
-    /// Whether this set includes `priority`.
-    pub const fn contains(self, priority: CoexPriority) -> bool {
-        self.0 & (1 << priority as u8) != 0
     }
 }
 
@@ -248,8 +223,6 @@ pub struct LowerMacCapabilities {
     /// The lowest [`TxPower::MaxDbm`](crate::TxPower::MaxDbm) ceiling the
     /// backend applies; `None` when it applies none.
     pub tx_power_ceiling_min_dbm: Option<i8>,
-    /// The coexistence levels an attempt may carry.
-    pub coex_priorities: CoexPrioritySet,
     /// The PPDU formats that send an individually addressed frame with
     /// [`TxResponse::None`](crate::TxResponse::None).
     pub individual_no_ack: PhyFormatSet,

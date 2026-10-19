@@ -219,11 +219,11 @@ fn software_coexistence_publishes_the_vendor_priorities() {
     assert_eq!(ll.calls[5..], [Call::SetAckPti(8), Call::SetTxrxPti(1)]);
 
     let mut ll = Recorder::default();
-    set_txrx_pti(&mut ll, &coexistence, Ieee802154CoexScene::RxAt);
+    set_txrx_pti(&mut ll, &coexistence, RadioOperation::RxAt);
     set_txrx_pti(
         &mut ll,
         &Ieee802154Coexistence::Disabled,
-        Ieee802154CoexScene::Tx,
+        RadioOperation::Tx,
     );
     assert_eq!(ll.calls, [Call::SetTxrxPti(8)]);
 }
@@ -354,10 +354,8 @@ fn sec_clear_disables_transmit_security() {
     assert_eq!(ll.calls, [Call::SetTransmitSecurity(false)]);
 }
 
-/// The priorities the ESP32-S31 vendor table resolves for the driver's
-/// default scene levels (idle 1, TX/RX 3, timed TX/RX 8, ACK 8), as an
-/// example chip's coexistence.
+/// The priorities the vendor table resolves for the driver's default
+/// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
 fn vendor_priorities() -> Ieee802154CoexPriorities {
-    let pti = |value| CoexPti::new(value).expect("four-bit priority");
-    Ieee802154CoexPriorities::new(pti(1), pti(3), pti(8), pti(8))
+    Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
 }

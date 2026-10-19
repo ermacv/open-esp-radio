@@ -395,7 +395,7 @@ impl RxBeaconPriorityHardware for Hardware {
 }
 
 /// A shared radio whose beacon-window event has priority 9, its
-/// connection event 6 and its slice event 4.
+/// connection event 6 and its slice event 4, with the reconnect policy on.
 struct RadioNine;
 
 impl RadioCoexPriorities for RadioNine {
@@ -403,10 +403,18 @@ impl RadioCoexPriorities for RadioNine {
         MacPti::new(9).unwrap()
     }
 
-    fn connection_frame_priorities(&self) -> ConnectionFramePriorities {
-        ConnectionFramePriorities {
-            packet: 6,
-            scheduler: 4,
+    fn connection_frame_priorities(
+        &self,
+        frame: ConnectionFrame,
+    ) -> Option<ConnectionFramePriorities> {
+        match frame {
+            ConnectionFrame::ProbeRequest => None,
+            ConnectionFrame::Authentication
+            | ConnectionFrame::Association
+            | ConnectionFrame::Eapol => Some(ConnectionFramePriorities {
+                packet: 6,
+                scheduler: 4,
+            }),
         }
     }
 }
@@ -908,7 +916,7 @@ fn values(frame: &[u8], no_ack: bool) -> Request {
             protection: Protection::None,
             power_ceiling_dbm: None,
             backoff_slots: 7,
-            coex: CoexPriority::Normal,
+            operation: TxOperation::Data,
             retry: false,
         },
     }
@@ -994,9 +1002,6 @@ fn capabilities_are_the_s31_limits_on_2_4_ghz() {
         usize::from(caps.max_mpdu_length) + TX_METADATA_SIZE + TX_CCMP_MIC_SIZE + TX_FCS_SIZE,
         512
     );
-    assert!(caps.coex_priorities.contains(CoexPriority::Normal));
-    assert!(caps.coex_priorities.contains(CoexPriority::Elevated));
-    assert!(!caps.coex_priorities.contains(CoexPriority::Critical));
     assert!(
         caps.individual_no_ack
             .contains_rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
@@ -2331,17 +2336,12 @@ fn wmm_set_with_best_effort_txop(
 }
 
 #[test]
-fn an_elevated_mpdu_carries_the_radio_system_s_connection_priorities() {
+fn a_connection_frame_carries_the_radio_system_s_connection_priorities() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        assert!(
-            esp32s31_lower_mac_capabilities(512)
-                .coex_priorities
-                .contains(CoexPriority::Elevated)
-        );
         let mut request = values(&data_frame(BSSID), false);
-        request.coex = CoexPriority::Elevated;
+        request.operation = TxOperation::Connection(ConnectionFrame::Authentication);
         submit(&mut core, &mut hardware, request).unwrap();
         let program = hardware.legacy[0].1;
         assert_eq!(
@@ -2352,9 +2352,21 @@ fn an_elevated_mpdu_carries_the_radio_system_s_connection_priorities() {
             ),
             (4, 6, CONNECTION_FRAME_PRIORITY_COUNT)
         );
-        complete(&mut core, &mut hardware, 0);
-        submit(&mut core, &mut hardware, values(&data_frame(BSSID), false)).unwrap();
-        assert_eq!(hardware.legacy[1].1.priority_count(), 1);
+        // A Probe Request only requests the air, and data keeps its static
+        // priority.
+        for (index, operation) in [
+            TxOperation::Connection(ConnectionFrame::ProbeRequest),
+            TxOperation::Data,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            complete(&mut core, &mut hardware, 0);
+            let mut request = values(&data_frame(BSSID), false);
+            request.operation = operation;
+            submit(&mut core, &mut hardware, request).unwrap();
+            assert_eq!(hardware.legacy[index + 1].1.priority_count(), 1);
+        }
     });
 }
 
@@ -2683,7 +2695,6 @@ fn ampdu_values(rate: PhyRate) -> AmpduValues {
         protection: Protection::None,
         power_ceiling_dbm: None,
         backoff_slots: 9,
-        coex: CoexPriority::Normal,
         min_mpdu_start_spacing: 5,
     }
 }
@@ -2921,12 +2932,6 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         assert_eq!(
             refused(spacing, aggregate_of(source, 2, 26), &mut hardware),
             Some(AmpduRefusal::StartSpacing)
-        );
-        let mut elevated = ampdu_values(ht_rate(7));
-        elevated.coex = CoexPriority::Elevated;
-        assert_eq!(
-            refused(elevated, aggregate_of(source, 2, 26), &mut hardware),
-            Some(AmpduRefusal::ElevatedCoexistence)
         );
 
         // An empty aggregate, a group receiver and one longer than the declared
@@ -3505,7 +3510,7 @@ fn checked_mpdu_values_retain_refused_slots_and_prevent_unchecked_lengths() {
         protection: Protection::None,
         power_ceiling_dbm: None,
         backoff_slots: 7,
-        coex: CoexPriority::Normal,
+        operation: TxOperation::Data,
         retry: false,
     };
     for (invalid, reason) in [
@@ -3529,13 +3534,6 @@ fn checked_mpdu_values_retain_refused_slots_and_prevent_unchecked_lengths() {
                 ..parameters
             },
             MpduValueError::Backoff,
-        ),
-        (
-            MpduParameters {
-                coex: CoexPriority::Critical,
-                ..parameters
-            },
-            MpduValueError::Coexistence,
         ),
         (
             MpduParameters {

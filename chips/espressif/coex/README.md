@@ -25,13 +25,18 @@ The recovered values cite the ESP32-S31 archive where they were reviewed;
 the PTI table and the IEEE 802.15.4 level lookup were also reviewed against
 the ESP32-C5 archive.
 
-## Portable clients and priorities
+## Portable clients and operations
 
 The portable vocabulary is [`oer-radio-coex`](../../../protocols/radio/coex/README.md).
 `CoexClient` converts from its `RadioClient` into the vendor request kind
-(IEEE 802.15.4 has none), `CoexStatusType` into the status word a client
-publishes, and `Ieee802154CoexLevel` from and into its `CoexPriority`
-(`Idle`, `Low` = `Normal`, `Middle` = `Elevated`, `High` = `Critical`).
+(IEEE 802.15.4 has none) and `CoexStatusType` into the status word a client
+publishes. Each protocol port owns its operation enum; this crate maps an
+operation to its row: `wifi_event` (beacon window, connection frames) and
+`ieee802154_event` (idle, immediate and timed operations, ACK, CSL slot).
+Each row is an exhaustive `match` with its vendor `SOURCE` or a stated
+`product choice`. Whether an operation is raised at a given time, such as a
+reconnecting station's connection frames, is state of the coexistence owner,
+not of the row.
 
 ## Time-slice schedule
 
@@ -111,8 +116,8 @@ cycle is not connected modem sleep.
 
 IEEE 802.15.4 is not an inferred third numeric `CoexClient`. Its MAC PTI fields
 and reviewed vendor wrappers have a distinct interface. `CoexPtiTable`
-resolves its four coexistence levels (high, middle, low, idle) from table
-events 41 through 44, which a radio publishes per operation scene.
+resolves each 802.15.4 operation from table events 42 through 44, which a
+radio publishes per operation.
 
 ## Participants, status and order
 

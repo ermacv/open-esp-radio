@@ -5,10 +5,10 @@
 //! this equal standalone policy is a product choice. When another radio
 //! shares the antenna, the radio applies the vendor BLE Controller's dynamic
 //! priority control: fixed lanes per role plus an event lane chosen by the
-//! LE radio's [`CoexistenceLevel`], which the LE Controller's `coexistence`
-//! module computes.
+//! LE radio's operation, whose reason the LE Controller's `coexistence`
+//! module names (`notes/bluetooth/le-coexistence-priorities.md`).
 
-use oer_bluetooth_le_radio::CoexistenceLevel;
+use oer_bluetooth_le_radio::{AdvertisingEventKind, ConnectionEventKind};
 use oer_esp32s31_bluetooth_memory::{
     AdvertisingCoexistencePriorities, ConnectionCoexistencePriorities,
     LegacyScanCoexistencePriorities, PeripheralConnectionCoexistenceProtection,
@@ -106,18 +106,32 @@ const fn lane(value: u8) -> SchedulerItemCoexistencePriority {
     }
 }
 
-const fn level_index(level: CoexistenceLevel) -> usize {
-    match level {
-        CoexistenceLevel::Baseline => 0,
-        CoexistenceLevel::Elevated => 1,
-        CoexistenceLevel::Critical => 2,
+/// The row of the legacy advertising event lane for `kind`: the vendor's
+/// baseline level for an ordinary event, its raised level for a raised one.
+const fn advertising_level_index(kind: AdvertisingEventKind) -> usize {
+    match kind {
+        AdvertisingEventKind::Ordinary => 0,
+        AdvertisingEventKind::Raised => 1,
+    }
+}
+
+/// The row of the connection event lane for `kind`: the baseline level, the
+/// raised level, or the highest level a central takes after repeated failed
+/// events.
+const fn connection_level_index(kind: ConnectionEventKind) -> usize {
+    match kind {
+        ConnectionEventKind::Ordinary => 0,
+        ConnectionEventKind::Opening
+        | ConnectionEventKind::MissedReceptions
+        | ConnectionEventKind::ControlProcedure => 1,
+        ConnectionEventKind::CentralFailures => 2,
     }
 }
 
 /// The lanes of one legacy advertising event.
 pub const fn advertising_priorities(
     profile: CoexistenceProfile,
-    level: CoexistenceLevel,
+    kind: AdvertisingEventKind,
 ) -> AdvertisingCoexistencePriorities {
     match profile {
         CoexistenceProfile::Standalone => AdvertisingCoexistencePriorities {
@@ -127,7 +141,7 @@ pub const fn advertising_priorities(
             let [_, one, two, three] = LEGACY_ADVERTISING_LANES;
             AdvertisingCoexistencePriorities {
                 lanes: [
-                    lane(LEGACY_ADVERTISING_EVENT[level_index(level)]),
+                    lane(LEGACY_ADVERTISING_EVENT[advertising_level_index(kind)]),
                     lane(one),
                     lane(two),
                     lane(three),
@@ -158,7 +172,7 @@ pub const fn passive_scan_priorities(
 /// The lanes of one connection event.
 pub const fn connection_priorities(
     profile: CoexistenceProfile,
-    level: CoexistenceLevel,
+    kind: ConnectionEventKind,
 ) -> ConnectionCoexistencePriorities {
     match profile {
         CoexistenceProfile::Standalone => ConnectionCoexistencePriorities {
@@ -166,7 +180,7 @@ pub const fn connection_priorities(
             base: lane(STANDALONE),
         },
         CoexistenceProfile::Shared => ConnectionCoexistencePriorities {
-            event: lane(CONNECTION_EVENT[level_index(level)]),
+            event: lane(CONNECTION_EVENT[connection_level_index(kind)]),
             base: lane(CONNECTION_BASE),
         },
     }

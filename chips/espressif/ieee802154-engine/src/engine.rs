@@ -23,7 +23,7 @@
 //! `IEEE802154_SET_TXRX_PTI` does.
 
 use crate::channel::Ieee802154Channel;
-use crate::coex::{Ieee802154CoexScene, Ieee802154Coexistence};
+use crate::coex::{Ieee802154Coexistence, RadioOperation};
 use crate::ll::{
     self, Ieee802154EtmRoute, Ieee802154LlCommand, Ieee802154LowLevel,
     Ieee802154MultipanEnableState, Ieee802154RxAbortEnableSet, Ieee802154RxStatus, Ieee802154Timer,
@@ -831,7 +831,7 @@ impl<'storage> Ieee802154Engine<'storage> {
             return Ok(());
         }
         self.tx_init(&mut cx, frame);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::Tx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Tx);
         if cca {
             cx.ll.set_ed_duration(CCA_DETECTION_TIME);
             cx.ll.set_command(Ieee802154LlCommand::CcaTxStart);
@@ -862,7 +862,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         }
         let mut cx = Cx { ll, env };
         self.tx_init(&mut cx, frame);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::TxAt);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::TxAt);
         if cca {
             cx.ll.set_ed_duration(CCA_DETECTION_TIME);
         }
@@ -917,7 +917,7 @@ impl<'storage> Ieee802154Engine<'storage> {
             }
         }
         self.rx_init(&mut cx);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::RxAt);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::RxAt);
         self.set_next_rx_buffer(&mut cx);
         self.set_state(Ieee802154State::Rx);
         ll::etm_set_event_task(cx.ll, Ieee802154EtmRoute::Timer1ToRxStart);
@@ -953,7 +953,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         let mut cx = Cx { ll, env };
         self.stop_current_operation(&mut cx);
         self.pib.update(cx.ll, self.levels);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::Rx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
         Self::start_ed(&mut cx, duration);
         self.set_state(Ieee802154State::Ed);
     }
@@ -967,7 +967,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         let mut cx = Cx { ll, env };
         self.stop_current_operation(&mut cx);
         self.pib.update(cx.ll, self.levels);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::Rx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
         Self::start_ed(&mut cx, CCA_DETECTION_TIME);
         self.set_state(Ieee802154State::Cca);
     }
@@ -1390,7 +1390,7 @@ impl<'storage> Ieee802154Engine<'storage> {
         E: Ieee802154Environment + ?Sized,
     {
         self.set_next_rx_buffer(cx);
-        ll::set_txrx_pti(cx.ll, &self.coexistence, Ieee802154CoexScene::Rx);
+        ll::set_txrx_pti(cx.ll, &self.coexistence, RadioOperation::Rx);
         cx.ll.set_command(Ieee802154LlCommand::RxStart);
         self.set_state(Ieee802154State::Rx);
     }
