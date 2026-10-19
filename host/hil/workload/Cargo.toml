@@ -1,0 +1,43 @@
+[package]
+name = "oer-hil-workload"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL workloads: the repetition context, fixtures, per-boot loops, typed results, image-key gates, measurements, failure classification, cleanup evidence and the family registry"
+
+[features]
+# Test helpers for the runner's cross-package end-to-end tests.
+test-support = [
+    "oer-hil-scenario/test-support",
+    "oer-hil-link/test-support",
+    "oer-hil-lab/test-support",
+]
+
+[dependencies]
+oer-hil-run-bundle-format = { path = "../run-bundle-format" }
+oer-hil-schema = { path = "../schema" }
+oer-hil-scenario-catalog = { path = "../scenario-catalog" }
+oer-image-bundle = { path = "../../image/bundle" }
+oer-hil-lab = { path = "../lab" }
+oer-lab-device-lock = { path = "../../lab/device-lock" }
+oer-lab-stand-board = { path = "../../lab/stand-board" }
+oer-hil-link = { path = "../link" }
+oer-hil-scenario = { path = "../scenario" }
+oer-os-durable = { path = "../../os/durable" }
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+oer-os-process = { path = "../../os/process" }
+oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+oer-hil-lab = { path = "../lab", features = ["test-support"] }
+oer-hil-link = { path = "../link", features = ["test-support"] }
+oer-hil-scenario = { path = "../scenario", features = ["test-support"] }
+
+[lints]
+workspace = true
+

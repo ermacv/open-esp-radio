@@ -1,0 +1,22 @@
+[package]
+name = "oer-lab-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The owner's stand file: its one reader"
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-lab-device-mac = { path = "../device-mac" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true

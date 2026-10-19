@@ -1,0 +1,33 @@
+[package]
+name = "oer-tool-blobray"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Blobray command line over its in-process operations"
+
+[[bin]]
+name = "blobray"
+path = "src/main.rs"
+
+[dependencies]
+oer-vendor-artifacts = { path = "../../host/vendor/artifacts" }
+oer-analysis-riscv-lift = { path = "../../host/analysis/riscv-lift" }
+oer-analysis-blobray-riscv = { path = "../../host/analysis/blobray-riscv" }
+oer-analysis-blobray-application = { path = "../../host/analysis/blobray-application" }
+oer-analysis-blobray-domain = { path = "../../host/analysis/blobray-domain" }
+oer-analysis-riscv-model = { path = "../../host/analysis/riscv-model" }
+clap = { version = "=4.5.48", features = ["derive"] }
+serde_json = "=1.0.151"
+serde = { version = "=1.0.229", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+object = { version = "=0.39.1", default-features = false, features = ["elf", "read", "std", "write"] }
+toml = "=1.1.4"
+
+[lints]
+workspace = true
+

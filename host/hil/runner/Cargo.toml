@@ -1,0 +1,62 @@
+[package]
+name = "oer-hil-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Host build, placement-audit and HIL runner for open ESP radio"
+
+[dependencies]
+oer-image-check-interrupts = { path = "../../image/check-interrupts" }
+oer-lab-devices = { path = "../../lab/devices", features = ["image"] }
+oer-hil-run-bundle-format = { path = "../run-bundle-format" }
+oer-hil-schema = { path = "../schema" }
+oer-hil-scenario-catalog = { path = "../scenario-catalog" }
+oer-image-bundle = { path = "../../image/bundle" }
+oer-image-toolchain = { path = "../../image/toolchain" }
+oer-hil-lab = { path = "../lab" }
+oer-hil-link = { path = "../link" }
+oer-hil-image = { path = "../image" }
+oer-image-build = { path = "../../image/build" }
+oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-hil-run-bundle = { path = "../run-bundle" }
+oer-hil-analysis = { path = "../analysis" }
+oer-hil-scenario = { path = "../scenario" }
+oer-hil-source-snapshot = { path = "../source-snapshot" }
+oer-os-durable = { path = "../../os/durable" }
+oer-hil-image-class = { path = "../image-class" }
+oer-lab-stand-board = { path = "../../lab/stand-board" }
+oer-hil-flash = { path = "../flash" }
+oer-hil-workload = { path = "../workload" }
+oer-hil-family-system = { path = "../family-system" }
+oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-os-process = { path = "../../os/process" }
+clap = { version = "4.5", features = ["derive"] }
+sha2 = "0.10"
+tempfile = "3"
+oer-hil-protocol = { path = "../../../portable/hil/protocol" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+oer-lab-device-lock = { path = "../../lab/device-lock" }
+oer-lab-stand-journal = { path = "../../lab/stand-journal" }
+oer-lab-stand-owners = { path = "../../lab/stand-owners" }
+[dev-dependencies]
+oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
+oer-hil-source-snapshot = { path = "../source-snapshot", features = ["test-support"] }
+toml = "1.1"
+oer-hil-workload = { path = "../workload", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+
+[build-dependencies]
+oer-os-process = { path = "../../os/process" }
+oer-hil-observer = { path = "../observer" }
+oer-hil-run-bundle-format = { path = "../run-bundle-format" }
+serde_json = "1.0"
+sha2 = "0.10"
+toml_edit = { version = "=0.25.13", features = ["serde"] }

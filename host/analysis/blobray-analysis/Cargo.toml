@@ -1,0 +1,18 @@
+[package]
+name = "oer-analysis-blobray-analysis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Bounded function control-flow analysis"
+
+[dependencies]
+oer-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-analysis-riscv-analysis = { path = "../riscv-analysis" }
+oer-analysis-riscv-model = { path = "../riscv-model" }
+
+[lints]
+workspace = true
+

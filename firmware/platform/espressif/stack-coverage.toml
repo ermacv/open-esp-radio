@@ -15,7 +15,7 @@ reason = "Naked context-switch stub retained by esp-hal initialization on ESP32-
 [[reviewed]]
 symbols = ["_mtvt_table", "_runtime_mtvt_table", "_mtvt_table2", "_vector_table"]
 category = "vector-data"
-source = "firmware/platform/espressif/staged-runtime/src/stacks.rs; esp-hal@890fd49 esp-hal/src/interrupt/riscv/clic.rs and esp-riscv-rt/src/lib.rs"
+source = "chips/platform/staged-runtime/src/stacks.rs; esp-hal@890fd49 esp-hal/src/interrupt/riscv/clic.rs and esp-riscv-rt/src/lib.rs"
 reason = "Dispatch tables emitted as text symbols, not compiler-generated function bodies. The interrupt-stack gate bounds what they dispatch to."
 
 [[reviewed]]
@@ -27,13 +27,13 @@ reason = "Assembly dispatch entries have no compiler frame record; the interrupt
 [[reviewed]]
 symbols = ["_runtime_psram_irq_entry_1", "_runtime_psram_irq_entry_2", "_runtime_psram_irq_entry_3", "_runtime_psram_irq_entry_4", "_runtime_psram_irq_entry_5", "_runtime_psram_irq_entry_6", "_runtime_psram_irq_entry_7", "_runtime_psram_irq_entry_8", "_runtime_psram_irq_entry_9", "_runtime_psram_irq_entry_10", "_runtime_psram_irq_entry_11", "_runtime_psram_irq_entry_12", "_runtime_psram_irq_entry_13", "_runtime_psram_irq_entry_14", "_runtime_psram_irq_entry_15", "_runtime_psram_irq_entry_16", "_runtime_psram_irq_entry_17", "_runtime_psram_irq_entry_18", "_runtime_psram_irq_entry_19", "_runtime_psram_irq_entry_20", "_runtime_psram_irq_entry_21", "_runtime_psram_irq_entry_22", "_runtime_psram_irq_entry_23", "_runtime_psram_irq_entry_24", "_runtime_psram_irq_entry_25", "_runtime_psram_irq_entry_26", "_runtime_psram_irq_entry_27", "_runtime_psram_irq_entry_28", "_runtime_psram_irq_entry_29", "_runtime_psram_irq_entry_30", "_runtime_psram_irq_entry_31", "_runtime_psram_irq_entry_32", "_runtime_psram_irq_entry_33", "_runtime_psram_irq_entry_34", "_runtime_psram_irq_entry_35", "_runtime_psram_irq_entry_36", "_runtime_psram_irq_entry_37", "_runtime_psram_irq_entry_38", "_runtime_psram_irq_entry_39", "_runtime_psram_irq_entry_40", "_runtime_psram_irq_entry_41", "_runtime_psram_irq_entry_42", "_runtime_psram_irq_entry_43", "_runtime_psram_irq_entry_44", "_runtime_psram_irq_entry_45", "_runtime_psram_irq_entry_46", "_runtime_psram_irq_entry_47", "_runtime_psram_interrupt_continue", "_runtime_stack_bootstrap", "_start_trap"]
 category = "assembly"
-source = "firmware/platform/espressif/staged-runtime/src/stacks.rs; pinned esp-riscv-rt trap entry"
+source = "chips/platform/staged-runtime/src/stacks.rs; pinned esp-riscv-rt trap entry"
 reason = "Handwritten stack-switch/interrupt-entry assembly, outside compiler frame metadata. This exception supplies no frame size or call-chain bound; the interrupt-stack gate bounds the interrupt entries from their machine code."
 
 [[reviewed]]
 symbols = ["_runtime_start", "_runtime_default_stack_bootstrap", "_runtime_enable_fpu"]
 category = "assembly"
-source = "firmware/platform/espressif/staged-runtime/src/entry.rs"
+source = "chips/platform/staged-runtime/src/entry.rs"
 reason = "Assembly boot and fallback stack initialization run before normal tasks; no compiler frame is claimed."
 
 [[reviewed]]

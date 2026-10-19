@@ -1,0 +1,20 @@
+[package]
+name = "oer-firmware-probes-esp32c5-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Retained ESP32-C5 Rust entry points for compiled vendor verification"
+
+[dependencies]
+oer-probe-macros = { path = "../../../host/probe/macros" }
+oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal" }
+oer-esp32c5-pac = { path = "../../../chips/esp32c5/pac" }
+oer-espressif-analog = { path = "../../../portable/espressif/analog" }
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[lints]
+workspace = true
+

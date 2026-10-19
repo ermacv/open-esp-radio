@@ -2,7 +2,7 @@
 //!
 //! The block runs from `OER-W1-BEGIN v=1` to `OER-W1-END lines=<n>`, one
 //! `keyword key=value …` line each, values without spaces; `cargo fw`
-//! recomputes every gate from the block's other lines (`tools/lib/service/firmware/src/w1.rs`
+//! recomputes every gate from the block's other lines (`host/image/firmware/src/w1.rs`
 //! holds its spec). BSSIDs are masked to their last two octets, SSIDs are
 //! printed only as their length and, per BSS, whether the stored SSID is the
 //! stand's (`ssid_ok=`).

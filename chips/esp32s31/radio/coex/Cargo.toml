@@ -1,0 +1,25 @@
+[package]
+name = "oer-esp32s31-radio-coex"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ESP32-S31 binding of the Espressif coexistence policy to the radio domain"
+
+[dependencies]
+oer-esp32s31-hal = { path = "../../hal" }
+oer-espressif-coex = { path = "../../../../portable/espressif/coex" }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "chip"
+chip = "esp32s31"

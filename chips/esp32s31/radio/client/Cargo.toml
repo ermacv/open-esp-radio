@@ -1,0 +1,35 @@
+[package]
+name = "oer-esp32s31-radio-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The ESP32-S31 radio system's client contract: membership cells, PHY membership typestate, RF epochs and the LP clock"
+
+[features]
+# Host-test construction of cells outside the one static claim.
+test-support = []
+# The registration's RF calibration and readiness-wait diagnostics in
+# `PhyPreparation::Registered`.
+registration-diagnostics = ["oer-esp32s31-phy/registration-diagnostics"]
+
+[dependencies]
+atomic-waker = "1.1.2"
+oer-base-time = { path = "../../../../portable/base/time" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-esp32s31-ieee80211-mac = { path = "../../ieee80211/mac" }
+oer-ieee80211-mac = { path = "../../../../portable/ieee80211/mac" }
+
+[dev-dependencies]
+embassy-futures = "0.1.2"
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "chip"
+chip = "esp32s31"

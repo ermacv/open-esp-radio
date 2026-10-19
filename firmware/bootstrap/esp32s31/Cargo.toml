@@ -1,0 +1,28 @@
+[package]
+name = "oer-firmware-bootstrap-esp32s31"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+oer-platform-esp32s31-layout.workspace = true
+oer-platform-staged-bootstrap = { path = "../../../chips/platform/staged-bootstrap", features = ["esp32s31"] }
+esp-bootloader-esp-idf = { workspace = true, features = ["embedded-storage", "esp32s31"] }
+esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
+oer-platform-esp32s31-board = { path = "../../../chips/platform/esp32s31-board" }
+oer-adapters-esp-hal-soc.workspace = true
+static_cell.workspace = true
+
+[build-dependencies]
+oer-platform-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "platform"
+platform = "chip"
+chip = "esp32s31"

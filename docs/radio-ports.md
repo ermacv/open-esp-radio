@@ -6,8 +6,8 @@ model. Everything above a port is written once for every backend; everything
 below it is the backend's. The ports are unfrozen until W4
 ([decisions](decisions.md)); this page states the principles the carried
 port crates follow. The shared lifecycle and vocabulary are in
-[`oer-radio-port`](../crates/radio/port/README.md), the Wi-Fi port in
-[`oer-ieee80211-lower-mac`](../crates/ieee80211/lower-mac/README.md).
+[`oer-radio-port`](../portable/radio/port/README.md), the Wi-Fi port in
+[`oer-ieee80211-lower-mac`](../portable/ieee80211/lower-mac/README.md).
 
 ## Placement follows hardware autonomy
 

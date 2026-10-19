@@ -1,0 +1,20 @@
+[package]
+name = "oer-image-checks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The checks an image build runs on request, assembled from the stack, interrupt-stack and placement checks"
+
+[dependencies]
+oer-analysis-elf = { path = "../../analysis/elf" }
+oer-image-build = { path = "../build" }
+oer-image-check-interrupts = { path = "../check-interrupts" }
+oer-image-check-placement = { path = "../check-placement" }
+oer-image-check-stack = { path = "../check-stack" }
+
+[lints]
+workspace = true
+

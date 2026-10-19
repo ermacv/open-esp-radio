@@ -1,0 +1,7 @@
+# The stage-two packing fixture both packers check against: this crate's
+# `stage_two` (the bootstrap's view) and the host packer
+# (`oer-image-encode::stage_two::pack_runtime` with each staged chip's
+# `[staged.stage-two]` profile data). `unpacked` is a runtime image with its
+# CRC field zero, `crc32` the payload CRC-32 the packer stores (hex).
+unpacked 535447320100000000100000401000000020000000200000002100002c0000003010000000180000000000000102030405060708090a0b0c0d0e0f1011121314
+crc32 4a633ae6

@@ -1,0 +1,17 @@
+[package]
+name = "oer-vendor-scenario-command"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The command line of a chip's typed vendor-comparison scenarios and the reviewer commands"
+
+[dependencies]
+oer-vendor-scenario-report = { path = "../scenario-report" }
+clap = { version = "=4.5.48", features = ["derive"] }
+
+[lints]
+workspace = true
+

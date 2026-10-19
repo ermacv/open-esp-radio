@@ -1,0 +1,33 @@
+[package]
+name = "oer-esp32s31-pac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Closed typed ESP32-S31 radio peripheral access crate"
+
+[features]
+# Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
+test-support = ["oer-espressif-ieee802154-pac/test-support"]
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
+oer-espressif-ieee802154-pac = { path = "../../../portable/espressif/ieee802154-pac" }
+oer-base-memory = { path = "../../../portable/base/memory" }
+oer-espressif-ieee80211-pac = { path = "../../espressif/ieee80211-pac" }
+oer-esp32s31-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
+vcell = "0.1.3"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+[package.metadata.open-radio]
+layer = "hardware"
+platform = "chip"
+chip = "esp32s31"

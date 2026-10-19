@@ -1,0 +1,21 @@
+[package]
+name = "oer-analysis-riscv-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Identities, errors, run control, working memory and the function decoding and lifting contracts of the RV32 program model"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive", "rc"] }
+sha2 = "=0.10.9"
+thiserror = "=2.0.19"
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+
+[lints]
+workspace = true
+

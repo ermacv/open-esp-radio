@@ -1,0 +1,32 @@
+[package]
+name = "oer-esp32s31-bluetooth-driver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
+
+[dependencies]
+oer-bluetooth-hci = { path = "../../../../portable/bluetooth/hci" }
+oer-bluetooth-le-radio = { path = "../../../../portable/bluetooth/le/radio" }
+oer-esp32s31-hal = { path = "../../hal" }
+oer-esp32s31-bluetooth-memory = { path = "../memory" }
+oer-esp32s31-phy = { path = "../../phy" }
+oer-base-time = { path = "../../../../portable/base/time" }
+
+[dev-dependencies]
+oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+
+# Host tests need the std implementation; chip doctests build without it.
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+

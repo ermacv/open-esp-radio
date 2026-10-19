@@ -1,0 +1,25 @@
+[package]
+name = "oer-analysis-elf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The one ELF and archive view: symbols with aliases, sections, relocations with the RV32 relocation table, relocatable functions and DWARF source locations"
+readme = "README.md"
+
+# No repository path dependencies: Blobray's standalone extraction takes this
+# package by path beside the RV32 crates.
+[dependencies]
+addr2line = { version = "=0.27.1", default-features = false, features = ["rustc-demangle", "std"] }
+# addr2line's `gimli`, with the reference-counted reader a `Symbolizer` owns.
+gimli = { version = "=0.34.0", default-features = false, features = ["endian-reader", "std"] }
+object = { version = "=0.39.1", default-features = false, features = ["archive", "elf", "read_core", "std"] }
+
+[dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["archive", "elf", "read_core", "std", "write"] }
+
+[lints]
+workspace = true
+

@@ -1,0 +1,45 @@
+# Host differential stand for the ported ESP32-S31 IEEE 802.15.4 driver.
+#
+# This workspace compiles the public ESP-IDF driver from an explicit checkout
+# (`OER_ESP_IDF_DIR`), so it is intentionally excluded from the root workspace:
+# ordinary builds never need the vendor sources.
+
+[package]
+name = "oer-vendor-ieee802154-esp32s31"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Host stand that runs the pinned public ESP-IDF IEEE 802.15.4 driver against recorded register and platform boundaries"
+build = "build.rs"
+links = "oer_esp32s31_ieee802154_vendor"
+
+[[bin]]
+name = "oer-vendor-ieee802154-esp32s31"
+path = "src/main.rs"
+
+[dependencies]
+oer-os-process = { path = "../../os/process" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
+oer-ieee802154-mac = { path = "../../../portable/ieee802154/mac" }
+oer-os-durable = { path = "../../os/durable" }
+oer-vendor-artifacts = { path = "../artifacts" }
+oer-vendor-evidence = { path = "../evidence" }
+oer-vendor-evidence-shard = { path = "../evidence-shard" }
+
+[features]
+# Build the vendor driver and the port with multi-PAN and two interfaces.
+multipan = []
+# Build the vendor driver with software coexistence and the port with the
+# driver's default scene levels.
+sw-coex = []
+
+[build-dependencies]
+cc = "=1.4.3"
+oer-vendor-artifacts = { path = "../artifacts" }
+oer-vendor-pins = { path = "../pins" }
+
+[lints]
+workspace = true

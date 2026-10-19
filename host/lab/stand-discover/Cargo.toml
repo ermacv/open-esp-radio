@@ -1,0 +1,17 @@
+[package]
+name = "oer-lab-stand-discover"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The stand file against the host: each attached board mapped to its hub port and button and compared with the stand file"
+
+[dependencies]
+oer-lab-model = { path = "../model" }
+oer-lab-stand-power = { path = "../stand-power" }
+
+[lints]
+workspace = true
+

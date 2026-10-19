@@ -46,8 +46,8 @@ and returns zero: production has no untyped buffer-type dispatch; its \
 buffer ownership kinds are typed owners (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive",
-    "crates/esp32s31/hal/src/ieee80211/dma/tx_ampdu_storage.rs",
+    "chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive",
+    "chips/esp32s31/hal/src/ieee80211/dma/tx_ampdu_storage.rs",
 ]
 [[decision.place]]
 function = "esf_buf_recycle_default_handler"
@@ -61,7 +61,7 @@ the overflow of the posted task queue, which logs and reports the post as \
 failed: production has no posted task queue; its wakes coalesce and its \
 control mailbox overflow is terminal (reviewed with the Wi-Fi owner)"""
 port_status = "partial"
-port = ["crates/esp32s31/ieee80211/driver/src/irq.rs"]
+port = ["chips/esp32s31/ieee80211/driver/src/irq.rs"]
 review = """
 wake coalescing is present; a terminal control-mailbox overflow was not \
 found in this repository (predecessor only)"""
@@ -95,9 +95,9 @@ PHY enabled or disabled twice); a hang has no effect to compare, and \
 production reports such states as typed errors instead of stopping"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx/ampdu.rs HtAmpduTxError",
-    "crates/esp32s31/ieee80211/mac/src/tx.rs TxLifetimeClass",
-    "crates/esp32s31/phy/src/wifi_client.rs WifiPhyMembership",
+    "chips/esp32s31/ieee80211/mac/src/tx/ampdu.rs HtAmpduTxError",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs TxLifetimeClass",
+    "chips/esp32s31/phy/src/wifi_client.rs WifiPhyMembership",
 ]
 [[decision.place]]
 function = "ppAssembleAMPDU"
@@ -163,8 +163,8 @@ length: production publishes vector formats zero to two only and always \
 writes the non-HE data length (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/tx.rs MacHtTxProgram",
-    "crates/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
+    "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHtTxProgram",
+    "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
 ]
 [[decision.place]]
 function = "mac_tx_set_plcp1"
@@ -185,7 +185,7 @@ a packet PTI at least coexistence event one's PTI 5, which \
 sends is 3 or lower"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx.rs vendor_data_scheduler_priority",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs vendor_data_scheduler_priority",
 ]
 [[decision.place]]
 function = "mac_tx_set_pti"
@@ -202,7 +202,7 @@ code 4 and every code above HE MCS 9 (0x23); and two branches of \
 `mac_tx_get_rts_rate` no code reaches (the HT sub-ranges above 0x12 and \
 0x1c, and a legacy code outside its three masks, which cover all eight)"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/mac/src/tx.rs vendor_control_rate"]
+port = ["chips/esp32s31/ieee80211/mac/src/tx.rs vendor_control_rate"]
 [[decision.place]]
 function = "mac_tx_get_rts_rate"
 start = 0x3c
@@ -233,7 +233,7 @@ reason = """
 an HE PPDU at 40 MHz: production transmits HE at 20 MHz only (reviewed \
 with the Wi-Fi owner)"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/mac/src/tx.rs HeRate"]
+port = ["chips/esp32s31/ieee80211/mac/src/tx.rs HeRate"]
 [[decision.place]]
 function = "mac_tx_set_plcp1"
 start = 0x8a
@@ -252,8 +252,8 @@ are fail-closed); production publishes the PLCP0 format from its typed \
 program (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
-    "crates/esp32s31/pac/src/wifi/mac/tx.rs MacHtTxProgram",
+    "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
+    "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHtTxProgram",
 ]
 [[decision.place]]
 function = "mac_tx_set_plcp0"
@@ -328,8 +328,8 @@ reason = """
 HE-SIG; production cannot build an HE program without its rate"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
-    "crates/esp32s31/ieee80211/mac/src/tx.rs HeRate",
+    "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs HeRate",
 ]
 [[decision.place]]
 function = "mac_tx_set_hesig"
@@ -344,7 +344,7 @@ reason = """
 a non-HE rate code in `mac_tx_set_hesig`, which only HE descriptors reach; \
 every production HE rate maps to a code of at least 0x1a"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/mac/src/tx.rs HeRate"]
+port = ["chips/esp32s31/ieee80211/mac/src/tx.rs HeRate"]
 [[decision.place]]
 function = "mac_tx_set_hesig"
 start = 0xa6
@@ -361,7 +361,7 @@ bit, and `mac_tx_set_txop_q` programs a granted TXOP slot; production \
 holds no TXOP and clears that bit for every SU PPDU (reviewed with the \
 Wi-Fi owner)"""
 port_status = "present"
-port = ["crates/esp32s31/pac/src/wifi/mac/tx.rs prepare_ht_mac_tx"]
+port = ["chips/esp32s31/pac/src/wifi/mac/tx.rs prepare_ht_mac_tx"]
 review = """
 the HT program carries a `txop` flag published to the PTI TXOP bit; \
 whether any current path sets it was not checked"""
@@ -384,7 +384,7 @@ a software HE-Control image: the driver never supplies one, so the \
 hardware BSR path stays selected and `mac_tx_set_tb` is reached (reviewed \
 with the Wi-Fi owner)"""
 port_status = "present"
-port = ["crates/ieee80211/mac/src/data.rs DataHeControl"]
+port = ["portable/ieee80211/mac/src/data.rs DataHeControl"]
 [[decision.place]]
 function = "hal_mac_tx_set_ppdu"
 start = 0x1aa
@@ -409,9 +409,9 @@ transmits HE SU only, so the MPDU-length links, their bitmap checks and \
 the TB-flow configuration are not used (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx/ampdu/owner.rs submit_he",
-    "crates/esp32s31/ieee80211/mac/src/tx.rs HeTriggerBasedTxConfig",
-    "crates/esp32s31/pac/src/wifi/mac/he/ofdma.rs prepare_he_trigger_based_queue",
+    "chips/esp32s31/ieee80211/mac/src/tx/ampdu/owner.rs submit_he",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs HeTriggerBasedTxConfig",
+    "chips/esp32s31/pac/src/wifi/mac/he/ofdma.rs prepare_he_trigger_based_queue",
 ]
 review = """
 stale: this repository prepares the HE-TB queue from the HE A-MPDU \
@@ -437,7 +437,7 @@ reason = """
 the BSS color of an interface other than the station: the access point \
 transmits no HE (reviewed with the Wi-Fi owner)"""
 port_status = "present"
-port = ["crates/ieee80211/mac/src/he.rs effective_bss_color"]
+port = ["portable/ieee80211/mac/src/he.rs effective_bss_color"]
 [[decision.place]]
 function = "hal_he_get_bss_color"
 start = 0x4
@@ -456,7 +456,7 @@ the OS-adapter critical section `wDev_AppendRxBlocks` enters and leaves \
 through `g_osi_funcs_p`, answered as quiet calls; production serializes \
 the RX ring through its single owner"""
 port_status = "present"
-port = ["crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive"]
+port = ["chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive"]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
 start = 0x7e
@@ -477,8 +477,8 @@ then reports the walker busy; a hardware fault no comparison case can \
 bound cheaply"""
 port_status = "present"
 port = [
-    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs complete_pending_reload",
-    "crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT",
+    "chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs complete_pending_reload",
+    "chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT",
 ]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
@@ -513,7 +513,7 @@ an exhausted walker whose LAST has no successor: the vendor counts it and \
 leaves the base alone, while production treats a LAST outside its accepted \
 list as corruption and requires a reset (fail-closed by design)"""
 port_status = "present"
-port = ["crates/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingError"]
+port = ["chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingError"]
 [[decision.place]]
 function = "wDev_AppendRxBlocks"
 start = 0xf2
@@ -530,7 +530,7 @@ descriptor selects MU EDCA: production neither negotiates nor applies the \
 MU-EDCA parameter set (`is_use_muedca` is zero for it) and always restores \
 the ordinary minimum (reviewed with the Wi-Fi owner)"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/mac/src/edca.rs EdcaBackoffState"]
+port = ["chips/esp32s31/ieee80211/mac/src/edca.rs EdcaBackoffState"]
 [[decision.place]]
 function = "lmacProcessShortFrameSuccess"
 start = 0x1e
@@ -570,7 +570,7 @@ the compared contention exponent is the same on both paths (reviewed with \
 the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx/protection.rs WifiTxProtectionPolicy",
+    "chips/esp32s31/ieee80211/mac/src/tx/protection.rs WifiTxProtectionPolicy",
 ]
 [[decision.place]]
 function = "lmacIsLongFrame"
@@ -586,7 +586,7 @@ reason = """
 descriptor rate bypass, a missing rate context and a context-fixed rate; \
 production always selects from its owned initial rate"""
 port_status = "present"
-port = ["crates/esp32s31/ieee80211/mac/src/tx.rs vendor_retry_rate"]
+port = ["chips/esp32s31/ieee80211/mac/src/tx.rs vendor_retry_rate"]
 [[decision.place]]
 function = "rcGetRate"
 start = 0x20
@@ -612,8 +612,8 @@ counts reach its publication limit (checked on the captured arena), and \
 production ends the MPDU at that limit before another rate is selected"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx/runtime.rs OrdinaryMpduRetryState",
-    "crates/esp32s31/ieee80211/mac/src/tx.rs vendor_retry_publication_limit",
+    "chips/esp32s31/ieee80211/mac/src/tx/runtime.rs OrdinaryMpduRetryState",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs vendor_retry_publication_limit",
 ]
 [[decision.place]]
 function = "rcGetRate"
@@ -635,11 +635,11 @@ composition sets no HE DCM override); a production raw transmit API with \
 DCM would need this decision revisited (reviewed with the Wi-Fi owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx.rs rate_control_dcm_fallback_code",
+    "chips/esp32s31/ieee80211/mac/src/tx.rs rate_control_dcm_fallback_code",
 ]
 review = """
 this repository maps a portable DCM HE rate to `HeRate::bcc_dcm` \
-(crates/esp32s31/ieee80211/mac/src/portable.rs); whether that reaches \
+(chips/esp32s31/ieee80211/mac/src/portable.rs); whether that reaches \
 ordinary data frames was not checked, and the predecessor's reason asks \
 for a revisit once a DCM transmit path exists"""
 [[decision.place]]
@@ -657,7 +657,7 @@ access bookkeeping, HE and MU-EDCA queue state and test statistics; the \
 ordinary transmit claim compares the prefix before that call, and \
 production's transmit engine owns its own queue bookkeeping"""
 port_status = "present"
-port = ["crates/esp32s31/pac/src/wifi/mac/tx.rs start_prepared_mac_tx"]
+port = ["chips/esp32s31/pac/src/wifi/mac/tx.rs start_prepared_mac_tx"]
 [[decision.place]]
 function = "hal_mac_txq_enable"
 start = 0x22
@@ -681,11 +681,11 @@ no mesh role and implements only the fresh AP epoch and the ordinary \
 transmit-completion clear"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/softap_tsf.rs reset_and_start_softap_tsf",
+    "chips/esp32s31/pac/src/wifi/mac/softap_tsf.rs reset_and_start_softap_tsf",
 ]
 review = """
 the selector-two queue clear is described in \
-crates/esp32s31/hal/src/ieee80211/dma/README.md; its code item was not located"""
+chips/esp32s31/hal/src/ieee80211/dma/README.md; its code item was not located"""
 [[decision.place]]
 function = "hal_mac_tsf_reset"
 start = 0x2
@@ -712,8 +712,8 @@ fail or log: production's typed `MacRoleReceivePolicy` and `MacInterface` \
 cannot express them"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/rx/policy.rs MacRoleReceivePolicy",
-    "crates/espressif/ieee80211-pac/src/generated.rs MacInterface",
+    "chips/esp32s31/pac/src/wifi/mac/rx/policy.rs MacRoleReceivePolicy",
+    "chips/espressif/ieee80211-pac/src/generated.rs MacInterface",
 ]
 [[decision.place]]
 function = "wifi_set_rx_policy"
@@ -760,8 +760,8 @@ no production owner. The control-mode-two receive filter of \
 `hal_mac_rx_set_policy` serves only policies 10 and 13"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/wifi/mac/rx/policy.rs apply_sta_link_receive_policy",
-    "crates/esp32s31/ieee80211/mac/src/init.rs activate_promiscuous_receive",
+    "chips/esp32s31/pac/src/wifi/mac/rx/policy.rs apply_sta_link_receive_policy",
+    "chips/esp32s31/ieee80211/mac/src/init.rs activate_promiscuous_receive",
 ]
 [[decision.place]]
 function = "wifi_set_rx_policy"
@@ -847,8 +847,8 @@ the claimed closures only that branch of `phy_set_channel_rfpll_freq_new` \
 (and of its rev0 ROM predecessor) reaches the direct-programming chain"""
 port_status = "present"
 port = [
-    "crates/esp32s31/phy/src/channel.rs PhyChipChannelRequest",
-    "crates/esp32s31/phy/src/analog/rfpll.rs RfpllFrequencyRequest",
+    "chips/esp32s31/phy/src/channel.rs PhyChipChannelRequest",
+    "chips/esp32s31/phy/src/analog/rfpll.rs RfpllFrequencyRequest",
 ]
 [[decision.place]]
 function = "phy_set_channel_rfpll_freq_new"
@@ -886,12 +886,12 @@ reason = """
 channels 1 to 13 and rejects the others fail-closed"""
 port_status = "present"
 port = [
-    "crates/esp32s31/phy/src/channel.rs PhyChipChannelRequest",
-    "crates/esp32s31/phy/src/channel.rs frequency_to_channel",
+    "chips/esp32s31/phy/src/channel.rs PhyChipChannelRequest",
+    "chips/esp32s31/phy/src/channel.rs frequency_to_channel",
 ]
 review = """
 the portable `WifiChannel::new_2_4_ghz` \
-(crates/ieee80211/mac/src/channel.rs) admits channel 14 at 20 MHz; the S31 \
+(portable/ieee80211/mac/src/channel.rs) admits channel 14 at 20 MHz; the S31 \
 PHY request validation rejects it"""
 [[decision.place]]
 function = "phy_mhz2ieee"
@@ -919,7 +919,7 @@ detected RX saturation, whose first radio search returns the ROM's \
 never-initialized output slot; characterized as a DIFF, not claimed (owner \
 decision 2026-09-26)"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/rx/dc_offset.rs PhyRxDcMinimumOutcome"]
+port = ["chips/esp32s31/phy/src/rx/dc_offset.rs PhyRxDcMinimumOutcome"]
 [[decision.place]]
 function = "phy_rxdc_est_min"
 start = 0x52
@@ -975,7 +975,7 @@ which only foreign `phy_param` contents could; production derives the same \
 indices from its generated tables"""
 port_status = "present"
 port = [
-    "crates/esp32s31/phy/src/calibration/baseband.rs generate_phy_rx_gain_table",
+    "chips/esp32s31/phy/src/calibration/baseband.rs generate_phy_rx_gain_table",
 ]
 [[decision.place]]
 function = "phy_gen_rx_gain_table"
@@ -1037,7 +1037,7 @@ TX-DC teardown skipped for a nonzero second argument, which every \
 `phy_txdc_cal_pwdet_init` caller in the claimed closures leaves zero"""
 port_status = "present"
 port = [
-    "crates/esp32s31/hal/src/phy/power_detector.rs restore_txdc_calibration",
+    "chips/esp32s31/hal/src/phy/power_detector.rs restore_txdc_calibration",
 ]
 [[decision.place]]
 function = "phy_txdc_cal_pwdet_init"
@@ -1052,7 +1052,7 @@ reason = """
 repeated power-detector status polls before it reports ready: the ready \
 read is compared and the poll count is hardware timing"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/tx/power_detector.rs"]
+port = ["chips/esp32s31/phy/src/tx/power_detector.rs"]
 [[decision.place]]
 function = "phy_pwdet_tone_start"
 start = 0x4a
@@ -1098,7 +1098,7 @@ reason = """
 repeated analog I2C busy polls before a write: the poll count is hardware \
 timing and the command itself is compared"""
 port_status = "present"
-port = ["crates/espressif/analog/src/lib.rs Busy"]
+port = ["portable/espressif/analog/src/lib.rs Busy"]
 [[decision.place]]
 function = "phy_chip_i2c_writeReg"
 start = 0x3a
@@ -1112,7 +1112,7 @@ reason = """
 temperature clamps at 250 and -200: the sensor scenario compares every \
 8-bit code in every DAC window and none reaches them"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/analog/temperature.rs temperature_from_code"]
+port = ["chips/esp32s31/phy/src/analog/temperature.rs temperature_from_code"]
 [[decision.place]]
 function = "phy_code_to_temp"
 start = 0x1a
@@ -1134,7 +1134,7 @@ reason = """
 frequency-memory parameter selectors 0 and 1, which only callers outside \
 the claimed closures pass; every claimed caller selects 2"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/analog/frequency.rs"]
+port = ["chips/esp32s31/phy/src/analog/frequency.rs"]
 [[decision.place]]
 function = "phy_get_freq_mem_param"
 start = 0x4
@@ -1152,7 +1152,7 @@ reason = """
 mixer digital-gain index above 10: its claimed callers pass indices from \
 the fixed RX gain tables and calibration loops, all at most 10"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/rx/gain_calibration.rs shared_mixer_dgain"]
+port = ["chips/esp32s31/phy/src/rx/gain_calibration.rs shared_mixer_dgain"]
 [[decision.place]]
 function = "phy_bt_rx_mx_dgain"
 start = 0x16
@@ -1173,7 +1173,7 @@ linear-to-dB scale 3 of `phy_get_power_db` and PBus read selectors above 4 \
 channel-register argument 0 (`phy_wakeup_init`); a claimed caller passing \
 them would either reach these paths or leave its call uncovered"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/calibration/estimator.rs phy_linear_to_db"]
+port = ["chips/esp32s31/phy/src/calibration/estimator.rs phy_linear_to_db"]
 review = """
 the PBus read selector and `phy_set_chan_reg` leaves were not located by \
 name in this repository"""
@@ -1263,7 +1263,7 @@ repeated software-frequency status polls before the start completes: the \
 poll count is hardware timing"""
 port_status = "present"
 port = [
-    "crates/esp32s31/phy/src/target_port/rfpll.rs observe_software_frequency_boundary",
+    "chips/esp32s31/phy/src/target_port/rfpll.rs observe_software_frequency_boundary",
 ]
 [[decision.place]]
 function = "phy_set_chan_freq_sw_start"
@@ -1279,7 +1279,7 @@ sensor DAC outside the five calibrated windows: the ROM's default index 5 \
 reads beyond its five-entry attribute table, and production rejects the \
 DAC fail-closed"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/analog/temperature.rs"]
+port = ["chips/esp32s31/phy/src/analog/temperature.rs"]
 [[decision.place]]
 function = "phy_tsens_dac_to_index"
 start = 0x22
@@ -1293,7 +1293,7 @@ reason = """
 TX gain publication skip option (`phy_param[7]`), which the production \
 configuration fixes disabled"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/channel.rs phy_wifi_set_tx_gain_new"]
+port = ["chips/esp32s31/phy/src/channel.rs phy_wifi_set_tx_gain_new"]
 [[decision.place]]
 function = "phy_wifi_set_tx_gain_new"
 start = 0x4a
@@ -1308,7 +1308,7 @@ RX gain memory writes over the tables generated from the fixed inputs of \
 `phy_set_rx_gain_table`: their RXBB DC index never exceeds 5 and the RF \
 gain index search always finds its entry"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/calibration/baseband.rs rfrx_gain_index"]
+port = ["chips/esp32s31/phy/src/calibration/baseband.rs rfrx_gain_index"]
 [[decision.place]]
 function = "phy_get_rxbb_dc_new"
 start = 0x6
@@ -1327,7 +1327,7 @@ TX baseband gain index above 4: the claimed `phy_txdc_cal_pwdet_init` \
 passes loop indices 0 to 2, and the other caller is outside the claimed \
 closures"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/tx/dc_offset.rs tx_bb_gain"]
+port = ["chips/esp32s31/phy/src/tx/dc_offset.rs tx_bb_gain"]
 [[decision.place]]
 function = "phy_index_to_txbbgain"
 start = 0x2
@@ -1346,7 +1346,7 @@ reentrancy guard `phy_param[0x194]` that RFPLL capacitance tracking sets \
 for the duration of its correction: production's exclusive radio ownership \
 makes a nested correction impossible"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/tracking/rfpll/thermal.rs"]
+port = ["chips/esp32s31/phy/src/tracking/rfpll/thermal.rs"]
 [[decision.place]]
 function = "phy_rfpll_cap_track_new"
 start = 0x42
@@ -1361,7 +1361,7 @@ analog I2C read-mask default for block identifiers outside 10 to 109: \
 every analog register the claimed closures access lies in blocks 0x62 to \
 0x6d"""
 port_status = "present"
-port = ["crates/esp32s31/pac/src/phy/i2c.rs publish_phy_i2c_read_mask"]
+port = ["chips/esp32s31/pac/src/phy/i2c.rs publish_phy_i2c_read_mask"]
 [[decision.place]]
 function = "phy_get_i2c_read_mask_new"
 start = 0xa
@@ -1381,8 +1381,8 @@ table end and the walk stops at either end, so from a start index inside \
 the table it ends within count - 1 steps and the limit never stops it"""
 port_status = "present"
 port = [
-    "crates/esp32s31/phy/src/channel.rs calculate_wifi_tx_gain",
-    "crates/esp32s31/phy/src/calibration/bluetooth.rs calculate_bluetooth_tx_gain",
+    "chips/esp32s31/phy/src/channel.rs calculate_wifi_tx_gain",
+    "chips/esp32s31/phy/src/calibration/bluetooth.rs calculate_bluetooth_tx_gain",
 ]
 [[decision.place]]
 function = "phy_get_tx_gain_value"
@@ -1397,7 +1397,7 @@ reason = """
 channel-14 MIC configuration: production rejects an enabled MIC option and \
 channel 14 fail-closed, as the qualified AP/STA profile requires"""
 port_status = "present"
-port = ["crates/esp32s31/phy/src/channel.rs Channel14MicEnabled"]
+port = ["chips/esp32s31/phy/src/channel.rs Channel14MicEnabled"]
 [[decision.place]]
 function = "phy_chan14_mic_cfg_new"
 [[decision.place]]
@@ -1420,7 +1420,7 @@ modes from 3, which the vendor reports through the `g_coa_funcs_p` console \
 slot"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/modem/coex_external.rs configure_external_coex_mode",
+    "chips/esp32s31/pac/src/modem/coex_external.rs configure_external_coex_mode",
 ]
 review = """
 mode 1 is a vendor mode the port could add; modes from 3 are invalid in \
@@ -1454,7 +1454,7 @@ only the Bluetooth module's selection \
 (`SharedRadioLease::select_bluetooth_low_power_clock`), and no ESP-IDF \
 path selects the coexistence module's (reviewed with the Bluetooth owner)"""
 port_status = "present"
-port = ["crates/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
+port = ["chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
 [[decision.place]]
 function = "modem_clock_select_lp_clock_source"
 start = 0x1a2
@@ -1484,8 +1484,8 @@ write, and a module outside the vendor's range asserts (reviewed with the \
 Bluetooth owner)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock",
-    "crates/esp32s31/pac/src/modem/shared_clock.rs select_bluetooth_low_power_timer_main_crystal",
+    "chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock",
+    "chips/esp32s31/pac/src/modem/shared_clock.rs select_bluetooth_low_power_timer_main_crystal",
 ]
 [[decision.place]]
 function = "modem_clock_select_lp_clock_source"
@@ -1515,7 +1515,7 @@ inside an interrupt; production's lease runs the selection in task context \
 only, during the Controller clock transition (reviewed with the Bluetooth \
 owner)"""
 port_status = "present"
-port = ["crates/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
+port = ["chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
 review = """
 the predecessor named a shared radio lease as the task-context owner; this \
 repository has no such lease, the selection belongs to `RadioDomain`"""
@@ -1545,7 +1545,7 @@ reason = """
 record: production's retry owners take both as typed values"""
 port_status = "present"
 port = [
-    "crates/esp32s31/ieee80211/mac/src/tx/runtime.rs OrdinaryMpduRetryState",
+    "chips/esp32s31/ieee80211/mac/src/tx/runtime.rs OrdinaryMpduRetryState",
 ]
 [[decision.place]]
 function = "rcReachRetryLimit"
@@ -1566,7 +1566,7 @@ assertion have no caller; production admits exactly the two sources \
 (`WifiLowPowerClockSource`)"""
 port_status = "present"
 port = [
-    "crates/esp32s31/pac/src/modem/shared_clock.rs WifiLowPowerClockSource",
+    "chips/esp32s31/pac/src/modem/shared_clock.rs WifiLowPowerClockSource",
 ]
 [[decision.place]]
 function = "modem_clock_hal_select_wifi_lpclk_source"

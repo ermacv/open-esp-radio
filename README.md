@@ -17,10 +17,12 @@ Not affiliated with or endorsed by Espressif Systems.
 
 | Path | Contents |
 | --- | --- |
-| `crates/` | the radio libraries, placed by protocol and chip ([architecture](docs/architecture.md)) |
-| `firmware/` | the chip-target workspace: staged boot platform and images |
+| `portable/` | libraries that touch neither hardware nor an OS: protocols, the radio port, chip knowledge ([layout](docs/repository-layout.md)) |
+| `chips/` | libraries that access a chip's hardware: PACs, HALs, PHY, drivers, platform |
+| `host/` | libraries that need an OS: analysis, images, the stand, HIL, the vendor comparison |
+| `firmware/` | the images for a chip: apps, bootstraps, HIL agents, probes, ESP-IDF peers |
+| `tools/` | the host programs: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
 | `registers/` | the reviewed register model (`cargo registers` publishes its SVD and PAC) |
-| `tools/` | host tools: `cargo registers`, `cargo fw`, by layer ([tools](tools/README.md)) |
 | `knowledge/` | recovered hardware facts and research notes |
 | `docs/` | architecture, owner decisions, source policy, hardware errata |
 

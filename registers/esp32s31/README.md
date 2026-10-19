@@ -24,12 +24,12 @@ analysis read this model; neither owns a second copy.
 | `model/platform/`, `policy/platform-ownership.toml`, `publication/platform.toml` | The platform publication: the reset-cause register the host reads through JTAG after a power cycle; SVD and `published/platform.bindings.toml` only, no PAC (ESP-HAL owns the block at runtime) |
 
 The generic generator is
-[`tools/lib/data/register-model`](../../tools/lib/data/register-model/README.md).
+[`host/registers/model`](../../host/registers/model/README.md).
 Its other two checked outputs are
-[`pac/raw/src/lib.rs`](../../crates/esp32s31/pac-raw/src/lib.rs) and
-[`pac/src/generated.rs`](../../crates/esp32s31/pac/src/generated.rs).
+[`pac/raw/src/lib.rs`](../../chips/esp32s31/pac-raw/src/lib.rs) and
+[`pac/src/generated.rs`](../../chips/esp32s31/pac/src/generated.rs).
 Handwritten runtime ownership and safe hardware access remain in the
-[closed PAC](../../crates/esp32s31/pac/README.md), not in publication tooling.
+[closed PAC](../../chips/esp32s31/pac/README.md), not in publication tooling.
 
 ## Publication and investigation are separate
 
@@ -107,13 +107,13 @@ Its `licenseText` is the Apache-2.0 notice of the Espressif SVD it mirrors,
 with the modification notice (see [`NOTICE`](../../NOTICE)).
 The reviewed common-PHY `TICK_CONF` carveout is in the radio model; adjacent
 platform-owned `MODEM_LPCON` registers remain in the upstream analysis catalog.
-See the [PAC provenance map](../../crates/esp32s31/pac/README.md).
+See the [PAC provenance map](../../chips/esp32s31/pac/README.md).
 
 Source provenance catalogs retain their exact source IDs, revisions and hashes.
 Reserved fields remain absent. A register or field whose meaning is not
 established is named by its position alone (`WORD_<offset>_OPAQUE`,
 `BIT_<n>_OPAQUE`, `BITS_<low>_<high>_OPAQUE`) and reviewed with
-`naming = "opaque"`; see [name origin](../../tools/lib/data/register-model/README.md). Neighboring-chip
+`naming = "opaque"`; see [name origin](../../host/registers/model/README.md). Neighboring-chip
 similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed
 source assertions, vendor comparison and dated hardware observations retain
 their distinct strength. Publication verifies consistency and reproducibility.

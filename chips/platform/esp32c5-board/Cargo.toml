@@ -1,0 +1,22 @@
+[package]
+name = "oer-platform-esp32c5-board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Memory configuration of the ESP32-C5 devkit with the N16R8 module"
+
+[features]
+# Stage two's adoption of the bootstrap's mapping (`adopt_psram`), which
+# links the staged runtime; the bootstrap does not enable it.
+stage-two = ["dep:oer-platform-staged-runtime"]
+
+[dependencies]
+oer-platform-esp32c5-layout.workspace = true
+oer-platform-staged-runtime = { path = "../staged-runtime", features = ["esp32c5"], optional = true }
+esp-hal = { workspace = true, features = ["esp32c5", "static-interrupts", "unstable"] }
+
+[lints]
+workspace = true
+

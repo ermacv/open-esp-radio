@@ -58,14 +58,14 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_exec_executor::{Executor, InterruptExecutor, LevelOrder, timer_observation::Window};
-use oer_firmware_platform_esp32s31_board as board;
-use oer_firmware_platform_espressif_staged_runtime::{panic, stacks};
 use oer_ieee80211_mac::{
     address::{Bssid, IndividualAddress},
     channel::{Channel, WifiChannel, WifiChannelWidth},
 };
 use oer_ieee80211_runtime::survey::Survey;
 use oer_ieee80211_softmac::WifiMacAddress;
+use oer_platform_esp32s31_board as board;
+use oer_platform_staged_runtime::{panic, stacks};
 use static_cell::StaticCell;
 
 use crate::{
@@ -87,7 +87,7 @@ pub struct W1Config {
 
 include!(concat!(env!("OUT_DIR"), "/w1_config.rs"));
 
-oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
+oer_platform_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
     wake: WakeToken = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The radio executor (P2), polled in its handler, which times each run.
@@ -178,7 +178,7 @@ extern "C" fn runtime_main() -> ! {
     // nothing has reset or remapped; interrupts stay disabled until the
     // executors, the doorbell and the time driver are bound below.
     let psram = unsafe {
-        oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+        oer_platform_staged_runtime::adopt(INTERRUPT_TABLE, || {
             board::adopt_psram_mapping(peripherals.PSRAM)
         })
     };
@@ -279,7 +279,7 @@ extern "C" fn runtime_main() -> ! {
     // wake are bound; the MAC and WDEVPWR sources stay silent until the
     // receive runner enables their routes, and interrupts were disabled
     // since the handoff.
-    unsafe { oer_firmware_platform_espressif_staged_runtime::enable_interrupts_after_handoff() };
+    unsafe { oer_platform_staged_runtime::enable_interrupts_after_handoff() };
     let boot = Boot {
         console,
         cell: cells.wifi,

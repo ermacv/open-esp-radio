@@ -136,7 +136,7 @@ is written at W3 and the contract is frozen after W4.
 
 ## Placement
 
-Code goes where the knowledge of the hardware is: `crates/esp32s31/` for this
-chip's registers, `crates/espressif/` for Espressif IP shared by their chips,
-the protocol directories for portable code, `crates/base/`, `radio/` and
-`exec/` for the rest, `crates/adapters/` for bindings. See `CLAUDE.md`.
+Code goes where the knowledge of the hardware is: `chips/esp32s31/` for this
+chip's registers, `portable/espressif/` and `chips/espressif/` for Espressif IP shared by their chips,
+the protocol directories for portable code, `portable/base/`, `radio/` and
+`exec/` for the rest, `portable/adapters/` and `chips/adapters/` for bindings. See `CLAUDE.md`.

@@ -29,7 +29,7 @@ their metadata because their code and stack already require the live mapping.
 The hook and all state it reads must stay in SRAM or retained memory and take
 no locks.
 
-Images are built, written and run by [`cargo fw`](../../../tools/lib/service/firmware/README.md);
+Images are built, written and run by [`cargo fw`](../../../host/image/firmware/README.md);
 no `.cargo/config.toml` adds Rust flags.
 
 The boot sequence is ROM → ESP-IDF bootloader → Flash bootstrap → application.
@@ -52,14 +52,14 @@ It does not return or carry Rust peripheral owners across the image boundary.
 
 Stage-two assembly initializes application data and SRAM interrupt/DMA sections
 before entering `runtime_main`. The application calls `esp_hal::init`, then
-unsafely calls the staged runtime's `oer_firmware_platform_espressif_staged_runtime::adopt` with
+unsafely calls the staged runtime's `oer_platform_staged_runtime::adopt` with
 its `INTERRUPT_TABLE` and, as the mapping closure, the board's
 `adopt_psram_mapping` with its unique PSRAM token. The image composes the two
 itself: the board does not link the runtime, whose panic entry would otherwise
 reach the bootstrap through the board. `adopt` also reinitializes vectoring and
 installs the per-core SRAM interrupt stack. Global interrupts remain disabled
 until the application binds its timers and executor handlers; it then calls
-the unsafe `oer_firmware_platform_espressif_staged_runtime::enable_interrupts_after_handoff` once
+the unsafe `oer_platform_staged_runtime::enable_interrupts_after_handoff` once
 per hart. PSRAM must not be reset or remapped after handoff.
 The runtime is the only owner of each hart's active vector table (MTVT):
 every CPU interrupt enters through its stack-switching vector entry and
@@ -71,8 +71,8 @@ differs from the runtime's entries, so a later direct binding cannot run on
 the interrupted stack.
 
 Each image declares its peripheral interrupt sources once with
-`oer_firmware_platform_espressif_staged_runtime::interrupt_table!` (source, handler, level,
-core; see [`oer-exec-interrupt-table`](../../../crates/exec/interrupt-table/README.md)):
+`oer_platform_staged_runtime::interrupt_table!` (source, handler, level,
+core; see [`oer-exec-interrupt-table`](../../../portable/exec/interrupt-table/README.md)):
 the macro links each handler into its source's slot of esp-hal's
 `__EXTERNAL_INTERRUPTS` and creates one token per source; the image hands its
 `INTERRUPT_TABLE` to the runtime's `adopt`. Each 12-byte entry holds the `Interrupt` (`u16`), the
@@ -84,7 +84,7 @@ slots; `enable_interrupts_after_handoff` checks again that every slot holds its
 handler and every table source is silent or routed to its level. An owner
 routes its source with `oer_adapters_esp_hal_soc::interrupt_table::enable` and
 its token, on the table's core only, and silences it with `disable`; the
-matrix lives in that adapter so that owners in `crates/` reach it. esp-hal's PMP region setup
+matrix lives in that adapter so that owners in `chips/` reach it. esp-hal's PMP region setup
 (`ESP_HAL_CONFIG_ENABLE_PMP`) is off in the root Cargo configuration, because
 its single no-execute data region would span stage two's PSRAM code.
 

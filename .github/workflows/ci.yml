@@ -75,13 +75,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
-      - name: Radio crates for the chip target
-        # Every crate of crates/ builds for the chip except the ui-test
-        # runner, a host test library that compiles cases with rustc.
+      - name: Portable and chip libraries for the chip target
+        # Every library of portable/ and chips/ builds for the chip; the
+        # platform packages of chips/platform are checked with the images.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
-            | jq -r '.packages[] | select(.manifest_path | contains("/crates/"))
-              | select(.name != "oer-base-ui-cases") | "-p " + .name')
+            | jq -r '.packages[] | select(.manifest_path | test("/(portable|chips)/"))
+              | select(.manifest_path | test("/chips/platform/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # The esp-hal halves of the adapters exist only for the chip, so the
@@ -95,8 +95,8 @@ jobs:
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|platform)/"))
-              | select((.manifest_path | test("/esp32c5/")) == ($c5 == "true"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/platform/"))
+              | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | "-p " + .name' <<<"$meta"
           }
           cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
@@ -110,8 +110,8 @@ jobs:
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|platform)/"))
-              | select((.manifest_path | test("/esp32c5/")) == ($c5 == "true"))
+              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/platform/"))
+              | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
               | "-p " + .name' <<<"$meta"
           }
           cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)

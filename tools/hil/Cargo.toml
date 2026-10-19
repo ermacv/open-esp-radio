@@ -1,0 +1,53 @@
+[package]
+name = "oer-tool-hil"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The `cargo hil` command line: argument parsing and calls into the stand, run store, analysis and experiment packages"
+
+[[bin]]
+name = "hil"
+path = "src/main.rs"
+
+[dependencies]
+oer-image-esp-idf = { path = "../../host/image/esp-idf" }
+oer-hil-run-bundle-format = { path = "../../host/hil/run-bundle-format" }
+oer-image-chip-profile = { path = "../../host/image/chip-profile" }
+oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
+oer-lab-stand-arbiter = { path = "../../host/lab/stand-arbiter" }
+oer-lab-stand-board = { path = "../../host/lab/stand-board" }
+oer-hil-run-bundle = { path = "../../host/hil/run-bundle" }
+oer-hil-analysis = { path = "../../host/hil/analysis" }
+oer-hil-experiment = { path = "../../host/hil/experiment" }
+oer-image-build = { path = "../../host/image/build" }
+oer-image-check-interrupts = { path = "../../host/image/check-interrupts" }
+oer-image-compare = { path = "../../host/image/compare" }
+oer-hil-image = { path = "../../host/hil/image" }
+oer-hil-image-class = { path = "../../host/hil/image-class" }
+oer-hil-source-snapshot = { path = "../../host/hil/source-snapshot" }
+oer-hil-schema = { path = "../../host/hil/schema" }
+oer-hil-observer = { path = "../../host/hil/observer" }
+oer-hil-lab = { path = "../../host/hil/lab" }
+oer-lab-stand-fixtures = { path = "../../host/lab/stand-fixtures" }
+oer-os-durable = { path = "../../host/os/durable" }
+oer-os-process = { path = "../../host/os/process" }
+oer-image-toolchain = { path = "../../host/image/toolchain" }
+clap = { version = "=4.5.48", features = ["derive"] }
+rustix = { version = "=1.1.4", features = ["process"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+tempfile = "=3.27.0"
+toml = "=1.1.4"
+
+oer-lab-device-peer-line = { path = "../../host/lab/device-peer-line" }
+oer-lab-stand-claims = { path = "../../host/lab/stand-claims" }
+oer-lab-stand-owners = { path = "../../host/lab/stand-owners" }
+[dev-dependencies]
+oer-hil-run-bundle = { path = "../../host/hil/run-bundle", features = ["test-support"] }
+
+[lints]
+workspace = true
+
