@@ -359,15 +359,12 @@ fn perform_release(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner without allocation"
 )]
-pub(crate) fn execute_acquire<'identity>(
-    prepared: PreparedModemClockAcquire<'identity>,
+pub(crate) fn execute_acquire(
+    prepared: PreparedModemClockAcquire,
     port: &mut impl ModemClockPort,
     held: &mut ModemPlatformClocks,
     platform: &impl PlatformClockProvider,
-) -> Result<
-    (ModemClockPlanner<'identity>, ModemClockLease<'identity>),
-    PoisonedModemClockAcquire<'identity>,
-> {
+) -> Result<(ModemClockPlanner, ModemClockLease), PoisonedModemClockAcquire> {
     oer_espressif_modem_clock::execute_acquire(prepared, |dependency| {
         perform_acquire(dependency, port, held, platform)
     })
@@ -383,11 +380,11 @@ pub(crate) fn execute_acquire<'identity>(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner and lease without allocation"
 )]
-pub(crate) fn execute_release<'planner, 'lease>(
-    prepared: PreparedModemClockRelease<'planner, 'lease>,
+pub(crate) fn execute_release(
+    prepared: PreparedModemClockRelease,
     port: &mut impl ModemClockPort,
     held: &mut ModemPlatformClocks,
-) -> Result<ModemClockPlanner<'planner>, PoisonedModemClockRelease<'planner, 'lease>> {
+) -> Result<ModemClockPlanner, PoisonedModemClockRelease> {
     oer_espressif_modem_clock::execute_release(prepared, |dependency| {
         perform_release(dependency, port, held)
     })

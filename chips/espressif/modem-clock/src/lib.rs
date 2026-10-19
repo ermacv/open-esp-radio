@@ -40,7 +40,11 @@
 #[cfg(test)]
 extern crate std;
 
-use core::{fmt, marker::PhantomData, ptr};
+use core::{
+    fmt,
+    marker::PhantomData,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 /// Most dependencies one chip table may name.
 pub const DEPENDENCY_CAPACITY: usize = 32;
@@ -136,18 +140,33 @@ fn bit<D: ModemClockDependency>(dependency: D) -> u32 {
     1 << dependency.index()
 }
 
-/// Stable, non-zero-sized identity borrowed by one planner epoch.
+/// Unique accounting identity transferred by value into one planner epoch.
 ///
-/// A borrow constructs the planner and remains live as long as any lease from
-/// that epoch exists. Distinct live identities therefore have distinct
-/// addresses without a global counter or unsafe code.
+/// ```compile_fail,E0382
+/// use oer_espressif_modem_clock::{ModemClockDependency, ModemClockPlanner, ModemClockPlannerIdentity};
+/// fn duplicate<D: ModemClockDependency>(identity: ModemClockPlannerIdentity) {
+///     let first = ModemClockPlanner::<D>::managed(identity);
+///     let second = ModemClockPlanner::<D>::managed(identity);
+/// }
+/// ```
+/// Keys are never reused, even if a planner or one of its leases is abandoned.
 pub struct ModemClockPlannerIdentity {
-    _occupied: u8,
+    key: u32,
 }
 
 impl ModemClockPlannerIdentity {
-    pub const fn new() -> Self {
-        Self { _occupied: 0 }
+    pub fn new() -> Self {
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        #[expect(
+            clippy::expect_used,
+            reason = "exhaustion must stop rather than reuse an identity retained by a forgotten lease"
+        )]
+        let key = NEXT
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |key| {
+                key.checked_add(1)
+            })
+            .expect("the modem clock identity space is exhausted");
+        Self { key }
     }
 }
 
@@ -190,19 +209,19 @@ impl<D: ModemClockDependency> LeaseSlot<D> {
 /// This type is intentionally neither `Clone` nor `Copy`. Counts and slots have
 /// no public accessors or mutation API.
 #[must_use = "dropping the planner abandons its complete software ownership epoch"]
-pub struct ModemClockPlanner<'identity, D> {
-    identity: &'identity ModemClockPlannerIdentity,
+pub struct ModemClockPlanner<D> {
+    identity: ModemClockPlannerIdentity,
     baseline: Baseline,
     wifi_initialized: bool,
     counts: [u16; DEPENDENCY_CAPACITY],
     slots: [LeaseSlot<D>; MAX_ACTIVE_LEASES],
 }
 
-impl<'identity, D: ModemClockDependency> ModemClockPlanner<'identity, D> {
+impl<D: ModemClockDependency> ModemClockPlanner<D> {
     /// Adopt an externally retained baseline.
     ///
     /// Unknown externally retained counts cannot produce a managed plan.
-    pub fn externally_retained(identity: &'identity mut ModemClockPlannerIdentity) -> Self {
+    pub fn externally_retained(identity: ModemClockPlannerIdentity) -> Self {
         Self::with_baseline(identity, Baseline::ExternallyRetained)
     }
 
@@ -211,14 +230,11 @@ impl<'identity, D: ModemClockDependency> ModemClockPlanner<'identity, D> {
     ///
     /// Counts start at zero, as the vendor's do: a zero-to-one edge enables a
     /// gate whatever its prior state, and a one-to-zero edge disables it.
-    pub const fn managed(identity: &'identity ModemClockPlannerIdentity) -> Self {
+    pub fn managed(identity: ModemClockPlannerIdentity) -> Self {
         Self::with_baseline(identity, Baseline::Managed)
     }
 
-    const fn with_baseline(
-        identity: &'identity ModemClockPlannerIdentity,
-        baseline: Baseline,
-    ) -> Self {
+    fn with_baseline(identity: ModemClockPlannerIdentity, baseline: Baseline) -> Self {
         Self {
             identity,
             baseline,
@@ -246,10 +262,7 @@ impl<'identity, D: ModemClockDependency> ModemClockPlanner<'identity, D> {
     pub fn prepare_acquire(
         self,
         dependencies: DependencySet<D>,
-    ) -> Result<
-        PreparedModemClockAcquire<'identity, D>,
-        ModemClockAcquirePreparationFailure<'identity, D>,
-    > {
+    ) -> Result<PreparedModemClockAcquire<D>, ModemClockAcquirePreparationFailure<D>> {
         if self.baseline != Baseline::Managed {
             return Err(ModemClockAcquirePreparationFailure {
                 planner: self,
@@ -305,16 +318,13 @@ impl<'identity, D: ModemClockDependency> ModemClockPlanner<'identity, D> {
         clippy::result_large_err,
         reason = "allocation-free failure retains the exact planner and lease owners"
     )]
-    pub fn prepare_release<'lease>(
+    pub fn prepare_release(
         self,
-        lease: ModemClockLease<'lease, D>,
-    ) -> Result<
-        PreparedModemClockRelease<'identity, 'lease, D>,
-        ModemClockReleasePreparationFailure<'identity, 'lease, D>,
-    > {
+        lease: ModemClockLease<D>,
+    ) -> Result<PreparedModemClockRelease<D>, ModemClockReleasePreparationFailure<D>> {
         let error = if self.baseline != Baseline::Managed {
             Some(ModemClockReleasePreparationError::UnknownBaseline)
-        } else if !ptr::eq(self.identity, lease.identity) {
+        } else if self.identity.key != lease.identity {
             Some(ModemClockReleasePreparationError::CrossManagerLease)
         } else if usize::from(lease.slot) >= MAX_ACTIVE_LEASES {
             Some(ModemClockReleasePreparationError::InvalidLeaseSlot)
@@ -367,12 +377,12 @@ pub enum ModemClockAcquirePreparationError<D> {
 
 /// Failed acquire preparation retaining the unchanged planner.
 #[must_use = "the failed preparation still owns the complete planner"]
-pub struct ModemClockAcquirePreparationFailure<'identity, D> {
-    planner: ModemClockPlanner<'identity, D>,
+pub struct ModemClockAcquirePreparationFailure<D> {
+    planner: ModemClockPlanner<D>,
     error: ModemClockAcquirePreparationError<D>,
 }
 
-impl<D: ModemClockDependency> fmt::Debug for ModemClockAcquirePreparationFailure<'_, D> {
+impl<D: ModemClockDependency> fmt::Debug for ModemClockAcquirePreparationFailure<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ModemClockAcquirePreparationFailure")
@@ -381,13 +391,13 @@ impl<D: ModemClockDependency> fmt::Debug for ModemClockAcquirePreparationFailure
     }
 }
 
-impl<'identity, D: ModemClockDependency> ModemClockAcquirePreparationFailure<'identity, D> {
+impl<D: ModemClockDependency> ModemClockAcquirePreparationFailure<D> {
     pub const fn error(&self) -> ModemClockAcquirePreparationError<D> {
         self.error
     }
 
     /// Recover the unchanged planner; preparation has exposed no edge.
-    pub fn into_planner(self) -> ModemClockPlanner<'identity, D> {
+    pub fn into_planner(self) -> ModemClockPlanner<D> {
         self.planner
     }
 }
@@ -396,8 +406,8 @@ impl<'identity, D: ModemClockDependency> ModemClockAcquirePreparationFailure<'id
 ///
 /// No count or slot is modified while this owner exists.
 #[must_use = "an acquire transaction must be executed or remain abandoned"]
-pub struct PreparedModemClockAcquire<'identity, D> {
-    planner: ModemClockPlanner<'identity, D>,
+pub struct PreparedModemClockAcquire<D> {
+    planner: ModemClockPlanner<D>,
     dependencies: DependencySet<D>,
     slot: u8,
     generation: u64,
@@ -406,14 +416,14 @@ pub struct PreparedModemClockAcquire<'identity, D> {
 }
 
 /// Next ownership state of an acquire transaction.
-enum ModemClockAcquireStep<'identity, D> {
-    Physical(PendingModemClockAcquireEdge<'identity, D>),
-    CommitReady(ModemClockAcquireCommitReady<'identity, D>),
+enum ModemClockAcquireStep<D> {
+    Physical(PendingModemClockAcquireEdge<D>),
+    CommitReady(ModemClockAcquireCommitReady<D>),
 }
 
-impl<'identity, D: ModemClockDependency> PreparedModemClockAcquire<'identity, D> {
+impl<D: ModemClockDependency> PreparedModemClockAcquire<D> {
     /// Move to the next boundary edge or the explicit commit state.
-    fn advance(mut self) -> ModemClockAcquireStep<'identity, D> {
+    fn advance(mut self) -> ModemClockAcquireStep<D> {
         while usize::from(self.next_dependency) < D::LOW_BIT_FIRST.len() {
             let dependency = D::LOW_BIT_FIRST[usize::from(self.next_dependency)];
             self.next_dependency += 1;
@@ -435,31 +445,31 @@ impl<'identity, D: ModemClockDependency> PreparedModemClockAcquire<'identity, D>
 ///
 /// Failure becomes an opaque poisoned owner, so partial physical execution
 /// cannot be represented as a clean rollback.
-struct PendingModemClockAcquireEdge<'identity, D> {
-    transaction: PreparedModemClockAcquire<'identity, D>,
+struct PendingModemClockAcquireEdge<D> {
+    transaction: PreparedModemClockAcquire<D>,
     dependency: D,
 }
 
-impl<'identity, D: ModemClockDependency> PendingModemClockAcquireEdge<'identity, D> {
+impl<D: ModemClockDependency> PendingModemClockAcquireEdge<D> {
     /// Record the edge performed and continue the same transaction.
-    fn complete(mut self) -> PreparedModemClockAcquire<'identity, D> {
+    fn complete(mut self) -> PreparedModemClockAcquire<D> {
         self.transaction.completed_edges += 1;
         self.transaction
     }
 
     /// Retain the complete owner after an uncertain or failed physical edge.
-    fn fail(self) -> PoisonedModemClockAcquire<'identity, D> {
+    fn fail(self) -> PoisonedModemClockAcquire<D> {
         PoisonedModemClockAcquire { pending: self }
     }
 }
 
 /// Opaque owner after a physical acquire edge did not complete cleanly.
 #[must_use = "a poisoned acquire still owns its planner and pending lease"]
-pub struct PoisonedModemClockAcquire<'identity, D> {
-    pending: PendingModemClockAcquireEdge<'identity, D>,
+pub struct PoisonedModemClockAcquire<D> {
+    pending: PendingModemClockAcquireEdge<D>,
 }
 
-impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockAcquire<'_, D> {
+impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockAcquire<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PoisonedModemClockAcquire")
@@ -469,7 +479,7 @@ impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockAcquire<'_, D> {
     }
 }
 
-impl<D: ModemClockDependency> PoisonedModemClockAcquire<'_, D> {
+impl<D: ModemClockDependency> PoisonedModemClockAcquire<D> {
     /// The dependency whose acquire edge failed.
     pub const fn dependency(&self) -> D {
         self.pending.dependency
@@ -481,27 +491,22 @@ impl<D: ModemClockDependency> PoisonedModemClockAcquire<'_, D> {
 }
 
 #[cfg(test)]
-impl<'identity, D> PoisonedModemClockAcquire<'identity, D> {
+impl<D> PoisonedModemClockAcquire<D> {
     /// Re-expose the same pure-model edge to unit tests. This is not a
     /// hardware retry contract.
-    fn reexpose_for_test(self) -> PendingModemClockAcquireEdge<'identity, D> {
+    fn reexpose_for_test(self) -> PendingModemClockAcquireEdge<D> {
         self.pending
     }
 }
 
 /// Acquire transaction whose required physical edge sequence is complete.
-struct ModemClockAcquireCommitReady<'identity, D> {
-    transaction: PreparedModemClockAcquire<'identity, D>,
+struct ModemClockAcquireCommitReady<D> {
+    transaction: PreparedModemClockAcquire<D>,
 }
 
-impl<'identity, D: ModemClockDependency> ModemClockAcquireCommitReady<'identity, D> {
+impl<D: ModemClockDependency> ModemClockAcquireCommitReady<D> {
     /// Atomically publish logical counts and the new opaque lease.
-    fn commit(
-        mut self,
-    ) -> (
-        ModemClockPlanner<'identity, D>,
-        ModemClockLease<'identity, D>,
-    ) {
+    fn commit(mut self) -> (ModemClockPlanner<D>, ModemClockLease<D>) {
         for &dependency in D::LOW_BIT_FIRST {
             if self.transaction.dependencies.contains(dependency) {
                 self.transaction.planner.counts[dependency.index()] += 1;
@@ -514,7 +519,7 @@ impl<'identity, D: ModemClockDependency> ModemClockAcquireCommitReady<'identity,
         slot.dependencies = self.transaction.dependencies;
 
         let lease = ModemClockLease {
-            identity: self.transaction.planner.identity,
+            identity: self.transaction.planner.identity.key,
             slot: self.transaction.slot,
             generation: self.transaction.generation,
             dependencies: self.transaction.dependencies,
@@ -528,8 +533,8 @@ impl<'identity, D: ModemClockDependency> ModemClockAcquireCommitReady<'identity,
 /// This type is intentionally neither `Clone` nor `Copy` and exposes no slot,
 /// generation, dependency set, or constructor.
 #[must_use = "the shared-clock lease must remain owned until an explicit release"]
-pub struct ModemClockLease<'identity, D> {
-    identity: &'identity ModemClockPlannerIdentity,
+pub struct ModemClockLease<D> {
+    identity: u32,
     slot: u8,
     generation: u64,
     dependencies: DependencySet<D>,
@@ -549,13 +554,13 @@ pub enum ModemClockReleasePreparationError<D> {
 
 /// Failed release preparation retaining the unchanged planner and exact lease.
 #[must_use = "both opaque owners remain in this failed release"]
-pub struct ModemClockReleasePreparationFailure<'planner, 'lease, D> {
-    planner: ModemClockPlanner<'planner, D>,
-    lease: ModemClockLease<'lease, D>,
+pub struct ModemClockReleasePreparationFailure<D> {
+    planner: ModemClockPlanner<D>,
+    lease: ModemClockLease<D>,
     error: ModemClockReleasePreparationError<D>,
 }
 
-impl<D: ModemClockDependency> fmt::Debug for ModemClockReleasePreparationFailure<'_, '_, D> {
+impl<D: ModemClockDependency> fmt::Debug for ModemClockReleasePreparationFailure<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ModemClockReleasePreparationFailure")
@@ -564,15 +569,13 @@ impl<D: ModemClockDependency> fmt::Debug for ModemClockReleasePreparationFailure
     }
 }
 
-impl<'planner, 'lease, D: ModemClockDependency>
-    ModemClockReleasePreparationFailure<'planner, 'lease, D>
-{
+impl<D: ModemClockDependency> ModemClockReleasePreparationFailure<D> {
     pub const fn error(&self) -> ModemClockReleasePreparationError<D> {
         self.error
     }
 
     /// Recover only the two unchanged opaque owners, never counts or IDs.
-    pub fn into_owners(self) -> (ModemClockPlanner<'planner, D>, ModemClockLease<'lease, D>) {
+    pub fn into_owners(self) -> (ModemClockPlanner<D>, ModemClockLease<D>) {
         (self.planner, self.lease)
     }
 }
@@ -582,22 +585,22 @@ impl<'planner, 'lease, D: ModemClockDependency>
 /// The lease remains active and counts remain unchanged until the
 /// transaction commits.
 #[must_use = "a release transaction must be executed or remain abandoned"]
-pub struct PreparedModemClockRelease<'planner, 'lease, D> {
-    planner: ModemClockPlanner<'planner, D>,
-    lease: ModemClockLease<'lease, D>,
+pub struct PreparedModemClockRelease<D> {
+    planner: ModemClockPlanner<D>,
+    lease: ModemClockLease<D>,
     next_dependency: u8,
     completed_edges: u8,
 }
 
 /// Next ownership state of a release transaction.
-enum ModemClockReleaseStep<'planner, 'lease, D> {
-    Physical(PendingModemClockReleaseEdge<'planner, 'lease, D>),
-    CommitReady(ModemClockReleaseCommitReady<'planner, 'lease, D>),
+enum ModemClockReleaseStep<D> {
+    Physical(PendingModemClockReleaseEdge<D>),
+    CommitReady(ModemClockReleaseCommitReady<D>),
 }
 
-impl<'planner, 'lease, D: ModemClockDependency> PreparedModemClockRelease<'planner, 'lease, D> {
+impl<D: ModemClockDependency> PreparedModemClockRelease<D> {
     /// Move to the next one-to-zero edge or the explicit commit state.
-    fn advance(mut self) -> ModemClockReleaseStep<'planner, 'lease, D> {
+    fn advance(mut self) -> ModemClockReleaseStep<D> {
         while usize::from(self.next_dependency) < D::LOW_BIT_FIRST.len() {
             let dependency = D::LOW_BIT_FIRST[usize::from(self.next_dependency)];
             self.next_dependency += 1;
@@ -617,31 +620,31 @@ impl<'planner, 'lease, D: ModemClockDependency> PreparedModemClockRelease<'plann
 }
 
 /// Release transaction owner while one physical edge is outstanding.
-struct PendingModemClockReleaseEdge<'planner, 'lease, D> {
-    transaction: PreparedModemClockRelease<'planner, 'lease, D>,
+struct PendingModemClockReleaseEdge<D> {
+    transaction: PreparedModemClockRelease<D>,
     dependency: D,
 }
 
-impl<'planner, 'lease, D: ModemClockDependency> PendingModemClockReleaseEdge<'planner, 'lease, D> {
+impl<D: ModemClockDependency> PendingModemClockReleaseEdge<D> {
     /// Record the edge performed and continue the same transaction.
-    fn complete(mut self) -> PreparedModemClockRelease<'planner, 'lease, D> {
+    fn complete(mut self) -> PreparedModemClockRelease<D> {
         self.transaction.completed_edges += 1;
         self.transaction
     }
 
     /// Retain the complete owner after an uncertain or failed physical edge.
-    fn fail(self) -> PoisonedModemClockRelease<'planner, 'lease, D> {
+    fn fail(self) -> PoisonedModemClockRelease<D> {
         PoisonedModemClockRelease { pending: self }
     }
 }
 
 /// Opaque owner after a physical release edge did not complete cleanly.
 #[must_use = "a poisoned release still owns its planner and exact lease"]
-pub struct PoisonedModemClockRelease<'planner, 'lease, D> {
-    pending: PendingModemClockReleaseEdge<'planner, 'lease, D>,
+pub struct PoisonedModemClockRelease<D> {
+    pending: PendingModemClockReleaseEdge<D>,
 }
 
-impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockRelease<'_, '_, D> {
+impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockRelease<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PoisonedModemClockRelease")
@@ -651,7 +654,7 @@ impl<D: ModemClockDependency> fmt::Debug for PoisonedModemClockRelease<'_, '_, D
     }
 }
 
-impl<D: ModemClockDependency> PoisonedModemClockRelease<'_, '_, D> {
+impl<D: ModemClockDependency> PoisonedModemClockRelease<D> {
     /// The dependency whose release edge failed.
     pub const fn dependency(&self) -> D {
         self.pending.dependency
@@ -663,22 +666,22 @@ impl<D: ModemClockDependency> PoisonedModemClockRelease<'_, '_, D> {
 }
 
 #[cfg(test)]
-impl<'planner, 'lease, D> PoisonedModemClockRelease<'planner, 'lease, D> {
+impl<D> PoisonedModemClockRelease<D> {
     /// Re-expose the same pure-model edge to unit tests. This is not a
     /// hardware retry contract.
-    fn reexpose_for_test(self) -> PendingModemClockReleaseEdge<'planner, 'lease, D> {
+    fn reexpose_for_test(self) -> PendingModemClockReleaseEdge<D> {
         self.pending
     }
 }
 
 /// Release transaction whose required physical edge sequence is complete.
-struct ModemClockReleaseCommitReady<'planner, 'lease, D> {
-    transaction: PreparedModemClockRelease<'planner, 'lease, D>,
+struct ModemClockReleaseCommitReady<D> {
+    transaction: PreparedModemClockRelease<D>,
 }
 
-impl<'planner, D: ModemClockDependency> ModemClockReleaseCommitReady<'planner, '_, D> {
+impl<D: ModemClockDependency> ModemClockReleaseCommitReady<D> {
     /// Atomically decrement counts and retire the exact lease slot.
-    fn commit(mut self) -> ModemClockPlanner<'planner, D> {
+    fn commit(mut self) -> ModemClockPlanner<D> {
         for &dependency in D::LOW_BIT_FIRST {
             if self.transaction.lease.dependencies.contains(dependency) {
                 self.transaction.planner.counts[dependency.index()] -= 1;
@@ -706,16 +709,10 @@ impl<'planner, D: ModemClockDependency> ModemClockReleaseCommitReady<'planner, '
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner without allocation"
 )]
-pub fn execute_acquire<'identity, D: ModemClockDependency, E>(
-    mut prepared: PreparedModemClockAcquire<'identity, D>,
+pub fn execute_acquire<D: ModemClockDependency, E>(
+    mut prepared: PreparedModemClockAcquire<D>,
     mut perform: impl FnMut(D) -> Result<(), E>,
-) -> Result<
-    (
-        ModemClockPlanner<'identity, D>,
-        ModemClockLease<'identity, D>,
-    ),
-    PoisonedModemClockAcquire<'identity, D>,
-> {
+) -> Result<(ModemClockPlanner<D>, ModemClockLease<D>), PoisonedModemClockAcquire<D>> {
     loop {
         match prepared.advance() {
             ModemClockAcquireStep::Physical(pending) => {
@@ -740,10 +737,10 @@ pub fn execute_acquire<'identity, D: ModemClockDependency, E>(
     clippy::result_large_err,
     reason = "the poisoned transaction retains the planner and lease without allocation"
 )]
-pub fn execute_release<'planner, 'lease, D: ModemClockDependency, E>(
-    mut prepared: PreparedModemClockRelease<'planner, 'lease, D>,
+pub fn execute_release<D: ModemClockDependency, E>(
+    mut prepared: PreparedModemClockRelease<D>,
     mut perform: impl FnMut(D) -> Result<(), E>,
-) -> Result<ModemClockPlanner<'planner, D>, PoisonedModemClockRelease<'planner, 'lease, D>> {
+) -> Result<ModemClockPlanner<D>, PoisonedModemClockRelease<D>> {
     loop {
         match prepared.advance() {
             ModemClockReleaseStep::Physical(pending) => {

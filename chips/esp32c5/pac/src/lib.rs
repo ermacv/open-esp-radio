@@ -56,7 +56,8 @@ pub use modem::clock::{Ieee802154ResetObservation, ModemClockDevice, ModemClockR
 pub use modem::etm::Ieee802154EtmChannels;
 pub use ownership::{
     Ieee802154InterruptRegisters, Ieee802154InterruptSetup, Ieee802154Partition,
-    Ieee802154TaskRegisters, RadioPartitions, WifiInterruptPartition, WifiMacPartition,
+    Ieee802154TaskRegisters, RadioHandoff, RadioPartitions, WifiInterruptPartition,
+    WifiMacPartition,
 };
 pub use phy::i2c::PhyI2cRegisters;
 #[cfg(any(test, feature = "test-support", oer_probe))]

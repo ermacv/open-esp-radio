@@ -133,8 +133,8 @@ oer_probe_macros::probe! {
             return INVALID_ARGUMENT;
         };
         with_bus(|bus| {
-            let mut read = FieldRead::new(field);
-            let result = drive(|| read.poll(bus));
+            let mut read = FieldRead::new(bus, field);
+            let result = drive(|| read.poll());
             result.map_or(EXHAUSTED, u32::from)
         })
     }
@@ -150,11 +150,12 @@ oer_probe_macros::probe! {
         let Some(field) = AnalogField::new(address, msb as u8, lsb as u8) else {
             return INVALID_ARGUMENT;
         };
-        let Some(mut write) = u8::try_from(data).ok().and_then(|data| FieldWrite::new(field, data).ok()) else {
-            return INVALID_ARGUMENT;
-        };
+        let Ok(data) = u8::try_from(data) else { return INVALID_ARGUMENT };
         with_bus(|bus| {
-            let result = drive(|| write.poll(bus));
+            let Ok(mut write) = FieldWrite::new(bus, field, data) else {
+                return INVALID_ARGUMENT;
+            };
+            let result = drive(|| write.poll());
             result.map_or(EXHAUSTED, |()| 0)
         })
     }
@@ -221,9 +222,9 @@ oer_probe_macros::probe! {
             parameter_416: halfword(0x416),
         };
         with_bus(|bus| {
-            let mut sequence = oer_esp32c5_hal::analog::initialization(inputs);
+            let mut sequence = oer_esp32c5_hal::analog::initialization(bus, inputs);
             for _ in 0..MAXIMUM_PARALLEL_ACTIONS {
-                if sequence.poll(bus) == Step::Ready(()) {
+                if sequence.poll() == Step::Ready(()) {
                     return 0;
                 }
             }
@@ -235,9 +236,9 @@ oer_probe_macros::probe! {
 /// Drive one analog configuration leaf to completion on the isolated bus.
 fn configure(leaf: oer_esp32c5_pac::PhyI2cConfiguration) -> u32 {
     with_bus(|bus| {
-        let mut configuration = oer_esp32c5_hal::analog::configuration(leaf);
+        let mut configuration = oer_esp32c5_hal::analog::configuration(bus, leaf);
         for _ in 0..MAXIMUM_PARALLEL_ACTIONS {
-            match configuration.poll(bus) {
+            match configuration.poll() {
                 Ok(Step::Ready(())) => return 0,
                 Ok(Step::Pending) => {}
                 Err(_) => return INVALID_ARGUMENT,

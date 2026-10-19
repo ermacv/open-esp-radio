@@ -1,5 +1,5 @@
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! ESP32-C5 SoC services backed by esp-hal peripheral witnesses.
 //!
@@ -8,3 +8,6 @@
 //! protocol policy.
 
 pub mod watchdog;
+
+#[cfg(feature = "esp32c5")]
+pub mod radio;

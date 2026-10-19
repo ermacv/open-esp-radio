@@ -98,8 +98,8 @@ contexts = ["esp_hal::interrupt::arch::init_vectoring"]
 writer = "esp_hal::interrupt::map_raw"
 contexts = [
     "esp_hal::interrupt::setup_interrupts",
-    "<esp_hal::interrupt::InterruptRoutes>::enable",
-    "<esp_hal::interrupt::InterruptRoutes>::disable",
+    "<esp_hal::interrupt::CoreInterruptRoutes>::enable",
+    "<esp_hal::interrupt::CoreInterruptRoutes>::disable",
 ]
 
 # The mask ROM the stack analyses read: the pinned ROM ELF of the revision

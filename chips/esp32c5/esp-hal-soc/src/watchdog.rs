@@ -13,14 +13,13 @@ pub use oer_time::deadline::{DeadlineBudget, DeadlineError};
 
 #[cfg(feature = "esp32c5")]
 mod target {
-    use core::{cell::RefCell, mem::ManuallyDrop};
-    use critical_section::Mutex;
+    use core::mem::ManuallyDrop;
     use esp_hal::{
         peripherals::TIMG1,
         time::{Duration, Instant},
         timer::timg::{MwdtStage, TimerGroup},
     };
-    use oer_time::deadline::{Backend, Controller, DeadlineBudget, DeadlineError};
+    use oer_time::deadline::{Backend, DeadlineBudget, DeadlineError, Lease, Watchdog};
 
     struct Hardware(ManuallyDrop<TimerGroup<'static, TIMG1<'static>>>);
     impl Backend for Hardware {
@@ -39,54 +38,37 @@ mod target {
         }
     }
 
-    /// Exclusive TIMG1 owner. Share this service, never the peripheral itself.
-    /// A critical section serializes finite programming only; expiry needs no
-    /// ISR, executor or access to this service.
-    pub struct DeadlineWatchdog(Mutex<RefCell<Controller<Hardware>>>);
+    /// Exclusive TIMG1 owner, moved into its task and then into each lease.
+    #[derive(Debug)]
+    pub struct DeadlineWatchdog(Watchdog<Hardware>);
 
     impl DeadlineWatchdog {
         pub fn new(timg: TIMG1<'static>) -> Self {
             let mut group = TimerGroup::new(timg);
             group.wdt.disable();
-            Self(Mutex::new(RefCell::new(Controller::new(Hardware(
-                ManuallyDrop::new(group),
-            )))))
+            Self(Watchdog::new(Hardware(ManuallyDrop::new(group))))
         }
 
-        /// Arm once. Reject an existing obligation without changing its timer.
-        /// The logical completion deadline is sampled before programming;
-        /// physical expiry additionally includes programming, latch and reset
-        /// latency, which requires hardware measurement.
-        pub fn arm(&self, budget: DeadlineBudget) -> Result<DeadlineLease<'_>, DeadlineError> {
-            let generation =
-                critical_section::with(|cs| self.0.borrow(cs).borrow_mut().arm(budget))?;
-            Ok(DeadlineLease {
-                owner: self,
-                generation,
-            })
+        pub fn arm(self, budget: DeadlineBudget) -> Result<DeadlineLease, (Self, DeadlineError)> {
+            self.0
+                .arm(budget)
+                .map(DeadlineLease)
+                .map_err(|(owner, error)| (Self(owner), error))
         }
     }
 
-    /// Unique completion authority for one operation. Dropping or forgetting it
-    /// leaves the watchdog armed and prevents any later operation from renewing
-    /// the deadline. This token is bound to the service that issued it.
+    /// Completion authority retaining the complete watchdog by value.
+    /// Dropping or forgetting it leaves reset armed.
+    #[derive(Debug)]
     #[must_use = "only proven restoration may complete the lease; dropping it leaves reset armed"]
-    pub struct DeadlineLease<'a> {
-        owner: &'a DeadlineWatchdog,
-        generation: u64,
-    }
+    pub struct DeadlineLease(Lease<Hardware>);
 
-    impl DeadlineLease<'_> {
-        /// Disarm after the client's physical postconditions hold. Equality or
-        /// lateness rejects completion and leaves the hardware armed.
-        pub fn complete(self) -> Result<(), DeadlineError> {
-            critical_section::with(|cs| {
-                self.owner
-                    .0
-                    .borrow(cs)
-                    .borrow_mut()
-                    .complete(self.generation)
-            })
+    impl DeadlineLease {
+        pub fn complete(self) -> Result<DeadlineWatchdog, (Self, DeadlineError)> {
+            self.0
+                .complete()
+                .map(DeadlineWatchdog)
+                .map_err(|(lease, error)| (Self(lease), error))
         }
     }
 }

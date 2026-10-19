@@ -9,40 +9,38 @@
 //!
 //! The doorbell consumes its software interrupt, so no executor can be woken
 //! through the same line. Its handler, named in the image's interrupt table,
-//! first calls [`acknowledge`], then takes the requests: a ring after that
+//! first calls [`DoorbellAcknowledger::acknowledge`], then takes the requests: a ring after that
 //! raises the interrupt again and is not lost.
 
 use core::sync::atomic::{Ordering, fence};
 
 use esp_hal::{
-    interrupt::{Priority, software::SoftwareInterrupt},
+    interrupt::{
+        Priority,
+        software::{SoftwareInterrupt, SoftwareInterruptAcknowledger, SoftwareInterruptSender},
+    },
     peripherals::Interrupt,
     system::Cpu,
 };
 use oer_interrupt_table::Entry;
 
-use crate::executor::{SameLevel, software_interrupt, software_interrupt_source};
+use crate::executor::{SameLevel, software_interrupt_source};
 
 /// The radio doorbell on software interrupt `SWI` (`FROM_CPU_INTR<SWI>`).
 pub struct Doorbell<const SWI: u8> {
-    interrupt: SoftwareInterrupt<'static, SWI>,
+    interrupt: SoftwareInterruptSender<'static, SWI>,
 }
 
 impl<const SWI: u8> Doorbell<SWI> {
     /// The doorbell on `interrupt`, whose source `bell` is the token of;
     /// `level` proves that it shares the radio interrupt's level and core.
-    /// Resets a stale raise, then routes the source to its table level.
-    ///
-    /// # Errors
-    ///
-    /// The interrupt table does not list the source with the token's level
-    /// and core, or the caller runs on another core than the table's; the
-    /// source stays silent.
+    /// Resets a stale raise and returns both halves. Install the acknowledger
+    /// in its handler's storage before calling its `enable` method.
     pub fn new<Radio, Bell>(
         interrupt: SoftwareInterrupt<'static, SWI>,
         bell: Bell,
         level: SameLevel<Radio, Bell>,
-    ) -> Result<Self, oer_espressif_esp_hal_irq::Error>
+    ) -> (Self, DoorbellAcknowledger<SWI>)
     where
         Radio: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
         Bell: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
@@ -55,8 +53,17 @@ impl<const SWI: u8> Doorbell<SWI> {
         };
         let _ = level;
         interrupt.reset();
-        oer_espressif_esp_hal_irq::enable(&bell)?;
-        Ok(Self { interrupt })
+        let (interrupt, ack) = interrupt.split();
+        // Return both owners before the image enables the route: the handler
+        // must own its acknowledger before any ring can reach it.
+        let doorbell = Self { interrupt };
+        (
+            doorbell,
+            DoorbellAcknowledger {
+                interrupt: ack,
+                bell: oer_espressif_esp_hal_irq::Route::new(bell),
+            },
+        )
     }
 
     /// Raise the doorbell. The fence orders the caller's request writes
@@ -69,9 +76,21 @@ impl<const SWI: u8> Doorbell<SWI> {
     }
 }
 
-/// Reset doorbell `SWI`'s software interrupt: the first step of its handler,
-/// before it takes the requests.
-#[inline(always)]
-pub fn acknowledge<const SWI: u8>() {
-    software_interrupt(SWI, false);
+/// The acknowledgement and route authority moved into the doorbell's ISR.
+pub struct DoorbellAcknowledger<const SWI: u8> {
+    interrupt: SoftwareInterruptAcknowledger<'static, SWI>,
+    bell: oer_espressif_esp_hal_irq::Route,
+}
+
+impl<const SWI: u8> DoorbellAcknowledger<SWI> {
+    /// Enable the route after this owner has reached the ISR's storage.
+    pub fn enable(&mut self) -> Result<(), oer_espressif_esp_hal_irq::Error> {
+        oer_espressif_esp_hal_irq::enable_route(&self.bell)
+    }
+
+    /// Reset the line before taking requests. Only the handler owns this half.
+    #[inline(always)]
+    pub fn acknowledge(&mut self) {
+        self.interrupt.reset();
+    }
 }

@@ -4,7 +4,7 @@ use oer_espressif_esp_hal_soc::watchdog::DeadlineLease;
 /// replaced. This verifies service cancellation, not an injected PHY failure.
 pub(super) async fn inject(
     mode: oer_hil_protocol::system::WatchdogTestMode,
-    lease: DeadlineLease<'static>,
+    lease: DeadlineLease,
 ) -> ! {
     use oer_hil_protocol::system::WatchdogTestMode as Mode;
     match mode {

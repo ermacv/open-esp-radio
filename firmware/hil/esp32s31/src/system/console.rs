@@ -7,7 +7,6 @@ use oer_espressif_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{RejectReason, Rejected};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
-use static_cell::StaticCell;
 
 use crate::transport::CONSOLE;
 use oer_hil_agent::base::{Either, PanicRequest, WatchdogRequest};
@@ -19,26 +18,26 @@ static TESTS: Channel<CriticalSectionRawMutex, (RequestIdentity, WatchdogTestMod
 pub(crate) fn start(
     executor: &'static mut crate::Executor<0>,
     wake: crate::ExecutorWake,
-    usb: crate::transport::Usb,
+    (usb, pads): (
+        crate::transport::Usb,
+        esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
+    ),
     rng: esp_hal::peripherals::RNG<'static>,
     timer: esp_hal::peripherals::TIMG1<'static>,
 ) -> ! {
-    static SERVICE: StaticCell<DeadlineWatchdog> = StaticCell::new();
-    let service = SERVICE.init(DeadlineWatchdog::new(timer));
-    let entropy = esp_hal::rng::TrngSource::new(rng);
-    let rng = esp_hal::rng::Trng::try_new().expect("HIL boot entropy");
-    let boot = ((u64::from(rng.random()) << 32) | u64::from(rng.random())).max(1);
-    drop(rng);
-    drop(entropy);
-    // `Rng` users keep reading the TRNG after its source owner is gone.
-    crate::check_entropy_source();
+    let service = DeadlineWatchdog::new(timer);
+    let mut entropy = oer_espressif_esp_hal_soc::entropy::Entropy::new(rng);
+    let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
+    crate::check_entropy_source(&entropy);
+    #[cfg(not(feature = "usb-jtag-off"))]
+    let _pads = pads;
     CONSOLE.start(boot);
     crate::transport::init_logger();
     executor.run(wake, |spawner| {
         spawner.spawn(test_watchdog(service).expect("system watchdog test task"));
         spawner.spawn(super::panic::panic_on_request().expect("panic task"));
         #[cfg(feature = "usb-jtag-off")]
-        spawner.spawn(usb_off::disable_on_request().expect("USB switch task"));
+        spawner.spawn(usb_off::disable_on_request(pads).expect("USB switch task"));
         spawner.spawn(run(usb, boot).expect("system console task"));
     });
 }
@@ -115,7 +114,9 @@ mod usb_off {
     /// pads and drops its pull-ups: the host sees the device leave USB. Only a reset of the chip,
     /// which restores the pads for the ROM, brings it back.
     #[embassy_executor::task]
-    pub(super) async fn disable_on_request() {
+    pub(super) async fn disable_on_request(
+        pads: esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
+    ) {
         let request = REQUESTS.receive().await;
         let sequence = CONSOLE
             .publish_reliably(request.session_id, request.request_id, &UsbDisabled)
@@ -125,41 +126,34 @@ mod usb_off {
         // Off its pads alone, the device stops answering but the host keeps
         // it enumerated: the D+ pull-up must go too for the host to see a
         // disconnect.
-        esp_hal::peripherals::USB_DEVICE::regs()
-            .conf0()
-            .modify(|_, w| {
-                w.pad_pull_override()
-                    .set_bit()
-                    .dp_pullup()
-                    .clear_bit()
-                    .dm_pullup()
-                    .clear_bit()
-                    .usb_pad_enable()
-                    .clear_bit()
-            });
+        pads.disconnect();
     }
 }
 
 /// Arms the SoC deadline watchdog for each test and misbehaves as asked.
 #[embassy_executor::task]
-async fn test_watchdog(service: &'static DeadlineWatchdog) {
+async fn test_watchdog(mut service: DeadlineWatchdog) {
     loop {
         let (request, mode) = TESTS.receive().await;
         let budget = DeadlineBudget::from_micros(
             core::num::NonZeroU32::new(1_000_000).expect("one second is nonzero"),
         );
-        let Ok(lease) = service.arm(budget) else {
-            let refused = Rejected(RejectReason::InvalidState);
-            CONSOLE
-                .publish_reliably(request.session_id, request.request_id, &refused)
-                .await;
-            continue;
+        let lease = match service.arm(budget) {
+            Ok(lease) => lease,
+            Err((returned, _error)) => {
+                service = returned;
+                let refused = Rejected(RejectReason::InvalidState);
+                CONSOLE
+                    .publish_reliably(request.session_id, request.request_id, &refused)
+                    .await;
+                continue;
+            }
         };
         // The host finds this in the next boot's post-mortem.
         super::postmortem::checkpoint("watchdog.arm", mode as u32);
         let armed = WatchdogArmed(mode);
         if mode == WatchdogTestMode::Complete {
-            lease.complete().expect("immediate diagnostic completion");
+            service = lease.complete().expect("immediate diagnostic completion");
             CONSOLE
                 .publish_reliably(request.session_id, request.request_id, &armed)
                 .await;

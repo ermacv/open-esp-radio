@@ -22,7 +22,7 @@ compile_error!(
 use core::fmt::Write as _;
 
 use esp_hal::{
-    Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::Rng,
+    Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::RngOwner,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
 use oer_embassy_time::EmbassyClock;
@@ -81,6 +81,7 @@ struct Boot {
     console: Console,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
+    rng: RngOwner<'static>,
     station: [u8; 6],
     access_point: [u8; 6],
 }
@@ -177,6 +178,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         console,
         cell: cells.wifi,
         wifi,
+        rng: RngOwner::new(peripherals.RNG),
         station,
         access_point,
     };
@@ -203,10 +205,11 @@ async fn w0(boot: Boot) {
         mut console,
         cell,
         wifi,
+        rng,
         station,
         access_point,
     } = boot;
-    match run(&mut console, cell, wifi, station, access_point).await {
+    match run(&mut console, cell, wifi, rng, station, access_point).await {
         Ok(()) => {
             let _ = console.write(b"OER-RESULT: pass w0\r\n");
         }
@@ -220,6 +223,7 @@ async fn run(
     console: &mut Console,
     cell: oer_esp32s31_radio_client::MembershipCell<oer_esp32s31_radio_client::wifi::Wifi>,
     wifi: oer_esp32s31_hal::root::WifiPartition,
+    rng: RngOwner<'static>,
     station: [u8; 6],
     access_point: [u8; 6],
 ) -> Result<(), &'static str> {
@@ -246,7 +250,16 @@ async fn run(
         WifiColdStartConfig::new(channel, ceiling),
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
     );
-    let (cell, started) = start_esp32s31_radio(cell, wifi, Platform::default(), config).await;
+    let (cell, started) = start_esp32s31_radio(
+        cell,
+        wifi,
+        Platform {
+            rng,
+            tx_power: None,
+        },
+        config,
+    )
+    .await;
     let stopped = match started {
         Ok(stopped) => stopped,
         Err(RadioStartFailure::Join { failed, .. }) => {
@@ -320,14 +333,14 @@ async fn run(
 }
 
 /// Wi-Fi's own platform values for the MAC bring-up.
-#[derive(Default)]
 struct Platform {
+    rng: RngOwner<'static>,
     tx_power: Option<PhyTxTargetPowerProfile>,
 }
 
 impl MacDelayEntropy for Platform {
     fn mac_delay_random(&mut self) -> u32 {
-        Rng::new().random()
+        self.rng.random()
     }
 }
 

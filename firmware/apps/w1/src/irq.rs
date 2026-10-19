@@ -31,7 +31,7 @@ use oer_esp32s31_ieee80211_mac::{
     irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
 };
 use oer_espressif_executor::{
-    Doorbell, InterruptExecutor, SameLevel,
+    Doorbell, DoorbellAcknowledger, InterruptExecutor, SameLevel,
     poll_timing::{CycleSource, Mcycle},
 };
 use oer_interrupt_table::signal::IrqSignal;
@@ -83,6 +83,8 @@ oer_espressif_staged_runtime::placed_static! {
     static POWER_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w1";
 }
 
+static DOORBELL_ACK: HandlerCell<DoorbellAcknowledger<3>> = HandlerCell::new();
+
 /// The doorbell shares the MAC interrupt's level and core.
 pub const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
 /// The WDEVPWR interrupt shares the MAC interrupt's level and core.
@@ -115,7 +117,7 @@ pub fn doorbell() {
     if rung != 0 {
         measure::raise(&RING_TO_DOORBELL_MAX, Mcycle.now().wrapping_sub(rung));
     }
-    let _ran = run_doorbell(&RX_LINE, oer_espressif_executor::acknowledge::<3>);
+    let _acknowledged = DOORBELL_ACK.with(|ack| run_doorbell(&RX_LINE, || ack.acknowledge()));
 }
 
 /// The radio executor's software interrupt (P2): each run's cycles.
@@ -135,7 +137,18 @@ impl ImageDoorbell {
         interrupt: SoftwareInterrupt<'static, 3>,
         token: DoorbellToken,
     ) -> Result<Self, oer_espressif_esp_hal_irq::Error> {
-        Doorbell::<3>::new(interrupt, token, BELL).map(Self)
+        static STORAGE: static_cell::StaticCell<DoorbellAcknowledger<3>> =
+            static_cell::StaticCell::new();
+        let (bell, ack) = Doorbell::<3>::new(interrupt, token, BELL);
+        let ack = STORAGE.init(ack);
+        // The route stays silent until its P3 acknowledgement owner is installed.
+        if DOORBELL_ACK.install(ack).is_err() {
+            panic!("the doorbell acknowledger is installed twice");
+        }
+        DOORBELL_ACK
+            .with(DoorbellAcknowledger::enable)
+            .expect("the doorbell owner was just installed")?;
+        Ok(Self(bell))
     }
 }
 

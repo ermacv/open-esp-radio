@@ -1,21 +1,43 @@
 use esp_hal::{
-    interrupt::{InterruptRoutes, Priority},
+    interrupt::{CoreInterruptRoutes, InterruptRoutes, Priority},
     peripherals::Interrupt,
     system::Cpu,
 };
 use oer_interrupt_table::{Adopted, Binding, Entry, Matrix, MatrixError, Table};
 
-/// The chip's interrupt matrix, as esp-hal drives it.
-pub struct EspHalMatrix;
+/// The unique writer of one core's interrupt-matrix bank.
+/// It is created only by consuming the corresponding esp-hal owner.
+pub struct EspHalMatrix {
+    routes: CoreInterruptRoutes,
+}
 
-/// esp-hal's routing capability, which [`adopt`] takes once.
-static ROUTES: Adopted<InterruptRoutes> = Adopted::new();
-
-fn routes() -> &'static InterruptRoutes {
-    match ROUTES.get() {
-        Some([routes]) => routes,
-        _ => panic!("the image's interrupt table is not adopted"),
+impl EspHalMatrix {
+    fn new(routes: CoreInterruptRoutes) -> Self {
+        Self { routes }
     }
+}
+
+// Boot and task-side routing borrow each bank's one owner. Interrupt
+// handlers never route sources and never reach these cells. Each hart has
+// its own bank, so simultaneous startup on two cores cannot contend.
+static MATRICES: [oer_memory::HandlerCell<EspHalMatrix>; 2] =
+    [const { oer_memory::HandlerCell::new() }; 2];
+static STORAGE: [static_cell::StaticCell<EspHalMatrix>; 2] =
+    [const { static_cell::StaticCell::new() }; 2];
+
+fn with_matrix<R>(f: impl FnOnce(&mut EspHalMatrix) -> R) -> R {
+    let matrix = match Cpu::current() {
+        Cpu::ProCpu => &MATRICES[0],
+        #[cfg(feature = "esp32s31")]
+        Cpu::AppCpu => &MATRICES[1],
+    };
+    #[expect(
+        clippy::expect_used,
+        reason = "routing requires one-time adoption and cannot reenter its own core's owner"
+    )]
+    matrix
+        .with(f)
+        .expect("the core's matrix owner is absent or already borrowed")
 }
 
 impl Matrix for EspHalMatrix {
@@ -28,11 +50,16 @@ impl Matrix for EspHalMatrix {
     }
 
     fn route(&mut self, source: Interrupt, level: Priority) {
-        routes().enable(Cpu::current(), source, level);
+        self.routes.enable(source, level);
     }
 
     fn silence(&mut self, core: Cpu, source: Interrupt) {
-        routes().disable(core, source);
+        assert_eq!(
+            core,
+            self.routes.core(),
+            "the matrix owner belongs to another core"
+        );
+        self.routes.disable(source);
     }
 
     fn routed(&self, core: Cpu, source: Interrupt) -> Option<Priority> {
@@ -81,8 +108,17 @@ pub fn adopt(table: &'static Table<EspHalMatrix>) {
     }
     let routes = InterruptRoutes::take()
         .unwrap_or_else(|| panic!("esp-hal's interrupt routes are taken outside the table"));
-    // The table is adopted once, so its routes are too.
-    let _ = ROUTES.adopt(core::slice::from_ref(routes));
+    let (core0, core1) = routes.split();
+    for ((storage, matrix), routes) in STORAGE.iter().zip(&MATRICES).zip([Some(core0), core1]) {
+        if let Some(routes) = routes {
+            assert!(
+                matrix
+                    .install(storage.init(EspHalMatrix::new(routes)))
+                    .is_ok(),
+                "the core's interrupt matrix was adopted twice"
+            );
+        }
+    }
 }
 
 /// The image's interrupt table.
@@ -109,7 +145,7 @@ pub fn enable<E>(token: &E) -> Result<(), Error>
 where
     E: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    oer_interrupt_table::enable(&mut EspHalMatrix, table(), token)
+    with_matrix(|matrix| oer_interrupt_table::enable(matrix, table(), token))
 }
 
 /// Silence the token's source on its table core.
@@ -117,7 +153,7 @@ pub fn disable<E>(token: &E)
 where
     E: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
-    oer_interrupt_table::disable(&mut EspHalMatrix, token);
+    with_matrix(|matrix| oer_interrupt_table::disable(matrix, token));
 }
 
 /// A source's token with its type erased ([`oer_interrupt_table::Route`]).
@@ -133,12 +169,12 @@ pub type Route = oer_interrupt_table::MatrixRoute<EspHalMatrix>;
 ///
 /// Before [`adopt`].
 pub fn enable_route(route: &Route) -> Result<(), Error> {
-    oer_interrupt_table::enable_route(&mut EspHalMatrix, table(), route)
+    with_matrix(|matrix| oer_interrupt_table::enable_route(matrix, table(), route))
 }
 
 /// [`disable`] by a route.
 pub fn disable_route(route: &Route) {
-    oer_interrupt_table::disable_route(&mut EspHalMatrix, route);
+    with_matrix(|matrix| oer_interrupt_table::disable_route(matrix, route));
 }
 
 /// Silence the current hart's sources and check every vector slot.
@@ -147,7 +183,7 @@ pub fn disable_route(route: &Route) {
 ///
 /// Before [`adopt`], or when the matrix disagrees with the table.
 pub fn install_current_hart() {
-    if let Err(error) = oer_interrupt_table::install(&mut EspHalMatrix, table()) {
+    if let Err(error) = with_matrix(|matrix| oer_interrupt_table::install(matrix, table())) {
         panic!("the interrupt matrix disagrees with the image's table: {error:?}");
     }
 }
@@ -160,7 +196,7 @@ pub fn install_current_hart() {
 /// Before [`adopt`], when the matrix disagrees with the table, or when a
 /// driver's required source has no entry or, on its table core, no route.
 pub fn verify_current_hart() {
-    if let Err(error) = oer_interrupt_table::verify(&EspHalMatrix, table()) {
+    if let Err(error) = with_matrix(|matrix| oer_interrupt_table::verify(matrix, table())) {
         panic!("the interrupt matrix disagrees with the image's table: {error:?}");
     }
     let required = esp_hal::interrupt::required_routes().map(|number| {
@@ -169,7 +205,9 @@ pub fn verify_current_hart() {
             .and_then(|number| Interrupt::try_from(number).ok())
             .unwrap_or_else(|| panic!("esp-hal required source {number}, which the PAC lacks"))
     });
-    if let Err(error) = oer_interrupt_table::verify_required(&EspHalMatrix, table(), required) {
+    if let Err(error) =
+        with_matrix(|matrix| oer_interrupt_table::verify_required(matrix, table(), required))
+    {
         panic!("an esp-hal driver's source is not routed by the image's table: {error:?}");
     }
 }

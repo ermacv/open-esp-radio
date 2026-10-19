@@ -248,8 +248,8 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
     for register in 0..I2C_REGISTERS {
         let address = PhyI2cAddress::new(bbpll, register);
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
-        let mut read = FieldRead::new(field);
-        let Some(ours) = drive(|| read.poll(bus)) else {
+        let mut read = FieldRead::new(bus, field);
+        let Some(ours) = drive(|| read.poll()) else {
             incomplete = true;
             break;
         };
@@ -273,8 +273,8 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
         let address = PhyI2cAddress::new(ulp_cal, register);
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let before = rom_read(address);
-        let mut write = FieldWrite::new(field, before).expect("byte fits");
-        if drive(|| write.poll(bus)).is_none() {
+        let mut write = FieldWrite::new(bus, field, before).expect("byte fits");
+        if drive(|| write.poll()).is_none() {
             unchanged = false;
             break;
         }
@@ -289,7 +289,7 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
 
 #[main]
 fn main() -> ! {
-    let _peripherals = esp_hal::init(esp_hal::Config::default());
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
     let mut failures = 0;
     let RadioPartitions {
@@ -297,7 +297,17 @@ fn main() -> ! {
         mut modem_clock,
         mut phy_i2c,
         ..
-    } = RadioPartitions::take().expect("first radio partition acquisition");
+    } = oer_esp32c5_esp_hal_soc::radio::take_radio(
+        oer_esp32c5_esp_hal_soc::radio::RadioSingletons {
+            i2c_ana_mst: peripherals.I2C_ANA_MST,
+            modem_syscon: peripherals.MODEM_SYSCON,
+            modem_lpcon: peripherals.MODEM_LPCON,
+            wifi: peripherals.WIFI,
+            bt: peripherals.BT,
+            ieee802154: peripherals.IEEE802154,
+        },
+    )
+    .into_partitions();
     probe_modem_clock(&mut modem_clock, &mut failures);
     check(
         &mut failures,

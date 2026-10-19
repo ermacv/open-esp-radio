@@ -73,6 +73,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
         peripherals.USB_DEVICE,
         interrupts.console_usb,
         peripherals.TIMG1,
+        peripherals.RNG,
     );
     adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {

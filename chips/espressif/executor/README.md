@@ -70,7 +70,7 @@ The radio executor never writes the registers a P3 handler owns. It records
 a request in memory both sides see and rings the `Doorbell`, a software
 interrupt (`FROM_CPU` line 3) at the P3 level: `ring` fences, raises the
 interrupt and reads its register back. The doorbell's handler first resets
-the interrupt (`acknowledge`), then takes the requests, so a ring after the
+the interrupt through its owned `DoorbellAcknowledger`, then takes the requests, so a ring after the
 take is not lost. Making the doorbell consumes its software interrupt, so no
 executor can use the line, and takes a `SameLevel` of the radio interrupt's
 and the doorbell's table entries, which checks when the image compiles that
@@ -81,3 +81,9 @@ Portable protocol policy cannot depend on this execution domain. The
 architecture audit follows transitive normal/build dependencies to enforce
 that boundary; portable packages cannot depend on these concrete ESP32-S31
 runtimes.
+
+Software-interrupt construction transfers its singleton into separate raise
+and reset owners. Wakers borrow the published sender; only the line's handler
+borrows its acknowledger. The time driver similarly adopts one SYSTIMER bank
+writer and three independent W1C alarm acknowledgers. Alarm interrupts never
+borrow the bank writer or a task's timer queue.

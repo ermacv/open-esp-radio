@@ -8,14 +8,14 @@ use crate::transport::CONSOLE;
 pub(crate) fn start(
     executor: &'static mut crate::Executor<0>,
     wake: crate::ExecutorWake,
-    usb: crate::transport::Usb,
+    (usb, _pads): (
+        crate::transport::Usb,
+        esp_hal::usb::usb_serial_jtag::UsbPadControl<'static>,
+    ),
     rng: esp_hal::peripherals::RNG<'static>,
 ) -> ! {
-    let entropy = esp_hal::rng::TrngSource::new(rng);
-    let rng = esp_hal::rng::Trng::try_new().expect("HIL boot entropy");
-    let boot = ((u64::from(rng.random()) << 32) | u64::from(rng.random())).max(1);
-    drop(rng);
-    drop(entropy);
+    let mut entropy = oer_espressif_esp_hal_soc::entropy::Entropy::new(rng);
+    let boot = u64::from_le_bytes(entropy.random_bytes().expect("HIL boot entropy")).max(1);
     CONSOLE.start(boot);
     crate::transport::init_logger();
     executor.run(wake, |spawner| {

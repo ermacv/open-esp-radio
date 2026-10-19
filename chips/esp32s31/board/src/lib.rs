@@ -83,8 +83,8 @@ pub struct BootstrapPsram(pub PSRAM<'static>);
 unsafe impl oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping for BootstrapPsram {
     type Mapping = Psram;
 
-    fn adopt(self, _handoff: &oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Psram {
-        let supply = psram_supply();
+    fn adopt(mut self, _handoff: &oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Psram {
+        let supply = esp_hal::psram::existing_supply_configuration(&mut self.0);
         let started = esp_hal::time::Instant::now();
         // SAFETY: the handoff proves the bootstrap initialized and mapped the
         // complete board PSRAM at `PSRAM_BASE_ADDRESS` and that nothing reset
@@ -104,22 +104,12 @@ unsafe impl oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping for Boo
         // Code and stacks already run from PSRAM: adopting the mapping must
         // leave the PHY supply's configuration as the bootstrap left it.
         assert_eq!(
-            psram_supply(),
+            psram.supply_configuration(),
             supply,
             "PSRAM adoption reprogrammed the PSRAM PHY supply"
         );
         psram
     }
-}
-
-/// The PMU words that configure the PSRAM PHY supply: the external LDO
-/// (inrush limit, voltage, enable) and the PSRAM power-down control.
-fn psram_supply() -> (u32, u32) {
-    let pmu = esp_hal::peripherals::PMU::regs();
-    (
-        pmu.ext_ldo_ctrl().read().bits(),
-        pmu.psram_cfg().read().bits(),
-    )
 }
 
 pub fn has_expected_psram_capacity(psram: &Psram) -> bool {

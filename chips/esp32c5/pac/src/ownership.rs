@@ -35,16 +35,39 @@ pub struct WifiInterruptPartition(
     #[allow(dead_code)] svd::peripheral_ownership::WifiInterruptPeripherals,
 );
 
-/// Every reviewed ESP32-C5 radio register partition.
+/// Proof that the platform transferred every ESP32-C5 radio singleton.
+#[must_use = "the radio root needs the consumed platform ownership"]
+pub struct RadioHandoff(());
+
+impl RadioHandoff {
+    /// Assert the platform's unique, permanent radio ownership handoff.
+    ///
+    /// # Safety
+    /// Call at most once. The caller consumed the platform's analog-I2C,
+    /// modem clock, Wi-Fi, Bluetooth and IEEE 802.15.4 singletons, and no
+    /// other code may access their radio register partitions thereafter.
+    #[allow(
+        unsafe_code,
+        reason = "the platform proves exclusive radio MMIO ownership"
+    )]
+    pub const unsafe fn assume_exclusive() -> Self {
+        Self(())
+    }
+}
+
+/// Every reviewed ESP32-C5 radio register partition, from the platform handoff.
 ///
-/// This is the sole production acquisition point.
-///
-/// ```compile_fail
+/// ```compile_fail,E0061
 /// use oer_esp32c5_pac::RadioPartitions;
+/// let partitions = RadioPartitions::from_handoff();
+/// ```
 ///
-/// let partitions = RadioPartitions::take().unwrap();
-/// let _first = partitions.i;
-/// let _second = partitions.i;
+/// ```compile_fail,E0382
+/// use oer_esp32c5_pac::{RadioHandoff, RadioPartitions};
+/// fn duplicate(handoff: RadioHandoff) {
+///     let first = RadioPartitions::from_handoff(handoff);
+///     let second = RadioPartitions::from_handoff(handoff);
+/// }
 /// ```
 #[must_use = "dropping the radio partitions permanently loses the unique hardware capability"]
 pub struct RadioPartitions {
@@ -57,9 +80,15 @@ pub struct RadioPartitions {
 }
 
 impl RadioPartitions {
-    /// Acquire the generated radio singleton once.
-    pub fn take() -> Option<Self> {
-        svd::Peripherals::take().map(Self::from_peripherals)
+    /// Adopt the platform's consumed radio owners without a second singleton.
+    #[allow(
+        unsafe_code,
+        reason = "the consumed handoff proves unique register ownership"
+    )]
+    pub fn from_handoff(_handoff: RadioHandoff) -> Self {
+        // SAFETY: RadioHandoff's constructor guarantees exclusive, permanent
+        // ownership. No independent generated singleton is acquired.
+        Self::from_peripherals(unsafe { svd::Peripherals::steal() })
     }
 
     /// Bind the generated singleton to the opaque partition owners.

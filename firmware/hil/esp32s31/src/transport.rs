@@ -4,7 +4,9 @@
 
 use core::ffi::CStr;
 
-use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
+use esp_hal::usb::usb_serial_jtag::{
+    UsbPadControl, UsbSerialJtag, UsbSerialJtagRx, UsbSerialJtagTx,
+};
 use oer_hil_agent::base::{Intake, Platform, Requests};
 use oer_hil_agent::console::{Console, Logger};
 use oer_hil_protocol::RequestIdentity;
@@ -47,16 +49,21 @@ impl Platform for Chip {
 /// The USB Serial/JTAG peripheral with the token of its table entry, whose
 /// handler is esp-hal's async driver's.
 pub(crate) struct Usb {
-    device: esp_hal::peripherals::USB_DEVICE<'static>,
-    route: crate::ConsoleUsb,
+    rx: UsbSerialJtagRx<'static, esp_hal::Async>,
+    tx: UsbSerialJtagTx<'static, esp_hal::Async>,
 }
 
 impl Usb {
     pub(crate) fn new(
         device: esp_hal::peripherals::USB_DEVICE<'static>,
         route: crate::ConsoleUsb,
-    ) -> Self {
-        Self { device, route }
+    ) -> (Self, UsbPadControl<'static>) {
+        oer_espressif_esp_hal_irq::enable(&route)
+            .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
+        let (rx, tx, pads) = UsbSerialJtag::new(device)
+            .into_async()
+            .split_with_pad_control();
+        (Self { rx, tx }, pads)
     }
 }
 
@@ -76,8 +83,5 @@ pub(crate) async fn serve<C: Requests>(
         ImageKeySet::new(crate::image_features::keys()),
         maximum_payload_bytes,
     );
-    oer_espressif_esp_hal_irq::enable(&usb.route)
-        .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
-    let (rx, tx) = UsbSerialJtag::new(usb.device).into_async().split();
-    CONSOLE.run(rx, tx, intake, &Chip, serve).await
+    CONSOLE.run(usb.rx, usb.tx, intake, &Chip, serve).await
 }

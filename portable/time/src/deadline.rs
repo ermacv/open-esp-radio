@@ -95,6 +95,72 @@ impl<B: Backend> Controller<B> {
     }
 }
 
+/// An affine watchdog service. Arming transfers it into the obligation.
+///
+/// ```compile_fail,E0382
+/// use oer_time::deadline::{Backend, DeadlineBudget, Watchdog};
+/// fn arm_twice<B: Backend>(watchdog: Watchdog<B>, budget: DeadlineBudget) {
+///     let first = watchdog.arm(budget);
+///     let second = watchdog.arm(budget);
+/// }
+/// ```
+pub struct Watchdog<B>(Controller<B>);
+
+/// One armed obligation, retaining its complete watchdog owner.
+///
+/// ```compile_fail,E0382
+/// use oer_time::deadline::{Backend, Lease};
+/// fn complete_twice<B: Backend>(lease: Lease<B>) {
+///     let first = lease.complete();
+///     let second = lease.complete();
+/// }
+/// ```
+#[must_use = "abandoning a lease leaves the hardware watchdog armed"]
+pub struct Lease<B> {
+    owner: Watchdog<B>,
+    generation: u64,
+}
+
+impl<B> core::fmt::Debug for Watchdog<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Watchdog").finish_non_exhaustive()
+    }
+}
+impl<B> core::fmt::Debug for Lease<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Lease")
+            .field("generation", &self.generation)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<B: Backend> Watchdog<B> {
+    pub const fn new(backend: B) -> Self {
+        Self(Controller::new(backend))
+    }
+
+    pub fn arm(mut self, budget: DeadlineBudget) -> Result<Lease<B>, (Self, DeadlineError)> {
+        match self.0.arm(budget) {
+            Ok(generation) => Ok(Lease {
+                owner: self,
+                generation,
+            }),
+            Err(error) => Err((self, error)),
+        }
+    }
+}
+
+impl<B: Backend> Lease<B> {
+    /// Return the watchdog only after timely completion. An expired lease
+    /// retains the armed watchdog in the error and cannot silently disarm it.
+    pub fn complete(mut self) -> Result<Watchdog<B>, (Self, DeadlineError)> {
+        match self.owner.0.complete(self.generation) {
+            Ok(()) => Ok(self.owner),
+            Err(error) => Err((self, error)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

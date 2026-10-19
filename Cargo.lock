@@ -1292,7 +1292,7 @@ dependencies = [
 [[package]]
 name = "esp-backtrace"
 version = "0.20.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "esp-config",
@@ -1306,7 +1306,7 @@ dependencies = [
 [[package]]
 name = "esp-bootloader-esp-idf"
 version = "0.6.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "embedded-storage",
@@ -1323,7 +1323,7 @@ dependencies = [
 [[package]]
 name = "esp-config"
 version = "0.8.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "esp-metadata-generated",
@@ -1335,7 +1335,7 @@ dependencies = [
 [[package]]
 name = "esp-hal"
 version = "1.2.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "bitfield",
  "bytemuck",
@@ -1396,7 +1396,7 @@ dependencies = [
 [[package]]
 name = "esp-hal-procmacros"
 version = "0.23.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "object 0.37.3",
@@ -1428,12 +1428,12 @@ dependencies = [
 [[package]]
 name = "esp-metadata-generated"
 version = "0.6.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 
 [[package]]
 name = "esp-println"
 version = "0.18.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "esp-metadata-generated",
@@ -1445,7 +1445,7 @@ dependencies = [
 [[package]]
 name = "esp-riscv-rt"
 version = "0.15.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "riscv",
@@ -1455,7 +1455,7 @@ dependencies = [
 [[package]]
 name = "esp-rom-sys"
 version = "0.1.5"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "esp-metadata-generated",
@@ -1466,7 +1466,7 @@ dependencies = [
 [[package]]
 name = "esp-storage"
 version = "0.10.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "esp-hal",
@@ -1481,7 +1481,7 @@ dependencies = [
 [[package]]
 name = "esp-sync"
 version = "0.3.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "embassy-sync 0.6.2",
@@ -2619,8 +2619,8 @@ dependencies = [
 name = "oer-esp32c5-esp-hal-soc"
 version = "0.1.0"
 dependencies = [
- "critical-section",
  "esp-hal",
+ "oer-esp32c5-hal",
  "oer-time",
 ]
 
@@ -2861,6 +2861,8 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-interrupt-table",
+ "oer-memory",
+ "static_cell",
 ]
 
 [[package]]
@@ -2896,8 +2898,10 @@ dependencies = [
  "oer-espressif-esp-hal-irq",
  "oer-interrupt-table",
  "oer-memory",
+ "oer-test-ui-cases",
  "portable-atomic",
  "riscv",
+ "static_cell",
 ]
 
 [[package]]
@@ -3134,6 +3138,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp32c5",
+ "oer-esp32c5-esp-hal-soc",
  "oer-esp32c5-hal",
  "oer-esp32c5-pac",
  "oer-esp32c5-pac-raw",
@@ -3889,6 +3894,7 @@ dependencies = [
 name = "oer-test-ui-cases"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "trybuild",
 ]
 
@@ -3896,6 +3902,7 @@ dependencies = [
 name = "oer-time"
 version = "0.1.0"
 dependencies = [
+ "oer-time-virtual",
  "postcard",
  "postcard-schema",
  "serde",
@@ -5657,7 +5664,7 @@ dependencies = [
 [[package]]
 name = "xtensa-lx"
 version = "0.13.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "critical-section",
 ]
@@ -5665,7 +5672,7 @@ dependencies = [
 [[package]]
 name = "xtensa-lx-rt"
 version = "0.23.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "document-features",
  "xtensa-lx",
@@ -5675,7 +5682,7 @@ dependencies = [
 [[package]]
 name = "xtensa-lx-rt-proc-macros"
 version = "0.5.0"
-source = "git+https://github.com/ermacv/esp-hal?rev=4fd4ba9b78aa9f96e54115c3d784491c1e12df02#4fd4ba9b78aa9f96e54115c3d784491c1e12df02"
+source = "git+https://github.com/ermacv/esp-hal?rev=2b665dd27104c6ec9983b675113551fc696050c9#2b665dd27104c6ec9983b675113551fc696050c9"
 dependencies = [
  "proc-macro2",
  "quote",
