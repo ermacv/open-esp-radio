@@ -3,8 +3,8 @@
 //!
 //! A variant is a repository revision and a feature delta. Each arm's
 //! revision is checked out in the experiment's worktree below
-//! `target/hil/ab/<id>/` and captured into a source snapshot, which the
-//! experiment's runner builds:
+//! `target/hil/ab/<id>/`, which the experiment's runner builds the arm's
+//! images from (`cargo hil run --source`):
 //! both arms therefore need the checkout's HIL protocol version.
 //!
 //! The experiment runs in rounds: both arms on one layout seed. For every
@@ -355,7 +355,7 @@ fn classes_of(loaded: &[(Arm, Run)], id: &RunId) -> BTreeMap<String, Vec<String>
 /// How a run gets its firmware.
 #[derive(Clone, Debug)]
 enum Firmware {
-    /// Build from the arm's snapshot with this layout seed.
+    /// Build from the arm's worktree with this layout seed.
     Build(NonZeroU32),
     /// Replay the images an earlier run of the arm archived.
     Replay(RunId),
@@ -377,10 +377,9 @@ struct PreparedArm {
     arm: Arm,
     variant: Variant,
     worktree: Worktree,
-    snapshot: PathBuf,
 }
 
-/// Check the arm's revision out and capture its sources.
+/// Check the arm's revision out.
 fn prepare(
     checkout: &Path,
     directory: &Path,
@@ -399,13 +398,6 @@ fn prepare(
         )
         .into());
     }
-    let snapshot = oer_hil_source_snapshot::capture(
-        worktree.path(),
-        &[],
-        false,
-        &oer_hil_image::source_snapshot_store()?,
-        &oer_hil_image::source_objects()?,
-    )?;
     Ok(PreparedArm {
         arm,
         variant: Variant {
@@ -413,7 +405,6 @@ fn prepare(
             features: spec.features.clone(),
         },
         worktree,
-        snapshot: snapshot.directory().to_owned(),
     })
 }
 
@@ -425,6 +416,25 @@ fn features_argument(features: &FeatureDelta) -> Option<String> {
 }
 
 impl PreparedArm {
+    /// The runner's arguments for `firmware`: a build from this arm's
+    /// worktree with the round's layout seed and the variant's features, or
+    /// a replay of an earlier run's image.
+    fn firmware_arguments(&self, firmware: &Firmware) -> Vec<String> {
+        match firmware {
+            Firmware::Build(seed) => {
+                let mut arguments = vec![
+                    String::from("--source"),
+                    self.worktree.path().to_string_lossy().into_owned(),
+                    String::from("--layout-seed"),
+                    seed.to_string(),
+                ];
+                arguments.extend(features_argument(&self.variant.features));
+                arguments
+            }
+            Firmware::Replay(run) => vec![String::from("--firmware-from"), run.to_string()],
+        }
+    }
+
     /// One run of this arm in `round`, a job of its own, under `grant`
     /// when the experiment holds the stand; the created run's id.
     fn run(
@@ -438,17 +448,7 @@ impl PreparedArm {
         let mut arguments = vec![String::from("run")];
         arguments.extend(scenarios.iter().cloned());
         arguments.extend(session.boards.iter().cloned());
-        match firmware {
-            Firmware::Build(seed) => {
-                arguments.push(String::from("--source-snapshot"));
-                arguments.push(self.snapshot.to_string_lossy().into_owned());
-                arguments.extend([String::from("--layout-seed"), seed.to_string()]);
-                arguments.extend(features_argument(&self.variant.features));
-            }
-            Firmware::Replay(run) => {
-                arguments.extend([String::from("--firmware-from"), run.to_string()]);
-            }
-        }
+        arguments.extend(self.firmware_arguments(firmware));
         let experiment = Experiment {
             id: session.id.to_owned(),
             arm: self.arm,

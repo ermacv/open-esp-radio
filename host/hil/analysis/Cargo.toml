@@ -16,6 +16,7 @@ oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["regis
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-schema = { path = "../schema" }
+oer-hil-image-class = { path = "../image-class" }
 oer-hil-stats = { path = "../stats" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

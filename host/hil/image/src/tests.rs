@@ -94,7 +94,6 @@ fn each_chip_s_spec_takes_its_agent_policy() {
     assert_eq!(staged.application.features, ["system-watchdog"]);
     assert_eq!(staged.stack_policy, staged_chip.hil_stack_policy());
     assert!(staged.checks.is_some());
-    assert!(!staged.builder_inputs.is_empty());
     let _diagnostic = spec(
         &root,
         &staged_chip.id,

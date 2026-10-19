@@ -4,7 +4,7 @@
 //! other document of the bundle is read through it, typed: the plan, the
 //! suite and its scenario and repetition results with their measurements,
 //! the scenario snapshots, the cleanup and USB records of a repetition, the
-//! laboratory and build provenance and the event stream. A document outside
+//! laboratory provenance and the event stream. A document outside
 //! this build's vocabulary, or a run of another schema, is an error, never a
 //! silently absent value. Whoever reads a bundle, the `cargo hil` analyses
 //! included, reads it here.
@@ -18,12 +18,11 @@ use oer_hil_schema::run::RunEvent;
 
 use crate::{
     Result,
-    build::BuildProvenance,
     lab::LabProvenance,
     run::{
-        CLEANUP_FILE, CleanupRecord, FirmwareArtifact, OBSERVATIONS_FILE, Observations,
-        PlannedFirmware, RUN_SCHEMA, RepetitionResult, RunManifest, RunPlan, RunState,
-        ScenarioResult, SuiteResult, USB_EVENTS_FILE, UsbEvent,
+        CLEANUP_FILE, CleanupRecord, OBSERVATIONS_FILE, Observations, PlannedFirmware, RUN_SCHEMA,
+        RepetitionResult, RunManifest, RunPlan, RunState, ScenarioResult, SuiteResult,
+        USB_EVENTS_FILE, UsbEvent,
         validation::{read_json, read_optional_json, validate_manifest},
     },
 };
@@ -181,15 +180,6 @@ impl RunBundle {
     pub fn lab_provenance(&self) -> Result<Option<LabProvenance>> {
         self.manifest
             .lab_provenance_path
-            .as_ref()
-            .map(|path| read_json(&self.directory.join(path)))
-            .transpose()
-    }
-
-    /// The build record of one of the run's images.
-    pub fn build_provenance(&self, artifact: &FirmwareArtifact) -> Result<Option<BuildProvenance>> {
-        artifact
-            .build_provenance_path
             .as_ref()
             .map(|path| read_json(&self.directory.join(path)))
             .transpose()

@@ -4,7 +4,7 @@
 //! experiment's directory. A revision whose HIL protocol version
 //! (`hil/protocol/messages.lock`) is this checkout's runs on this
 //! checkout's runner and host code with the revision's firmware, built from
-//! a source snapshot of the worktree. A revision with another protocol
+//! the worktree (`cargo hil run --source`). A revision with another protocol
 //! version runs its own runner, built in the worktree, inside a whole-stand
 //! lease: that runner gets a private arbiter directory holding a copy of the
 //! stand file (and of an older device registry), so it neither waits for nor
@@ -164,25 +164,18 @@ impl<'a> Revision<'a> {
         Ok((runner, ran))
     }
 
-    /// This checkout's runner, building the revision's firmware from a
-    /// snapshot of the worktree, as a job of its own.
+    /// This checkout's runner, building the revision's firmware from the
+    /// worktree, as a job of its own.
     pub(crate) fn with_current_runner(
         &self,
         scenarios: &[String],
         arguments: &[String],
     ) -> Result<Ran> {
-        let snapshot = oer_hil_source_snapshot::capture(
-            &self.worktree,
-            &[],
-            false,
-            &oer_hil_image::source_snapshot_store()?,
-            &oer_hil_image::source_objects()?,
-        )?;
         let arguments = std::iter::once(String::from("run"))
             .chain(scenarios.iter().cloned())
             .chain([
-                String::from("--source-snapshot"),
-                snapshot.directory().to_string_lossy().into_owned(),
+                String::from("--source"),
+                self.worktree.to_string_lossy().into_owned(),
             ])
             .chain(arguments.iter().cloned())
             .map(OsString::from)

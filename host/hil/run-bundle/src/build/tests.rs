@@ -2,68 +2,32 @@ use super::*;
 use oer_hil_run_bundle_format::archived::archived_identity;
 
 #[test]
-fn remote_provenance_never_retains_https_credentials() {
-    assert_eq!(
-        sanitize_git_remote(String::from(
-            "https://user:secret-token@github.com/owner/repository.git"
-        )),
-        "https://github.com/owner/repository.git"
-    );
-    assert_eq!(
-        sanitize_git_remote(String::from("git@github.com:owner/repository.git")),
-        "git@github.com:owner/repository.git"
-    );
-}
-
-#[test]
-fn source_stability_check_rejects_a_post_capture_change() {
-    let root = std::env::temp_dir().join(format!(
-        "open-radio-hil-source-stability-{}",
-        std::process::id()
-    ));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir(&root).unwrap();
+fn a_tree_is_dirty_while_it_holds_a_change_its_commit_does_not() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
     for arguments in [
         &["init", "-q", "-b", "main"][..],
         &["config", "user.name", "HIL Test"],
         &["config", "user.email", "hil@example.invalid"],
-        &[
-            "remote",
-            "add",
-            "origin",
-            "https://example.invalid/repository.git",
-        ],
     ] {
-        oer_os_process::git::run(&root, arguments).unwrap();
+        oer_os_process::git::run(root, arguments).unwrap();
     }
     fs::write(root.join("tracked.txt"), b"before\n").unwrap();
-    oer_os_process::git::run(&root, ["add", "tracked.txt"]).unwrap();
-    oer_os_process::git::run(&root, ["commit", "-m", "base"]).unwrap();
-    let run = root.join("run");
-    fs::create_dir(&run).unwrap();
-    let source = capture_source_material(
-        "repository",
-        &root,
-        &run,
-        Path::new("source/repository.patch"),
-    )
-    .unwrap();
-    assert_eq!(
-        capture_git_source_state(&root)
-            .unwrap()
-            .unwrap()
-            .workspace_sha256,
-        source.workspace_sha256
-    );
+    oer_os_process::git::run(root, ["add", "tracked.txt"]).unwrap();
+    oer_os_process::git::run(root, ["commit", "-q", "-m", "base"]).unwrap();
+    let clean = repository(root).unwrap();
+    assert_eq!(clean.commit.len(), 40);
+    assert!(!clean.dirty);
     fs::write(root.join("tracked.txt"), b"after\n").unwrap();
-    assert_ne!(
-        capture_git_source_state(&root)
-            .unwrap()
-            .unwrap()
-            .workspace_sha256,
-        source.workspace_sha256
-    );
-    fs::remove_dir_all(root).unwrap();
+    let changed = repository(root).unwrap();
+    assert_eq!(changed.commit, clean.commit);
+    assert!(changed.dirty);
+    oer_os_process::git::run(root, ["checkout", "-q", "--", "tracked.txt"]).unwrap();
+    fs::write(root.join("untracked.txt"), b"new\n").unwrap();
+    assert!(repository(root).unwrap().dirty);
+    let outside = tempfile::tempdir().unwrap();
+    let none = repository(outside.path()).unwrap();
+    assert!(none.commit.is_empty() && none.dirty);
 }
 
 #[test]

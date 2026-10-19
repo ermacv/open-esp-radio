@@ -8,8 +8,6 @@
 
 pub mod check;
 
-use std::path::PathBuf;
-
 use oer_hil_schema::image::ImageClass;
 use oer_os_process::Checkout;
 
@@ -20,7 +18,7 @@ use crate::Result;
 pub enum ImagesCli {
     /// Build HIL image classes with their link-time audits, reporting every
     /// class: all of them with `--all`, each `--class`, or the classes a
-    /// change reaches (`--reaching`, `--changed`); `--list` prints every class
+    /// change reaches (`--reaching`); `--list` prints every class
     /// with the runtime features it builds with.
     #[command(group(clap::ArgGroup::new("selection").required(true).args(["all", "classes", "list", "reaching"])))]
     Check {
@@ -34,10 +32,6 @@ pub enum ImagesCli {
         /// one of them.
         #[arg(long, value_delimiter = ',')]
         reaching: Vec<String>,
-        /// Changed files (repository-relative): with `--reaching`, also
-        /// every class whose last build read one of them.
-        #[arg(long, requires = "reaching")]
-        changed: Vec<PathBuf>,
         /// Fail first when the lock gives an image a vendor dependency.
         #[arg(long)]
         vendor_dependencies_absent: bool,
@@ -83,7 +77,6 @@ pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::proce
         ImagesCli::Check {
             classes,
             reaching,
-            changed,
             vendor_dependencies_absent,
             type_check,
             jobs,
@@ -97,7 +90,7 @@ pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::proce
                 let classes = if reaching.is_empty() {
                     classes.clone()
                 } else {
-                    check::reached(&ctx.root, &chip, &reaching, &changed)?
+                    check::reached(&ctx.root, &chip, &reaching)?
                 };
                 check::run(
                     ctx,

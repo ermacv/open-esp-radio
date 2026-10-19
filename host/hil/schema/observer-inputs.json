@@ -14,7 +14,6 @@
       "oer-image-build",
       "oer-hil-image-class",
       "oer-os-durable",
-      "oer-hil-source-snapshot",
       "oer-hil-scenario",
       "oer-hil-scenario-catalog",
       "oer-hil-run-bundle",

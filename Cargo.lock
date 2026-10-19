@@ -3177,6 +3177,7 @@ name = "oer-hil-analysis"
 version = "0.1.0"
 dependencies = [
  "oer-analysis-elf",
+ "oer-hil-image-class",
  "oer-hil-protocol",
  "oer-hil-run-bundle",
  "oer-hil-run-bundle-format",
@@ -3215,7 +3216,6 @@ dependencies = [
  "oer-hil-run-bundle",
  "oer-hil-run-bundle-format",
  "oer-hil-schema",
- "oer-hil-source-snapshot",
  "oer-hil-stats",
  "oer-lab-model",
  "oer-lab-stand-arbiter",
@@ -3307,7 +3307,6 @@ dependencies = [
  "oer-hil-run-bundle-format",
  "oer-hil-scenario",
  "oer-hil-schema",
- "oer-hil-source-snapshot",
  "oer-image-build",
  "oer-image-checks",
  "oer-image-compare",
@@ -3450,7 +3449,6 @@ dependencies = [
  "oer-hil-scenario",
  "oer-hil-scenario-catalog",
  "oer-hil-schema",
- "oer-hil-source-snapshot",
  "oer-image-toolchain",
  "oer-os-durable",
  "oer-os-process",
@@ -3494,7 +3492,6 @@ dependencies = [
  "oer-hil-scenario",
  "oer-hil-scenario-catalog",
  "oer-hil-schema",
- "oer-hil-source-snapshot",
  "oer-hil-workload",
  "oer-image-build",
  "oer-image-checks",
@@ -3545,21 +3542,6 @@ dependencies = [
  "oer-os-durable",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "oer-hil-source-snapshot"
-version = "0.1.0"
-dependencies = [
- "oer-hil-schema",
- "oer-image-profile",
- "oer-image-toolchain",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
 ]
 
 [[package]]
@@ -4325,7 +4307,6 @@ dependencies = [
  "oer-hil-run-bundle",
  "oer-hil-run-bundle-format",
  "oer-hil-schema",
- "oer-hil-source-snapshot",
  "oer-image-build",
  "oer-image-checks",
  "oer-image-compare",

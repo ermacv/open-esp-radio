@@ -27,7 +27,6 @@ impl RunFirmware {
             Self::Replay(firmware) => PlannedFirmware::Replay {
                 source_run_id: firmware.run_id.clone(),
                 image: firmware.image,
-                build_id: firmware.build_id.clone(),
                 application_sha256: firmware.application_sha256.clone(),
             },
         }
@@ -73,7 +72,7 @@ pub(crate) fn build_image(
     session: &mut RunSession,
 ) -> Result<Built> {
     session.record_event(RunEventKind::ImageBuildStarted, None, Some(class), None)?;
-    let artifacts = match oer_hil_image::frozen::build_for_run(session, class, build) {
+    let artifacts = match oer_hil_image::image_for_run(session, class, &build) {
         Ok(artifacts) => artifacts,
         Err(error) => {
             oer_os_process::check_cancelled()?;

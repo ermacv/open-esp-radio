@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The HIL run bundle: format, writer and seal, the one typed reader, integrity, the run store and build provenance"
+description = "The HIL run bundle: format, writer and seal, the one typed reader, integrity, the run store and firmware records"
 
 [features]
 # The run-session fixtures of the image builder's record tests.
@@ -20,7 +20,6 @@ oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["regis
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-scenario = { path = "../scenario" }
 oer-hil-schema = { path = "../schema" }
-oer-hil-source-snapshot = { path = "../source-snapshot" }
 oer-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -30,7 +29,6 @@ flate2 = "1.1.9"
 
 [dev-dependencies]
 oer-hil-scenario = { path = "../scenario", features = ["test-support"] }
-oer-hil-source-snapshot = { path = "../source-snapshot", features = ["test-support"] }
 
 [lints]
 workspace = true

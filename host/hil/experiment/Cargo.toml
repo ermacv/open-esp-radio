@@ -17,7 +17,6 @@ oer-hil-image = { path = "../image" }
 oer-hil-observer = { path = "../observer" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-schema = { path = "../schema" }
-oer-hil-source-snapshot = { path = "../source-snapshot" }
 oer-lab-model = { path = "../../lab/model" }
 oer-os-process = { path = "../../os/process" }
 oer-hil-stats = { path = "../stats" }

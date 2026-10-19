@@ -1,6 +1,5 @@
 use super::*;
 use crate::run::sha256_file;
-use crate::run::test_support::TestRecipe;
 use oer_hil_run_bundle_format::lab::AccessPointDefinition;
 use oer_hil_run_bundle_format::lab::FixtureObservation;
 use oer_hil_run_bundle_format::lab::HostInterfaceObservation;
@@ -26,12 +25,7 @@ static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// The replay check of the fixture's run `run-1` of `chip-a`.
 fn validate(root: &Path) -> Result<RunManifest> {
-    validate_source(
-        &root.join(crate::store::CHECKOUT_RUNS),
-        "chip-a",
-        "run-1",
-        &TestRecipe,
-    )
+    validate_source(&root.join(crate::store::CHECKOUT_RUNS), "chip-a", "run-1")
 }
 
 fn fixture() -> (PathBuf, PathBuf) {
@@ -62,8 +56,7 @@ fn fixture() -> (PathBuf, PathBuf) {
             "invocation": ["cargo", "hil", "run", "icmp"],
             "repository": {
                 "commit": "0123456789abcdef",
-                "dirty": false,
-                "workspace_sha256": "00"
+                "dirty": false
             },
             "runner": {
                 "package": "runner",
@@ -80,6 +73,7 @@ fn fixture() -> (PathBuf, PathBuf) {
             },
             "firmware": [{
                 "image": "system-watchdog",
+                "repository": { "commit": "0123456789abcdef", "dirty": false },
                 "application_path": application_path,
                 "application_size_bytes": 19,
                 "application_sha256": application_sha256,
@@ -147,19 +141,18 @@ fn write_compressed(path: &Path, bytes: &[u8]) {
     .unwrap();
 }
 
-fn add_build_provenance(run: &Path) {
+/// Archive the image's runtime and bootstrap files beside its application,
+/// with their digests in the manifest.
+fn add_firmware_subjects(run: &Path) {
     let runtime_elf_path = PathBuf::from("firmware/system-watchdog/runtime.elf");
     let runtime_bin_path = PathBuf::from("firmware/system-watchdog/runtime.bin");
     let bootstrap_elf_path = PathBuf::from("firmware/system-watchdog/bootstrap.elf");
-    let effective_lock_path = PathBuf::from("firmware/system-watchdog/effective-Cargo.lock");
     write_compressed(&run.join(&runtime_elf_path), b"runtime elf");
     fs::write(run.join(&runtime_bin_path), b"runtime bin").unwrap();
     fs::write(run.join(&bootstrap_elf_path), b"bootstrap elf").unwrap();
-    fs::write(run.join(&effective_lock_path), b"effective lock").unwrap();
     let mut manifest: RunManifest = read_json(&run.join("manifest.json")).unwrap();
-    manifest.repository.workspace_sha256 = "00".repeat(32);
     let artifact = &mut manifest.firmware[0];
-    artifact.runtime_elf_path = Some(runtime_elf_path.clone());
+    artifact.runtime_elf_path = Some(runtime_elf_path);
     artifact.runtime_elf_size_bytes = Some(11);
     artifact.runtime_elf_sha256 = oer_os_durable::sha256_bytes(b"runtime elf");
     artifact.runtime_bin_path = Some(runtime_bin_path.clone());
@@ -168,86 +161,7 @@ fn add_build_provenance(run: &Path) {
     artifact.bootstrap_elf_path = Some(bootstrap_elf_path.clone());
     artifact.bootstrap_elf_size_bytes = Some(13);
     artifact.bootstrap_elf_sha256 = Some(sha256_file(&run.join(&bootstrap_elf_path)).unwrap());
-    let subjects = vec![
-        BuildSubject {
-            role: BuildSubjectRole::Application,
-            path: artifact.application_path.clone(),
-            size_bytes: artifact.application_size_bytes,
-            sha256: artifact.application_sha256.clone(),
-        },
-        BuildSubject {
-            role: BuildSubjectRole::BootstrapElf,
-            path: bootstrap_elf_path,
-            size_bytes: 13,
-            sha256: artifact.bootstrap_elf_sha256.clone().unwrap(),
-        },
-        BuildSubject {
-            role: BuildSubjectRole::RuntimeBin,
-            path: runtime_bin_path,
-            size_bytes: 11,
-            sha256: artifact.runtime_bin_sha256.clone().unwrap(),
-        },
-        BuildSubject {
-            role: BuildSubjectRole::RuntimeElf,
-            path: runtime_elf_path,
-            size_bytes: 11,
-            sha256: artifact.runtime_elf_sha256.clone(),
-        },
-    ];
-    let build_id = crate::build::build_id(&subjects);
-    let provenance_path = PathBuf::from("firmware/system-watchdog/build-provenance.json");
-    artifact.build_id = Some(build_id.clone());
-    artifact.build_provenance_path = Some(provenance_path.clone());
     atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    atomic_json(
-        &run.join(&provenance_path),
-        &BuildProvenance {
-            schema: BUILD_PROVENANCE_SCHEMA,
-            build_id,
-            build_type: String::from("open-esp-radio-hil-firmware/v1"),
-            parameters: oer_hil_run_bundle_format::build::BuildParameters {
-                network: None,
-                image: ImageClass::SystemWatchdog,
-                runtime_profile: ImageClass::SystemWatchdog.runtime_profile().to_owned(),
-                target: String::from("riscv32imafc-unknown-none-elf"),
-                runtime_features: ImageClass::SystemWatchdog.runtime_features().to_owned(),
-                layout_seed: None,
-                features: oer_hil_schema::image::FeatureDelta::default(),
-            },
-            sources: vec![SourceMaterial {
-                name: String::from("repository"),
-                checkout_path: PathBuf::from("/build/source"),
-                remote: Some(String::from("https://example.invalid/repository.git")),
-                commit: manifest.repository.commit.clone(),
-                dirty: manifest.repository.dirty,
-                workspace_sha256: manifest.repository.workspace_sha256.clone(),
-                rebuild_status: SourceRebuildStatus::CleanCommit,
-                tracked_patch_path: None,
-                tracked_patch_size_bytes: None,
-                tracked_patch_sha256: None,
-                untracked_files: Vec::new(),
-                limitations: Vec::new(),
-            }],
-            files: vec![oer_hil_run_bundle_format::build::BuildFileMaterial {
-                name: String::from("embedded-lock"),
-                path: PathBuf::from("Cargo.lock"),
-                archive_path: Some(effective_lock_path.clone()),
-                size_bytes: 14,
-                sha256: sha256_file(&run.join(&effective_lock_path)).unwrap(),
-            }],
-            environment: oer_hil_run_bundle_format::build::BuildEnvironment {
-                tools: Vec::new(),
-                inherited_rustflags: None,
-                inherited_encoded_rustflags: None,
-                cargo_incremental: String::from("0"),
-                source_date_epoch: None,
-            },
-            subjects,
-            source_reconstructable: true,
-            reproducibility: oer_hil_run_bundle_format::build::BuildReproducibility::Unverified,
-        },
-    )
-    .unwrap();
 }
 
 fn add_lab_provenance(run: &Path, device_id: &str) {
@@ -429,27 +343,15 @@ fn a_non_network_plan_accepts_system_provenance_with_a_peer_requirement() {
 #[test]
 fn selects_only_verified_archived_firmware_for_replay() {
     let (root, run) = fixture();
-    let firmware = archived_firmware(
-        &root,
-        "chip-a",
-        "run-1",
-        ImageClass::SystemWatchdog,
-        &TestRecipe,
-    )
-    .expect("select archived firmware");
+    let firmware = archived_firmware(&root, "chip-a", "run-1", ImageClass::SystemWatchdog)
+        .expect("select archived firmware");
     assert_eq!(
         firmware.application_path,
         run.join("firmware/system-watchdog/application.bin")
     );
     assert_eq!(firmware.application_sha256.len(), 64);
-    let error = archived_firmware(
-        &root,
-        "chip-a",
-        "run-1",
-        ImageClass::SystemPanicReset,
-        &TestRecipe,
-    )
-    .expect_err("reject absent image class");
+    let error = archived_firmware(&root, "chip-a", "run-1", ImageClass::SystemPanicReset)
+        .expect_err("reject absent image class");
     assert!(
         error
             .to_string()
@@ -459,36 +361,17 @@ fn selects_only_verified_archived_firmware_for_replay() {
 }
 
 #[test]
-fn verifies_complete_build_provenance_and_all_firmware_subjects() {
+fn verifies_every_archived_firmware_subject() {
     let (root, run) = fixture();
-    add_build_provenance(&run);
+    add_firmware_subjects(&run);
     assert_eq!(validate(&root).unwrap().firmware.len(), 1);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn a_manifest_seed_must_be_the_build_records_seed() {
-    let (root, run) = fixture();
-    add_build_provenance(&run);
-    let mut manifest: RunManifest = read_json(&run.join("manifest.json")).unwrap();
-    manifest.firmware[0].layout_seed = std::num::NonZeroU32::new(7);
-    atomic_json(&run.join("manifest.json"), &manifest).unwrap();
-    let error = validate(&root).unwrap_err();
-    assert!(
-        error.to_string().contains("build provenance inconsistent"),
-        "{error}"
-    );
-    // Unseeded, the manifest keeps its earlier form.
-    manifest.firmware[0].layout_seed = None;
-    let json = serde_json::to_value(&manifest).unwrap();
-    assert!(json["firmware"][0].get("layout_seed").is_none());
     fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn rejects_tampered_archived_runtime_elf() {
     let (root, run) = fixture();
-    add_build_provenance(&run);
+    add_firmware_subjects(&run);
     write_compressed(
         &run.join("firmware/system-watchdog/runtime.elf"),
         b"runtime elF",
@@ -499,16 +382,12 @@ fn rejects_tampered_archived_runtime_elf() {
 }
 
 #[test]
-fn rejects_replay_origin_not_bound_to_the_firmware_build() {
+fn rejects_a_replay_origin_naming_the_run_itself() {
     let (root, run) = fixture();
-    add_build_provenance(&run);
     let mut manifest: RunManifest = read_json(&run.join("manifest.json")).unwrap();
-    let repository = manifest.repository.clone();
     manifest.firmware[0].replayed_from =
         Some(oer_hil_run_bundle_format::run::FirmwareReplayOrigin {
-            source_run_id: String::from("source-run"),
-            firmware_repository: repository,
-            source_build_id: Some(String::from("wrong-build-id")),
+            source_run_id: String::from("run-1"),
         });
     atomic_json(&run.join("manifest.json"), &manifest).unwrap();
     let error = validate(&root).unwrap_err();

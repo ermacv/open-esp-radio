@@ -41,7 +41,6 @@ pub(crate) fn selection_description(tags: &[String]) -> String {
 
 pub(crate) struct Invocation {
     pub(crate) arguments: Vec<OsString>,
-    pub(crate) snapshot: Option<oer_hil_source_snapshot::Snapshot>,
     /// Shell command run after the scenarios within the run's lease.
     pub(crate) then: Option<String>,
 }
@@ -505,7 +504,7 @@ impl SuiteEffects for LiveSuite<'_> {
 
     fn after_scenario(&mut self, scenario: &Scenario, session: &mut RunSession) -> Result<()> {
         let class = scenario.image();
-        let recovery = ImageClass::BootSmoke;
+        let recovery = RECOVERY_IMAGE;
         let silent = oer_hil_lab::recovery::image_silent(class.id());
         if !needs_recovery_image(
             silent,
@@ -528,6 +527,7 @@ impl SuiteEffects for LiveSuite<'_> {
             FirmwarePreparation::BuildCurrent(build)
             | FirmwarePreparation::Selected(RunFirmware::BuildCurrent(build)) => build.clone(),
             FirmwarePreparation::Selected(RunFirmware::Replay(_)) => oer_hil_image::CurrentBuild {
+                source: oer_hil_image::ImageSource::Tree(self.root.to_owned()),
                 layout_seed: None,
                 features: Default::default(),
             },
@@ -1057,6 +1057,9 @@ fn needs_recovery_image(
 }
 
 /// The image classes `selected` runs on, in the order runs build them.
+/// The image a silent board is brought back to.
+pub(crate) const RECOVERY_IMAGE: ImageClass = ImageClass::BootSmoke;
+
 pub(crate) fn image_classes(selected: &[&Scenario]) -> Vec<ImageClass> {
     group_selected_scenarios(selected)
         .into_iter()
@@ -1098,15 +1101,6 @@ fn start_run(
     session.report_interruption_to(|report| {
         let _ = oer_hil_workload::emit_json(report, false);
     });
-    if let Some(snapshot) = invocation.snapshot {
-        session.bind_source_snapshot(
-            snapshot.directory(),
-            &oer_hil_image::source_objects()?,
-            &oer_hil_image::frozen::build_slots(lab.chip())?,
-        )?;
-    } else if matches!(firmware, Some(PlannedFirmware::BuildCurrent)) {
-        return Err("current-source HIL run requires a source snapshot".into());
-    }
     let entries = catalog
         .all()
         .iter()

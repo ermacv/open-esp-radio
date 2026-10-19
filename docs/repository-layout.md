@@ -253,7 +253,6 @@ profile, ELF through `host/analysis/elf`.
 | `host/hil/runner` | `host/hil/runner` | host |
 | `host/hil/run-bundle-format` | `host/hil/runs` | host |
 | `host/hil/run-bundle` | `host/hil/runs` | host |
-| `host/hil/source-snapshot` | `host/hil/runs` | host |
 | `host/hil/scenario` | `host/hil/scenario` | host |
 | `host/hil/workload` | `host/hil/scenario` | host |
 | `host/image/build` | `host/image/build` | host |

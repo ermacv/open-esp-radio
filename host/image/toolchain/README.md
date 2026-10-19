@@ -10,13 +10,12 @@ builds run and record which ones ran.
   toolchain (`<sysroot>/lib/rustlib/<host>/bin`, the toolchain
   `rust-toolchain.toml` pins), never from an unrelated LLVM on `PATH`.
 - `require(Tool)` fails unless the tool runs; `versions()` lists every tool
-  with the program and the version it reports, which image builds record as
-  evidence (`llvm-objdump` included).
+  with the program and the version it reports (`llvm-objdump` included).
 - `image::configure` applies the image compiler setup to an image's Cargo
   command: the unstable stack and move flags under `RUSTC_BOOTSTRAP`, the
   stack-size section for C and C++, and the image linker, which
   `image::build_linker` builds from the tree being built (a checkout or a
-  source snapshot) through `oer-os-process`.
+  worktree) through `oer-os-process`.
 - `host_target()` names the host's target triple, for a workspace whose
   Cargo configuration defaults to a chip target.
 - `blobray::{cargo, binary, host}`: Cargo commands in the separate Blobray

@@ -23,7 +23,6 @@ oer-image-profile = { path = "../../image/profile" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-analysis = { path = "../analysis" }
 oer-hil-scenario = { path = "../scenario" }
-oer-hil-source-snapshot = { path = "../source-snapshot" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-image-class = { path = "../image-class" }
 oer-lab-stand-board = { path = "../../lab/stand-board" }
@@ -44,7 +43,6 @@ oer-lab-stand-journal = { path = "../../lab/stand-journal" }
 oer-lab-stand-owners = { path = "../../lab/stand-owners" }
 [dev-dependencies]
 oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
-oer-hil-source-snapshot = { path = "../source-snapshot", features = ["test-support"] }
 toml = "1.1"
 oer-hil-workload = { path = "../workload", features = ["test-support"] }
 

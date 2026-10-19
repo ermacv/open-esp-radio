@@ -9,37 +9,12 @@ use std::{
 use serde::Serialize;
 
 use crate::Result;
-use crate::build::build_id;
-use oer_hil_run_bundle_format::build::BUILD_PROVENANCE_SCHEMA;
-use oer_hil_run_bundle_format::build::BuildProvenance;
-use oer_hil_run_bundle_format::build::BuildReproducibility;
-use oer_hil_run_bundle_format::build::BuildSubject;
-use oer_hil_run_bundle_format::build::BuildSubjectRole;
-use oer_hil_run_bundle_format::build::SourceMaterial;
-use oer_hil_run_bundle_format::build::SourceRebuildStatus;
 use oer_hil_run_bundle_format::lab::LabProvenance;
 use oer_hil_run_bundle_format::run::RUN_SCHEMA;
 use oer_hil_run_bundle_format::run::RunManifest;
 use oer_hil_run_bundle_format::run::RunState;
 use oer_hil_run_bundle_format::run::validation::read_json;
 use oer_hil_run_bundle_format::run::validation::validate_manifest;
-
-/// What the image builder derives from a build's recorded selection.
-/// A replay checks each build record against it, so a record cannot
-/// claim a target or features its image class does not build with.
-pub trait FirmwareRecipe {
-    /// The Rust target `chip` images build for.
-    fn rust_target(&self, chip: &str) -> Result<String>;
-
-    /// The runtime features `image` builds with before any feature delta,
-    /// for the recorded network integration, or none for an image that
-    /// links no network integration.
-    fn runtime_features(
-        &self,
-        image: oer_hil_schema::image::ImageClass,
-        network: Option<&str>,
-    ) -> Result<String>;
-}
 
 #[derive(Debug, Serialize)]
 pub struct ArchivedFirmware {
@@ -49,11 +24,8 @@ pub struct ArchivedFirmware {
     pub image: oer_hil_schema::image::ImageClass,
     pub application_path: PathBuf,
     pub application_sha256: String,
-    pub build_id: Option<String>,
     pub(super) source_directory: PathBuf,
-    pub(super) repository: oer_hil_run_bundle_format::run::RepositoryProvenance,
     pub(super) artifact: oer_hil_run_bundle_format::run::FirmwareArtifact,
-    pub(super) build_provenance: Option<BuildProvenance>,
 }
 
 /// The run directory a checkout's `runs` resolves to. A checkout links it to
@@ -71,10 +43,9 @@ pub fn archived_firmware(
     target: &str,
     run_id: &str,
     image: oer_hil_schema::image::ImageClass,
-    recipe: &dyn FirmwareRecipe,
 ) -> Result<ArchivedFirmware> {
     let runs = root.join(crate::store::CHECKOUT_RUNS);
-    let manifest = validate_source(&runs, target, run_id, recipe)?;
+    let manifest = validate_source(&runs, target, run_id)?;
     let run_directory = runs_directory(&runs)?.join(run_id);
     let artifact = manifest
         .firmware
@@ -86,34 +57,21 @@ pub fn archived_firmware(
                 image.id()
             )
         })?;
-    let build_provenance = artifact
-        .build_provenance_path
-        .as_ref()
-        .map(|path| read_json(&run_directory.join(path)))
-        .transpose()?;
     Ok(ArchivedFirmware {
         run_id: run_id.to_owned(),
         target: manifest.target.clone(),
         image,
         application_path: run_directory.join(&artifact.application_path),
         application_sha256: artifact.application_sha256.clone(),
-        build_id: artifact.build_id.clone(),
         source_directory: run_directory.clone(),
-        repository: manifest.repository,
         artifact: artifact.clone(),
-        build_provenance,
     })
 }
 
 /// Check the run `run_id` of `chip` below `runs` before its firmware is
 /// replayed: its manifest, laboratory provenance and every firmware
-/// artifact with its build record, against `recipe`.
-fn validate_source(
-    runs: &Path,
-    chip: &str,
-    run_id: &str,
-    recipe: &dyn FirmwareRecipe,
-) -> Result<RunManifest> {
+/// artifact's files against their recorded digests.
+fn validate_source(runs: &Path, chip: &str, run_id: &str) -> Result<RunManifest> {
     let run_directory = runs_directory(runs)?.join(run_id);
     let manifest_path = run_directory.join("manifest.json");
     require_regular_file(&manifest_path)?;
@@ -123,7 +81,7 @@ fn validate_source(
         return Err(format!("HIL run `{}` is still running", manifest.run_id).into());
     }
     validate_lab_provenance(&run_directory, &manifest)?;
-    validate_firmware(&run_directory, &manifest, recipe)?;
+    validate_firmware(&run_directory, &manifest)?;
     Ok(manifest)
 }
 
@@ -190,11 +148,7 @@ fn validate_lab_provenance(run_directory: &Path, manifest: &RunManifest) -> Resu
     )
 }
 
-fn validate_firmware(
-    run_directory: &Path,
-    manifest: &RunManifest,
-    recipe: &dyn FirmwareRecipe,
-) -> Result<()> {
+fn validate_firmware(run_directory: &Path, manifest: &RunManifest) -> Result<()> {
     let mut images = BTreeSet::new();
     let mut paths = BTreeSet::new();
     for artifact in &manifest.firmware {
@@ -250,37 +204,6 @@ fn validate_firmware(
             &artifact.application_sha256,
             "firmware application",
         )?;
-        match (&artifact.build_id, &artifact.build_provenance_path) {
-            (None, None) => {}
-            (Some(build_id), Some(path)) => {
-                let expected = PathBuf::from("firmware")
-                    .join(artifact.image.id())
-                    .join("build-provenance.json");
-                if path != &expected || !paths.insert(path.clone()) {
-                    return Err(format!(
-                        "HIL run `{}` has non-canonical build provenance for `{}`",
-                        manifest.run_id,
-                        artifact.image.id()
-                    )
-                    .into());
-                }
-                validate_build_provenance(
-                    run_directory,
-                    manifest,
-                    artifact,
-                    build_id,
-                    path,
-                    recipe,
-                )?;
-            }
-            _ => {
-                return Err(format!(
-                    "HIL run `{}` has incomplete build provenance reference",
-                    manifest.run_id
-                )
-                .into());
-            }
-        }
     }
     Ok(())
 }
@@ -308,190 +231,6 @@ fn validate_optional_firmware_file(
     }
 }
 
-fn validate_build_provenance(
-    run_directory: &Path,
-    manifest: &RunManifest,
-    artifact: &oer_hil_run_bundle_format::run::FirmwareArtifact,
-    expected_build_id: &str,
-    path: &Path,
-    recipe: &dyn FirmwareRecipe,
-) -> Result<()> {
-    validate_relative_path(path, "build provenance")?;
-    require_regular_file_below(run_directory, path)?;
-    let provenance: BuildProvenance = read_json(&run_directory.join(path))?;
-    if provenance.schema != BUILD_PROVENANCE_SCHEMA
-        || provenance.build_id != expected_build_id
-        || provenance.build_id != build_id(&provenance.subjects)
-        || provenance.build_type != "open-esp-radio-hil-firmware/v1"
-        || provenance.parameters.image != artifact.image
-        || provenance.parameters.runtime_profile != artifact.image.runtime_profile()
-        || provenance.parameters.runtime_features
-            != provenance
-                .parameters
-                .features
-                .apply(&recipe.runtime_features(
-                    artifact.image,
-                    provenance.parameters.network.as_deref(),
-                )?)
-        || provenance.parameters.target != recipe.rust_target(&manifest.target)?
-        // The manifest's seed is the one the build record says the image
-        // was linked with, so a run cannot claim another layout.
-        || provenance.parameters.layout_seed != artifact.layout_seed
-        || provenance.reproducibility != BuildReproducibility::Unverified
-    {
-        return Err(format!(
-            "HIL run `{}` has build provenance inconsistent with `{}`",
-            manifest.run_id,
-            artifact.image.id()
-        )
-        .into());
-    }
-    // The build record lists the application, the subjects of the image's
-    // boot flow and the runtime ELF, in that order.
-    let subject = |role, file: &str| -> Result<BuildSubject> {
-        let record = artifact
-            .subjects()
-            .into_iter()
-            .find(|subject| subject.file == file)
-            .ok_or("unknown firmware subject")?;
-        Ok(BuildSubject {
-            role,
-            path: record
-                .path
-                .cloned()
-                .ok_or_else(|| format!("build provenance requires an archived {}", record.kind))?,
-            size_bytes: record
-                .size_bytes
-                .ok_or_else(|| format!("build provenance requires a {} size", record.kind))?,
-            sha256: record
-                .sha256
-                .ok_or_else(|| format!("build provenance requires a {} digest", record.kind))?
-                .to_owned(),
-        })
-    };
-    let mut expected_subjects = vec![BuildSubject {
-        role: BuildSubjectRole::Application,
-        path: artifact.application_path.clone(),
-        size_bytes: artifact.application_size_bytes,
-        sha256: artifact.application_sha256.clone(),
-    }];
-    expected_subjects.push(subject(BuildSubjectRole::BootstrapElf, "bootstrap.elf")?);
-    expected_subjects.push(subject(BuildSubjectRole::RuntimeBin, "runtime.bin")?);
-    expected_subjects.push(subject(BuildSubjectRole::RuntimeElf, "runtime.elf")?);
-    if provenance.subjects != expected_subjects || provenance.sources.is_empty() {
-        return Err(format!(
-            "HIL run `{}` has inconsistent build subjects or no source materials",
-            manifest.run_id
-        )
-        .into());
-    }
-    for subject in &provenance.subjects {
-        verify_indexed_file(
-            run_directory,
-            &subject.path,
-            subject.size_bytes,
-            &subject.sha256,
-            "build subject",
-        )?;
-    }
-    let mut source_names = BTreeSet::new();
-    for source in &provenance.sources {
-        if source.name.is_empty() || !source_names.insert(&source.name) {
-            return Err(format!(
-                "HIL run `{}` has an invalid or duplicate source material",
-                manifest.run_id
-            )
-            .into());
-        }
-        validate_source_material(run_directory, manifest, source)?;
-    }
-    let primary = &provenance.sources[0];
-    let expected_repository = artifact
-        .replayed_from
-        .as_ref()
-        .map(|origin| &origin.firmware_repository)
-        .unwrap_or(&manifest.repository);
-    if primary.name != "repository"
-        || primary.commit != expected_repository.commit
-        || primary.dirty != expected_repository.dirty
-        || primary.workspace_sha256 != expected_repository.workspace_sha256
-    {
-        return Err(format!(
-            "HIL run `{}` has primary source material inconsistent with its manifest",
-            manifest.run_id
-        )
-        .into());
-    }
-    let source_reconstructable = provenance
-        .sources
-        .iter()
-        .all(|source| source.rebuild_status != SourceRebuildStatus::Incomplete);
-    if provenance.source_reconstructable != source_reconstructable {
-        return Err(format!(
-            "HIL run `{}` has inconsistent source reconstructability",
-            manifest.run_id
-        )
-        .into());
-    }
-    let mut file_names = BTreeSet::new();
-    let mut file_paths = BTreeSet::new();
-    for file in &provenance.files {
-        validate_relative_path(&file.path, "build file material")?;
-        validate_sha256(&file.sha256, "build file material", &file.name)?;
-        if file.name.is_empty() || !file_names.insert(&file.name) || !file_paths.insert(&file.path)
-        {
-            return Err(format!(
-                "HIL run `{}` has an invalid or duplicate build file material",
-                manifest.run_id
-            )
-            .into());
-        }
-        if let Some(archive_path) = &file.archive_path {
-            verify_indexed_file(
-                run_directory,
-                archive_path,
-                file.size_bytes,
-                &file.sha256,
-                "archived build file material",
-            )?;
-        }
-    }
-    let expected_lock_archive = PathBuf::from("firmware")
-        .join(artifact.image.id())
-        .join("effective-Cargo.lock");
-    validate_snapshot_materials(run_directory, &provenance)?;
-    if provenance
-        .files
-        .iter()
-        .find(|file| file.name == "embedded-lock")
-        .and_then(|file| {
-            file.archive_path
-                .as_ref()
-                .filter(|path| *path == &expected_lock_archive)
-        })
-        .is_none()
-    {
-        return Err(format!(
-            "HIL run `{}` does not archive its effective embedded lock file",
-            manifest.run_id
-        )
-        .into());
-    }
-    let mut tools = BTreeSet::new();
-    if provenance.environment.cargo_incremental != "0"
-        || provenance.environment.tools.iter().any(|tool| {
-            tool.name.is_empty() || tool.program.is_empty() || !tools.insert(&tool.name)
-        })
-    {
-        return Err(format!(
-            "HIL run `{}` has invalid build environment provenance",
-            manifest.run_id
-        )
-        .into());
-    }
-    Ok(())
-}
-
 fn validate_replay_origin(
     manifest: &RunManifest,
     artifact: &oer_hil_run_bundle_format::run::FirmwareArtifact,
@@ -501,7 +240,6 @@ fn validate_replay_origin(
     };
     if origin.source_run_id == manifest.run_id
         || !is_single_normal_component(Path::new(&origin.source_run_id))
-        || origin.source_build_id != artifact.build_id
     {
         return Err(format!(
             "HIL run `{}` has inconsistent replay origin for `{}`",
@@ -509,146 +247,6 @@ fn validate_replay_origin(
             artifact.image.id()
         )
         .into());
-    }
-    Ok(())
-}
-
-fn validate_source_material(
-    run_directory: &Path,
-    manifest: &RunManifest,
-    source: &SourceMaterial,
-) -> Result<()> {
-    match (
-        source.tracked_patch_path.as_deref(),
-        source.tracked_patch_size_bytes,
-        source.tracked_patch_sha256.as_deref(),
-    ) {
-        (None, None, None) => {}
-        (Some(path), Some(size_bytes), Some(sha256)) => verify_indexed_file(
-            run_directory,
-            path,
-            size_bytes,
-            sha256,
-            "tracked source patch",
-        )?,
-        _ => {
-            return Err(format!(
-                "HIL run `{}` has incomplete tracked source patch provenance",
-                manifest.run_id
-            )
-            .into());
-        }
-    }
-    let mut untracked_paths = BTreeSet::new();
-    validate_sha256(&source.workspace_sha256, "source workspace", &source.name)?;
-    for file in &source.untracked_files {
-        validate_relative_path(&file.path, "untracked source identity")?;
-        validate_sha256(
-            &file.sha256,
-            "untracked source identity",
-            &file.path.display().to_string(),
-        )?;
-        if !untracked_paths.insert(&file.path) {
-            return Err(format!(
-                "HIL run `{}` has a duplicate untracked source path `{}`",
-                manifest.run_id,
-                file.path.display()
-            )
-            .into());
-        }
-    }
-    let state_is_consistent = match source.rebuild_status {
-        SourceRebuildStatus::SourceSnapshot => {
-            source.tracked_patch_path.is_none()
-                && source.untracked_files.is_empty()
-                && source.limitations.is_empty()
-                && !source.commit.is_empty()
-        }
-        SourceRebuildStatus::CleanCommit => {
-            !source.dirty
-                && source.tracked_patch_path.is_none()
-                && source.untracked_files.is_empty()
-                && source.limitations.is_empty()
-                && source.remote.is_some()
-                && !source.commit.is_empty()
-        }
-        SourceRebuildStatus::TrackedPatch => {
-            source.dirty
-                && source.tracked_patch_path.is_some()
-                && source.untracked_files.is_empty()
-                && source.limitations.is_empty()
-                && source.remote.is_some()
-                && !source.commit.is_empty()
-        }
-        SourceRebuildStatus::Incomplete => !source.limitations.is_empty(),
-    };
-    if !state_is_consistent {
-        return Err(format!(
-            "HIL run `{}` has inconsistent source rebuild provenance",
-            manifest.run_id
-        )
-        .into());
-    }
-    Ok(())
-}
-
-fn validate_snapshot_materials(run: &Path, provenance: &BuildProvenance) -> Result<()> {
-    let snapshot_sources = provenance
-        .sources
-        .iter()
-        .filter(|s| s.rebuild_status == SourceRebuildStatus::SourceSnapshot)
-        .count();
-    let materials = provenance
-        .files
-        .iter()
-        .filter(|f| f.name.starts_with("source-snapshot-"))
-        .collect::<Vec<_>>();
-    if snapshot_sources == 0 && materials.is_empty() {
-        return Ok(());
-    }
-    if snapshot_sources != provenance.sources.len()
-        || materials.len() != crate::build::SNAPSHOT_MATERIALS.len()
-    {
-        return Err("incomplete source snapshot binding".into());
-    }
-    let mut directory = None;
-    for (name, filename) in crate::build::SNAPSHOT_MATERIALS {
-        let file = materials
-            .iter()
-            .find(|f| f.name == name)
-            .ok_or("missing source snapshot material")?;
-        let path = file
-            .archive_path
-            .as_deref()
-            .ok_or("source snapshot must be archived")?;
-        if file.path != Path::new(filename)
-            || path.file_name() != Some(std::ffi::OsStr::new(filename))
-        {
-            return Err("invalid source snapshot material path".into());
-        }
-        let parent = path.parent().ok_or("source snapshot has no directory")?;
-        if directory
-            .replace(parent)
-            .is_some_and(|previous| previous != parent)
-        {
-            return Err("source snapshot materials must share one directory".into());
-        }
-    }
-    let frozen = oer_hil_source_snapshot::FrozenSources::open(
-        &run.join(directory.unwrap()),
-        &oer_hil_schema::snapshot::objects_of_run(run)?,
-    )?;
-    if frozen.sources().len() != provenance.sources.len() {
-        return Err("source snapshot roles disagree with provenance".into());
-    }
-    for (input, source) in frozen.sources().iter().zip(&provenance.sources) {
-        if input.name != source.name
-            || input.commit != source.commit
-            || input.dirty != source.dirty
-            || oer_hil_source_snapshot::identity(input)? != source.workspace_sha256
-        {
-            return Err("source snapshot identity disagrees with provenance".into());
-        }
     }
     Ok(())
 }

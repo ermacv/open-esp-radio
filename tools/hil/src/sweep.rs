@@ -40,33 +40,14 @@ pub struct Candidate {
     pub reason: String,
 }
 
-/// The files that queued or running HIL jobs were fixed with, and the
-/// source snapshot each names with `--source-snapshot`, which it reads when
-/// it starts.
+/// The files that queued or running HIL jobs were fixed with.
 pub(crate) fn held_by_jobs() -> Result<Vec<PathBuf>> {
     Ok(oer_lab_stand_arbiter::Arbiter::open()?
         .jobs()
         .unfinished()
         .into_iter()
-        .flat_map(|job| {
-            let snapshot = named_snapshot(&job.command).map(|path| job.checkout.join(path));
-            job.fixed.into_iter().chain(snapshot)
-        })
+        .flat_map(|job| job.fixed)
         .collect())
-}
-
-/// The value of `--source-snapshot` in the `cargo hil` arguments `command`.
-fn named_snapshot(command: &[String]) -> Option<&str> {
-    let mut arguments = command.iter();
-    while let Some(argument) = arguments.next() {
-        if argument == "--source-snapshot" {
-            return arguments.next().map(String::as_str);
-        }
-        if let Some(value) = argument.strip_prefix("--source-snapshot=") {
-            return Some(value);
-        }
-    }
-    None
 }
 
 /// `found` without the candidates that hold or lie inside a `held` path.
@@ -192,6 +173,35 @@ fn image_caches(
     }
 }
 
+/// The directories of images that runs built for themselves
+/// (`target/hil/<chip>/images/<run>`) and that enqueued runs were built
+/// with (`target/hil/jobs/images/<job>`), unused for the policy's image
+/// cache age: a run keeps what it flashed in its bundle, and a queued job
+/// holds its own.
+fn built_images(
+    target: &Path,
+    chips: &[String],
+    policy: Policy,
+    now: SystemTime,
+    found: &mut Vec<Candidate>,
+) {
+    let parents = chips
+        .iter()
+        .map(|chip| target.join("hil").join(chip).join("images"))
+        .chain(std::iter::once(target.join("hil/jobs/images")));
+    for parent in parents {
+        for entry in fs::read_dir(&parent).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() && age(&path, now).is_some_and(|age| age > policy.image_caches) {
+                found.push(Candidate {
+                    path,
+                    reason: "built images unused".into(),
+                });
+            }
+        }
+    }
+}
+
 /// Every removable cache of the checkout at `root` whose chips are `chips`.
 pub fn candidates(
     root: &Path,
@@ -203,6 +213,7 @@ pub fn candidates(
     let mut found = Vec::new();
     incremental(&target, policy, now, &mut found);
     image_caches(&target, chips, policy, now, &mut found);
+    built_images(&target, chips, policy, now, &mut found);
     found.sort_by(|a, b| a.path.cmp(&b.path));
     found
 }
@@ -294,6 +305,35 @@ mod tests {
     }
 
     #[test]
+    fn old_built_images_of_runs_and_jobs_are_candidates() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("target");
+        let paths = [
+            "hil/chip-a/images/run-old",
+            "hil/chip-a/images/run-new",
+            "hil/jobs/images/job-old",
+        ]
+        .map(|path| target.join(path));
+        for path in &paths {
+            fs::create_dir_all(path).unwrap();
+        }
+        aged(&paths[0], 10);
+        aged(&paths[2], 10);
+        let found = candidates(
+            root.path(),
+            &["chip-a".to_owned()],
+            Policy::default(),
+            SystemTime::now(),
+        );
+        let found: Vec<_> = found.iter().map(|candidate| &candidate.path).collect();
+        assert!(
+            found.contains(&&paths[0]) && found.contains(&&paths[2]),
+            "{found:?}"
+        );
+        assert!(!found.contains(&&paths[1]));
+    }
+
+    #[test]
     fn files_a_queued_job_was_fixed_with_are_kept_with_what_holds_them() {
         let candidate = |path: &str| Candidate {
             path: PathBuf::from(path),
@@ -335,31 +375,5 @@ mod tests {
             candidates(root.path(), &[], Policy::default(), SystemTime::now()).len(),
             1
         );
-    }
-
-    /// A job names the snapshot it reads with `--source-snapshot`; a sweep
-    /// and source collection keep it as if the job were fixed with it.
-    #[test]
-    fn a_job_holds_the_snapshot_it_names() {
-        let command = |arguments: &[&str]| -> Vec<String> {
-            arguments
-                .iter()
-                .map(|argument| (*argument).to_owned())
-                .collect()
-        };
-        assert_eq!(
-            named_snapshot(&command(&[
-                "run",
-                "smoke",
-                "--source-snapshot",
-                "/s/schema-2/ab"
-            ])),
-            Some("/s/schema-2/ab")
-        );
-        assert_eq!(
-            named_snapshot(&command(&["run", "--source-snapshot=rel/cd", "smoke"])),
-            Some("rel/cd")
-        );
-        assert_eq!(named_snapshot(&command(&["run", "smoke"])), None);
     }
 }

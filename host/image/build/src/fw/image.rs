@@ -1,10 +1,7 @@
 //! Building an image of `firmware/apps` through the image pipeline: its
 //! bundle lies in `target/fw/<image>/`, described by its `bundle.json`.
 
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
@@ -73,8 +70,6 @@ pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSp
         stack_policy: profile.stack_policy(),
         layout_seed: None,
         runtime_environment: runtime_env(image, w1),
-        builder_inputs: BTreeSet::new(),
-        reads: Vec::new(),
         output: output(root, image),
         checks: Some(Gates {
             enforced: false,

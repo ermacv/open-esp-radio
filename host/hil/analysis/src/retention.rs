@@ -139,8 +139,6 @@ pub struct Pruned {
     pub total: usize,
     /// How many observer builds no kept run names were deleted.
     pub observers: usize,
-    /// The source objects and captures that were deleted.
-    pub sources: crate::runs::CollectedSources,
     /// The deleted runs this build cannot read, with the bytes only they
     /// held: those of an older schema, and with `unreadable` those of the
     /// current one.
@@ -180,7 +178,6 @@ pub fn prune(
     budget: Option<u64>,
     apply: bool,
     unreadable: bool,
-    captures: &crate::runs::Captures,
 ) -> Result<Pruned> {
     let all = Run::all(store)?;
     // From reading the pins until the last deletion, no pin can land: a pin
@@ -307,7 +304,6 @@ pub fn prune(
         // the deleted runs alone named are collected.
         pins_lock.take();
         pruned.observers = crate::runs::collect_observers(store)?;
-        pruned.sources = crate::runs::collect_sources(store, captures)?;
     }
     drop(pins_lock);
     Ok(pruned)

@@ -16,7 +16,7 @@ use crate::encode;
 use crate::encode::Encoding;
 use oer_image_profile::policy::StackPolicy;
 
-use crate::{ImageSpec, Result, build_log::BuildLog, exclusion::Staging, source_inputs};
+use crate::{ImageSpec, Result, build_log::BuildLog, exclusion::Staging};
 
 use crate::encode::stage_two::pack_runtime;
 
@@ -44,7 +44,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     // cache: each build holds it until its ELF and dependency information
     // are copied out.
     let release = cache.join(target).join(crate::FIRMWARE_PROFILE);
-    let (runtime_elf, mut compiled) = {
+    let runtime_elf = {
         let _cache = oer_image_toolchain::image::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
@@ -58,9 +58,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
             &output,
             files::RUNTIME_ELF,
         )?;
-        let compiled =
-            source_inputs::collect(root, &[(&release, spec.application.binary.as_str())])?;
-        (elf, compiled)
+        elf
     };
     let runtime_bin = output.join(files::RUNTIME_BIN);
     let mut objcopy = oer_image_toolchain::command(oer_image_toolchain::Tool::LlvmObjcopy)?;
@@ -118,10 +116,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
         &output,
         files::BOOTSTRAP_ELF,
     )?;
-    compiled.extend(source_inputs::collect(
-        root,
-        &[(&release, bootstrap_package.as_str())],
-    )?);
     drop(bootstrap_cache);
     if let Some(checks) = &spec.checks {
         let outcome = checks
@@ -147,39 +141,6 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
         bootstrap_package: bootstrap_package.clone(),
     });
 
-    let map = bundle.flash.clone();
-    let mut reads = vec![
-        spec.stack_policy.clone(),
-        Path::new("firmware/platform")
-            .join(&profile.id)
-            .join("chip.toml"),
-        Path::new("firmware/platform")
-            .join(&profile.id)
-            .join("stack.toml"),
-    ];
-    if let Some(coverage) = &policy.coverage_policy {
-        reads.push(lexical(coverage.strip_prefix(root)?));
-    }
-    reads.push(
-        Path::new("verification")
-            .join(&profile.id)
-            .join("artifacts.toml"),
-    );
-    reads.extend(profile.rom.iter().filter_map(|rom| rom.summaries.clone()));
-    reads.push(map.partitions.clone());
-    reads.extend(spec.reads.iter().cloned());
-    let mut inputs = source_inputs::configuration(
-        root,
-        &compiled,
-        &[Path::new("")],
-        &reads
-            .iter()
-            .map(std::path::PathBuf::as_path)
-            .collect::<Vec<_>>(),
-    )?;
-    inputs.extend(compiled);
-    inputs.extend(spec.builder_inputs.iter().cloned());
-    source_inputs::write(&output, &inputs)?;
     staging.publish(bundle)
 }
 
@@ -252,22 +213,6 @@ pub(crate) fn encode_boot_files(
     std::fs::write(bundle.path(files::OTADATA), encode::ota_selector_image(0))?;
     bundle.otadata = true;
     Ok(())
-}
-
-/// `path` with its `..` components resolved against the components before
-/// them, as a repository-relative input path names the file.
-fn lexical(path: &Path) -> std::path::PathBuf {
-    let mut resolved = std::path::PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                resolved.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => resolved.push(other),
-        }
-    }
-    resolved
 }
 
 /// The partitions of the flash map's partition table at `root`.

@@ -8,15 +8,9 @@ use std::{
     time::Instant,
 };
 
-use oer_hil_schema::image::ImageClass;
 use oer_os_durable::{UNIQUE_FILE_COUNTER, atomic_json};
 
 use super::*;
-use crate::Result;
-use crate::replay::FirmwareRecipe;
-use oer_hil_run_bundle_format::build::SourceLimitation;
-use oer_hil_run_bundle_format::build::SourceMaterial;
-use oer_hil_run_bundle_format::build::SourceRebuildStatus;
 
 /// A fresh directory below the system temporary directory.
 pub fn temporary_directory(label: &str) -> PathBuf {
@@ -43,7 +37,6 @@ pub fn manifest() -> RunManifest {
         repository: RepositoryProvenance {
             commit: String::from("abc123"),
             dirty: false,
-            workspace_sha256: String::from("00"),
         },
         runner: RunnerProvenance {
             observer: None,
@@ -79,41 +72,16 @@ pub fn session(directory: &Path) -> RunSession {
     manifest.finished_unix_millis = None;
     manifest.duration_millis = None;
     atomic_json(&directory.join("manifest.json"), &manifest).unwrap();
-    let repository_root = directory
-        .parent()
-        .expect("test run directory has a parent")
-        .to_owned();
     manifest.repository = RepositoryProvenance {
         commit: String::new(),
         dirty: true,
-        workspace_sha256: String::from(
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        ),
     };
     RunSession {
-        frozen_sources: None,
-        snapshot_materials: Vec::new(),
         target_directory: directory
             .parent()
             .expect("test run directory has a parent")
             .to_owned(),
         directory: directory.to_owned(),
-        source_materials: vec![SourceMaterial {
-            name: String::from("repository"),
-            checkout_path: repository_root,
-            remote: Some(String::from("https://example.invalid/repository.git")),
-            commit: String::new(),
-            dirty: true,
-            workspace_sha256: String::from(
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            ),
-            rebuild_status: SourceRebuildStatus::Incomplete,
-            tracked_patch_path: None,
-            tracked_patch_size_bytes: None,
-            tracked_patch_sha256: None,
-            untracked_files: Vec::new(),
-            limitations: vec![SourceLimitation::RepositoryStateNotCaptured],
-        }],
         manifest,
         started: Instant::now(),
         events: File::create(directory.join("events.jsonl")).unwrap(),
@@ -131,7 +99,6 @@ pub fn integrated_session(target_directory: &Path) -> RunSession {
     session
 }
 
-/// The repository files a staged build record cites, below `root`.
 /// The staged chip of the fixture images.
 pub const TEST_CHIP: &str = "chip-a";
 
@@ -170,30 +137,11 @@ pub fn write_test_build_materials(root: &Path) {
     .unwrap();
 }
 
-/// A session writing into `directory` for `target_directory`, built from
-/// the checkout at `checkout`.
-pub fn session_for(directory: &Path, target_directory: &Path, checkout: &Path) -> RunSession {
+/// A session writing into `directory` for `target_directory`.
+pub fn session_for(directory: &Path, target_directory: &Path) -> RunSession {
     let mut session = session(directory);
     session.target_directory = target_directory.to_owned();
-    session.source_materials[0].checkout_path = checkout.to_owned();
     session
-}
-
-/// The recipe of the staged chip-a images with the owned network, for
-/// records built by these fixtures.
-pub struct TestRecipe;
-
-impl FirmwareRecipe for TestRecipe {
-    fn rust_target(&self, _chip: &str) -> Result<String> {
-        Ok(String::from("riscv32imafc-unknown-none-elf"))
-    }
-
-    fn runtime_features(&self, image: ImageClass, network: Option<&str>) -> Result<String> {
-        Ok(match network {
-            Some(_) => image.build_features("owned-network"),
-            None => image.runtime_features().to_owned(),
-        })
-    }
 }
 
 /// One repetition of a fixture run, with its artifacts in

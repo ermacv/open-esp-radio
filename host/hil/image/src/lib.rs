@@ -1,7 +1,6 @@
 //! HIL images: what each image class builds for each chip, through the one
-//! image pipeline (`oer-image-build`), from the live tree or a frozen source
-//! snapshot, and the firmware and build records the builder hands to run
-//! evidence.
+//! image pipeline (`oer-image-build`), from the tree a run builds from, and
+//! the firmware and build records the builder hands to run evidence.
 //!
 //! This crate owns what is HIL's own about an image: the class's features
 //! and network integration, the agent package of each chip, the HIL stack
@@ -24,24 +23,13 @@ use oer_image_build::bundle::ImageBundle;
 use oer_image_checks::Gates;
 use oer_image_checks::interrupts::Required;
 
-pub mod builder;
-pub mod frozen;
+pub mod images;
 pub mod record;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Version of the `image build` artifact report on stdout.
 const ARTIFACT_REPORT_SCHEMA: u16 = 4;
-
-/// The packages whose code builds a HIL image: the pipeline's, its checks
-/// and this one, which turns a class into an image spec. Their closure joins
-/// every HIL image's source inputs.
-const BUILDERS: [&str; 4] = [
-    oer_image_build::PIPELINE[0],
-    oer_image_build::PIPELINE[1],
-    "oer-image-checks",
-    "oer-hil-image",
-];
 
 /// The report `cargo hil image build` prints: the bundle and what passed.
 #[derive(Serialize)]
@@ -90,8 +78,8 @@ pub struct Artifacts {
     pub bundle: ImageBundle,
     /// Runtime features added to or removed from the class's own.
     pub features: FeatureDelta,
-    /// Host tools that produced this build, recorded in its provenance.
-    pub environment: oer_hil_run_bundle_format::build::BuildEnvironment,
+    /// The tree it was built from: its commit and whether it was dirty.
+    pub repository: oer_hil_run_bundle_format::run::RepositoryProvenance,
 }
 
 /// The profile of `chip` in the repository this runner was built from.
@@ -165,9 +153,22 @@ pub fn chip_for(root: &Path, classes: &[ImageClass], requested: Option<&str>) ->
 /// natural order, a seed shuffles ordinary code and read-only data by it.
 pub type LayoutSeed = Option<std::num::NonZeroU32>;
 
-/// How a run builds its images from the current sources.
+/// Where a run's images come from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ImageSource {
+    /// Built by the run from this tree: the runner's checkout, or a
+    /// worktree of another revision.
+    Tree(PathBuf),
+    /// Built before the run into this directory of images
+    /// ([`images::Images`]): an enqueued run's, built when it was enqueued.
+    Built(PathBuf),
+}
+
+/// How a run gets its images: their source, the layout seed and the
+/// feature delta they are built with.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CurrentBuild {
+    pub source: ImageSource,
     pub layout_seed: LayoutSeed,
     /// Runtime features added to or removed from each class's own; empty
     /// outside an experiment.
@@ -202,8 +203,6 @@ pub(crate) fn spec(
         stack_policy: profile.hil_stack_policy(),
         layout_seed,
         runtime_environment: Vec::new(),
-        builder_inputs: builder::closure(root, &BUILDERS)?,
-        reads: Vec::new(),
         output,
         // HIL images always request every check; each applies where the
         // chip's data names what it checks.
@@ -235,11 +234,57 @@ pub fn build(
         features.suffix()
     ));
     let spec = spec(root, chip, class, (layout_seed, features), output)?;
-    built(&spec, features)
+    built(
+        &spec,
+        features,
+        oer_hil_run_bundle::build::repository(root)?,
+    )
+}
+
+/// `class`'s image for `session`: built into the run's own directory of
+/// images, or taken from the directory built before the run; either way read
+/// back from the directory, checked against its digests.
+pub fn image_for_run(
+    session: &oer_hil_run_bundle::run::RunSession,
+    class: ImageClass,
+    build: &CurrentBuild,
+) -> Result<Artifacts> {
+    let images = match &build.source {
+        ImageSource::Tree(root) => {
+            let directory = session.target_directory().join("images").join(session.id());
+            let mut images = if directory.exists() {
+                images::Images::open(&directory)?
+            } else {
+                images::Images::create(
+                    &directory,
+                    root,
+                    session.target(),
+                    build.layout_seed,
+                    &build.features,
+                )?
+            };
+            images.build(root, class)?;
+            images
+        }
+        ImageSource::Built(directory) => images::Images::open(directory)?,
+    };
+    if images.manifest().chip != session.target() {
+        return Err(format!(
+            "the images are for {}, the run for {}",
+            images.manifest().chip,
+            session.target()
+        )
+        .into());
+    }
+    images.load(class)
 }
 
 /// Run the pipeline for `spec` and keep the HIL record's context.
-pub(crate) fn built(spec: &ImageSpec, features: &FeatureDelta) -> Result<Artifacts> {
+pub(crate) fn built(
+    spec: &ImageSpec,
+    features: &FeatureDelta,
+    repository: oer_hil_run_bundle_format::run::RepositoryProvenance,
+) -> Result<Artifacts> {
     let bundle = oer_image_build::build(spec)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
@@ -247,7 +292,7 @@ pub(crate) fn built(spec: &ImageSpec, features: &FeatureDelta) -> Result<Artifac
     Ok(Artifacts {
         bundle,
         features: features.clone(),
-        environment: oer_hil_run_bundle::build::capture_environment(),
+        repository,
     })
 }
 
@@ -310,17 +355,6 @@ fn tree_packages(tree: &str) -> std::collections::BTreeSet<String> {
         .filter_map(|line| line.split_whitespace().next())
         .map(str::to_owned)
         .collect()
-}
-
-/// Where the host keeps the source snapshots its builds read.
-pub fn source_snapshot_store() -> Result<PathBuf> {
-    Ok(oer_image_build::host_build_root()?.join("source-snapshots"))
-}
-
-/// The source files of every snapshot, by their SHA-256: beside the shared
-/// run store's runs, which keep naming them after a build cache is cleared.
-pub fn source_objects() -> Result<PathBuf> {
-    Ok(oer_hil_run_bundle::RunStore::shared()?.sources())
 }
 
 /// The host build root of `chip` images.

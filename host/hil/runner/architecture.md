@@ -17,13 +17,12 @@ Separate Cargo packages bound the privilege and radio-family scopes:
 | `workload/` (`oer-hil-workload`) | none | What a workload runs against: the repetition `Context`, its one result writer (`results`, written as `observations.json`), `for_each_boot`, `require_keys`, failure classification, per-repetition cleanup evidence, the measurements recorder, the type-erased `Fixtures`, `BoardImages` (the run's writer of the board under test's images, through the flash operation), and the family registry contract (`family::{Workload, Kind, Registry, FixtureProvider}`) |
 | `lab/` (`oer-hil-lab`) | none | A run's stand operation: its laboratory configuration, the fixture lock it holds, the cell's pre-run observation, fixture software leases, recovery and post-mortem; implements the link's `Dut` port. It actuates no hardware and writes no flash record |
 | `link/` (`oer-hil-link`) | none | The host/target link: one DUT session (`SerialCapture`) with the generic exchange (`call`, `request`, `command`, `wait_command`) and reboots; reaches the board only through its `Dut` port; and the reference peers' `PeerConsole` with the whole `@` line grammar (`peer`) |
-| `image/` (`oer-hil-image`) | none | The image builder: firmware construction from the live tree or a frozen source snapshot, placement and stack audits, and the firmware and build records it hands to evidence |
-| `run-bundle/` (`oer-hil-run-bundle`) | none | The run bundle: its typed documents, the one writer, the one typed reader (`RunBundle`) every consumer uses, the run store with its sidecars (`RunStore`), the launch run list, build provenance and the content-addressed object store, the replay checks against the image builder's recipe, and the experiment and laboratory records a run keeps |
+| `image/` (`oer-hil-image`) | none | The image builder: firmware construction from a tree (the checkout or an arm's worktree) into a directory of built images, placement and stack audits, and the firmware records it hands to evidence |
+| `run-bundle/` (`oer-hil-run-bundle`) | none | The run bundle: its typed documents, the one writer, the one typed reader (`RunBundle`) every consumer uses, the run store with its sidecars (`RunStore`), the launch run list, the content-addressed object store, the replay checks of archived firmware against its digests, and the experiment and laboratory records a run keeps |
 | `analysis/` (`oer-hil-analysis`) | none | Analyses of run bundles: the one measurement aggregation and comparison, run queries, retention, performance baselines, A/B arm comparison, the dashboard's runs and the JUnit/HTML views a run writes |
 | `experiment/` (`oer-hil-experiment`) | none | `launch_run`, the one way a run is launched (its runs come from the runner's launch run list), the job a launch runs as, revision runs (a revision's scenario set with the runner of its HIL wire), A/B experiments and bisection |
 | `scenario/` (`oer-hil-scenario`) | none | The family-independent scenario envelope, catalog and campaign plan, with the laboratory requirements, Wi-Fi link vocabulary and target settings a scenario declares |
 | `image-class/` (`oer-hil-image-class`) | none | Image classes, their build features and the image keys each class serves, the check of a device's reported keys against them, and where a chip's HIL images are built from (`agent`: the agent's workspace, package and manifest, the bootstrap) |
-| `source-snapshot/` (`oer-hil-source-snapshot`) | none | Source snapshots: capture of the repository and local dependency checkouts, their identity, and verified materialization into build workspaces |
 | `family/system/` (`oer-hil-family-system`) | none | One scenario family: its scenario table (`ScenarioFamily`: validation, plan, requirements, image keys, peer image, air use), its `Workload` and its target exchanges; each depends on `oer-hil-workload`, never on another family |
 | `family/phy/` (`oer-hil-family-phy`) | none | The host half of the PHY vendor calibration cross-check: the comparison port and the vendor IEEE 802.15.4 reference firmware driver; no scenario family registers it; it names no chip |
 | `family/phy-esp32s31/` (`oer-hil-family-phy-esp32s31`) | none | The ESP32-S31 comparison port: `oer-vendor-phy-esp32s31` behind it |
@@ -184,8 +183,6 @@ suite.json          typed suite/scenario/repetition outcomes
 junit.xml           CI view derived from suite.json
 report.html         human view derived from suite.json
 firmware/<image>/
-├── build-provenance.json
-│                   build recipe, source materials, tools and output subjects
 ├── application.bin exact application bytes used by the flash operation
 ├── runtime.elf.deflate
 │                   exact symbolized runtime used to produce the image,
@@ -366,18 +363,16 @@ Runs retain all firmware subjects through a SHA-256 content-addressed
 store under `target/hil/<target>/objects/`. The files inside a run are ordinary
 hard links when the filesystem supports them, or independent copies
 otherwise. This keeps a copied run self-contained without allocating another
-large runtime ELF for every repeated scenario. Build provenance separates
-subjects, materials and recipe. A tracked dirty delta is stored
-as a binary Git patch; untracked content is identified but never copied
-implicitly, and makes source reconstruction incomplete.
+large runtime ELF for every repeated scenario. Each image's record in the
+manifest is its files by their SHA-256 and the commit of the tree it was
+built from, with whether that tree was dirty.
 
 `cargo hil run <scenario-id> --firmware-from <run-id>` checks the source
-run's manifest, laboratory provenance, firmware and build records offline
+run's manifest, laboratory provenance and firmware records offline
 before acquiring the physical fixture, requires the archived
 image class to match the selected scenario, and then executes the ordinary
 scenario lifecycle without invoking Cargo. The resulting run imports all
-available firmware subjects, effective lock and tracked source patches into
-its own CAS-backed bundle; its firmware replays again after the source run
+available firmware subjects into its own CAS-backed bundle; its firmware replays again after the source run
 is removed. Its manifest records the source run.
 `run-all` does not accept `--firmware-from`.
 
@@ -397,22 +392,19 @@ The host packages own these roles:
   identities, their feature recipes and the keys each class serves.
 - `oer-hil-run-bundle` owns the bundle's typed documents, the run writer,
   the one typed reader, the run store and its sidecars, the launch run list,
-  build provenance and the content-addressed object store, and the replay
+  the content-addressed object store, and the replay
   checks. It depends on no stand, board or image
-  builder code: the image builder hands it firmware records and implements
-  `replay::FirmwareRecipe`, which a replay checks build records against,
+  builder code: the image builder hands it firmware records,
   the runner hands `RunSession::finish` the renderer of its HTML/JUnit views
   (`oer-hil-analysis`), and a run reports its interruption through a
   callback its caller publishes. `oer-hil-analysis` reads bundles for every
-  query, statistic and view; `oer-hil-experiment` launches every run. `oer-hil-source-snapshot` captures and verifies the sources
-  builds and runs are made from, and `oer-os-durable` provides atomic files,
+  query, statistic and view; `oer-hil-experiment` launches every run, and `oer-os-durable` provides atomic files,
   digests and timestamps to every producer.
 - `oer-hil-image` turns an image class into an image spec for the one image
   pipeline, [`oer-image-build`](../../tools/image/pipeline/README.md) (the class's features
   and network, each chip's agent and HIL stack policy, the radio observers'
-  placement audit), builds from a frozen snapshot (`frozen`) and writes the
-  records it hands to evidence (`record`, which also implements the recipe
-  verification checks them against). The pipeline compiles, runs every gate
+  placement audit), builds a run's images into a directory of built images
+  (`images`) and writes the records it hands to evidence (`record`). The pipeline compiles, runs every gate
   (over `oer-analysis-riscv-stack`) and encodes the bundle's flash files, the
   ESP-IDF catalog bootloader of an ESP-IDF chip included. The builder does
   not print: `artifact_report` returns the report the CLI publishes.
@@ -450,7 +442,7 @@ implement its ports, never the reverse. The image builder depends on the run
 bundle, never the reverse, and nothing but the binary, `oer-hil-experiment`,
 `oer-tool-hil` and `xtask` depends on the builder. The runner never depends
 on `oer-tool-hil` or `oer-hil-experiment`, and no library runs `cargo hil`. The `test-support` features of `oer-hil-workload`, `oer-hil-lab`,
-`oer-hil-scenario`, `oer-hil-run-bundle` and `oer-hil-source-snapshot` expose
+`oer-hil-scenario` and `oer-hil-run-bundle` expose
 their test doubles and fixtures to the other packages' tests.
 
 The recursive [catalog contract](../scenarios/README.md) has one discovery,

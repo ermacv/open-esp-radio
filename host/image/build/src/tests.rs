@@ -201,8 +201,6 @@ fn a_type_check_refuses_requested_checks() {
         stack_policy: "no-such-stack.toml".into(),
         layout_seed: None,
         runtime_environment: Vec::new(),
-        builder_inputs: BTreeSet::new(),
-        reads: Vec::new(),
         output: directory.path().to_owned(),
         checks: Some(requested(false)),
     };

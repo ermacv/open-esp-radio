@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The HIL evidence contract: run vocabulary, canonical scenarios and source-snapshot manifests"
+description = "The HIL evidence contract: run vocabulary and canonical scenarios"
 
 [dependencies]
 oer-os-durable = { path = "../../os/durable" }

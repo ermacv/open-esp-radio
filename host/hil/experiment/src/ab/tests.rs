@@ -13,8 +13,17 @@ fn enclosing_lease_reaches_preparation_and_replay() {
                     features: FeatureDelta::default(),
                 },
                 worktree: Worktree::detached(&root, &directory.join("arm-a"), "HEAD").unwrap(),
-                snapshot: directory.join("snapshot"),
             };
+            // A build round builds from the arm's worktree, not this checkout.
+            let worktree = arm.worktree.path().to_string_lossy().into_owned();
+            assert_eq!(
+                arm.firmware_arguments(&Firmware::Build(NonZeroU32::MIN)),
+                ["--source", worktree.as_str(), "--layout-seed", "1"]
+            );
+            assert_eq!(
+                arm.firmware_arguments(&Firmware::Replay(RunId::new("5"))),
+                ["--firmware-from", "5"]
+            );
             let session = Session {
                 checkout: &root,
                 owner: "experiment-test",

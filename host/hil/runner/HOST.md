@@ -23,14 +23,13 @@ hil/
 │   ├── flash/         the flash operation: lease, write, journal, start
 │   ├── link/          the DUT session, generic exchange, reboots, the peer console
 │   ├── net-traffic/   network sessions, paced UDP/TCP and ICMP host traffic
-│   ├── run-bundle/    the run bundle: format, writer, the one reader, run store, build provenance, replay checks
+│   ├── run-bundle/    the run bundle: format, writer, the one reader, run store, firmware records, replay checks
 │   ├── analysis/      run queries, the one measurement aggregation and comparison, performance, views
 │   ├── experiment/    the one run launch, revision runs, A/B comparisons and bisection
-│   ├── image/         image class specs for the image pipeline, firmware records, compare_images
+│   ├── image/         image class specs for the image pipeline, directories of built images, firmware records, compare_images
 │   ├── scenario/      scenario envelope, catalog, campaign plan and requirements
 │   ├── executor/      typed scenario execution on the model or the stand, the tier plan and its leases
 │   ├── image-class/   image classes and the keys each serves
-│   ├── source-snapshot/ source snapshots builds and runs are made from
 │   ├── board/         board I/O: ports, the flash writer, starts, resets, OpenOCD, power, consoles
 │   ├── family/        one radio family's scenarios and workload each; the Wi-Fi fixtures
 │   ├── arbiter/       leases, claims, balances, lock files, job tickets, the board journal
@@ -164,83 +163,23 @@ stderr. An ELF or `application.bin` left beside a failed build is not a
 successful image report. `cargo fw flash --device MAC|PORT <bundle>` writes a
 bundle to an attached board; a run writes its images through the flash operation ([stand](stand.md#the-flash-operation)).
 
-For an explicit source snapshot, use:
-
-```console
-cargo hil image snapshot --source-include crates/path/to/new.rs
-cargo hil image build boot-smoke --source-snapshot ~/.cache/open-esp-radio/build/source-snapshots/schema-2/<snapshot-id>
-```
-
-`image build` takes several classes; from one source snapshot they share one
-materialization of it and are built one after the other.
-
-Snapshot capture is offline and does not load fixture secrets, build firmware or
-access a device. Tracked regular files are captured automatically. Every
-nonignored untracked file must be explicitly named with a repeated
-`--source-include`, or, with `--include-untracked`, lie inside a path package
-of the firmware workspaces (`hil/targets/esp32s31`,
-`platform/esp32s31/bootstrap` and `hil/targets/esp32c5`, as Cargo's locked
-metadata lists them), the
-packages an image build reads, or inside the HIL host packages and scenarios
-(`hil/host`, `hil/schema` and `hil/scenarios`), which the run reads;
-unresolved files block capture with their names and the `--source-include`
-arguments that add them all, ready to paste, before content is archived. The manifest lists every archived untracked
-file with `by: source-include`, `by: image-package` or `by: hil-host`. Directory selections and ignored files are not accepted.
-For the configured local override, qualify each new file with `esp-hal:`. Agent instructions (`AGENTS.md` at any depth and
-every `.agents/` directory) are excluded from tracked and untracked inputs
-in every source checkout: they configure coding agents, not firmware or HIL.
-No symlink or submodule content in the remaining source inputs is silently followed;
-such inputs require review and are rejected by this capture interface.
-
-The content-addressed directory (`<capture store>/schema-2/<manifest
-digest>`, a directory per record schema so an earlier schema's capture of the
-same tree never conflicts) contains `manifest.json` and `snapshot.json`
-(record schema 2). The manifest records each file's size, SHA-256 and
-executable mode for the main source and configured overrides; the bytes are
-objects named by their SHA-256 in the run store's `sources/` directory
-(`~/.local/share/open-esp-radio/hil/sources/<2 hex>/<sha256>`), shared by every
-capture, run and checkout, so an unchanged file is stored once however many
-snapshots name it. A run archives only the manifest and record. Subsequent
-capture does not overwrite an existing identity, rewrites an object whose bytes
-no longer hash to its name, and every reader checks each object's digest; a
-missing or corrupt object is rejected. `cargo hil runs prune --apply` and the
-automatic rule delete a capture no queued or running job holds (was fixed with,
-or names with `--source-snapshot`) a week after its
-record was last written or used (every build or run from `--source-snapshot`
-uses it), then the objects that no run and no
-remaining capture names once a day old. Builds with
-`--source-snapshot` validate and materialize these inputs in one of the host's
-build slots, `~/.cache/open-esp-radio/build/<chip>/source-build-<n>/`
-(`OER_BUILD_ROOT` replaces `~/.cache/open-esp-radio/build`; a set
-`$XDG_CACHE_HOME` replaces `~/.cache` here and for every other stand state
-directory). Every checkout
-of the host shares the slots: a build takes a free one under an exclusive lock
-and waits while all are busy. A slot keeps each unchanged file's bytes and
-modification time, so Cargo rebuilds only the packages whose sources differ
-from the slot's previous build, whichever checkout ran it. Cargo uses that
-directory, including its copied configuration and snapshot-local override
-paths. Artifacts (including copies of both ELFs) and the snapshot reference
-remain under `~/.cache/open-esp-radio/build/<chip>/snapshot-builds/`. The live
-checkout is not a build source for this explicit mode.
+A run takes its images as a directory of built images (`images.json`
+beside each class's bundle, with the SHA-256 of every file): `cargo hil run`
+builds them into `target/hil/<chip>/images/<run>` from this checkout, or from
+the tree `--source DIR` names (an A/B arm's or a revision's worktree); `cargo
+hil run --images DIR` flashes images built before, and refuses one whose files
+changed. `cargo hil run … --enqueue` builds the run's images when it is
+enqueued into the job's own directory (`target/hil/jobs/images/<job>`) and the
+job flashes exactly those, whatever the checkout holds when it starts. `cargo
+hil sweep` removes these directories once they are unused for the image cache
+age. A run records each image's files by their SHA-256 and the commit of the
+tree it was built from, with whether that tree was dirty.
 
 Every image build compiles in one shared cache,
 `~/.cache/open-esp-radio/build/cargo/`; `cargo hil images check` builds its classes there too. At most half the host's cores, and no
 more than its memory holds at 2 GB each, compile image runtimes at once across
 all checkouts; further builds wait for a free build slot in
 `~/.cache/open-esp-radio/build/tokens/`.
-
-This fixes the source input set, not the entire build environment: tools, Cargo
-package caches and user-level configuration are still external. It does not
-prove byte-identical rebuilds or authorize transfer of HIL evidence. Fresh `run` and `run-all` executions capture and bind a source
-snapshot before building firmware; pass explicit `--source-include` arguments
-or `--include-untracked` for nonignored untracked inputs. Replay uses the archived artifact rather than
-claiming a current build. Standalone image builds use the snapshot only when
-`--source-snapshot` is supplied.
-Such a build also publishes `target/hil/esp32s31/builds/<identity>/build.json`,
-firmware and source snapshot. Its identity is the SHA-256 of the record's
-file inventory (`run::inventory`). A review can name this destination without fabricating a
-scenario or hardware observation; the record supplies no PASS or repetitions.
-
 
 `cargo hil run S... --repetitions N` runs each selected scenario N times
 (1 to 20) instead of its own count, for a quicker look while debugging. The run

@@ -233,8 +233,7 @@ const scenarioPill = (id, outcome) =>
   `<span class="pill ${outcome === "planned" ? "muted pending" : tone(outcome)}" title="${esc(outcome)}">${esc((ICONS[outcome] ?? "") + " " + id)}</span>`;
 
 // Flags whose value only locates a build input; the summary drops them.
-const HIDDEN_FLAGS = new Set(["--source-snapshot", "--source-include"]);
-const HIDDEN_SWITCHES = new Set(["--include-untracked"]);
+const HIDDEN_FLAGS = new Set(["--source", "--images"]);
 // A command line in short form: build-input paths dropped, other paths cut
 // to their last component. The full line is the element's tooltip.
 function summary(line) {
@@ -242,7 +241,6 @@ function summary(line) {
   const kept = [];
   for (let i = 0; i < words.length; i++) {
     if (HIDDEN_FLAGS.has(words[i])) { i++; continue; }
-    if (HIDDEN_SWITCHES.has(words[i])) continue;
     const word = words[i];
     kept.push(word.includes("/") && word.length > 32 ? "…/" + word.split("/").filter(Boolean).pop() : word);
   }

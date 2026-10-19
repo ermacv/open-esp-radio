@@ -38,10 +38,6 @@ fn build_inputs(root: &Path) -> Artifacts {
         ("bootloader.bin", b"bootloader".as_slice()),
         ("partitions.bin", b"partitions".as_slice()),
         ("otadata.bin", b"otadata".as_slice()),
-        (
-            "source-inputs.json",
-            br#"{"schema":2,"files":[]}"#.as_slice(),
-        ),
     ] {
         write(&build.join(name), bytes);
     }
@@ -56,13 +52,16 @@ fn build_inputs(root: &Path) -> Artifacts {
     Artifacts {
         bundle,
         features: oer_hil_schema::image::FeatureDelta::default(),
-        environment: oer_hil_run_bundle::build::synthetic_environment(),
+        repository: oer_hil_run_bundle_format::run::RepositoryProvenance {
+            commit: String::from("abc"),
+            dirty: false,
+        },
     }
 }
 
 fn session(root: &Path) -> RunSession {
     crate::tests::register();
-    let mut session = RunSession::create(
+    RunSession::create(
         root,
         "chip-a",
         "test-cell",
@@ -70,19 +69,7 @@ fn session(root: &Path) -> RunSession {
         Path::new("/test/no-device"),
         vec![OsString::from("test")],
     )
-    .unwrap();
-    // The run's store holds the source objects, as the shared store does.
-    let objects = oer_hil_schema::snapshot::objects_of_run(session.directory()).unwrap();
-    let (_snapshot_root, snapshot) =
-        oer_hil_source_snapshot::test_snapshot_into(root, Some(&objects));
-    session
-        .bind_source_snapshot(
-            snapshot.directory(),
-            &objects,
-            &oer_hil_image::frozen::build_slots("chip-a").unwrap(),
-        )
-        .unwrap();
-    session
+    .unwrap()
 }
 
 #[test]
@@ -152,6 +139,7 @@ fn flash_failure_is_typed_after_archival() {
 fn current_build_has_the_canonical_firmware_plan_identity() {
     assert!(matches!(
         RunFirmware::BuildCurrent(oer_hil_image::CurrentBuild {
+            source: oer_hil_image::ImageSource::Tree(std::path::PathBuf::from("/checkout")),
             features: oer_hil_schema::image::FeatureDelta::default(),
             layout_seed: None,
         })
@@ -179,7 +167,6 @@ fn replay_import_is_archived_before_flashing_the_new_run_local_path() {
         "chip-a",
         &source_id,
         ImageClass::SystemWatchdog,
-        &oer_hil_run_bundle::run::test_support::TestRecipe,
     )
     .unwrap();
     let mut replay = session(root.path());
@@ -218,7 +205,6 @@ fn corrupt_replay_is_rejected_before_flash_without_a_build_fallback() {
         "chip-a",
         &source_id,
         ImageClass::SystemWatchdog,
-        &oer_hil_run_bundle::run::test_support::TestRecipe,
     )
     .unwrap();
     #[cfg(unix)]

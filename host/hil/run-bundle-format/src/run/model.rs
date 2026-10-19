@@ -6,11 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use oer_hil_schema::image::ImageClass;
 
-/// Format of a run bundle and its `manifest.json`. 7: a run's runtime ELF
-/// lies deflate-compressed at `firmware/<image>/runtime.elf.deflate`; what
-/// the manifest and build provenance record of it (path, size, digest) is
-/// the uncompressed file's ([`crate::archived`]).
-pub const RUN_SCHEMA: u16 = 10;
+/// Format of a run bundle and its `manifest.json`. A run's runtime ELF lies
+/// deflate-compressed at `firmware/<image>/runtime.elf.deflate`; what the
+/// manifest records of it (path, size, digest) is the uncompressed file's
+/// ([`crate::archived`]). 11: an image's record is its files' digests and
+/// the commit and dirty state of the tree it was built from.
+pub const RUN_SCHEMA: u16 = 11;
 
 pub use oer_hil_schema::run::{
     Better, Comparison, FailureKind, MeasurementUnit, MeasurementVerdict, Outcome, RunEventKind,
@@ -376,8 +377,6 @@ pub enum PlannedFirmware {
     Replay {
         source_run_id: String,
         image: ImageClass,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        build_id: Option<String>,
         application_sha256: String,
     },
 }
@@ -385,16 +384,13 @@ pub enum PlannedFirmware {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RepositoryProvenance {
     pub commit: String,
+    /// Whether the tree had changes its commit does not hold.
     pub dirty: bool,
-    pub workspace_sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FirmwareReplayOrigin {
     pub source_run_id: String,
-    pub firmware_repository: RepositoryProvenance,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_build_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -430,10 +426,9 @@ pub struct FirmwareArtifact {
     pub image: ImageClass,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replayed_from: Option<FirmwareReplayOrigin>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build_provenance_path: Option<PathBuf>,
+    /// The tree the image was built from: its commit and whether it was
+    /// dirty.
+    pub repository: RepositoryProvenance,
     pub application_path: PathBuf,
     pub application_size_bytes: u64,
     pub application_sha256: String,

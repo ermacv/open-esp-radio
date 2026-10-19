@@ -10,7 +10,7 @@
 //! Every image links through the image linker (`oer-image-linker` of `host/image/checks`), which
 //! refuses an input section named as zero-initialized that carries bytes and
 //! otherwise runs the target's `rust-lld` with the same arguments. The linker
-//! is built from the sources being built, the checkout or source snapshot at
+//! is built from the sources being built, the checkout or worktree at
 //! [`ImageCompiler::root`], so an image never links with another tree's
 //! linker.
 
@@ -31,8 +31,7 @@ pub const ZEROED_INPUTS_ENV: &str = "OER_IMAGE_ZEROED_INPUTS";
 pub const BUILD_ROOT_ENV: &str = "OER_BUILD_ROOT";
 
 /// The directory every checkout of this host builds images in: the shared
-/// compile cache, the image linker, the build slots and, for HIL, the
-/// source snapshots and their build workspaces. One per host, so each
+/// compile cache, the image linker and the build slots. One per host, so each
 /// agent's build of the same sources reuses the same compiled units.
 pub fn host_build_root() -> Result<PathBuf> {
     oer_os_durable::xdg::overridable(BUILD_ROOT_ENV, oer_os_durable::xdg::Base::Cache, "build")
@@ -41,7 +40,7 @@ pub fn host_build_root() -> Result<PathBuf> {
 
 /// The one compile cache (`CARGO_TARGET_DIR`) below `build_root` of every
 /// firmware build of the host: every image class, example and chip, and
-/// the vendor comparison probes, from every checkout and source snapshot.
+/// the vendor comparison probes, from every checkout and worktree.
 /// Cargo keeps the units apart by target, package path, features and flags,
 /// and the flags are the same for every build of a chip. Builds uplift
 /// their binaries to the same `<target>/firmware/<name>`, so each holds

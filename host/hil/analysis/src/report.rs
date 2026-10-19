@@ -84,11 +84,6 @@ pub fn junit(suite: &SuiteResult, manifest: &RunManifest) -> String {
     );
     let _ = writeln!(
         xml,
-        "      <property name=\"workspace_sha256\" value=\"{}\"/>",
-        manifest.repository.workspace_sha256
-    );
-    let _ = writeln!(
-        xml,
         "      <property name=\"firmware_replayed_from\" value=\"{}\"/>",
         xml_escape(&firmware_replay_summary(manifest))
     );

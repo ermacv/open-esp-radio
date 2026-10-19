@@ -9,7 +9,7 @@ the workspace's one `Cargo.lock` (`--locked`).
 
 ## Contract
 
-An `ImageSpec` names the tree (`root`: a checkout or a source snapshot), the
+An `ImageSpec` names the tree (`root`: a checkout or a worktree), the
 chip, the application crate (package, binary, features), the stack
 policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
@@ -37,7 +37,6 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
-| `source-inputs.json` | Every repository file the build read |
 | `build.log` | Every step's standard error |
 
 `ImageBundle::segments` is what a flash writes: bootloader, partition table
@@ -187,14 +186,7 @@ dropped, identical-code-folded names pair by body, and a `Review` applies
 reviewed aliases and scheduling ties. `cargo fw compare` calls it;
 `compare images` builds both sides first (`oer_hil_image::compare_images`).
 
-## Source inputs and exclusion
-
-`source-inputs.json` lists the compiled sources (dep-info and build-script
-inputs), the workspaces' manifests and locks, Cargo configuration, the
-policies, partition tables and chip profile, and the builder's own sources:
-the dependency closure of `oer-image-build`, `oer-image-linker` and the caller's
-builder packages, as `oer-repo` resolves it, so an analyzer or linker crate
-is an input from the day it is linked.
+## Exclusion
 
 Build exclusion has one mechanism, the foundation's file lock
 (`oer_os_process::lock::FileLock`, shared or exclusive): one build at a

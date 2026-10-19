@@ -96,9 +96,9 @@ impl<S: Spec> Instance<S> {
     /// SHA-256 over the canonical JSON ([`canonical_json`], keys sorted
     /// at every level, negative zero written as zero) of the scenario, the
     /// instance, its parameters and the criteria, so reordering a struct's
-    /// fields keeps the identity. The verdict code's identity is the source
-    /// closure the run's source snapshot records; together they pin what a
-    /// recorded verdict was computed by.
+    /// fields keeps the identity. The verdict code's identity is the
+    /// runner's (the observer build the run records); together they pin what
+    /// a recorded verdict was computed by.
     pub fn identity(&self, criteria: &S::Criteria) -> Result<Sha256, IdentityError> {
         // JSON writes NaN and infinities as `null`, which would give
         // different thresholds one identity.

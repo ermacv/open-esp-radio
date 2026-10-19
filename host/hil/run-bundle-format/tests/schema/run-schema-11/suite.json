@@ -1,5 +1,5 @@
 {
-  "schema": 10,
+  "schema": 11,
   "run_id": "1791582140859-002c088b",
   "target": "esp32s31",
   "outcome": "failed",
@@ -17,14 +17,14 @@
   },
   "scenarios": [
     {
-      "schema": 10,
+      "schema": 11,
       "scenario": "system-watchdog",
       "image": "system-watchdog",
       "outcome": "failed",
       "required_repetitions": 3,
       "repetitions": [
         {
-          "schema": 10,
+          "schema": 11,
           "repetition": 1,
           "outcome": "failed",
           "started_unix_millis": 1791582365170,
@@ -73,7 +73,7 @@
           }
         },
         {
-          "schema": 10,
+          "schema": 11,
           "repetition": 2,
           "outcome": "failed",
           "started_unix_millis": 1791582391128,
