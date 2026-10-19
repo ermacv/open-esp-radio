@@ -1,5 +1,3 @@
-//! Typed cache diagnostics and explicit PSRAM writeback operations.
+//! Typed cache diagnostics.
 
-#[cfg(feature = "axi-gdma-mem2mem")]
-pub(super) mod maintenance;
 pub(super) mod performance;

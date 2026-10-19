@@ -2864,7 +2864,6 @@ dependencies = [
 name = "oer-espressif-esp-hal-soc"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "bytemuck",
  "critical-section",
  "esp-hal",
