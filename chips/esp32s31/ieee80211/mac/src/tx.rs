@@ -45,7 +45,7 @@ use crate::rate::{
 
 use oer_espressif_ieee80211_policy::retry_ladder;
 
-use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
+use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
 use oer_ieee80211_mac::{
     he::HeDcmConstellation,
@@ -312,7 +312,7 @@ impl TxHardware for WifiMacHal<'_> {
     }
 }
 
-impl TxHardware for RadioRuntimeOwner {
+impl TxHardware for RadioAccess {
     fn probe_phy_low_rate_gate(
         &mut self,
     ) -> Result<MacLowRateGateProbe, MacLowRateTransitionError> {

@@ -1,6 +1,6 @@
 #![no_std]
 use oer_esp32s31_hal::ieee80211::dma::rx_dma::{RxDma, WifiRxDmaEngine};
-use oer_esp32s31_hal::owner::RadioRuntimeOwner;
+use oer_esp32s31_hal::owner::RadioAccess;
 
 // Code above the HAL drives the walker generically, through the engine the
 // running owner lends.
@@ -8,7 +8,7 @@ pub fn observe(walker: &mut impl RxDma) -> bool {
     walker.walker_enabled()
 }
 
-pub fn engine(owner: &mut RadioRuntimeOwner) -> &mut WifiRxDmaEngine {
+pub fn engine(owner: &mut RadioAccess) -> &mut WifiRxDmaEngine {
     owner.rx_dma()
 }
 

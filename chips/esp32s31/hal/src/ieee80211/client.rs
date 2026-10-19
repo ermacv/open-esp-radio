@@ -13,7 +13,7 @@
 //! for one transaction, the MAC reset pulses through it, and the runtime MAC
 //! HAL needs no radio domain because the Wi-Fi hot path touches Wi-Fi registers
 //! only. After cold MAC setup [`WifiClocked::into_running`] splits the client
-//! into the task-side [`RadioRuntimeOwner`] and the MAC interrupt setup;
+//! into the task-side [`RadioAccess`] and the MAC interrupt setup;
 //! [`WifiClocked::from_running`] reunites a stopped runtime epoch.
 
 use core::fmt;
@@ -32,7 +32,7 @@ use crate::{
         mac::{WifiMacColdHal, WifiMacHal},
         station_wake::StationWakeState,
     },
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     root::WifiPartition,
 };
 
@@ -331,20 +331,14 @@ impl WifiClocked {
     /// runtime owner, the MAC interrupt setup, which keeps MAC interrupts
     /// masked until its activation, and the proof that the clocks stay on.
     /// This performs no MMIO.
-    pub fn into_running(
-        self,
-    ) -> (
-        RadioRuntimeOwner,
-        crate::owner::MacInterruptSetup,
-        WifiClocksOn,
-    ) {
+    pub fn into_running(self) -> (RadioAccess, crate::owner::MacInterruptSetup, WifiClocksOn) {
         let WifiClientRegisters {
             mac,
             rx_dma,
             interrupts,
         } = self.registers;
         (
-            RadioRuntimeOwner::from_clocked(mac, rx_dma, self.station_wake, self.initialized),
+            RadioAccess::from_clocked(mac, rx_dma, self.station_wake, self.initialized),
             crate::owner::MacInterruptSetup { inner: interrupts },
             self.clocks,
         )
@@ -356,7 +350,7 @@ impl WifiClocked {
     /// installed interrupt route may remain outside these values. This
     /// performs no MMIO; the Wi-Fi clocks stay enabled.
     pub fn from_running(
-        runtime: RadioRuntimeOwner,
+        runtime: RadioAccess,
         interrupts: crate::owner::MacInterruptSetup,
         clocks: WifiClocksOn,
     ) -> Self {

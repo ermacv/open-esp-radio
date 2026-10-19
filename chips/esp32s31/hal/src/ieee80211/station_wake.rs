@@ -4,8 +4,6 @@
 //! records whether a schedule runs for the Wi-Fi route, so an interval change
 //! reaches only a running schedule.
 
-use crate::ieee80211::MacBorrow;
-use core::cell::RefMut;
 use oer_esp32s31_pac::WifiRadioRegisters;
 
 use oer_esp32s31_pac::StaTbttSchedule;
@@ -24,29 +22,17 @@ pub(crate) struct StationWakeState {
 }
 
 struct StationWakeRegisters<'registers> {
-    mac: MacBorrow<'registers>,
-    state: StateBorrow<'registers>,
-}
-
-enum StateBorrow<'registers> {
-    Owned(&'registers mut StationWakeState),
-    Published(RefMut<'registers, StationWakeState>),
+    mac: &'registers mut WifiRadioRegisters,
+    state: &'registers mut StationWakeState,
 }
 
 impl StationWakeRegisters<'_> {
     fn parts_mut(&mut self) -> (&mut WifiRadioRegisters, &mut StationWakeState) {
-        let state = match &mut self.state {
-            StateBorrow::Owned(state) => &mut **state,
-            StateBorrow::Published(state) => &mut **state,
-        };
-        (&mut self.mac, state)
+        (self.mac, self.state)
     }
 
     fn state(&self) -> &StationWakeState {
-        match &self.state {
-            StateBorrow::Owned(state) => state,
-            StateBorrow::Published(state) => state,
-        }
+        self.state
     }
 }
 
@@ -64,20 +50,8 @@ impl<'registers> StationWakeHal<'registers> {
     ) -> Self {
         Self {
             registers: StationWakeRegisters {
-                mac: MacBorrow::Owned(registers),
-                state: StateBorrow::Owned(state),
-            },
-        }
-    }
-
-    pub(crate) fn from_published(
-        registers: RefMut<'registers, WifiRadioRegisters>,
-        state: RefMut<'registers, StationWakeState>,
-    ) -> Self {
-        Self {
-            registers: StationWakeRegisters {
-                mac: MacBorrow::Published(registers),
-                state: StateBorrow::Published(state),
+                mac: registers,
+                state,
             },
         }
     }

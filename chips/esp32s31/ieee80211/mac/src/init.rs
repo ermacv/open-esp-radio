@@ -82,7 +82,7 @@ impl MacRuntimeStopHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>
     }
 }
 
-impl MacRuntimeStopHardware for oer_esp32s31_hal::owner::RadioRuntimeOwner {
+impl MacRuntimeStopHardware for oer_esp32s31_hal::owner::RadioAccess {
     fn request_mac_runtime_stop(&mut self) {
         self.wifi_mac_hal().request_channel_stop();
     }

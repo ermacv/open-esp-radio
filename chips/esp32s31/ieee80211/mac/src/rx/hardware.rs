@@ -8,7 +8,7 @@
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     types::{
         MacExtraSoftApRxBlockAckEntryIndex, MacInterface, MacRxBlockAckEntryIndex,
         MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow,
@@ -153,12 +153,12 @@ impl RxBlockAckHardware for WifiMacHal<'_> {
     }
 }
 
-impl RxBlockAckHardware for RadioRuntimeOwner {
+impl RxBlockAckHardware for RadioAccess {
     fn diagnostic_rx_block_ack_entry_snapshot(
         &mut self,
         hardware_index: u8,
     ) -> Option<RxBlockAckEntrySnapshot> {
-        RadioRuntimeOwner::rx_block_ack_entry_snapshot(self, hardware_index)
+        RadioAccess::rx_block_ack_entry_snapshot(self, hardware_index)
     }
 
     fn program_rx_block_ack(

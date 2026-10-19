@@ -120,6 +120,12 @@ control prefix, TX descriptor words, BLE exchange memory) are part of the
 hardware too: [hardware memory](hardware-memory.md) describes them in the
 register model, with the protocol in the HAL.
 
+The S31 Wi-Fi handoff returns one `RadioAccess` by value. The driver owns it
+through the runtime epoch; synchronous HAL capabilities borrow it with
+`&mut`. A retune takes the owner for its entire asynchronous transaction and
+returns it with the result. Register access uses no shared arena or dynamic
+borrow guard.
+
 ## Radio system
 
 One actor on the P2 executor owns the shared RF front-end: PHY

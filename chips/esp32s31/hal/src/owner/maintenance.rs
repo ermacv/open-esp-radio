@@ -5,7 +5,7 @@
 //! and walker readbacks check that the caller drained active TX and stopped
 //! its RX descriptor epoch; they do not retire software DMA leases.
 
-use super::{MacInterruptSetup, RadioRuntimeOwner};
+use super::{MacInterruptSetup, RadioAccess};
 use crate::ieee80211::{
     dma::rx_dma::{RxDma, WifiRxDmaEngine},
     mac::WifiMacHal,
@@ -20,11 +20,11 @@ pub enum Error {
 /// Original resources retained when admission has made no hardware changes.
 pub struct AdmissionFailure {
     pub error: Error,
-    pub registers: RadioRuntimeOwner,
+    pub registers: RadioAccess,
     pub interrupts: MacInterruptSetup,
 }
 
-impl RadioRuntimeOwner {
+impl RadioAccess {
     /// Verify the stopped physical boundary without acquiring maintenance or
     /// changing hardware. This is the final-client shutdown admission check.
     pub fn try_confirm_phy_stopped(
@@ -39,10 +39,10 @@ impl RadioRuntimeOwner {
 }
 
 fn confirm_stopped(
-    mut registers: RadioRuntimeOwner,
+    mut registers: RadioAccess,
     interrupts: MacInterruptSetup,
-    check: impl FnOnce(&mut RadioRuntimeOwner) -> Result<(), Error>,
-) -> Result<(RadioRuntimeOwner, MacInterruptSetup), AdmissionFailure> {
+    check: impl FnOnce(&mut RadioAccess) -> Result<(), Error>,
+) -> Result<(RadioAccess, MacInterruptSetup), AdmissionFailure> {
     if let Err(error) = check(&mut registers) {
         return Err(AdmissionFailure {
             error,

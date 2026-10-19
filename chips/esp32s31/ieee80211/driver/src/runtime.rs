@@ -4,7 +4,7 @@ use crate::startup::WifiStartReport;
 
 use oer_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiClocksOn},
-    owner::{MacInterruptSetup, RadioRuntimeOwner},
+    owner::{MacInterruptSetup, RadioAccess},
     types::MacInterruptEnableState,
 };
 
@@ -85,7 +85,7 @@ pub struct WifiRuntimeTransitionReport {
 /// ```
 pub struct WifiStopped<W> {
     platform: W,
-    registers: RadioRuntimeOwner,
+    registers: RadioAccess,
     interrupt_setup: MacInterruptSetup,
     clocks: WifiClocksOn,
     member: Member<Wifi, Tracked>,
@@ -221,7 +221,7 @@ impl<W> WifiStopped<W> {
 #[doc(hidden)]
 pub struct WifiRuntimeParts<W> {
     pub platform: W,
-    pub registers: RadioRuntimeOwner,
+    pub registers: RadioAccess,
     pub interrupt_setup: MacInterruptSetup,
     pub context: WifiRuntimeContext,
 }
@@ -255,7 +255,7 @@ impl WifiRuntimeContext {
     pub fn into_stopped<W>(
         self,
         platform: W,
-        registers: RadioRuntimeOwner,
+        registers: RadioAccess,
         interrupt_setup: MacInterruptSetup,
     ) -> WifiStopped<W> {
         WifiStopped {
@@ -321,7 +321,7 @@ impl<W> WifiRoleOwner<W> {
     /// interrupt route returned their exact owners.
     pub fn into_stopped<L>(
         self,
-        registers: RadioRuntimeOwner,
+        registers: RadioAccess,
         interrupt_setup: MacInterruptSetup,
         resources: L,
     ) -> WifiRoleStopped<W, L> {
@@ -337,7 +337,7 @@ impl<W> WifiRoleOwner<W> {
 /// One materialized role graph's owners.
 pub struct WifiRoleMaterialized<W, L> {
     pub owner: WifiRoleOwner<W>,
-    pub registers: RadioRuntimeOwner,
+    pub registers: RadioAccess,
     pub interrupt_setup: MacInterruptSetup,
     pub resources: L,
 }

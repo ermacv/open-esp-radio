@@ -72,8 +72,8 @@ fn setup() -> super::MacInterruptSetup {
     }
 }
 
-fn registers() -> super::RadioRuntimeOwner {
-    super::RadioRuntimeOwner::claim_for_host_test()
+fn registers() -> super::RadioAccess {
+    super::RadioAccess::claim_for_host_test()
 }
 
 #[test]

@@ -1,8 +1,8 @@
 #![no_std]
-use oer_esp32s31_hal::owner::RadioRuntimeOwner;
+use oer_esp32s31_hal::owner::RadioAccess;
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
 
-pub fn snapshots(owner: &mut RadioRuntimeOwner, ap: &AccessPointTsf) -> (u64, u64) {
+pub fn snapshots(owner: &mut RadioAccess, ap: &AccessPointTsf) -> (u64, u64) {
     let mut sta = owner.wifi_mac_hal();
     #[cfg(not(ui_reject))]
     let station = sta.station_tsf();
