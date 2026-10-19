@@ -1,29 +1,9 @@
-//! Platform-supplied entropy behind the standard LE Rand command.
+//! The standard LE Rand command and its completion.
 
 use bt_hci::{
     cmd::{Cmd, Opcode, le::LeRand},
     param::{Error as HciError, Status},
 };
-
-/// A cryptographic entropy service retained by the HCI endpoint's owner.
-///
-/// Implementations must keep their entropy source enabled for every call and
-/// return fresh cryptographically suitable bytes. They must not depend on an
-/// active radio role or fall back to a deterministic generator on failure.
-/// Calls run synchronously in command dispatch and must be bounded and short.
-/// This contract deliberately contains no peripheral or executor types.
-pub trait LeRandomSource: Sync {
-    /// Produce eight fresh octets, or fail without returning partial output.
-    fn random_bytes(&self) -> Result<[u8; 8], LeRandomUnavailable>;
-}
-
-/// The configured entropy service could not provide a complete random value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeRandomUnavailable;
-
-/// Entropy may only be attached once, before the epoch's first successful Reset.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeRandomSourceAlreadyConfigured;
 
 /// Validated parameterless LE Rand request, separate from software bootstrap.
 #[derive(Debug)]
