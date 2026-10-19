@@ -250,7 +250,6 @@ macro_rules! dma_static {
             "a DMA static lives in a `.dma.bss.<block>` section"
         );
         $(#[$meta])*
-        #[allow(unsafe_code, reason = "a DMA static's section placement")]
         #[unsafe(link_section = $section)]
         $vis static $name: $crate::dma_static::DmaStatic<$ty> =
             // SAFETY: the static is in the `.dma.bss.<block>` section checked
@@ -300,6 +299,9 @@ mod tests {
     }
 
     #[test]
+    // The macro's placement is unsafe code here, in its own crate; a foreign
+    // crate's expansion of it is not linted.
+    #[allow(unsafe_code, reason = "a DMA static's section placement")]
     fn a_placed_static_is_claimed_once() {
         crate::dma_static! {
             static CELL: [u32; 4] = zeroed in ".dma.bss.test";

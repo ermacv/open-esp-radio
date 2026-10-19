@@ -3787,7 +3787,7 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-platform-esp32c5-layout",
- "oer-platform-staged-runtime",
+ "oer-platform-staged-layout",
 ]
 
 [[package]]
@@ -3803,6 +3803,7 @@ version = "0.1.0"
 dependencies = [
  "esp-hal",
  "oer-platform-esp32s31-layout",
+ "oer-platform-staged-layout",
 ]
 
 [[package]]

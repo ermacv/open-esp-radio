@@ -3,8 +3,7 @@
 //! matrix by it, and its owners enable and disable their sources there.
 
 /// Declare the image's interrupt table, once per image, and hand its
-/// `INTERRUPT_TABLE` to the board's PSRAM adoption, which passes it to
-/// [`adopt`](crate::adopt):
+/// `INTERRUPT_TABLE` to [`Handoff::adopt`](crate::Handoff::adopt):
 ///
 /// ```ignore
 /// oer_platform_staged_runtime::interrupt_table! {

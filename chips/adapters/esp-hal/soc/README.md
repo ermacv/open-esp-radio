@@ -26,7 +26,7 @@ These are engineering limits, not measured worst-case reset/RF-off bounds.
   mechanism has no radio dependency and does not arm a watchdog or establish
   a reset-latency bound.
 - `interrupt_table.rs`: the ESP32-S31 interrupt matrix the image's interrupt
-  table (`oer-exec-interrupt-table`) drives. The platform runtime `adopt`s the
+  table (`oer-exec-interrupt-table`) drives. The platform runtime's handoff adopts the
   image's table, silences each hart's sources when it installs the hart's
   interrupt stack and verifies them before it enables interrupts; an owner
   routes its source with `enable` and its token and silences it with

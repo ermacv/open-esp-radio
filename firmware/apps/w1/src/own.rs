@@ -97,10 +97,7 @@ const CRC_TABLE: [u32; 256] = {
 pub fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = !0_u32;
     for byte in bytes {
-        // SAFETY: `byte` is a shared borrow of an initialized byte of the
-        // lease's frame, valid and aligned for the read; a volatile read
-        // only reads it.
-        let byte = unsafe { core::ptr::read_volatile(byte) };
+        let byte = oer_base_memory::read_volatile(byte);
         crc = CRC_TABLE[usize::from(crc as u8 ^ byte)] ^ (crc >> 8);
     }
     !crc

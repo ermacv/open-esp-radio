@@ -5,7 +5,8 @@
 //!
 //! The bootstrap initializes the module's PSRAM with [`initialize_psram`] at
 //! the layout's fixed address in the cache window flash and PSRAM share;
-//! stage two adopts the mapping with [`adopt_psram`]. This profile does not
+//! stage two adopts the mapping through [`BootstrapPsram`], which the staged
+//! runtime's handoff takes. This profile does not
 //! describe every ESP32-C5 board.
 
 use oer_platform_esp32c5_layout::LAYOUT;
@@ -48,37 +49,29 @@ pub fn initialize_psram(peripheral: PSRAM<'static>) -> Psram {
     Psram::new(peripheral, psram_config())
 }
 
-/// Adopt the board mapping and install the stage-two interrupt context
-/// (`oer_platform_staged_runtime::adopt`).
+/// The module's PSRAM as stage two finds it: mapped by the bootstrap at the
+/// layout's fixed address, with code, data and stacks already running from
+/// it. The staged runtime's handoff adopts it.
 ///
-/// `interrupt_table` is the image's `INTERRUPT_TABLE`
-/// (`oer_platform_staged_runtime::interrupt_table!`).
-///
-/// Code, data and task stacks run from PSRAM from here on, so the adopted
-/// mapping keeps the PLL behind the MSPI clock referenced in esp-hal's clock
-/// tree for the lifetime of the image.
-///
-/// # Safety
-/// Call once after `_runtime_start`, with interrupts disabled and the
-/// bootstrap's board mapping intact. Keep interrupts disabled until the
-/// application's timer and executor handlers have been bound.
-#[cfg(feature = "stage-two")]
-pub unsafe fn adopt_psram(
-    peripheral: PSRAM<'static>,
-    interrupt_table: &'static oer_platform_staged_runtime::InterruptTable,
-) -> Psram {
-    let adopt = || {
-        // SAFETY: the bootstrap initialized and mapped the complete module
-        // PSRAM at `PSRAM_BASE_ADDRESS` and handed over without resetting or
-        // remapping it (the caller's contract).
+/// The adopted mapping keeps the PLL behind the MSPI clock referenced in
+/// esp-hal's clock tree for the lifetime of the image.
+pub struct BootstrapPsram(pub PSRAM<'static>);
+
+// SAFETY: `adopt` takes over the bootstrap's mapping through
+// `Psram::from_existing_mapping`, which neither resets nor remaps PSRAM, and
+// leaves interrupts as it found them.
+unsafe impl oer_platform_staged_layout::handoff::AdoptsBootstrapMapping for BootstrapPsram {
+    type Mapping = Psram;
+
+    fn adopt(self, _handoff: &oer_platform_staged_layout::handoff::StageTwoHandoff) -> Psram {
+        // SAFETY: the handoff proves the bootstrap initialized and mapped the
+        // complete module PSRAM at `PSRAM_BASE_ADDRESS` and that nothing reset
+        // or remapped it since.
         unsafe {
             Psram::from_existing_mapping(
-                peripheral,
+                self.0,
                 PSRAM_BASE_ADDRESS..PSRAM_BASE_ADDRESS + PSRAM_SIZE_BYTES,
             )
         }
-    };
-    // SAFETY: the caller's contract is `adopt`'s; the closure adopts the
-    // bootstrap's mapping without resetting or remapping it.
-    unsafe { oer_platform_staged_runtime::adopt(interrupt_table, adopt) }
+    }
 }

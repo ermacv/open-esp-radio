@@ -68,15 +68,14 @@ oer_base_memory::zeroed_static! {
     static RX_LINE: HandlerCell<WifiIrqLine<Epoch>> = zeroed in ".critical.bss.wifi_rx_line";
 }
 
-/// MAC handler entries without an installed line.
-#[unsafe(link_section = ".critical.data.w1")]
-pub static UNSERVICED_MAC: AtomicU32 = AtomicU32::new(0);
-/// WDEVPWR handler entries without an installed line.
-#[unsafe(link_section = ".critical.data.w1")]
-pub static UNSERVICED_PWR: AtomicU32 = AtomicU32::new(0);
-/// Refused route enables of the MAC and WDEVPWR sources.
-#[unsafe(link_section = ".critical.data.w1")]
-pub static ROUTE_ERRORS: AtomicU32 = AtomicU32::new(0);
+oer_platform_staged_runtime::critical_static! {
+    /// MAC handler entries without an installed line.
+    pub static UNSERVICED_MAC: AtomicU32 = AtomicU32::new(0), in "w1";
+    /// WDEVPWR handler entries without an installed line.
+    pub static UNSERVICED_PWR: AtomicU32 = AtomicU32::new(0), in "w1";
+    /// Refused route enables of the MAC and WDEVPWR sources.
+    pub static ROUTE_ERRORS: AtomicU32 = AtomicU32::new(0), in "w1";
+}
 
 /// The doorbell shares the MAC interrupt's level and core.
 pub const BELL: SameLevel<WifiMacToken, DoorbellToken> = SameLevel::new();
