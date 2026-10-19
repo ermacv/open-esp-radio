@@ -20,7 +20,7 @@
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-use oer_vendor_pins::GitPin;
+use oer_pins::GitPin;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -345,7 +345,7 @@ pub fn output(root: &Path, project: &Project) -> PathBuf {
 /// directory with its contents. Files the project names outside its
 /// directory, such as a shared partition table, are not part of it.
 pub fn recipe(root: &Path, pins: &str, project: &Project) -> Result<String> {
-    project_recipe(&oer_vendor_pins::git_pins(root, pins)?, &project.source)
+    project_recipe(&oer_pins::git_pins(root, pins)?, &project.source)
 }
 
 fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {
@@ -449,7 +449,7 @@ pub fn build(root: &Path, pins: &str, projects: &[Project]) -> Result<Vec<Build>
         .iter()
         .map(|project| recipe(root, pins, project))
         .collect::<Result<Vec<_>>>()?;
-    let pins = oer_vendor_pins::git_pins(root, pins)?;
+    let pins = oer_pins::git_pins(root, pins)?;
     let cache = cache_directory()?;
     std::fs::create_dir_all(&cache)?;
     use oer_os_process::lock::{FileLock, Mode};

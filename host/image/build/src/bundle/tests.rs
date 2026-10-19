@@ -1,9 +1,9 @@
 use super::*;
 
 /// A chip with a flash map, whose bundles hold an OTA selection.
-fn profile() -> oer_image_profile::Profile {
+fn profile() -> oer_chip_profile::Profile {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    oer_image_profile::Profile::all(&root)
+    oer_chip_profile::Profile::all(&root)
         .unwrap()
         .into_iter()
         .find(|profile| profile.flash.is_some())

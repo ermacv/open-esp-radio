@@ -26,7 +26,7 @@ oer-espressif-coex = { path = "../../../portable/espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
 oer-ieee802154-mac = { path = "../../../portable/ieee802154/mac" }
 oer-os-durable = { path = "../../os/durable" }
-oer-vendor-artifacts = { path = "../artifacts" }
+oer-pins = { path = "../../pins" }
 oer-vendor-evidence = { path = "../evidence" }
 oer-vendor-evidence-shard = { path = "../evidence-shard" }
 
@@ -39,8 +39,7 @@ sw-coex = []
 
 [build-dependencies]
 cc = "=1.4.3"
-oer-vendor-artifacts = { path = "../artifacts" }
-oer-vendor-pins = { path = "../pins" }
+oer-pins = { path = "../../pins" }
 
 [lints]
 workspace = true

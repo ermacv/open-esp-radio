@@ -90,9 +90,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let application = directory.path().join("application.bin");
         std::fs::write(&application, b"application").unwrap();
-        let chip = oer_image_profile::Profile::all(&root).unwrap()[0]
-            .id
-            .clone();
+        let chip = oer_chip_profile::Profile::all(&root).unwrap()[0].id.clone();
         let run = format!("r{}", std::process::id());
         let error = archived(&root, &chip, &application, &run, ImageClass::SystemWatchdog)
             .unwrap_err()

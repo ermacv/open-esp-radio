@@ -4,7 +4,7 @@ use super::*;
 fn the_compile_cache_is_used_by_one_build_at_a_time() {
     let directory = tempfile::tempdir().unwrap();
     let cache = directory.path().join("nested");
-    let first = oer_image_toolchain::image::lock_compile_cache(&cache).unwrap();
+    let first = crate::compiler::lock_compile_cache(&cache).unwrap();
     let path = cache.join("build.lock");
     assert!(
         FileLock::try_acquire(&path, Mode::Shared)
@@ -12,7 +12,7 @@ fn the_compile_cache_is_used_by_one_build_at_a_time() {
             .is_none()
     );
     drop(first);
-    let _second = oer_image_toolchain::image::lock_compile_cache(&cache).unwrap();
+    let _second = crate::compiler::lock_compile_cache(&cache).unwrap();
     assert!(
         FileLock::try_acquire(&path, Mode::Exclusive)
             .unwrap()

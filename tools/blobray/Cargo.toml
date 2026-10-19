@@ -13,7 +13,7 @@ name = "blobray"
 path = "src/main.rs"
 
 [dependencies]
-oer-vendor-artifacts = { path = "../../host/vendor/artifacts" }
+oer-pins = { path = "../../host/pins" }
 oer-analysis-riscv-lift = { path = "../../host/analysis/riscv-lift" }
 oer-analysis-blobray-riscv = { path = "../../host/analysis/blobray-riscv" }
 oer-analysis-blobray-application = { path = "../../host/analysis/blobray-application" }

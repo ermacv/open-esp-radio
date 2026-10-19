@@ -8,7 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_image_profile::{InterruptContract, Memory, Placement, Region, Symbols};
+use oer_chip_profile::{InterruptContract, Memory, Placement, Region, Symbols};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// The region name of the mask ROM's code in an interrupt handler rule.

@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::bundle::{ImageBundle, Staged, files};
 use crate::encode;
 use crate::encode::Encoding;
-use oer_image_profile::policy::StackPolicy;
+use oer_chip_profile::policy::StackPolicy;
 
 use crate::{ImageSpec, Result, build_log::BuildLog, exclusion::Staging};
 
@@ -24,7 +24,7 @@ use crate::encode::stage_two::pack_runtime;
 /// pages and stage two starts on one.
 const MMU_PAGE_SIZE: u32 = 0x1_0000;
 
-pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> Result<ImageBundle> {
+pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
     let bootstrap_package = profile.bootstrap_package();
@@ -45,7 +45,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     // are copied out.
     let release = cache.join(target).join(crate::FIRMWARE_PROFILE);
     let runtime_elf = {
-        let _cache = oer_image_toolchain::image::lock_compile_cache(&cache)?;
+        let _cache = crate::compiler::lock_compile_cache(&cache)?;
         let mut runtime = crate::runtime_command(spec, profile, "build", &policy)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
         crate::cargo::ensure_fetched(root)?;
@@ -61,7 +61,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
         elf
     };
     let runtime_bin = output.join(files::RUNTIME_BIN);
-    let mut objcopy = oer_image_toolchain::command(oer_image_toolchain::Tool::LlvmObjcopy)?;
+    let mut objcopy = oer_os_toolchain::command(oer_os_toolchain::Tool::LlvmObjcopy)?;
     objcopy
         .args(["-O", "binary"])
         .arg(&runtime_elf)
@@ -91,7 +91,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
     // The bootstrap embeds the runtime with `include_bytes!`; a stable path
     // that keeps its timestamp while its bytes are unchanged leaves the
     // bootstrap fresh.
-    let bootstrap_cache = oer_image_toolchain::image::lock_compile_cache(&cache)?;
+    let bootstrap_cache = crate::compiler::lock_compile_cache(&cache)?;
     let embedded = std::path::absolute(cache.join("stage-two-runtime.bin"))?;
     crate::replace_if_changed(&runtime_bin, &embedded)?;
     let mut bootstrap = crate::cargo::command();
@@ -106,9 +106,9 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
         bootstrap.env_remove(name);
     }
     crate::zeroed_inputs(&mut bootstrap, profile);
-    oer_image_toolchain::image::configure(
+    crate::compiler::configure(
         &mut bootstrap,
-        &policy.image_compiler(root, &crate::linker_cache()?, target),
+        &crate::compiler::of_policy(&policy, root, &crate::linker_cache()?, target),
     )?;
     log.run(&mut bootstrap, "build the Flash/SRAM bootstrap")?;
     let bootstrap_elf = crate::snapshot(
@@ -148,7 +148,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_image_profile::Profile) -> R
 /// at the flash map's application offset, audited against that partition.
 fn encode_application(
     root: &Path,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
     elf: &[u8],
     bundle: &ImageBundle,
 ) -> Result<Vec<u8>> {
@@ -179,7 +179,7 @@ fn encode_application(
 /// selection of the first slot into `bundle`.
 pub(crate) fn encode_boot_files(
     root: &Path,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
     elf: &[u8],
     bundle: &mut ImageBundle,
 ) -> Result<()> {

@@ -27,7 +27,7 @@ fn test_artifacts(
 ) -> Artifacts {
     let directory = application.parent().unwrap().join("bundle");
     fs::create_dir_all(&directory).unwrap();
-    let profile: oer_image_profile::Profile =
+    let profile: oer_chip_profile::Profile =
         toml::from_str(oer_hil_run_bundle::run::test_support::TEST_CHIP_PROFILE).unwrap();
     let mut bundle = oer_image_build::bundle::ImageBundle::new(
         &directory,

@@ -27,7 +27,7 @@ line the engine provides.
 
 The engine decides every verdict and recorded set; it hands each claimed
 suite's `Findings` to a `RunReport` the scenario binary passes in, and the
-report crate implements it. Pins come from `oer-vendor-artifacts`, the one
+report crate implements it. Pins come from `oer-pins`, the one
 reader of `artifacts.toml`, and a shard's path closure from `oer-repo`. Dependencies run from the report crate to the
 engine only, so editing a report changes no scenario's verdict sources.
 

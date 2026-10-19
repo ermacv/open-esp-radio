@@ -36,7 +36,7 @@ use oer_analysis_riscv_stack::{
 use crate::stack::budget::{Budget, MEMORY_LIMIT, TIMEOUT, Usage, WORK_UNITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
-use oer_image_profile::policy::{StackPolicy, Storage, TaskStack};
+use oer_chip_profile::policy::{StackPolicy, Storage, TaskStack};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -71,7 +71,7 @@ pub fn audit_runtime_stacks(
 /// with; `None` when the policy names no bootstrap stack.
 pub fn audit_bootstrap_stack(
     root: &Path,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
     elf: &Path,
     policy: &StackPolicy,
     output: &Path,
@@ -107,7 +107,7 @@ pub struct Image {
 impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
-    pub fn read(root: &Path, profile: &oer_image_profile::Profile, elf: &Path) -> Result<Self> {
+    pub fn read(root: &Path, profile: &oer_chip_profile::Profile, elf: &Path) -> Result<Self> {
         let elf = std::fs::read(elf)
             .map_err(|error| format!("cannot read {}: {error}", elf.display()))?;
         Self::of_bytes(root, profile, elf)
@@ -116,14 +116,14 @@ impl Image {
     /// [`Self::read`] of the ELF bytes `elf`.
     pub fn of_bytes(
         root: &Path,
-        profile: &oer_image_profile::Profile,
+        profile: &oer_chip_profile::Profile,
         elf: Vec<u8>,
     ) -> Result<Self> {
         let rom = profile
             .rom
             .as_ref()
             .ok_or_else(|| format!("platform/{}/chip.toml names no [rom] ELF", profile.id))?;
-        let rom_elf = std::fs::read(oer_vendor_artifacts::ensure(root, &profile.id, &rom.elf)?)?;
+        let rom_elf = std::fs::read(oer_pins::artifacts::ensure(root, &profile.id, &rom.elf)?)?;
         let summaries = match &rom.summaries {
             Some(path) => parse_summaries(&std::fs::read_to_string(root.join(path))?)?,
             None => Vec::new(),

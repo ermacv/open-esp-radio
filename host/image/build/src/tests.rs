@@ -25,7 +25,7 @@ fn an_application_selects_its_features_alone() {
 #[test]
 fn every_chip_with_images_names_its_flash_map() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for chip in oer_image_profile::supported(&root).unwrap() {
+    for chip in oer_chip_profile::supported(&root).unwrap() {
         let profile = profile(&root, &chip).unwrap();
         let flash = profile.flash.unwrap();
         assert!(
@@ -71,7 +71,7 @@ fn requested(placement: bool) -> Gates {
 /// An empty bundle in `directory` of the first chip with a flash map.
 fn empty_bundle(directory: &Path) -> crate::bundle::ImageBundle {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let chip = oer_image_profile::supported(&root).unwrap().remove(0);
+    let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
     let flash = profile.flash.clone().unwrap();
     crate::bundle::ImageBundle::new(directory, &profile, flash)
@@ -188,7 +188,7 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
 fn a_type_check_refuses_requested_checks() {
     let directory = tempfile::tempdir().unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let chip = oer_image_profile::supported(&root).unwrap().remove(0);
+    let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
     let spec = ImageSpec {
         root: root.clone(),
         chip,

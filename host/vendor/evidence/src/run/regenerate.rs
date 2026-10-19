@@ -18,7 +18,7 @@ use std::process::ExitCode;
 
 /// Shard directory of `chip`, relative to the repository root.
 fn directory(root: &Path, chip: &str) -> Result<String> {
-    Ok(oer_vendor_artifacts::project::Project::new(root, chip)?.evidence_shards())
+    Ok(oer_pins::artifacts::project::Project::new(root, chip)?.evidence_shards())
 }
 
 /// The comparison probe packages of `chip` a scenario run needs.
@@ -113,7 +113,7 @@ impl Producer for HostStand<'_> {
     fn produce(&self, _scenarios: &[String], index: &Path) -> Result<()> {
         super::phase::timed(&format!("stand {}", self.scenario), || {
             oer_os_process::run(
-                oer_image_toolchain::cargo_in(&self.ctx.root)
+                oer_os_toolchain::cargo_in(&self.ctx.root)
                     .args(["run", "--quiet", "--manifest-path", &self.manifest, "--"])
                     .arg("shard")
                     .arg("--index")
@@ -188,13 +188,13 @@ pub fn run(
     // Ubuntu's LLD 18 fails these RV32 links: the toolchain's LLD is the default.
     let linker = match linker {
         Some(linker) => linker,
-        None => oer_image_toolchain::lld()?,
+        None => oer_os_toolchain::lld()?,
     };
     let relative = directory(&ctx.root, chip)?;
     let directory = ctx.root.join(&relative);
     if scenarios.is_empty() {
-        oer_vendor_artifacts::fetch_vendor_sources(&ctx.root, chip)?;
-        for image in oer_vendor_artifacts::firmware_images(&ctx.root, chip)? {
+        oer_pins::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
+        for image in oer_pins::artifacts::firmware_images(&ctx.root, chip)? {
             oer_image_build::esp_idf::catalog::build(&ctx.root, &image)?;
         }
         if directory.exists() {

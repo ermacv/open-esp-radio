@@ -15,7 +15,7 @@ oer-vendor-evidence = { path = "../evidence" }
 oer-vendor-evidence-shard = { path = "../evidence-shard" }
 oer-registers-bindings = { path = "../../registers/bindings" }
 oer-os-durable = { path = "../../os/durable" }
-oer-vendor-pins = { path = "../pins" }
+oer-pins = { path = "../../pins" }
 oer-image-build = { path = "../../image/build" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }

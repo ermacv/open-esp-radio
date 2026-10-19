@@ -13,7 +13,7 @@ the capture now: the `phy` family's `vendor-calibration` workload and its
 scenarios were deleted with the production images they booted (), and
 return with the HIL architecture of ; the tag `legacy-wifi-2026-10-16`
 keeps them. The host comparison port is
-[`oer-hil-family-phy`](../../../host/family/phy/README.md). The capture below
+[`oer-vendor-phy`](../../../host/family/phy/README.md). The capture below
 describes what the removed workload did and what a new one must reproduce.
 
 ## Capture

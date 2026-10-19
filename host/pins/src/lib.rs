@@ -2,6 +2,8 @@
 //! `knowledge/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-vendor-artifacts`.
+pub mod artifacts;
+
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -24,7 +26,7 @@ pub fn manifest(chip: &str) -> String {
 /// that lists the supported chips for an unsupported one, or names the
 /// missing manifest of a chip without a vendor verification project.
 pub fn manifest_path(root: &Path, chip: &str) -> Result<String> {
-    let profile = oer_image_profile::Profile::load(root, chip)?;
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
     let manifest = manifest(&profile.id);
     if !root.join(&manifest).is_file() {
         return Err(format!("chip {chip} has no vendor artifact pins ({manifest})").into());

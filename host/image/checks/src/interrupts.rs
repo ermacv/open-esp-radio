@@ -353,7 +353,7 @@ fn with_margin(bytes: u64, percent: u32) -> u64 {
 
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
 /// chip that reviews none.
-pub fn rom_summaries(root: &Path, profile: &oer_image_profile::Profile) -> Result<Vec<String>> {
+pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result<Vec<String>> {
     let Some(path) = profile.rom.as_ref().and_then(|rom| rom.summaries.as_ref()) else {
         return Ok(Vec::new());
     };
@@ -365,7 +365,7 @@ pub fn rom_summaries(root: &Path, profile: &oer_image_profile::Profile) -> Resul
 /// the pinned ROM of the repository at `root`.
 pub fn interrupt_stacks(
     root: &Path,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
     elf: Vec<u8>,
 ) -> Result<InterruptStacks> {
     interrupt_stacks_of(&Image::of_bytes(root, profile, elf)?)
@@ -500,7 +500,7 @@ fn cached_hook_references(
     elf: &oer_analysis_elf::Elf<'_>,
     functions: &[oer_analysis_riscv_stack::Function],
     reached: &BTreeSet<u32>,
-    memory: &oer_image_profile::Memory,
+    memory: &oer_chip_profile::Memory,
 ) -> Result<Vec<(u32, u32, u64)>> {
     use oer_analysis_elf::rv32::{Role, kind};
     let mut references = BTreeSet::new();
@@ -543,7 +543,7 @@ fn panic_path_code(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
     resolutions: &oer_analysis_riscv_stack::Resolutions,
-    memory: &oer_image_profile::Memory,
+    memory: &oer_chip_profile::Memory,
 ) -> Result<HandlerCode> {
     let mut reached = BTreeSet::new();
     for (&address, _) in names.iter().filter(|(_, name)| panic_entry(name)) {
@@ -571,7 +571,7 @@ fn handler_code(
     analysis: &Analysis,
     reached: &BTreeSet<u32>,
     names: &BTreeMap<u32, String>,
-    memory: &oer_image_profile::Memory,
+    memory: &oer_chip_profile::Memory,
 ) -> HandlerCode {
     let panicking = |address: u32| {
         names
@@ -614,7 +614,7 @@ fn handler_code(
 /// chain must hold one of the writer's contexts.
 fn level_writers(
     dwarf: &Dwarf,
-    interrupts: &oer_image_profile::InterruptContract,
+    interrupts: &oer_chip_profile::InterruptContract,
 ) -> Result<Vec<String>> {
     let writers: Vec<&str> = interrupts
         .level_writers
@@ -657,7 +657,7 @@ mod tests {
 
     fn contract() -> Contract {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        oer_image_profile::Profile::all(&root)
+        oer_chip_profile::Profile::all(&root)
             .unwrap()
             .iter()
             .find_map(Contract::of)

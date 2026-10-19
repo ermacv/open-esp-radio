@@ -10,7 +10,7 @@ fn catalog() -> crate::scenario::Catalog {
 fn chips() -> (String, String) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let full = oer_hil_image::chips_building(&root, &[ImageClass::SystemPanicReset]).unwrap();
-    let partial = oer_image_profile::supported(&root)
+    let partial = oer_chip_profile::supported(&root)
         .unwrap()
         .into_iter()
         .find(|chip| !full.contains(chip))

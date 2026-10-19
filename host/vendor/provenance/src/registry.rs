@@ -28,7 +28,7 @@
 //! registration.
 use crate::Result;
 use crate::fingerprint::Function;
-use oer_vendor_artifacts::project::{self, Project};
+use oer_pins::artifacts::project::{self, Project};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -428,7 +428,7 @@ fn pinned_functions(
 ) -> Result<(BTreeMap<String, (PathBuf, Vec<Function>)>, BTreeSet<String>)> {
     let mut out = BTreeMap::new();
     let mut symbols = BTreeSet::new();
-    for artifact in oer_vendor_artifacts::pinned(root, chip)? {
+    for artifact in oer_pins::artifacts::pinned(root, chip)? {
         if artifact.firmware {
             continue;
         }

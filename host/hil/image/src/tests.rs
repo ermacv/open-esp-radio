@@ -33,8 +33,8 @@ fn removed_images_are_rejected_by_both_decoders() {
 
 /// This checkout's first chip whose HIL agent builds the panic-reset image
 /// (`full`), the staged agent, or does not, the application agent.
-fn agent(full: bool) -> oer_image_profile::Profile {
-    oer_image_profile::Profile::all(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))
+fn agent(full: bool) -> oer_chip_profile::Profile {
+    oer_chip_profile::Profile::all(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))
         .unwrap()
         .into_iter()
         .find(|profile| oer_hil_image_class::declares(&profile.id, "system-panic-reset") == full)

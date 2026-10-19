@@ -32,7 +32,7 @@ chips/      libraries that access a chip's hardware (MMIO)
   platform/     staged bootstrap and runtime, boards
   adapters/     esp-hal
 host/       libraries that need an OS (std)
-  os/ test/ analysis/ registers/ image/ lab/ hil/ vendor/ probe/
+  os/ test/ analysis/ chip/ pins/ registers/ probe/ image/ lab/ hil/ vendor/
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/ (and ESP-IDF peers/, vendor/)
 tools/      programs for the host: fw/ hil/ stand/ registers/ blobray/ vendor/
 registers/ knowledge/ docs/   data and documents
@@ -100,7 +100,9 @@ no exceptions.
   build; it lives in `host/` and is reached only as a proc-macro or build
   dependency.
 - Inside a root, a domain depends on the domains below it; the order is
-  listed once in the layer test.
+  listed once in the layer test. The order of `host/`, lowest first: `os`,
+  `test`, `analysis`, `chip`, `pins`, `registers`, `probe`, `image`, `lab`,
+  `hil`, `vendor`.
 - Nothing optional crosses a rule: a portable crate does not reach esp-hal
   through a feature either. A crate that does belongs to `chips/` or splits.
 
@@ -237,8 +239,8 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/analysis/riscv-stack` | `host/analysis/riscv-stack` | host |
 | `host/hil/analysis` | `host/hil/analysis` | host |
 | `host/hil/stats` | `host/hil/analysis` | host |
-| `host/hil/family-phy` | `host/hil/family-phy` | host |
-| `host/hil/family-phy-esp32s31` | `host/hil/family-phy` | host |
+| `host/hil/family-phy` | `host/vendor/phy` | host |
+| `host/hil/family-phy-esp32s31` | `host/vendor/phy-esp32s31` | host |
 | `host/hil/family-system` | `host/hil/family-system` | host |
 | `host/hil/fixture` | `host/hil/fixture` | host |
 | `host/hil/link` | `host/hil/link` | host |
@@ -268,9 +270,9 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/image/linker` | `host/image/checks` | host |
 | `host/image/compare` | `host/image/compare` | host |
 | `host/image/esp-idf` | `host/image/esp-idf` | host |
-| `host/image/chip-profile` | `host/image/profile` | host |
-| `host/image/policy` | `host/image/profile` | host |
-| `host/image/toolchain` | `host/image/toolchain` | host |
+| `host/image/chip-profile` | `host/chip/profile` | host |
+| `host/image/policy` | `host/chip/profile` | host |
+| `host/image/toolchain` | `host/os/toolchain` | host |
 | `host/lab/stand-arbiter` | `host/lab/arbiter` | host |
 | `host/lab/stand-claims` | `host/lab/arbiter` | host |
 | `host/lab/stand-journal` | `host/lab/arbiter` | host |
@@ -307,8 +309,8 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/vendor/phy-archive` | `host/vendor/phy` | host |
 | `host/vendor/phy-calibration-capture` | `host/vendor/phy` | host |
 | `host/vendor/phy-esp32s31` | `host/vendor/phy-esp32s31` | host |
-| `host/vendor/artifacts` | `host/vendor/pins` | host |
-| `host/vendor/pins` | `host/vendor/pins` | host |
+| `host/vendor/artifacts` | `host/pins` | host |
+| `host/vendor/pins` | `host/pins` | host |
 | `host/vendor/markers` | `host/vendor/provenance` | host |
 | `host/vendor/provenance` | `host/vendor/provenance` | host |
 | `host/vendor/scenario-engine` | `host/vendor/scenario` | host |

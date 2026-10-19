@@ -95,7 +95,7 @@ pub(crate) fn bounds(chip: &str, elf: &Path) -> Result<Bounds, String> {
         .entry(elf.to_owned())
         .or_insert_with(|| {
             let root = oer_os_process::built_root();
-            let stacks = oer_image_profile::Profile::load(&root, chip)
+            let stacks = oer_chip_profile::Profile::load(&root, chip)
                 .and_then(|profile| {
                     let bytes = oer_hil_run_bundle_format::archived::read_archived(elf)
                         .map_err(|error| error.to_string())?;

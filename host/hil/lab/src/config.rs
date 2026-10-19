@@ -330,7 +330,7 @@ impl LabConfig {
     ) -> Result<Self> {
         let stand = oer_lab_model::Stand::load(path)?;
         let root = oer_os_process::built_root();
-        let chips = oer_image_profile::Profile::all(&root)?;
+        let chips = oer_chip_profile::Profile::all(&root)?;
         // The fixture sections hold no credentials: the run generates them.
         let raw: RawFixtures =
             toml::Value::Table(stand.fixtures()?)
@@ -771,7 +771,7 @@ impl LabConfig {
             cell_id: String::from("test-cell"),
             bluetooth_adapter: None,
             // A chip of the tree this build came from.
-            chip: oer_image_profile::Profile::all(&oer_os_process::built_root())
+            chip: oer_chip_profile::Profile::all(&oer_os_process::built_root())
                 .expect("the chip profiles load")
                 .into_iter()
                 .next()

@@ -10,13 +10,13 @@ description = "HIL image classes: build feature recipes and the keys each class 
 
 [dependencies]
 oer-hil-schema = { path = "../schema" }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-hil-image-keys = { path = "../../../portable/hil/image-keys" }
 oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
 toml = "1.1"
 
 [build-dependencies]
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 
 [lints]
 workspace = true

@@ -17,7 +17,7 @@ serde_json = "=1.0.151"
 oer-analysis-elf = { path = "../../analysis/elf" }
 
 [dev-dependencies]
-oer-image-toolchain = { path = "../../image/toolchain" }
+oer-os-toolchain = { path = "../../os/toolchain" }
 object = { version = "=0.39.1", default-features = false, features = ["elf", "read_core", "std", "write"] }
 tempfile = "=3.27.0"
 

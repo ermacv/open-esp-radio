@@ -20,7 +20,25 @@ use std::{
     process::Command,
 };
 
-use crate::{Result, Tool};
+use crate::Result;
+use oer_os_toolchain::Tool;
+
+/// The image compiler setup of an image under `policy`, built from the tree
+/// at `root` with the image linker's build in `linker_target`.
+pub fn of_policy<'a>(
+    policy: &oer_chip_profile::policy::StackPolicy,
+    root: &'a Path,
+    linker_target: &'a Path,
+    rust_target: &'a str,
+) -> ImageCompiler<'a> {
+    ImageCompiler {
+        root,
+        linker_target,
+        rust_target,
+        max_move_bytes: policy.max_move_bytes,
+        runtime_environment: policy.runtime_environment(),
+    }
+}
 
 /// The input section patterns (`name` or `name.*`, comma separated) the
 /// image linker refuses initialized bytes in: the regions the boot zeroes.
@@ -113,7 +131,7 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
 /// `target_dir` and return its path. The build leaves the image's compiler
 /// environment behind: it is a host tool.
 pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
-    let mut command = crate::command(Tool::Cargo)?;
+    let mut command = oer_os_toolchain::command(Tool::Cargo)?;
     command
         .current_dir(root)
         .args([

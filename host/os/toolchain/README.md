@@ -1,6 +1,6 @@
 # Host toolchain
 
-`oer-image-toolchain` is the one place repository tools locate the host programs
+`oer-os-toolchain` is the one place repository tools locate the host programs
 builds run and record which ones ran.
 
 - `program(Tool)` / `command(Tool)`: a non-empty override variable names the
@@ -11,11 +11,8 @@ builds run and record which ones ran.
   `rust-toolchain.toml` pins), never from an unrelated LLVM on `PATH`.
 - `require(Tool)` fails unless the tool runs; `versions()` lists every tool
   with the program and the version it reports (`llvm-objdump` included).
-- `image::configure` applies the image compiler setup to an image's Cargo
-  command: the unstable stack and move flags under `RUSTC_BOOTSTRAP`, the
-  stack-size section for C and C++, and the image linker, which
-  `image::build_linker` builds from the tree being built (a checkout or a
-  worktree) through `oer-os-process`.
+- The image compiler setup is the image pipeline's
+  (`oer_image_build::compiler`).
 - `host_target()` names the host's target triple, for a workspace whose
   Cargo configuration defaults to a chip target.
 - `blobray::{cargo, binary, host}`: Cargo commands in the separate Blobray
@@ -26,5 +23,5 @@ builds run and record which ones ran.
 It depends only on `oer-os-process`.
 
 ```console
-cargo test -p oer-image-toolchain
+cargo test -p oer-os-toolchain
 ```

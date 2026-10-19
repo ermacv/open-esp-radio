@@ -111,19 +111,19 @@ pub fn image(root: &Path, package: &str, rust_target: &str) -> PathBuf {
 /// `package` is not a verification package of a supported chip, or the
 /// build failed.
 pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf> {
-    let chips: Vec<String> = oer_image_profile::Profile::all(root)?
+    let chips: Vec<String> = oer_chip_profile::Profile::all(root)?
         .into_iter()
         .map(|profile| profile.id)
         .collect();
     let chip = chip_of(package, &chips)?;
-    let profile = oer_image_profile::Profile::load(root, chip)?;
-    let policy = oer_image_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
+    let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
     let target = profile.rust_target.as_str();
     // The image compiler of the chip, as every image build of it applies it.
     let mut cargo = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
-    oer_image_toolchain::image::configure(
+    crate::compiler::configure(
         &mut cargo,
-        &oer_image_toolchain::image::ImageCompiler {
+        &crate::compiler::ImageCompiler {
             root,
             linker_target: &root.join("target/image-linker"),
             rust_target: target,
@@ -131,10 +131,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
             runtime_environment: Vec::new(),
         },
     )?;
-    cargo.env(
-        oer_image_toolchain::image::ZEROED_INPUTS_ENV,
-        profile.zeroed_inputs(),
-    );
+    cargo.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
     let status = command(cargo, root, package, target, jobs)
         .status()
         .map_err(|error| format!("run cargo: {error}"))?;

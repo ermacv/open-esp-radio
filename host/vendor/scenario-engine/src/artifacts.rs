@@ -7,7 +7,7 @@
 //! output at its pinned location once its build follows the current recipe
 //! of its catalog image. The manifest is the only place a pin changes.
 use crate::harness::{Result, invalid};
-use oer_vendor_pins::{Artifact, Manifest, SourceKind};
+use oer_pins::{Artifact, Manifest, SourceKind};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

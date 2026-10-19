@@ -101,7 +101,7 @@ fn shard(index: &Path) -> Result<()> {
     }
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = directory.join("../../..");
-    let inputs = oer_vendor_artifacts::pinned(&root, CHIP)?
+    let inputs = oer_pins::artifacts::pinned(&root, CHIP)?
         .into_iter()
         .filter(|artifact| artifact.source == SOURCE)
         .map(|artifact| Ok((artifact.id, oer_os_durable::sha256_file(&artifact.path)?)))

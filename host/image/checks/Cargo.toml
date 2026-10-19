@@ -18,9 +18,9 @@ oer-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-program = { path = "../../analysis/riscv-program" }
 oer-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
-oer-image-profile = { path = "../profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-os-process = { path = "../../os/process" }
-oer-vendor-artifacts = { path = "../../vendor/artifacts" }
+oer-pins = { path = "../../pins" }
 rustc-demangle = "=0.1.28"
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "1.1"

@@ -420,7 +420,7 @@ pub fn runner_provenance() -> Result<RunnerProvenance> {
         ),
         host_os: std::env::consts::OS.to_owned(),
         host_arch: std::env::consts::ARCH.to_owned(),
-        tools: oer_image_toolchain::versions()
+        tools: oer_os_toolchain::versions()
             .into_iter()
             .map(|tool| ToolVersion {
                 name: tool.tool.name().to_owned(),

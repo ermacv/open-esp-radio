@@ -61,7 +61,7 @@ way.
 ## Flash map
 
 Each chip's `platform/<chip>/chip.toml` `[flash]` table
-([`oer-image-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
+([`oer-chip-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition table CSVs (`platform/esp32s31/partitions/`). The flash map is
 host data: no target code reads it (the bootstrap finds its payload through
@@ -146,9 +146,8 @@ The hook and its callees also must not statically reference cached memory:
 the retained ELF relocations reveal globals, lookup tables and anonymous
 constants introduced by the compiler, including constant-copy initialization.
 
-The image compiler flags have one owner, `image::configure` of
-[`oer-image-toolchain`](../../toolchain/README.md), which a stack policy parameterizes
-through `StackPolicy::image_compiler`:
+The image compiler flags have one owner, `compiler::configure`, which a
+stack policy parameterizes through `compiler::of_policy`:
 `-Z emit-stack-sizes`, `-Z move-size-limit` (the policy's `max_move_bytes`) with `-D large-assignments`,
 `-Z share-generics=y` and the C/C++ `-fstack-size-section`. No
 `.cargo/config.toml` of the repository carries Rust flags (Cargo reads those

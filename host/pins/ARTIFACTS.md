@@ -1,4 +1,4 @@
-# oer-vendor-artifacts
+# oer-pins
 
 The pinned vendor artifacts of a chip. `verification/<chip>/artifacts.toml`
 is the only pin: git sources at a revision and release assets, each

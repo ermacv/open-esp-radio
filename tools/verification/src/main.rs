@@ -146,7 +146,7 @@ enum Check {
 
 /// The chips with pinned vendor artifacts.
 fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
-    Ok(oer_vendor_artifacts::project::supported(&ctx.root)?
+    Ok(oer_pins::artifacts::project::supported(&ctx.root)?
         .into_iter()
         .filter(|chip| {
             ctx.root
@@ -159,8 +159,8 @@ fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
 }
 
 fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
-    if !oer_vendor_artifacts::unfetched(&ctx.root, chip)?.is_empty() {
-        oer_vendor_artifacts::fetch_vendor_sources(&ctx.root, chip)?;
+    if !oer_pins::artifacts::unfetched(&ctx.root, chip)?.is_empty() {
+        oer_pins::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
     }
     oer_vendor_provenance::registry::check(&ctx.root, chip)
 }
@@ -173,13 +173,13 @@ fn host_stands(ctx: &Checkout) -> Result<()> {
         {
             let manifest = ctx.root.join(manifest);
             oer_os_process::run(
-                oer_image_toolchain::cargo_in(&ctx.root)
+                oer_os_toolchain::cargo_in(&ctx.root)
                     .args(["clippy", "--locked", "--manifest-path"])
                     .arg(&manifest)
                     .args(["--all-targets", "--", "-D", "warnings"]),
             )?;
             oer_os_process::run(
-                oer_image_toolchain::cargo_in(&ctx.root)
+                oer_os_toolchain::cargo_in(&ctx.root)
                     .args(["test", "--locked", "--no-fail-fast", "--manifest-path"])
                     .arg(&manifest),
             )?;
@@ -197,10 +197,10 @@ fn run() -> Result<ExitCode> {
     let _signals = oer_os_process::install_signal_handlers()?;
     match cli.command {
         Command::Fetch { chip, artifacts } => {
-            oer_vendor_artifacts::run(&ctx.root, &chip, &artifacts)?
+            oer_pins::artifacts::run(&ctx.root, &chip, &artifacts)?
         }
         Command::LinkStore { root } => {
-            oer_vendor_artifacts::link_store(&root, &oer_vendor_artifacts::store()?)?
+            oer_pins::artifacts::link_store(&root, &oer_pins::artifacts::store()?)?
         }
         Command::Diff {
             chip,

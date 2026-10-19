@@ -9,7 +9,7 @@ use std::{
 };
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_vendor_artifacts as artifacts;
+use oer_pins::artifacts;
 
 #[derive(Parser)]
 #[command(about = "Fetch and verify pinned vendor artifacts")]

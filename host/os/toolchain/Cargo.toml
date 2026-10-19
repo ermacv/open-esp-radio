@@ -1,12 +1,12 @@
 [package]
-name = "oer-image-toolchain"
+name = "oer-os-toolchain"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The host tools repository builds run: their lookup, recorded versions and the image compiler setup"
+description = "The host tools repository builds run: their lookup and recorded versions"
 
 [dependencies]
 oer-os-durable = { path = "../../os/durable" }

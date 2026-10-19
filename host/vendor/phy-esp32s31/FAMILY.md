@@ -1,4 +1,4 @@
-# oer-hil-family-phy-esp32s31
+# oer-vendor-phy-esp32s31
 
 The ESP32-S31 implementation of the [PHY cross-check's](../phy/README.md)
 comparison port, with the chip's vendor calibration comparison
@@ -9,5 +9,5 @@ family crate itself names no chip, and its captures are the chip-neutral
 PHY scenario family ().
 
 ```console
-cargo test -p oer-hil-family-phy-esp32s31
+cargo test -p oer-vendor-phy-esp32s31
 ```

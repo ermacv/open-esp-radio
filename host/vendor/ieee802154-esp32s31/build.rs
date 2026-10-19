@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_vendor_pins::Manifest;
+use oer_pins::Manifest;
 
 const SOURCE_ENV: &str = "OER_ESP_IDF_DIR";
 const COMMON_LL: &str = "components/esp_hal_ieee802154/include/hal/ieee802154_common_ll.h";
@@ -230,7 +230,7 @@ fn main() {
     for source in &sources {
         let path = idf.join(&source.path);
         println!("cargo::rerun-if-changed={}", path.display());
-        let pinned = oer_vendor_artifacts::verified(&path, &source.sha256)
+        let pinned = oer_pins::artifacts::verified(&path, &source.sha256)
             .unwrap_or_else(|error| panic!("{}: {error} (ESP-IDF {revision})", path.display()));
         assert!(
             pinned,

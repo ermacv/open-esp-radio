@@ -56,7 +56,7 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(String, Option<
 /// The pipeline's spec of `image`, with `w1`'s parameters for image `w1`:
 /// every check, reported and never failing the build.
 pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSpec> {
-    let profile = oer_image_profile::Profile::load(root, CHIP)?;
+    let profile = oer_chip_profile::Profile::load(root, CHIP)?;
     let package = package(root, image)?;
     Ok(ImageSpec {
         root: root.to_owned(),

@@ -19,6 +19,7 @@ mod around;
 pub mod build_log;
 pub mod bundle;
 pub mod cargo;
+pub mod compiler;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
@@ -34,8 +35,8 @@ use std::{
 pub use build_log::{BuildLog, BuildStepFailed};
 
 pub use cargo::LAYOUT_SEED_ENV;
-use oer_image_profile::policy::StackPolicy;
-pub use oer_image_profile::{Boot, FlashMap};
+use oer_chip_profile::policy::StackPolicy;
+pub use oer_chip_profile::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -110,7 +111,7 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?;
     let cache = compile_cache()?;
     // The image linker the flags name is the shared one.
-    let _cache = oer_image_toolchain::image::lock_compile_cache(&cache)?;
+    let _cache = crate::compiler::lock_compile_cache(&cache)?;
     let mut command = runtime_command(spec, &profile, "check", &policy)?;
     command.env("CARGO_TARGET_DIR", &cache);
     cargo::ensure_fetched(&spec.root)?;
@@ -126,8 +127,8 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
 }
 
 /// The profile of `chip` at `root`, which must name its flash map.
-pub fn profile(root: &Path, chip: &str) -> Result<oer_image_profile::Profile> {
-    let profile = oer_image_profile::Profile::load(root, chip)?;
+pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
+    let profile = oer_chip_profile::Profile::load(root, chip)?;
     if profile.flash.is_none() {
         return Err(
             format!("platform/{chip}/chip.toml names no [flash] map for its images").into(),
@@ -142,7 +143,7 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_image_profile::Profile> {
 /// committed pins.
 fn runtime_command(
     spec: &ImageSpec,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
     subcommand: &str,
     policy: &StackPolicy,
 ) -> Result<std::process::Command> {
@@ -176,9 +177,9 @@ fn runtime_command(
         command.env(LAYOUT_SEED_ENV, seed.to_string());
     }
     zeroed_inputs(&mut command, profile);
-    oer_image_toolchain::image::configure(
+    crate::compiler::configure(
         &mut command,
-        &policy.image_compiler(&spec.root, &linker_cache()?, &profile.rust_target),
+        &crate::compiler::of_policy(&policy, &spec.root, &linker_cache()?, &profile.rust_target),
     )?;
     Ok(command)
 }
@@ -187,44 +188,35 @@ fn runtime_command(
 /// which it refuses initialized bytes in.
 pub(crate) fn zeroed_inputs(
     command: &mut std::process::Command,
-    profile: &oer_image_profile::Profile,
+    profile: &oer_chip_profile::Profile,
 ) {
-    command.env(
-        oer_image_toolchain::image::ZEROED_INPUTS_ENV,
-        profile.zeroed_inputs(),
-    );
+    command.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
 }
 
-/// The host build root ([`oer_image_toolchain::image::host_build_root`]).
+/// The host build root ([`crate::compiler::host_build_root`]).
 pub fn host_build_root() -> Result<PathBuf> {
     // Unit tests build into the workspace's disposable target directory,
     // never into the host's shared build root.
     #[cfg(test)]
-    if std::env::var_os(oer_image_toolchain::image::BUILD_ROOT_ENV)
-        .is_none_or(|root| root.is_empty())
-    {
+    if std::env::var_os(crate::compiler::BUILD_ROOT_ENV).is_none_or(|root| root.is_empty()) {
         return Ok(oer_os_process::built_root().join("target/test-build-root"));
     }
-    oer_image_toolchain::image::host_build_root()
+    crate::compiler::host_build_root()
 }
 
 /// The host's one firmware compile cache
-/// ([`oer_image_toolchain::image::compile_cache`]); a build holds
-/// [`oer_image_toolchain::image::lock_compile_cache`] from its Cargo run until its
+/// ([`crate::compiler::compile_cache`]); a build holds
+/// [`crate::compiler::lock_compile_cache`] from its Cargo run until its
 /// ELF and dependency information are copied out.
 pub fn compile_cache() -> Result<PathBuf> {
-    Ok(oer_image_toolchain::image::compile_cache(
-        &host_build_root()?
-    ))
+    Ok(crate::compiler::compile_cache(&host_build_root()?))
 }
 
 /// The target directory of the image linker, built once for every image
 /// build; its path is part of every image's `RUSTFLAGS`, so it must not
 /// differ between builds.
 pub(crate) fn linker_cache() -> Result<PathBuf> {
-    Ok(oer_image_toolchain::image::linker_target(
-        &host_build_root()?
-    ))
+    Ok(crate::compiler::linker_target(&host_build_root()?))
 }
 
 /// Copy `source` to `target` unless `target` already holds the same bytes, so

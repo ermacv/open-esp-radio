@@ -10,7 +10,7 @@ description = "Board discovery, serial consoles, resets, OpenOCD and receipted i
 
 [dependencies]
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-model = { path = "../model" }
 oer-os-durable = { path = "../../os/durable" }
 oer-image-build = { path = "../../image/build" }

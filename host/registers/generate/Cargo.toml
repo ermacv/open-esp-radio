@@ -14,9 +14,9 @@ oer-registers-review = { path = "../review" }
 oer-registers-contracts = { path = "../contracts" }
 oer-os-process = { path = "../../os/process" }
 oer-os-durable = { path = "../../os/durable" }
-oer-image-toolchain = { path = "../../image/toolchain" }
+oer-os-toolchain = { path = "../../os/toolchain" }
 oer-analysis-elf = { path = "../../analysis/elf" }
-oer-vendor-artifacts = { path = "../../vendor/artifacts" }
+oer-pins = { path = "../../pins" }
 oer-vendor-provenance = { path = "../../vendor/provenance" }
 roxmltree = "=0.20.0"
 serde = { version = "=1.0.229", features = ["derive"] }

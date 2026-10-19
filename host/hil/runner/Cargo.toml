@@ -15,11 +15,11 @@ oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-schema = { path = "../schema" }
 oer-hil-scenario-catalog = { path = "../scenario-catalog" }
 oer-image-build = { path = "../../image/build" }
-oer-image-toolchain = { path = "../../image/toolchain" }
+oer-os-toolchain = { path = "../../os/toolchain" }
 oer-hil-lab = { path = "../lab" }
 oer-hil-link = { path = "../link" }
 oer-hil-image = { path = "../image" }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-analysis = { path = "../analysis" }
 oer-hil-scenario = { path = "../scenario" }

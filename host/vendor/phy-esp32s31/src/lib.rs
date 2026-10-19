@@ -15,6 +15,8 @@
 //! `src/tolerances.toml` as the review, yielding a
 //! MATCH, DIFF or INCOMPLETE [`compare::Summary`].
 
+pub mod family;
+
 pub mod compare;
 pub mod registers;
 

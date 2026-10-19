@@ -14,12 +14,12 @@ oer-image-compare = { path = "../../image/compare" }
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-schema = { path = "../schema" }
 oer-image-build = { path = "../../image/build" }
-oer-image-profile = { path = "../../image/profile" }
+oer-chip-profile = { path = "../../chip/profile" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-run-bundle = { path = "../run-bundle" }
 oer-hil-image-class = { path = "../image-class" }
 oer-os-process = { path = "../../os/process" }
-oer-image-toolchain = { path = "../../image/toolchain" }
+oer-os-toolchain = { path = "../../os/toolchain" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3"

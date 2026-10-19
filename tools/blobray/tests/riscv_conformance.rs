@@ -239,7 +239,7 @@ fn reference(sail: &Path, elf: &Path, directory: &Path) -> std::result::Result<V
 #[ignore = "needs the RISC-V architectural tests, a riscv32 clang and Sail"]
 fn architectural_tests_match_their_reference_signatures() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let inputs = oer_vendor_artifacts::conformance::inputs(&root).unwrap();
+    let inputs = oer_pins::artifacts::conformance::inputs(&root).unwrap();
     let (suite, sail) = (inputs.arch_test, inputs.sail);
     let cc = environment("BLOBRAY_RISCV_CC");
     let output = tempfile::tempdir().unwrap();

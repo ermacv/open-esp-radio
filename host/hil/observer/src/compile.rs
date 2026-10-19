@@ -42,7 +42,7 @@ pub fn compile(root: &Path) -> Result<Compilation> {
         .as_str()
         .ok_or("observer build profile missing")?;
     let profile = if profile == "debug" { "dev" } else { profile };
-    let mut command = Command::new(oer_image_toolchain::cargo_program());
+    let mut command = Command::new(oer_os_toolchain::cargo_program());
     command
         .current_dir(root)
         .env("CARGO_TARGET_DIR", root.join("target"))

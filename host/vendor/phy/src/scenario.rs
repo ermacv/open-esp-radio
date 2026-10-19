@@ -19,7 +19,7 @@ use crate::comparison::Comparison;
 /// relative to the repository root: its profile's `[hil]
 /// vendor-calibration`.
 pub fn vendor_projects(chip: &str) -> Result<std::path::PathBuf> {
-    oer_image_profile::Profile::load(&oer_os_process::built_root(), chip)?
+    oer_chip_profile::Profile::load(&oer_os_process::built_root(), chip)?
         .hil
         .and_then(|hil| hil.vendor_calibration)
         .ok_or_else(|| format!("{chip} has no PHY calibration cross-check").into())

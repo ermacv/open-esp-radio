@@ -1,7 +1,7 @@
 //! What the checks read from the chip profile: the `[memory]` map and the
 //! `[interrupts]` contract.
 
-use oer_image_profile::{InterruptContract, Memory, Profile};
+use oer_chip_profile::{InterruptContract, Memory, Profile};
 
 /// The chip's address map and interrupt contract.
 #[derive(Clone, Debug, Eq, PartialEq)]
