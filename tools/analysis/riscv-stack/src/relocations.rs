@@ -13,17 +13,24 @@ pub fn taken_addresses(
     let mut taken = std::collections::BTreeSet::new();
     for address_use in image.address_uses() {
         control.checkpoint(1)?;
-        if matches!(
-            address_use.relocation.target,
-            oer_analysis_elf::Target::Section(_) | oer_analysis_elf::Target::Other
-        ) {
-            continue;
-        }
-        if let Some(address) = address_use.value.canonical() {
+        if let Some(address) = taken_address(address_use) {
             keep.add(&mut taken, address, control)?;
         }
     }
     Ok(taken)
+}
+
+/// Numerical taken-address projection, shared with the callback audit's
+/// candidate universe. This consumes an existing observation, not an index.
+pub(super) fn taken_address(address_use: &AddressUse<'_>) -> Option<u32> {
+    if matches!(
+        address_use.relocation.target,
+        oer_analysis_elf::Target::Section(_) | oer_analysis_elf::Target::Other
+    ) {
+        None
+    } else {
+        address_use.value.canonical()
+    }
 }
 
 /// The two all-uses audits intentionally admit different symbol identities.

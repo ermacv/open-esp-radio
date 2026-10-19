@@ -11,17 +11,16 @@ address uses, checked address words and `.LJTI*` labels, parsed once) and its fr
 and DWARF through [`oer-analysis-elf`](../elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
 
-`taken_addresses`, task-spawn ownership and experimental typed provenance
+`taken_addresses`, task-spawn ownership and the shared callback audit
 read the common address-use index. Their projections preserve distinct
 rules: `taken_addresses` excludes direct section targets and clears the
 instruction low bit; spawn ownership recognizes source function symbols
 only of kind `Text`; typed provenance recognizes any source symbol at a
-function entry. Both all-uses audits retain arithmetic, odd, interior and
+function entry. Both the callback and task-spawn audits retain arithmetic, odd, interior and
 unknown-role uses, which cannot prove an exact typed materialization.
 They project onto the joint analysis's numerical function catalog without
 interpreting another ELF's section identities. Field-type, executor and
-instruction-pattern proofs remain in their consumers. Experimental typed
-provenance is not part of the firmware pipeline.
+instruction-pattern proofs remain in their consumers. The callback audit is shared by the global and experimental local resolver.
 
 `analyze` works in the caller's `WorkingMemory` and charges the caller's
 `RunControl`, as Blobray's analyses do: running out of either fails it with
@@ -40,13 +39,15 @@ borrowed from the ELF's bytes; its inline chains are addr2line's over the
 same bytes (`Symbolizer::shared`), whose lazily grown caches are library
 internals the working memory does not account.
 
-`read_debug` takes `DebugMetadata::Standard` for the normal image pipeline.
-`DebugMetadata::TypedLocations` additionally retains local-variable and
-parameter locations in the returned `TypeFacts`, in the same DIE walk. The
-experimental `typed_function_pointer_resolutions` requires those prepared
-facts; it reads no debug sections and prepares machine-register aliases
-separately from instructions. Standard metadata allocates no local-location
-records or lexical-range state, and no global cache is used.
+The image pipeline requests `DebugMetadata::TypedLocations` from `read_debug`:
+local/parameter locations and global storage types are collected in the same
+DIE walk. `audit_function_addresses` prepares instruction aliases once and
+audits the existing `ImageFacts::address_uses` observations. Both resolvers
+accept this same `FunctionPointerAudit`; neither loads DWARF or rebuilds an
+ELF/symbol index. `DebugMetadata::Standard` remains available to callers that
+need no local locations; their code stores stay unknown to the audit. The
+experimental local resolver requires prepared local locations. No global
+cache is used.
 
 Local locations preserve exact half-open PC ranges, location-list gaps and
 independent byte-aligned aggregate pieces. Missing or unsupported pieces
@@ -195,43 +196,44 @@ the function's full frame and every nonrecursive callee. Unknown control
 flow, unsupported operations, loops and exhausted analysis budgets prevent
 the proof; indirect and mutual recursion remain unresolved.
 
-`TypeFacts` reads the image's types, global variables and function
-signatures from its DWARF, and `function_pointer_resolutions` sends a call
-through a function pointer a static's field holds (the load's address from
-the sweep, kept when the load's base register is later reused, or from the
-value analysis's registers; the field from the global at that address, merged
-and split globals included, down to a pointer to a subroutine type) to its
-candidates, matched per parameter and result, never by a signature's
-spelling: every function whose address `taken_addresses` lists, with the
-field's parameter count, whose parameters and result no known fact
-contradicts. For a Rust-ABI pointer a fact is a byte size or a type name;
-for a foreign-ABI pointer only a byte size, since C and Rust name one type
-differently, and a taken function the DWARF does not describe is a candidate
-too. Excluding by name rests on rustc naming one type identically in every
-crate and codegen unit, which a test holds the toolchain to. Function merging puts
-functions of identical bodies, perhaps of other types, at one address, each
-an ELF function symbol with the kept body's size (a symbol of size zero, a
-linker script's or an assembly label, names no function of its own): an
-address several such functions share matches by the subprogram of any of
-them (a merged function keeps one without an address, by its linkage name),
-and one without a subprogram makes it a candidate whatever the field. A unit that
-states no types at all, such as the precompiled `core` and `alloc` built with
-limited debuginfo, names its functions without their parameters or result:
-their shape is unknown, and they are candidates whatever the field, except
-a trait method (`<Type as Trait>::method`) whose parameter count, which the
-trait fixes whatever the type, the image's typed implementations of the same
-method state, and which differs from the field's. A unit's `partial + ?`
-interrupt stack then names such a function's site as a hole. A site whose
-address or field is unknown stays unresolved; a function put into the field
-through a transmute is not seen.
+`function_pointer_resolutions` discovers fields through absolute globals:
+the sweep's load address, or the value analysis's base register plus the
+load displacement. Merged/split global pieces retain their own DWARF rules.
+`typed_function_pointer_resolutions` separately discovers fields through
+PC-specific pointer/aggregate locations and complete reaching target loads.
+These APIs intentionally recognize different sites; neither discovery rule
+is extended by the shared audit.
 
-`typed_function_pointer_resolutions` is a separate conservative API for
-local typed fields, DWARF register and aggregate-piece locations, and
-reaching target loads. It excludes a function by type only after auditing
-all relocated uses of its address as type-preserving. An unknown use keeps
-the function as a candidate even when its declaration has an incompatible
-signature. This API is not used by the firmware stack gate: its current
-address-use coverage leaves candidate sets too broad for useful bounds.
+Both use `audit_function_addresses` and exactly one candidate rule. Each
+relocated use of a function address retains its original index and either
+all proven storage types or a specific `UnknownUse` reason. An absolute word
+can prove a unique global function-pointer field. The existing small code
+proof accepts an adjacent absolute HI20/LO12 pair only when every subsequent
+read stores the pointer into a typed local field before its register dies.
+Unfamiliar instructions, control flow, destinations and arithmetic stay
+unknown. Function merging unites all aliases' uses at their shared entry.
+Addends retain both their source function and numerical containing function
+when different. Facts remain bound to their source ELF; another ELF's DIE
+and section offsets cannot establish a storage proof.
+
+A candidate remains when any storage type can match any call-field type,
+when any use is unknown, or when its taken address has no storage evidence.
+Matching compares parameter/result sizes and, for two Rust-ABI storage
+types, the names rustc assigns; a missing signature fact excludes nothing.
+A cast before storage therefore participates through its stored type. A
+function declaration, a merged symbol's declaration and a trait method's
+arity alone prove no pointer provenance. Empty candidate sets still leave
+`Fact::FieldType` calls unresolved. Memory recovered through an erased
+pointer retains the existing executor-invariant assumption.
+
+The firmware gate continues to use global field discovery. The experimental
+local resolver remains available separately; its current address-use coverage
+leaves candidate sets too broad for useful bounds. Interprocedural pointer
+propagation, constructor summaries and new memory models are later work.
+
+The [callback audit validation](validation/callback-address-audit.md) records
+real w0/w1 unknown-use classes, missing facts, before/after results and the
+commands to reproduce the diagnostic without function/address allowlists.
 
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
 interrupt per level the hart takes (its table entries' levels and the levels
