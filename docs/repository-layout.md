@@ -22,7 +22,7 @@ portable/   libraries that touch neither hardware nor an OS (no_std)
   hil/          the HIL protocol, the agent core, conformance traces
   probe/        the probe catalog format
   espressif/    Espressif IP as algorithms and data (802.15.4 engine, coex, Wi-Fi policy)
-  esp32s31/ esp32c5/   chip knowledge: tables, constants, layouts, pure functions
+  esp32s31/ esp32c5/   chip knowledge: tables, constants, pure functions, platform data
   platform/     memory layouts of the staged images
   adapters/     bindings to portable frameworks (Embassy)
 chips/      libraries that access a chip's hardware (MMIO)
@@ -136,10 +136,8 @@ and runs is a thin wrapper over `cargo fw` and the program.
 
 ## Known deviations
 
-The tree does not yet follow these rules in two places:
+The tree does not yet follow these rules in one place:
 
 - `portable/ieee80211/mac` holds the Wi-Fi frame formats and protocol state
   together; chip backends and the radio system depend on it for formats
   alone (the radio system for the channel type only).
-- `firmware/platform/<chip>/` holds chip data (`chip.toml`, partitions) and
-  linker scripts that belong to `portable/<chip>/` and `chips/platform/`.

@@ -4,7 +4,7 @@
 //! The profile data is the host's view of the bootstrap's contract
 //! (`oer-platform-staged-layout`'s `stage_two`), which this generic
 //! pipeline does not link; both check the shared fixture
-//! `platform/espressif/staged-layout/fixtures/stage-two.txt`, so they agree.
+//! `portable/platform/staged-layout/fixtures/stage-two.txt`, so they agree.
 use crate::Result;
 use oer_chip_profile::StageTwo;
 use std::{fs, path::Path};

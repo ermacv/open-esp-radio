@@ -48,7 +48,7 @@ followed through a proven table, whose entries all lie in the function, is
 no unresolved transfer.
 
 `analyze` also takes reviewed summaries (`Summary`, parsed from a
-`[[function]]` TOML such as `platform/esp32s31/linker/rom/functions.toml`) of
+`[[function]]` TOML such as `portable/esp32s31/platform/rom-functions.toml`) of
 companion functions the machine code alone does not bound: each names its
 function's address, which must carry that name. A summary of a function the
 image reaches applies: where the analysis bounds the function itself, the

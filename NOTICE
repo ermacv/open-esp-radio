@@ -121,7 +121,7 @@ Source:    https://github.com/esp-rs/esp-hal, ld/riscv/hal-defaults.x
 Copyright: the esp-rs contributors
 License:   MIT OR Apache-2.0
 
-firmware/platform/espressif/linker/runtime/link.x repeats its
+portable/platform/staged-layout/linker/runtime/link.x repeats its
 PROVIDE(interruptN = DefaultHandler) symbol interface.
 
 

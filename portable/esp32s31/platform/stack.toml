@@ -2,7 +2,7 @@ schema = 5
 
 # Every linked function without a compiler frame record (`-Z emit-stack-sizes`)
 # needs exactly one review there: assembly, vector data or compiler runtime.
-coverage_policy = "../espressif/stack-coverage.toml"
+coverage_policy = "../../platform/staged-layout/stack-coverage.toml"
 
 # Reject implicit copies/moves large enough to hide owner graphs or buffers in
 # compiler temporaries. The lint is enforced while building the final fat-LTO

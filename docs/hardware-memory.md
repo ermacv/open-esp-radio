@@ -145,7 +145,7 @@ to hardware-shared memory.
 A DMA static is declared with `oer_esp32s31_hal::dma_static!`: a zeroed
 `DmaStatic<T>` in a `.dma.bss.<block>` section (the macro refuses any other
 section name), claimed once as a `Placed<T>`. The register generator writes
-`firmware/platform/esp32s31/linker/dma-window.x` from the model: the
+`portable/platform/esp32s31-layout/linker/dma-window.x` from the model: the
 `dma-window` region and the width of `RX_NEXT_DESCRIPTOR.ADDRESS_LOW`. The
 runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the

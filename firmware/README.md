@@ -1,12 +1,12 @@
 # Firmware
 
-The chip-target workspace for the ESP32-S31: the staged boot shared by the
-Espressif chips (`platform/espressif`), the ESP32-S31 board, bootstrap and
-address map (`platform/esp32s31`) and, from the first slice on, the images.
-The radio libraries it links live in the host workspace and are tested there.
+The images for a chip: applications, the bootstrap, HIL agents, probes, peers
+and vendor references. The staged boot they share is in `chips/platform/` and
+`portable/platform/`, each chip's platform data in `portable/<chip>/platform/`.
+The libraries they link are tested on the host.
 
 The boot runs ROM → ESP-IDF bootloader → flash bootstrap → stage two in PSRAM
-(see [platform/esp32s31](platform/esp32s31/README.md)). The bootstrap embeds
+(see [the ESP32-S31 board](../chips/platform/esp32s31-board/README.md)). The bootstrap embeds
 the packed stage-two runtime named by `PSRAM_RUNTIME_BIN`; an empty file is
 enough to type-check:
 

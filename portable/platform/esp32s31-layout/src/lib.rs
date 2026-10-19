@@ -8,7 +8,7 @@
 //! `oer-platform-staged-layout`; this crate states the board's map once, for
 //! the bootstrap, the board, and the build scripts of every image. With the
 //! `build` feature, [`build`] links a binary with the shared scripts and this
-//! chip's ROM script (`firmware/platform/esp32s31/linker`).
+//! chip's ROM script (`portable/platform/esp32s31-layout/linker`).
 //!
 //! Sizes describe this board's fitted memories and the staged-boot contract;
 //! they are not universal ESP32-S31 capabilities.
@@ -62,7 +62,7 @@ pub mod build {
     use std::path::Path;
 
     fn linker_dir() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware/platform/esp32s31/linker")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("linker")
     }
 
     /// Link binary `bin` as a stage-two runtime of this board.

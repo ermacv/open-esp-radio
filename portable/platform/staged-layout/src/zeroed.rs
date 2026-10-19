@@ -107,13 +107,11 @@ mod tests {
 
     use super::*;
 
-    const SCRIPT: &str =
-        include_str!("../../../../firmware/platform/espressif/linker/runtime/sections.x");
+    const SCRIPT: &str = include_str!("../linker/runtime/sections.x");
     /// A chip's generated window check, with a known window.
-    const WINDOW: &str = include_str!("../../../../firmware/platform/esp32s31/linker/dma-window.x");
+    const WINDOW: &str = include_str!("../../esp32s31-layout/linker/dma-window.x");
     /// A chip's generated window check, with none known.
-    const NO_WINDOW: &str =
-        include_str!("../../../../firmware/platform/esp32c5/linker/dma-window.x");
+    const NO_WINDOW: &str = include_str!("../../esp32c5-layout/linker/dma-window.x");
 
     #[test]
     fn dma_storage_is_checked_against_the_generated_window() {

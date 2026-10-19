@@ -1,3 +1,3 @@
 schema = 5
 # The production policy applies to the HIL images too.
-extends = "../../platform/esp32s31/stack.toml"
+extends = "../../../portable/esp32s31/platform/stack.toml"

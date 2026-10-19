@@ -259,7 +259,7 @@ impl Board {
             .find(|profile| profile.id == self.chip)
             .ok_or_else(|| {
                 format!(
-                    "board `{name}`: chip `{}` has no profile (firmware/platform/{}/chip.toml)",
+                    "board `{name}`: chip `{}` has no profile (portable/{}/platform/chip.toml)",
                     self.chip, self.chip
                 )
             })?;
