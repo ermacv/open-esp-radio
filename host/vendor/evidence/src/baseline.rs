@@ -137,17 +137,13 @@ pub struct Accepted {
 }
 
 impl Accepted {
-    /// The acceptances of `chip`'s project below `root`; none without the file.
+    /// The acceptances of `chip`'s project below `root`; a missing file is
+    /// an error, since an empty list is written out.
     pub fn load(root: &Path, chip: &str) -> Result<Self> {
         let path = oer_pins::artifacts::project::Project::new(root, chip)?.accepted_losses();
-        match std::fs::read_to_string(root.join(&path)) {
-            Ok(text) => Self::parse(path, &text),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
-                path,
-                ..Self::default()
-            }),
-            Err(error) => Err(error.into()),
-        }
+        let text = std::fs::read_to_string(root.join(&path))
+            .map_err(|error| format!("{path}: {error}"))?;
+        Self::parse(path, &text)
     }
 
     pub fn parse(path: String, text: &str) -> Result<Self> {

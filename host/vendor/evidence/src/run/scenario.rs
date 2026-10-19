@@ -21,7 +21,8 @@ pub fn run(ctx: &Checkout, chip: &str, args: &[OsString]) -> Result<std::process
     let scenarios = chip.scenarios();
     if !ctx
         .root
-        .join(chip.verification("scenarios/Cargo.toml"))
+        .join(chip.scenarios_directory())
+        .join("Cargo.toml")
         .is_file()
     {
         return Err(format!("no vendor scenarios for chip {}", chip.name()).into());
