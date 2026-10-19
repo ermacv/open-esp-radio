@@ -17,8 +17,8 @@ use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
 
 mod ampdu_resort;
 mod calibration_leaves;
+mod calibration_projection;
 mod coex;
-use oer_esp32s31_phy_relation::projection as calibration_projection;
 mod i2c;
 mod production_trace;
 mod rx_append;

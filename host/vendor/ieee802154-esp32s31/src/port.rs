@@ -11,10 +11,9 @@
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(feature = "sw-coex")]
-use oer_esp32s31_hal::{
-    coex::{CoexPtiTable, Ieee802154CoexLevel},
-    ieee802154::coex::{Ieee802154CoexConfig, resolve_priorities},
-};
+use oer_esp32s31_tables::ieee802154_coex::{Ieee802154CoexConfig, resolve_priorities};
+#[cfg(feature = "sw-coex")]
+use oer_espressif_coex::{CoexPtiTable, Ieee802154CoexLevel};
 #[cfg(feature = "sw-coex")]
 use oer_espressif_ieee802154_engine::coex::Ieee802154Coexistence;
 use oer_espressif_ieee802154_engine::engine::{
@@ -801,7 +800,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     let buffers = Box::leak(Box::new(Ieee802154EngineBuffers::new()));
     // The recovered ESP32-S31 BTBB level set, which the vendor side reads
     // through `bt_bb_get_tx_pwr_table` (`crate::record`).
-    let levels = oer_esp32s31_hal::ieee802154::ESP32S31_TX_POWER_LEVELS;
+    let levels = oer_esp32s31_tables::tx_power::ESP32S31_TX_POWER_LEVELS;
     let defaults = Ieee802154PibDefaults::default();
     #[cfg(not(feature = "multipan"))]
     let mut engine = Ieee802154Engine::new(buffers, levels, defaults);

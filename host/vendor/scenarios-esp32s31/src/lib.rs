@@ -52,9 +52,9 @@ pub fn install() {
 /// root, and the probe ELF package whose path dependencies are the compiled
 /// production sources.
 pub const PROBES_DIRECTORY: &str = "firmware/probes";
-pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-radio-elf";
+pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-radio";
 /// Package of the compiled Bluetooth probe image.
-pub const BLUETOOTH_PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-probe-bluetooth-elf";
+pub const BLUETOOTH_PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-bluetooth";
 pub const PROBES_TARGET: &str = "riscv32imafc-unknown-none-elf";
 
 #[cfg(test)]

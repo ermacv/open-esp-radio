@@ -2,8 +2,6 @@
 
 pub(crate) mod backend;
 
-pub mod coex;
-
 pub mod lifecycle;
 
 pub mod ll;
@@ -13,8 +11,6 @@ pub mod mac;
 pub(crate) mod policy;
 
 pub(crate) mod role;
-
-pub mod tx_power;
 
 #[cfg(oer_probe)]
 pub(crate) mod validation;
@@ -57,5 +53,3 @@ pub use role::{
     Ieee802154MacPolicyTransitionFailure, Ieee802154PowerTransitionFailure, Ieee802154Powered,
     Ieee802154Reset, Ieee802154ResetTransitionFailure,
 };
-
-pub use tx_power::ESP32S31_TX_POWER_LEVELS;

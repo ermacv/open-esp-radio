@@ -66,7 +66,7 @@ fn the_environment_records_the_retained_btbb_transmit_power_table() {
             core::array::from_fn(|index| storage.environment[offset + index].get());
         u32::from_le_bytes(bytes)
     };
-    let levels = oer_esp32s31_hal::phy::baseband::TX_POWER_LEVELS_DBM;
+    let levels = oer_esp32s31_tables::tx_power::TX_POWER_LEVELS_DBM;
 
     assert_eq!(storage.tx_power_levels_dbm, levels);
     assert_eq!(

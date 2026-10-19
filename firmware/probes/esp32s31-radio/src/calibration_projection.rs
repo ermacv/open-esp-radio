@@ -2,10 +2,9 @@
 //! them: the calibration projection of the tracking roots and their
 //! committed state words.
 //!
-//! The comparison probes publish these words for the Blobray tracking
-//! scenario, and the hardware calibration cross-check projects a snapshot
-//! captured on the board through the same functions. The file depends only
-//! on `oer_esp32s31_phy`.
+//! The probe publishes these words for the Blobray tracking scenario, which
+//! compares them through `oer_esp32s31_phy_relation::committed`. The module
+//! depends only on `oer_esp32s31_phy`.
 
 /// Committed calibration state in the vendor `phy_param` byte order: the eight
 /// DCODE codes, the two status bytes holding the RX-gain DC (0x80 of the

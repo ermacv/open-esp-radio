@@ -24,8 +24,8 @@ fn directory(root: &Path, chip: &str) -> Result<String> {
 /// The comparison probe packages of `chip` a scenario run needs.
 fn probes(chip: &str) -> (String, String) {
     (
-        format!("oer-firmware-probes-{chip}-radio-elf"),
-        format!("oer-firmware-probes-{chip}-bluetooth-elf"),
+        format!("oer-firmware-probes-{chip}-radio"),
+        format!("oer-firmware-probes-{chip}-bluetooth"),
     )
 }
 

@@ -30,7 +30,7 @@ fn repository() -> tempfile::TempDir {
         );
         for (role, name) in probes {
             text.push_str(&format!(
-                "[[probe]]\nrole = \"{role}\"\npackage = \"oer-firmware-probes-{chip}-probe-{name}-elf\"\n"
+                "[[probe]]\nrole = \"{role}\"\npackage = \"oer-firmware-probes-{chip}-{name}\"\n"
             ));
         }
         std::fs::write(profile.join("chip.toml"), text).unwrap();
@@ -133,10 +133,10 @@ fn a_chip_builds_only_its_own_probes() {
         Ok(())
     })
     .unwrap();
-    assert_eq!(seen, ["oer-firmware-probes-chip-b-probe-radio-elf"]);
+    assert_eq!(seen, ["oer-firmware-probes-chip-b-radio"]);
     assert!(
-        elf(&context, "oer-firmware-probes-chip-b-probe-radio-elf")
+        elf(&context, "oer-firmware-probes-chip-b-radio")
             .unwrap()
-            .ends_with("target/verification/chip-b/oer-firmware-probes-chip-b-probe-radio-elf")
+            .ends_with("target/verification/chip-b/oer-firmware-probes-chip-b-radio")
     );
 }

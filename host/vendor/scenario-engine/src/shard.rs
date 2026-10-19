@@ -35,9 +35,9 @@ const PACKAGE_MANIFEST: &str = "Cargo.toml";
 /// The probe compiler, a host build tool whose sources Cargo's dep-info of
 /// the probe image does not list.
 const PROBE_COMPILER: [&str; 2] = ["host/probe/codegen", "host/probe/macros"];
-/// The suffix of a probe image package's directory: its placement and entry
-/// code apply to every probe, so they stay global.
-const PROBE_IMAGE_SUFFIX: &str = "-elf";
+/// The image files of a probe package, relative to it: their placement and
+/// entry code apply to every probe, so they stay global.
+const PROBE_IMAGE_FILES: [&str; 3] = ["src/main.rs", "link.x", "build.rs"];
 
 /// Repository-relative sources Cargo's dep-info records for the artifact at
 /// `artifact`, from the `.d` file beside it: every compiled source file,
@@ -121,12 +121,13 @@ pub fn source_paths(
 ) -> Vec<PathBuf> {
     let attributable = |path: &Path| {
         PRODUCTION_ROOTS.iter().any(|root| path.starts_with(root))
-            || (path.starts_with(probe_directory)
-                && !path.components().any(|c| {
-                    c.as_os_str()
-                        .to_str()
-                        .is_some_and(|name| name.ends_with(PROBE_IMAGE_SUFFIX))
-                }))
+            || path.strip_prefix(probe_directory).is_ok_and(|inside| {
+                // Below the probe package's own directory.
+                let file = inside.components().skip(1).collect::<PathBuf>();
+                !PROBE_IMAGE_FILES
+                    .iter()
+                    .any(|image| file == Path::new(image))
+            })
     };
     let (per_file, mut global): (Vec<PathBuf>, Vec<PathBuf>) = closures
         .probe
@@ -296,17 +297,17 @@ mod source_tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    const PROBES: &str = "firmware/probes/chip";
+    const PROBES: &str = "firmware/probes";
 
     fn closures() -> Closures {
         Closures {
             probe: [
                 "chips/hal/src/mac.rs",
                 "chips/hal/src/phy.rs",
-                "firmware/probes/chip/probe-radio/src/rx.rs",
-                "firmware/probes/chip/probe-radio/src/i2c.rs",
-                "firmware/probes/chip/probe-radio-elf/src/main.rs",
-                "firmware/probes/chip/probe-radio-elf/link.x",
+                "firmware/probes/chip-radio/src/rx.rs",
+                "firmware/probes/chip-radio/src/i2c.rs",
+                "firmware/probes/chip-radio/src/main.rs",
+                "firmware/probes/chip-radio/link.x",
             ]
             .map(PathBuf::from)
             .to_vec(),
@@ -332,13 +333,13 @@ mod source_tests {
     fn a_probe_file_is_a_source_only_of_the_shard_that_executes_it() {
         let rx = sources(&[
             "chips/hal/src/mac.rs",
-            "firmware/probes/chip/probe-radio/src/rx.rs",
+            "firmware/probes/chip-radio/src/rx.rs",
         ]);
         let i2c = sources(&[
             "chips/hal/src/phy.rs",
-            "firmware/probes/chip/probe-radio/src/i2c.rs",
+            "firmware/probes/chip-radio/src/i2c.rs",
         ]);
-        let edited = Path::new("firmware/probes/chip/probe-radio/src/rx.rs");
+        let edited = Path::new("firmware/probes/chip-radio/src/rx.rs");
         assert!(rx.contains(edited));
         assert!(!i2c.contains(edited));
         assert!(!rx.contains(Path::new("chips/hal/src/phy.rs")));
@@ -360,10 +361,8 @@ mod source_tests {
             sources(&["chips/hal/src/mac.rs"]),
             sources(&["chips/hal/src/phy.rs"]),
         ] {
-            assert!(shard.contains(Path::new("firmware/probes/chip/probe-radio-elf/link.x")));
-            assert!(shard.contains(Path::new(
-                "firmware/probes/chip/probe-radio-elf/src/main.rs"
-            )));
+            assert!(shard.contains(Path::new("firmware/probes/chip-radio/link.x")));
+            assert!(shard.contains(Path::new("firmware/probes/chip-radio/src/main.rs")));
             // An include_str!-ed data file of the scenario binary.
             assert!(shard.contains(Path::new("verification/chip/artifacts.toml")));
             assert!(shard.contains(Path::new("chips/hal/Cargo.toml")));
@@ -377,7 +376,7 @@ mod source_tests {
                 .into_iter()
                 .collect();
         assert!(shard.contains(Path::new("chips/hal/src/phy.rs")));
-        assert!(shard.contains(Path::new("firmware/probes/chip/probe-radio/src/i2c.rs")));
+        assert!(shard.contains(Path::new("firmware/probes/chip-radio/src/i2c.rs")));
     }
 
     #[test]

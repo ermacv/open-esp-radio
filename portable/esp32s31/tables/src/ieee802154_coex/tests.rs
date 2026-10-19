@@ -1,5 +1,5 @@
 use super::{Ieee802154CoexConfig, Ieee802154CoexScene, resolve_priorities};
-use crate::coex::{CoexEventId, CoexPti, CoexPtiTable};
+use oer_espressif_coex::{CoexEventId, CoexPti, CoexPtiTable};
 
 /// The driver's default scene levels resolve against the vendor table as
 /// the vendor MAC publishes them: idle 1, TX/RX 3, timed TX/RX 8, ACK 8.

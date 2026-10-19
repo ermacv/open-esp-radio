@@ -5,7 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Retained ESP32-S31 Rust entry points for compiled vendor verification"
+build = "build.rs"
+description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
@@ -17,7 +18,6 @@ oer-base-memory = { path = "../../../portable/base/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
-oer-esp32s31-phy-relation = { path = "../../../portable/esp32s31/phy-relation", features = ["projection"] }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
 oer-ieee80211-mac = { path = "../../../portable/ieee80211/mac" }
@@ -28,6 +28,13 @@ oer-base-time = { path = "../../../portable/base/time" }
 
 [lib]
 crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "oer-firmware-probes-esp32s31-radio"
+path = "src/main.rs"
+
+[build-dependencies]
+oer-probe-codegen = { path = "../../../host/probe/codegen" }
 
 [lints]
 workspace = true

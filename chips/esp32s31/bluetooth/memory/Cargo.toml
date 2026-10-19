@@ -8,6 +8,7 @@ repository.workspace = true
 description = "ESP32-S31 Bluetooth controller-memory layouts and ownership"
 
 [dependencies]
+oer-esp32s31-tables = { path = "../../../../portable/esp32s31/tables" }
 oer-esp32s31-hal = { path = "../../hal" }
 pin-project = "1.1.13"
 vcell = "0.1.3"
