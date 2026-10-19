@@ -14,7 +14,7 @@ oer-analysis-blobray-application = { path = "../blobray-application" }
 oer-analysis-blobray-domain = { path = "../blobray-domain" }
 oer-analysis-riscv-model = { path = "../riscv-model" }
 sha2 = "=0.10.9"
-libc = "=0.2.189"
+rustix = { version = "=1.1.4", features = ["event", "fs", "pipe"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

@@ -2,6 +2,7 @@
 //! application's `LinkerHost` port. The CLI does not link, so it does not
 //! depend on this crate.
 #![cfg(target_os = "linux")]
+#![forbid(unsafe_code)]
 mod linker;
 pub use linker::ElfLinker;
 

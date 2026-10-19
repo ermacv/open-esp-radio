@@ -12,7 +12,7 @@ serde_json = "=1.0.151"
 [target.'cfg(unix)'.dependencies]
 signal-hook = "=0.3.18"
 libc = "=0.2.189"
-rustix = { version = "=1.1.4", features = ["fs", "param"] }
+rustix = { version = "=1.1.4", features = ["fs", "param", "process"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

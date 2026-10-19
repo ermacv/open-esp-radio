@@ -2500,12 +2500,12 @@ dependencies = [
 name = "oer-analysis-blobray-linker"
 version = "0.1.0"
 dependencies = [
- "libc",
  "object 0.39.1",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-riscv-model",
  "oer-os-process",
+ "rustix",
  "sha2 0.10.9",
  "tempfile",
 ]

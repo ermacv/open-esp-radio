@@ -2,6 +2,7 @@
 //! the repository checkout a tool acts on, Git, live-process facts and the
 //! one advisory file lock ([`lock::FileLock`]).
 
+pub mod child_setup;
 pub mod context;
 pub mod git;
 pub use context::{Context, command};

@@ -8,11 +8,8 @@ use std::{
     ffi::OsString,
     io::Read,
     os::{
-        fd::AsRawFd,
-        unix::{
-            ffi::OsStringExt,
-            process::{CommandExt, ExitStatusExt},
-        },
+        fd::{AsFd, AsRawFd},
+        unix::{ffi::OsStringExt, process::ExitStatusExt},
     },
 };
 mod lld;
@@ -45,8 +42,8 @@ impl LinkerHost for ElfLinker {
         drain(
             &mut child,
             &[
-                (stdout.as_raw_fd(), LinkOutput::Elf),
-                (stderr.as_raw_fd(), LinkOutput::Stderr),
+                (stdout.as_fd(), LinkOutput::Elf),
+                (stderr.as_fd(), LinkOutput::Stderr),
             ],
             &mut version,
             control,
@@ -185,19 +182,7 @@ fn semantic_arguments(request: &LinkInvocation<'_>, command: &mut Command) -> Re
     }
     Ok(())
 }
-fn inherit(command: &mut Command, descriptors: Vec<i32>) {
-    // SAFETY: only fcntl runs after fork; descriptors are retained until spawn.
-    unsafe {
-        command.pre_exec(move || {
-            for fd in &descriptors {
-                if libc::fcntl(*fd, libc::F_SETFD, 0) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-            }
-            Ok(())
-        });
-    }
-}
+
 fn layout_script(layout: ImageLayout) -> String {
     format!(
         "MEMORY {{ CODE (rx) : ORIGIN = {:#x}, LENGTH = {:#x}\n DATA (rw) : ORIGIN = {:#x}, LENGTH = {:#x} }}\nPHDRS {{ code PT_LOAD FLAGS(5); data PT_LOAD FLAGS(6); }}\nSECTIONS {{ .text : {{ INPUT_SECTION_FLAGS (SHF_ALLOC & SHF_EXECINSTR) *(*) }} > CODE :code\n .rodata : {{ *(.rodata .rodata.* .srodata .srodata.*) }} > CODE :code\n .eh_frame : {{ *(.eh_frame) }} > CODE :code\n .data : {{ *(.data .data.* .sdata .sdata.*) }} > DATA :data\n PROVIDE(__global_pointer$ = ADDR(.data) + 0x800);\n .bss (NOLOAD) : {{ *(.bss .bss.* .sbss .sbss.*) *(COMMON) }} > DATA :data\n }}\n",
