@@ -17,13 +17,11 @@ Not affiliated with or endorsed by Espressif Systems.
 
 | Path | Contents |
 | --- | --- |
-| `portable/` | libraries that touch neither hardware nor an OS: protocols, the radio port, chip knowledge ([layout](docs/repository-layout.md)) |
-| `chips/` | libraries that access a chip's hardware: PACs, HALs, PHY, drivers, platform |
-| `host/` | libraries that need an OS: analysis, images, the stand, HIL, the vendor comparison |
+| `protocols/` | sans-IO protocols: Wi-Fi, Bluetooth LE, IEEE 802.15.4, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
+| `portable/` | generic `no_std` support: time, memory, trace, Embassy bindings, the HIL agent core |
+| `chips/` | everything Espressif: PACs, HALs, PHY, drivers, staged boot, boards, and each chip's register model, notes and vendor pins |
 | `firmware/` | the images for a chip: apps, bootstraps, HIL agents, probes, ESP-IDF peers |
-| `tools/` | the host programs: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
-| `registers/` | the reviewed register model (`cargo registers` publishes its SVD and PAC) |
-| `knowledge/` | recovered hardware facts and research notes |
+| `tools/` | the developer's machine, by domain: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
 | `docs/` | architecture, decisions, source policy, hardware errata |
 
 ## Build

@@ -1,21 +1,19 @@
-# Reviewed register descriptions and publication
+# Shared register descriptions
 
-This tree owns the hardware descriptions and reviewed policies shared by
-production PAC publication and vendor analysis. It contains source data,
-provenance and checked generated catalogs; it is not a runtime crate or a
-vendor investigation.
+Register layouts that Espressif chips share and each chip places at its own
+base addresses. The [Wi-Fi MAC register library](ieee80211/README.md) is the
+one such library; its outputs are
+[`chips/espressif/ieee80211-pac`](../ieee80211-pac/README.md) and
+[`chips/espressif/ieee80211-pac-raw`](../ieee80211-pac-raw/).
 
-The [ESP32-S31 model](esp32s31/README.md) distinguishes editable hardware
-semantics, publication policy, upstream inputs and generated outputs. Runtime
-register owners and both generated Rust outputs remain in
-[`chips/esp32s31/pac`](../../esp32s31/pac/README.md).
-The [ESP32-C5 model](esp32c5/README.md) has the same layout; it publishes
-SVD and binding indexes only, since no ESP32-C5 PAC crate exists yet.
-The [Wi-Fi MAC register library](ieee80211/README.md) owns layouts a chip
-places at its own base addresses; its outputs are
-[`chips/espressif/ieee80211-pac`](../ieee80211-pac/README.md).
+Each chip's own register model is in `chips/<chip>/registers/`: the
+[ESP32-S31 model](../../esp32s31/registers/README.md) and the
+[ESP32-C5 model](../../esp32c5/registers/README.md). A model separates
+editable hardware semantics, publication policy, upstream inputs and
+generated outputs; its PAC is `chips/<chip>/pac`. The ESP32-C5 model
+publishes SVD and binding indexes; its PAC is `chips/esp32c5/pac`.
 
-Generic loading, validation and generation remain in
-[register tool](../../../tools/registers/generate/README.md). A vendor project references the
-same reviewed model while selecting its own artifact context and comparison
-policy. Neither source generation nor binary analysis decides product readiness.
+Loading, validation and generation are the
+[register tool](../../../tools/registers/generate/README.md)
+(`cargo registers`). The vendor comparison reads the same models with its
+own artifacts and comparison policy.

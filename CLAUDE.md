@@ -26,7 +26,7 @@ without vendor radio binaries. Decisions are in
   ownership, never generated register addresses, masks, shifts or layout
   constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
-  is added to `registers/` and regenerated (`cargo registers generate`), never
+  is added to `chips/<chip>/registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
   `// SAFETY:` ([docs/unsafe.md](docs/unsafe.md)).
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
@@ -38,10 +38,10 @@ without vendor radio binaries. Decisions are in
   each with a static message. Panic lints warn; a crate moves to `deny` when
   its contract freezes ([docs/decisions.md](docs/decisions.md)).
 - **Generated files** (`*/pac-raw/src/lib.rs`, `*/pac/src/generated.rs`,
-  `registers/*/published/*`, `knowledge/*/vendor/facts/**`) are never read
-  whole or edited by hand: grep them by path, regenerate them.
-  `portable/platform/*-layout/linker/dma-window.x` is small and may be read, but it
-  is regenerated, never edited.
+  `registers/**/published/*`, `vendor/facts/**`, all below `chips/`) are
+  never read whole or edited by hand: grep them by path, regenerate them.
+  `chips/*/layout/linker/dma-window.x` is small and may be read, but it is
+  regenerated, never edited.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
@@ -60,17 +60,21 @@ without vendor radio binaries. Decisions are in
 
 The layout is [docs/repository-layout.md](docs/repository-layout.md).
 
-- **Libraries by what they touch:** `portable/` touches neither hardware nor
-  an OS (protocol cores, the HIL protocol, chip knowledge such as tables and
-  pure functions); `chips/` accesses a chip's registers (PAC, HAL, PHY,
-  drivers, platform); `host/` needs an OS. A domain may split across roots
-  (`protocols/hil/protocol`, `tools/hil/run`).
-- **Executables:** `firmware/` holds chip images, `tools/<tool>/` one host
-  program each (`main.rs` and its own modules).
-- **Dependencies:** `portable` → `portable`; `chips` → `portable`, `chips`;
-  `host` → `portable`, `host`; `firmware` → `portable`, `chips`; `tools` →
-  `portable`, `host`. No exceptions: a host tool that needs a chip fact takes
-  it from `portable/<chip>/`.
+- **Roots by what the code is about:** `protocols/` the sans-IO protocols and
+  their vocabularies (radio, Wi-Fi, Bluetooth, 802.15.4, network, HIL);
+  `portable/` generic support no protocol or chip owns (time, memory, trace,
+  Embassy bindings, the HIL agent core); `chips/` everything Espressif:
+  `espressif/` for IP shared by the chips, `<chip>/` for PAC, HAL, PHY,
+  drivers, board, layout, chip knowledge and the chip's `platform/`,
+  `registers/`, `notes/` and `vendor/` data; `firmware/` the chip images;
+  `tools/<domain>/` everything for the developer's machine, a domain's
+  libraries beside its program (`tools/hil/run`, `tools/hil/cli`).
+- **Executables** live only in `firmware/` and `tools/`; a host program is
+  `main.rs` and its own modules.
+- **Direction:** protocols and portable crates know no chip and no tool; a
+  host tool takes a chip fact from a crate that does not touch hardware and
+  never links a HAL. Only names and the unsafe boundary are checked
+  (`cargo test -p oer-test-layers`).
 - **Names:** a library is `oer-` and its path below the root
   (`protocols/ieee80211/mac` is `oer-ieee80211-mac`); an executable keeps its
   root (`oer-firmware-apps-w1`, `oer-tool-image-cli`).

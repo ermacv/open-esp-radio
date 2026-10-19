@@ -6,10 +6,10 @@ knowledge it uses.
 Included:
 
 - the radio libraries: protocols, PAC, HAL, PHY and drivers;
-- reviewed hardware descriptions (`registers/`) and the PAC generated from them;
+- reviewed hardware descriptions (`chips/<chip>/registers/`) and the PAC generated from them;
 - recovered hardware tables and calibration coefficients, including values
   recovered from vendor binaries, represented in production source;
-- recovered facts and research notes as data (`knowledge/`);
+- recovered facts and research notes as data (`chips/<chip>/notes/`, `vendor/`);
 - architecture, API contracts, operating instructions and capability limits.
 
 Excluded:
@@ -87,7 +87,7 @@ a state machine) nor verbatim data blocks (whole tables copied as they are).
 A verbatim table is replaced by values measured on the stand; where that is
 not possible, it goes to the owner as a question and is never kept silently.
 
-Work from such a source is clean-room: facts are extracted into `knowledge/`,
+Work from such a source is clean-room: facts are extracted into the chip's `notes/`,
 and code is written from the specification, those facts and measurements, not
 from the vendor code.
 
