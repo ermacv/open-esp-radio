@@ -7,7 +7,6 @@
 
 use oer_ieee80211_lower_mac::Ieee80211Duration;
 use oer_ieee80211_mac::qos::WmmAccessCategory;
-use oer_ieee80211_softmac::EdcaContention;
 use oer_ieee80211_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
 
 /// Short retry limit: `lmacConfMib[0x15]` of `lmacInit`.
@@ -113,30 +112,12 @@ pub const fn default_contention(access_category: WmmAccessCategory) -> DefaultCo
     }
 }
 
-/// The default contention of the four access categories, indexed by ACI,
-/// as the transmit planner holds it.
-pub const fn default_edca() -> [EdcaContention; 4] {
-    const fn contention(access_category: WmmAccessCategory) -> EdcaContention {
-        let defaults = default_contention(access_category);
-        EdcaContention::new(defaults.ecw_min, defaults.ecw_max)
-    }
-    [
-        contention(WmmAccessCategory::BestEffort),
-        contention(WmmAccessCategory::Background),
-        contention(WmmAccessCategory::Video),
-        contention(WmmAccessCategory::Voice),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn defaults_are_indexed_by_aci() {
-        let edca = default_edca();
-        assert_eq!(edca[WmmAccessCategory::Voice as usize].cw(), 3);
-        assert_eq!(edca[WmmAccessCategory::BestEffort as usize].cw(), 15);
         assert_eq!(
             default_contention(WmmAccessCategory::Background),
             DefaultContention {
