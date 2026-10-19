@@ -2253,26 +2253,14 @@ every field transaction.</description>
           <resetValue>0x0000002D</resetValue>
           <fields>
             <field>
-              <name>READ_MASK_COMPLEMENT_LOW</name>
-              <description>Project-assigned name. Low 24 bits of the complemented one-hot read mask of the block being read.</description>
+              <name>READ_MASK_COMPLEMENT</name>
+              <description>Project-assigned name. Complemented one-hot read mask of the block being read; the libphy publication sets the high byte to 0xFF.</description>
               <bitOffset>0</bitOffset>
-              <bitWidth>24</bitWidth>
+              <bitWidth>32</bitWidth>
               <writeConstraint>
                 <range>
                   <minimum>0</minimum>
-                  <maximum>16777215</maximum>
-                </range>
-              </writeConstraint>
-            </field>
-            <field>
-              <name>READ_MASK_COMPLEMENT_HIGH</name>
-              <description>Project-assigned name. High byte of the complemented read mask; the libphy publication sets it to 0xFF.</description>
-              <bitOffset>24</bitOffset>
-              <bitWidth>8</bitWidth>
-              <writeConstraint>
-                <range>
-                  <minimum>0</minimum>
-                  <maximum>255</maximum>
+                  <maximum>4294967295</maximum>
                 </range>
               </writeConstraint>
             </field>

@@ -65,6 +65,94 @@ register = "EVENT_STATUS"
 sources = ["esp-idf-4d59230d-ieee802154-common-ll"]
 
 [[enum-domains]]
+name = "PhyI2cReadMask"
+description = "The complemented one-hot read mask `phy_chip_i2c_readReg_org` publishes for each analog block of `phy_get_i2c_read_mask_` (CSWTCH.81); blocks without a one-hot entry publish all ones."
+
+[[enum-domains.values]]
+name = "Block61"
+value = 0xfffffeff
+description = "Read mask of analog block 0x61."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Unselected"
+value = 0xffffffff
+description = "Read mask of analog blocks 0x62 and 0x64, which have no one-hot entry."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block63"
+value = 0xffffffef
+description = "Read mask of analog block 0x63."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block65"
+value = 0xffffefff
+description = "Read mask of analog block 0x65."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block66"
+value = 0xffffff7f
+description = "Read mask of analog block 0x66."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block67"
+value = 0xfffffffb
+description = "Read mask of analog block 0x67."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block68"
+value = 0xffffffdf
+description = "Read mask of analog block 0x68."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block69"
+value = 0xfffffdff
+description = "Read mask of analog block 0x69."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6A"
+value = 0xffffffbf
+description = "Read mask of analog block 0x6a."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6B"
+value = 0xfffffff7
+description = "Read mask of analog block 0x6b."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6C"
+value = 0xffffdfff
+description = "Read mask of analog block 0x6c."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6D"
+value = 0xfffffbff
+description = "Read mask of analog block 0x6d."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6E"
+value = 0xfffff7ff
+description = "Read mask of analog block 0x6e."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains.values]]
+name = "Block6F"
+value = 0xffffbfff
+description = "Read mask of analog block 0x6f."
+sources = ["C5_BLOB_LIBPHY_PHY_I2C"]
+
+[[enum-domains]]
 name = "Ieee802154TxOnDelay"
 description = "The sole transmit-on delay image accepted by the pinned ESP32-C5 IEEE 802.15.4 MAC initialization (ieee802154_txon_delay_set)."
 
@@ -630,11 +718,13 @@ value = 0x206
 exposure = "facade"
 sources = ["C5_BLOB_LIBPHY_PHY_I2C_INIT1"]
 
-[[zero-based-field-writes]]
+[[full-register-writes]]
 name = "publish_phy_i2c_read_mask"
 peripheral = "I2C_ANA_MST"
 register = "ANA_CONF1"
-fields = ["READ_MASK_COMPLEMENT_LOW", "READ_MASK_COMPLEMENT_HIGH"]
+field = "READ_MASK_COMPLEMENT"
+domain = "PhyI2cReadMask"
+exposure = "facade"
 sources = ["C5_BLOB_LIBPHY_PHY_I2C", "ESP_IDF_4D59230D_C5_I2C_ANA_MST", "HIL_OPEN_C5_PHY_I2C_READ_PROBE_2026_09_27"]
 
 [[zero-based-field-writes]]
