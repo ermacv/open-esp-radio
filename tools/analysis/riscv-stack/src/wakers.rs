@@ -77,11 +77,39 @@ pub fn waker_resolutions(
                 continue;
             }
             let chain = dwarf.inline_chain(transfer.site)?;
-            let Some(slot) = chain.first().and_then(|function| slot(function)) else {
-                continue;
-            };
-            keep.admit(Resolutions::admission(vtables.len()), control)?;
-            let targets: BTreeSet<u32> = vtables.iter().map(|vtable| vtable[slot]).collect();
+            let mut scratch = Ledger::new(keep.memory(), control)?;
+            let mut slots = BTreeSet::new();
+            if let Some(slot) = chain.first().and_then(|function| slot(function)) {
+                scratch.add(&mut slots, slot, control)?;
+            } else {
+                // A source scope can end before the call. Use every reaching
+                // target load in the complete local graph, including merges
+                // of wake and wake_by_ref. A single unknown path leaves a hole.
+                let Some(loads) = facts.target_loads.get(&transfer.site) else {
+                    continue;
+                };
+                let mut known = true;
+                for load in loads {
+                    control.checkpoint(1)?;
+                    let chain = dwarf.inline_chain(load.site)?;
+                    let Some(slot) = chain
+                        .first()
+                        .and_then(|function| slot(function))
+                        .filter(|slot| load.offset == 4 * *slot as i32)
+                    else {
+                        known = false;
+                        break;
+                    };
+                    scratch.add(&mut slots, slot, control)?;
+                }
+                if !known || slots.is_empty() {
+                    continue;
+                }
+            }
+            keep.admit(Resolutions::admission(vtables.len() * slots.len()), control)?;
+            let targets = vtables
+                .iter()
+                .flat_map(|vtable| slots.iter().map(|slot| vtable[*slot]));
             resolutions.add(transfer.site, Fact::WakerVtables, targets);
         }
     }

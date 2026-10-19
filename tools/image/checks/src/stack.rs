@@ -195,8 +195,10 @@ impl Image {
             function_pointer_resolutions(&analysis, &types, &taken, &mut keep, &mut control)?;
         // The executor reaches each task's poll through its header.
         resolutions.extend(task_poll_resolutions(
+            &facts,
             &analysis,
             &dwarf,
+            &types,
             names
                 .iter()
                 .map(|(&address, name)| (address, name.as_str())),

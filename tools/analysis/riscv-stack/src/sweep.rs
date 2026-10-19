@@ -61,6 +61,12 @@ pub struct Transfer {
 /// The word load an unresolved target comes from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Load {
+    /// The instruction that defined the target register. It remains a
+    /// producer only while no control-flow merge or register write loses it.
+    pub site: u32,
+    /// The complete value-analysis graph proves this load is the call's
+    /// sole predecessor. This is separate from tracking its address base.
+    pub exclusive_producer: bool,
     /// The register the load's address is based on, unchanged from the load
     /// to the transfer.
     pub base: u8,
@@ -568,7 +574,9 @@ pub(crate) fn transfers(
                                 Some(Fact::TableEntry { base, .. }) => Some(base),
                                 _ => None,
                             },
-                            load: loads[base.0 as usize],
+                            load: (displacement.as_i32() == 0)
+                                .then_some(loads[base.0 as usize])
+                                .flatten(),
                         },
                         control,
                     )?,
@@ -582,6 +590,8 @@ pub(crate) fn transfers(
         let next = fact(&instruction, pc, &facts, image);
         let load = match instruction {
             Instruction::Base(Inst::Lw { offset, base, .. }) => Some(Load {
+                site: pc,
+                exclusive_producer: false,
                 base: base.0,
                 offset: offset.as_i32(),
                 address: match facts[base.0 as usize] {
