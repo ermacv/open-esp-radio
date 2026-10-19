@@ -2634,6 +2634,9 @@ dependencies = [
 [[package]]
 name = "oer-base-trace"
 version = "0.1.0"
+dependencies = [
+ "oer-base-memory",
+]
 
 [[package]]
 name = "oer-bluetooth-hci"

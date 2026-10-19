@@ -177,14 +177,11 @@ pub struct Trace {
 }
 
 #[cfg(feature = "record")]
-#[allow(unsafe_code, reason = "the image's clock is a link-time function")]
-// SAFETY: the declaration matches the definition every recording image must
-// provide (`fn() -> u64`, no preconditions), so calling it is safe; the link
-// fails without one.
-unsafe extern "Rust" {
+oer_base_memory::link_fn! {
+    declare
     /// The image's monotonic time in microseconds, which stamps records:
     /// every image that records declares it once with [`clock!`](crate::clock).
-    safe fn __oer_trace_now_micros() -> u64;
+    fn __oer_trace_now_micros() -> u64;
 }
 
 impl Trace {

@@ -26,6 +26,7 @@ mod request_slot;
 pub mod retained;
 mod rx_external_handoff;
 mod rx_handoff;
+mod static_ref;
 mod volatile;
 pub mod zeroed;
 
@@ -48,6 +49,7 @@ pub use rx_external_handoff::{
     ExternalRxRadioLease,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
+pub use static_ref::StaticRef;
 pub use volatile::read_volatile;
 
 /// Authority to prepare registers for one retained, software-owned TX chain.

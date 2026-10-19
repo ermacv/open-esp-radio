@@ -13,6 +13,9 @@ default = []
 # while the event types stay available to host decoders.
 record = []
 
+[dependencies]
+oer-base-memory = { path = "../memory" }
+
 [lints]
 workspace = true
 
