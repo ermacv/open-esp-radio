@@ -19,6 +19,7 @@
 use core::marker::PhantomData;
 
 mod affine_spsc;
+mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
 mod pinned_tx;
@@ -37,6 +38,7 @@ pub use affine_spsc::{
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError, UniqueQueueIndex,
 };
+pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 pub use pinned_tx::{

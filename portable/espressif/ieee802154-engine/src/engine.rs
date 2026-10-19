@@ -672,7 +672,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     /// have no MAC to write received frames.
     #[cfg(not(target_arch = "riscv32"))]
     pub fn model_dma_write(&mut self, address: u32, image: &[u8]) -> bool {
-        match self.buffers.frame_at(address) {
+        match self.buffers.frame_at_mut(address) {
             Some(frame) => {
                 frame.write(image);
                 true
@@ -766,7 +766,7 @@ impl<'storage> Ieee802154Engine<'storage> {
     }
 
     fn rx_buffer_clear(&mut self) {
-        for frame in &self.buffers.rx {
+        for frame in &mut self.buffers.rx {
             frame.write(&[]);
         }
         self.rx_info = [Ieee802154FrameInfo::default(); RX_BUFFER_COUNT + 1];
@@ -1012,7 +1012,7 @@ impl<'storage> Ieee802154Engine<'storage> {
             let original = self.tx_frame().read();
             let mut frame = original;
             cx.env.transmit_sfd_done(&mut frame);
-            self.tx_frame().patch(&original, &frame);
+            self.tx_frame_mut().patch(&original, &frame);
             events = events.difference(Ieee802154Event::TxSfdDone.mask());
         }
         if events.contains(Ieee802154Event::TxDone) {
@@ -1104,6 +1104,13 @@ impl<'storage> Ieee802154Engine<'storage> {
         match self.tx {
             TxSource::Frame => &self.buffers.tx,
             TxSource::EnhancedAck => &self.buffers.enhanced_ack,
+        }
+    }
+
+    fn tx_frame_mut(&mut self) -> &mut DmaFrame {
+        match self.tx {
+            TxSource::Frame => &mut self.buffers.tx,
+            TxSource::EnhancedAck => &mut self.buffers.enhanced_ack,
         }
     }
 
