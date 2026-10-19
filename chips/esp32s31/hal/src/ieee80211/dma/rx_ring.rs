@@ -1362,7 +1362,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// hardware list was exhausted. In that state every link from the
     /// software head through LAST has been consumed, even when an unused
     /// intermediate buffer retained its recycle guard. The complete vendor
-    /// `wdevProcessRxSucDataAll` likewise walks every node through its saved
+    /// `libpp[wdev.o]::wdevProcessRxSucDataAll` likewise walks every node through its saved
     /// LAST and uses only the terminal `RX_DONE` (bit 30) to delimit receive
     /// units.
     ///

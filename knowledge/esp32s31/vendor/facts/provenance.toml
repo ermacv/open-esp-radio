@@ -1,7 +1,7 @@
 # Code fingerprints of the vendor functions production `SOURCE:` blocks
 # and the register model cite, and those the verification decisions
 # exclude code of, as reviewed. Maintained by
-# `cargo verification provenance`; checked by `cargo verification
+# `cargo vendor-check provenance`; checked by `cargo vendor-check
 # check provenance`.
 schema = 1
 
@@ -28,12 +28,6 @@ artifact = "libble_app"
 member = "ble_1.o"
 symbol = "r_sym_ble_Ok6PLzc6qsIOuEzma5oM"
 code = "0d8e02d2954ac689fefb58490c84cb6c0a2f9a811fc33a66980f1cc561a4f30b"
-
-[[function]]
-artifact = "libble_app"
-member = "ble_2.o"
-symbol = "r_sym_ble_2eLkvpKuoaxT83Mj406p"
-code = "6979807a845881b89aeb1dddc729dd5988687fa8158297b720aa15e020f15702"
 
 [[function]]
 artifact = "libble_app"
@@ -374,20 +368,8 @@ code = "a7ae8c382e9a8edcb0dc8e1dfd0af27f62b5b300993ecc03dee470ebae310f93"
 [[function]]
 artifact = "libble_app"
 member = "coexAdv.c.o_1.o"
-symbol = "r_sym_coexAdv_A5DXuOYpsXb125NuYN3d"
-code = "8e7913df9a252e7a32071aac3e3bd31c400ef82d8c8bb4eecff2fd5327d64f4d"
-
-[[function]]
-artifact = "libble_app"
-member = "coexAdv.c.o_1.o"
 symbol = "r_sym_coexAdv_OyYkQW0rKTbKcPp0FJNt"
 code = "353d823f3ca101330948ca0cce6197859b7930c70b871557aa598bc4ac0e125f"
-
-[[function]]
-artifact = "libble_app"
-member = "coexAdv.c.o_1.o"
-symbol = "r_sym_coexAdv_VG7vTjgdtb9y55QZyPP0"
-code = "7ad50b500c3ccdb77b241279e942415b55682bce9b2a3a24a097bc94b3fefb44"
 
 [[function]]
 artifact = "libble_app"
@@ -404,20 +386,8 @@ code = "07b99aed26a8ade96a1f06b148bb7261a22d2f5fe461d7dd872eef92e64db9f0"
 [[function]]
 artifact = "libble_app"
 member = "coexConn.c.o_1.o"
-symbol = "r_sym_coexConn_8zwo11wSByltviHFU8eN"
-code = "8587c7694d3e90c77a839efb9d417a3a59f5ed4575c532f144371b4d15f5a1f6"
-
-[[function]]
-artifact = "libble_app"
-member = "coexConn.c.o_1.o"
 symbol = "r_sym_coexConn_BqYvJSQvD3IUJJyL5jD8"
 code = "504fb6e56a072f985ed3401feca7131153743e08b1afd41c9290e6996b7e7fb8"
-
-[[function]]
-artifact = "libble_app"
-member = "coexConn.c.o_1.o"
-symbol = "r_sym_coexConn_FwW1rUBEXrFbsmQm3dvU"
-code = "68f71f6a64e5aa61bebeba18919b028975bc57734946ce8f212801902f983e61"
 
 [[function]]
 artifact = "libble_app"
@@ -430,12 +400,6 @@ artifact = "libble_app"
 member = "coexConn.c.o_1.o"
 symbol = "r_sym_coexConn_sQLo226BUyucqr2y4gOW"
 code = "ba0ae9acdd3e14ccec48a9d8aa11ec64cecd77a2922308148255463f1f9a1a44"
-
-[[function]]
-artifact = "libble_app"
-member = "coexConn.c.o_1.o"
-symbol = "r_sym_coexConn_zaMnJdgVnBd25ru35IkB"
-code = "3e6b4ef10f98e1edaca3c2fc884b512f2775e4e74a12282089ce928e276c7777"
 
 [[function]]
 artifact = "libble_app"

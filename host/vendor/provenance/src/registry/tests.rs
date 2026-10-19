@@ -20,6 +20,16 @@ fn identifiers_skip_short_words_and_numbers() {
         "an archive member name is not a function"
     );
     assert!(words.contains("phy_rf_init"));
+    let mut words = BTreeSet::new();
+    identifiers(
+        "calls `phy_track_pll()` (phy_init.c:399, phy_init.h)",
+        &mut words,
+    );
+    assert!(
+        !words.contains("phy_init"),
+        "a source file name is not a function"
+    );
+    assert!(words.contains("phy_track_pll"));
 }
 
 #[test]

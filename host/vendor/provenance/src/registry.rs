@@ -40,6 +40,9 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
 /// Production sources scanned for `SOURCE:` blocks: Rust files and, with
 /// `#` comments, TOML files such as the platform's ROM function summaries.
 const PRODUCTION: [&str; 3] = ["portable", "chips", "firmware"];
+/// One-letter extensions of the file names a citation names: an object
+/// file, a C source or a header.
+const FILE_EXTENSIONS: [char; 3] = ['o', 'c', 'h'];
 /// Shortest identifier taken as a reference; shorter words are prose.
 const MINIMUM_NAME: usize = 4;
 
@@ -118,8 +121,9 @@ fn render_registry(entries: &[Entry]) -> String {
     text
 }
 
-/// Code-shaped identifiers of `text`. A word directly followed by `.o` is
-/// an archive member name such as `phy_init.o`, not a function.
+/// Code-shaped identifiers of `text`. A word directly followed by `.o`,
+/// `.c` or `.h` is a file name, such as the archive member `phy_init.o` or
+/// the source `phy_init.c:399`, not a function.
 fn identifiers(text: &str, out: &mut BTreeSet<String>) {
     let mut word = String::new();
     let characters: Vec<char> = text.chars().chain([' ']).collect();
@@ -128,7 +132,9 @@ fn identifiers(text: &str, out: &mut BTreeSet<String>) {
             word.push(c);
         } else {
             let member = c == '.'
-                && characters.get(index + 1) == Some(&'o')
+                && characters
+                    .get(index + 1)
+                    .is_some_and(|c| FILE_EXTENSIONS.contains(c))
                 && !characters
                     .get(index + 2)
                     .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_');
