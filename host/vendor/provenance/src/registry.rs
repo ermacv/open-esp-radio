@@ -37,9 +37,20 @@ fn registry_path(root: &Path, chip: &str) -> Result<String> {
     Ok(Project::new(root, chip)?.provenance_registry())
 }
 
-/// Production sources scanned for `SOURCE:` blocks: Rust files and, with
-/// `#` comments, TOML files such as the platform's ROM function summaries.
-const PRODUCTION: [&str; 3] = ["portable", "chips", "firmware"];
+/// Sources scanned for `SOURCE:` blocks: Rust files, with `#` comments TOML
+/// files such as the platform's ROM function summaries, and Markdown, such as
+/// the recovered facts of `knowledge/`.
+const PRODUCTION: [&str; 4] = ["portable", "chips", "firmware", "knowledge"];
+
+/// Whether `file` is generated data, which holds no recovered fact of its
+/// own: the fact files below `knowledge/<chip>/vendor/facts/`.
+fn generated(file: &str) -> bool {
+    let mut parts = file.split('/');
+    parts.next() == Some("knowledge")
+        && parts.next().is_some()
+        && parts.next() == Some("vendor")
+        && parts.next() == Some("facts")
+}
 /// One-letter extensions of the file names a citation names: an object
 /// file, a C source or a header.
 const FILE_EXTENSIONS: [char; 3] = ['o', 'c', 'h'];
@@ -349,7 +360,7 @@ fn production_words(
     } else {
         Box::new(repo.below(directory))
     };
-    for file in files {
+    for file in files.filter(|file| !generated(file)) {
         let name = file.rsplit('/').next().unwrap_or(file);
         if let Some(syntax) = Syntax::of(name) {
             let relative = Path::new(file);

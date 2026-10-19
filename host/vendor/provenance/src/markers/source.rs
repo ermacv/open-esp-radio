@@ -45,6 +45,9 @@ pub enum Syntax {
     Rust,
     /// `#` lines, such as a TOML file's.
     Hash,
+    /// Markdown prose: a block runs from its marker to the end of the
+    /// paragraph.
+    Markdown,
 }
 
 impl Syntax {
@@ -54,6 +57,8 @@ impl Syntax {
             Some(Self::Rust)
         } else if name.ends_with(".toml") {
             Some(Self::Hash)
+        } else if name.ends_with(".md") {
+            Some(Self::Markdown)
         } else {
             None
         }
@@ -65,6 +70,7 @@ impl Syntax {
         match self {
             Self::Rust => line.starts_with("//") || line.starts_with("/*") || line.starts_with('*'),
             Self::Hash => line.starts_with('#'),
+            Self::Markdown => !line.is_empty(),
         }
     }
 }
@@ -233,6 +239,17 @@ mod tests {
     }
 
     #[test]
+    fn a_markdown_block_runs_to_the_end_of_its_paragraph() {
+        let text = "Prose before.\nThe walker reads LAST. SOURCE: ROM_X\n`rom[]::f` continues\n\nnext `g`\n";
+        assert_eq!(Syntax::of("note.md"), Some(Syntax::Markdown));
+        let blocks = blocks_in(text, Syntax::Markdown).unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].line, 2);
+        assert!(blocks[0].text.contains("rom[]::f"));
+        assert!(!blocks[0].text.contains("`g`"));
+    }
+
+    #[test]
     fn hash_comments_carry_blocks_in_toml_but_not_in_rust() {
         let text = "# SOURCE(chip-a): rev0 ROM `memset`\n# never writes `sp`\nname = 1\n";
         let toml = blocks_in(text, Syntax::Hash).unwrap();
@@ -244,7 +261,7 @@ mod tests {
         assert!(!block.text.contains("unrelated"));
         assert_eq!(Syntax::of("functions.toml"), Some(Syntax::Hash));
         assert_eq!(Syntax::of("lib.rs"), Some(Syntax::Rust));
-        assert_eq!(Syntax::of("README.md"), None);
+        assert_eq!(Syntax::of("lib.c"), None);
     }
 
     #[test]
