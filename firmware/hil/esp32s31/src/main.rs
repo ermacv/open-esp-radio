@@ -52,13 +52,13 @@ mod system;
 mod transport;
 
 const DATA_SENTINEL: u32 = 0x5353_31d2;
-const INTERNAL_SRAM_START: u32 = 0x2f00_0000;
-const INTERNAL_SRAM_END: u32 = 0x2f07_afc0;
+const INTERNAL_SRAM_START: u32 = oer_esp32s31_layout::LAYOUT.sram.origin;
+const INTERNAL_SRAM_END: u32 = oer_esp32s31_layout::LAYOUT.sram.end();
 
-const PROFILE_CODE_START: u32 = 0x5001_0000;
-const PROFILE_CODE_END: u32 = 0x5100_0000;
-const PROFILE_DATA_START: u32 = 0x5000_0000;
-const PROFILE_DATA_END: u32 = 0x5100_0000;
+const PROFILE_CODE_START: u32 = oer_esp32s31_layout::LAYOUT.runtime_psram().origin;
+const PROFILE_CODE_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
+const PROFILE_DATA_START: u32 = oer_esp32s31_layout::LAYOUT.psram.origin;
+const PROFILE_DATA_END: u32 = oer_esp32s31_layout::LAYOUT.psram.end();
 const PROFILE_NAME: &core::ffi::CStr = c"psram-code-psram-data-psram-stack";
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
