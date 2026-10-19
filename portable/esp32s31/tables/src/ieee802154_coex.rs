@@ -10,7 +10,7 @@
 //! A build without software coexistence disables both fields instead
 //! (`ieee802154_ll_disable_coex`).
 
-use crate::coex::{CoexPtiTable, Ieee802154CoexLevel};
+use oer_espressif_coex::{CoexPtiTable, Ieee802154CoexLevel};
 pub use oer_espressif_ieee802154_engine::coex::{
     Ieee802154CoexPriorities, Ieee802154CoexScene, Ieee802154Coexistence,
 };

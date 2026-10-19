@@ -21,7 +21,8 @@ path = "src/main.rs"
 
 [dependencies]
 oer-os-process = { path = "../../os/process" }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-tables = { path = "../../../portable/esp32s31/tables" }
+oer-espressif-coex = { path = "../../../portable/espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
 oer-ieee802154-mac = { path = "../../../portable/ieee802154/mac" }
 oer-os-durable = { path = "../../os/durable" }

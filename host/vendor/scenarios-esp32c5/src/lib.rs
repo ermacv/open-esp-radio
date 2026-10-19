@@ -98,4 +98,4 @@ pub fn install() {
 /// root, and the probe ELF package whose path dependencies are the compiled
 /// production sources.
 pub const PROBES_DIRECTORY: &str = "firmware/probes";
-pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32c5-radio-elf";
+pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32c5-radio";

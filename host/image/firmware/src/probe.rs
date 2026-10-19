@@ -156,11 +156,11 @@ mod tests {
     fn only_a_verification_package_of_a_known_chip_is_a_probe() {
         let chips = chips();
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32s31-radio-elf", &chips).unwrap(),
+            chip_of("oer-firmware-probes-esp32s31-radio", &chips).unwrap(),
             "esp32s31"
         );
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32c5-radio-elf", &chips).unwrap(),
+            chip_of("oer-firmware-probes-esp32c5-radio", &chips).unwrap(),
             "esp32c5"
         );
         assert!(chip_of("oer-firmware-apps-w1", &chips).is_err());
@@ -176,7 +176,7 @@ mod tests {
         let command = command(
             compiler,
             root,
-            "oer-firmware-probes-esp32s31-radio-elf",
+            "oer-firmware-probes-esp32s31-radio",
             "rv",
             None,
         );

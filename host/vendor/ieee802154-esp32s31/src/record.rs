@@ -331,7 +331,7 @@ pub const COEX_PRIORITY_CALLS: [&str; 2] = [
 /// resolves against.
 #[unsafe(no_mangle)]
 extern "C" fn bt_bb_get_tx_pwr_table(length: *mut u8) -> *const i8 {
-    let levels = &oer_esp32s31_hal::phy::baseband::TX_POWER_LEVELS_DBM;
+    let levels = &oer_esp32s31_tables::tx_power::TX_POWER_LEVELS_DBM;
     if !length.is_null() {
         // SAFETY: the driver passes a pointer to its local `uint8_t length`.
         unsafe { length.write(levels.len() as u8) };

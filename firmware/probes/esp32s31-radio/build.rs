@@ -5,12 +5,13 @@ fn main() {
         .expect("Cargo supplies the package manifest directory");
     let directory = std::path::PathBuf::from(directory);
     oer_probe_codegen::build(
-        &directory.join("../esp32s31-register/src/lib.rs"),
+        &directory.join("src/lib.rs"),
         &std::env::var("CARGO_PKG_NAME").expect("Cargo package name"),
         &std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo output directory")),
     )
     .expect("valid probe declarations");
     let script = directory.join("link.x");
     println!("cargo:rerun-if-changed={}", script.display());
-    println!("cargo:rustc-link-arg=-T{}", script.display());
+    // The script places the image alone; the library is linked into it.
+    println!("cargo:rustc-link-arg-bins=-T{}", script.display());
 }

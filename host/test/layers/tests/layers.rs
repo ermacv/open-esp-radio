@@ -8,28 +8,6 @@ use std::path::{Component, Path, PathBuf};
 /// The roots that hold packages, in the layout's order.
 const ROOTS: [&str; 5] = ["portable", "chips", "host", "firmware", "tools"];
 
-/// The edges that break the root rules until the migration's second stage
-/// moves the chip knowledge they take to `portable/<chip>/`; it empties this
-/// list, and no edge joins it.
-/// The probe image packages reach their probe libraries until the second
-/// stage merges each pair into one package, as the layout's map says.
-const MIGRATION: [(&str, &str); 5] = [
-    ("host/vendor/ieee802154-esp32s31", "chips/esp32s31/hal"),
-    ("portable/esp32s31/phy-relation", "chips/esp32s31/phy"),
-    (
-        "firmware/probes/esp32c5-radio-elf",
-        "firmware/probes/esp32c5-radio",
-    ),
-    (
-        "firmware/probes/esp32s31-radio-elf",
-        "firmware/probes/esp32s31-radio",
-    ),
-    (
-        "firmware/probes/esp32s31-register-elf",
-        "firmware/probes/esp32s31-register",
-    ),
-];
-
 /// The packages outside `firmware/` that build only for a chip: a host
 /// `cargo test` does not build them.
 const CHIP_ONLY: [&str; 6] = [
@@ -79,9 +57,6 @@ fn refusal(from: &str, to: &str, kind: Kind) -> Option<String> {
     let (Some(source), Some(target)) = (root_of(from), root_of(to)) else {
         return refused("a package outside portable/, chips/, host/, firmware/ and tools/");
     };
-    if MIGRATION.contains(&(from, to)) {
-        return None;
-    }
     let allowed = match (source, target) {
         (_, Portable) => true,
         (Chips | Firmware, Chips) => true,
@@ -218,15 +193,6 @@ fn every_dependency_goes_down_its_layers() {
         })
         .collect::<Vec<_>>();
     assert!(refusals.is_empty(), "{}", refusals.join("\n"));
-    // Each migration edge still exists; an emptied one leaves the list.
-    for (from, to) in MIGRATION {
-        assert!(
-            path_dependencies(&root, from)
-                .iter()
-                .any(|(dependency, _)| dependency == to),
-            "{from} → {to} is gone: remove it from MIGRATION"
-        );
-    }
 }
 
 #[test]
@@ -259,6 +225,16 @@ fn the_rules_refuse_what_the_layout_forbids() {
         ("host/image/firmware", "firmware/apps/w1", Kind::Normal),
         ("tools/fw", "tools/registers", Kind::Normal),
         ("tools/fw", "chips/esp32s31/hal", Kind::Normal),
+        (
+            "host/vendor/ieee802154-esp32s31",
+            "chips/esp32s31/hal",
+            Kind::Normal,
+        ),
+        (
+            "portable/esp32s31/phy-relation",
+            "chips/esp32s31/phy",
+            Kind::Normal,
+        ),
         ("firmware/apps/w1", "host/image/firmware", Kind::Normal),
         ("tools/fw", "outside/base/time", Kind::Normal),
     ] {
@@ -281,14 +257,9 @@ fn the_rules_refuse_what_the_layout_forbids() {
         // Build-time code and tests run on the host.
         ("chips/esp32s31/hal", "host/test/ui-cases", Kind::HostTime),
         (
-            "firmware/probes/esp32s31-radio-elf",
+            "firmware/probes/esp32s31-radio",
             "host/probe/codegen",
             Kind::HostTime,
-        ),
-        (
-            "host/vendor/ieee802154-esp32s31",
-            "chips/esp32s31/hal",
-            Kind::Normal,
         ),
     ] {
         assert_eq!(refusal(from, to, kind), None, "{from} → {to}");

@@ -171,11 +171,11 @@ crc-offset = 40
 # with its hooks (knowledge/esp32s31/open-questions.md).
 [[probe]]
 role = "rust-artifact"
-package = "oer-firmware-probes-esp32s31-radio-elf"
+package = "oer-firmware-probes-esp32s31-radio"
 
 [[probe]]
 role = "rust-artifact:wifi-registers"
-package = "oer-firmware-probes-esp32s31-register-elf"
+package = "oer-firmware-probes-esp32s31-register"
 
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is

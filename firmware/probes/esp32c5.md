@@ -9,13 +9,14 @@ firmware depends on them.
 cargo verification probes --chip esp32c5
 ```
 
-builds `oer-firmware-probes-esp32c5-radio-elf` for
+builds `oer-firmware-probes-esp32c5-radio` for
 `riscv32imac-unknown-none-elf` with `cargo fw probe`, the only build that sets
 `cfg(oer_probe)`, copies it into `target/verification/esp32c5/` and validates
 its `.blobray.probes` catalog against the image's executable symbols.
 
-`probe-radio` declares the entries with `oer_probe_macros::probe!`;
-`probe-radio-elf` owns only the image entry point and linker layout. Each analog
+`esp32c5-radio` declares the entries with `oer_probe_macros::probe!` in its
+library; its image (`src/main.rs`, `link.x`) owns only the entry point and
+linker layout. Each analog
 I2C entry is named `open_phy_i2c_trace_<vendor function>` and takes that
 `libphy.a[phy_i2c.o]` function's integer arguments in its order:
 
