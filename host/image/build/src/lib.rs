@@ -61,7 +61,7 @@ pub struct ImageSpec {
     /// (`None`); the bootstrap's build removes every one.
     pub runtime_environment: Vec<(String, Option<String>)>,
     /// The bundle's directory; every build of an image has its own. The
-    /// compile cache is the host's one [`compile_cache`].
+    /// compile cache is `root`'s own [`compile_cache`].
     pub output: PathBuf,
     /// The checks to run; `None` runs none.
     pub checks: Option<Gates>,
@@ -109,8 +109,8 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
     }
     let profile = profile(&spec.root, &spec.chip)?;
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?;
-    let cache = compile_cache()?;
-    // The image linker the flags name is the shared one.
+    let cache = compile_cache(&spec.root);
+    // The image linker the flags name is this checkout's.
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
     let mut command = runtime_command(spec, &profile, "check", &policy)?;
     command.env("CARGO_TARGET_DIR", &cache);
@@ -179,7 +179,12 @@ fn runtime_command(
     zeroed_inputs(&mut command, profile);
     crate::compiler::configure(
         &mut command,
-        &crate::compiler::of_policy(&policy, &spec.root, &linker_cache()?, &profile.rust_target),
+        &crate::compiler::of_policy(
+            &policy,
+            &spec.root,
+            &linker_cache(&spec.root),
+            &profile.rust_target,
+        ),
     )?;
     Ok(command)
 }
@@ -193,7 +198,8 @@ pub(crate) fn zeroed_inputs(
     command.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
 }
 
-/// The host build root ([`crate::compiler::host_build_root`]).
+/// The host's directory of the image build slots
+/// ([`crate::compiler::host_build_root`]).
 pub fn host_build_root() -> Result<PathBuf> {
     // Unit tests build into the workspace's disposable target directory,
     // never into the host's shared build root.
@@ -204,20 +210,21 @@ pub fn host_build_root() -> Result<PathBuf> {
     crate::compiler::host_build_root()
 }
 
-/// The host's one firmware compile cache
+/// The firmware compile cache of the checkout at `root`
 /// ([`crate::compiler::compile_cache`]); a build holds
 /// [`crate::compiler::lock_compile_cache`] from its Cargo run until its
 /// ELF and dependency information are copied out.
-pub fn compile_cache() -> Result<PathBuf> {
-    Ok(crate::compiler::compile_cache(&host_build_root()?))
+pub fn compile_cache(root: &Path) -> PathBuf {
+    crate::compiler::compile_cache(root)
 }
 
-/// The target directory of the image linker, built once for every image
-/// build; its path is part of every image's `RUSTFLAGS`, so it must not
-/// differ between builds.
-pub(crate) fn linker_cache() -> Result<PathBuf> {
-    Ok(crate::compiler::linker_target(&host_build_root()?))
+/// The target directory of the image linker of the checkout at `root`;
+/// its path is part of every image's `RUSTFLAGS`.
+pub(crate) fn linker_cache(root: &Path) -> PathBuf {
+    crate::compiler::linker_target(root)
 }
+
+pub use crate::compiler::seed_build_cache;
 
 /// Copy `source` to `target` unless `target` already holds the same bytes, so
 /// that an unchanged file keeps the timestamp Cargo compares.

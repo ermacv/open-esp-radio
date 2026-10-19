@@ -180,6 +180,8 @@ pub fn step(checkout: &Path, owner: &str, spec: &Spec) -> Result<(String, Step)>
     let current = messages_lock(checkout).ok_or("this checkout names no HIL wire")?;
     let directory = checkout.join("target/hil/bisect").join(&commit);
     let worktree = Worktree::detached(checkout, &directory, &commit)?;
+    // A warm start: the step recompiles only what the revision changes.
+    oer_image_build::seed_build_cache(checkout, worktree.path())?;
     let step = if messages_lock(worktree.path()).as_deref() != Some(&current) {
         Ok(Step::Skip {
             why: String::from(

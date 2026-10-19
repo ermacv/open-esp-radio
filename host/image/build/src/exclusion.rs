@@ -4,7 +4,7 @@
 //!
 //! - [`Staging`]: one build owns a bundle's output; a second build of it
 //!   fails at once.
-//! - the host's one compile cache ([`crate::compile_cache`]) is used by one
+//! - a checkout's compile cache ([`crate::compile_cache`]) is used by one
 //!   build at a time, from its Cargo run until its outputs are copied out,
 //!   the next waiting for it ([`crate::compiler::lock_compile_cache`]);
 //! - [`slot`]: the host-wide limit on concurrent image compilations, one of

@@ -48,35 +48,60 @@ pub const ZEROED_INPUTS_ENV: &str = "OER_IMAGE_ZEROED_INPUTS";
 /// Names the host build root instead of the user's cache directory.
 pub const BUILD_ROOT_ENV: &str = "OER_BUILD_ROOT";
 
-/// The directory every checkout of this host builds images in: the shared
-/// compile cache, the image linker and the build slots. One per host, so each
-/// agent's build of the same sources reuses the same compiled units.
+/// The host's directory of the image build slots: the one place every
+/// checkout of this host shares, since the slots bound the host's load.
+/// Nothing compiled lives here.
 pub fn host_build_root() -> Result<PathBuf> {
     oer_os_durable::xdg::overridable(BUILD_ROOT_ENV, oer_os_durable::xdg::Base::Cache, "build")
         .map_err(|error| error.to_string().into())
 }
 
-/// The one compile cache (`CARGO_TARGET_DIR`) below `build_root` of every
-/// firmware build of the host: every image class, example and chip, and
-/// the vendor comparison probes, from every checkout and worktree.
-/// Cargo keeps the units apart by target, package path, features and flags,
-/// and the flags are the same for every build of a chip. Builds uplift
-/// their binaries to the same `<target>/firmware/<name>`, so each holds
-/// [`lock_compile_cache`] from its Cargo run until its outputs are copied
-/// out.
-pub fn compile_cache(build_root: &Path) -> PathBuf {
-    build_root.join("cargo")
+/// The firmware compile cache (`CARGO_TARGET_DIR`) of the checkout at
+/// `root`, inside its own `target/`: every image class and chip of that
+/// checkout. A cache is never shared between checkouts: Cargo decides that a
+/// path package's unit is fresh by comparing modification times, so a unit
+/// another checkout compiled from other sources of the same package would
+/// pass for this one's. Builds uplift their binaries to the same
+/// `<target>/firmware/<name>`, so each holds [`lock_compile_cache`] from its
+/// Cargo run until its outputs are copied out.
+pub fn compile_cache(root: &Path) -> PathBuf {
+    root.join("target/fw/cargo")
 }
 
-/// The target directory below `build_root` of the image linker, built once
-/// for every firmware build of the host: its path is part of every image's
-/// and probe's Rust flags, so it must not differ between builds.
-pub fn linker_target(build_root: &Path) -> PathBuf {
-    build_root.join("image-linker")
+/// The target directory of the image linker of the checkout at `root`: its
+/// path is part of every image's Rust flags, so it does not differ between
+/// that checkout's builds.
+pub fn linker_target(root: &Path) -> PathBuf {
+    root.join("target/fw/image-linker")
 }
 
-/// The lock of the shared compile cache `cache`: one build at a time, the
-/// next waiting for it.
+/// Start the compile cache and image linker of the checkout at `to` from a
+/// copy of those of `from`, cheaply where the file system can share the
+/// blocks (`cp -a --reflink=auto`). A new worktree's first build then
+/// recompiles only what its sources change: Cargo rebuilds a path package
+/// whose sources are newer than its unit, and reuses the units of registry
+/// and git dependencies. Nothing to copy is no error.
+pub fn seed_build_cache(from: &Path, to: &Path) -> Result<()> {
+    let source = from.join("target/fw");
+    if !source.is_dir() {
+        return Ok(());
+    }
+    let target = to.join("target");
+    std::fs::create_dir_all(&target)?;
+    if target.join("fw").exists() {
+        return Err(format!("{} already has a build cache", to.display()).into());
+    }
+    oer_os_process::run(
+        oer_os_process::command("cp")
+            .args(["-a", "--reflink=auto"])
+            .arg(&source)
+            .arg(target.join("fw")),
+    )
+    .map_err(|error| format!("seeding the build cache of {}: {error}", to.display()).into())
+}
+
+/// The lock of the compile cache `cache`: one build at a time, the next
+/// waiting for it.
 pub fn lock_compile_cache(cache: &Path) -> Result<oer_os_process::lock::FileLock> {
     oer_os_process::lock::FileLock::wait(
         &cache.join("build.lock"),
@@ -292,5 +317,73 @@ mod tests {
             let output = oer_os_process::command(&linker).output().unwrap();
             assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
         }
+    }
+
+    /// A checkout holding package `shared` whose binary prints `marker`,
+    /// its sources last modified at `modified`.
+    fn checkout_with(marker: &str, modified: std::time::SystemTime) -> tempfile::TempDir {
+        let tree = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tree.path().join("src")).unwrap();
+        std::fs::write(
+            tree.path().join("Cargo.toml"),
+            "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[workspace]\n",
+        )
+        .unwrap();
+        let main = tree.path().join("src/main.rs");
+        std::fs::write(&main, format!("fn main() {{ print!(\"{marker}\"); }}\n")).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&main)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        tree
+    }
+
+    #[test]
+    fn two_checkouts_of_one_package_never_share_a_unit() {
+        // The second checkout's sources are older than the first one's
+        // build: a cache shared by both would pass the first's unit for the
+        // second's as fresh.
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        let first = checkout_with("first", std::time::SystemTime::now());
+        let second = checkout_with("second", old);
+        for (checkout, marker) in [(&first, "first"), (&second, "second")] {
+            let cache = compile_cache(checkout.path());
+            assert!(cache.starts_with(checkout.path()));
+            oer_os_process::run(
+                oer_os_process::command(
+                    std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
+                )
+                .current_dir(checkout.path())
+                .args(["build", "--quiet"])
+                .env("CARGO_TARGET_DIR", &cache),
+            )
+            .unwrap();
+            let output = oer_os_process::command(cache.join("debug/shared"))
+                .output()
+                .unwrap();
+            assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
+        }
+        assert_ne!(compile_cache(first.path()), compile_cache(second.path()));
+        assert_ne!(linker_target(first.path()), linker_target(second.path()));
+    }
+
+    #[test]
+    fn a_new_worktree_starts_from_a_copy_of_the_warm_cache() {
+        let warm = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(compile_cache(warm.path())).unwrap();
+        std::fs::write(compile_cache(warm.path()).join("unit"), "compiled").unwrap();
+        let fresh = tempfile::tempdir().unwrap();
+        seed_build_cache(warm.path(), fresh.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(compile_cache(fresh.path()).join("unit")).unwrap(),
+            "compiled"
+        );
+        // A worktree that already has a cache keeps it.
+        assert!(seed_build_cache(warm.path(), fresh.path()).is_err());
+        // A checkout without a cache seeds nothing.
+        let empty = tempfile::tempdir().unwrap();
+        seed_build_cache(empty.path(), tempfile::tempdir().unwrap().path()).unwrap();
     }
 }

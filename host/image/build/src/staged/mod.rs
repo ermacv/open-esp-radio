@@ -36,12 +36,12 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Re
     let mut bundle = ImageBundle::new(&output, profile, flash);
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
-    let cache = crate::compile_cache()?;
+    let cache = crate::compile_cache(root);
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
     crate::test_support::refuse(root, &spec.application.package, target)?;
 
-    // Every image uplifts into the same `<target>/firmware` of the shared
-    // cache: each build holds it until its ELF and dependency information
+    // Every image uplifts into the same `<target>/firmware` of the
+    // checkout's cache: each build holds it until its ELF and dependency information
     // are copied out.
     let release = cache.join(target).join(crate::FIRMWARE_PROFILE);
     let runtime_elf = {
@@ -108,7 +108,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Re
     crate::zeroed_inputs(&mut bootstrap, profile);
     crate::compiler::configure(
         &mut bootstrap,
-        &crate::compiler::of_policy(&policy, root, &crate::linker_cache()?, target),
+        &crate::compiler::of_policy(&policy, root, &crate::linker_cache(root), target),
     )?;
     log.run(&mut bootstrap, "build the Flash/SRAM bootstrap")?;
     let bootstrap_elf = crate::snapshot(
