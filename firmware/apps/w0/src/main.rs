@@ -33,7 +33,8 @@ use oer_esp32s31_ieee80211_driver::startup::{
     start_esp32s31_radio,
 };
 use oer_esp32s31_ieee80211_mac::init::{
-    MacDelayEntropy, MacSlowClockCalibration, MacSlowClockCalibrationSource,
+    MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
+    MacSlowClockCalibrationSource,
 };
 use oer_esp32s31_phy::{
     HARDWARE_EDGE_LIMIT, NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig,
@@ -228,7 +229,7 @@ async fn run(
     let channel = WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).map_err(|_| "channel")?;
     let config = RadioStartConfig::new(
         WifiColdStartConfig::new(channel),
-        WifiMacStartConfig::new(u32::from(HARDWARE_EDGE_LIMIT), station, access_point),
+        WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
     );
     let (cell, started) = start_esp32s31_radio(cell, wifi, Platform::default(), config).await;
     let stopped = match started {

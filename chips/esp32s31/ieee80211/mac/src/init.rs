@@ -7,6 +7,7 @@
 //! the cold ring.
 
 use oer_esp32s31_hal::types::MacDelaySlot;
+use oer_time::{Duration, Timer};
 
 pub use crate::{
     cold::{
@@ -15,7 +16,10 @@ pub use crate::{
         crypto::MacColdCryptoHardware,
         enable::MacColdEnableHardware,
         hal_tail::{MacColdHalTailHardware, MacSlowClockCalibration},
-        handshake::{MacColdHandshakeHardware, MacColdStartError, MacColdStartOutcome},
+        handshake::{
+            MAC_COLD_HANDSHAKE_DEADLINE, MAC_COLD_HANDSHAKE_RESAMPLE, MacColdHandshakeHardware,
+            MacColdStartError, MacColdStartOutcome, run_cold_handshake,
+        },
         he::{
             MacColdHeHardware, MacTxPowerSource, query_tx_power_table,
             run_tx_power_diagnostic_queries,
@@ -127,7 +131,8 @@ pub trait MacSlowClockCalibrationSource {
 /// Inputs for the role-neutral Wi-Fi MAC cold transition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacColdStartConfig {
-    pub handshake_sample_limit: u32,
+    /// How long the ready edge may stay unset, counted from the request.
+    pub handshake_deadline: Duration,
     pub station_address: [u8; 6],
     pub access_point_address: [u8; 6],
 }
@@ -142,7 +147,7 @@ pub struct MacColdStartConfig {
 /// This function owns no descriptor storage, enables neither the RX walker nor
 /// a CPU interrupt route, and does not select a station/AP/monitor receive
 /// policy. A role builder must apply that policy before publishing its ring.
-pub fn initialize_wifi_mac<
+pub async fn initialize_wifi_mac<
     M: MacColdAntennaHardware
         + MacColdCoexHardware
         + MacColdCryptoHardware
@@ -158,9 +163,11 @@ pub fn initialize_wifi_mac<
         + MacLowRateHardware
         + MacResetHardware,
     P: MacCoexPtiSource + MacDelayEntropy + MacSlowClockCalibrationSource + MacTxPowerSource,
+    T: Timer,
 >(
     platform: &mut P,
     mmio: &mut M,
+    timer: &T,
     config: MacColdStartConfig,
 ) -> Result<MacColdStartOutcome, MacColdStartError> {
     // Match the vendor lifecycle's `wifi_reset_mac()` after
@@ -172,7 +179,7 @@ pub fn initialize_wifi_mac<
     mmio.set_wifi_mac_reset(true);
     mmio.set_wifi_mac_reset(false);
 
-    let outcome = mmio.begin_cold_handshake(config.handshake_sample_limit)?;
+    let outcome = run_cold_handshake(mmio, timer, config.handshake_deadline).await?;
 
     // Direct prefix, all three exact on-chip HE callback paths, then suffix.
     mmio.initialize_txrx_prefix();

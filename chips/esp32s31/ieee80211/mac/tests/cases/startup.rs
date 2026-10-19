@@ -1,4 +1,5 @@
 use crate::{support::*, *};
+use oer_time::Clock;
 
 #[test]
 fn mac_delay_slot_reproduces_vendor_modulo_eleven() {
@@ -21,24 +22,26 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
     let clock_trace = Rc::new(RefCell::new(Vec::new()));
     let mut platform = MockPlatform::default();
     let mut mmio = MockMmio {
-        cold_handshake_result: Some(Ok(MacColdStartOutcome {
-            handshake_samples: 0,
-            handshake_observations: 1,
-        })),
+        cold_handshake_ready_after: Some(0),
         cold_start_clock_trace: Some(clock_trace.clone()),
         ..MockMmio::default()
     };
 
     let station = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
     let access_point = [0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0xee];
-    let outcome = initialize_wifi_mac(
-        &mut platform,
-        &mut mmio,
-        MacColdStartConfig {
-            handshake_sample_limit: 4,
-            station_address: station,
-            access_point_address: access_point,
-        },
+    let clock = oer_time_virtual::VirtualClock::default();
+    let outcome = run(
+        &clock,
+        initialize_wifi_mac(
+            &mut platform,
+            &mut mmio,
+            &clock,
+            MacColdStartConfig {
+                handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
+                station_address: station,
+                access_point_address: access_point,
+            },
+        ),
     )
     .unwrap();
     assert_ne!(
@@ -57,15 +60,17 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert_eq!(
-        &mmio.operations()[..3],
+        &mmio.operations()[..5],
         [
             Operation::SetWifiMacReset(true),
             Operation::SetWifiMacReset(false),
-            Operation::BeginColdHandshake(4),
+            Operation::RequestColdHandshake,
+            Operation::SampleColdHandshake,
+            Operation::FinishColdHandshake,
         ]
     );
     assert_eq!(
-        &mmio.operations()[3..9],
+        &mmio.operations()[5..11],
         [
             Operation::InitializeTxRxPrefix,
             Operation::InitializeTxRxCallbacks(MacDelaySlot::from_random(7)),
@@ -76,11 +81,11 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[9],
+        mmio.operations()[11],
         Operation::InitializeTxPower(_)
     ));
     assert_eq!(
-        &mmio.operations()[10..16],
+        &mmio.operations()[12..18],
         [
             Operation::InitializeHeSuffix,
             Operation::InitializeLastRxBufferTable,
@@ -94,11 +99,11 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[16],
+        mmio.operations()[18],
         Operation::InitializeColdCoex(_)
     ));
     assert_eq!(
-        &mmio.operations()[17..],
+        &mmio.operations()[19..],
         [
             Operation::EnableMacInterrupts(MacInterruptMask::COLD_RX),
             Operation::ProgramInterfaceAddress(MacInterface::Station, station),
@@ -134,39 +139,75 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
 }
 
 #[test]
-fn cold_mac_handshake_timeout_stops_mac_initialization() {
+fn cold_mac_handshake_resamples_every_ten_microseconds_until_ready() {
     let mut platform = MockPlatform::default();
     let mut mmio = MockMmio {
-        cold_handshake_result: Some(Err(MacColdStartError::HandshakeTimedOut {
-            samples: 2,
-            sample_limit: 2,
-        })),
+        cold_handshake_ready_after: Some(2),
         ..MockMmio::default()
     };
+    let clock = oer_time_virtual::VirtualClock::default();
+    let start = clock.now();
 
-    assert_eq!(
+    let outcome = run(
+        &clock,
         initialize_wifi_mac(
             &mut platform,
             &mut mmio,
+            &clock,
             MacColdStartConfig {
-                handshake_sample_limit: 2,
+                handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
                 station_address: [0; 6],
                 access_point_address: [0; 6],
             },
         ),
-        Err(MacColdStartError::HandshakeTimedOut {
-            samples: 2,
-            sample_limit: 2,
-        })
-    );
+    )
+    .unwrap();
+
+    assert_eq!(outcome.handshake_samples, 2);
+    assert_eq!(outcome.handshake_observations, 3);
     assert_eq!(
-        mmio.operations(),
-        [
-            Operation::SetWifiMacReset(true),
-            Operation::SetWifiMacReset(false),
-            Operation::BeginColdHandshake(2),
-        ]
+        clock.now().saturating_duration_since(start),
+        oer_time::Duration::from_micros(20)
     );
+}
+
+#[test]
+fn cold_mac_handshake_timeout_stops_mac_initialization() {
+    let mut platform = MockPlatform::default();
+    let mut mmio = MockMmio::default();
+    let clock = oer_time_virtual::VirtualClock::default();
+    let deadline = oer_time::Duration::from_micros(30);
+
+    let error = run(
+        &clock,
+        initialize_wifi_mac(
+            &mut platform,
+            &mut mmio,
+            &clock,
+            MacColdStartConfig {
+                handshake_deadline: deadline,
+                station_address: [0; 6],
+                access_point_address: [0; 6],
+            },
+        ),
+    )
+    .unwrap_err();
+
+    // Samples at 0, 10, 20 and 30 µs; the one at the deadline ends it.
+    assert_eq!(
+        error,
+        MacColdStartError::HandshakeTimedOut {
+            samples: 4,
+            deadline,
+        }
+    );
+    let mut expected = vec![
+        Operation::SetWifiMacReset(true),
+        Operation::SetWifiMacReset(false),
+        Operation::RequestColdHandshake,
+    ];
+    expected.extend([Operation::SampleColdHandshake; 4]);
+    assert_eq!(mmio.operations(), expected);
 }
 
 #[test]

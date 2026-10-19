@@ -11,7 +11,9 @@ use oer_esp32s31_hal::ieee80211::dma::{
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Operation {
-    BeginColdHandshake(u32),
+    RequestColdHandshake,
+    SampleColdHandshake,
+    FinishColdHandshake,
     InitializeMacAntenna,
     InitializeHalTail(MacInterruptMask, MacSlowClockCalibration),
     InitializeColdCoex(MacColdCoexPti),
@@ -50,7 +52,9 @@ pub(super) type ColdStartClockTrace = Rc<RefCell<Vec<ColdStartClockEdge>>>;
 #[derive(Default)]
 pub(super) struct MockMmio {
     pub(super) operations: Vec<Operation>,
-    pub(super) cold_handshake_result: Option<Result<MacColdStartOutcome, MacColdStartError>>,
+    /// Not-ready samples before the ready edge; `None` never becomes ready.
+    pub(super) cold_handshake_ready_after: Option<u32>,
+    pub(super) cold_handshake_samples: u32,
     pub(super) cold_start_clock_trace: Option<ColdStartClockTrace>,
     pub(super) tx_completions: [Option<MacTxCompletionObservation>; 4],
     pub(super) tx_timeout_pending: [bool; 4],
@@ -341,17 +345,39 @@ impl MacInterfaceAddressHardware for MockMmio {
 }
 
 impl MacColdHandshakeHardware for MockMmio {
-    fn begin_cold_handshake(
-        &mut self,
-        sample_limit: u32,
-    ) -> Result<MacColdStartOutcome, MacColdStartError> {
-        self.operations
-            .push(Operation::BeginColdHandshake(sample_limit));
-        self.cold_handshake_result
-            .unwrap_or(Err(MacColdStartError::HandshakeTimedOut {
-                samples: sample_limit,
-                sample_limit,
-            }))
+    fn request_cold_handshake(&mut self) {
+        self.operations.push(Operation::RequestColdHandshake);
+    }
+
+    fn sample_cold_handshake_ready(&mut self) -> bool {
+        self.operations.push(Operation::SampleColdHandshake);
+        let sample = self.cold_handshake_samples;
+        self.cold_handshake_samples += 1;
+        self.cold_handshake_ready_after
+            .is_some_and(|ready_after| sample >= ready_after)
+    }
+
+    fn finish_cold_handshake(&mut self) {
+        self.operations.push(Operation::FinishColdHandshake);
+    }
+}
+
+/// Drive `future` on `clock`, advancing it to the next deadline whenever the
+/// future waits.
+pub(super) fn run<F: core::future::Future>(
+    clock: &oer_time_virtual::VirtualClock,
+    future: F,
+) -> F::Output {
+    let mut future = core::pin::pin!(future);
+    loop {
+        if let core::task::Poll::Ready(output) = future.as_mut().poll(
+            &mut core::task::Context::from_waker(core::task::Waker::noop()),
+        ) {
+            return output;
+        }
+        clock
+            .advance_to_next_deadline()
+            .expect("a pending future waits on the clock");
     }
 }
 

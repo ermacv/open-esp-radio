@@ -25,6 +25,7 @@ use oer_esp32s31_radio_client::{
 };
 use oer_ieee80211_mac::channel::WifiChannel;
 use oer_ieee80211_softmac::WifiMacAddress;
+use oer_time::Duration;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
 
@@ -61,26 +62,26 @@ impl WifiColdStartConfig {
 /// Role-neutral inputs for the common Wi-Fi MAC transition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiMacStartConfig {
-    handshake_sample_limit: u32,
+    handshake_deadline: Duration,
     station_address: WifiMacAddress,
     access_point_address: WifiMacAddress,
 }
 
 impl WifiMacStartConfig {
     pub const fn new(
-        handshake_sample_limit: u32,
+        handshake_deadline: Duration,
         station_address: WifiMacAddress,
         access_point_address: WifiMacAddress,
     ) -> Self {
         Self {
-            handshake_sample_limit,
+            handshake_deadline,
             station_address,
             access_point_address,
         }
     }
 
-    pub const fn handshake_sample_limit(self) -> u32 {
-        self.handshake_sample_limit
+    pub const fn handshake_deadline(self) -> Duration {
+        self.handshake_deadline
     }
 
     pub const fn station_address(self) -> WifiMacAddress {
@@ -183,7 +184,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         channel: config.wifi.initial_channel,
         maximum_tx_power_quarter_dbm: config.wifi.maximum_tx_power_quarter_dbm,
         mac: MacColdStartConfig {
-            handshake_sample_limit: config.mac.handshake_sample_limit,
+            handshake_deadline: config.mac.handshake_deadline,
             station_address: config.mac.station_address.bytes(),
             access_point_address: config.mac.access_point_address.bytes(),
         },

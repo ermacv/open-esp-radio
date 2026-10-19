@@ -474,7 +474,7 @@ where
         };
         let mac_outcome = {
             let mut hal = wifi.cold_mac_hal(&mut self.radio);
-            initialize_wifi_mac(&mut sources, &mut hal, mac)
+            initialize_wifi_mac(&mut sources, &mut hal, &self.timer, mac).await
         };
         match mac_outcome {
             Ok(mac) => {

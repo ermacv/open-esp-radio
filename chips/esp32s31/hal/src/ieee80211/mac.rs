@@ -43,90 +43,6 @@ pub struct MacInterfaceIdentity {
     pub bssid: [u8; 6],
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacColdHandshakeOutcome {
-    /// Number of not-ready observations before the ready edge.
-    pub samples: u32,
-    /// Total hardware observations, including the final ready edge.
-    pub observations: u32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacColdHandshakeTimeout {
-    /// Number of not-ready observations consumed from the finite budget.
-    pub samples: u32,
-    /// Caller-provided finite not-ready observation limit.
-    pub sample_limit: u32,
-}
-
-trait MacColdHandshakeBackend {
-    fn request_cold_start(&mut self);
-    fn sample_cold_start_ready(&mut self) -> bool;
-    fn mask_mac_interrupts(&mut self);
-    fn clear_mac_interrupts(&mut self);
-}
-
-impl MacColdHandshakeBackend for ColdRegisters<'_> {
-    fn request_cold_start(&mut self) {
-        self.parts().0.request_mac_cold_start();
-    }
-
-    fn sample_cold_start_ready(&mut self) -> bool {
-        self.parts().0.sample_mac_cold_start_ready()
-    }
-
-    fn mask_mac_interrupts(&mut self) {
-        self.parts().2.mask_all_mac_interrupts();
-    }
-
-    fn clear_mac_interrupts(&mut self) {
-        self.parts().2.clear_all_mac_interrupts();
-    }
-}
-
-fn execute_cold_mac_handshake(
-    backend: &mut impl MacColdHandshakeBackend,
-    sample_limit: u32,
-) -> Result<MacColdHandshakeOutcome, MacColdHandshakeTimeout> {
-    backend.request_cold_start();
-
-    let mut samples = 0;
-    loop {
-        if backend.sample_cold_start_ready() {
-            break;
-        }
-        samples += 1;
-        if samples >= sample_limit {
-            return Err(MacColdHandshakeTimeout {
-                samples,
-                sample_limit,
-            });
-        }
-    }
-
-    backend.mask_mac_interrupts();
-    backend.clear_mac_interrupts();
-    Ok(MacColdHandshakeOutcome {
-        samples,
-        observations: samples + 1,
-    })
-}
-
-/// Execute the finite cold-MAC handshake and interrupt cleanup sequence.
-///
-/// SOURCE: complete pinned `libpp[hal_mac.o]::hal_init`, offsets
-/// `0x00..0x3a`. The vendor waits forever; this HAL operation owns the finite
-/// sample limit, polling, and multi-register cleanup order. One initial sample
-/// always occurs. Each not-ready observation increments the sample count, then
-/// reaches timeout when that count is greater than or equal to `sample_limit`;
-/// a zero limit therefore still performs exactly one observation.
-fn begin_cold_mac_handshake(
-    registers: &mut ColdRegisters<'_>,
-    sample_limit: u32,
-) -> Result<MacColdHandshakeOutcome, MacColdHandshakeTimeout> {
-    execute_cold_mac_handshake(registers, sample_limit)
-}
-
 /// The owners one cold MAC transaction borrows: a clocked Wi-Fi client's MAC
 /// and interrupt setup, with the shared radio owner borrowed from the arbiter
 /// lease.
@@ -226,11 +142,26 @@ impl<'registers> WifiMacColdHal<'registers> {
         mac.initialize_mac_hal_tail(rx_dma, interrupts, event_mask, slow_clock_calibration)
     }
 
-    pub fn begin_handshake(
-        &mut self,
-        sample_limit: u32,
-    ) -> Result<MacColdHandshakeOutcome, MacColdHandshakeTimeout> {
-        begin_cold_mac_handshake(&mut self.registers, sample_limit)
+    /// Request the cold MAC start.
+    ///
+    /// SOURCE: complete pinned `libpp[hal_mac.o]::hal_init`, offsets
+    /// `0x00..0x3a`. The vendor then waits forever for the ready edge; the
+    /// caller samples it with [`Self::sample_handshake_ready`] under its own
+    /// deadline and ends the handshake with [`Self::finish_handshake`].
+    pub fn request_handshake(&mut self) {
+        self.registers.parts().0.request_mac_cold_start();
+    }
+
+    /// Sample whether the cold MAC start is ready.
+    pub fn sample_handshake_ready(&mut self) -> bool {
+        self.registers.parts().0.sample_mac_cold_start_ready()
+    }
+
+    /// Mask and clear the MAC interrupts once the handshake saw the ready
+    /// edge.
+    pub fn finish_handshake(&mut self) {
+        self.registers.parts().2.mask_all_mac_interrupts();
+        self.registers.parts().2.clear_all_mac_interrupts();
     }
 
     pub fn initialize_he_prefix(&mut self) {
@@ -826,6 +757,3 @@ impl<'registers> WifiMacHal<'registers> {
             .set_he_trigger_based_tid_enabled(tid, enabled);
     }
 }
-
-#[cfg(test)]
-mod tests;
