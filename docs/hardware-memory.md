@@ -15,7 +15,7 @@ describes how the register model, the PAC and the HAL describe them.
 | Wi-Fi RX control prefix (metadata the MAC writes at the start of each received buffer: RSSI, PHY info, local timestamp) | hardware writes, CPU reads after completion |
 | Wi-Fi TX descriptor words (flags, security, HE control, rate context) | CPU writes, hardware reads at transmission |
 | A-MPDU internal and external descriptors | CPU builds, hardware walks |
-| BLE controller exchange memory (packet headers, scheduler lists, CTE ring) | CPU and controller both, by protocol |
+| BLE controller exchange memory (buffer headers, packet prefixes, scheduler items, link states, the device table, the direction-finding workspace) | CPU and controller both, by protocol |
 | IEEE 802.15.4 frame buffers (length byte, PSDU) | CPU and engine |
 
 The Wi-Fi DMA descriptor and the RX control prefix are generated from the
@@ -205,6 +205,3 @@ the loan is made, with the first such buffer.
   shared model when a second chip's Wi-Fi DMA is described.
 - **SVD and the binding index.** A layout has no address, so it does not go
   into the SVD; whether vendor analysis needs it in the binding index is open.
-- **Phase per field.** `writer` names one writer. Fields written by the CPU in
-  one phase and by the hardware in another (none known yet) would need a
-  phase list; added only when one appears.
