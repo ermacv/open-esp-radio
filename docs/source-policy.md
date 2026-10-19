@@ -76,9 +76,9 @@ project may be cited for observed behaviour that a specification also fixes.
 
 ### Sources without a license
 
-Exception (owner, 2026-10-18): the Bluetooth LE code carried from the
-predecessor keeps what it took from `esp32s31-bt-lib` as it is; see
-[decisions](decisions.md).
+Exception: the Bluetooth LE hardware engine (the S31 driver, controller
+memory, the PAC's Bluetooth initialization and the HAL's scheduler locks)
+keeps what it takes from `esp32s31-bt-lib` as it is.
 
 From a source that has no license, such as `esp32s31-bt-lib`, the repository
 records only facts: values, layouts, addresses, order of operations and names.
