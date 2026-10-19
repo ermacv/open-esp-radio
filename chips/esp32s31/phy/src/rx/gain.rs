@@ -818,6 +818,7 @@ impl PhyRxGainInitTransition {
     #[inline(never)]
     pub(crate) fn execute_publish_target_direct<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
+        clock: &dyn oer_time::Clock,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
     ) -> Result<bool, crate::target_executor::PhyTargetPortError> {
         let parameters = match &self.step {
@@ -829,7 +830,7 @@ impl PhyRxGainInitTransition {
             oer_esp32s31_hal::phy::pbus::configure_debug_mode(registers);
             for index in 0..PBUS_RX_ON_COUNT {
                 let transaction = pbus_rx_on(index, parameters.parameter_002);
-                if !crate::target_executor::force_pbus_direct(registers, transaction) {
+                if !crate::target_executor::force_pbus_direct(clock, registers, transaction) {
                     failure = Some(PhyRxGainPublishFailure::PbusTimedOut { bank, transaction });
                     break;
                 }
@@ -846,7 +847,7 @@ impl PhyRxGainInitTransition {
                 oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, false);
                 for index in 0..PBUS_RX_ON_COUNT {
                     let transaction = pbus_rx_on(index, parameters.parameter_002);
-                    if !crate::target_executor::force_pbus_direct(registers, transaction) {
+                    if !crate::target_executor::force_pbus_direct(clock, registers, transaction) {
                         failure = Some(PhyRxGainPublishFailure::PbusTimedOut { bank, transaction });
                         break;
                     }

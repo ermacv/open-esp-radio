@@ -159,6 +159,7 @@ impl PhyTxDcPwdetSearchTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn execute_target_direct(
         &mut self,
+        clock: &dyn oer_time::Clock,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
@@ -178,7 +179,7 @@ impl PhyTxDcPwdetSearchTransition {
             match self.step {
                 SearchStep::ProgramDco { transaction, kind } => {
                     let command = self.dco_transaction(transaction);
-                    if !force_pbus_direct(registers, command) {
+                    if !force_pbus_direct(clock, registers, command) {
                         return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
                     }
                     self.step = if transaction == 3 {
@@ -206,6 +207,7 @@ impl PhyTxDcPwdetSearchTransition {
                         let mut observations = 0_u16;
                         let ready =
                             crate::executor::wait::poll::bounded::<core::convert::Infallible>(
+                                clock,
                                 || {
                                     let ready = oer_esp32s31_hal::phy::power_detector::sample_ready(
                                         registers,
@@ -246,7 +248,7 @@ impl PhyTxDcPwdetSearchTransition {
                 }
                 SearchStep::CommitDco { transaction } => {
                     let command = self.dco_transaction(transaction);
-                    if !force_pbus_direct(registers, command) {
+                    if !force_pbus_direct(clock, registers, command) {
                         return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
                     }
                     self.step = if transaction == 3 {
@@ -804,6 +806,7 @@ impl PhyTxDcPwdetTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn execute_target_direct(
         &mut self,
+        clock: &dyn oer_time::Clock,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
@@ -826,7 +829,7 @@ impl PhyTxDcPwdetTransition {
         let mut terminal = RootTerminal::Complete;
         for index in 0..5 {
             let transaction = tx_off(index);
-            if !force_pbus_direct(registers, transaction) {
+            if !force_pbus_direct(clock, registers, transaction) {
                 terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                 break;
             }
@@ -834,7 +837,7 @@ impl PhyTxDcPwdetTransition {
         if terminal == RootTerminal::Complete {
             for index in 0..3 {
                 let transaction = rx_off(index);
-                if !force_pbus_direct(registers, transaction) {
+                if !force_pbus_direct(clock, registers, transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -845,7 +848,7 @@ impl PhyTxDcPwdetTransition {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
             for index in 0..11 {
                 let transaction = tx_on(index);
-                if !force_pbus_direct(registers, transaction) {
+                if !force_pbus_direct(clock, registers, transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -861,7 +864,7 @@ impl PhyTxDcPwdetTransition {
                 PhyPbusForceTest::new(1, 1, value | 2),
                 PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
             ] {
-                if !force_pbus_direct(registers, transaction) {
+                if !force_pbus_direct(clock, registers, transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -874,7 +877,7 @@ impl PhyTxDcPwdetTransition {
                     PhyPbusForceTest::new(5, 1, if row == 2 { 0x1e7 } else { 0x1ef }),
                     PhyPbusForceTest::new(1, 2, TX_BB_GAIN[row as usize]),
                 ] {
-                    if !force_pbus_direct(registers, transaction) {
+                    if !force_pbus_direct(clock, registers, transaction) {
                         terminal =
                             RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                         break;
@@ -888,7 +891,12 @@ impl PhyTxDcPwdetTransition {
                     initial: self.dco[row as usize],
                     clear_tone_after_ready: self.parameters.clear_tone_after_ready,
                 });
-                match search.execute_target_direct(registers, &mut settle, &mut observe_ready)? {
+                match search.execute_target_direct(
+                    clock,
+                    registers,
+                    &mut settle,
+                    &mut observe_ready,
+                )? {
                     Ok(outcome) => {
                         self.dco[row as usize] = outcome.dco;
                         self.total_measurements = self
@@ -907,10 +915,10 @@ impl PhyTxDcPwdetTransition {
         // failure. Its PBus writes are best effort, but the register restore
         // remains a hard epoch invariant.
         for index in 0..4 {
-            let _ = force_pbus_direct(registers, default_dco(index));
+            let _ = force_pbus_direct(clock, registers, default_dco(index));
         }
         for index in 0..5 {
-            let _ = force_pbus_direct(registers, tx_off(index));
+            let _ = force_pbus_direct(clock, registers, tx_off(index));
         }
         crate::hardware::configure_phy_calibration_tone_wide(registers, false, 0x80, 0x78);
         if oer_esp32s31_hal::phy::pbus::configure_work_mode(registers) {

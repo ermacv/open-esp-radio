@@ -65,11 +65,12 @@ use crate::{
 use oer_esp32s31_hal::owner::SharedPhyAccess;
 
 /// Execute one complete rev0 PBus force command with the vendor's direct
-/// status polling shape. The finite observation ceiling is OER's fail-closed
-/// extension; no executor edge exists inside this transaction.
+/// status polling shape. A named 20 µs settle on the caller's clock
+/// bounds completion; no executor edge exists inside this transaction.
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn force_pbus_direct(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     transaction: crate::analog::pbus::PhyPbusForceTest,
 ) -> bool {
@@ -79,7 +80,7 @@ pub(crate) fn force_pbus_direct(
         transaction.path(),
         transaction.value(),
     );
-    crate::executor::wait::poll::bounded::<core::convert::Infallible>(|| {
+    crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
         Ok(oer_esp32s31_hal::phy::pbus::try_finish_force_test(registers).is_ok())
     })
     .unwrap_or_else(|never| match never {})
@@ -90,23 +91,21 @@ pub(crate) fn force_pbus_direct(
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn read_i2c_direct(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
 ) -> Result<u8, PhyTargetPortError> {
-    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(|| {
+    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
         Ok(crate::analog::i2c::try_start_read(registers, address).is_ok())
     })
     .unwrap_or_else(|never| match never {});
     if !started {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
-    for _ in 0..HARDWARE_EDGE_LIMIT {
-        match crate::analog::i2c::try_finish_read(registers, address) {
-            Ok(value) => return Ok(value),
-            Err(crate::analog::i2c::PhyI2cError::Busy) => {}
-        }
-    }
-    Err(PhyTargetPortError::HardwareEdgeTimedOut)
+    crate::executor::wait::poll::settled(clock, || {
+        crate::analog::i2c::try_finish_read(registers, address).ok()
+    })
+    .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)
 }
 
 /// Complete one byte write through the PHY analog-I2C host using the same
@@ -114,21 +113,23 @@ pub(crate) fn read_i2c_direct(
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_direct(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     address: oer_esp32s31_hal::phy::i2c::PhyI2cAddress,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
-    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(|| {
+    let started = crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
         Ok(crate::analog::i2c::try_start_write(registers, address, value).is_ok())
     })
     .unwrap_or_else(|never| match never {});
     if !started {
         return Err(PhyTargetPortError::HardwareEdgeTimedOut);
     }
-    let completed = crate::executor::wait::poll::bounded::<core::convert::Infallible>(|| {
-        Ok(crate::analog::i2c::try_finish_write(registers, address).is_ok())
-    })
-    .unwrap_or_else(|never| match never {});
+    let completed =
+        crate::executor::wait::poll::bounded::<core::convert::Infallible>(clock, || {
+            Ok(crate::analog::i2c::try_finish_write(registers, address).is_ok())
+        })
+        .unwrap_or_else(|never| match never {});
     if completed {
         Ok(())
     } else {
@@ -141,18 +142,25 @@ pub(crate) fn write_i2c_direct(
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_field_direct(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
     field: oer_esp32s31_hal::phy::i2c::PhyI2cField,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
-    let current = read_i2c_direct(registers, field.address())?;
-    write_i2c_direct(registers, field.address(), field.replace(current, value))
+    let current = read_i2c_direct(clock, registers, field.address())?;
+    write_i2c_direct(
+        clock,
+        registers,
+        field.address(),
+        field.replace(current, value),
+    )
 }
 
 /// Execute the four masked analog-I²C writes of complete ROM
-/// `phy_reset_ckgen` with direct finite polling.
+/// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_clock_generator_direct(
+    clock: &dyn oer_time::Clock,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use oer_esp32s31_hal::phy::i2c::analog_registers;
@@ -163,7 +171,7 @@ pub(crate) fn reset_clock_generator_direct(
         (analog_registers::RFPLL_DCODE_CKGEN_RESET, 0),
         (analog_registers::RFPLL_DCODE_CKGEN_RESET, 1),
     ] {
-        write_i2c_field_direct(registers, field, value)?;
+        write_i2c_field_direct(clock, registers, field, value)?;
     }
     Ok(())
 }
@@ -353,14 +361,15 @@ pub fn complete_rx_gain_i2c(
 
 /// Complete an admitted RFPLL I2C command with the ROM's immediate status
 /// polling. Publication, retries and terminal recognition share the existing
-/// finite edge budget. Bus status reads have no mandatory settling interval;
+/// named 20 µs settle on the caller's clock. Bus status reads have no mandatory settling interval;
 /// analog settling remains an explicit responsibility of the caller.
 pub(crate) fn complete_rfpll_i2c_direct(
+    clock: &dyn oer_time::Clock,
     mut binding: crate::analog::rfpll::RfpllFrequencyI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, PhyTargetPortError> {
     use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cError};
-    let completed = crate::executor::wait::poll::bounded(|| {
+    let completed = crate::executor::wait::poll::bounded(clock, || {
         match binding.action() {
             PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
                 match binding.start_target(registers) {

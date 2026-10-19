@@ -359,6 +359,7 @@ impl PhyRxDcCalibrationTransition {
     #[inline(never)]
     pub(crate) fn execute_target_direct<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
+        clock: &dyn oer_time::Clock,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
         budget: &mut crate::target_executor::DirectOperationBudget,
     ) -> Result<PhyRxDcCalibrationTargetStats, crate::target_executor::PhyTargetPortError> {
@@ -382,17 +383,17 @@ impl PhyRxDcCalibrationTransition {
 
         let terminal = loop {
             let force_i = PhyPbusForceTest::new(2, path, policy.current[0]);
-            if !force_pbus_direct(registers, force_i) {
+            if !force_pbus_direct(clock, registers, force_i) {
                 break Terminal::Failed(PhyRxDcCalibrationFailure::PbusForceTimedOut(force_i));
             }
             let force_q = PhyPbusForceTest::new(3, path, policy.current[1]);
-            if !force_pbus_direct(registers, force_q) {
+            if !force_pbus_direct(clock, registers, force_q) {
                 break Terminal::Failed(PhyRxDcCalibrationFailure::PbusForceTimedOut(force_q));
             }
 
             let low = if self.request.stage == PhyRxDcCalibrationStage::Baseband {
                 let level = PhyPbusForceTest::new(1, 2, 0);
-                if !force_pbus_direct(registers, level) {
+                if !force_pbus_direct(clock, registers, level) {
                     break Terminal::Failed(PhyRxDcCalibrationFailure::PbusForceTimedOut(level));
                 }
                 if !D::settle_micros(10) {
@@ -416,7 +417,7 @@ impl PhyRxDcCalibrationTransition {
 
             let measurement = if self.request.stage == PhyRxDcCalibrationStage::Baseband {
                 let level = PhyPbusForceTest::new(1, 2, 0x20);
-                if !force_pbus_direct(registers, level) {
+                if !force_pbus_direct(clock, registers, level) {
                     break Terminal::Failed(PhyRxDcCalibrationFailure::PbusForceTimedOut(level));
                 }
                 if !D::settle_micros(10) {
@@ -489,8 +490,8 @@ impl PhyRxDcCalibrationTransition {
             Terminal::Complete(outcome) => outcome.configuration,
             Terminal::Failed(_) => initial,
         };
-        let _ = force_pbus_direct(registers, PhyPbusForceTest::new(2, path, cleanup[0]));
-        let _ = force_pbus_direct(registers, PhyPbusForceTest::new(3, path, cleanup[1]));
+        let _ = force_pbus_direct(clock, registers, PhyPbusForceTest::new(2, path, cleanup[0]));
+        let _ = force_pbus_direct(clock, registers, PhyPbusForceTest::new(3, path, cleanup[1]));
         oer_esp32s31_hal::phy::rx_dco::restore_control(registers)
             .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
 
