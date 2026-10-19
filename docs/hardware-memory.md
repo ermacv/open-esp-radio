@@ -132,11 +132,14 @@ A fixed array declares `[layout.array]` with `element = "<LAYOUT>"` and
 and placement must match those of its elements. The generated type exposes
 checked `entry(index)` access to the individual layouts.
 
-A BLE link declares `points-to = "<LAYOUT>"` and
-`encoding = "ble-compressed"` on a 20-bit field. Its nonzero value is a
+A BLE link to a structure declares `points-to = "<LAYOUT>"` and
+`encoding = "ble-compressed"` on a 20-bit field. A pointer to a byte buffer
+uses `placement = ["dma-window"]` with that encoding instead, including a
+pointer to the beginning of a packet with its RX or TX prefix. Its nonzero value is a
 word index: the CPU address is `0x2f000000 | (index << 2)`. Zero is no link.
-The builder takes `Option<DmaRef<Layout>>`, checks the encoding and preserves
-the surrounding bits. A getter decodes an address without creating a
+The link builder takes `Option<DmaRef<Layout>>`; the buffer builder takes
+`DmaWindowAddress`. Both check the encoding and preserve the surrounding
+bits. A getter decodes an address without creating a
 reference; hardware-written links still need validation against their arena.
 
 Every field gets a `[[review]]` like a register field: naming, sources,
