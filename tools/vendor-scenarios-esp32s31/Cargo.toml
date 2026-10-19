@@ -10,7 +10,7 @@ description = "The ESP32-S31 vendor-scenario binary: the chip's verdict library 
 
 [dependencies]
 oer-vendor-scenarios-esp32s31 = { path = "../../host/vendor/scenarios-esp32s31" }
-oer-vendor-scenario-command = { path = "../../host/vendor/scenario-command" }
+oer-vendor-scenario-report = { path = "../../host/vendor/scenario-report" }
 
 [lints]
 workspace = true

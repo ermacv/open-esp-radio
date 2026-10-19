@@ -11,7 +11,7 @@
 //! field occupies, in the order the production PAC reads it
 //! (`PhyI2cAddress::image`).
 use crate::Result;
-use oer_vendor_phy_calibration_capture::space::{Register, analog_address};
+use oer_vendor_phy::calibration_capture::space::{Register, analog_address};
 use std::path::Path;
 
 /// Published SVD and PAC API policy, relative to the repository root.
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn analog_replies_round_trip_through_their_space() {
-        use oer_vendor_phy_calibration_capture::space::Space;
+        use oer_vendor_phy::calibration_capture::space::Space;
         let image = analog(&oer_os_process::built_root(), ANALOG_DOMAIN).unwrap();
         assert!(image.windows(2).all(|w| w[0].address < w[1].address));
         let register = &image[0];

@@ -6,11 +6,11 @@
 //! their files: an edit to report code must never stale evidence. Producers compute what a shard may record
 //! through [`closure`] and check it with [`check_verdict_sources`];
 //! [`reject_report_sources`] catches a shard of an index that bypassed them.
+use crate::shard::store;
 use crate::{
     Result,
     workspace::{Package, Workspace},
 };
-use oer_vendor_evidence_shard::store;
 use std::path::{Path, PathBuf};
 
 /// The path packages building one package compiles, split by whether their
@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn a_report_package_file_cannot_be_a_shard_source() {
         let report = [PathBuf::from("host/vendor/scenario-report")];
-        let verdict = [PathBuf::from("host/vendor/scenario-engine/src/shard.rs")];
+        let verdict = [PathBuf::from("host/vendor/scenario/src/shard.rs")];
         assert!(check_verdict_sources(&verdict, &report).is_ok());
         let leaked = [PathBuf::from("host/vendor/scenario-report/src/triage.rs")];
         let error = check_verdict_sources(&leaked, &report).unwrap_err();
@@ -99,17 +99,17 @@ mod tests {
     #[test]
     fn a_committed_shard_recording_report_code_is_rejected() {
         let directory = tempfile::tempdir().unwrap();
-        let shard = oer_vendor_evidence_shard::Index {
-            schema: oer_vendor_evidence_shard::SCHEMA,
-            command: oer_vendor_evidence_shard::BLOBRAY.into(),
+        let shard = crate::shard::Index {
+            schema: crate::shard::SCHEMA,
+            command: crate::shard::BLOBRAY.into(),
             target: "chip-a".into(),
             scenario: "leaf".into(),
             inputs: Default::default(),
-            sources: vec![oer_vendor_evidence_shard::SourceDigest {
+            sources: vec![crate::shard::SourceDigest {
                 path: PathBuf::from("host/vendor/scenario-report/src/triage.rs"),
                 sha256: "0".repeat(64),
             }],
-            dependence: oer_vendor_evidence_shard::Dependence::whole_closure("test"),
+            dependence: crate::shard::Dependence::whole_closure("test"),
             entries: vec![],
             untriaged: vec![],
             functions: vec![],
@@ -117,7 +117,7 @@ mod tests {
             observed: vec![],
             unprojected: vec![],
         };
-        oer_vendor_evidence_shard::store::write(directory.path(), &shard).unwrap();
+        crate::shard::store::write(directory.path(), &shard).unwrap();
         let report = [PathBuf::from("host/vendor/scenario-report")];
         let error = reject_report_sources(directory.path(), &report).unwrap_err();
         assert!(error.to_string().contains("leaf.json"), "{error}");
@@ -130,7 +130,7 @@ mod tests {
         let workspace = Workspace::load(&root, None).unwrap();
         let report = report_packages(&workspace);
         assert!(report.contains(&PathBuf::from("host/vendor/scenario-report")));
-        assert!(report.contains(&PathBuf::from("tools/verification")));
+        assert!(report.contains(&PathBuf::from("tools/vendor")));
         let package = workspace.owner("host/vendor/evidence/Cargo.toml").unwrap();
         let closure = closure(&workspace, package);
         assert!(

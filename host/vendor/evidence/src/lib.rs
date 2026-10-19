@@ -22,6 +22,8 @@
 //! evaluator all read and write shards through it.
 #![forbid(unsafe_code)]
 
+pub mod shard;
+
 #[cfg(feature = "producers")]
 pub mod baseline;
 pub mod diff;

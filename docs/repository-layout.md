@@ -34,7 +34,7 @@ chips/      libraries that access a chip's hardware (MMIO)
 host/       libraries that need an OS (std)
   os/ test/ analysis/ chip/ pins/ registers/ probe/ image/ lab/ hil/ vendor/
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/ (and ESP-IDF peers/, vendor/)
-tools/      programs for the host: fw/ hil/ stand/ registers/ blobray/ vendor/
+tools/      programs for the host: fw/ hil/ stand/ registers/ blobray/ pins/ vendor/ …
 registers/ knowledge/ docs/   data and documents
 ```
 
@@ -136,8 +136,8 @@ and runs is a thin wrapper over `cargo fw` and the program.
 | run an app on a board | `cargo fw run w1 --board s31-a` | `firmware/apps/w1`, `tools/fw` |
 | run a HIL scenario | `cargo fw build …`, then `cargo hil run` with the manifest | `firmware/hil/*` and `host/hil/` speak `portable/hil/protocol` |
 | add a HIL message | edit `portable/hil/protocol` | both sides build against one definition |
-| compare a HAL leaf with the vendor | `cargo fw probe <package>`, then the vendor tool with the probe ELF | hook under `cfg(oer_probe)` in `chips/`; catalog in `portable/probe/` |
-| run the 802.15.4 vendor stand | the vendor tool | vendor driver and `portable/espressif/ieee802154-engine` meet at the low-level boundary; chip tables from `portable/esp32s31/` |
+| compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | hook under `cfg(oer_probe)` in `chips/`; catalog in `portable/probe/` |
+| run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- compare <scenario>` | vendor driver and `portable/espressif/ieee802154-engine` meet at the low-level boundary; chip tables from `portable/esp32s31/` |
 | check an image's stack | `cargo fw build <image>` | `host/image/checks` reads the ELF |
 | add a register field | edit `registers/`, `cargo registers generate` | `chips/<chip>/pac` |
 
@@ -304,9 +304,9 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/test/ui-cases` | `host/test/ui-cases` | host |
 | `host/vendor/evidence-shard` | `host/vendor/evidence` | host |
 | `host/vendor/evidence` | `host/vendor/evidence` | host |
-| `host/vendor/ieee802154-esp32s31` | `host/vendor/ieee802154-esp32s31` | host |
-| `host/vendor/lineage` | `host/vendor/lineage` | host |
-| `host/vendor/phy-archive` | `host/vendor/phy` | host |
+| `host/vendor/ieee802154-esp32s31` | `host/vendor/ieee802154-esp32s31`, `tools/vendor-ieee802154-esp32s31` | host |
+| `host/vendor/lineage` | `host/vendor/lineage`, `tools/vendor` | host |
+| `host/vendor/phy-archive` | `host/vendor/phy`, `tools/vendor` | host |
 | `host/vendor/phy-calibration-capture` | `host/vendor/phy` | host |
 | `host/vendor/phy-esp32s31` | `host/vendor/phy-esp32s31` | host |
 | `host/vendor/artifacts` | `host/pins` | host |
@@ -314,7 +314,7 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/vendor/markers` | `host/vendor/provenance` | host |
 | `host/vendor/provenance` | `host/vendor/provenance` | host |
 | `host/vendor/scenario-engine` | `host/vendor/scenario` | host |
-| `host/vendor/scenario-report` | `host/vendor/scenario` | host |
+| `host/vendor/scenario-report` | `host/vendor/scenario-report` | host |
 | `host/vendor/scenarios-esp32c5` | `host/vendor/scenarios-esp32c5` | host |
 | `host/vendor/scenarios-esp32s31` | `host/vendor/scenarios-esp32s31` | host |
 | `firmware/apps/boot-smoke` | (unchanged) | chip |
@@ -342,8 +342,8 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `tools/stand` | `tools/stand` | host |
 | `host/lab/stand-discover` | `tools/stand` | host |
 | `host/lab/stand-doctor` | `tools/stand` | host |
-| `tools/pins` | `tools/vendor` | host |
-| `tools/vendor-scenarios-esp32c5` | `tools/vendor` | host |
-| `tools/vendor-scenarios-esp32s31` | `tools/vendor` | host |
+| `tools/pins` | `tools/pins` | host |
+| `tools/vendor-scenarios-esp32c5` | `tools/vendor-scenarios-esp32c5` | host |
+| `tools/vendor-scenarios-esp32s31` | `tools/vendor-scenarios-esp32s31` | host |
 | `tools/verification` | `tools/vendor` | host |
-| `host/vendor/scenario-command` | `tools/vendor` | host |
+| `host/vendor/scenario-command` | `host/vendor/scenario-report` | host |

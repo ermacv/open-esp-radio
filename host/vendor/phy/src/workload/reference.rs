@@ -7,7 +7,7 @@
 //! the calibration firmware's line formats, so the comparison reads both
 //! vendor firmwares alike.
 use crate::Result;
-use oer_vendor_phy_calibration_capture::space::{self, Register, Space, analog_parts};
+use crate::calibration_capture::space::{self, Register, Space, analog_parts};
 use std::io::{Read, Write as _};
 use std::time::{Duration, Instant};
 
@@ -185,7 +185,7 @@ impl Peer {
                 }
                 if ready_lines(&self.console) > boots {
                     lines.push_str(
-                        &oer_vendor_phy_calibration_capture::vendor::unreadable_line(
+                        &crate::calibration_capture::vendor::unreadable_line(
                             register.address,
                         ),
                     );
@@ -198,7 +198,7 @@ impl Peer {
                     oer_lab_board::reset::reset_usb_serial_jtag(&mut self.serial)?;
                     self.wait(|console| ready_lines(console) > boots, "the ready line")?;
                     lines.push_str(
-                        &oer_vendor_phy_calibration_capture::vendor::unreadable_line(
+                        &crate::calibration_capture::vendor::unreadable_line(
                             register.address,
                         ),
                     );

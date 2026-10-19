@@ -12,9 +12,9 @@ pins = "run --quiet --profile tools -p oer-tool-pins --"
 stand = "run --quiet --profile tools -p oer-tool-stand --"
 # HIL runs (host/hil/run/HIL.md).
 hil = "run --quiet --profile tools -p oer-tool-hil --"
-# The vendor comparison: pins, scenarios, evidence shards and the probe
-# images (tools/verification).
-verification = "run --quiet --profile tools -p oer-tool-verification --"
+# The vendor comparison: provenance, scenarios, evidence shards and the probe
+# images (tools/vendor).
+vendor-check = "run --quiet --profile tools -p oer-tool-vendor --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git

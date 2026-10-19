@@ -9,7 +9,7 @@
 //! production entry or scenario changes neither.
 
 use crate::Result;
-use oer_vendor_evidence_shard::store;
+use crate::shard::store;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 

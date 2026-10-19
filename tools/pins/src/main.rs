@@ -24,7 +24,7 @@ enum Command {
     /// each against its SHA-256 and print where it lies.
     Fetch {
         /// The chip whose pins to fetch.
-        #[arg(long, default_value = "esp32s31")]
+        #[arg(long)]
         chip: String,
         /// Artifact ids; all of the chip's when none is named.
         ids: Vec<String>,
@@ -33,6 +33,9 @@ enum Command {
     /// riscv-arch-test checkout and Sail) at their pins and print where
     /// they lie.
     Conformance,
+    /// Link `ROOT/target/vendor` to the host-wide vendor artifact store (a
+    /// new worktree finds the fetched artifacts).
+    LinkStore { root: PathBuf },
 }
 
 /// The repository this tool runs in.
@@ -58,6 +61,7 @@ fn main() -> ExitCode {
                 println!("sail             {}", inputs.sail.display());
                 Ok(())
             }
+            Command::LinkStore { root } => artifacts::link_store(&root, &artifacts::store()?),
         }
     })();
     match result {
@@ -90,5 +94,6 @@ mod tests {
             panic!("not a fetch");
         };
         assert_eq!((chip.as_str(), ids), ("esp32c5", vec!["libphy".to_owned()]));
+        assert!(Cli::try_parse_from(["pins", "fetch", "libphy"]).is_err());
     }
 }

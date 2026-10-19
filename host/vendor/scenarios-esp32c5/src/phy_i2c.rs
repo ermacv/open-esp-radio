@@ -17,13 +17,13 @@ use oer_analysis_blobray_domain::{
     CommandBank, CommandCell, CommandPort, DeviceBehavior, DeviceDeclaration, EffectRule,
     RegionLifetime, RegisterCell,
 };
-use oer_vendor_scenario_engine::evidence::PhyEffect;
-use oer_vendor_scenario_engine::harness::Result;
-use oer_vendor_scenario_engine::leaf::{
+use oer_vendor_scenario::evidence::PhyEffect;
+use oer_vendor_scenario::harness::Result;
+use oer_vendor_scenario::leaf::{
     Domain, Leaf, Objects, Observed, Suite, Vendor, expected, leaf, objects, ruled, stated,
 };
-use oer_vendor_scenario_engine::phy::contracts::port_polling;
-use oer_vendor_scenario_engine::phy::layout::{
+use oer_vendor_scenario::phy::contracts::port_polling;
+use oer_vendor_scenario::phy::layout::{
     COMMAND_BUSY, COMMAND_DATA_MASK, COMMAND_READ, COMMAND_SELECTOR_MASK, COMMAND_WRITE,
     analog_bank,
 };
@@ -614,7 +614,7 @@ fn parameter_image(profile: u32) -> Vec<u8> {
 /// the vendor its linked `phy_param`, both holding the profile's image.
 fn initialization_abi(words: &[u32], vendor: &Vendor<'_>) -> Result<Objects> {
     let [parameters, profile] = *words else {
-        return Err(oer_vendor_scenario_engine::harness::invalid(
+        return Err(oer_vendor_scenario::harness::invalid(
             "initialization words",
         ));
     };
@@ -1075,9 +1075,7 @@ fn swap_scale_image(state: u32) -> Vec<u8> {
 
 fn parameter_leaf_abi(words: &[u32], vendor: &Vendor<'_>) -> Result<Objects> {
     let [parameters, state] = *words else {
-        return Err(oer_vendor_scenario_engine::harness::invalid(
-            "parameter words",
-        ));
+        return Err(oer_vendor_scenario::harness::invalid("parameter words"));
     };
     let image = swap_scale_image(state);
     Ok(Objects {
@@ -1273,7 +1271,7 @@ fn filter_dcap_commands(image: &[u8]) -> Vec<Command> {
 /// every addressed register holding 0xA5.
 fn filter_dcap_abi(words: &[u32], vendor: &Vendor<'_>) -> Result<Objects> {
     let [parameters, profile] = *words else {
-        return Err(oer_vendor_scenario_engine::harness::invalid("filter words"));
+        return Err(oer_vendor_scenario::harness::invalid("filter words"));
     };
     let image = parameter_image(profile);
     Ok(Objects {
@@ -2017,7 +2015,7 @@ pub const PHY_I2C: Suite = Suite {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_vendor_scenario_engine::phy::layout::COMMAND_BUSY;
+    use oer_vendor_scenario::phy::layout::COMMAND_BUSY;
 
     #[test]
     fn the_expectations_follow_the_reviewed_transport_facts() {

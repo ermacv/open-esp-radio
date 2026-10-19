@@ -6,7 +6,7 @@ artifacts. The probes depend on production crates; no production crate or
 firmware depends on them.
 
 ```console
-cargo verification probes --chip esp32c5
+cargo vendor-check probes --chip esp32c5
 ```
 
 builds `oer-firmware-probes-esp32c5-radio` for

@@ -1,5 +1,5 @@
 //! Reviewed observation decisions of the ESP32-C5 scenarios.
-use oer_vendor_scenario_engine::observation::Decision;
+use oer_vendor_scenario::observation::Decision;
 
 /// Reviewed unobserved lines.
 pub const DECISIONS: &[Decision] = &[Decision {

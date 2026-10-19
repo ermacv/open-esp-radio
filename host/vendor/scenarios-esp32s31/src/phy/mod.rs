@@ -1,5 +1,5 @@
 //! ESP32-S31 PHY scenarios over the engine's PHY session
-//! (`oer_vendor_scenario_engine::phy`) and [`crate::layout::PHY_LAYOUT`].
+//! (`oer_vendor_scenario::phy`) and [`crate::layout::PHY_LAYOUT`].
 
 pub mod calibration_leaves;
 pub mod calibration_prefix;
@@ -14,4 +14,4 @@ pub mod rx_gain;
 pub mod tracking;
 pub mod tracking_graph;
 pub mod tx_dc;
-pub use oer_vendor_scenario_engine::phy::*;
+pub use oer_vendor_scenario::phy::*;

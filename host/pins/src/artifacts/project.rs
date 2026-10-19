@@ -19,7 +19,7 @@ pub fn supported(root: &Path) -> Result<Vec<String>> {
 }
 
 /// Directory of `chip`'s vendor scenario evidence shards, relative to the
-/// root: derived data, which `cargo verification evidence` writes for the
+/// root: derived data, which `cargo vendor-check evidence` writes for the
 /// checkout from its sources and pins, and nothing tracks. Its one location
 /// for every reader.
 pub fn evidence_shards(chip: &str) -> String {

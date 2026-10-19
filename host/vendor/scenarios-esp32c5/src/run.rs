@@ -3,11 +3,11 @@
 //! shard. The binary adds the reviewer commands.
 use crate::{LIBRARY, PROBES_DIRECTORY, PROBES_PACKAGE, ROM, decisions, phy_i2c};
 use clap::Subcommand;
-use oer_vendor_scenario_engine::findings::RunReport;
-use oer_vendor_scenario_engine::harness::{Budget, Result};
-use oer_vendor_scenario_engine::leaf::{self, LeafOptions};
-use oer_vendor_scenario_engine::shard::{self, ProbeImages};
-use oer_vendor_scenario_engine::{artifacts, observation, session, state};
+use oer_vendor_scenario::findings::RunReport;
+use oer_vendor_scenario::harness::{Budget, Result};
+use oer_vendor_scenario::leaf::{self, LeafOptions};
+use oer_vendor_scenario::shard::{self, ProbeImages};
+use oer_vendor_scenario::{artifacts, observation, session, state};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -82,7 +82,7 @@ fn phy_i2c(common: &Common, report: &dyn RunReport) -> Result<session::Claims> {
         phy_i2c::PHY_I2C.id,
         &run.roots,
         &leaf::claims(&run),
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     println!(
@@ -127,8 +127,8 @@ fn all(common: &Common, report: &dyn RunReport) -> Result<()> {
     for line in &untriaged {
         println!("  untriaged line {}:{}", line.0.display(), line.1);
     }
-    oer_vendor_scenario_engine::coverage::Observed::of(&claims.closures)
-        .check("all", oer_vendor_scenario_engine::coverage::decisions()?)?;
+    oer_vendor_scenario::coverage::Observed::of(&claims.closures)
+        .check("all", oer_vendor_scenario::coverage::decisions()?)?;
     state::check(decisions::state::DECISIONS, &claims.unprojected)?;
     record(common, "phy-i2c", &claims)
 }

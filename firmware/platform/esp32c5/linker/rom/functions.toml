@@ -6,7 +6,7 @@
 # The analysis checks each address against the symbol of the pinned ROM ELF
 # (`esp32c5_rev100_rom.elf`, artifact `rom-rev100`) and requires a summary to
 # agree with the machine code wherever the analysis bounds the function
-# itself. `cargo verification check provenance` keeps each cited function's
+# itself. `cargo vendor-check check provenance` keeps each cited function's
 # code fingerprint, so a changed ROM fails until reviewed.
 
 # SOURCE(esp32c5): rev100 ROM `memset` (newlib's RISC-V assembly, the same

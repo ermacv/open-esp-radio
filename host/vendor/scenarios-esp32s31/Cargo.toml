@@ -12,11 +12,11 @@ description = "Typed ESP32-S31 vendor-comparison scenarios driven through the Bl
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-oer-vendor-evidence-shard = { path = "../evidence-shard" }
+oer-vendor-evidence = { path = "../evidence" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
 oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
-oer-vendor-scenario-engine = { path = "../scenario-engine" }
+oer-vendor-scenario = { path = "../scenario" }
 oer-esp32s31-phy-relation = { path = "../../../portable/esp32s31/phy-relation" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }

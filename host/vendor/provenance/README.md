@@ -20,8 +20,8 @@ patches with that crate's RV32 relocation table. A `Function` carries:
 
 [`oer-vendor-lineage`](../lineage/README.md) uses it too.
 
-The other modules are the provenance check itself; `cargo verification check
-provenance`, `cargo verification provenance` and `cargo verification diff`
+The other modules are the provenance check itself; `cargo vendor-check check
+provenance`, `cargo vendor-check provenance` and `cargo vendor-check diff`
 ([verification](../../verification/README.md)) only parse arguments and call
 them:
 
@@ -35,5 +35,5 @@ them:
   library never runs the vendor scenarios);
 - `diff`: function-by-function classification of two archive revisions. A test pins one function's fingerprint and `oer-analysis-elf` pins the
 relocation table: changing either changes registered fingerprints, which are
-then regenerated with `cargo verification provenance --chip <chip> --rebuild`
-after `cargo verification check provenance` passed with the previous fingerprints.
+then regenerated with `cargo vendor-check provenance --chip <chip> --rebuild`
+after `cargo vendor-check check provenance` passed with the previous fingerprints.

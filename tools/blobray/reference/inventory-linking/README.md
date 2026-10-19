@@ -39,7 +39,7 @@ blobray strings --input librftest=/path/to/librftest.a --object phy_test.o
 `symbols` lists every defined, named function and data symbol with its input,
 archive member, section, address, size, kind, binding and citation
 `ROLE[member]::name`; with the pinned artifact's id as `ROLE` that is the form
-`cargo verification check provenance` prints. `--match` selects names
+`cargo vendor-check check provenance` prints. `--match` selects names
 containing a substring, or matching a whole-name pattern when it contains `*`.
 Same-named archive members stay separate rows. `strings` lists every
 NUL-terminated run of at least `--min-length` (default 4) text bytes in the

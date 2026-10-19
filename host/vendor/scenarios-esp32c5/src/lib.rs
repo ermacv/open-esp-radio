@@ -8,7 +8,7 @@ pub mod decisions;
 pub mod phy_i2c;
 pub mod run;
 
-use oer_vendor_scenario_engine::{Chip, Isa, phy::PhyLayout};
+use oer_vendor_scenario::{Chip, Isa, phy::PhyLayout};
 
 /// Session input of the authenticated ROM ELF.
 pub const ROM_INPUT: u64 = 1;
@@ -91,7 +91,7 @@ pub static CHIP: Chip = Chip {
 
 /// Run the scenario engine for the ESP32-C5.
 pub fn install() {
-    oer_vendor_scenario_engine::install(&CHIP);
+    oer_vendor_scenario::install(&CHIP);
 }
 
 /// The directory of the chip's probe packages, relative to the repository
