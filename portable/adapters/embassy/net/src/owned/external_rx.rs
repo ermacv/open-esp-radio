@@ -10,6 +10,10 @@
 //!
 //! Admission happens before the radio rewrites the frame in place, so a
 //! refused admission leaves the staged frame untouched for the copying path.
+#![allow(
+    unsafe_code,
+    reason = "the binding to Xarxa's external-packet API, which is unsafe by design"
+)]
 
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
@@ -39,10 +43,6 @@ pub struct ExternalRxOrigin<const FRAME_CAPACITY: usize, const SLOTS: usize> {
     dropped: AtomicU32,
 }
 
-#[allow(
-    unsafe_code,
-    reason = "the static origin is shared by RX producers and packet drops"
-)]
 // SAFETY: `this` is only compared with `self` and passed to the release
 // callback, which is callable from any core. Every mutable field is atomic,
 // and the Xarxa origin and handoff pool are `Sync`.
@@ -136,7 +136,6 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
         Self {
             this,
             pool,
-            #[allow(unsafe_code, reason = "the origin binds its own static release edge")]
             // SAFETY: `release_adopted_slot` only reaches `this`'s atomics and
             // its `'static` pool, both callable from any core. The packet's
             // slot is the handoff index, which is adopted again only after
@@ -218,7 +217,6 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
     ///
     /// `index` came from `into_adoption` on this origin's pool and nothing
     /// accesses its bytes any more.
-    #[allow(unsafe_code, reason = "forwards the adoption release contract")]
     unsafe fn release_slot(&self, index: u8) {
         // SAFETY: forwarded from this function's contract.
         unsafe { self.pool.release_adopted(index) };
@@ -234,7 +232,6 @@ impl<const FRAME_CAPACITY: usize, const SLOTS: usize> ExternalRxOrigin<FRAME_CAP
 ///
 /// `context` is the origin's own static address and `slot` the handoff index
 /// of a packet this origin adopted, released once.
-#[allow(unsafe_code, reason = "type-erased Xarxa release edge")]
 unsafe fn release_adopted_slot<const FRAME_CAPACITY: usize, const SLOTS: usize>(
     context: *const (),
     slot: usize,
@@ -311,15 +308,11 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
         if !fits_packet(&adoption) {
             origin.copied_unfit.fetch_add(1, Ordering::Relaxed);
             let result = self.copy_adopted(&adoption);
-            #[allow(unsafe_code, reason = "returns a slot which was not adopted")]
             // SAFETY: the adoption came from this origin's pool and the copy
             // above no longer borrows its bytes.
-            unsafe {
-                origin.release_slot(adoption.index)
-            };
+            unsafe { origin.release_slot(adoption.index) };
             return result;
         }
-        #[allow(unsafe_code, reason = "adopts a detached DMA buffer as a packet")]
         // SAFETY: `fits_packet` proved an aligned `PACKET_BUF_SIZE` view at
         // the Ethernet start inside the slot's stable, initialized allocation,
         // which the consumed network lease hands exclusively to this packet
@@ -350,7 +343,6 @@ impl<M: RawMutex, const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, M, RX_QUEUE_
         if adoption.length > adoption.available {
             return Err(RxEnqueueError::InvalidLength(FrameLengthError::TooLong));
         }
-        #[allow(unsafe_code, reason = "reads the adopted frame before release")]
         // SAFETY: the adoption owns `available >= length` initialized bytes
         // from `data` until its slot is released by the caller.
         let frame = unsafe { core::slice::from_raw_parts(adoption.data.as_ptr(), adoption.length) };
