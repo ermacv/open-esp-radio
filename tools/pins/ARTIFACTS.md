@@ -1,6 +1,6 @@
 # oer-tool-pins
 
-The pinned vendor artifacts of a chip. `verification/<chip>/artifacts.toml`
+The pinned vendor artifacts of a chip. `chips/<chip>/vendor/artifacts.toml`
 is the only pin: git sources at a revision and release assets, each
 artifact with its SHA-256, and firmware outputs, pinned by the tracked
 catalog image whose recipe builds them and by no digest. This crate is its only reader
