@@ -5,9 +5,9 @@
 //! `oer-ieee80211-upper-mac`, which a backend running the Espressif policy
 //! instantiates with them.
 
-use oer_time::Duration;
 use oer_ieee80211_mac::qos::WmmAccessCategory;
 use oer_ieee80211_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
+use oer_time::Duration;
 
 /// Short retry limit: `lmacConfMib[0x15]` of `lmacInit`.
 pub const SHORT_RETRY_LIMIT: u8 = 0x20;
@@ -61,10 +61,7 @@ pub const MSDU_AGED_MARGIN_MICROS: u32 = 1 << 10;
 /// (`g_mesh_is_started`). `libpp[lmac.o]::lmacProcessCtsTimeout` counts a failed protection
 /// exchange against the same short limit, and `libpp[lmac.o]::lmacEndRetryAMPDUFail` then
 /// keeps the aggregate and sends a BlockAckReq (executed).
-pub const fn ampdu_retry_policy(
-    lifetime: Duration,
-    retain_single_mpdu: bool,
-) -> AmpduRetryPolicy {
+pub const fn ampdu_retry_policy(lifetime: Duration, retain_single_mpdu: bool) -> AmpduRetryPolicy {
     AmpduRetryPolicy {
         lifetime,
         aged_margin: Duration::from_micros(MSDU_AGED_MARGIN_MICROS as u64),
