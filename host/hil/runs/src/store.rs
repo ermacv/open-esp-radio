@@ -94,14 +94,6 @@ impl RunStore {
         self.root.join("runs")
     }
 
-    /// Runs another revision's runner wrote in that revision's own bundle
-    /// format, kept beside the store's runs so they outlive the checkout
-    /// that launched them. Nothing reads them as runs of this store, and no
-    /// retention or size budget deletes them: they are removed by hand.
-    pub fn revision_runs(&self) -> PathBuf {
-        self.root.join("revision-runs")
-    }
-
     pub fn run(&self, id: &str) -> PathBuf {
         self.runs().join(id)
     }
