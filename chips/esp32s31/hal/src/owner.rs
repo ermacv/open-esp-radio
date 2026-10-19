@@ -387,6 +387,26 @@ pub(crate) fn phy_parts_mut(
 /// touches shared radio registers borrows them from the radio domain. It can move
 /// between lifecycle owners and the runtime arena, but exposes no PAC owner,
 /// dereference operation, or generic register callback.
+///
+/// Moving the owner transfers its authority rather than copying access:
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_hal::owner::RadioRuntimeOwner;
+/// fn duplicate(owner: RadioRuntimeOwner) -> (RadioRuntimeOwner, RadioRuntimeOwner) {
+///     (owner, owner)
+/// }
+/// ```
+///
+/// A live MAC transaction excludes a second mutable transaction:
+///
+/// ```compile_fail,E0499
+/// use oer_esp32s31_hal::owner::RadioRuntimeOwner;
+/// fn overlap(owner: &mut RadioRuntimeOwner) {
+///     let first = owner.wifi_mac_hal();
+///     let second = owner.wifi_mac_hal();
+///     drop((first, second));
+/// }
+/// ```
 pub struct RadioRuntimeOwner {
     pub(crate) registers: WifiRadioRegisters,
     rx_dma: WifiRxDmaEngine,
