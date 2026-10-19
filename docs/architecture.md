@@ -92,7 +92,8 @@ with `DrainTimeout`.
 
 - One owner per resource, neither `Clone` nor `Copy`: `&mut` within a call, a
   token or lease beyond it, an actor across tasks. A handle shared over a mutex
-  is not ownership.
+  is not ownership. A read-only capability without side effects (a
+  free-running counter nobody writes, such as `MacLocalTime`) may be `Copy`.
 - Who controls a state decides its form: the caller's own state is a typestate
   or token, the world's (air, hardware, peers, time) a typed refusal or outcome.
   A `Busy` the caller's own state explains is a design defect.
