@@ -1,6 +1,12 @@
 extern crate std;
 
 use super::*;
+fn free<const N: usize>(owner: &mut PinnedTxDmaStorage<N>) -> TxDmaFree<'_, N> {
+    match owner.access() {
+        TxDmaAccess::Free(free) => free,
+        _ => panic!("fixture owns free DMA"),
+    }
+}
 
 use crate::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
 
@@ -27,8 +33,8 @@ fn hardware_owned_head(authority: &dyn HardwareOwnedTxDma) -> u32 {
 #[test]
 fn publication_records_hardware_owner_before_start_token() {
     let mut storage = storage();
-    storage.buffer_mut().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
-    storage.reserve(64, 4).unwrap();
+    free(&mut storage).into_buffer()[..4].copy_from_slice(&[1, 2, 3, 4]);
+    free(&mut storage).reserve(64, 4).unwrap();
 
     let mut start_address = 0;
     let publication = storage.publication().unwrap();
@@ -43,7 +49,7 @@ fn publication_records_hardware_owner_before_start_token() {
     assert!(storage.binding().admits_descriptor(DESCRIPTOR_ADDRESS));
     assert!(storage.binding().admits_buffer(BUFFER_ADDRESS + 8, 16));
     assert!(!storage.binding().admits_buffer(BUFFER_ADDRESS + 63, 2));
-    assert!(storage.buffer_mut().is_err());
+    assert!(matches!(storage.access(), TxDmaAccess::HardwareOwned));
     storage
         .release_aborted(MacTxQueueDetached::new_model(DESCRIPTOR_ADDRESS))
         .unwrap();
@@ -52,7 +58,7 @@ fn publication_records_hardware_owner_before_start_token() {
 #[test]
 fn dropped_publication_remains_cancellable_software_state() {
     let mut storage = storage();
-    storage.reserve(32, 16).unwrap();
+    free(&mut storage).reserve(32, 16).unwrap();
     {
         let _publication = storage.publication().unwrap();
     }
@@ -66,12 +72,12 @@ fn dropped_publication_remains_cancellable_software_state() {
 #[test]
 fn completed_storage_is_not_reused_before_explicit_release() {
     let mut storage = storage();
-    storage.reserve(64, 8).unwrap();
+    free(&mut storage).reserve(64, 8).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.mark_completed().unwrap();
 
     assert_eq!(storage.state(), TxDmaState::Completed);
-    assert_eq!(storage.reserve(64, 8), Err(TxDmaStorageError::Busy));
+    assert!(!matches!(storage.access(), TxDmaAccess::Free(_)));
     storage
         .release_completed(MacTxQueueDetached::new_model(DESCRIPTOR_ADDRESS))
         .unwrap();
@@ -81,7 +87,7 @@ fn completed_storage_is_not_reused_before_explicit_release() {
 #[test]
 fn detach_proof_must_name_the_active_descriptor() {
     let mut storage = storage();
-    storage.reserve(64, 8).unwrap();
+    free(&mut storage).reserve(64, 8).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.mark_completed().unwrap();
 
@@ -98,18 +104,18 @@ fn detach_proof_must_name_the_active_descriptor() {
 #[test]
 fn reset_required_storage_remains_quarantined() {
     let mut storage = storage();
-    storage.reserve(64, 8).unwrap();
+    free(&mut storage).reserve(64, 8).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.require_reset().unwrap();
 
     assert_eq!(storage.state(), TxDmaState::ResetRequired);
-    assert_eq!(storage.reserve(64, 8), Err(TxDmaStorageError::Busy));
+    assert!(!matches!(storage.access(), TxDmaAccess::Free(_)));
     assert_eq!(storage.mark_completed(), Err(TxDmaStorageError::State));
     assert_eq!(
         storage.release_aborted(MacTxQueueDetached::new_model(DESCRIPTOR_ADDRESS)),
         Err(TxDmaStorageError::State)
     );
-    assert_eq!(storage.buffer_mut(), Err(TxDmaStorageError::Busy));
+    assert!(matches!(storage.access(), TxDmaAccess::ResetRequired));
     // Letting the movable capability leave scope must not unwind. The
     // permanently located backing remains quarantined until reset.
 }
@@ -120,7 +126,7 @@ fn impossible_sequence_can_only_quarantine_backing() {
     storage.quarantine();
 
     assert_eq!(storage.state(), TxDmaState::ResetRequired);
-    assert_eq!(storage.reserve(64, 8), Err(TxDmaStorageError::Busy));
+    assert!(!matches!(storage.access(), TxDmaAccess::Free(_)));
     assert_eq!(storage.cancel_reservation(), Err(TxDmaStorageError::State));
     assert_eq!(
         storage.release_completed(MacTxQueueDetached::new_model(DESCRIPTOR_ADDRESS)),

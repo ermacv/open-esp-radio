@@ -31,7 +31,9 @@ pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
 #[cfg(any(test, feature = "test-support"))]
 use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
 
-use oer_esp32s31_hal::ieee80211::dma::tx_storage::{PinnedTxDmaStorage, TxDmaStorageError};
+use oer_esp32s31_hal::ieee80211::dma::tx_storage::{
+    PinnedTxDmaStorage, TxDmaAccess, TxDmaStorageError,
+};
 
 use oer_ieee80211_lower_mac::TxStatus;
 use oer_ieee80211_mac::qos::WmmAccessCategory;
@@ -601,7 +603,6 @@ pub(crate) fn decode_or_quarantine(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TxError {
-    Busy,
     Invalid,
     QueueActive,
     Stale,
@@ -3262,6 +3263,66 @@ pub struct TxSlot<const BUFFER_SIZE: usize> {
     queue: LegacyTxQueue,
 }
 
+/// An exclusive view of the slot's publication phase.
+pub enum TxSlotAccess<'owner, const BUFFER_SIZE: usize> {
+    Free(TxSlotFree<'owner, BUFFER_SIZE>),
+    Reserved,
+    HardwareOwned,
+    Completed,
+    ResetRequired,
+}
+
+/// Only a free slot can be encoded, reset or reserved. Reserving consumes
+/// this loan; it cannot be reused while the DMA owner changes phase.
+pub struct TxSlotFree<'owner, const BUFFER_SIZE: usize> {
+    slot: Pin<&'owner mut TxSlot<BUFFER_SIZE>>,
+}
+
+impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
+    /// Return the same still-free slot, for custody across a queued handoff.
+    pub fn into_slot(self) -> Pin<&'owner mut TxSlot<BUFFER_SIZE>> {
+        self.slot
+    }
+
+    pub fn slot(&self) -> Pin<&TxSlot<BUFFER_SIZE>> {
+        self.slot.as_ref()
+    }
+
+    pub fn into_buffer(self) -> &'owner mut [u8; BUFFER_SIZE] {
+        match self.slot.get_mut().dma.access() {
+            TxDmaAccess::Free(free) => free.into_buffer(),
+            _ => panic!("free TX slot retains free DMA authority"),
+        }
+    }
+    pub fn buffer_mut(&mut self) -> &mut [u8; BUFFER_SIZE] {
+        match self.slot.as_mut().get_mut().dma.access() {
+            TxDmaAccess::Free(free) => free.into_buffer(),
+            _ => panic!("free TX slot retains free DMA authority"),
+        }
+    }
+
+    pub fn reset_work(&mut self) {
+        self.slot.as_mut().get_mut().work = oer_ieee80211_softmac::MacTxWork::new();
+    }
+
+    pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
+        let slot = self.slot.get_mut();
+        let generation = slot
+            .generation_cursor
+            .checked_add(1)
+            .ok_or(TxError::ResetRequired)?;
+        match slot.dma.access() {
+            TxDmaAccess::Free(free) => free.reserve(buffer_capacity, transfer_length),
+            _ => panic!("free TX slot retains free DMA authority"),
+        }
+        .map_err(map_dma_storage_error)?;
+        slot.generation_cursor = generation;
+        slot.active = TxCookie(generation);
+        slot.queue = LegacyTxQueue::Voice;
+        Ok(slot.active)
+    }
+}
+
 impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// Attach MAC policy to a statically pinned lower DMA allocation.
     pub fn from_dma(dma: PinnedTxDmaStorage<BUFFER_SIZE>) -> Self {
@@ -3301,25 +3362,18 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         self.work
     }
 
-    pub fn reset_work(self: Pin<&mut Self>) -> Result<(), TxError> {
-        let slot = self.get_mut();
-        if slot.state() != TxDmaState::Free {
-            return Err(TxError::Busy);
-        }
-        slot.work = oer_ieee80211_softmac::MacTxWork::new();
-        Ok(())
-    }
-
     pub fn state(&self) -> TxDmaState {
         self.dma.state()
     }
 
-    /// Borrow the complete source buffer while software exclusively owns it.
-    pub fn buffer_mut(self: Pin<&mut Self>) -> Result<&mut [u8; BUFFER_SIZE], TxError> {
-        self.get_mut()
-            .dma
-            .buffer_mut()
-            .map_err(map_dma_storage_error)
+    pub fn access(self: Pin<&mut Self>) -> TxSlotAccess<'_, BUFFER_SIZE> {
+        match self.state() {
+            TxDmaState::Free => TxSlotAccess::Free(TxSlotFree { slot: self }),
+            TxDmaState::Reserved => TxSlotAccess::Reserved,
+            TxDmaState::HardwareOwned => TxSlotAccess::HardwareOwned,
+            TxDmaState::Completed => TxSlotAccess::Completed,
+            TxDmaState::ResetRequired => TxSlotAccess::ResetRequired,
+        }
     }
 
     /// Current descriptor ownership word for bounded diagnostics.
@@ -3335,28 +3389,6 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// Stable source-buffer address retained by the lower DMA owner.
     pub fn buffer_address(self: Pin<&Self>) -> u32 {
         self.get_ref().dma.binding().buffer_address()
-    }
-
-    pub fn reserve(
-        self: Pin<&mut Self>,
-        buffer_capacity: u32,
-        transfer_length: u32,
-    ) -> Result<TxCookie, TxError> {
-        let slot = self.get_mut();
-        if slot.dma.state() != TxDmaState::Free {
-            return Err(TxError::Busy);
-        }
-        let generation = slot
-            .generation_cursor
-            .checked_add(1)
-            .ok_or(TxError::ResetRequired)?;
-        slot.dma
-            .reserve(buffer_capacity, transfer_length)
-            .map_err(map_dma_storage_error)?;
-        slot.generation_cursor = generation;
-        slot.active = TxCookie(generation);
-        slot.queue = LegacyTxQueue::Voice;
-        Ok(slot.active)
     }
 
     /// Cancel a descriptor that has not been published to an ordinary queue.
@@ -3742,7 +3774,6 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
 fn map_dma_storage_error(error: TxDmaStorageError) -> TxError {
     match error {
         TxDmaStorageError::Address | TxDmaStorageError::InvalidLength => TxError::Invalid,
-        TxDmaStorageError::Busy => TxError::Busy,
         TxDmaStorageError::State => TxError::Stale,
     }
 }

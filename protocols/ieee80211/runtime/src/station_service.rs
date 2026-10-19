@@ -421,9 +421,9 @@ pub struct TxMsdu {
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
-pub enum ServiceCommand<K> {
+pub enum ServiceCommand<'id, K, Path: oer_radio_port::PoolPath = oer_radio_port::Root> {
     /// A command of the station.
-    Station(StaRequest),
+    Station(StaRequest<'id, Path>),
     /// A fact of the access point beside the station.
     AccessPoint(AccessPointFact<K>),
     /// The access point beside the station is wanted.
@@ -438,7 +438,7 @@ pub enum ServiceCommand<K> {
     clippy::large_enum_variant,
     reason = "a refusal returns the original owned packet without allocation"
 )]
-pub enum ServiceOutput<K> {
+pub enum ServiceOutput<'id, K, Path: oer_radio_port::PoolPath = oer_radio_port::Root> {
     /// An ordinary protocol RX drop, before network delivery.
     RxFrameDropped(oer_ieee80211_sta::machine::StaRxError),
     /// The original network operation refused before data admission.
@@ -456,9 +456,9 @@ pub enum ServiceOutput<K> {
     /// The station's notice.
     Notice(StaNotice),
     /// A request refused synchronously, with its original correlation.
-    CommandRefused(StaCommandRefused),
+    CommandRefused(StaCommandRefused<'id, Path>),
     /// The unique terminal of one admitted station request.
-    CommandCompleted(StaCommandTerminal),
+    CommandCompleted(StaCommandTerminal<'id, Path>),
     /// The arbiter's command to the access point beside the station.
     AccessPoint(AccessPointCommand<K>),
 }
@@ -551,20 +551,22 @@ pub enum ServiceFault<B: PortBackend> {
 /// ```
 pub struct ServiceIo<
     'c,
+    'id,
     K,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
+    Path: oer_radio_port::PoolPath = oer_radio_port::Root,
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
-    pub commands: MsduReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
+    pub commands: MsduReceiver<'c, ServiceCommand<'id, K, Path>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends.
     pub transmit: MsduReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
     pub receive: MsduSender<'c, EthernetFrame, RX_DEPTH>,
     /// What the service tells the application.
-    pub output: &'c mut dyn FnMut(ServiceOutput<K>),
+    pub output: &'c mut dyn FnMut(ServiceOutput<'id, K, Path>),
 }
 
 /// How the service ended.
@@ -910,7 +912,15 @@ impl<
     >(
         self,
         owner: Owner<'p, 'id, B, Disabled>,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
         timer: &impl Timer,
     ) -> ServiceCompleted<'p, 'id, B, S, GROUPS> {
         let Self { arbiter, mut state } = self;
@@ -986,7 +996,15 @@ impl<
         &mut self,
         arbiter: PortArbiter<'id, B>,
         owner: Owner<'p, 'id, B, Disabled>,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
         timer: &impl Timer,
     ) -> (
         ServiceEnd<'p, 'id, B>,
@@ -1132,7 +1150,15 @@ impl<
                 <B::Types as PhaseTypes<'id>>::GatePath,
             >,
         >,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
         timer: &impl Timer,
     ) -> Result<
         (PortArbiter<'id, B>, Owner<'p, 'id, B, Enabled>),
@@ -1246,7 +1272,15 @@ impl<
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
         phase: &mut P,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
         timer: &impl Timer,
     ) -> Served<'id, B>
     where
@@ -1398,7 +1432,15 @@ impl<
     fn send<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
         now: Instant,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
     ) {
         let Some(mut link) = self.station.link() else {
             return;
@@ -1439,7 +1481,15 @@ impl<
         arbiter: &mut PortArbiter<'id, B>,
         now: Instant,
         phase: &mut P,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
     ) -> Next<'id, B>
     where
         'id: 'p,
@@ -1596,7 +1646,15 @@ impl<
         &mut self,
         now: Instant,
         follow: Follow<'id, B, GROUPS>,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
             Follow::Nothing => {}
@@ -1636,7 +1694,15 @@ impl<
         &mut self,
         arbiter: &mut PortArbiter<'id, B>,
         now: Instant,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
     ) {
         while let Some(notice) = arbiter.poll_notice(now) {
             match notice {
@@ -1657,7 +1723,15 @@ impl<
         arbiter: &mut PortArbiter<'id, B>,
         now: Instant,
         event: LowerMacEvent<'id, B::Types>,
-        io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+        io: &mut ServiceIo<
+            '_,
+            'id,
+            B::Caps,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            <B::Types as PhaseTypes<'id>>::StationCommandPath,
+        >,
     ) -> Result<Option<<B::Types as PhaseTypes<'id>>::RxBuffer>, ContractFault<'id, B>> {
         match event {
             LowerMacEvent::Received { frame, meta } => {
@@ -2137,7 +2211,15 @@ fn station_action<
 >(
     now: Instant,
     phase: &mut P,
-    io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
+    io: &mut ServiceIo<
+        '_,
+        'id,
+        B::Caps,
+        TX_DEPTH,
+        RX_DEPTH,
+        COMMAND_DEPTH,
+        <B::Types as PhaseTypes<'id>>::StationCommandPath,
+    >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
     pending_actions: &mut PendingActions<'id, B>,

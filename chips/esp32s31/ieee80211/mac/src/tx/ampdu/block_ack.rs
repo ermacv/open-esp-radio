@@ -118,8 +118,6 @@ pub struct TxAmpduCompletion {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxAmpduBatchError {
-    Busy,
-    NotBuilding,
     Empty,
     InvalidWindow(u8),
     InvalidSlot(u8),
@@ -128,22 +126,36 @@ pub enum TxAmpduBatchError {
     Full,
 }
 
-#[derive(Clone, Copy)]
-enum TxAmpduBatchPhase {
-    Idle,
-    Building,
-    Completing(Option<TxBlockAckBitmap>),
-}
+/// A batch with no outstanding frame ownership.
+#[derive(Debug)]
+pub struct BatchIdle;
+
+/// A batch whose frame list is exclusively owned by its builder.
+#[derive(Debug)]
+pub struct BatchBuilding;
+
+/// A batch draining a single hardware completion observation.
+#[derive(Debug)]
+pub struct BatchCompleting(Option<TxBlockAckBitmap>);
 
 /// One fixed TX A-MPDU batch owned by the Rust radio task.
 ///
-/// `next_completion` returns at most one frame on every call. The executor can
-/// therefore recycle or retry one MPDU and yield, instead of running the
-/// vendor linked-list drains inside one PP event. There is no allocation,
-/// clock read, retry loop, lock, or raw-pointer ownership in this type.
-pub struct TxAmpduBatch {
+/// `begin` consumes the idle owner. Only a building owner can append frames
+/// or accept completion; only the last completion returns an idle owner.
+/// Dropping a phase loses its authority rather than allowing a second begin.
+/// Each completion step returns exactly one frame without a drain loop.
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_ieee80211_mac::tx::ampdu::TxAmpduBatch;
+/// use oer_ieee80211_mac::sequence::SequenceNumber;
+/// let idle = TxAmpduBatch::new();
+/// let building = idle.begin(SequenceNumber::ZERO, 2);
+/// let duplicate = idle.begin(SequenceNumber::ZERO, 2);
+/// ```
+#[derive(Debug)]
+pub struct TxAmpduBatch<Phase = BatchIdle> {
     entries: [Option<TxAmpduMpdu>; TX_AMPDU_SLOT_CAPACITY],
-    phase: TxAmpduBatchPhase,
+    phase: Phase,
     starting_sequence: SequenceNumber,
     window: u8,
     count: u8,
@@ -155,7 +167,7 @@ impl TxAmpduBatch {
     pub const fn new() -> Self {
         Self {
             entries: [None; TX_AMPDU_SLOT_CAPACITY],
-            phase: TxAmpduBatchPhase::Idle,
+            phase: BatchIdle,
             starting_sequence: SequenceNumber::ZERO,
             window: 0,
             count: 0,
@@ -165,46 +177,32 @@ impl TxAmpduBatch {
     }
 
     pub fn begin(
-        &mut self,
+        mut self,
         starting_sequence: SequenceNumber,
         window: u8,
-    ) -> Result<(), TxAmpduBatchError> {
-        if !matches!(self.phase, TxAmpduBatchPhase::Idle) {
-            return Err(TxAmpduBatchError::Busy);
-        }
+    ) -> Result<TxAmpduBatch<BatchBuilding>, (Self, TxAmpduBatchError)> {
         if window == 0 || usize::from(window) > TX_AMPDU_SLOT_CAPACITY {
-            return Err(TxAmpduBatchError::InvalidWindow(window));
+            return Err((self, TxAmpduBatchError::InvalidWindow(window)));
         }
         self.starting_sequence = starting_sequence;
         self.window = window;
-        self.count = 0;
-        self.completion_index = 0;
-        self.slot_mask = 0;
-        self.phase = TxAmpduBatchPhase::Building;
-        Ok(())
+        Ok(self.with_phase(BatchBuilding))
     }
+}
 
-    /// Append one statically owned frame and assign its consecutive QoS
-    /// sequence number. Duplicate slot ownership is rejected in O(1).
+impl TxAmpduBatch<BatchBuilding> {
+    /// Append one statically owned frame with a consecutive QoS sequence.
     pub fn push(&mut self, slot: u8) -> Result<TxAmpduMpdu, TxAmpduBatchError> {
         let sequence = self.starting_sequence.wrapping_add(u16::from(self.count));
         self.push_sequence(slot, sequence)
     }
 
-    /// Append a statically owned frame whose sequence was already assigned by
-    /// the finite PP framing leaf.
-    ///
-    /// This is the path used for a prepared hardware A-MPDU. It preserves the
-    /// exact per-MPDU sequence numbers, including retry aggregates with holes,
-    /// so BlockAck completion never depends on an inferred order.
+    /// Preserve a prepared MPDU's exact sequence, including retry holes.
     pub fn push_sequence(
         &mut self,
         slot: u8,
         sequence: SequenceNumber,
     ) -> Result<TxAmpduMpdu, TxAmpduBatchError> {
-        if !matches!(self.phase, TxAmpduBatchPhase::Building) {
-            return Err(TxAmpduBatchError::NotBuilding);
-        }
         let slot = TxAmpduSlot::new(slot).ok_or(TxAmpduBatchError::InvalidSlot(slot))?;
         let slot_bit = 1_u32 << slot.index();
         if self.slot_mask & slot_bit != 0 {
@@ -213,13 +211,10 @@ impl TxAmpduBatch {
         if self.count >= self.window {
             return Err(TxAmpduBatchError::Full);
         }
-
-        let mut index = 0_usize;
-        while index < usize::from(self.count) {
-            if self.entries[index].is_some_and(|entry| entry.sequence == sequence) {
+        for entry in &self.entries[..usize::from(self.count)] {
+            if entry.is_some_and(|entry| entry.sequence == sequence) {
                 return Err(TxAmpduBatchError::DuplicateSequence(sequence));
             }
-            index += 1;
         }
         let mpdu = TxAmpduMpdu { slot, sequence };
         self.entries[usize::from(self.count)] = Some(mpdu);
@@ -229,78 +224,97 @@ impl TxAmpduBatch {
     }
 
     pub fn complete_with_block_ack(
-        &mut self,
+        self,
         block_ack: TxBlockAckBitmap,
-    ) -> Result<(), TxAmpduBatchError> {
+    ) -> Result<TxAmpduBatch<BatchCompleting>, (Self, TxAmpduBatchError)> {
         self.begin_completion(Some(block_ack))
     }
 
-    /// Complete a hardware timeout/error edge. Every submitted MPDU is
-    /// returned as `Retry`, one per `next_completion` call.
-    pub fn complete_without_block_ack(&mut self) -> Result<(), TxAmpduBatchError> {
+    /// On a timeout/error edge every MPDU returns as `Retry`.
+    pub fn complete_without_block_ack(
+        self,
+    ) -> Result<TxAmpduBatch<BatchCompleting>, (Self, TxAmpduBatchError)> {
         self.begin_completion(None)
     }
 
     fn begin_completion(
-        &mut self,
+        self,
         block_ack: Option<TxBlockAckBitmap>,
-    ) -> Result<(), TxAmpduBatchError> {
-        if !matches!(self.phase, TxAmpduBatchPhase::Building) {
-            return Err(TxAmpduBatchError::NotBuilding);
-        }
+    ) -> Result<TxAmpduBatch<BatchCompleting>, (Self, TxAmpduBatchError)> {
         if self.count == 0 {
-            return Err(TxAmpduBatchError::Empty);
+            return Err((self, TxAmpduBatchError::Empty));
         }
-        self.completion_index = 0;
-        self.phase = TxAmpduBatchPhase::Completing(block_ack);
-        Ok(())
+        Ok(self.with_phase(BatchCompleting(block_ack)))
     }
+}
 
-    /// Consume exactly one completion result. Returning the last result also
-    /// returns the batch to idle; no separate drain or cleanup loop exists.
-    pub fn next_completion(&mut self) -> Option<TxAmpduCompletion> {
-        let TxAmpduBatchPhase::Completing(block_ack) = self.phase else {
-            return None;
-        };
-        if self.completion_index >= self.count {
-            self.reset();
-            return None;
-        }
+/// Returning the last MPDU returns the unique permission to begin again.
+#[derive(Debug)]
+#[must_use = "retain the remaining batch or the returned idle owner"]
+pub enum TxAmpduBatchStep {
+    More {
+        completion: TxAmpduCompletion,
+        batch: TxAmpduBatch<BatchCompleting>,
+    },
+    Last {
+        completion: TxAmpduCompletion,
+        batch: TxAmpduBatch,
+    },
+}
 
+impl TxAmpduBatch<BatchCompleting> {
+    pub fn next_completion(mut self) -> TxAmpduBatchStep {
         let index = usize::from(self.completion_index);
-        let mpdu = self.entries[index].take()?;
+        let mpdu = self.entries[index]
+            .take()
+            .expect("completing batch retains every submitted MPDU");
         self.completion_index += 1;
         self.slot_mask &= !(1_u32 << mpdu.slot.index());
-        let disposition = if block_ack.is_some_and(|ack| ack.acknowledges(mpdu.sequence)) {
+        let disposition = if self
+            .phase
+            .0
+            .is_some_and(|ack| ack.acknowledges(mpdu.sequence))
+        {
             TxAmpduDisposition::Acknowledged
         } else {
             TxAmpduDisposition::Retry
         };
         let completion = TxAmpduCompletion { mpdu, disposition };
         if self.completion_index == self.count {
-            self.reset();
+            self.window = 0;
+            self.count = 0;
+            self.completion_index = 0;
+            TxAmpduBatchStep::Last {
+                completion,
+                batch: self.with_phase(BatchIdle),
+            }
+        } else {
+            TxAmpduBatchStep::More {
+                completion,
+                batch: self,
+            }
         }
-        Some(completion)
     }
+}
 
+impl<Phase> TxAmpduBatch<Phase> {
     pub const fn len(&self) -> usize {
         self.count as usize
     }
-
     pub const fn is_empty(&self) -> bool {
         self.count == 0
     }
 
-    pub const fn is_idle(&self) -> bool {
-        matches!(self.phase, TxAmpduBatchPhase::Idle)
-    }
-
-    fn reset(&mut self) {
-        self.phase = TxAmpduBatchPhase::Idle;
-        self.window = 0;
-        self.count = 0;
-        self.completion_index = 0;
-        self.slot_mask = 0;
+    fn with_phase<Next>(self, phase: Next) -> TxAmpduBatch<Next> {
+        TxAmpduBatch {
+            entries: self.entries,
+            phase,
+            starting_sequence: self.starting_sequence,
+            window: self.window,
+            count: self.count,
+            completion_index: self.completion_index,
+            slot_mask: self.slot_mask,
+        }
     }
 }
 

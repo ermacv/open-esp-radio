@@ -116,27 +116,24 @@ where
     // same per-service descriptor budget.
     let mut deferred_recycled = 0_usize;
     while deferred_recycled < BUDGET_UNITS {
-        let Some(descriptor_count) = storage
-            .first_observed_ring_unit_descriptor_count(ring)
+        let Some(recycle) = storage
+            .claim_deferred_recycle(ring, frozen_cursor)
             .map_err(RxStageTransactionError::Ring)?
         else {
             break;
         };
+        let descriptor_count = recycle.descriptor_count();
         if deferred_recycled.saturating_add(descriptor_count) > BUDGET_UNITS {
             deferred_recycle_pending = true;
             break;
         }
-        let append = storage
-            .recycle_completed_unit_through_frozen_last(
-                ring,
-                hardware,
-                frozen_cursor,
-                descriptor_count,
-            )
-            .map_err(RxStageTransactionError::Ring)?;
-        let Some(append) = append else {
-            deferred_recycle_pending = true;
-            break;
+        let append = match recycle.append(hardware) {
+            Ok(append) => append,
+            Err(RxRingError::ReloadPending) => {
+                deferred_recycle_pending = true;
+                break;
+            }
+            Err(error) => return Err(RxStageTransactionError::Ring(error)),
         };
         recycled_descriptors = recycled_descriptors.saturating_add(append.descriptor_count);
         deferred_recycled = deferred_recycled.saturating_add(append.descriptor_count);
@@ -296,7 +293,6 @@ where
         }
 
         hooks.phase(Phase::StageTake);
-        let recycle_start_before_take = ring.recycle_start();
         // The take is bounded by the frozen LAST inclusive: the walker no
         // longer writes any descriptor of the unit it returns.
         let unit = storage
@@ -337,10 +333,9 @@ where
         admitted = admitted.saturating_add(1);
         admitted_descriptors = admitted_descriptors.saturating_add(unit_descriptor_count);
 
-        let (frame, descriptor_replenished) = if overload_drop {
-            unit.retain_for_deferred_recycle();
-            let descriptor_replenished =
-                unit_observation.head_index == recycle_start_before_take.get();
+        let (frame, recycle) = if overload_drop {
+            let recycle = unit.retain_discard();
+            let descriptor_replenished = recycle.is_some();
             deferred_recycle_pending |= !descriptor_replenished;
             discarded_units = discarded_units.saturating_add(1);
             overload_discarded = overload_discarded.saturating_add(1);
@@ -354,11 +349,10 @@ where
             admission.observe(Observation::OverloadDiscardedAndRecycled(
                 unavailable_preview.expect("overload discard has a preview"),
             ));
-            (None, descriptor_replenished)
+            (None, recycle)
         } else if let Some(discard) = recoverable_discard {
-            unit.retain_for_deferred_recycle();
-            let descriptor_replenished =
-                unit_observation.head_index == recycle_start_before_take.get();
+            let recycle = unit.retain_discard();
+            let descriptor_replenished = recycle.is_some();
             deferred_recycle_pending |= !descriptor_replenished;
             discarded_units = discarded_units.saturating_add(1);
             if hooks.observing() {
@@ -368,7 +362,7 @@ where
                 unit: unit_observation,
                 reason: discard,
             });
-            (None, descriptor_replenished)
+            (None, recycle)
         } else {
             if stage_with_reserved_credit {
                 critical_reserve_admitted = critical_reserve_admitted.saturating_add(1);
@@ -398,37 +392,33 @@ where
                 );
             }
             match stage? {
-                RxDmaDeferredStageUnitOutcome::Staged(frame) => (Some(frame), false),
+                RxDmaDeferredStageUnitOutcome::Staged(frame) => (Some(frame), None),
                 RxDmaDeferredStageUnitOutcome::Discarded(_) => {
                     return Err(RxStageTransactionError::Ring(RxRingError::Corrupt));
                 }
             }
         };
 
-        if descriptor_replenished {
+        let descriptor_replenished = recycle.is_some();
+        if let Some(recycle) = recycle {
             hooks.phase(Phase::Recycle);
-            let append = storage
-                .recycle_completed_unit_through_frozen_last(
-                    ring,
-                    hardware,
-                    frozen_cursor,
-                    unit_descriptor_count,
-                )
-                .map_err(RxStageTransactionError::Ring)?;
-            let Some(append) = append else {
-                if O::LOG_ERRORS {
-                    hooks.log_recycle_refused(
-                        unit_descriptor_count,
-                        ring.recycle_start().get(),
-                        ring.accepted_tail().get(),
-                        ring.observed_mask().count_ones(),
-                        frozen_cursor.last_descriptor_low(),
-                        frozen_cursor.next_descriptor_low(),
-                        ring.reload_pending(),
-                        hardware.reload_pending(),
-                    );
+            let append = match recycle.append(hardware) {
+                Ok(append) => append,
+                Err(error) => {
+                    if O::LOG_ERRORS {
+                        hooks.log_recycle_refused(
+                            unit_descriptor_count,
+                            ring.recycle_start().get(),
+                            ring.accepted_tail().get(),
+                            ring.observed_mask().count_ones(),
+                            frozen_cursor.last_descriptor_low(),
+                            frozen_cursor.next_descriptor_low(),
+                            ring.reload_pending(),
+                            hardware.reload_pending(),
+                        );
+                    }
+                    return Err(RxStageTransactionError::Ring(error));
                 }
-                return Err(RxStageTransactionError::Ring(RxRingError::Busy));
             };
             if append.descriptor_count != unit_descriptor_count {
                 return Err(RxStageTransactionError::Ring(RxRingError::Corrupt));

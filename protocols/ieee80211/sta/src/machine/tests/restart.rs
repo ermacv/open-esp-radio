@@ -35,10 +35,8 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         assert!(world.station.link().is_none());
         assert_eq!(world.pending_removals.len(), 1);
         assert!(matches!(
-            world
-                .station
-                .command(at(51), StaRequest::new(999, StaCommand::Connect)),
-            Err(StaCommandRefused {
+            world.command(at(51), 999, StaCommand::Connect),
+            Err(ObservedCommandRefused {
                 reason: CommandRefusal::Transitioning,
                 ..
             })
@@ -56,10 +54,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
             world.take(),
             [Seen::RemoveKey, Seen::RemoveKey, Seen::Configure("off")]
         );
-        world
-            .station
-            .command(at(53), StaRequest::new(1000, StaCommand::Connect))
-            .unwrap();
+        world.command(at(53), 1000, StaCommand::Connect).unwrap();
         world.run(at(53));
         assert_ne!(world.station.epoch, previous_epoch);
         assert_ne!(world.station.lease.id(), previous_lease);

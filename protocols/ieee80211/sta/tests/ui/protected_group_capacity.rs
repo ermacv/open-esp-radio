@@ -14,13 +14,13 @@ pub fn build<'id>(
     password: oer_ieee80211_rsn::sae::SaePassword,
     pmk: oer_ieee80211_rsn::Pmk,
     resources: StationResources<'id, Tokens<GROUPS>, 1, 1, GROUPS>,
-) -> Station<'id, Tokens<GROUPS>, Caps> {
+) -> (Station<'id, Tokens<GROUPS>, Caps>, oer_ieee80211_sta::machine::StaCommandCredits<'id>) {
     Station::new_personal(config, password, pmk, resources, CAPACITY)
 }
 
 pub fn open_without_group_slots<'id>(
     config: StaConfig<Caps>,
     resources: StationResources<'id, Tokens<0>, 1, 1, 0>,
-) -> Station<'id, Tokens<0>, Caps> {
+) -> (Station<'id, Tokens<0>, Caps>, oer_ieee80211_sta::machine::StaCommandCredits<'id>) {
     Station::new_open(config, resources)
 }

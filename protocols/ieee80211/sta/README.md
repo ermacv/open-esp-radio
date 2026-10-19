@@ -12,16 +12,18 @@ the consumer performs or forwards them before waiting again. Rust can still
 explicitly drop an affine value; the annotation diagnoses accidentally
 discarded results and does not replace terminal resource handling.
 
-`Station::command` consumes a non-cloneable `StaRequest` with the application's
-correlation value. Refusal returns the request synchronously with its reason;
-admission reserves one terminal cell for its command kind. Connect,
-background scan and Disconnect have separate cells. A duplicate request is
-refused while its operation or undelivered terminal owns that cell, so a
-Disconnect cannot overwrite a pending scan result. `CommandCompleted` returns
-the original request. Lifecycle Connected/Disconnected notices remain distinct
-from request completion. A scan result retains partial observations and names
-the exact absence refusal, cancelled-absence limit or link-ending reason.
-The correlation value is caller data and confers no resource authority.
+`Station::command` consumes a `StaRequest` together with its unique command
+credit. Construction returns separate Connect, background-scan and Disconnect
+credits, bound to the installation and interface by their types. A refusal
+returns the original request synchronously; admission retains its credit
+through the operation and terminal delivery. `CommandCompleted` returns the
+same request and credit, so the application can issue that kind again. A
+pending request or undelivered terminal cannot coexist with another credit
+for its kind. Disconnect keeps its independent terminal cell and cannot
+overwrite a pending scan result. Lifecycle Connected/Disconnected notices
+remain distinct from request completion. A scan result retains partial
+observations and names the exact absence refusal, cancelled-absence limit or
+link-ending reason. Correlation is caller data and confers no authority.
 
 After the port's terminal failure, `Station::finish` consumes the protocol
 machine into `RetiredStation`, with separate epoch, key, frame and
@@ -232,8 +234,9 @@ after checking its subtype and all three header addresses.
 `StaSecurity::Personal` carries both the SAE password and PSK PMK; AKM
 selection follows the BSS qualification.
 
-`Station::new_open` and `Station::new_personal` require one to eight tickets
-and small buffers at compile time. Resources must match the backend token
+`Station::new_open` and `Station::new_personal` return the machine and its
+three command credits. They require one to eight tickets and small buffers
+at compile time. Resources must match the backend token
 type's `StaTokens::GROUP_SLOTS`. Open mode accepts zero group slots; the
 personal constructor requires at least one: it takes a `GroupCapacity`
 proof, which a `const` item evaluates (a zero capacity fails the build), and the
@@ -554,8 +557,8 @@ configuration replies.
   (via `mem::replace`), `Option` fields `configuration`, `place`,
   `absence_place`, `absence`, `epoch` on `Station`, `Held::Released`, bools
   and `Option`s in `Connected`.
-- **`machine/commands.rs::CommandRefusal::Busy/TerminalPending`**, and
-  `Commands::complete` does nothing unless the cell is `Pending`.
+- **`Commands::complete`** does nothing unless the cell is `Pending`; command
+  credits prevent a second request from overwriting that cell or its terminal.
 - **`machine.rs::Owed` variants carry no proof**; they re-read `self.lease`
   and `self.keys.pairwise` behind `_ =>` arms.
 - **Silent losses and hidden panics:** `pool.rs::Pool::put` drops and

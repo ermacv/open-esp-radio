@@ -115,7 +115,16 @@ pub enum RxRingError {
     DescriptorOwnerAddress,
     Size,
     Overflow,
-    Busy,
+    /// An asynchronous upper owner has not returned its detached buffer.
+    OutstandingLeases,
+    /// Descriptor ownership contradicts the independently retained buffer.
+    BufferOwnershipConflict,
+    /// The peripheral has not retired its previous reload doorbell.
+    ReloadPending,
+    /// The receive walker did not acknowledge its enable edge.
+    WalkerStartUnconfirmed,
+    /// The receive walker did not acknowledge its stop edge.
+    WalkerStopUnconfirmed,
     Corrupt,
     ResetRequired,
 }
@@ -958,14 +967,8 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
         self,
         mmio: &mut M,
     ) -> Result<RxRingLive<'a, COUNT>, (Self, RxRingError)> {
-        match RxDmaArenaState::load(self.arena.lifecycle()) {
-            RxDmaArenaState::Prepared => {}
-            RxDmaArenaState::ResetRequired => {
-                return Err((self, RxRingError::ResetRequired));
-            }
-            RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                return Err((self, RxRingError::Busy));
-            }
+        if RxDmaArenaState::load(self.arena.lifecycle()) == RxDmaArenaState::ResetRequired {
+            return Err((self, RxRingError::ResetRequired));
         }
         if !self.topology_snapshot().valid || !self.reserved_published() {
             return Err((self, RxRingError::Corrupt));
@@ -1922,29 +1925,32 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// one returned chain. It counts one unit, transfers that exact
     /// `head..tail` chain through `wDev_DiscardFrame`/`wDev_AppendRxBlocks`,
     /// and only then refreshes LAST before examining the next software head.
-    /// Binding the operation to [`RxFrozenCursor`] prevents the descriptor
-    /// address from being reused as authority after this append changes the
-    /// ring generation.
-    pub(crate) fn recycle_completed_unit_through_frozen_last_owned<M, F>(
+    /// The affine recycle unit retains the mutable ring loan from its
+    /// frozen-LAST observation through this append. A copied cursor or count
+    /// cannot authorize a later descriptor generation.
+    pub(crate) fn recycle_proven_unit_owned<M, F>(
         &mut self,
         mmio: &mut M,
-        cursor: RxFrozenCursor,
         descriptor_count: usize,
         prepare_buffer: F,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError>
+    ) -> Result<RxLiveAppend<COUNT>, RxRingError>
     where
         M: RxDma,
         F: FnMut(usize) -> Result<(), RxRingError>,
     {
-        if !self.frozen_cursor_releases_unit(cursor, descriptor_count) {
-            return Ok(None);
-        }
+        // Only RxDmaRecycleUnit calls this: its mutable ring loan retains
+        // the observed group and the frozen LAST generation until append.
+        debug_assert!(
+            self.observed_mask
+                .contains_group::<COUNT>(self.recycle_start, descriptor_count)
+        );
         self.recycle_completed_group(
             mmio,
             descriptor_count,
             RxRecycleGroupShape::OneCompletedUnitThroughFrozenLast,
             prepare_buffer,
-        )
+        )?
+        .ok_or(RxRingError::ReloadPending)
     }
 
     fn recycle_completed_group<M, F>(
@@ -2305,7 +2311,11 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// its saved LAST before taking another snapshot. Keep this proof separate
     /// from the fallback live-cursor probe: it is valid only while the caller
     /// has not appended anything since freezing `last_descriptor_low`.
-    fn frozen_cursor_releases_unit(&self, cursor: RxFrozenCursor, descriptor_count: usize) -> bool {
+    pub(crate) fn frozen_cursor_releases_unit(
+        &self,
+        cursor: RxFrozenCursor,
+        descriptor_count: usize,
+    ) -> bool {
         if descriptor_count == 0 || descriptor_count > COUNT {
             return false;
         }
@@ -2409,8 +2419,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// The doorbells are observed until they clear or `settle`'s limit has
     /// passed on its clock, counted from the call; the first observation
     /// always runs. When a doorbell is still pending then, the reload stays
-    /// pending in this owner and the call returns `Busy`. Each wait records
-    /// its observation count in [`RxReloadEvidence::max_reload_attempts`].
+    /// pending in this owner and the call returns `ReloadPending`. Each wait
+    /// records its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so
     /// this waits for at most two doorbells.
     pub fn complete_pending_reload<M: RxDma>(
@@ -2425,7 +2435,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 mmio.try_with_reload_settled(|_settled| ())
             });
             record_maximum(&self.arena.max_reload_attempts, attempts);
-            settled.map_err(|crate::settle::Unsettled| RxRingError::Busy)?;
+            settled.map_err(|crate::settle::Unsettled| RxRingError::ReloadPending)?;
             self.settle_reload(mmio)?;
         }
         Ok(())
@@ -2840,7 +2850,7 @@ fn enable_receive_inner<M: RxDma>(
     binding: &RxDmaBinding<'_>,
 ) -> Result<(), RxRingError> {
     mmio.try_with_walker_enabled(binding, |_enabled| ())
-        .ok_or(RxRingError::Busy)
+        .ok_or(RxRingError::WalkerStartUnconfirmed)
 }
 
 /// Stop the RX walker and confirm that the peripheral released its enable
@@ -2850,8 +2860,8 @@ fn enable_receive_inner<M: RxDma>(
 /// and readback turn that raw leaf into an explicit Rust ownership boundary:
 /// callers may mutate the ring only after this function returns `Ok(())`.
 ///
-/// A walker which does not read back as stopped is `Busy`. A stop proof
-/// naming another arena proves nothing about this one: the arena is
+/// A walker which does not read back as stopped is `WalkerStopUnconfirmed`.
+/// A stop proof naming another arena proves nothing about this one: the arena is
 /// poisoned until radio reset and the stop is `Corrupt`.
 fn disable_receive_inner<M: RxDma>(
     mmio: &mut M,
@@ -2859,7 +2869,7 @@ fn disable_receive_inner<M: RxDma>(
     arena: &RxArenaWords,
 ) -> Result<(), RxRingError> {
     match mmio.try_with_walker_stopped(binding, |stopped| stopped.names(arena)) {
-        None => Err(RxRingError::Busy),
+        None => Err(RxRingError::WalkerStopUnconfirmed),
         Some(true) => Ok(()),
         Some(false) => {
             RxDmaArenaState::ResetRequired.store(arena.lifecycle());

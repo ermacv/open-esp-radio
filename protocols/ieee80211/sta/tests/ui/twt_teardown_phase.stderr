@@ -1,0 +1,5 @@
+error[E0599]: no method named `queue_teardown` found for struct `IndividualTwtTransmittingFlow<'owner>` in the current scope
+  --> tests/ui/twt_teardown_phase.rs:11:11
+   |
+11 |     _flow.queue_teardown(_now); // ui-error: E0599
+   |           ^^^^^^^^^^^^^^ method not found in `IndividualTwtTransmittingFlow<'_>`

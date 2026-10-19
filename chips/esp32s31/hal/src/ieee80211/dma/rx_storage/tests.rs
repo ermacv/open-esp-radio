@@ -494,36 +494,26 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
 }
 
 #[test]
-fn one_arena_cannot_issue_two_root_ring_capabilities() {
-    const COUNT: usize = 2;
-    let storage = Box::leak(Box::new(RxDmaStorage::<COUNT, 16, 20, HostDma>::new()));
-    let placed = place(storage);
+fn the_consumed_placement_moves_through_one_prepared_live_halted_graph() {
+    let placed = place(Box::leak(Box::new(
+        RxDmaStorage::<2, 16, 20, HostDma>::new(),
+    )));
     let storage = placed.storage();
-    let mut first_mmio = MockRxDma::default();
-    let mut second_mmio = MockRxDma::default();
-
-    let first = placed
-        .prepare_ring(&mut first_mmio)
-        .expect("first root capability");
+    let mut mmio = MockRxDma::default();
+    let prepared = placed.prepare_ring(&mut mmio).expect("initial root owner");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
-    assert!(matches!(
-        placed.prepare_ring(&mut second_mmio),
-        Err(RxRingError::Busy)
-    ));
-
-    let live = first
-        .try_start(&mut first_mmio)
+    let live = prepared
+        .try_start(&mut mmio)
         .map_err(|(_, error)| error)
-        .expect("first live epoch");
+        .expect("live owner");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
-    let _halted = live
-        .try_stop(&mut first_mmio)
+    let halted = live
+        .try_stop(&mut mmio)
         .unwrap_or_else(|_| panic!("walker stops"));
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
-    assert!(matches!(
-        placed.prepare_ring(&mut second_mmio),
-        Err(RxRingError::Busy)
-    ));
+    let _prepared = storage
+        .prepare_halted(halted, &mut mmio)
+        .unwrap_or_else(|_| panic!("same stopped arena is reusable"));
 }
 
 #[test]
@@ -604,7 +594,7 @@ fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
 
     assert!(matches!(
         placed.prepare_ring(&mut mmio),
-        Err(RxRingError::Busy)
+        Err(RxRingError::WalkerStopUnconfirmed)
     ));
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
 }
@@ -635,7 +625,7 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
         Err(failure) => failure,
     };
 
-    assert_eq!(error, RxRingError::Busy);
+    assert_eq!(error, RxRingError::WalkerStopUnconfirmed);
     assert!(mmio.walker);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
 }
@@ -685,7 +675,7 @@ fn partial_live_buffer_rearm_quarantines_the_arena() {
         (base + crate::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) & ADDRESS_LOW_MASK;
     assert_eq!(
         storage.recycle_completed_prefix::<1, _>(&mut live, &mut mmio),
-        Err(RxRingError::Busy),
+        Err(RxRingError::BufferOwnershipConflict),
     );
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
     drop(detached);
@@ -1119,11 +1109,12 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
         .take_completed_unit(&mut live, frozen_cursor)
         .expect("completed descriptor")
         .expect("descriptor owner");
-    unit.retain_for_deferred_recycle();
-
-    let append = storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, frozen_cursor, 1)
-        .expect("frozen LAST reclaim")
+    let credit = unit
+        .retain_discard()
+        .expect("unit is at the recycle frontier");
+    assert_eq!(credit.descriptor_count(), 1);
+    let append = credit
+        .append(&mut mmio)
         .expect("LAST itself releases the observed descriptor");
     assert_eq!(append.head_index.get(), 0);
     assert_eq!(append.descriptor_count, 1);
@@ -1274,7 +1265,15 @@ fn a_cursor_of_an_earlier_generation_takes_nothing() {
         .expect("first unit")
         .retain_for_deferred_recycle();
     storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, stale, 1)
+        .claim_deferred_recycle(&mut live, stale)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(&mut mmio)
+                })
+                .transpose()
+        })
         .unwrap()
         .expect("LAST releases descriptor zero");
     live.complete_pending_reload(&mut mmio, frozen_settle())
@@ -1369,7 +1368,15 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
         .expect("first unit owner")
         .retain_for_deferred_recycle();
     let append = storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 1)
+        .claim_deferred_recycle(&mut live, cursor)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(&mut mmio)
+                })
+                .transpose()
+        })
         .expect("first vendor unit reclaim")
         .expect("first unit precedes LAST");
     assert_eq!(append.head_index.get(), 0);
@@ -1390,14 +1397,28 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
         .retain_for_deferred_recycle();
     assert!(
         storage
-            .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 1,)
+            .claim_deferred_recycle(&mut live, cursor)
+            .and_then(|credit| credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(&mut mmio)
+                })
+                .transpose())
             .expect("stale generation check")
             .is_none(),
         "one frozen cursor must not authorize a second append generation"
     );
     let refreshed = live.freeze_cursor(&mut mmio).unwrap();
     storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, refreshed, 1)
+        .claim_deferred_recycle(&mut live, refreshed)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(&mut mmio)
+                })
+                .transpose()
+        })
         .expect("refreshed cursor check")
         .expect("refreshed LAST releases the second vendor unit");
     live.complete_pending_reload(&mut mmio, frozen_settle())
@@ -1422,7 +1443,7 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
         Ok(_) => panic!("ambiguous enable is not a live capability"),
         Err(failure) => failure,
     };
-    assert_eq!(error, RxRingError::Busy);
+    assert_eq!(error, RxRingError::WalkerStartUnconfirmed);
     assert!(mmio.walker);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::ResetRequired);
 }
@@ -1732,7 +1753,7 @@ fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
 }
 
 #[test]
-fn a_walker_that_does_not_stop_returns_the_live_owner_busy() {
+fn a_walker_that_does_not_stop_returns_the_live_owner_unconfirmed() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
     let storage = Box::leak(Box::new(RxDmaStorage::<2, 16, 20, HostDma>::new()));
     let placed = place(storage);
@@ -1750,7 +1771,7 @@ fn a_walker_that_does_not_stop_returns_the_live_owner_busy() {
         .try_stop(&mut mmio)
         .err()
         .expect("an unconfirmed stop keeps the live owner");
-    assert_eq!(error, RxRingError::Busy);
+    assert_eq!(error, RxRingError::WalkerStopUnconfirmed);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
     assert!(mmio.walker_enabled);
 
@@ -1817,7 +1838,15 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
     // Its consumer drops it as it drops any chained unit.
     unit.retain_for_deferred_recycle();
     let append = storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 3)
+        .claim_deferred_recycle(&mut live, cursor)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 3);
+                    credit.append(&mut mmio)
+                })
+                .transpose()
+        })
         .unwrap()
         .expect("the frozen LAST releases the chain");
     assert_eq!(append.head_index.get(), 0);
@@ -1868,7 +1897,15 @@ fn ring_with_pending_reload(
         .unwrap()
         .retain_for_deferred_recycle();
     storage
-        .recycle_completed_unit_through_frozen_last(&mut live, mmio, cursor, 1)
+        .claim_deferred_recycle(&mut live, cursor)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(mmio)
+                })
+                .transpose()
+        })
         .unwrap()
         .expect("the frozen LAST releases descriptor zero");
     assert!(live.reload_pending());
@@ -1876,7 +1913,7 @@ fn ring_with_pending_reload(
 }
 
 #[test]
-fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
+fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
     use core::cell::Cell;
 
@@ -1900,7 +1937,7 @@ fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
     let settle = Settle::new(SettleLimit::new(Duration::from_micros(5)).unwrap(), &clock);
     assert_eq!(
         live.complete_pending_reload(&mut mmio, settle),
-        Err(RxRingError::Busy)
+        Err(RxRingError::ReloadPending)
     );
     // The start read is 100; the checks read 101..=105, and 105 ends it.
     assert_eq!(live.reload_evidence().max_reload_attempts, 5);
@@ -1957,7 +1994,15 @@ fn reload_attempts_record_the_largest_observation_count() {
         .unwrap()
         .retain_for_deferred_recycle();
     storage
-        .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, cursor, 1)
+        .claim_deferred_recycle(&mut live, cursor)
+        .and_then(|credit| {
+            credit
+                .map(|credit| {
+                    assert_eq!(credit.descriptor_count(), 1);
+                    credit.append(&mut mmio)
+                })
+                .transpose()
+        })
         .unwrap()
         .expect("the frozen LAST releases descriptor one");
     assert!(live.reload_pending());

@@ -20,8 +20,8 @@ use oer_esp32s31_hal::{
 
 use crate::{
     concurrent::{
-        ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyReady, acquire_client,
-        release_client,
+        ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyClientReady, PhyReady,
+        acquire_client, release_client, resume_client, retire_suspended_client, suspend_client,
     },
     state::client::RadioClient,
 };
@@ -35,7 +35,7 @@ use crate::{
 /// ```
 #[must_use = "the Wi-Fi PHY membership must be left through leave_wifi"]
 pub struct WifiPhyMembership {
-    _private: (),
+    key: crate::state::client::PhyClientKey,
 }
 
 impl fmt::Debug for WifiPhyMembership {
@@ -55,7 +55,7 @@ impl fmt::Debug for WifiPhyMembership {
 ///
 /// The client set rejects the client; nothing changed.
 pub fn join_wifi<'l>(
-    ready: PhyReady<'l>,
+    ready: PhyClientReady<'l, WifiPhyMembership>,
     clocked: &WifiClocked,
     clock: &impl oer_time::Clock,
 ) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, ConcurrentPhyError>> {
@@ -63,7 +63,9 @@ pub fn join_wifi<'l>(
     let radio = ready.into_radio();
     match acquire_client(radio, RadioClient::Wifi, clock) {
         Ok(acquired) => Ok(Joined {
-            membership: WifiPhyMembership { _private: () },
+            membership: WifiPhyMembership {
+                key: radio.attachment().permission_key(),
+            },
             acquired,
             radio,
         }),
@@ -81,7 +83,9 @@ pub fn set_wifi_rx(
     membership: &WifiPhyMembership,
     enabled: bool,
 ) {
-    let _ = membership;
+    (radio.attachment().permission_key() == membership.key)
+        .then_some(())
+        .expect("PHY registration mismatch");
     oer_esp32s31_hal::phy::frequency::set_wifi_enabled(&mut radio.phy_hal(), enabled);
 }
 
@@ -126,9 +130,9 @@ pub fn leave_wifi(
     membership: WifiPhyMembership,
 ) -> Result<bool, WifiPhyLeaveFailure> {
     let _ = clocked;
-    match release_client(radio, RadioClient::Wifi) {
+    match release_client(radio, RadioClient::Wifi, membership.key) {
         Ok(last) => {
-            let WifiPhyMembership { _private: () } = membership;
+            let WifiPhyMembership { key: _ } = membership;
             Ok(last)
         }
         Err(error) => Err(WifiPhyLeaveFailure { membership, error }),
@@ -144,7 +148,7 @@ pub fn leave_wifi(
 /// ```
 #[must_use = "the suspended Wi-Fi client must resume or leave"]
 pub struct WifiPhySuspended {
-    _private: (),
+    key: crate::state::client::PhyClientKey,
 }
 
 impl fmt::Debug for WifiPhySuspended {
@@ -198,10 +202,10 @@ pub fn suspend_wifi(
     membership: WifiPhyMembership,
 ) -> Result<(WifiPhySuspended, bool), WifiPhyLeaveFailure> {
     let _ = clocks;
-    match release_client(radio, RadioClient::Wifi) {
+    match suspend_client(radio, membership.key) {
         Ok(last) => {
-            let WifiPhyMembership { _private: () } = membership;
-            Ok((WifiPhySuspended { _private: () }, last))
+            let WifiPhyMembership { key } = membership;
+            Ok((WifiPhySuspended { key }, last))
         }
         Err(error) => Err(WifiPhyLeaveFailure { membership, error }),
     }
@@ -224,11 +228,11 @@ pub fn resume_wifi<'l>(
 ) -> Result<Joined<'l, WifiPhyMembership>, JoinRefused<'l, WifiPhySuspendedFailure>> {
     let _ = clocks;
     let radio = ready.into_radio();
-    match acquire_client(radio, RadioClient::Wifi, clock) {
+    match resume_client(radio, suspended.key, clock) {
         Ok(acquired) => {
-            let WifiPhySuspended { _private: () } = suspended;
+            let WifiPhySuspended { key } = suspended;
             Ok(Joined {
-                membership: WifiPhyMembership { _private: () },
+                membership: WifiPhyMembership { key },
                 acquired,
                 radio,
             })
@@ -242,8 +246,12 @@ pub fn resume_wifi<'l>(
 
 /// Stop Wi-Fi while its RF sleeps: the client already left the PHY domain,
 /// so only the token ends. No register access happens here.
-pub fn leave_suspended_wifi(suspended: WifiPhySuspended) {
-    let WifiPhySuspended { _private: () } = suspended;
+pub fn leave_suspended_wifi(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    suspended: WifiPhySuspended,
+) -> Result<(), WifiPhySuspendedFailure> {
+    retire_suspended_client(radio, suspended.key)
+        .map_err(|error| WifiPhySuspendedFailure { suspended, error })
 }
 
 #[cfg(test)]

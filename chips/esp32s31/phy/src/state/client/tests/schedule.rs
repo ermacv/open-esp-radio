@@ -47,14 +47,14 @@ fn current_client_set_replaces_stale_demand_after_a_deferred_release() {
     assert!(old.request().wifi());
     assert!(old.request().bluetooth_ieee802154());
 
-    let state = state.release(RadioClient::Wifi).unwrap().owner;
-    let state = state.release(RadioClient::Bluetooth).unwrap().owner;
+    let state = member(state, RadioClient::Wifi).release().owner;
+    let state = member(state, RadioClient::Bluetooth).release().owner;
     let Schedule::Due(current) = state.snapshot().tracking_schedule_at(at).unwrap() else {
         panic!("IEEE client still requires its shared tracking class");
     };
     assert!(!current.request().wifi());
     assert!(current.request().bluetooth_ieee802154());
-    let state = state.release(RadioClient::Ieee802154).unwrap().owner;
+    let state = member(state, RadioClient::Ieee802154).release().owner;
     assert_eq!(
         state.snapshot().tracking_schedule_at(u64::MAX),
         Ok(Schedule::Inactive)
@@ -92,7 +92,7 @@ fn impossible_deadline_is_an_error_without_losing_the_owner() {
         })
     );
     assert_eq!(state.snapshot(), snapshot);
-    let state = state.release(RadioClient::Ieee802154).unwrap().owner;
+    let state = member(state, RadioClient::Ieee802154).release().owner;
     assert_eq!(
         state.snapshot().tracking_schedule_at(0),
         Ok(Schedule::Inactive)

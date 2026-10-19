@@ -178,7 +178,11 @@ impl<
         let core = self.core;
         LowerMacCoreParts {
             authority: core.authority,
-            tx: core.tx,
+            tx: core
+                .tx
+                .into_idle()
+                .ok()
+                .expect("disabled core has retired every queued publication"),
             config: core.config,
             coex: core.coex,
             keys: core.keys,

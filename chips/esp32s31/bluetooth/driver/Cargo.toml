@@ -17,11 +17,11 @@ oer-time = { path = "../../../../portable/time" }
 oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
 
 [dev-dependencies]
-oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 # Host tests need the std implementation; chip doctests build without it.
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
+oer-interrupt-table = { path = "../../../../portable/interrupt-table", features = ["host-signal"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 
 [lints]

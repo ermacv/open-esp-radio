@@ -14,3 +14,6 @@ pub use finished_lists::{
     SchedulerFinishedListCaptureError, SchedulerFinishedListWorker,
     SchedulerFinishedListWorkerStep,
 };
+
+#[cfg(target_arch = "riscv32")]
+pub use core::{ControllerTimeAccess, ControllerTimeReady};

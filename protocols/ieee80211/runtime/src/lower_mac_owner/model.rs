@@ -1814,7 +1814,11 @@ impl ModelAir {
 
     /// The EDCA set the interface of `role` last set, if any.
     pub fn edca(&self, role: VifRole) -> Option<WmmParameterSet> {
-        self.edca.get()[role as usize]
+        let [station, access_point] = self.edca.get();
+        match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        }
     }
 
     /// The frames the air holds for the driver yet.
@@ -3875,7 +3879,11 @@ where
     /// The model applies each interface's set exactly.
     fn set_edca(&mut self, parameters: SupportedEdca<K>) -> SupportedEdca<K> {
         let mut edca = self.held.air.edca.get();
-        edca[R::ROLE as usize] = Some(parameters.get());
+        let [station, access_point] = &mut edca;
+        *match R::ROLE {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        } = Some(parameters.get());
         self.held.air.edca.set(edca);
         self.held.settings.borrow_mut().other = true;
         self.held.air.wake_driver();

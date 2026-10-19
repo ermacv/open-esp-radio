@@ -1,0 +1,32 @@
+error[E0277]: the trait bound `StaCommandPermission<'_, Path>: From<StaCommand>` is not satisfied
+ --> tests/ui/command_needs_credit.rs:7:51
+  |
+7 |     let request = StaRequest::<'id, Path>::new(1, StaCommand::Connect); // ui-error: E0277
+  |                   ----------------------------    ^^^^^^^^^^^^^^^^^^^ the trait `From<StaCommand>` is not implemented for `StaCommandPermission<'_, Path>`
+  |                   |
+  |                   required by a bound introduced by this call
+  |
+help: `StaCommandPermission<'_, Path>` implements trait `From<T>`
+ --> src/machine/commands.rs
+  |
+  | /         impl<'id, Path: PoolPath> From<StaCommandCredit<'id, Path, $kind>>
+  | |             for StaCommandPermission<'id, Path>
+  | |                                               ^
+  | |                                               |
+  | |                                               `From<StaCommandCredit<'_, Path, ConnectCommand>>`
+  | |_______________________________________________`From<StaCommandCredit<'_, Path, DisconnectCommand>>`
+  |                                                 `From<StaCommandCredit<'_, Path, ScanCommand>>`
+...
+  |   permission_from!(ConnectCommand, Connect);
+  |   ----------------------------------------- in this macro invocation
+  |   permission_from!(ScanCommand, BackgroundScan);
+  |   --------------------------------------------- in this macro invocation
+  |   permission_from!(DisconnectCommand, Disconnect);
+  |   ----------------------------------------------- in this macro invocation
+  = note: required for `StaCommand` to implement `Into<StaCommandPermission<'_, Path>>`
+note: required by a bound in `StaRequest::<'id, Path>::new`
+ --> src/machine/commands.rs
+  |
+  |     pub fn new(correlation: u64, permission: impl Into<StaCommandPermission<'id, Path>>) -> Self {
+  |                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `StaRequest::<'id, Path>::new`
+  = note: this error originates in the macro `permission_from` (in Nightly builds, run with -Z macro-backtrace for more info)

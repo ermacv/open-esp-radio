@@ -2,10 +2,10 @@
 use oer_ieee80211_lower_mac::Ieee80211Capabilities;
 use oer_ieee80211_sta::machine::{StaRequest, StaTokens, Station};
 
-pub fn submit<T: StaTokens, K: Ieee80211Capabilities>(
-    station: &mut Station<'_, T, K>,
+pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities>(
+    station: &mut Station<'id, T, K>,
     now: oer_time::Instant,
-    request: StaRequest,
+    request: StaRequest<'id, T::ConfigurationPath>,
 ) {
     let result = station.command(now, request);
     #[cfg(ui_reject)]

@@ -296,8 +296,11 @@ pub enum IndividualTwtRequesterError {
     /// fail-closed until it is replaced by a new owner with a wider epoch.
     GenerationExhausted,
     DeadlineOverflow,
-    FlowBusy(IndividualTwtFlowId),
-    NoAgreement(IndividualTwtFlowId),
+    /// The proposal names a different flow than the selected idle loan.
+    ProposalFlowMismatch {
+        selected: IndividualTwtFlowId,
+        proposed: IndividualTwtFlowId,
+    },
     StaleTransmission,
     UnexpectedInstall,
     UnexpectedRemove,
@@ -371,15 +374,92 @@ pub struct IndividualTwtRequester {
     flows: [FlowPhase; INDIVIDUAL_TWT_FLOW_CAPACITY],
     next_dialog_token: u8,
     generation: u32,
+    // One bounded flow loan selects this index; its exclusive borrow keeps
+    // it stable through mutation. The byte occupies existing tail padding.
+    selected_flow: IndividualTwtFlowId,
+}
+
+/// The selected flow's callable phase, borrowed exclusively for one step.
+pub enum IndividualTwtFlowAccess<'owner> {
+    Idle(IndividualTwtIdleFlow<'owner>),
+    TeardownReady(IndividualTwtTeardownReady<'owner>),
+    Transmitting(IndividualTwtTransmittingFlow<'owner>),
+}
+
+/// Only an idle flow can queue a fresh setup. The loan is consumed once.
+///
+/// ```compile_fail,E0382
+/// use oer_ieee80211_sta::twt::{IndividualTwtIdleFlow, IndividualTwtProposal};
+/// fn twice(idle: IndividualTwtIdleFlow<'_>, proposal: IndividualTwtProposal,
+///          now: oer_time::Instant) {
+///     let _ = idle.queue_setup(proposal, now);
+///     let _ = idle.queue_setup(proposal, now);
+/// }
+/// ```
+pub struct IndividualTwtIdleFlow<'owner> {
+    owner: &'owner mut IndividualTwtRequester,
+}
+/// A non-idle flow whose transmitter no longer owns an operation.
+pub struct IndividualTwtTeardownReady<'owner> {
+    owner: &'owner mut IndividualTwtRequester,
+}
+/// A transmitter-owned flow exposes no setup or teardown queue operation.
+///
+/// ```compile_fail,E0599
+/// use oer_ieee80211_sta::twt::IndividualTwtTransmittingFlow;
+/// fn teardown(transmitting: IndividualTwtTransmittingFlow<'_>, now: oer_time::Instant) {
+///     transmitting.queue_teardown(now);
+/// }
+/// ```
+pub struct IndividualTwtTransmittingFlow<'owner> {
+    _owner: &'owner mut IndividualTwtRequester,
+}
+
+impl IndividualTwtIdleFlow<'_> {
+    pub fn queue_setup(
+        self,
+        proposal: IndividualTwtProposal,
+        now: Instant,
+    ) -> Result<(), IndividualTwtRequesterError> {
+        let proposal = proposal.validate()?;
+        let flow_id = self.owner.selected_flow;
+        if proposal.parameters.flow_id != flow_id {
+            return Err(IndividualTwtRequesterError::ProposalFlowMismatch {
+                selected: flow_id,
+                proposed: proposal.parameters.flow_id,
+            });
+        }
+        *flow_id.select_mut(&mut self.owner.flows) = FlowPhase::SetupQueued {
+            proposal,
+            attempts_remaining: self.owner.config.setup_attempt_limit,
+            ready_at: now,
+        };
+        Ok(())
+    }
+}
+
+impl IndividualTwtTeardownReady<'_> {
+    /// Queue teardown after the chip owner synchronously removed any installed
+    /// wake agreement. This loan proves the software TX phase alone; it does
+    /// not assert removal of a hardware wake schedule.
+    pub fn queue_teardown(self, now: Instant) {
+        let flow_id = self.owner.selected_flow;
+        *flow_id.select_mut(&mut self.owner.flows) = FlowPhase::TeardownQueued {
+            attempts_remaining: self.owner.config.teardown_attempt_limit,
+            ready_at: now,
+        };
+    }
 }
 
 impl IndividualTwtRequester {
     pub const fn new(config: IndividualTwtRequesterConfig) -> Self {
+        let [first, ..] = FLOW_IDS;
         Self {
             config,
             flows: [FlowPhase::IDLE; INDIVIDUAL_TWT_FLOW_CAPACITY],
             next_dialog_token: 1,
             generation: 0,
+            selected_flow: first,
         }
     }
 
@@ -409,46 +489,36 @@ impl IndividualTwtRequester {
         }
     }
 
-    pub fn queue_setup(
-        &mut self,
-        proposal: IndividualTwtProposal,
-        now: Instant,
-    ) -> Result<(), IndividualTwtRequesterError> {
-        let proposal = proposal.validate()?;
-        let flow_id = proposal.parameters.flow_id;
-        if !matches!(*flow_id.select(&self.flows), FlowPhase::Idle) {
-            return Err(IndividualTwtRequesterError::FlowBusy(flow_id));
+    /// Lend the selected software phase. Consuming the resulting loan is
+    /// the only route to a queue operation; another selection or event cannot
+    /// mutate this requester while that loan remains live.
+    ///
+    /// ```compile_fail,E0499
+    /// use oer_ieee80211_sta::twt::IndividualTwtRequester;
+    /// use oer_ieee80211_mac::twt::IndividualTwtFlowId;
+    /// fn overlap(owner: &mut IndividualTwtRequester, flow: IndividualTwtFlowId) {
+    ///     let first = owner.flow(flow);
+    ///     let second = owner.flow(flow);
+    ///     drop((first, second));
+    /// }
+    /// ```
+    pub fn flow(&mut self, flow_id: IndividualTwtFlowId) -> IndividualTwtFlowAccess<'_> {
+        self.selected_flow = flow_id;
+        match *flow_id.select(&self.flows) {
+            FlowPhase::Idle => IndividualTwtFlowAccess::Idle(IndividualTwtIdleFlow { owner: self }),
+            FlowPhase::SetupTransmitting { .. } | FlowPhase::TeardownTransmitting { .. } => {
+                IndividualTwtFlowAccess::Transmitting(IndividualTwtTransmittingFlow {
+                    _owner: self,
+                })
+            }
+            FlowPhase::SetupQueued { .. }
+            | FlowPhase::AwaitingResponse { .. }
+            | FlowPhase::AwaitingHardwareInstall { .. }
+            | FlowPhase::Active(_)
+            | FlowPhase::TeardownQueued { .. } => {
+                IndividualTwtFlowAccess::TeardownReady(IndividualTwtTeardownReady { owner: self })
+            }
         }
-        *flow_id.select_mut(&mut self.flows) = FlowPhase::SetupQueued {
-            proposal,
-            attempts_remaining: self.config.setup_attempt_limit,
-            ready_at: now,
-        };
-        Ok(())
-    }
-
-    /// Queue a teardown after the chip owner has synchronously removed any
-    /// installed wake agreement. This method itself never asserts that the
-    /// hardware schedule was removed.
-    pub fn queue_teardown(
-        &mut self,
-        flow_id: IndividualTwtFlowId,
-        now: Instant,
-    ) -> Result<(), IndividualTwtRequesterError> {
-        if matches!(*flow_id.select(&self.flows), FlowPhase::Idle) {
-            return Err(IndividualTwtRequesterError::NoAgreement(flow_id));
-        }
-        if matches!(
-            *flow_id.select(&self.flows),
-            FlowPhase::SetupTransmitting { .. } | FlowPhase::TeardownTransmitting { .. }
-        ) {
-            return Err(IndividualTwtRequesterError::FlowBusy(flow_id));
-        }
-        *flow_id.select_mut(&mut self.flows) = FlowPhase::TeardownQueued {
-            attempts_remaining: self.config.teardown_attempt_limit,
-            ready_at: now,
-        };
-        Ok(())
     }
 
     pub fn service(

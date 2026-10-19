@@ -28,7 +28,7 @@ use oer_esp32s31_ieee80211_mac::{
     tx::{
         CompletionObservation, HeSmpduTxConfig, HtTxConfig, LegacyTxConfig, LegacyTxQueue,
         MacLegacyTxResponse, TxCompletion, TxControlFrame, TxCookie, TxDmaState, TxError,
-        TxHardware, TxPhyRate, TxSlot,
+        TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
     },
 };
 use oer_ieee80211_lower_mac::VifRole;
@@ -229,7 +229,6 @@ pub enum TxResetReason {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrdinaryTxError {
-    Busy,
     BufferSizeOverflow,
     DeadlineOverflow,
     Tx(TxError),
@@ -341,7 +340,7 @@ pub struct OrdinaryTxPlan {
 }
 
 /// The protection exchange a caller chose for one single-attempt
-/// publication ([`OrdinaryTxOwner::start_single_attempt`]).
+/// publication ([`OrdinaryTxIdle::start_single_attempt`]).
 ///
 /// The control frame's rate is still the BSS policy's
 /// ([`WifiTxProtectionPolicy::control_rate`](oer_esp32s31_ieee80211_mac::tx::protection::WifiTxProtectionPolicy::control_rate));
@@ -354,7 +353,7 @@ pub enum SingleAttemptProtection {
 }
 
 /// The caller's choices for one single-attempt publication
-/// ([`OrdinaryTxOwner::start_single_attempt`]).
+/// ([`OrdinaryTxIdle::start_single_attempt`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SingleAttempt {
     pub protection: SingleAttemptProtection,
@@ -523,13 +522,90 @@ enum OrdinaryTxPhase {
 
 /// Unique ordinary-MPDU descriptor and retry owner shared by protocol phases.
 pub struct OrdinaryTxOwner<'slot, P, E, T, const BUFFER_SIZE: usize> {
-    pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+    slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
     policy: WifiTxRuntimePolicy,
     power: P,
     entropy: E,
     pub timer: T,
     active: Option<ActiveTx>,
     last_outcome: Option<OrdinaryTxOutcome>,
+}
+
+/// The methods available during one exclusively borrowed ordinary TX phase.
+pub enum OrdinaryTxAccess<'owner, 'slot, P, E, T, const N: usize> {
+    Idle(OrdinaryTxIdle<'owner, 'slot, P, E, T, N>),
+    Active(OrdinaryTxActive<'owner, 'slot, P, E, T, N>),
+    Unavailable(TxDmaState),
+}
+
+pub struct OrdinaryTxIdle<'owner, 'slot, P, E, T, const N: usize> {
+    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N>,
+}
+
+pub struct OrdinaryTxActive<'owner, 'slot, P, E, T, const N: usize> {
+    owner: &'owner mut OrdinaryTxOwner<'slot, P, E, T, N>,
+}
+
+/// An owned idle transmitter. Consuming this owner into the lower MAC fixes
+/// queued mode: that core never exposes its nested classic transmitter.
+pub struct OrdinaryTxIdleOwner<'slot, P, E, T, const N: usize> {
+    pub(crate) owner: OrdinaryTxOwner<'slot, P, E, T, N>,
+}
+
+impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxIdle<'_, '_, P, E, T, N>
+{
+    pub fn buffer_mut(&mut self) -> &mut [u8; N] {
+        self.owner.free_slot().into_buffer()
+    }
+
+    pub fn start<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        plan: OrdinaryTxPlan,
+    ) -> Result<WifiTxProgress, OrdinaryTxError> {
+        self.owner.start_idle(hardware, plan)
+    }
+
+    pub fn start_with_retry_rate_policy<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        plan: OrdinaryTxPlan,
+        retry: OrdinaryRetryRatePolicy,
+    ) -> Result<WifiTxProgress, OrdinaryTxError> {
+        self.owner
+            .start_idle_with_retry_rate_policy(hardware, plan, retry)
+    }
+
+    pub fn start_single_attempt<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        plan: OrdinaryTxPlan,
+        attempt: SingleAttempt,
+    ) -> Result<WifiTxProgress, OrdinaryTxError> {
+        self.owner
+            .start_idle_single_attempt(hardware, plan, attempt)
+    }
+}
+
+impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
+    OrdinaryTxActive<'_, '_, P, E, T, N>
+{
+    pub fn service<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        wake: WifiTxWake,
+    ) -> Result<WifiTxProgress, OrdinaryTxError> {
+        self.owner.service_active(hardware, wake)
+    }
+
+    pub fn service_polling<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        poll_interval: oer_time::Duration,
+    ) -> impl Future<Output = Result<WifiTxProgress, OrdinaryTxError>> {
+        self.owner.service_active_polling(hardware, poll_interval)
+    }
 }
 
 /// The owner's timer, for phases that wait on the owner's clock.
@@ -593,12 +669,41 @@ where
         self.active.is_some()
     }
 
+    /// Lend the current software phase for one encoding or service operation.
+    pub fn access(&mut self) -> OrdinaryTxAccess<'_, 'slot, P, E, T, BUFFER_SIZE> {
+        if self.active.is_some() {
+            OrdinaryTxAccess::Active(OrdinaryTxActive { owner: self })
+        } else if self.slot_state() == TxDmaState::Free {
+            OrdinaryTxAccess::Idle(OrdinaryTxIdle { owner: self })
+        } else {
+            OrdinaryTxAccess::Unavailable(self.slot_state())
+        }
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "an unavailable phase retains the entire transmitter"
+    )]
+    pub fn into_idle(self) -> Result<OrdinaryTxIdleOwner<'slot, P, E, T, BUFFER_SIZE>, Self> {
+        if self.active.is_none() && self.slot_state() == TxDmaState::Free {
+            Ok(OrdinaryTxIdleOwner { owner: self })
+        } else {
+            Err(self)
+        }
+    }
+
+    fn free_slot(&mut self) -> TxSlotFree<'_, BUFFER_SIZE> {
+        match self.slot.as_mut().access() {
+            TxSlotAccess::Free(free) => free,
+            _ => panic!("ordinary transaction owns its free encoding phase"),
+        }
+    }
+
     /// Observe the bounded retry state retained by the active TX owner.
     ///
     /// `retry_bit_set` follows from a completed ACK-timeout re-publication:
     /// the owner increments that counter, writes the Retry bit and publishes
-    /// again before restoring `active`. If either write or publication fails,
-    /// no active snapshot is returned for that failed transition.
+    /// again before restoring `active`.
     pub fn active_snapshot(&self) -> Result<Option<OrdinaryTxActiveSnapshot>, OrdinaryRetryError> {
         self.active
             .as_ref()
@@ -757,27 +862,20 @@ where
         self.last_outcome
     }
 
-    pub fn buffer_mut(&mut self) -> Result<&mut [u8; BUFFER_SIZE], OrdinaryTxError> {
-        if self.active.is_some() {
-            return Err(OrdinaryTxError::Busy);
-        }
-        self.slot.as_mut().buffer_mut().map_err(Into::into)
-    }
-
-    pub fn start<H: TxHardware>(
+    fn start_idle<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         plan: OrdinaryTxPlan,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
-        self.start_with_retry_rate_policy(hardware, plan, OrdinaryRetryRatePolicy::Normal)
+        self.start_idle_with_retry_rate_policy(hardware, plan, OrdinaryRetryRatePolicy::Normal)
     }
 
     /// Start one ordinary MPDU with an explicitly owned retry-rate policy.
     ///
-    /// Protocols should use [`Self::start`] unless they have a distinct,
+    /// Protocols should use [`OrdinaryTxIdle::start`] unless they have a distinct,
     /// reviewed rate arena such as the standard ESP-NOW P2P profile. DMA,
     /// EDCA and terminal ownership remain identical to the normal path.
-    pub fn start_with_retry_rate_policy<H: TxHardware>(
+    fn start_idle_with_retry_rate_policy<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         plan: OrdinaryTxPlan,
@@ -798,7 +896,7 @@ where
     /// its widening after failures belong to the caller's retry policy
     /// above the port. The owner's own EDCA state is left at its minimum.
     /// A power ceiling bounds the data and the protection control frame.
-    pub fn start_single_attempt<H: TxHardware>(
+    fn start_idle_single_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         plan: OrdinaryTxPlan,
@@ -808,7 +906,7 @@ where
         Ok(self.settle(Step::Pending(active)))
     }
 
-    /// [`Self::start_single_attempt`], returning the published attempt
+    /// [`OrdinaryTxIdle::start_single_attempt`], returning the published attempt
     /// instead of keeping it in the owner.
     fn start_single_active<H: TxHardware>(
         &mut self,
@@ -831,7 +929,7 @@ where
     /// Publish `slot`'s encoded MPDU as one single attempt on the queue of
     /// `plan.exchange.access_category`, then detach it from the owner.
     ///
-    /// The publication is [`Self::start_single_attempt`]'s; the owner keeps
+    /// The publication is [`OrdinaryTxIdle::start_single_attempt`]'s; the owner keeps
     /// its own idle slot and no active transaction, so it can publish another
     /// queued attempt on another queue while this one is in flight. The
     /// hardware keeps a descriptor, a completion bank and timeout and
@@ -842,7 +940,7 @@ where
         clippy::result_large_err,
         reason = "the refusal hands the caller's pinned slot back by value"
     )]
-    pub fn start_queued_single_attempt<H: TxHardware>(
+    pub(crate) fn start_queued_single_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         mut slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
@@ -852,12 +950,10 @@ where
         QueuedSingleAttempt<'slot, BUFFER_SIZE>,
         QueuedSingleAttemptRefused<'slot, BUFFER_SIZE>,
     > {
-        if self.active.is_some() {
-            return Err(QueuedSingleAttemptRefused {
-                error: OrdinaryTxError::Busy,
-                slot,
-            });
-        }
+        assert!(
+            self.active.is_none(),
+            "queued mode retains an idle ordinary transmitter"
+        );
         core::mem::swap(&mut self.slot, &mut slot);
         let result = self.start_single_active(hardware, plan, attempt);
         // `slot` is the owner's idle slot again; hand the caller's back.
@@ -876,7 +972,7 @@ where
     /// claims only its own queue's state: the completion bank, then (on a
     /// collision edge) the collision detach, then (on a timeout edge or its
     /// expired publication deadline) the timeout abort. An edge its queue does
-    /// not show leaves the attempt pending; unlike [`Self::service`], several
+    /// not show leaves the attempt pending; unlike [`OrdinaryTxActive::service`], several
     /// simultaneous causes are not a fault, since they may belong to different
     /// queues. An expired deadline without the queue's timeout edge still
     /// quarantines the descriptor.
@@ -888,7 +984,7 @@ where
     ///
     /// On an error the descriptor and its slot stay in the returned quarantine;
     /// only a radio reset can recover it.
-    pub fn service_queued_single_attempt<H: TxHardware>(
+    pub(crate) fn service_queued_single_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         queued: QueuedSingleAttempt<'slot, BUFFER_SIZE>,
@@ -898,12 +994,10 @@ where
         QueuedSingleAttemptProgress<'slot, BUFFER_SIZE>,
         QueuedSingleAttemptFailed<'slot, BUFFER_SIZE>,
     > {
-        if self.active.is_some() {
-            return Err(QueuedSingleAttemptFailed {
-                error: OrdinaryTxError::Busy,
-                quarantine: QuarantinedSingleAttempt { _slot: queued.slot },
-            });
-        }
+        assert!(
+            self.active.is_none(),
+            "queued mode retains an idle ordinary transmitter"
+        );
         let QueuedSingleAttempt { mut slot, active } = queued;
         core::mem::swap(&mut self.slot, &mut slot);
         let result = self.service_shared_edge(hardware, active, wake, may_begin_timeout_abort);
@@ -925,7 +1019,7 @@ where
         }
     }
 
-    /// [`Self::service`] for an edge several queues share.
+    /// [`OrdinaryTxActive::service`] for an edge several queues share.
     fn service_shared_edge<H: TxHardware>(
         &mut self,
         hardware: &mut H,
@@ -981,7 +1075,7 @@ where
     /// The control frame of a single-attempt PPDU another owner publishes
     /// (an aggregate): the caller's protection at the BSS policy's control
     /// rate, its power codes bounded by `ceiling`, as
-    /// [`Self::start_single_attempt`] selects them for an MPDU.
+    /// [`OrdinaryTxIdle::start_single_attempt`] selects them for an MPDU.
     pub fn single_attempt_control_frame(
         &self,
         data: TxPhyRate,
@@ -998,7 +1092,7 @@ where
     }
 
     /// The calibrated power pair of `rate_code` bounded by `ceiling`, as
-    /// [`Self::start_single_attempt`] publishes it.
+    /// [`OrdinaryTxIdle::start_single_attempt`] publishes it.
     pub fn single_attempt_power_pair(&self, rate_code: u8, ceiling: Option<i8>) -> WifiTxPowerPair {
         capped_power(self.power.power_pair(rate_code), ceiling)
     }
@@ -1023,9 +1117,10 @@ where
         retry_rate_policy: OrdinaryRetryRatePolicy,
         single_attempt: Option<SingleAttempt>,
     ) -> Result<ActiveTx, OrdinaryTxError> {
-        if self.active.is_some() {
-            return Err(OrdinaryTxError::Busy);
-        }
+        assert!(
+            self.active.is_none(),
+            "idle authority excludes an active ordinary transaction"
+        );
         let hardware_frame_length = plan
             .frame_length
             .checked_add(plan.hardware_mic_length + TX_FCS_SIZE)
@@ -1049,7 +1144,7 @@ where
         let hardware_frame_length = u32::try_from(hardware_frame_length)
             .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
         let (receiver, response) = {
-            let buffer = self.slot.as_mut().buffer_mut()?;
+            let buffer = self.free_slot().into_buffer();
             let address1: [u8; 6] = buffer[TX_METADATA_SIZE + 4..TX_METADATA_SIZE + 10]
                 .try_into()
                 .expect("an encoded MPDU carries Address 1");
@@ -1090,7 +1185,7 @@ where
             },
         )?;
         {
-            let buffer = self.slot.as_mut().buffer_mut()?;
+            let buffer = self.free_slot().into_buffer();
             buffer[..4].copy_from_slice(&hardware_frame_length.to_le_bytes());
             buffer[4..TX_METADATA_SIZE].fill(0);
             buffer[TX_METADATA_SIZE + plan.frame_length
@@ -1123,7 +1218,7 @@ where
             phase: OrdinaryTxPhase::Published,
             retries: OrdinaryTxRetryReport::default(),
         };
-        self.slot.as_mut().reset_work()?;
+        self.free_slot().reset_work();
         self.publish_attempt(hardware, &mut active)?;
         self.last_outcome = None;
         Ok(active)
@@ -1135,12 +1230,15 @@ where
     /// and returns `Pending`; the caller waits until `next_deadline`
     /// (or another event) before servicing again. An early wake cannot finish
     /// abort or release the descriptor.
-    pub fn service<H: TxHardware>(
+    fn service_active<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         wake: WifiTxWake,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
-        let active = self.active.take().ok_or(OrdinaryTxError::Busy)?;
+        let active = self
+            .active
+            .take()
+            .expect("active authority retains the ordinary transaction");
         let step = self.service_step(hardware, active, wake)?;
         Ok(self.settle(step))
     }
@@ -1223,7 +1321,7 @@ where
     /// It observes the same completion/timeout registers as the IRQ path and
     /// quarantines the descriptor when an executor deadline expires without a
     /// qualified hardware timeout edge.
-    pub async fn service_polling<H: TxHardware>(
+    async fn service_active_polling<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         poll_interval: oer_time::Duration,
@@ -1247,7 +1345,10 @@ where
         &mut self,
         hardware: &mut H,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
-        let active = self.active.take().ok_or(OrdinaryTxError::Busy)?;
+        let active = self
+            .active
+            .take()
+            .expect("active authority retains the ordinary transaction");
         let step = self.poll_step(hardware, active)?;
         Ok(self.settle(step))
     }
@@ -1416,7 +1517,7 @@ where
                     TxStatus::Success | TxStatus::TimedOut => {}
                 }
                 if set_retry_bit {
-                    mark_retry(self.slot.as_mut().buffer_mut()?, active.frame_length)?;
+                    mark_retry(self.free_slot().into_buffer(), active.frame_length)?;
                 }
                 self.publish_attempt(hardware, &mut active)?;
                 Ok(Step::Pending(active))
@@ -1498,7 +1599,7 @@ where
             .checked_add(active.completion_timeout)
             .ok_or(OrdinaryTxError::DeadlineOverflow)?;
         let rate = active.retry.current_rate()?;
-        let metadata = self.slot.as_mut().buffer_mut()?;
+        let metadata = self.free_slot().into_buffer();
         let head = <&mut [u8; WifiTxMetadataHead::SIZE]>::try_from(
             &mut metadata[..WifiTxMetadataHead::SIZE],
         )
@@ -1511,8 +1612,7 @@ where
             .with_he_smpdu(matches!(rate, TxPhyRate::He(_)));
         head.set_control(control);
         let cookie = self
-            .slot
-            .as_mut()
+            .free_slot()
             .reserve(active.descriptor_capacity, active.transfer_length)?;
         let protection = match self.submit_reserved_attempt(hardware, cookie, active) {
             Ok(protection) => protection,

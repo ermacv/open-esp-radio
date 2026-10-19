@@ -69,16 +69,15 @@ fn clients_share_one_domain_and_leave_it_one_by_one() {
     assert!(snapshot.contains(RadioClient::Wifi));
     assert!(snapshot.contains(RadioClient::Bluetooth));
     assert!(matches!(
-        enter_client(radio, RadioClient::Wifi, &VirtualClock::<8>::new()),
-        Err(ConcurrentPhyError::Acquire(_))
+        phy_ready(radio)
+            .unwrap()
+            .client::<crate::wifi_client::WifiPhyMembership>(),
+        PhyClientAccess::Member(_)
     ));
 
-    assert_eq!(release_client(radio, RadioClient::Wifi), Ok(false));
-    assert_eq!(release_client(radio, RadioClient::Bluetooth), Ok(true));
-    assert!(matches!(
-        release_client(radio, RadioClient::Bluetooth),
-        Err(ConcurrentPhyError::Release(_))
-    ));
+    assert_eq!(release_for_test(radio, RadioClient::Wifi), Ok(false));
+    assert_eq!(release_for_test(radio, RadioClient::Bluetooth), Ok(true));
+    assert!(radio.attachment().client_snapshot().unwrap().is_empty());
 }
 
 #[test]
@@ -181,7 +180,7 @@ fn rf_closes_only_after_the_last_client_left() {
         Err(ConcurrentPhyError::ClientsActive)
     ));
     // The rejected close leaves the client in the open domain.
-    assert_eq!(release_client(radio, RadioClient::Bluetooth), Ok(true));
+    assert_eq!(release_for_test(radio, RadioClient::Bluetooth), Ok(true));
     assert!(radio.attachment_mut().idle_domain().is_ok());
 }
 
@@ -217,4 +216,12 @@ fn enter_client(
     clock: &impl oer_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
+}
+
+fn release_for_test(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    client: RadioClient,
+) -> Result<bool, ConcurrentPhyError> {
+    let key = radio.attachment().permission_key();
+    release_client(radio, client, key)
 }

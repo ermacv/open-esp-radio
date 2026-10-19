@@ -13,7 +13,7 @@ use oer_esp32s31_phy::{
         BluetoothPhyClientError, BluetoothPhyLeaveFailure, BluetoothPhyMembership, join_bluetooth,
         leave_bluetooth,
     },
-    concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyReady},
+    concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientReady},
 };
 
 use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::TaskResources};
@@ -127,7 +127,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     )]
     pub fn join_phy(
         self,
-        ready: PhyReady<'_>,
+        ready: PhyClientReady<'_, BluetoothPhyMembership>,
         clock: &impl oer_time::Clock,
     ) -> Result<
         (

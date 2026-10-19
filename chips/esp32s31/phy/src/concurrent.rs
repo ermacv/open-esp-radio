@@ -29,8 +29,8 @@ use crate::{
     PhyState, RegisteredPhyState,
     domain::PhyDomain,
     state::client::{
-        PhyClientAcquireError, PhyClientReleaseError, PhyClientSnapshot, PhyPendingTrack,
-        PhyTrackTimeError,
+        PhyClientAccess as ClientStateAccess, PhyClientAcquireError, PhyClientKey,
+        PhyClientSnapshot, PhyPendingTrack, PhyTrackTimeError,
     },
 };
 
@@ -85,8 +85,6 @@ pub enum ConcurrentPhyError {
     Clock(ModemClockError),
     /// The client set rejected the acquisition.
     Acquire(PhyClientAcquireError),
-    /// The client set rejected the release.
-    Release(PhyClientReleaseError),
     /// The tracking clock was rejected.
     Time(PhyTrackTimeError),
     /// The client this operation serves is not in the domain's client set.
@@ -103,6 +101,14 @@ pub enum ConcurrentAcquire {
 }
 
 impl ConcurrentPhy {
+    pub(crate) fn permission_key(&self) -> PhyClientKey {
+        match &self.slot {
+            Slot::Registered(domain) | Slot::RfClosed(domain) => domain.clients.permission_key(),
+            Slot::Pending { pending, .. } => pending.permission_key(),
+            Slot::Empty | Slot::Poisoned => panic!("PHY registration missing"),
+        }
+    }
+
     /// An empty slot for a fresh radio domain.
     pub const fn new() -> Self {
         Self { slot: Slot::Empty }
@@ -323,7 +329,95 @@ impl core::fmt::Debug for PhyReady<'_> {
     }
 }
 
+mod client_kind_sealed {
+    pub trait Sealed {}
+}
+/// The closed set of protocol memberships that share this PHY.
+pub trait PhyClientKind: client_kind_sealed::Sealed {
+    const CLIENT: RadioClient;
+}
+impl client_kind_sealed::Sealed for crate::wifi_client::WifiPhyMembership {}
+impl client_kind_sealed::Sealed for crate::bluetooth_client::BluetoothPhyMembership {}
+impl client_kind_sealed::Sealed for crate::ieee802154_client::Ieee802154PhyMembership {}
+impl PhyClientKind for crate::wifi_client::WifiPhyMembership {
+    const CLIENT: RadioClient = RadioClient::Wifi;
+}
+impl PhyClientKind for crate::bluetooth_client::BluetoothPhyMembership {
+    const CLIENT: RadioClient = RadioClient::Bluetooth;
+}
+impl PhyClientKind for crate::ieee802154_client::Ieee802154PhyMembership {
+    const CLIENT: RadioClient = RadioClient::Ieee802154;
+}
+
+pub enum PhyClientAccess<'l, K: PhyClientKind> {
+    Available(PhyClientReady<'l, K>),
+    Member(PhyReady<'l>),
+}
+
+/// Exclusive, consumed join authority for one protocol and registration.
+///
+/// ```no_run
+/// use oer_esp32s31_phy::{concurrent::PhyClientReady, wifi_client::{WifiPhyMembership, join_wifi}};
+/// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
+/// fn wifi(ready: PhyClientReady<'_, WifiPhyMembership>, clocks: &WifiClocked,
+///         clock: &impl oer_time::Clock) {
+///     let _ = join_wifi(ready, clocks, clock);
+/// }
+/// ```
+///
+/// A different protocol's permission cannot authorize Wi-Fi:
+///
+/// ```compile_fail,E0308
+/// use oer_esp32s31_phy::{concurrent::PhyClientReady,
+///     bluetooth_client::BluetoothPhyMembership, wifi_client::join_wifi};
+/// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
+/// fn foreign(ready: PhyClientReady<'_, BluetoothPhyMembership>, clocks: &WifiClocked,
+///            clock: &impl oer_time::Clock) {
+///     let _ = join_wifi(ready, clocks, clock);
+/// }
+/// ```
+pub struct PhyClientReady<'l, K: PhyClientKind> {
+    ready: PhyReady<'l>,
+    kind: core::marker::PhantomData<fn() -> K>,
+}
+
+impl<'l, K: PhyClientKind> PhyClientReady<'l, K> {
+    pub(crate) fn into_radio(self) -> &'l mut RadioDomain<ConcurrentPhy> {
+        self.ready.into_radio()
+    }
+    #[cfg(test)]
+    pub(crate) fn for_test(radio: &'l mut RadioDomain<ConcurrentPhy>) -> Self {
+        Self {
+            ready: PhyReady::for_test(radio),
+            kind: core::marker::PhantomData,
+        }
+    }
+}
+
 impl<'l> PhyReady<'l> {
+    /// Lend one client's vacant phase; a member phase has no join operation.
+    pub fn client<K: PhyClientKind>(self) -> PhyClientAccess<'l, K> {
+        #[allow(
+            clippy::ok_expect,
+            reason = "an internal phase failure needs no Debug formatter in the firmware"
+        )]
+        let clients = &self
+            .radio
+            .attachment()
+            .settled()
+            .ok()
+            .expect("PHY client phase invariant")
+            .clients;
+        if clients.is_claimed(K::CLIENT) {
+            PhyClientAccess::Member(self)
+        } else {
+            PhyClientAccess::Available(PhyClientReady {
+                ready: self,
+                kind: core::marker::PhantomData,
+            })
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn for_test(radio: &'l mut RadioDomain<ConcurrentPhy>) -> Self {
         Self { radio }
@@ -393,7 +487,10 @@ pub(crate) fn acquire_client(
         registered,
         clients,
     } = phy.settled_domain()?;
-    match clients.acquire(client, clock) {
+    let ClientStateAccess::Available(available) = clients.client(client) else {
+        panic!("PHY client phase invariant");
+    };
+    match available.acquire(clock) {
         Ok(outcome) => match outcome.into_owner() {
             Ok(clients) => {
                 phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
@@ -415,34 +512,104 @@ pub(crate) fn acquire_client(
     }
 }
 
+/// Resume the existing Wi-Fi claim instead of minting a second join right.
+pub(crate) fn resume_client(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    key: PhyClientKey,
+    clock: &impl oer_time::Clock,
+) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
+    let phy = radio.attachment_mut();
+    let PhyDomain {
+        registered,
+        clients,
+    } = phy.settled_domain()?;
+    clients.assert_permission(key);
+    let ClientStateAccess::Suspended(suspended) = clients.client(RadioClient::Wifi) else {
+        panic!("PHY client phase invariant");
+    };
+    match suspended.resume(clock) {
+        Ok(outcome) => match outcome.into_owner() {
+            Ok(clients) => {
+                phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
+                Ok(ConcurrentAcquire::Settled)
+            }
+            Err(pending) => {
+                phy.slot = Slot::Pending {
+                    registered,
+                    pending,
+                };
+                Ok(ConcurrentAcquire::TrackingDue)
+            }
+        },
+        Err(failure) => {
+            let error = failure.error();
+            phy.slot = Slot::Registered(PhyDomain::new(registered, failure.into_owner()));
+            Err(ConcurrentPhyError::Acquire(error))
+        }
+    }
+}
+
+/// Retire a sleeping client's software permission without opening RF.
+pub(crate) fn retire_suspended_client(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    key: PhyClientKey,
+) -> Result<(), ConcurrentPhyError> {
+    let phy = radio.attachment_mut();
+    let domain = match &mut phy.slot {
+        Slot::Registered(domain) | Slot::RfClosed(domain) => domain,
+        Slot::Pending { .. } => return Err(ConcurrentPhyError::TrackingPending),
+        Slot::Empty => return Err(ConcurrentPhyError::NotRegistered),
+        Slot::Poisoned => return Err(ConcurrentPhyError::Poisoned),
+    };
+    domain.clients.assert_permission(key);
+    domain.clients.retire_suspended_wifi();
+    Ok(())
+}
+
 /// Remove `client` from the shared domain. Returns whether it was the last.
 ///
 /// # Errors
 ///
 /// The domain is not registered and settled, or the client was not acquired.
 /// The domain is unchanged.
-pub fn release_client(
+pub(crate) fn release_client(
     radio: &mut RadioDomain<ConcurrentPhy>,
     client: RadioClient,
+    key: PhyClientKey,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {
         registered,
         clients,
     } = phy.settled_domain()?;
-    match clients.release(client) {
-        Ok(outcome) => {
-            let is_last = outcome.is_last();
-            let clients = outcome.into_owner();
-            phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
-            Ok(is_last)
-        }
-        Err(failure) => {
-            let error = failure.error();
-            phy.slot = Slot::Registered(PhyDomain::new(registered, failure.into_owner()));
-            Err(ConcurrentPhyError::Release(error))
-        }
-    }
+    clients.assert_permission(key);
+    let ClientStateAccess::Member(member) = clients.client(client) else {
+        panic!("PHY client phase invariant");
+    };
+    let outcome = member.release();
+    let is_last = outcome.is_last();
+    let clients = outcome.into_owner();
+    phy.slot = Slot::Registered(PhyDomain::new(registered, clients));
+    Ok(is_last)
+}
+
+pub(crate) fn suspend_client(
+    radio: &mut RadioDomain<ConcurrentPhy>,
+    key: PhyClientKey,
+) -> Result<bool, ConcurrentPhyError> {
+    let phy = radio.attachment_mut();
+    let PhyDomain {
+        registered,
+        clients,
+    } = phy.settled_domain()?;
+    clients.assert_permission(key);
+    let ClientStateAccess::Member(member) = clients.client(RadioClient::Wifi) else {
+        panic!("PHY client phase invariant");
+    };
+    let outcome = member.suspend();
+    let last = outcome.is_last();
+    phy.slot = Slot::Registered(PhyDomain::new(registered, outcome.into_owner()));
+    Ok(last)
 }
 
 /// Run one periodic tracking evaluation. Returns whether tracking is now due.

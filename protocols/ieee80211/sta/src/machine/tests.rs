@@ -301,7 +301,8 @@ struct World<'id, const G: usize = 2> {
     arbiter: Arbiter<'id, Caps, NoReservation, TestGatePath>,
     gate_issuer: GateIssuer<'id, TestGatePath>,
     seen: Vec<Seen>,
-    completed: Vec<StaCommandTerminal>,
+    completed: Vec<ObservedCommandTerminal>,
+    command_credits: CommandCredits<'id>,
     /// The transmissions in flight, which the port ends in order.
     submitted: Vec<(StaTxContext<'id>, Ticket, Buffer)>,
     /// Let RX run while the current TX still owns its terminal resources.
@@ -378,7 +379,10 @@ impl<'id> World<'id> {
         build: impl FnOnce(
             StaConfig<Caps>,
             StationResources<'id, Tokens<G>, TX, TX, G>,
-        ) -> Station<'id, Tokens<G>, Caps>,
+        ) -> (
+            Station<'id, Tokens<G>, Caps>,
+            StaCommandCredits<'id, TestConfigurationPath>,
+        ),
     ) -> World<'id, G> {
         let channels = heapless::Vec::from_slice(&[channel(1), channel(6)]).unwrap();
         let ((gate, gate_issuer, authority), permissions) = mint.into_pools();
@@ -414,9 +418,10 @@ impl<'id> World<'id> {
             keys: (Slot(0), group_slots),
             group_permission: GroupPermission,
         };
-        let station = build(config, resources);
+        let (station, command_credits) = build(config, resources);
         World {
             station,
+            command_credits: CommandCredits::new(command_credits),
             arbiter,
             gate_issuer,
             seen: Vec::new(),
@@ -440,7 +445,103 @@ impl<'id> World<'id> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ObservedRequest {
+    correlation: u64,
+    command: StaCommand,
+}
+impl ObservedRequest {
+    const fn new(correlation: u64, command: StaCommand) -> Self {
+        Self {
+            correlation,
+            command,
+        }
+    }
+    fn of<Path: PoolPath>(request: &StaRequest<'_, Path>) -> Self {
+        Self::new(request.correlation(), request.command())
+    }
+    const fn correlation(&self) -> u64 {
+        self.correlation
+    }
+    const fn command(&self) -> StaCommand {
+        self.command
+    }
+}
+#[derive(Debug, Eq, PartialEq)]
+struct ObservedCommandTerminal {
+    request: ObservedRequest,
+    outcome: StaCommandOutcome,
+}
+#[derive(Debug, Eq, PartialEq)]
+struct ObservedCommandRefused {
+    request: ObservedRequest,
+    reason: CommandRefusal,
+}
+struct CommandCredits<'id> {
+    connect: Option<StaCommandCredit<'id, TestConfigurationPath, ConnectCommand>>,
+    scan: Option<StaCommandCredit<'id, TestConfigurationPath, ScanCommand>>,
+    disconnect: Option<StaCommandCredit<'id, TestConfigurationPath, DisconnectCommand>>,
+}
+impl<'id> CommandCredits<'id> {
+    fn new(credits: StaCommandCredits<'id, TestConfigurationPath>) -> Self {
+        Self {
+            connect: Some(credits.connect),
+            scan: Some(credits.scan),
+            disconnect: Some(credits.disconnect),
+        }
+    }
+    fn take(&mut self, kind: StaCommand) -> StaCommandPermission<'id, TestConfigurationPath> {
+        match kind {
+            StaCommand::Connect => self
+                .connect
+                .take()
+                .expect("fixture owns connect credit")
+                .into(),
+            StaCommand::BackgroundScan => {
+                self.scan.take().expect("fixture owns scan credit").into()
+            }
+            StaCommand::Disconnect => self
+                .disconnect
+                .take()
+                .expect("fixture owns disconnect credit")
+                .into(),
+        }
+    }
+    fn restore(&mut self, permission: StaCommandPermission<'id, TestConfigurationPath>) {
+        match permission {
+            StaCommandPermission::Connect(credit) => {
+                assert!(self.connect.replace(credit).is_none())
+            }
+            StaCommandPermission::BackgroundScan(credit) => {
+                assert!(self.scan.replace(credit).is_none())
+            }
+            StaCommandPermission::Disconnect(credit) => {
+                assert!(self.disconnect.replace(credit).is_none())
+            }
+        }
+    }
+}
+
 impl<'id, const G: usize> World<'id, G> {
+    fn command(
+        &mut self,
+        now: Instant,
+        correlation: u64,
+        command: StaCommand,
+    ) -> Result<(), ObservedCommandRefused> {
+        let permission = self.command_credits.take(command);
+        self.station
+            .command(now, StaRequest::new(correlation, permission))
+            .map_err(|refused| {
+                let observation = ObservedCommandRefused {
+                    request: ObservedRequest::of(&refused.request),
+                    reason: refused.reason,
+                };
+                self.command_credits.restore(refused.request.into_parts().1);
+                observation
+            })
+    }
+
     /// Run the loop at `now` until neither machine owes an action; the
     /// port confirms configurations and ends transmissions at once.
     fn run(&mut self, now: Instant) {
@@ -582,7 +683,15 @@ impl<'id, const G: usize> World<'id, G> {
                         self.transmitted(transmit, true);
                     }
                     StaAction::Notify(notice) => self.seen.push(Seen::Notify(notice)),
-                    StaAction::CommandCompleted(terminal) => self.completed.push(terminal),
+                    StaAction::CommandCompleted(terminal) => {
+                        let observation = ObservedCommandTerminal {
+                            request: ObservedRequest::of(&terminal.request),
+                            outcome: terminal.outcome,
+                        };
+                        self.command_credits
+                            .restore(terminal.request.into_parts().1);
+                        self.completed.push(observation);
+                    }
                     // The frames sent before the station associated.
                     StaAction::Associated(peer) => {
                         self.associated = Some((self.frames.len(), peer))
@@ -816,10 +925,7 @@ fn edca_seen(world: &mut World<'_>) -> Vec<WmmParameterSet> {
 fn the_station_contends_with_the_access_points_edca_set_and_follows_its_beacons() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         world.advance();
         let advertised = wmm_element(1, 3, 10);
@@ -860,10 +966,7 @@ fn the_station_contends_with_the_access_points_edca_set_and_follows_its_beacons(
 fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         // Channel 1, where the port is: the station listens and probes.
         assert_eq!(
@@ -945,10 +1048,7 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
 
         // The application leaves: Deauthentication, receive off, the lease
         // back, then the report.
-        world
-            .station
-            .command(at(40), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
         world.run(at(40));
         assert_eq!(
             world.take(),
@@ -980,15 +1080,9 @@ fn refused_background_absence_returns_the_original_request_and_exact_reason() {
             let mut world = connected_world(mint);
             world.completed.clear();
             world
-                .station
-                .command(at(50), StaRequest::new(42, StaCommand::BackgroundScan))
+                .command(at(50), 42, StaCommand::BackgroundScan)
                 .unwrap();
-            let rejected = world
-                .station
-                .command(at(50), StaRequest::new(43, StaCommand::BackgroundScan))
-                .unwrap_err();
-            assert_eq!(rejected.request.correlation(), 43);
-            assert_eq!(rejected.reason, CommandRefusal::Busy);
+            assert!(world.command_credits.scan.is_none());
             let Some(StaAction::RequestAbsence { place, .. }) = world.station.poll_action(at(50))
             else {
                 panic!()
@@ -997,29 +1091,24 @@ fn refused_background_absence_returns_the_original_request_and_exact_reason() {
                 at(50),
                 StaInput::AbsenceAnswer(AbsenceAnswer::Refused(reason, place)),
             );
-            let rejected = world
-                .station
-                .command(at(50), StaRequest::new(44, StaCommand::BackgroundScan))
-                .unwrap_err();
-            assert_eq!(rejected.reason, CommandRefusal::TerminalPending);
-            assert_eq!(rejected.request.correlation(), 44);
+            assert!(
+                world.command_credits.scan.is_none(),
+                "terminal still owns the scan credit"
+            );
             // A second kind of command cannot overwrite the scan's terminal.
-            world
-                .station
-                .command(at(50), StaRequest::new(45, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(50), 45, StaCommand::Disconnect).unwrap();
             world.run(at(50));
             assert_eq!(
                 world.completed,
                 [
-                    StaCommandTerminal {
-                        request: StaRequest::new(42, StaCommand::BackgroundScan),
+                    ObservedCommandTerminal {
+                        request: ObservedRequest::new(42, StaCommand::BackgroundScan),
                         outcome: StaCommandOutcome::BackgroundScan {
                             interrupted: Some(BackgroundScanEnd::AbsenceRefused(reason))
                         },
                     },
-                    StaCommandTerminal {
-                        request: StaRequest::new(45, StaCommand::Disconnect),
+                    ObservedCommandTerminal {
+                        request: ObservedRequest::new(45, StaCommand::Disconnect),
                         outcome: StaCommandOutcome::Disconnected(StaDisconnectReason::Requested),
                     },
                 ]
@@ -1038,10 +1127,7 @@ fn absence_schedule_exhaustion_completes_the_accepted_background_scan() {
         let mut world = connected_world(mint);
         // The dwell itself fits, but the arbiter's preparation and return do not.
         let now = Instant::from_micros(u64::MAX - world.station.config.dwell.as_micros());
-        world
-            .station
-            .command(now, StaRequest::new(61, StaCommand::BackgroundScan))
-            .unwrap();
+        world.command(now, 61, StaCommand::BackgroundScan).unwrap();
         let Some(StaAction::RequestAbsence {
             request,
             home,
@@ -1079,23 +1165,15 @@ fn inappropriate_commands_return_without_changing_the_running_operation() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
         for command in [StaCommand::BackgroundScan, StaCommand::Disconnect] {
-            let refused = world
-                .station
-                .command(at(0), StaRequest::new(71, command))
-                .unwrap_err();
+            let refused = world.command(at(0), 71, command).unwrap_err();
             assert_eq!(refused.request.command(), command);
             assert_eq!(refused.reason, CommandRefusal::NotConnected);
         }
-        world
-            .station
-            .command(at(0), StaRequest::new(72, StaCommand::Connect))
-            .unwrap();
-        let refused = world
-            .station
-            .command(at(0), StaRequest::new(73, StaCommand::Connect))
-            .unwrap_err();
-        assert_eq!(refused.request.correlation(), 73);
-        assert_eq!(refused.reason, CommandRefusal::Transitioning);
+        world.command(at(0), 72, StaCommand::Connect).unwrap();
+        assert!(
+            world.command_credits.connect.is_none(),
+            "active connect owns its credit"
+        );
         assert!(matches!(
             world.station.poll_action(at(0)),
             Some(StaAction::RequestChannel(..))
@@ -1119,10 +1197,7 @@ fn beside_an_access_point_the_scan_goes_in_absences_after_its_tbtts() {
                 .unwrap(),
             },
         );
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         // Channel 1 is the access point's: the station scans it at once.
         assert_eq!(
@@ -1175,10 +1250,7 @@ fn a_scan_ends_with_a_partial_result_after_skipped_absences() {
                 .unwrap(),
             },
         );
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         world.advance();
         world.take();
@@ -1243,10 +1315,7 @@ fn beside_an_access_point_a_join_elsewhere_moves_it_and_one_too_soon_after_waits
     installed(|mint| {
         let mut world = World::new(mint, 3);
         access_point_on_1(&mut world);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         // Channel 6 in the absence at 52 ms, where the network's beacon is.
         world.advance();
@@ -1290,10 +1359,7 @@ fn beside_an_access_point_a_join_elsewhere_moves_it_and_one_too_soon_after_waits
         // The network is now on channel 1, where the access point was: the
         // join there is refused within the follow interval, and the station
         // asks again once it passed.
-        world
-            .station
-            .command(at(700), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(700), 1, StaCommand::Connect).unwrap();
         world.run(at(700));
         advance_until(&mut world, |seen| *seen == Seen::Retune(1));
         let now = world.arbiter.poll_deadline().unwrap_or(at(760));
@@ -1360,10 +1426,7 @@ fn refused_lease_exchange_releases_the_original_lease_and_resources() {
 }
 
 fn connect_open_world<const G: usize>(mut world: World<'_, G>) -> World<'_, G> {
-    world
-        .station
-        .command(at(0), StaRequest::new(1, StaCommand::Connect))
-        .unwrap();
+    world.command(at(0), 1, StaCommand::Connect).unwrap();
     world.run(at(0));
     world.advance();
     world.receive(at(13), &beacon());
@@ -1399,10 +1462,7 @@ fn association_advertises_the_configured_listen_interval() {
                     StaCommandOutcome::Connected { .. }
                 ))
             );
-            world
-                .station
-                .command(at(40), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(40), 2, StaCommand::Disconnect).unwrap();
             world.run(at(40));
             assert!(matches!(world.station.state, State::Idle));
             assert!(world.station.tokens().is_some());
@@ -1438,10 +1498,7 @@ fn scan_without_a_ds_element_uses_the_received_channel_configuration() {
     }
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         // A delayed observation can outlive the lease that captured it.
         receive_observation(&mut world, at(1), 6);
@@ -1449,8 +1506,7 @@ fn scan_without_a_ds_element_uses_the_received_channel_configuration() {
     installed(|mint| {
         let mut world = connected_world(mint);
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         let away = world.advance();
@@ -1510,15 +1566,9 @@ fn a_terminal_of_the_previous_connection_only_returns_its_resources() {
                 StaPowerManagement::Active,
             )
             .unwrap();
-        world
-            .station
-            .command(at(40), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
         world.run(at(40));
-        world
-            .station
-            .command(at(50), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(50), 1, StaCommand::Connect).unwrap();
         world.run(at(50));
         world.advance();
         world.receive(at(63), &beacon());
@@ -1576,8 +1626,7 @@ fn a_connected_station_scans_in_an_absence_announced_with_nulls() {
     installed(|mint| {
         let mut world = connected_world(mint);
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         // PM=1 first; the absence waits for its readiness and the window.
@@ -1632,8 +1681,8 @@ fn a_connected_station_scans_in_an_absence_announced_with_nulls() {
         assert!(world.take().is_empty());
         assert_eq!(
             world.completed.last().unwrap(),
-            &StaCommandTerminal {
-                request: StaRequest::new(3, StaCommand::BackgroundScan),
+            &ObservedCommandTerminal {
+                request: ObservedRequest::new(3, StaCommand::BackgroundScan),
                 outcome: StaCommandOutcome::BackgroundScan { interrupted: None },
             }
         );
@@ -1646,8 +1695,7 @@ fn an_undelivered_sleep_null_cancels_the_absence_and_the_station_stays() {
         let mut world = connected_world(mint);
         world.outcomes.push_back((ended(End::AckTimeout), true));
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         world.take();
@@ -1671,8 +1719,7 @@ fn an_unsent_sleep_null_is_undelivered_and_the_station_stays() {
         // channel): the station hears it as undelivered.
         world.unsend_next = true;
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         world.take();
@@ -1692,8 +1739,7 @@ fn an_undelivered_wake_null_is_sent_again_when_the_tim_shows_buffered_frames() {
     installed(|mint| {
         let mut world = connected_world(mint);
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         // Channel 1's absence; back home, the PM=0 Null is not delivered.
@@ -1704,8 +1750,8 @@ fn an_undelivered_wake_null_is_sent_again_when_the_tim_shows_buffered_frames() {
         world.advance();
         assert_eq!(
             world.completed.last(),
-            Some(&StaCommandTerminal {
-                request: StaRequest::new(3, StaCommand::BackgroundScan),
+            Some(&ObservedCommandTerminal {
+                request: ObservedRequest::new(3, StaCommand::BackgroundScan),
                 outcome: StaCommandOutcome::BackgroundScan { interrupted: None },
             })
         );
@@ -1792,10 +1838,7 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                 pmk: Pmk::from_bytes(PMK),
             },
         );
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         world.advance();
         world.receive(at(13), &wpa2_beacon());
@@ -1862,10 +1905,7 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
         assert!(world.station.is_connected());
 
         // Leaving removes both keys before the Deauthentication.
-        world
-            .station
-            .command(at(40), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(40), 2, StaCommand::Disconnect).unwrap();
         world.run(at(40));
         assert_eq!(
             world.take()[..3],
@@ -1906,10 +1946,7 @@ fn wpa2_associated_by<'id, const G: usize>(
         },
         core::array::from_fn::<_, G, _>(|i| Slot(u8::try_from(i + 1).unwrap())),
     );
-    world
-        .station
-        .command(at(0), StaRequest::new(1, StaCommand::Connect))
-        .unwrap();
+    world.command(at(0), 1, StaCommand::Connect).unwrap();
     world.run(at(0));
     world.advance();
     world.receive(at(13), beacon);
@@ -2042,10 +2079,7 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
         assert!(world.station.is_connected());
         assert!(world.take().contains(&Seen::InstallGroup(0)));
         assert_eq!(world.station.keys.group_slots.free.len(), 0);
-        world
-            .station
-            .command(at(34), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(34), 2, StaCommand::Disconnect).unwrap();
         world.run(at(34));
         assert!(matches!(
             world.station.keys.pairwise,
@@ -2232,10 +2266,7 @@ fn a_single_group_slot_is_replaced_without_a_separate_removal() {
         );
         assert!(world.station.is_connected());
         assert_eq!(world.station.keys.group_slots.free.len(), 0);
-        world
-            .station
-            .command(at(51), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(51), 2, StaCommand::Disconnect).unwrap();
         world.run(at(51));
         assert!(world.station.keys.clear());
     });
@@ -2467,10 +2498,7 @@ fn local_or_broadcast_disconnect_from_selected_bss_ends_the_link() {
 fn leaving_on_request_deauthenticates_as_leaving() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
-        world
-            .station
-            .command(at(50), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
         assert_eq!(world.deauthentications, [REASON_LEAVING]);
     });
@@ -2490,10 +2518,7 @@ fn beacon_from(bssid: [u8; 6], number: u8) -> [u8; 55] {
 fn joined_beside<'id>(mint: Mint<'id, TestPools>, beside: i8) -> (u8, bool) {
     let mut world = World::new(mint, 3);
     access_point_on_1(&mut world);
-    world
-        .station
-        .command(at(0), StaRequest::new(1, StaCommand::Connect))
-        .unwrap();
+    world.command(at(0), 1, StaCommand::Connect).unwrap();
     world.run(at(0));
     world.rssi = beside;
     world.receive(at(1), &beacon_from([2, 0, 0, 0, 0, 0xbb], 1));
@@ -2568,19 +2593,12 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
                 world.run(at(33));
                 assert_eq!(world.pending_installs.len(), 1);
             }
-            world
-                .station
-                .command(at(34), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(34), 2, StaCommand::Disconnect).unwrap();
             world.run(at(34));
             assert!(world.station.current_epoch().is_none());
             assert!(matches!(world.station.state, State::Leave(_)));
-            // Connect cannot replace an installation still reclaiming its keys.
-            let refused = world
-                .station
-                .command(at(34), StaRequest::new(1, StaCommand::Connect))
-                .unwrap_err();
-            assert_eq!(refused.reason, CommandRefusal::Transitioning);
+            // The original connect retains its credit while keys return.
+            assert!(world.command_credits.connect.is_none());
             assert!(world.station.current_epoch().is_none());
             let returned = core::mem::take(&mut world.pending_installs);
             for input in returned {
@@ -2607,10 +2625,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             );
             // M2 was the only EAPOL: the stale installations did not cause M4.
             assert_eq!(world.eapol.len(), 1);
-            world
-                .station
-                .command(at(36), StaRequest::new(1, StaCommand::Connect))
-                .unwrap();
+            world.command(at(36), 1, StaCommand::Connect).unwrap();
             assert!(world.station.current_epoch().is_some());
         });
     }
@@ -2624,10 +2639,7 @@ fn a_rekey_installed_after_disconnect_is_removed_without_group_message_2() {
         let eapol = world.eapol.len();
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         assert_eq!(world.pending_installs.len(), 1);
-        world
-            .station
-            .command(at(51), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(51), 2, StaCommand::Disconnect).unwrap();
         world.run(at(51));
         assert!(matches!(world.station.state, State::Leave(_)));
         let installed = world.pending_installs.pop().unwrap();
@@ -2655,10 +2667,7 @@ fn a_replacement_terminal_after_disconnect_returns_its_slot_through_removal() {
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         assert_eq!(world.pending_installs.len(), 1);
         let responses = world.eapol.len();
-        world
-            .station
-            .command(at(51), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(51), 2, StaCommand::Disconnect).unwrap();
         world.run(at(51));
         assert!(!world.station.keys.clear());
         let terminal = world.pending_installs.pop().unwrap();
@@ -2713,16 +2722,10 @@ fn old_configuration_response_releases_permission_without_completing_leave() {
     installed(|mint| {
         let mut world = World::new(mint, 2);
         world.hold_configured = true;
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         let pending_scan = world.configuring.take().unwrap();
-        world
-            .station
-            .command(at(1), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(1), 2, StaCommand::Disconnect).unwrap();
         world.run(at(1));
         assert!(world.configuring.is_none());
         assert!(!world.seen.contains(&Seen::Configure("off")));
@@ -2763,14 +2766,8 @@ fn authentication_transmitter_is_station() {
 fn leave_without_lease_reports_before_waiting() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
-        world
-            .station
-            .command(at(0), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.command(at(0), 2, StaCommand::Disconnect).unwrap();
         let Some(StaAction::Configure(StationReceive::Off, pending)) =
             world.station.poll_action(at(0))
         else {
@@ -2825,10 +2822,7 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
                     .unwrap(),
             );
         }
-        world
-            .station
-            .command(at(50), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         assert!(
             world.station.poll_action(at(50)).is_none(),
             "deauthentication must wait for credit"
@@ -2871,17 +2865,13 @@ fn disconnect_during_an_absence_sends_deauthentication_only_after_returning_home
     installed(|mint| {
         let mut world = connected_world(mint);
         world
-            .station
-            .command(at(40), StaRequest::new(3, StaCommand::BackgroundScan))
+            .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(40));
         let now = world.advance();
         assert_eq!(world.arbiter.channel().unwrap().channel().number(), 1);
         world.take();
-        world
-            .station
-            .command(now, StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(now, 2, StaCommand::Disconnect).unwrap();
         world.run(now);
         assert!(
             world.take().is_empty(),
@@ -2916,10 +2906,7 @@ fn associated_is_the_first_action_after_the_association_response() {
                 StaSecurity::Open
             };
             let mut world = World::with_security(mint, 3, security);
-            world
-                .station
-                .command(at(0), StaRequest::new(1, StaCommand::Connect))
-                .unwrap();
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
             world.run(at(0));
             world.advance();
             if protected {
@@ -2981,10 +2968,7 @@ fn associated_is_the_first_action_after_the_association_response() {
 fn irrelevant_management_while_authentication_waits_for_credit_preserves_join() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         world.advance();
         world.receive(at(13), &beacon());
@@ -3134,10 +3118,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     pmk: Pmk::from_bytes(PMK),
                 },
             );
-            world
-                .station
-                .command(at(0), StaRequest::new(1, StaCommand::Connect))
-                .unwrap();
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
             world.run(at(0));
             world.advance();
             world.receive(at(13), &wpa2_beacon());
@@ -3413,10 +3394,7 @@ fn unsuccessful_scan_disables_reception_before_reporting() {
     for unsupported_channel in [false, true] {
         installed(|mint| {
             let mut world = World::new(mint, 3);
-            world
-                .station
-                .command(at(0), StaRequest::new(1, StaCommand::Connect))
-                .unwrap();
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
             world.run(at(0));
             if unsupported_channel {
                 world.receive(at(1), &beacon_on(3));
@@ -3447,10 +3425,7 @@ fn unsuccessful_scan_disables_reception_before_reporting() {
 fn refused_scan_disables_reception_before_reporting() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         let Some(StaAction::RequestChannel(_, place)) = world.station.poll_action(at(0)) else {
             panic!("the scan requests its first channel");
         };
@@ -3491,10 +3466,7 @@ fn a_lease_terminal_during_leave_preserves_deauthentication_and_configuration() 
             } else {
                 connected_world(mint)
             };
-            world
-                .station
-                .command(at(50), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(50), 2, StaCommand::Disconnect).unwrap();
             // The lease terminal races the existing Leave, before the key
             // removals or the deauthentication have been taken as actions.
             let leaving = world.station.take_state();
@@ -3888,10 +3860,7 @@ fn a_repeated_m3_can_replace_group_material_without_reinstalling_the_ptk() {
                         .same_material(GroupKeyId::new(1).unwrap(), &[0x99; 16])
                 );
             }
-            world
-                .station
-                .command(at(35), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(35), 2, StaCommand::Disconnect).unwrap();
             world.run(at(35));
             assert!(world.station.keys.clear());
             assert_eq!(world.station.tickets.len(), 2);
@@ -3906,10 +3875,7 @@ fn a_repeated_m3_can_replace_group_material_without_reinstalling_the_ptk() {
 fn probe_encoding_failure_returns_credit_and_missing_epoch_reports_link_change() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world
-            .station
-            .command(at(0), StaRequest::new(1, StaCommand::Connect))
-            .unwrap();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
         let State::Scan(scan) = &mut world.station.state else {
             panic!("scan");
         };
@@ -4175,9 +4141,7 @@ fn returned_removal_places_are_reused_without_losing_installed_slots() {
             // overwriting the still-current record or losing its slot.
             a.hold_key_installs = false;
             a.receive_verified(at(53), &group_message1(&ptk_a, 5, 0));
-            a.station
-                .command(at(54), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            a.command(at(54), 2, StaCommand::Disconnect).unwrap();
             a.run(at(54));
             assert!(
                 a.station.keys.clear(),
@@ -4193,10 +4157,7 @@ fn a_removal_issued_before_leave_returns_its_record_and_permission_after_leave()
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let (pending, slot, permission) = take_group_removal(&mut world, &ptk, 3, 2, at(51));
-        world
-            .station
-            .command(at(52), StaRequest::new(2, StaCommand::Disconnect))
-            .unwrap();
+        world.command(at(52), 2, StaCommand::Disconnect).unwrap();
         world.run(at(52));
         assert!(matches!(world.station.state, State::Leave(_)));
         world.station.input(
@@ -4228,10 +4189,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
                 },
                 core::array::from_fn::<_, G, _>(|i| Slot(u8::try_from(i + 1).unwrap())),
             );
-            world
-                .station
-                .command(at(0), StaRequest::new(1, StaCommand::Connect))
-                .unwrap();
+            world.command(at(0), 1, StaCommand::Connect).unwrap();
             world.run(at(0));
             world.advance();
             world.receive(at(13), &wpa2_beacon());
@@ -4270,10 +4228,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
             assert_eq!(world.station.keys.group_slots.free.len(), 0);
             assert_eq!(world.station.keys.groups.len(), G);
             if leave {
-                world
-                    .station
-                    .command(at(34), StaRequest::new(2, StaCommand::Disconnect))
-                    .unwrap();
+                world.command(at(34), 2, StaCommand::Disconnect).unwrap();
                 world.run(at(34));
                 for completed in 1..=G {
                     assert_eq!(world.pending_removals.len(), 1);
@@ -4327,10 +4282,7 @@ fn previous_auth_terminal_cannot_finish_new_attempt() {
         for rx_first in [false, true] {
             installed(|mint| {
                 let mut world = World::with_pools::<2, 1>(mint, 3, StaSecurity::Open, [Slot(1)]);
-                world
-                    .station
-                    .command(at(0), StaRequest::new(92, StaCommand::Connect))
-                    .unwrap();
+                world.command(at(0), 92, StaCommand::Connect).unwrap();
                 world.run(at(0));
                 world.advance();
                 world.receive(at(13), &beacon());
@@ -4524,10 +4476,7 @@ fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
             world.station.input(at(33), installed);
             world.run(at(33));
             assert!(world.station.is_connected());
-            world
-                .station
-                .command(at(34), StaRequest::new(2, StaCommand::Disconnect))
-                .unwrap();
+            world.command(at(34), 2, StaCommand::Disconnect).unwrap();
             world.run(at(34));
             assert!(
                 world.station.keys.clear(),

@@ -1165,7 +1165,7 @@ fn receive_enable_is_a_separate_confirmed_hardware_edge() {
         Ok(_) => panic!("an enabled walker accepted a second enable"),
         Err((_, error)) => error,
     };
-    assert_eq!(error, RxRingError::Busy);
+    assert_eq!(error, RxRingError::WalkerStartUnconfirmed);
     assert_eq!(
         already_enabled.operations(),
         &[Walker::Enable, Walker::ObserveWalkerEnabled,]

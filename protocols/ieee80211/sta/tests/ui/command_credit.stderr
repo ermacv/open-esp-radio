@@ -1,0 +1,18 @@
+error[E0382]: use of moved value: `credit`
+ --> tests/ui/command_credit.rs:8:40
+  |
+5 | pub fn start_once<'id, Path: PoolPath>(credit: StaCommandCredit<'id, Path, ConnectCommand>) {
+  |                                        ------ move occurs because `credit` has type `StaCommandCredit<'_, Path, ConnectCommand>`, which does not implement the `Copy` trait
+6 |     let first = StaRequest::new(1, credit);
+  |                                    ------ value moved here
+7 |     #[cfg(all())]
+8 |     let duplicate = StaRequest::new(2, credit); // ui-error: E0382
+  |                                        ^^^^^^ value used here after move
+
+warning: unused variable: `duplicate`
+ --> tests/ui/command_credit.rs:8:9
+  |
+8 |     let duplicate = StaRequest::new(2, credit); // ui-error: E0382
+  |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_duplicate`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

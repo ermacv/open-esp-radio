@@ -133,8 +133,9 @@ mod management;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
 use commands::Commands;
 pub use commands::{
-    BackgroundScanEnd, CommandRefusal, StaCommandOutcome, StaCommandRefused, StaCommandTerminal,
-    StaRequest,
+    BackgroundScanEnd, CommandRefusal, ConnectCommand, DisconnectCommand, ScanCommand,
+    StaCommandCredit, StaCommandCredits, StaCommandOutcome, StaCommandPermission,
+    StaCommandRefused, StaCommandTerminal, StaRequest,
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
 use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as GroupReplay};
@@ -519,7 +520,7 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     /// Tell the application what happened.
     Notify(StaNotice),
     /// Return one accepted application's request and its final outcome.
-    CommandCompleted(StaCommandTerminal),
+    CommandCompleted(StaCommandTerminal<'id, T::ConfigurationPath>),
 }
 
 /// One MPDU to transmit: its ticket, the buffer the station encoded it in,
@@ -858,7 +859,7 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities> {
     /// The absence the station holds.
     absence: Option<Lease<'id, K, T::GatePath>>,
     /// Each admitted application request reserves its own terminal cell.
-    commands: Commands,
+    commands: Commands<'id, T::ConfigurationPath>,
     sequence: StaSequenceCounter,
     scan: ScanTable<SCAN_CAPACITY>,
     pmksa: StaPmksaCache,
@@ -880,15 +881,15 @@ pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities> {
     configuration: Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
     tickets: Pool<T::Ticket>,
     buffers: Pool<T::SmallBuffer>,
-    commands: Commands,
+    commands: Commands<'id, T::ConfigurationPath>,
     sequence: StaSequenceCounter,
     pmksa: StaPmksaCache,
     notice: Option<StaNotice>,
 }
 
 /// Terminal-only output; finalization never requests a port operation.
-pub enum StaFinalOutput {
-    CommandCompleted(StaCommandTerminal),
+pub enum StaFinalOutput<'id, Path: PoolPath = Root> {
+    CommandCompleted(StaCommandTerminal<'id, Path>),
     Notify(StaNotice),
 }
 
@@ -974,7 +975,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> RetiredStation<'id, T, K> {
     }
 
     /// Drain original accepted requests before the one lifecycle notice.
-    pub fn poll_output(&mut self) -> Option<StaFinalOutput> {
+    pub fn poll_output(&mut self) -> Option<StaFinalOutput<'id, T::ConfigurationPath>> {
         self.commands
             .poll()
             .map(StaFinalOutput::CommandCompleted)
@@ -2127,7 +2128,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
     pub fn new_open<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
         config: StaConfig<K>,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-    ) -> Self {
+    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         Self::from_config(config, StaSecurity::Open, resources)
     }
 
@@ -2138,7 +2139,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         pmk: Pmk,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
         _capacity: GroupCapacity<GROUPS>,
-    ) -> Self {
+    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         Self::from_config(config, StaSecurity::Personal { password, pmk }, resources)
     }
 
@@ -2146,7 +2147,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         config: StaConfig<K>,
         security: StaSecurity,
         resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
-    ) -> Self {
+    ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
             #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
             const fn check(tickets: usize, buffers: usize) {
@@ -2173,25 +2174,29 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
             keys,
             group_permission,
         } = resources;
-        Self {
-            config,
-            security,
-            state: State::Idle,
-            keys: Keys::new::<GROUPS>(keys, group_permission),
-            configuration: Some(configure),
-            tickets: Pool::new(tickets),
-            buffers: Pool::new(buffers),
-            place: Some(place),
-            lease: Held::None,
-            absence_place: Some(absence_place),
-            absence: None,
-            commands: Commands::new(),
-            sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
-            scan: ScanTable::new(),
-            pmksa: StaPmksaCache::new(),
-            epoch: None,
-            epochs,
-        }
+        let (commands, credits) = Commands::new();
+        (
+            Self {
+                config,
+                security,
+                state: State::Idle,
+                keys: Keys::new::<GROUPS>(keys, group_permission),
+                configuration: Some(configure),
+                tickets: Pool::new(tickets),
+                buffers: Pool::new(buffers),
+                place: Some(place),
+                lease: Held::None,
+                absence_place: Some(absence_place),
+                absence: None,
+                commands,
+                sequence: StaSequenceCounter::new(SequenceNumber::ZERO),
+                scan: ScanTable::new(),
+                pmksa: StaPmksaCache::new(),
+                epoch: None,
+                epochs,
+            },
+            credits,
+        )
     }
 
     /// Tokens given back beyond the station's own: dropped, counted.
@@ -2307,7 +2312,11 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
 
     /// Admit a request and reserve its terminal before changing protocol state.
     /// Refusal returns that same request immediately and owes no terminal.
-    pub fn command(&mut self, now: Instant, request: StaRequest) -> Result<(), StaCommandRefused> {
+    pub fn command(
+        &mut self,
+        now: Instant,
+        request: StaRequest<'id, T::ConfigurationPath>,
+    ) -> Result<(), StaCommandRefused<'id, T::ConfigurationPath>> {
         self.complete_commands();
         let command = request.command();
         let reason = match (command, &self.state) {
@@ -2330,7 +2339,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         if let Some(reason) = reason {
             return Err(StaCommandRefused { request, reason });
         }
-        self.commands.reserve(request)?;
+        self.commands.reserve(request);
         let state = self.take_state();
         self.state = self.step(state, now, Done::Command(command));
         self.complete_commands();

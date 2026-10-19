@@ -33,8 +33,7 @@ fn personal() -> StaSecurity {
 
 fn begin(world: &mut World<'_>, beacon: &[u8], start: u32, request: u64) {
     world
-        .station
-        .command(at(start), StaRequest::new(request, StaCommand::Connect))
+        .command(at(start), request, StaCommand::Connect)
         .unwrap();
     world.run(at(start));
     world.advance();
@@ -208,10 +207,7 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                 assert!(!rsn.akm_suites().contains([0, 0x0f, 0xac, 2]));
                 let pmk = Pmk::from_bytes(keys.pmk);
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 32);
-                world
-                    .station
-                    .command(at(40), StaRequest::new(92, StaCommand::Disconnect))
-                    .unwrap();
+                world.command(at(40), 92, StaCommand::Disconnect).unwrap();
                 world.run(at(40));
                 assert!(matches!(world.station.state, State::Idle));
                 begin(&mut world, &beacon, 100, 93);

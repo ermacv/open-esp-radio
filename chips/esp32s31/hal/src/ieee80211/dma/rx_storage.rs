@@ -79,7 +79,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     pub(crate) unsafe fn prepare_for_recycle(&self) -> Result<(), RxRingError> {
         match self.1.load(Ordering::Acquire) {
             RX_BUFFER_RING => {}
-            RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED | RX_BUFFER_RELEASED => {
+                return Err(RxRingError::BufferOwnershipConflict);
+            }
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: ring ownership makes this the only CPU or DMA writer.
@@ -95,7 +97,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
     /// therefore safe to republish, but its allocation still carries the
     /// durable `Released` state. Normalize that state in the same transaction;
     /// otherwise the descriptor becomes DMA-visible while a later detach sees
-    /// the stale release and rejects a real completion as `Busy`.
+    /// the stale release and rejects a real completion as `BufferOwnershipConflict`.
     #[allow(
         unsafe_code,
         reason = "the observed live-ring prefix excludes DMA and detached upper ownership"
@@ -111,9 +113,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
-                    .map_err(|_| RxRingError::Busy)?;
+                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
             }
-            RX_BUFFER_DETACHED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: the state check/transition excludes every external owner.
@@ -137,7 +139,7 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
-            .map_err(|_| RxRingError::Busy)?;
+            .map_err(|_| RxRingError::BufferOwnershipConflict)?;
         let pointer = NonNull::new(self.0.get().cast::<u8>()).expect("RX DMA buffer is non-null");
         #[allow(
             unsafe_code,
@@ -172,9 +174,9 @@ impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> RxDmaBuffer<BUFFER_SIZ
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     )
-                    .map_err(|_| RxRingError::Busy)?;
+                    .map_err(|_| RxRingError::BufferOwnershipConflict)?;
             }
-            RX_BUFFER_DETACHED => return Err(RxRingError::Busy),
+            RX_BUFFER_DETACHED => return Err(RxRingError::BufferOwnershipConflict),
             _ => return Err(RxRingError::Corrupt),
         }
         // SAFETY: stopped-ring ownership excludes DMA, and DETACHED was
@@ -329,7 +331,7 @@ pub struct RxDmaCompletedUnit<
 > {
     unit: RxCompletedUnit,
     storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
-    ring: &'owner mut RxRingLive<'ring, COUNT>,
+    ring: Option<&'owner mut RxRingLive<'ring, COUNT>>,
     requires_recycle: bool,
     // Keep physical descriptor credit on the core-local DMA owner. The
     // consuming detach transition deliberately returns a separate Send-able
@@ -343,6 +345,71 @@ pub struct RxDmaDetachedUnit {
     descriptor_address: u32,
     descriptor_word0: WifiRxDmaDescriptorControl,
     length: usize,
+}
+
+/// Affine permission to append one observed unit at the recycle frontier.
+///
+/// Its exclusive ring loan keeps the frozen LAST generation current. Neither
+/// a descriptor count nor a copied cursor can publish descriptors on its own.
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaRecycleUnit};
+/// fn duplicate(credit: RxDmaRecycleUnit<'_, '_, '_, 4, 16, 20>, mmio: &mut impl RxDma) {
+///     let _ = credit.append(mmio);
+///     let _ = credit.append(mmio);
+/// }
+/// ```
+///
+/// ```compile_fail,E0499
+/// use oer_esp32s31_hal::ieee80211::dma::{
+///     rx_dma::RxDma, rx_ring::{RxRingLive, RxFrozenCursor}, rx_storage::RxDmaStorage,
+/// };
+/// fn change_generation(storage: &RxDmaStorage<4, 16, 20>, ring: &mut RxRingLive<'_, 4>,
+///                      cursor: RxFrozenCursor, mmio: &mut impl RxDma) {
+///     let credit = storage.claim_deferred_recycle(ring, cursor).unwrap().unwrap();
+///     let _ = ring.freeze_cursor(mmio);
+///     let _ = credit.append(mmio);
+/// }
+/// ```
+#[must_use = "append the unit or retain it for a later recycle pass"]
+pub struct RxDmaRecycleUnit<
+    'storage,
+    'owner,
+    'ring,
+    const COUNT: usize,
+    const BUFFER_SIZE: usize,
+    const STORAGE_SIZE: usize,
+    S: DmaSpace = ChipDma,
+> {
+    storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
+    ring: &'owner mut RxRingLive<'ring, COUNT>,
+    descriptor_count: usize,
+}
+
+impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
+    RxDmaRecycleUnit<'_, '_, '_, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
+{
+    pub const fn descriptor_count(&self) -> usize {
+        self.descriptor_count
+    }
+
+    #[allow(
+        unsafe_code,
+        reason = "the affine unit retains exclusive buffer rearm authority"
+    )]
+    pub fn append<M: RxDma>(self, mmio: &mut M) -> Result<RxLiveAppend<COUNT>, RxRingError> {
+        self.ring
+            .recycle_proven_unit_owned(mmio, self.descriptor_count, |index| {
+                // SAFETY: the token's ring loan retains the observed complete
+                // unit and its frozen link-release proof until this publication.
+                unsafe {
+                    self.storage
+                        .buffer_for_descriptor(index)
+                        .ok_or(RxRingError::Count)?
+                        .prepare_for_recycle()
+                }
+            })
+    }
 }
 
 impl RxDmaDetachedUnit {
@@ -415,6 +482,8 @@ impl<
         let descriptor_count = self.unit.descriptor_count();
         let result = self
             .ring
+            .as_deref_mut()
+            .expect("completed unit retains ring loan")
             .recycle_completed_unit_owned(mmio, descriptor_count, |index| {
                 // SAFETY: this consuming token owns every segment until this
                 // rearm closure returns it to the live walker.
@@ -441,6 +510,33 @@ impl<
         self.requires_recycle = false;
     }
 
+    /// Retain a discard, returning append authority only when this unit is
+    /// already at the recycle frontier. A preceding detached upper owner
+    /// leaves it deferred; that owner's release must advance the frontier.
+    pub fn retain_discard(
+        mut self,
+    ) -> Option<RxDmaRecycleUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>>
+    {
+        self.requires_recycle = false;
+        if self.unit.head_index()
+            != self
+                .ring
+                .as_deref()
+                .expect("completed unit retains ring loan")
+                .recycle_start()
+                .get()
+        {
+            return None;
+        }
+        let descriptor_count = self.unit.descriptor_count();
+        let ring = self.ring.take().expect("completed unit retains ring loan");
+        Some(RxDmaRecycleUnit {
+            storage: self.storage,
+            ring,
+            descriptor_count,
+        })
+    }
+
     /// Detach one complete hardware buffer for zero-copy upper ownership.
     ///
     /// The descriptor remains observed and CPU-owned in the ring. Before the
@@ -464,11 +560,18 @@ impl<
             .storage
             .descriptor_buffer_id(index)
             .ok_or(RxRingError::Count)?;
-        let detached_word = self.ring.detached_word(index)?;
+        let detached_word = self
+            .ring
+            .as_deref_mut()
+            .expect("completed unit retains ring loan")
+            .detached_word(index)?;
         let buffer = self
             .storage
             .detach_buffer(self.unit.total_length(), buffer_id)?;
-        self.ring.publish_detached(mmio, index, detached_word);
+        self.ring
+            .as_deref_mut()
+            .expect("completed unit retains ring loan")
+            .publish_detached(mmio, index, detached_word);
         self.requires_recycle = false;
         Ok(RxDmaDetachedUnit {
             buffer,
@@ -488,7 +591,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             // observed exactly once. Losing that linear CPU owner before a
             // successful rearm would otherwise leave an arena which looks
             // live but can never transfer the same group again.
-            self.ring.require_reset();
+            self.ring
+                .as_deref_mut()
+                .expect("completed unit retains ring loan")
+                .require_reset();
         }
     }
 }
@@ -554,29 +660,16 @@ pub struct PlacedRxDma<
     descriptor_base: u32,
 }
 
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Clone
-    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
-{
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace> Copy
-    for PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
-{
-}
-
 impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S: DmaSpace>
     PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>
 {
     /// The placed storage.
-    pub const fn storage(self) -> &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S> {
+    pub const fn storage(&self) -> &'static RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S> {
         self.storage
     }
 
     /// The DMA address of descriptor 0.
-    pub const fn descriptor_base(self) -> u32 {
+    pub const fn descriptor_base(&self) -> u32 {
         self.descriptor_base
     }
 
@@ -588,8 +681,16 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// # Errors
     ///
-    /// The storage already has a ring or must be reset, or an unexpectedly
-    /// live walker did not stop.
+    /// The arena must be reset, or an unexpectedly live walker did not stop.
+    /// The unique placement owner is consumed even when preparation fails.
+    ///
+    /// ```compile_fail,E0382
+    /// use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, rx_dma::RxDma};
+    /// fn twice<M: RxDma>(placed: PlacedRxDma<2, 16, 20>, mmio: &mut M) {
+    ///     let _ = placed.prepare_ring(mmio);
+    ///     let _ = placed.prepare_ring(mmio);
+    /// }
+    /// ```
     pub fn prepare_ring<M: RxDma>(
         self,
         mmio: &mut M,
@@ -809,17 +910,18 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         match self.lifecycle_state() {
             RxDmaArenaState::Reusable => {}
             RxDmaArenaState::Prepared | RxDmaArenaState::Live => {
-                return Err(RxRingError::Busy);
+                panic!("RX initial owner invariant");
             }
             RxDmaArenaState::ResetRequired => return Err(RxRingError::ResetRequired),
         }
         let buffer_size = u32::try_from(BUFFER_SIZE).map_err(|_| RxRingError::Size)?;
-        // `prepare_ring` takes a shared static arena reference, so Rust
-        // borrowing alone cannot prevent two root capabilities. Claim the
-        // stopped/halted owner graph before mutating any descriptor.
-        if !RxDmaArenaState::claim_prepared(self.arena.lifecycle()) {
-            return Err(RxRingError::Busy);
-        }
+        // The consumed, non-Copy placement owner is the sole constructor.
+        // Keep the durable claim before publishing descriptors, so a lost
+        // owner or failed preparation still leaves the arena fail-closed.
+        assert!(
+            RxDmaArenaState::claim_prepared(self.arena.lifecycle()),
+            "RX initial owner invariant"
+        );
         let prepared = match self.reserved_buffer_address() {
             Ok(reserved_buffer_address) => RxRingStopped::prepare_inner(
                 mmio,
@@ -859,8 +961,11 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         ring: RxRingHalted<'storage, COUNT>,
         mmio: &mut M,
     ) -> Result<RxRingStopped<'storage, COUNT>, (RxRingHalted<'storage, COUNT>, RxRingError)> {
+        if !ring.belongs_to_arena(&self.arena) {
+            return Err((ring, RxRingError::DescriptorOwnerAddress));
+        }
         if self.any_buffer_in_state(RX_BUFFER_DETACHED) {
-            return Err((ring, RxRingError::Busy));
+            return Err((ring, RxRingError::OutstandingLeases));
         }
         match self.lifecycle_state() {
             RxDmaArenaState::Prepared => {}
@@ -868,11 +973,8 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                 return Err((ring, RxRingError::ResetRequired));
             }
             RxDmaArenaState::Reusable | RxDmaArenaState::Live => {
-                return Err((ring, RxRingError::Busy));
+                panic!("RX halted owner invariant");
             }
-        }
-        if !ring.belongs_to_arena(&self.arena) {
-            return Err((ring, RxRingError::DescriptorOwnerAddress));
         }
         let buffer_size = match u32::try_from(BUFFER_SIZE) {
             Ok(buffer_size) => buffer_size,
@@ -1227,41 +1329,34 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         Ok(Some(RxDmaCompletedUnit {
             unit,
             storage: self,
-            ring,
+            ring: Some(ring),
             requires_recycle: true,
             _not_send: PhantomData,
         }))
     }
 
-    /// Return one copied complete unit through the vendor's frozen-LAST
-    /// ownership proof.
-    #[allow(
-        unsafe_code,
-        reason = "the frozen vendor LAST proves exclusive unit-buffer rearm"
-    )]
-    pub fn recycle_completed_unit_through_frozen_last<M: RxDma>(
-        &self,
-        ring: &mut RxRingLive<'_, COUNT>,
-        mmio: &mut M,
+    /// Claim one deferred ring-owned discard through a current LAST.
+    /// A preceding upper owner or a hardware frontier short of the unit
+    /// returns no credit. Append itself accepts only the affine result.
+    pub fn claim_deferred_recycle<'storage, 'owner, 'ring>(
+        &'storage self,
+        ring: &'owner mut RxRingLive<'ring, COUNT>,
         cursor: RxFrozenCursor,
-        descriptor_count: usize,
-    ) -> Result<Option<RxLiveAppend<COUNT>>, RxRingError> {
-        self.validate_live_ring(ring)?;
-        let result = ring.recycle_completed_unit_through_frozen_last_owned(
-            mmio,
-            cursor,
+    ) -> Result<
+        Option<RxDmaRecycleUnit<'storage, 'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE, S>>,
+        RxRingError,
+    > {
+        let Some(descriptor_count) = self.first_observed_ring_unit_descriptor_count(ring)? else {
+            return Ok(None);
+        };
+        if !ring.frozen_cursor_releases_unit(cursor, descriptor_count) {
+            return Ok(None);
+        }
+        Ok(Some(RxDmaRecycleUnit {
+            storage: self,
+            ring,
             descriptor_count,
-            |index| {
-                // SAFETY: the ring limits mutation to the observed complete
-                // unit ending at or before the generation-bound LAST.
-                unsafe {
-                    self.buffer_for_descriptor(index)
-                        .ok_or(RxRingError::Count)?
-                        .prepare_for_recycle()
-                }
-            },
-        );
-        self.observe_append(result)
+        }))
     }
 
     /// Check the reserved descriptor once per service pass: count a frame

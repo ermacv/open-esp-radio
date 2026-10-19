@@ -12,8 +12,7 @@ use core::fmt;
 
 use crate::{
     ordinary_tx::{
-        OrdinaryTxError, OrdinaryTxInterface, OrdinaryTxOwner, OrdinaryTxPlan, TX_FCS_SIZE,
-        TX_METADATA_SIZE,
+        OrdinaryTxError, OrdinaryTxInterface, OrdinaryTxPlan, TX_FCS_SIZE, TX_METADATA_SIZE,
     },
     tx::{WifiTxEntropy, WifiTxPowerProfile, WifiTxProgress},
 };
@@ -323,7 +322,7 @@ impl core::error::Error for EspNowCryptoError {}
 /// ordinary TX buffer. Both exact Action AAD and a disjoint S31 key selector
 /// are required before this handoff may become live.
 pub fn start_esp_now_v1_encrypted<P, E, T, const BUFFER_SIZE: usize>(
-    _ordinary: &mut OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE>,
+    _ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
     keys: &mut EspNowKeyOwner,
     prepared: EspNowPreparedEncryptedV1Tx<'_>,
     active_channel: WifiChannel,
@@ -356,7 +355,7 @@ where
 /// owner while it excludes a concurrent retune. A mismatch is reported before
 /// the ordinary TX buffer or descriptor is touched.
 pub fn start_esp_now_v1_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    ordinary: &mut OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE>,
+    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
     prepared: EspNowPreparedV1Tx<'_>,
     active_channel: WifiChannel,
@@ -384,7 +383,7 @@ where
     let (initial_rate, retry_rate_policy) = plaintext_tx_policy(hardware, prepared.phy_mode())?;
 
     let frame_length = {
-        let buffer = ordinary.buffer_mut().map_err(EspNowTxError::Tx)?;
+        let buffer = ordinary.buffer_mut();
         let Some(frame_buffer) = buffer.get_mut(TX_METADATA_SIZE..) else {
             return Err(EspNowTxError::Tx(OrdinaryTxError::BufferSizeOverflow));
         };
@@ -407,7 +406,7 @@ where
 /// A generic buffer smaller than the complete metadata plus MPDU requirement
 /// is rejected before `buffer_mut` can expose or mutate DMA storage.
 pub fn start_esp_now_v2_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    ordinary: &mut OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE>,
+    mut ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
     prepared: EspNowPreparedV2Tx<'_>,
     active_channel: WifiChannel,
@@ -446,7 +445,7 @@ where
     }
     let (initial_rate, retry_rate_policy) = plaintext_tx_policy(hardware, prepared.phy_mode())?;
     let frame_length = {
-        let buffer = ordinary.buffer_mut().map_err(EspNowTxError::Tx)?;
+        let buffer = ordinary.buffer_mut();
         let frame_buffer = &mut buffer[TX_METADATA_SIZE..];
         prepared
             .encode(frame_buffer)
@@ -526,7 +525,7 @@ fn plaintext_tx_policy<H: TxHardware>(
 }
 
 fn publish_plaintext<H, P, E, T, const BUFFER_SIZE: usize>(
-    ordinary: &mut OrdinaryTxOwner<'_, P, E, T, BUFFER_SIZE>,
+    ordinary: crate::ordinary_tx::OrdinaryTxIdle<'_, '_, P, E, T, BUFFER_SIZE>,
     hardware: &mut H,
     frame_length: usize,
     broadcast: bool,

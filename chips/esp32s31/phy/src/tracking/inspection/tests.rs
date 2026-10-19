@@ -15,8 +15,8 @@ fn clients(active: &[RadioClient]) -> PhyClientSnapshot {
     let mut owner = PhyClientState::without_registration(1000);
     let at_zero = oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
     for client in active {
-        owner = match owner
-            .acquire(*client, &at_zero)
+        owner = match available(owner, *client)
+            .acquire(&at_zero)
             .unwrap_or_else(|_| panic!("acquire"))
             .into_owner()
         {
@@ -160,14 +160,26 @@ fn inspection_rejects_reversed_clock_and_uses_updated_state_on_reinspection() {
     let after = Inspection::inspect(&state, policy, clients, 1001).unwrap();
     assert!(!before.wifi.unwrap().calibration.unwrap().common.is_due());
     assert!(after.wifi.unwrap().calibration.unwrap().common.is_due());
-    let later = PhyClientState::without_registration(1000)
-        .acquire(
-            RadioClient::Wifi,
-            &oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(2000)),
-        )
-        .unwrap_or_else(|_| panic!("acquire"))
-        .into_owner()
-        .err()
-        .expect("initial tracking must be due");
+    let later = available(
+        PhyClientState::without_registration(1000),
+        RadioClient::Wifi,
+    )
+    .acquire(&oer_time_virtual::VirtualClock::<8>::starting_at(
+        oer_time::Instant::from_micros(2000),
+    ))
+    .unwrap_or_else(|_| panic!("acquire"))
+    .into_owner()
+    .err()
+    .expect("initial tracking must be due");
     assert!(Inspection::inspect(&state, policy, later.snapshot(), 1999).is_err());
+}
+
+fn available(
+    owner: crate::state::client::PhyClientState,
+    client: crate::state::client::RadioClient,
+) -> crate::state::client::PhyClientAvailable {
+    match owner.client(client) {
+        crate::state::client::PhyClientAccess::Available(available) => available,
+        _ => panic!("inspection fixture owns the vacant client"),
+    }
 }
