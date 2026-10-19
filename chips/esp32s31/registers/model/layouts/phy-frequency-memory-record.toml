@@ -19,16 +19,16 @@ writer = "cpu"
 description = "Low capacitor byte."
 
 [[layout.bytes.fields]]
-name = "CAP_HIGH"
-bits = "14"
+name = "CAP_HIGH_BYTE"
+bits = "15:8"
 writer = "cpu"
-description = "Capacitor bit 8 at block 0x62 register 2 bit 6."
+description = "Complete block 0x62 register 2 payload, including the capacitor high bit and fixed configuration."
 
 [[layout.bytes.fields]]
-name = "SDM_LOW"
-bits = "18:16"
+name = "SDM_LOW_BYTE"
+bits = "23:16"
 writer = "cpu"
-description = "Low SDM bits in block 0x63 register 6."
+description = "Complete block 0x63 register 6 payload, combining the low SDM bits and saved upper configuration."
 
 [[layout.bytes]]
 name = "SDM_HIGH"
@@ -90,7 +90,7 @@ completeness = "partial"
 naming = "descriptive"
 
 [[review]]
-entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.CAP_HIGH"
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.CAP_HIGH_BYTE"
 sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
 provenance = "derived"
 accuracy = "exact"
@@ -98,7 +98,7 @@ completeness = "partial"
 naming = "descriptive"
 
 [[review]]
-entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.SDM_LOW"
+entity = "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM.SDM_LOW_BYTE"
 sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING", "ROM_REV0_PHY_FREQUENCY_PACKING"]
 provenance = "derived"
 accuracy = "exact"

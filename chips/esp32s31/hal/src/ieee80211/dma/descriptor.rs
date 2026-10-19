@@ -21,20 +21,23 @@ pub const MAX_ENCODED_MPDU_LEN: usize = 0x3fff;
 /// register (`RX_LAST_DESCRIPTOR`, `RX_NEXT_DESCRIPTOR`) read as `low`, in the
 /// ring of `count` descriptors at DMA address `ring_base`; `None` between
 /// descriptors or outside the ring.
+#[inline]
 pub fn cursor_ring_index(low: u32, ring_base: u32, count: usize) -> Option<usize> {
     const BITS: u32 = oer_esp32s31_pac::WifiDescriptorAddressLow::MAX;
     let offset = low.wrapping_sub(ring_base & BITS) & BITS;
-    ring_index_of(offset, count)
+    if !offset.is_multiple_of(DESCRIPTOR_BYTES) {
+        return None;
+    }
+    let index = usize::try_from(offset / DESCRIPTOR_BYTES).ok()?;
+    (index < count).then_some(index)
 }
 
 /// The ring index of the descriptor at DMA address `address` in the ring of
 /// `count` descriptors at `ring_base`; `None` outside the ring or between
 /// descriptors.
+#[inline]
 pub fn descriptor_ring_index(address: u32, ring_base: u32, count: usize) -> Option<usize> {
-    ring_index_of(address.checked_sub(ring_base)?, count)
-}
-
-fn ring_index_of(offset: u32, count: usize) -> Option<usize> {
+    let offset = address.checked_sub(ring_base)?;
     if !offset.is_multiple_of(DESCRIPTOR_BYTES) {
         return None;
     }

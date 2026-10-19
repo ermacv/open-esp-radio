@@ -11272,21 +11272,6 @@ exposure = "facade"
 sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
 
 [[bitwise-composed-domains]]
-name = "PhyFrequencyCapAndSdmInput"
-description = "The first RF-frequency record word, including the fixed capacitor configuration and the saved upper SDM-register bits."
-peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"
-register = "FREQUENCY_MEMORY_DATA"
-arguments = [
-    { name = "cap_low", value-type = "u16", retain-mask = 0xff, left-shift = 0x0 },
-    { name = "cap_high", value-type = "u16", right-shift = 0x8, retain-mask = 0x1, left-shift = 0xe },
-    { name = "sdm_low", value-type = "u8", left-shift = 0x10 },
-    { name = "sdm_upper", value-type = "u8", retain-mask = 0xf8, left-shift = 0x10 },
-]
-fixed-value = 0xbf00
-output-mask = 0xffffffff
-sources = ["BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING"]
-
-[[bitwise-composed-domains]]
 name = "PhyFrequencyCapCorrectionInput"
 description = "Exact capacitor correction publication, including signed high-byte spill. signed_code is the adjusted i16 sign-extended to u32; the final left shift makes a logical right shift equivalent to the ROM arithmetic one."
 peripheral = "PHY_FREQUENCY_CHANNEL_ORACLE"

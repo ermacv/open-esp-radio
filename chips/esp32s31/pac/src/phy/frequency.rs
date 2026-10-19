@@ -4,11 +4,6 @@
 
 use crate::RadioPhyRegisters;
 
-/// First RF-frequency record word, packed by the reviewed model.
-pub const fn frequency_cap_and_sdm_word(cap: u16, sdm_low: u8, sdm_upper: u8) -> u32 {
-    crate::generated::PhyFrequencyCapAndSdmInput::compose(cap, cap, sdm_low, sdm_upper).get()
-}
-
 /// Corrected capacitor word, retaining the ROM's signed spill into the mode.
 pub const fn frequency_cap_correction_word(raw: u32, adjusted: u16) -> u32 {
     crate::generated::PhyFrequencyCapCorrectionInput::compose(

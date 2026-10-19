@@ -2760,28 +2760,6 @@ impl PhyTransmitGainData2 {
     }
 }
 
-/// The first RF-frequency record word, including the fixed capacitor configuration and the saved upper SDM-register bits.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PhyFrequencyCapAndSdmInput(u32);
-
-impl PhyFrequencyCapAndSdmInput {
-    /// Compose one register-specific image from typed logical arguments.
-    pub(crate) const fn compose(cap_low: u16, cap_high: u16, sdm_low: u8, sdm_upper: u8) -> Self {
-        Self(
-            0x0000bf00
-                | ((cap_low as u32) & 0x000000ff)
-                | ((((cap_high as u32) >> 8) & 0x00000001) << 14)
-                | ((sdm_low as u32) << 16)
-                | (((sdm_upper as u32) & 0x000000f8) << 16),
-        )
-    }
-
-    /// Return the generated numeric image to its private raw-PAC bridge.
-    pub(crate) const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// Exact capacitor correction publication, including signed high-byte spill. signed_code is the adjusted i16 sign-extended to u32; the final left shift makes a logical right shift equivalent to the ROM arithmetic one.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PhyFrequencyCapCorrectionInput(u32);
@@ -8864,6 +8842,74 @@ pub mod layouts {
     impl sealed::Sealed for WifiTxDmaDescriptor {}
     impl DmaLayout for WifiTxDmaDescriptor {}
 
+    /// One captured byte at RX-control prefix offset 3, used by ppRxProtoProc to select a rate-control route. Individual electrical meanings are unassigned.
+    ///
+    /// A decoder over the 1 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiRxRateControlFlags<'a> {
+        bytes: &'a [u8; 1],
+    }
+
+    impl<'a> WifiRxRateControlFlags<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 1;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 1]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 1] {
+            self.bytes
+        }
+
+        /// The `FLAGS` range: byte 0x0.
+        pub const fn flags(self) -> WifiRxRateControlFlagsFlags {
+            WifiRxRateControlFlagsFlags(u8::from_le_bytes([self.bytes[0]]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_RX_RATE_CONTROL_FLAGS.FLAGS` range.
+    /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiRxRateControlFlagsFlags(u8);
+
+    impl WifiRxRateControlFlagsFlags {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u8 {
+            self.0
+        }
+
+        /// Opaque: meaning not established. With bit 5 clear, selects route zero.
+        ///
+        /// `BIT_4_OPAQUE`, bit 4; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_4_opaque(self) -> bool {
+            self.0 & 0x10 != 0
+        }
+
+        /// Opaque: meaning not established. With bit 4 clear, selects route one; with bit 4 set, suppresses lookup.
+        ///
+        /// `BIT_5_OPAQUE`, bit 5; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_5_opaque(self) -> bool {
+            self.0 & 0x20 != 0
+        }
+
+        /// Opaque: meaning not established. With bits 4 and 5 clear, selects route two.
+        ///
+        /// `BIT_6_OPAQUE`, bit 6; written by the hardware.
+        /// SOURCE: BLOB_LIBPP_RX_RATE_ROUTE.
+        pub const fn bit_6_opaque(self) -> bool {
+            self.0 & 0x40 != 0
+        }
+    }
+
     /// The first twenty bytes of the ordinary TX descriptor, with the reviewed flags, priority and security words written by ieee80211_set_tx_desc. A-MPDU and unassigned bits are not modeled.
     ///
     /// A decoder over the 20 bytes the hardware wrote, read only after the
@@ -9481,39 +9527,30 @@ pub mod layouts {
             Self((self.0 & 0xffffff00) | value as u32)
         }
 
-        /// Project-assigned name. Capacitor bit 8 at block 0x62 register 2 bit 6.
+        /// Project-assigned name. Complete block 0x62 register 2 payload, including the capacitor high bit and fixed configuration.
         ///
-        /// `CAP_HIGH`, bit 14; written by the CPU.
+        /// `CAP_HIGH_BYTE`, bits 15:8; written by the CPU.
         /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
-        pub const fn cap_high(self) -> bool {
-            self.0 & 0x4000 != 0
+        pub const fn cap_high_byte(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
         }
 
-        /// This value with `CAP_HIGH` set to `value`.
-        pub const fn with_cap_high(self, value: bool) -> Self {
-            if value {
-                Self(self.0 | 0x4000)
-            } else {
-                Self(self.0 & 0xffffbfff)
-            }
+        /// This value with `CAP_HIGH_BYTE` set to `value`.
+        pub const fn with_cap_high_byte(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
         }
 
-        /// Project-assigned name. Low SDM bits in block 0x63 register 6.
+        /// Project-assigned name. Complete block 0x63 register 6 payload, combining the low SDM bits and saved upper configuration.
         ///
-        /// `SDM_LOW`, bits 18:16; written by the CPU.
+        /// `SDM_LOW_BYTE`, bits 23:16; written by the CPU.
         /// SOURCE: BLOB_LIBPHY_PHY_RF_FREQUENCY_PACKING, ROM_REV0_PHY_FREQUENCY_PACKING.
-        pub const fn sdm_low(self) -> u8 {
-            ((self.0 >> 16) & 0x7) as u8
+        pub const fn sdm_low_byte(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
         }
 
-        /// This value with `SDM_LOW` set to `value`, or `None` when `value` does not
-        /// fit its 3 bits.
-        pub const fn with_sdm_low(self, value: u8) -> Option<Self> {
-            if value > 0x7 {
-                None
-            } else {
-                Some(Self((self.0 & 0xfff8ffff) | (value as u32) << 16))
-            }
+        /// This value with `SDM_LOW_BYTE` set to `value`.
+        pub const fn with_sdm_low_byte(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
         }
     }
 
@@ -9729,21 +9766,17 @@ pub mod layouts {
             Self((self.0 & 0xff00) | value as u16)
         }
 
-        /// Project-assigned name. High capacitor bit.
+        /// Project-assigned name. Unmasked high byte of the ROM code carrier; admitted nine-bit codes use only its low bit.
         ///
-        /// `HIGH`, bit 8; written by the CPU.
+        /// `HIGH`, bits 15:8; written by the CPU.
         /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
-        pub const fn high(self) -> bool {
-            self.0 & 0x100 != 0
+        pub const fn high(self) -> u8 {
+            (self.0 >> 8) as u8
         }
 
         /// This value with `HIGH` set to `value`.
-        pub const fn with_high(self, value: bool) -> Self {
-            if value {
-                Self(self.0 | 0x100)
-            } else {
-                Self(self.0 & 0xfeff)
-            }
+        pub const fn with_high(self, value: u8) -> Self {
+            Self((self.0 & 0xff) | (value as u16) << 8)
         }
     }
 

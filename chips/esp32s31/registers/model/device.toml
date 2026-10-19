@@ -116,6 +116,7 @@ fragments = [
     "peripherals/modem-etm.toml",
 ]
 layouts = [
+    "layouts/wifi-rx-rate-control-flags.toml",
     "layouts/wifi-tx-descriptor-prefix.toml",
     "layouts/phy-frequency-memory-word.toml",
     "layouts/phy-frequency-i2c-command.toml",

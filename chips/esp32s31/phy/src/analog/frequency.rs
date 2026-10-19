@@ -24,11 +24,9 @@ use oer_esp32s31_hal::{
     layouts::{
         PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
         PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
-        PhyFrequencyMemoryWordWord,
+        PhyFrequencyMemoryWordWord, PhyRfpllCapacitorCodeCode,
     },
-    phy::frequency::{
-        PhyFrequencyI2cNumberAddresses, frequency_cap_and_sdm_word, frequency_cap_correction_word,
-    },
+    phy::frequency::{PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word},
 };
 
 pub const PHY_FREQUENCY_TABLE_ENTRY_COUNT: u8 = 85;
@@ -141,6 +139,16 @@ pub const fn phy_frequency_memory_record(
     let frequency_code = PHY_FREQUENCY_TABLE_FIRST_CODE.wrapping_add(index as u16);
     let sdm = calculate_rfpll_sdm(frequency_code, request.parameters.crystal_selector, 0).bytes();
     let cap = interpolated_cap(request.low_frequency_cap, request.high_frequency_cap, index);
+    const CAP_CONFIGURATION: u8 = analog_registers::RFPLL_INITIAL_CONFIGURATION_HIGH.replace(
+        analog_registers::RFPLL_INITIAL_CONFIGURATION_LOW.replace(0, 0x3f),
+        1,
+    );
+    let cap_high = analog_registers::RFPLL_CAPACITOR_HIGH.replace(
+        CAP_CONFIGURATION,
+        PhyRfpllCapacitorCodeCode::from_bits(cap).high(),
+    );
+    let sdm_low =
+        analog_registers::RFPLL_SDM_LOW.replace(request.parameters.sdm_register_six_upper, sdm[0]);
     let xtal_duty = phy_frequency_xtal_duty(
         frequency_code,
         request.parameters.middle_xtal_duty,
@@ -149,7 +157,11 @@ pub const fn phy_frequency_memory_record(
 
     PhyFrequencyMemoryRecord {
         words: [
-            frequency_cap_and_sdm_word(cap, sdm[0], request.parameters.sdm_register_six_upper),
+            PhyFrequencyMemoryRecordCapAndSdm::from_bits(0)
+                .with_cap_low(cap as u8)
+                .with_cap_high_byte(cap_high)
+                .with_sdm_low_byte(sdm_low)
+                .bits(),
             PhyFrequencyMemoryRecordSdmHigh::from_bits(0)
                 .with_lower_middle(sdm[1])
                 .with_upper_middle(sdm[2])
@@ -340,7 +352,10 @@ pub const fn phy_frequency_cap_adjusted_word(
     correction: PhyFrequencyCapCorrection,
 ) -> u32 {
     let record = PhyFrequencyMemoryRecordCapAndSdm::from_bits(raw);
-    let cap = u16::from_le_bytes([record.cap_low(), record.cap_high() as u8]);
+    let cap = u16::from_le_bytes([
+        record.cap_low(),
+        analog_registers::RFPLL_CAPACITOR_HIGH.extract(record.cap_high_byte()),
+    ]);
     let adjusted = cap.wrapping_add(correction.delta() as u16);
     frequency_cap_correction_word(raw, adjusted)
 }

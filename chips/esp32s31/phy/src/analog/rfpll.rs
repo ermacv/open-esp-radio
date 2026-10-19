@@ -98,7 +98,7 @@ impl RfpllCapacitorCode {
 
     /// Bit 8, for the one-bit `RFPLL_CAPACITOR_HIGH`.
     pub const fn high_bit(self) -> u8 {
-        PhyRfpllCapacitorCodeCode::from_bits(self.0).high() as u8
+        PhyRfpllCapacitorCodeCode::from_bits(self.0).high()
     }
 }
 

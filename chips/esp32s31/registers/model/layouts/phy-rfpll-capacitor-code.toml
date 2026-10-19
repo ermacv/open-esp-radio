@@ -20,9 +20,9 @@ description = "Low capacitor byte."
 
 [[layout.bytes.fields]]
 name = "HIGH"
-bits = "8"
+bits = "15:8"
 writer = "cpu"
-description = "High capacitor bit."
+description = "Unmasked high byte of the ROM code carrier; admitted nine-bit codes use only its low bit."
 
 [[review]]
 entity = "PHY_RFPLL_CAPACITOR_CODE"

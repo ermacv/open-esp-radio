@@ -207,7 +207,7 @@ description = "_oracles/esp32s31_rev0_rom.elf sha256 a52ad7513deb656a910a5740125
 
 [[sources]]
 id = "ROM_REV0_PHY_RFPLL_VALUE_PACKING"
-description = "ESP32-S31 rev0 ROM (esp-rom-elfs/20260528), sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete phy_rfpll_set_freq at 0x2f8258ca emits SDM bits 2:0, 10:3, 18:11 and 26:19 into its first four scratch bytes; the fifth byte is not consumed by phy_write_rfpll_sdm. Complete phy_write_pll_cap at 0x2f8259f2 writes the low capacitor byte and the high bit into block 0x62 register 2 bit 6."
+description = "ESP32-S31 rev0 ROM (esp-rom-elfs/20260528), sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Complete phy_rfpll_set_freq at 0x2f8258ca emits SDM bits 2:0, 10:3, 18:11 and 26:19 into its first four scratch bytes; the fifth byte is not consumed by phy_write_rfpll_sdm. Complete phy_write_pll_cap at 0x2f8259f2 writes the low capacitor byte and passes the unmasked high byte into block 0x62 register 2 bit 6. Admitted nine-bit codes restrict that byte to zero or one."
 
 [[sources]]
 id = "ROM_REV0_PHY_FREQUENCY_PACKING"
