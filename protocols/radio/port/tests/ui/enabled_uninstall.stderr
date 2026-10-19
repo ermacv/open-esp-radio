@@ -1,18 +1,18 @@
-error[E0277]: the trait bound `Owner<'_, 'id, B, oer_radio_port::Enabled>: UninstallOwner<'_, _>` is not satisfied
+error[E0277]: the trait bound `Owner<'_, 'id, B, Enabled>: UninstallOwner<'_, _>` is not satisfied
   --> tests/ui/enabled_uninstall.rs:11:22
    |
 11 |     Ended::uninstall(owner, control, ()) // ui-error: E0277
-   |     ---------------- ^^^^^ the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, oer_radio_port::Enabled>`
+   |     ---------------- ^^^^^ the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, Enabled>`
    |     |
    |     required by a bound introduced by this call
    |
-help: the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, oer_radio_port::Enabled>`
+help: the trait `UninstallOwner<'_, _>` is not implemented for `Owner<'_, 'id, B, Enabled>`
       but trait `UninstallOwner<'_, B>` is implemented for `Owner<'_, '_, B, oer_radio_port::Disabled>`
   --> src/lifecycle.rs
    |
    | impl<'id, B: PortBackend> UninstallOwner<'id, B> for Owner<'_, 'id, B, Disabled> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = help: for that trait implementation, expected `oer_radio_port::Disabled`, found `oer_radio_port::Enabled`
+   = help: for that trait implementation, expected `oer_radio_port::Disabled`, found `Enabled`
 note: required by a bound in `oer_radio_port::Ended::<'id, B, Out>::uninstall`
   --> src/lifecycle.rs
    |

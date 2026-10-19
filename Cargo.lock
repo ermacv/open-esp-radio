@@ -3492,17 +3492,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-rsn-service"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-ieee80211-mac",
- "oer-ieee80211-rsn",
- "oer-time",
- "oer-time-virtual",
-]
-
-[[package]]
 name = "oer-ieee80211-runtime"
 version = "0.1.0"
 dependencies = [

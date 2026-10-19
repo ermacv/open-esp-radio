@@ -1,4 +1,4 @@
-//! Operation ownership, correlation and backend lifecycle messages.
+//! Operation ownership and correlation.
 
 use crate::PortResult;
 use core::{fmt::Debug, future::Future, ops::RangeInclusive};
@@ -97,52 +97,6 @@ pub enum CancelError {
     /// No admitted work has this identity: it already ended and its terminal
     /// event was reported, or it never ran.
     NotRunning,
-}
-
-/// A lifecycle command; each admitted one ends with one [`LifecycleEvent`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum LifecycleCommand {
-    /// Start admitting work and receiving; ends with
-    /// [`LifecycleEvent::Enabled`] or [`LifecycleEvent::Failed`].
-    Enable,
-    /// Stop admitting work, end the work in flight and stop receiving; ends
-    /// with [`LifecycleEvent::Disabled`] after the terminal event of every
-    /// admitted operation.
-    Disable,
-    /// Stop admitting work and let the work in flight complete; ends with
-    /// [`LifecycleEvent::Quiesced`] after the last terminal event.
-    /// [`Self::Enable`] resumes admission.
-    Quiesce,
-}
-
-/// The terminal event of a lifecycle command.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum LifecycleEvent {
-    /// [`LifecycleCommand::Enable`] completed.
-    Enabled,
-    /// [`LifecycleCommand::Disable`] completed.
-    Disabled,
-    /// [`LifecycleCommand::Quiesce`] completed.
-    Quiesced,
-    /// An admitted command failed and left the port in the state it was in
-    /// before the command. A failure that leaves the backend's state
-    /// unknown is not reported here: [`crate::Poisoned`] follows instead.
-    Failed {
-        /// The command that failed.
-        command: LifecycleCommand,
-    },
-}
-
-/// Why a lifecycle command was refused; nothing changed.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum LifecycleError {
-    /// The port is already in the requested state.
-    AlreadyInState,
-    /// The command does not apply in the port's current state, or the
-    /// backend does not implement it.
-    InvalidState,
-    /// Another lifecycle command has not ended yet.
-    Busy,
 }
 
 /// A caller-chosen correlation identity of one port's submissions.
