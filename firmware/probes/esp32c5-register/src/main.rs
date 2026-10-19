@@ -248,8 +248,8 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
     for register in 0..I2C_REGISTERS {
         let address = PhyI2cAddress::new(bbpll, register);
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
-        let mut read = FieldRead::new(field);
-        let Some(ours) = drive(|| read.poll(bus)) else {
+        let mut read = FieldRead::new(bus, field);
+        let Some(ours) = drive(|| read.poll()) else {
             incomplete = true;
             break;
         };
@@ -273,8 +273,8 @@ fn probe_analog_bus(bus: &mut AnalogI2c, failures: &mut u32) {
         let address = PhyI2cAddress::new(ulp_cal, register);
         let field = AnalogField::new(address, 7, 0).expect("whole byte");
         let before = rom_read(address);
-        let mut write = FieldWrite::new(field, before).expect("byte fits");
-        if drive(|| write.poll(bus)).is_none() {
+        let mut write = FieldWrite::new(bus, field, before).expect("byte fits");
+        if drive(|| write.poll()).is_none() {
             unchanged = false;
             break;
         }

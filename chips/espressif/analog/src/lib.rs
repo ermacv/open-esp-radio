@@ -459,26 +459,42 @@ enum BusPhase {
 /// Run a [`ByteTransition`] over an [`AnalogRegisterBus`], at most one bus
 /// action per [`poll`](Self::poll): start the pending byte transaction when
 /// its host is idle, then observe its completion.
+/// The transaction exclusively borrows the same bus across all polls.
+///
+/// ```compile_fail,E0499
+/// use oer_espressif_analog::{AnalogRegisterBus, ByteTransition, Driver};
+/// fn interleave<B, T>(bus: &mut B, first: T, second: T)
+/// where B: AnalogRegisterBus<Address = T::Address>, T: ByteTransition {
+///     let mut first = Driver::new(bus, first);
+///     let mut second = Driver::new(bus, second);
+///     first.poll();
+///     second.poll();
+/// }
+/// ```
 #[must_use = "a transition does nothing until it is polled to completion"]
-#[derive(Clone, Copy, Debug)]
-pub struct Driver<Transition> {
+#[derive(Debug)]
+pub struct Driver<'bus, Bus, Transition> {
+    bus: &'bus mut Bus,
     transition: Transition,
     phase: BusPhase,
 }
 
-impl<Transition: ByteTransition> Driver<Transition> {
-    pub const fn new(transition: Transition) -> Self {
+impl<'bus, Bus, Transition> Driver<'bus, Bus, Transition>
+where
+    Transition: ByteTransition,
+    Bus: AnalogRegisterBus<Address = Transition::Address>,
+{
+    pub const fn new(bus: &'bus mut Bus, transition: Transition) -> Self {
         Self {
+            bus,
             transition,
             phase: BusPhase::Idle,
         }
     }
 
     /// Advance the transition by at most one bus action.
-    pub fn poll<Bus>(&mut self, bus: &mut Bus) -> Step<Transition::Output>
-    where
-        Bus: AnalogRegisterBus<Address = Transition::Address>,
-    {
+    pub fn poll(&mut self) -> Step<Transition::Output> {
+        let bus = &mut self.bus;
         let action = self.transition.action();
         let completion = match (self.phase, action) {
             (_, Action::Complete(output)) => return Step::Ready(output),
@@ -518,62 +534,95 @@ impl<Transition: ByteTransition> Driver<Transition> {
 }
 
 /// Polled `phy_i2c_readReg_Mask` over a bus.
+///
+/// ```compile_fail,E0382
+/// use oer_espressif_analog::{AnalogRegisterBus, FieldRead};
+/// fn duplicate<B: AnalogRegisterBus>(mut read: FieldRead<'_, B>) {
+///     let mut other = read;
+///     read.poll();
+///     other.poll();
+/// }
+/// ```
 #[must_use = "a field read does nothing until it is polled to completion"]
-#[derive(Clone, Copy, Debug)]
-pub struct FieldRead<Address>(Driver<FieldReadTransition<Address>>);
+#[derive(Debug)]
+pub struct FieldRead<'bus, Bus: AnalogRegisterBus>(
+    Driver<'bus, Bus, FieldReadTransition<Bus::Address>>,
+);
 
-impl<Address: Copy + Eq> FieldRead<Address> {
-    pub const fn new(field: AnalogField<Address>) -> Self {
-        Self(Driver::new(FieldReadTransition::new(field)))
+impl<'bus, Bus: AnalogRegisterBus> FieldRead<'bus, Bus> {
+    pub const fn new(bus: &'bus mut Bus, field: AnalogField<Bus::Address>) -> Self {
+        Self(Driver::new(bus, FieldReadTransition::new(field)))
     }
 
     /// Advance the read by at most one bus action.
-    pub fn poll<Bus>(&mut self, bus: &mut Bus) -> Step<u8>
-    where
-        Bus: AnalogRegisterBus<Address = Address>,
-    {
-        self.0.poll(bus)
+    pub fn poll(&mut self) -> Step<u8> {
+        self.0.poll()
     }
 }
 
 /// Polled `phy_i2c_writeReg_Mask` over a bus.
+///
+/// ```compile_fail,E0499
+/// use oer_espressif_analog::{AnalogField, AnalogRegisterBus, FieldWrite};
+/// fn interleave<B: AnalogRegisterBus>(bus: &mut B, field: AnalogField<B::Address>) {
+///     let mut first = FieldWrite::new(bus, field, 0).ok().expect("fits");
+///     let mut second = FieldWrite::new(bus, field, 0).ok().expect("fits");
+///     first.poll();
+///     second.poll();
+/// }
+/// ```
 #[must_use = "a field write does nothing until it is polled to completion"]
-#[derive(Clone, Copy, Debug)]
-pub struct FieldWrite<Address>(Driver<FieldWriteTransition<Address>>);
+#[derive(Debug)]
+pub struct FieldWrite<'bus, Bus: AnalogRegisterBus>(
+    Driver<'bus, Bus, FieldWriteTransition<Bus::Address>>,
+);
 
-impl<Address: Copy + Eq> FieldWrite<Address> {
+impl<'bus, Bus: AnalogRegisterBus> FieldWrite<'bus, Bus> {
     /// A write of `value` to `field`.
     ///
     /// # Errors
     ///
     /// `value` does not fit the field.
-    pub const fn new(field: AnalogField<Address>, value: u8) -> Result<Self, ValueTooWide> {
+    pub const fn new(
+        bus: &'bus mut Bus,
+        field: AnalogField<Bus::Address>,
+        value: u8,
+    ) -> Result<Self, ValueTooWide> {
         match FieldWriteTransition::new(field, value) {
-            Ok(write) => Ok(Self(Driver::new(write))),
+            Ok(write) => Ok(Self(Driver::new(bus, write))),
             Err(error) => Err(error),
         }
     }
 
     /// Advance the write by at most one bus action.
-    pub fn poll<Bus>(&mut self, bus: &mut Bus) -> Step<()>
-    where
-        Bus: AnalogRegisterBus<Address = Address>,
-    {
-        self.0.poll(bus)
+    pub fn poll(&mut self) -> Step<()> {
+        self.0.poll()
     }
 }
 
 /// Polled vendor configuration leaf over a bus.
+///
+/// ```compile_fail,E0499
+/// use oer_espressif_analog::{AnalogRegisterBus, Configuration, ConfigurationCommand};
+/// fn interleave<B: AnalogRegisterBus>(bus: &mut B) {
+///     let mut first = Configuration::new(bus, |_| None::<ConfigurationCommand<B::Address>>);
+///     let mut second = Configuration::new(bus, |_| None::<ConfigurationCommand<B::Address>>);
+///     first.poll();
+///     second.poll();
+/// }
+/// ```
 #[must_use = "a configuration does nothing until it is polled to completion"]
-#[derive(Clone, Copy, Debug)]
-pub struct Configuration<Commands, Address>(Driver<ConfigurationTransition<Commands, Address>>);
+#[derive(Debug)]
+pub struct Configuration<'bus, Bus: AnalogRegisterBus, Commands>(
+    Driver<'bus, Bus, ConfigurationTransition<Commands, Bus::Address>>,
+);
 
-impl<Commands, Address: Copy + Eq> Configuration<Commands, Address>
+impl<'bus, Bus: AnalogRegisterBus, Commands> Configuration<'bus, Bus, Commands>
 where
-    Commands: ConfigurationCommands<Address = Address>,
+    Commands: ConfigurationCommands<Address = Bus::Address>,
 {
-    pub fn new(commands: Commands) -> Self {
-        Self(Driver::new(ConfigurationTransition::new(commands)))
+    pub fn new(bus: &'bus mut Bus, commands: Commands) -> Self {
+        Self(Driver::new(bus, ConfigurationTransition::new(commands)))
     }
 
     /// Advance the configuration by at most one bus action.
@@ -582,11 +631,8 @@ where
     ///
     /// A `Modify` command's value does not fit its field; no bus action was
     /// performed for it.
-    pub fn poll<Bus>(&mut self, bus: &mut Bus) -> Result<Step<()>, InvalidCommand>
-    where
-        Bus: AnalogRegisterBus<Address = Address>,
-    {
-        match self.0.poll(bus) {
+    pub fn poll(&mut self) -> Result<Step<()>, InvalidCommand> {
+        match self.0.poll() {
             Step::Pending => Ok(Step::Pending),
             Step::Ready(result) => result.map(Step::Ready),
         }
@@ -706,24 +752,40 @@ impl<Pairs> ParallelTransition<Pairs> {
 }
 
 /// Polled parallel write sequence over a [`ParallelAnalogBus`].
+///
+/// ```compile_fail,E0499
+/// use oer_espressif_analog::{ParallelAnalogBus, ParallelWrites};
+/// fn interleave<B: ParallelAnalogBus>(bus: &mut B) {
+///     let mut first = ParallelWrites::new(bus, |_| None);
+///     let mut second = ParallelWrites::new(bus, |_| None);
+///     first.poll();
+///     second.poll();
+/// }
+/// ```
 #[must_use = "a parallel write sequence does nothing until it is polled to completion"]
-#[derive(Clone, Copy, Debug)]
-pub struct ParallelWrites<Pairs>(ParallelTransition<Pairs>);
+#[derive(Debug)]
+pub struct ParallelWrites<'bus, Bus, Pairs> {
+    bus: &'bus mut Bus,
+    transition: ParallelTransition<Pairs>,
+}
 
-impl<Pairs> ParallelWrites<Pairs> {
+impl<'bus, Bus: ParallelAnalogBus, Pairs> ParallelWrites<'bus, Bus, Pairs>
+where
+    Pairs: Fn(usize) -> Option<Bus::Pair>,
+{
     /// The sequence of the pairs `pairs(0)`, `pairs(1)`, ... up to the first
     /// `None`.
-    pub const fn new(pairs: Pairs) -> Self {
-        Self(ParallelTransition::new(pairs))
+    pub const fn new(bus: &'bus mut Bus, pairs: Pairs) -> Self {
+        Self {
+            bus,
+            transition: ParallelTransition::new(pairs),
+        }
     }
 
     /// Advance the sequence by at most one bus action.
-    pub fn poll<Bus>(&mut self, bus: &mut Bus) -> Step<()>
-    where
-        Bus: ParallelAnalogBus,
-        Pairs: Fn(usize) -> Option<Bus::Pair>,
-    {
-        match self.0.action() {
+    pub fn poll(&mut self) -> Step<()> {
+        let bus = &mut self.bus;
+        match self.transition.action() {
             ParallelAction::SelectParallelMap => bus.select_parallel_host_map(),
             ParallelAction::StartPair(pair) => bus.start_pair(pair),
             ParallelAction::AwaitIdle(host) => {
@@ -733,12 +795,12 @@ impl<Pairs> ParallelWrites<Pairs> {
             }
             ParallelAction::RestoreMap => {
                 bus.restore_host_map();
-                self.0.advance();
+                self.transition.advance();
                 return Step::Ready(());
             }
             ParallelAction::Complete => return Step::Ready(()),
         }
-        self.0.advance();
+        self.transition.advance();
         Step::Pending
     }
 }

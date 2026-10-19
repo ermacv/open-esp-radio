@@ -82,11 +82,12 @@ impl ParallelAnalogBus for AnalogI2c {
 }
 
 /// The parallel analog I2C initialization `phy_i2c_init1` performs, over
-/// the `phy_param` fields it reads; poll it on an [`AnalogI2c`].
+/// the `phy_param` fields it reads, borrowing the bus until completion.
 pub fn initialization(
+    bus: &mut AnalogI2c,
     inputs: PhyI2cInitializationInputs,
-) -> ParallelWrites<impl Fn(usize) -> Option<PhyI2cParallelWrite>> {
-    ParallelWrites::new(move |index| inputs.pair(index))
+) -> ParallelWrites<'_, AnalogI2c, impl Fn(usize) -> Option<PhyI2cParallelWrite>> {
+    ParallelWrites::new(bus, move |index| inputs.pair(index))
 }
 
 fn configuration_command(
@@ -105,11 +106,14 @@ fn configuration_command(
     })
 }
 
-/// A vendor analog configuration leaf; poll it on an [`AnalogI2c`].
+/// A vendor analog configuration leaf, borrowing the bus until completion.
 pub fn configuration(
+    bus: &mut AnalogI2c,
     leaf: PhyI2cConfiguration,
-) -> Configuration<impl Fn(usize) -> Option<ConfigurationCommand<PhyI2cAddress>>, PhyI2cAddress> {
-    Configuration::new(move |index| leaf.command(index).and_then(configuration_command))
+) -> Configuration<'_, AnalogI2c, impl Fn(usize) -> Option<ConfigurationCommand<PhyI2cAddress>>> {
+    Configuration::new(bus, move |index| {
+        leaf.command(index).and_then(configuration_command)
+    })
 }
 
 #[cfg(test)]
