@@ -10,10 +10,16 @@ struct State {
     armed: Cell<bool>,
     arms: Cell<u32>,
     disarms: Cell<u32>,
+    drops: Cell<u32>,
 }
 struct Hardware<'a> {
     clock: &'a VirtualClock<1>,
     state: &'a State,
+}
+impl Drop for Hardware<'_> {
+    fn drop(&mut self) {
+        self.state.drops.set(self.state.drops.get() + 1);
+    }
 }
 impl Backend for Hardware<'_> {
     fn now_micros(&self) -> u64 {
@@ -29,7 +35,7 @@ impl Backend for Hardware<'_> {
     }
 }
 fn budget() -> DeadlineBudget {
-    DeadlineBudget::from_micros(NonZeroU32::new(100).expect("nonzero budget"))
+    DeadlineBudget::from_micros(NonZeroU32::MIN.saturating_add(99))
 }
 #[test]
 fn completion_returns_the_owner_for_the_next_obligation() {
@@ -67,6 +73,7 @@ fn cancellation_and_forgetting_leave_hardware_armed() {
         } else {
             drop(lease);
         }
+        assert_eq!(state.drops.get(), u32::from(!forget));
         clock
             .advance(Duration::from_micros(100))
             .expect("virtual time");

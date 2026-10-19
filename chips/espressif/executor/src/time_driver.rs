@@ -184,23 +184,19 @@ where
     A: Entry<Source = Interrupt, Level = Priority, Core = Cpu>,
 {
     let (bank, zero, one, two) = AlarmBank::adopt(systimer);
-    if BANK.install(BANK_STORAGE.init(bank)).is_err() {
-        panic!("the SYSTIMER bank owner is already installed");
-    }
-    for (index, ack) in [
+    assert!(
+        BANK.install(BANK_STORAGE.init(bank)).is_ok(),
+        "the SYSTIMER bank owner is already installed"
+    );
+    for ((storage, acknowledger), ack) in ACK_STORAGE.iter().zip(&ACKNOWLEDGERS).zip([
         Acknowledger::Zero(zero),
         Acknowledger::One(one),
         Acknowledger::Two(two),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        if ACKNOWLEDGERS[index]
-            .install(ACK_STORAGE[index].init(ack))
-            .is_err()
-        {
-            panic!("the SYSTIMER acknowledger is already installed");
-        }
+    ]) {
+        assert!(
+            acknowledger.install(storage.init(ack)).is_ok(),
+            "the SYSTIMER acknowledger is already installed"
+        );
     }
     assert!(
         WRITER
@@ -262,12 +258,19 @@ where
         "executor {SWI} or comparator {comparator} is bound already"
     );
     // Setup still owns both halves before this alarm's route is enabled.
-    BANK.with(|bank| {
-        ACKNOWLEDGERS[comparator as usize]
-            .with(|ack| ack.bind(bank))
-            .expect("the comparator owner is installed before its route");
-    })
-    .expect("the SYSTIMER bank is installed before binding");
+    assert!(
+        BANK.with(|bank| {
+            assert!(
+                ACKNOWLEDGERS
+                    .get(usize::from(comparator))
+                    .and_then(|ack| ack.with(|ack| ack.bind(bank)))
+                    .is_some(),
+                "the comparator owner is installed before its route"
+            );
+        })
+        .is_some(),
+        "the SYSTIMER bank is installed before binding"
+    );
     if let Err(error) = oer_espressif_esp_hal_irq::enable(&alarm) {
         panic!("time driver alarm {comparator}: {error:?}");
     }
@@ -283,8 +286,10 @@ fn program(comparator: u8, deadline: u64) {
             .saturating_mul(u64::from(TICKS_PER_MICROSECOND.load(Ordering::Relaxed)))
             .min(TICK_MASK)
     });
-    BANK.with(|bank| bank.program(comparator, ticks))
-        .expect("only the SYSTIMER writer programs the bank");
+    assert!(
+        BANK.with(|bank| bank.program(comparator, ticks)).is_some(),
+        "only the SYSTIMER writer programs the bank"
+    );
 }
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
@@ -376,9 +381,13 @@ fn program_published(writer: &mut Slot) {
 pub fn alarm_interrupt<const COMPARATOR: u8>() {
     #[cfg(oer_profile)]
     let entered = now();
-    ACKNOWLEDGERS[COMPARATOR as usize]
-        .with(Acknowledger::acknowledge)
-        .expect("only the alarm handler acknowledges its installed comparator");
+    assert!(
+        ACKNOWLEDGERS
+            .get(usize::from(COMPARATOR))
+            .and_then(|ack| ack.with(Acknowledger::acknowledge))
+            .is_some(),
+        "only the alarm handler acknowledges its installed comparator"
+    );
     #[cfg(oer_profile)]
     {
         let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];

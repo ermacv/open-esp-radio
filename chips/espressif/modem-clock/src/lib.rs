@@ -157,6 +157,10 @@ pub struct ModemClockPlannerIdentity {
 impl ModemClockPlannerIdentity {
     pub fn new() -> Self {
         static NEXT: AtomicU32 = AtomicU32::new(1);
+        #[expect(
+            clippy::expect_used,
+            reason = "exhaustion must stop rather than reuse an identity retained by a forgotten lease"
+        )]
         let key = NEXT
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |key| {
                 key.checked_add(1)

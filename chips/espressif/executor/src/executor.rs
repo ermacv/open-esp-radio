@@ -121,39 +121,51 @@ impl Acknowledger {
     }
 }
 
-fn install_line(swi: usize, sender: Sender, mut ack: Acknowledger) {
+fn install_line(
+    senders: &'static oer_memory::zeroed::ZeroedOnce<Sender>,
+    acknowledger: &'static oer_memory::HandlerCell<Acknowledger>,
+    storage: &'static static_cell::StaticCell<Acknowledger>,
+    sender: Sender,
+    mut ack: Acknowledger,
+) {
     ack.reset();
     assert!(
-        SENDERS[swi].get().is_none(),
+        senders.get().is_none(),
         "software interrupt owner is already installed"
     );
-    let _sender = SENDERS[swi].get_or_init(|| sender);
-    if ACKNOWLEDGERS[swi]
-        .install(ACK_STORAGE[swi].init(ack))
-        .is_err()
-    {
-        panic!("software interrupt acknowledger is already installed");
-    }
+    let _sender = senders.get_or_init(|| sender);
+    assert!(
+        acknowledger.install(storage.init(ack)).is_ok(),
+        "software interrupt acknowledger is already installed"
+    );
 }
 
 #[inline(always)]
 fn raise_interrupt(swi: u8) {
-    let sender = SENDERS[swi as usize]
-        .get()
-        .expect("software interrupt sender is installed before use");
-    match sender {
-        Sender::Zero(sender) => sender.raise(),
-        Sender::One(sender) => sender.raise(),
-        Sender::Two(sender) => sender.raise(),
-        Sender::Three(sender) => sender.raise(),
-    }
+    let raised = SENDERS
+        .get(usize::from(swi))
+        .and_then(oer_memory::zeroed::ZeroedOnce::get)
+        .map(|sender| match sender {
+            Sender::Zero(sender) => sender.raise(),
+            Sender::One(sender) => sender.raise(),
+            Sender::Two(sender) => sender.raise(),
+            Sender::Three(sender) => sender.raise(),
+        });
+    assert!(
+        raised.is_some(),
+        "software interrupt sender is installed before use"
+    );
 }
 
 #[inline(always)]
 fn acknowledge_interrupt(swi: u8) {
-    ACKNOWLEDGERS[swi as usize]
-        .with(Acknowledger::reset)
-        .expect("only the installed software interrupt handler acknowledges its line");
+    assert!(
+        ACKNOWLEDGERS
+            .get(usize::from(swi))
+            .and_then(|ack| ack.with(Acknowledger::reset))
+            .is_some(),
+        "only the installed software interrupt handler acknowledges its line"
+    );
 }
 
 /// The level of the image's three execution contexts, checked when the image
@@ -468,7 +480,9 @@ macro_rules! impl_executor_constructors {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
                 let (sender, ack) = interrupt.split();
                 install_line(
-                    $number,
+                    &SENDERS[$number],
+                    &ACKNOWLEDGERS[$number],
+                    &ACK_STORAGE[$number],
                     Sender::$variant(sender),
                     Acknowledger::$variant(ack),
                 );
@@ -483,7 +497,9 @@ macro_rules! impl_executor_constructors {
             pub fn new(interrupt: SoftwareInterrupt<'static, $number>) -> Self {
                 let (sender, ack) = interrupt.split();
                 install_line(
-                    $number,
+                    &SENDERS[$number],
+                    &ACKNOWLEDGERS[$number],
+                    &ACK_STORAGE[$number],
                     Sender::$variant(sender),
                     Acknowledger::$variant(ack),
                 );

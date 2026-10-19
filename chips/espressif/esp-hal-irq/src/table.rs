@@ -26,9 +26,18 @@ static STORAGE: [static_cell::StaticCell<EspHalMatrix>; 2] =
     [const { static_cell::StaticCell::new() }; 2];
 
 fn with_matrix<R>(f: impl FnOnce(&mut EspHalMatrix) -> R) -> R {
-    MATRICES[Cpu::current() as usize]
+    let matrix = match Cpu::current() {
+        Cpu::ProCpu => &MATRICES[0],
+        #[cfg(feature = "esp32s31")]
+        Cpu::AppCpu => &MATRICES[1],
+    };
+    #[expect(
+        clippy::expect_used,
+        reason = "routing requires one-time adoption and cannot reenter its own core's owner"
+    )]
+    matrix
         .with(f)
-        .unwrap_or_else(|| panic!("the core's matrix owner is absent or already borrowed"))
+        .expect("the core's matrix owner is absent or already borrowed")
 }
 
 impl Matrix for EspHalMatrix {
@@ -100,12 +109,14 @@ pub fn adopt(table: &'static Table<EspHalMatrix>) {
     let routes = InterruptRoutes::take()
         .unwrap_or_else(|| panic!("esp-hal's interrupt routes are taken outside the table"));
     let (core0, core1) = routes.split();
-    for (index, routes) in [Some(core0), core1].into_iter().enumerate() {
+    for ((storage, matrix), routes) in STORAGE.iter().zip(&MATRICES).zip([Some(core0), core1]) {
         if let Some(routes) = routes {
-            let matrix = STORAGE[index].init(EspHalMatrix::new(routes));
-            if MATRICES[index].install(matrix).is_err() {
-                panic!("the core's interrupt matrix was adopted twice");
-            }
+            assert!(
+                matrix
+                    .install(storage.init(EspHalMatrix::new(routes)))
+                    .is_ok(),
+                "the core's interrupt matrix was adopted twice"
+            );
         }
     }
 }

@@ -40,13 +40,17 @@ pub fn run_chip(
         let Ok(value) = serde_json::from_slice::<serde_json::Value>(line) else {
             continue;
         };
-        if value["reason"] != "compiler-artifact" {
+        if value.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-artifact") {
             continue;
         }
-        let Some(name) = value["target"]["name"].as_str() else {
+        let Some(name) = value
+            .get("target")
+            .and_then(|target| target.get("name"))
+            .and_then(serde_json::Value::as_str)
+        else {
             continue;
         };
-        if let Some(files) = value["filenames"].as_array() {
+        if let Some(files) = value.get("filenames").and_then(serde_json::Value::as_array) {
             for file in files.iter().filter_map(serde_json::Value::as_str) {
                 let path = Path::new(file);
                 if path
