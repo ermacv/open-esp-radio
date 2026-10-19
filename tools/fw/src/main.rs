@@ -50,9 +50,10 @@ enum Command {
         image: String,
         #[arg(long)]
         board: String,
-        /// How long to wait for the result, such as `30s` or `2m`.
-        #[arg(long, default_value = "30s", value_parser = parse_duration)]
-        timeout: Duration,
+        /// How long to wait for the result, such as `30s` or `2m`; the
+        /// image's own run time when omitted (w1 120 s, any other 30 s).
+        #[arg(long, value_parser = parse_duration)]
+        timeout: Option<Duration>,
     },
     /// Print a board's console without resetting it.
     Monitor {
@@ -107,7 +108,10 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
-            } => return command::run(&root, &image, &board, timeout),
+            } => {
+                let timeout = timeout.unwrap_or_else(|| image::run_timeout(&image));
+                return command::run(&root, &image, &board, timeout);
+            }
             Command::Monitor { board } => command::monitor(&root, &board)?,
             Command::Router => command::router_ready()?,
             Command::Boards => command::list_boards()?,

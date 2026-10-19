@@ -53,6 +53,17 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(String, Option<
     }
 }
 
+/// How long `cargo fw run` waits for `image`'s result without `--timeout`:
+/// w1's hold cycles and report take up to two minutes, any other image
+/// reports within 30 s.
+pub fn run_timeout(image: &str) -> std::time::Duration {
+    if image == w1::IMAGE {
+        std::time::Duration::from_secs(120)
+    } else {
+        std::time::Duration::from_secs(30)
+    }
+}
+
 /// The pipeline's spec of `image`, with `w1`'s parameters for image `w1`:
 /// every check, reported and never failing the build.
 pub fn spec(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<ImageSpec> {
@@ -103,6 +114,12 @@ pub fn bundle(root: &Path, image: &str) -> Result<ImageBundle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn w1_waits_long_enough_for_its_report_by_default() {
+        assert_eq!(run_timeout("w1"), std::time::Duration::from_secs(120));
+        assert_eq!(run_timeout("w0"), std::time::Duration::from_secs(30));
+    }
 
     #[test]
     fn only_w1s_runtime_build_gets_its_parameters() {

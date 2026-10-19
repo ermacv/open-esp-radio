@@ -6,7 +6,7 @@ flash and runs them to a verdict.
 ```console
 cargo fw build <image>
 cargo fw flash <image> --board <id|MAC>
-cargo fw run <image> --board <id|MAC> [--timeout 30s]
+cargo fw run <image> --board <id|MAC> [--timeout <duration>]
 cargo fw monitor --board <id|MAC>
 cargo fw router
 cargo fw boards
@@ -67,7 +67,8 @@ when it refuses.
 - `run` builds and writes the image, leaves the chip in the flasher stub,
   opens the console and resets the chip into the image with an RTS pulse, then
   reads until `OER-RESULT: pass …` (exit 0), `OER-RESULT: fail …` (1) or the
-  timeout (2). The console goes to `target/fw/runs/<time>-<image>/log.txt`.
+  timeout (2): `--timeout`, or the image's own run time (w1 120 s, any other
+  image 30 s). The console goes to `target/fw/runs/<time>-<image>/log.txt`.
 - `run w1` first brings the stand router to the W1 profile and verifies it
   (below), then builds the image for its AP. It also reads the report block the image prints after its exit,
   `OER-W1-BEGIN v=1` to `OER-W1-END lines=<n>` (one `keyword key=value …`
