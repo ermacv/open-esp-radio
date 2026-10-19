@@ -36,6 +36,7 @@ system-panic-reset = [
 ]
 [dependencies]
 oer-base-memory = { path = "../../../portable/base/memory" }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 embassy-executor.workspace = true
 embassy-sync = { workspace = true, optional = true }
 embassy-time.workspace = true

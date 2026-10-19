@@ -9,6 +9,8 @@
 //! runtime's handoff takes. This profile does not
 //! describe every ESP32-C5 board.
 
+pub mod rom;
+
 use oer_platform_esp32c5_layout::LAYOUT;
 
 use esp_hal::{

@@ -457,6 +457,16 @@ impl SerialCapture {
         console_shows_boot(bytes.get(mark..).unwrap_or_default())
     }
 
+    /// Whether the console bytes after `mark` hold `text`, such as a line the
+    /// image prints through the ROM before its protocol starts.
+    pub fn console_shows_since(&self, mark: usize, text: &str) -> bool {
+        let bytes = self
+            .bytes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        contains(bytes.get(mark..).unwrap_or_default(), text.as_bytes())
+    }
+
     pub fn latest_boot_id(&self) -> Option<u64> {
         let state = self
             .protocol
@@ -645,5 +655,25 @@ pub(crate) type DrainedProfile = (
 fn console_shows_boot(bytes: &[u8]) -> bool {
     [b"ESP-ROM:".as_slice(), b" boot: ".as_slice()]
         .iter()
-        .any(|marker| bytes.windows(marker.len()).any(|window| window == *marker))
+        .any(|marker| contains(bytes, marker))
+}
+
+/// Whether `bytes` hold `text`.
+fn contains(bytes: &[u8], text: &[u8]) -> bool {
+    !text.is_empty() && bytes.windows(text.len()).any(|window| window == text)
+}
+
+#[cfg(test)]
+mod console_tests {
+    use super::{console_shows_boot, contains};
+
+    #[test]
+    fn a_rom_line_is_found_only_whole_and_only_after_the_mark() {
+        let console = b"ESP-ROM:esp32s31\r\nOPEN_RADIO_HIL runtime=PANIC boot=previous hart=0\r\n";
+        assert!(console_shows_boot(console));
+        assert!(contains(console, b"runtime=PANIC boot=previous hart=0"));
+        assert!(!contains(console, b"runtime=EXCEPTION"));
+        assert!(!contains(console, b""), "an empty text proves nothing");
+        assert!(!contains(&console[40..], b"ESP-ROM:"));
+    }
 }

@@ -1,5 +1,6 @@
 //! Platform observations and diagnostics of the radio-free SoC image.
 pub(crate) mod console;
+mod panic;
 pub(crate) mod postmortem;
 mod watchdog;
 

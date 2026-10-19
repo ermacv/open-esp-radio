@@ -10,7 +10,7 @@ use oer_hil_scenario::workload::{context::Context, require_keys};
 use std::{path::Path, time::Duration};
 
 /// The agent source that raises the panic, as its record ends.
-const PANIC_FILE: &str = "system/panic_reset.rs";
+const PANIC_FILE: &str = "system/panic.rs";
 
 pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {
     context.with_capture(output, |capture| {
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn only_the_injected_thread_panic_matches() {
-        let injected = "agent/src/system/panic_reset.rs";
+        let injected = "agent/src/system/panic.rs";
         assert!(names_the_injection(&record(injected, 0, None)).is_ok());
         assert!(names_the_injection(&record("src/main.rs", 0, None)).is_err());
         assert!(names_the_injection(&record(injected, 1, None)).is_err());

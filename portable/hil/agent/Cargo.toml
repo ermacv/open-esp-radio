@@ -12,6 +12,8 @@ description = "Chip-independent HIL target logic shared by the firmware runtime 
 crc = "3.3.0"
 embassy-sync = "0.8.0"
 heapless = "0.9.3"
+oer-base-memory = { path = "../../base/memory" }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-hil-protocol = { path = "../protocol", default-features = false, features = ["async-io"] }
 embedded-io-async = "0.7.0"
 embassy-futures = "0.1.2"

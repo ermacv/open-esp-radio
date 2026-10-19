@@ -18,8 +18,10 @@ of the panic to `.rtc_fast.persistent` without formatting (the end of the
 location's file path, line, column, the start of the message when it is a
 static string, hart and, on an interrupt stack, the interrupted PC), so the
 panic path stays a short leaf in every stack bound. An image with
-`panic-hook` defines `oer_platform_panic_hook`, which the entry calls after
-the record to record more of its own state the same way; it returns. Every
+`panic-hook` names its hook with `panic_hook!`, which the entry calls after
+the record to record more of its own state the same way; it returns. An
+image's own reset-retained records are `retained_static!` cells, one holder
+at a time without waiting, with their claim in the SRAM critical BSS. Every
 image then resets, and its next boot reads and clears the record with
 `panic::take_previous` and prints it.
 The hook receives `panic::PanicDetails`, rather than the original `PanicInfo`.

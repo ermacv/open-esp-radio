@@ -1,17 +1,19 @@
 //! The post-mortem record a boot leaves in reset-retained memory.
 //!
-//! The runtime places one [`Record`] in memory that survives software,
-//! watchdog, JTAG and brownout resets but not a power-on. During a boot it
-//! appends named checkpoints to a ring and, when the boot ends in a hang or
-//! a panic, the fault. The next boot calls [`Record::begin_boot`], which
-//! returns what the previous boot left and starts a fresh ring.
+//! The runtime places one [`Record`] and one [`FaultRecord`] in memory that
+//! survives software, watchdog, JTAG and brownout resets but not a power-on,
+//! each in its own retained cell: a fault never waits for, nor loses to, a
+//! checkpoint. During a boot the record gets named checkpoints in a ring and,
+//! when the boot ends in a hang or a panic, the fault record the fault. The
+//! next boot calls [`Record::begin_boot`], which returns what the previous
+//! boot left and starts a fresh ring and an empty fault.
 //!
 //! Every field is an integer or a byte array, so any bit pattern is a value
 //! and the record can be read before anything initialized it. Integrity is
 //! checked piecewise, so a checkpoint costs one small CRC rather than one over
 //! the whole record: the header, each checkpoint and the fault carry their
 //! own CRC, and a part whose CRC fails is dropped. After a power-on the header
-//! fails and nothing is reported.
+//! fails and nothing is reported, the fault neither.
 //! A fault's CRC-32C uses no lookup table and is inlined into its caller, so
 //! an image's SRAM panic hook can seal a retained fault with caches unavailable.
 //! Checkpoint/header CRCs keep the table-based implementation in thread code.
@@ -30,7 +32,7 @@ use oer_hil_protocol::base::{
 const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 const MAGIC: u32 = u32::from_le_bytes(*b"OPMR");
 /// Layout of [`Record`]; a record of another layout is discarded.
-const LAYOUT: u32 = 2;
+const LAYOUT: u32 = 3;
 
 const FAULT_NONE: u32 = 0;
 const FAULT_HANG: u32 = 1;
@@ -39,7 +41,8 @@ const FAULT_PANIC: u32 = 2;
 const PANIC_FILE_BYTES: usize = 48;
 const PANIC_MESSAGE_BYTES: usize = 96;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
 struct RawCheckpoint {
     name: [u8; CHECKPOINT_NAME_BYTES],
     arg: u32,
@@ -79,8 +82,12 @@ impl RawCheckpoint {
     }
 }
 
-#[derive(Clone, Copy)]
-struct RawFault {
+/// The fault that ended a boot, a hang or a panic, in reset-retained
+/// memory. Any bit pattern is a fault record; an invalid one reports
+/// nothing.
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
+pub struct FaultRecord {
     kind: u32,
     detected_uptime_ms: u32,
     stalled_executors: u32,
@@ -96,8 +103,9 @@ struct RawFault {
     crc: u32,
 }
 
-impl RawFault {
-    const NONE: Self = Self {
+impl FaultRecord {
+    /// No fault, for memory a power-on left undefined.
+    pub const EMPTY: Self = Self {
         kind: FAULT_NONE,
         detected_uptime_ms: 0,
         stalled_executors: 0,
@@ -180,11 +188,61 @@ impl RawFault {
             _ => None,
         }
     }
+
+    /// Record that a watchdog found this boot hung; a later fault replaces it.
+    pub fn record_hang(&mut self, hang: &HangFault) {
+        *self = FaultRecord {
+            kind: FAULT_HANG,
+            detected_uptime_ms: hang.detected_uptime_ms,
+            stalled_executors: u32::from(hang.stalled_executors),
+            harts: hang.harts.map(|hart| {
+                [
+                    u32::from(hart.responded),
+                    hart.mepc,
+                    hart.ra,
+                    hart.sp,
+                    hart.mcause,
+                    hart.mstatus,
+                ]
+            }),
+            samples: hang.samples,
+            stalled_task: hang.stalled_task.map_or(0, |stall| {
+                TaskSlot::ALL
+                    .iter()
+                    .position(|slot| *slot == stall.slot)
+                    .map_or(0, |position| position as u32 + 1)
+            }),
+            task_pending_ms: hang.stalled_task.map_or(0, |stall| stall.pending_ms),
+            ..FaultRecord::EMPTY
+        }
+        .seal();
+    }
+
+    /// Record that this boot panicked, cutting long texts.
+    #[inline(always)]
+    pub fn record_panic(&mut self, file: &str, line: u32, message: &str) {
+        // Fill in place: copying `FaultRecord::EMPTY` can make the compiler read
+        // a constant from cached memory even when the calling hook is in SRAM.
+        let fault = self;
+        fault.kind = FAULT_PANIC;
+        fault.detected_uptime_ms = 0;
+        fault.stalled_executors = 0;
+        for word in fault.harts.iter_mut().flatten().chain(&mut fault.samples) {
+            *word = 0;
+        }
+        fault.stalled_task = 0;
+        fault.task_pending_ms = 0;
+        fault.panic_line = line;
+        fault.panic_file = bytes(file);
+        fault.panic_message = bytes(message);
+        fault.crc = fault.digest();
+    }
 }
 
-/// The record in reset-retained memory. Any bit pattern is a record; an
-/// invalid one reports nothing.
-#[derive(Clone, Copy)]
+/// The checkpoint ring in reset-retained memory. Any bit pattern is a
+/// record; an invalid one reports nothing.
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
 pub struct Record {
     magic: u32,
     layout: u32,
@@ -195,7 +253,6 @@ pub struct Record {
     len: u32,
     header_crc: u32,
     checkpoints: [RawCheckpoint; POST_MORTEM_CHECKPOINTS],
-    fault: RawFault,
 }
 
 /// What the previous boot left behind.
@@ -241,7 +298,6 @@ impl Record {
         len: 0,
         header_crc: 0,
         checkpoints: [RawCheckpoint::EMPTY; POST_MORTEM_CHECKPOINTS],
-        fault: RawFault::NONE,
     };
 
     fn header_digest(&self) -> u32 {
@@ -271,8 +327,8 @@ impl Record {
     }
 
     /// Start this boot's record: return what the previous boot left, when a
-    /// valid record survived, and clear the ring and the fault.
-    pub fn begin_boot(&mut self) -> Option<Previous> {
+    /// valid record survived, and clear the ring and `fault`.
+    pub fn begin_boot(&mut self, fault: &mut FaultRecord) -> Option<Previous> {
         let previous = self.header_valid().then(|| {
             let len = self.len as usize;
             let first =
@@ -284,7 +340,7 @@ impl Record {
                         self.checkpoints[(first + offset) % POST_MORTEM_CHECKPOINTS].decode()
                     })
                     .collect(),
-                fault: self.fault.decode(),
+                fault: fault.decode(),
             }
         });
         let boot_count = previous
@@ -294,7 +350,7 @@ impl Record {
         self.magic = MAGIC;
         self.layout = LAYOUT;
         self.boot_count = boot_count;
-        self.fault = RawFault::NONE.seal();
+        *fault = FaultRecord::EMPTY.seal();
         self.seal_header();
         previous
     }
@@ -315,55 +371,6 @@ impl Record {
         self.head = ((head + 1) % POST_MORTEM_CHECKPOINTS) as u32;
         self.len = (self.len + 1).min(POST_MORTEM_CHECKPOINTS as u32);
         self.seal_header();
-    }
-
-    /// Record that a watchdog found this boot hung; a later fault replaces it.
-    pub fn record_hang(&mut self, hang: &HangFault) {
-        self.fault = RawFault {
-            kind: FAULT_HANG,
-            detected_uptime_ms: hang.detected_uptime_ms,
-            stalled_executors: u32::from(hang.stalled_executors),
-            harts: hang.harts.map(|hart| {
-                [
-                    u32::from(hart.responded),
-                    hart.mepc,
-                    hart.ra,
-                    hart.sp,
-                    hart.mcause,
-                    hart.mstatus,
-                ]
-            }),
-            samples: hang.samples,
-            stalled_task: hang.stalled_task.map_or(0, |stall| {
-                TaskSlot::ALL
-                    .iter()
-                    .position(|slot| *slot == stall.slot)
-                    .map_or(0, |position| position as u32 + 1)
-            }),
-            task_pending_ms: hang.stalled_task.map_or(0, |stall| stall.pending_ms),
-            ..RawFault::NONE
-        }
-        .seal();
-    }
-
-    /// Record that this boot panicked, cutting long texts.
-    #[inline(always)]
-    pub fn record_panic(&mut self, file: &str, line: u32, message: &str) {
-        // Fill in place: copying `RawFault::NONE` can make the compiler read
-        // a constant from cached memory even when the calling hook is in SRAM.
-        let fault = &mut self.fault;
-        fault.kind = FAULT_PANIC;
-        fault.detected_uptime_ms = 0;
-        fault.stalled_executors = 0;
-        for word in fault.harts.iter_mut().flatten().chain(&mut fault.samples) {
-            *word = 0;
-        }
-        fault.stalled_task = 0;
-        fault.task_pending_ms = 0;
-        fault.panic_line = line;
-        fault.panic_file = bytes(file);
-        fault.panic_message = bytes(message);
-        fault.crc = fault.digest();
     }
 }
 
@@ -433,9 +440,9 @@ mod tests {
             ("src/agent.rs", 123, "intentional panic"),
             ("путь/пример.rs", u32::MAX, "сообщение"),
         ] {
-            let mut record = Record::EMPTY;
-            record.record_panic(file, line, message);
-            let fault = &record.fault;
+            let mut fault = FaultRecord::EMPTY;
+            fault.record_panic(file, line, message);
+            let fault = &fault;
             let mut expected = CRC.digest();
             for word in [
                 fault.kind,
@@ -452,10 +459,10 @@ mod tests {
             expected.update(&fault.panic_file);
             expected.update(&fault.panic_message);
             assert_eq!(fault.crc, expected.finalize());
-            let mut reused = Record::EMPTY;
+            let mut reused = FaultRecord::EMPTY;
             reused.record_hang(&hang());
             reused.record_panic(file, line, message);
-            assert_eq!(reused.fault.crc, fault.crc, "previous hang fields survived");
+            assert_eq!(reused.crc, fault.crc, "previous hang fields survived");
         }
     }
 
@@ -479,24 +486,28 @@ mod tests {
 
     #[test]
     fn a_power_on_leaves_nothing_to_report() {
-        let mut record = Record::EMPTY;
-        assert_eq!(record.begin_boot(), None);
-        // Whatever memory a power-on leaves also fails the header.
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        assert_eq!(record.begin_boot(&mut fault), None);
+        // Whatever memory a power-on leaves also fails the header, and a
+        // fault that happens to check out is not reported without it.
         let mut random = Record::EMPTY;
         random.magic = MAGIC;
         random.layout = LAYOUT;
         random.header_crc = 0x1234_5678;
-        assert_eq!(random.begin_boot(), None);
+        let mut fault = FaultRecord::EMPTY;
+        fault.record_hang(&hang());
+        assert_eq!(random.begin_boot(&mut fault), None);
+        assert_eq!(fault.decode(), None, "the boot clears the fault");
     }
 
     #[test]
     fn the_next_boot_reports_checkpoints_and_the_fault_once() {
-        let mut record = Record::EMPTY;
-        record.begin_boot();
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
         record.checkpoint("wifi.start", 1, 10, 0);
         record.checkpoint("coex.grant", 2, 20, 1);
-        record.record_hang(&hang());
-        let previous = record.begin_boot().unwrap();
+        fault.record_hang(&hang());
+        let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.boot_count, 1);
         let names = previous
             .checkpoints
@@ -507,7 +518,7 @@ mod tests {
         assert_eq!(previous.checkpoints[1].hart, 1);
         assert_eq!(previous.fault, Some(Fault::Hang(hang())));
         // The boot after reports its own, empty history, not the hang again.
-        let next = record.begin_boot().unwrap();
+        let next = record.begin_boot(&mut fault).unwrap();
         assert_eq!(next.boot_count, 2);
         assert!(next.checkpoints.is_empty());
         assert_eq!(next.fault, None);
@@ -515,8 +526,8 @@ mod tests {
 
     #[test]
     fn a_task_stall_survives_the_reset() {
-        let mut record = Record::EMPTY;
-        record.begin_boot();
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
         let stall = HangFault {
             stalled_executors: 0,
             stalled_task: Some(TaskStall {
@@ -525,18 +536,21 @@ mod tests {
             }),
             ..hang()
         };
-        record.record_hang(&stall);
-        assert_eq!(record.begin_boot().unwrap().fault, Some(Fault::Hang(stall)));
+        fault.record_hang(&stall);
+        assert_eq!(
+            record.begin_boot(&mut fault).unwrap().fault,
+            Some(Fault::Hang(stall))
+        );
     }
 
     #[test]
     fn the_ring_keeps_the_newest_checkpoints_in_order() {
-        let mut record = Record::EMPTY;
-        record.begin_boot();
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
         for index in 0..(POST_MORTEM_CHECKPOINTS as u32 + 5) {
             record.checkpoint("step", index, index, 0);
         }
-        let previous = record.begin_boot().unwrap();
+        let previous = record.begin_boot(&mut fault).unwrap();
         let args = previous
             .checkpoints
             .iter()
@@ -561,29 +575,29 @@ mod tests {
 
     #[test]
     fn a_corrupted_part_is_dropped_and_the_rest_reported() {
-        let mut record = Record::EMPTY;
-        record.begin_boot();
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
         record.checkpoint("kept", 1, 1, 0);
         record.checkpoint("damaged", 2, 2, 0);
-        record.record_panic("src/main.rs", 42, "boom");
+        fault.record_panic("src/main.rs", 42, "boom");
         record.checkpoints[1].arg ^= 1;
-        let previous = record.begin_boot().unwrap();
+        let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints.len(), 1);
         assert_eq!(previous.checkpoints[0].name.as_str(), "kept");
         assert!(matches!(previous.fault, Some(Fault::Panic(ref panic)) if panic.line == 42));
         record.checkpoint("x", 0, 0, 0);
-        record.record_panic("f", 1, "m");
-        record.fault.panic_line ^= 1;
-        assert_eq!(record.begin_boot().unwrap().fault, None);
+        fault.record_panic("f", 1, "m");
+        fault.panic_line ^= 1;
+        assert_eq!(record.begin_boot(&mut fault).unwrap().fault, None);
     }
 
     #[test]
     fn long_texts_are_cut_at_a_character_boundary() {
-        let mut record = Record::EMPTY;
-        record.begin_boot();
+        let (mut record, mut fault) = (Record::EMPTY, FaultRecord::EMPTY);
+        record.begin_boot(&mut fault);
         record.checkpoint("ieee802154.receive.frame", 0, 0, 0);
-        record.record_panic(&"é".repeat(40), 7, &"x".repeat(200));
-        let previous = record.begin_boot().unwrap();
+        fault.record_panic(&"é".repeat(40), 7, &"x".repeat(200));
+        let previous = record.begin_boot(&mut fault).unwrap();
         assert_eq!(previous.checkpoints[0].name.as_str(), "ieee802154.recei");
         let Some(Fault::Panic(panic)) = previous.fault else {
             panic!("the panic is reported");

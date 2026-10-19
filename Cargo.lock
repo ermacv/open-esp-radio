@@ -3080,6 +3080,7 @@ dependencies = [
 name = "oer-firmware-hil-esp32s31"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "critical-section",
  "embassy-executor",
  "embassy-sync 0.8.0",
@@ -3171,6 +3172,7 @@ dependencies = [
 name = "oer-hil-agent"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "crc",
  "critical-section",
  "embassy-futures",
@@ -3179,6 +3181,7 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
  "log",
+ "oer-base-memory",
  "oer-hil-protocol",
 ]
 
@@ -3830,6 +3833,7 @@ name = "oer-platform-staged-runtime"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
+ "oer-base-memory",
  "oer-exec-esp-hal-irq",
  "oer-exec-interrupt-table",
  "oer-platform-staged-layout",
