@@ -124,10 +124,21 @@ bounds) live in the code that applies them.
 - **Low-power clock** is a type (`LpClock<RcSlow | Xtal32k>`); the
   ESP32-S31-Function-CoreBoard-1 has no 32 kHz crystal.
 - **Brownout** policy is applied in the bootstrap, not in a radio constructor.
-- **Regulatory domain** is a validated type, mandatory for channel legality.
+- **Regulatory domain** is a validated type, mandatory for channel legality:
+  only the domain permits a channel, and every tune, install, scan and
+  transmission of all three radios takes the permitted channel. Its rules
+  are a generated subset of `wireless-regdb`. A domain is fixed for an
+  installation: a country change is a reinstall; without a domain no radio
+  installs. A channel without initiating radiation (NO_IR) is listened on
+  only. 5 GHz DFS channels are refused until radar detection exists. An
+  access point's Country element only narrows the domain for that
+  association.
 - **Priority and power.** Each MAC's PTI registers belong to its own driver,
   and PTI values travel inside typed grants and notices. One transmit power
-  policy, by board and country, covers all three radios.
+  policy, by board and country, covers all three radios: the ceiling is the
+  least of the domain's EIRP less the board's antenna gain, the chip's
+  maximum and an owner cap; a per-attempt power only lowers it. The stand's
+  10 dBm cap is a laboratory setting, not a product default.
 - **RX descriptor walker.** Detached RX descriptors carry owner bit 31 clear:
   the walker stops on one instead of writing it. Execution-level DMA rules are
   facts in `chips/esp32s31/notes/wifi/dma-execution.md`.
@@ -153,7 +164,13 @@ bounds) live in the code that applies them.
   every port has a lost-air terminal.
 - **Coexistence by operation.** Ports name what an operation is (beacon, ACK,
   connection event, CSL slot, …); one coexistence owner maps (client, kind) to
-  a priority through the chip family's data table.
+  a priority through the chip family's data table. Each protocol's port owns
+  its operation kinds; the shared radio vocabulary names only the clients.
+  There is no urgency level. A row without a vendor source is a product
+  choice that states its reason.
+- **Hard deadlines** are the Bluetooth LE connection event, the 802.15.4
+  timed transmission and reception and CSL slot, and the beacon window of a
+  dozing Wi-Fi station; every other operation is served by the PTI alone.
 - **Short hard windows.** Windows shorter than a grant are enforced by the
   hardware priority (PTI) alone and reported as an information-only blackout;
   rate selection ignores samples taken during an absence or a blackout.
