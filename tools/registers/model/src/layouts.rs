@@ -180,6 +180,15 @@ impl MemoryLayout {
     }
 }
 
+impl LayoutUnit {
+    /// Whether the CPU writes any field of this range.
+    pub fn is_cpu_written(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.writer == LayoutWriter::Cpu)
+    }
+}
+
 impl LayoutField {
     /// Whether this field holds an address: of a buffer or of a layout.
     pub fn is_address(&self) -> bool {
@@ -1252,11 +1261,67 @@ fn render_bytes(output: &mut String, layout: &MemoryLayout) {
              /// The range's little-endian value.\n\
              pub const fn bits(self) -> {unit_type} {{ self.0 }}\n"
         );
+        if unit.is_cpu_written() {
+            let _ = writeln!(
+                output,
+                "/// The value of a range image; every bit pattern is one.\n\
+                 pub const fn from_bits(bits: {unit_type}) -> Self {{ Self(bits) }}\n"
+            );
+        }
         for field in &unit.fields {
-            render_field(output, layout, unit, field, unit_type, false);
+            render_field(
+                output,
+                layout,
+                unit,
+                field,
+                unit_type,
+                field.writer == LayoutWriter::Cpu,
+            );
         }
         output.push_str("}\n\n");
     }
+    if layout.units.iter().any(LayoutUnit::is_cpu_written) {
+        render_bytes_mut(output, layout);
+    }
+}
+
+/// The CPU-side view of a byte layout with CPU-written fields: typed getters
+/// for every range and typed setters for the ranges the CPU writes.
+fn render_bytes_mut(output: &mut String, layout: &MemoryLayout) {
+    let ty = camel(&layout.name);
+    let _ = writeln!(
+        output,
+        "/// A writer over the {size} bytes the CPU fills in: typed ranges, no raw\n\
+         /// byte access outside this generated code.\n\
+         #[derive(Debug, Eq, PartialEq)]\n\
+         pub struct {ty}Mut<'a> {{\nbytes: &'a mut [u8; {size}],\n}}\n\n\
+         impl<'a> {ty}Mut<'a> {{\n\
+         /// Write through the structure's bytes.\n\
+         pub const fn new(bytes: &'a mut [u8; {size}]) -> Self {{ Self {{ bytes }} }}\n\n\
+         /// A read-only decoder over the bytes written so far.\n\
+         pub const fn view(&self) -> {ty}<'_> {{ {ty}::new(self.bytes) }}",
+        size = layout.size
+    );
+    for unit in layout.units.iter().filter(|unit| unit.is_cpu_written()) {
+        let value = format!("{ty}{}", camel(&unit.name));
+        let unit_type = storage(8 * unit.size);
+        let name = snake(&unit.name);
+        let stores = (0..unit.size)
+            .map(|index| format!("self.bytes[{}] = bytes[{index}];", unit.offset + index))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let _ = writeln!(
+            output,
+            "\n    /// Store the `{}` range, little-endian.\n\
+             pub fn set_{name}(&mut self, value: {value}) {{\n\
+             let bytes = value.bits().to_le_bytes();\n{stores}\n}}\n\n\
+             /// The `{}` range as last stored.\n\
+             pub const fn {name}(&self) -> {value} {{ self.view().{name}() }}",
+            unit.name, unit.name
+        );
+        let _ = unit_type;
+    }
+    output.push_str("}\n\n");
 }
 
 #[cfg(test)]

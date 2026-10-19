@@ -9867,4 +9867,109 @@ pub mod layouts {
             self.0
         }
     }
+
+    /// The first word of the TX metadata that precedes a transmit frame in its
+    /// buffer: the CPU fills it in before DMA publication.
+    ///
+    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// handover that gives them to the CPU.
+    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct WifiTxMetadataHead<'a> {
+        bytes: &'a [u8; 4],
+    }
+
+    impl<'a> WifiTxMetadataHead<'a> {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+
+        /// Decode the structure from its bytes.
+        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// The bytes this decoder reads.
+        pub const fn bytes(self) -> &'a [u8; 4] {
+            self.bytes
+        }
+
+        /// The `CONTROL` range: bytes 0x0..0x4, little-endian.
+        pub const fn control(self) -> WifiTxMetadataHeadControl {
+            WifiTxMetadataHeadControl(u32::from_le_bytes([
+                self.bytes[0],
+                self.bytes[1],
+                self.bytes[2],
+                self.bytes[3],
+            ]))
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_METADATA_HEAD.CONTROL` range.
+    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxMetadataHeadControl(u32);
+
+    impl WifiTxMetadataHeadControl {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Project-assigned name. Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion.
+        ///
+        /// `HE_SMPDU`, bit 24; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+        pub const fn he_smpdu(self) -> bool {
+            self.0 & 0x1000000 != 0
+        }
+
+        /// This value with `HE_SMPDU` set to `value`.
+        pub const fn with_he_smpdu(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x1000000)
+            } else {
+                Self(self.0 & 0xfeffffff)
+            }
+        }
+    }
+
+    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// byte access outside this generated code.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct WifiTxMetadataHeadMut<'a> {
+        bytes: &'a mut [u8; 4],
+    }
+
+    impl<'a> WifiTxMetadataHeadMut<'a> {
+        /// Write through the structure's bytes.
+        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+            Self { bytes }
+        }
+
+        /// A read-only decoder over the bytes written so far.
+        pub const fn view(&self) -> WifiTxMetadataHead<'_> {
+            WifiTxMetadataHead::new(self.bytes)
+        }
+
+        /// Store the `CONTROL` range, little-endian.
+        pub fn set_control(&mut self, value: WifiTxMetadataHeadControl) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[0] = bytes[0];
+            self.bytes[1] = bytes[1];
+            self.bytes[2] = bytes[2];
+            self.bytes[3] = bytes[3];
+        }
+
+        /// The `CONTROL` range as last stored.
+        pub const fn control(&self) -> WifiTxMetadataHeadControl {
+            self.view().control()
+        }
+    }
 }

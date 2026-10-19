@@ -120,6 +120,7 @@ layouts = [
     "layouts/wifi-tx-dma-descriptor.toml",
     "layouts/wifi-rx-control-prefix.toml",
     "layouts/wifi-rx-control-tail.toml",
+    "layouts/wifi-tx-metadata-head.toml",
 ]
 
 [[shared-fragments]]
