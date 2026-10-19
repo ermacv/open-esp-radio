@@ -13,7 +13,7 @@
 
 #![deny(unsafe_code)]
 
-use oer_esp32s31_bluetooth_memory::ControllerSramLinkAddress;
+use crate::ControllerSramLinkAddress;
 
 use crate::scheduler::{
     SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerTransactionFault,
@@ -21,7 +21,7 @@ use crate::scheduler::{
 };
 
 /// Affine proofs of the list-zero publications, one type each.
-pub(crate) trait SchedulerPublications {
+pub trait SchedulerPublications {
     type Lock;
     type Modify;
     type LockModify;
@@ -128,7 +128,7 @@ pub enum SchedulerStartError<E> {
 }
 
 /// Publications of the list transaction in progress and the latest RUN.
-pub(crate) struct SchedulerHardware<P: SchedulerPublications> {
+pub struct SchedulerHardware<P: SchedulerPublications> {
     lock: Option<P::Lock>,
     modify: Option<P::Modify>,
     lock_modify: Option<P::LockModify>,
@@ -139,8 +139,14 @@ pub(crate) struct SchedulerHardware<P: SchedulerPublications> {
     run: Option<P::Run>,
 }
 
+impl<P: SchedulerPublications> Default for SchedulerHardware<P> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<P: SchedulerPublications> SchedulerHardware<P> {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             lock: None,
             modify: None,
@@ -154,7 +160,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     }
 
     /// Whether no list transaction holds a publication.
-    pub(crate) const fn is_quiet(&self) -> bool {
+    pub const fn is_quiet(&self) -> bool {
         self.lock.is_none()
             && self.modify.is_none()
             && self.lock_modify.is_none()
@@ -165,7 +171,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     }
 
     /// Whether a RUN command was published in this epoch.
-    pub(crate) const fn has_run(&self) -> bool {
+    pub const fn has_run(&self) -> bool {
         self.run.is_some()
     }
 
@@ -399,7 +405,7 @@ impl Admission {
 }
 
 #[cfg(target_arch = "riscv32")]
-pub(crate) mod live;
+pub mod live;
 
 #[cfg(test)]
 mod tests;

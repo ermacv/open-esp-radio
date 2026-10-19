@@ -1,6 +1,6 @@
 //! Hardware actions, waits and observations shared by the list transactions.
 
-use oer_esp32s31_bluetooth_memory::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+use crate::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerLockModifyObservation,

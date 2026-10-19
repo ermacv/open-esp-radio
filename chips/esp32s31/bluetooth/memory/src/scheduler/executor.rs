@@ -15,7 +15,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_bluetooth_memory::{
+use crate::{
     ControllerSramLinkAddress, SchedulerItemCompletionStatus, SchedulerItemId, SchedulerItemSpace,
 };
 use oer_esp32s31_hal::bluetooth::{BluetoothSchedulerBusyObservation, BluetoothSchedulerStopped};

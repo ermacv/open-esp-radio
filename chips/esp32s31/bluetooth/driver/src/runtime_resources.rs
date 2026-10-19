@@ -24,7 +24,9 @@ use crate::{
 };
 
 #[cfg(target_arch = "riscv32")]
-use crate::scheduler::hardware::{SchedulerHardware, live::HalPublications};
+use oer_esp32s31_bluetooth_memory::scheduler::hardware::{
+    SchedulerHardware, live::HalPublications,
+};
 
 /// Event cells shared between the Controller's interrupt handlers and its
 /// task-side workers.
@@ -193,7 +195,7 @@ pub struct ControllerPoweredTaskRuntime<'runtime> {
     pub(crate) task: TaskResources,
     pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-    pub(crate) config: crate::scheduler::SchedulerSoftwareConfig,
+    pub(crate) config: oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig,
 }
 
 /// Why the powered task endpoint cannot be retired yet.
@@ -212,7 +214,7 @@ impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
         task: TaskResources,
         time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
         standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-        config: crate::scheduler::SchedulerSoftwareConfig,
+        config: oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig,
     ) -> Self {
         Self {
             runtime,
@@ -269,7 +271,9 @@ impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
     }
 
     /// Source-owned scheduler policy retained by this powered epoch.
-    pub const fn scheduler_config(&self) -> crate::scheduler::SchedulerSoftwareConfig {
+    pub const fn scheduler_config(
+        &self,
+    ) -> oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig {
         self.config
     }
 

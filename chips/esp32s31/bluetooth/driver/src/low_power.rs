@@ -4,8 +4,9 @@ use crate::{
     runtime_resources::{
         ControllerInterruptRuntime, ControllerModemTimerRuntime, ControllerPoweredTaskRuntime,
     },
-    scheduler::{SchedulerInitialized, SchedulerSoftwareConfig},
+    scheduler::SchedulerInitialized,
 };
+use oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothLowPowerRuntimeControlObservation, BluetoothModemLpTimerOwnerError,

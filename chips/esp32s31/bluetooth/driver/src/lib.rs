@@ -60,6 +60,4 @@ pub use controller_time::{
     ControllerDurationError, ControllerSchedulerEpoch, ControllerTimeSample,
 };
 
-pub use scheduler::time::SchedulerInstant;
-
 pub mod memory;
