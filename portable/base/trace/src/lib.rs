@@ -1,5 +1,5 @@
 #![no_std]
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 //! Typed, reset-retained event trace and snapshot slots.
 //!
@@ -29,7 +29,7 @@
 //! the freeze latch and the snapshot cursor are read-modify-write atomics in
 //! the [`Trace`]. An image that freezes from a panic with caches unavailable
 //! places that `Trace` in uncached RAM; the global pointer and channel mask
-//! use `.critical.data.*` on RISC-V. After a reset the order of the
+//! are in `.critical.bss.*`, SRAM the runtime zeroes. After a reset the order of the
 //! retained entries comes back from their 16-bit sequence tags, and an entry
 //! a reset interrupted fails its commit word and is dropped.
 //!
@@ -49,52 +49,32 @@ pub use store::{
     oldest_first,
 };
 
-use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 
-/// Enabled channels, one bit each; zero unless a trace is running.
-#[allow(
-    unsafe_code,
-    reason = "panic/interrupt trace state must stay in uncached memory"
-)]
-#[cfg_attr(
-    target_arch = "riscv32",
-    unsafe(link_section = ".critical.data.trace_mask")
-)]
-static MASK: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
-#[allow(
-    unsafe_code,
-    reason = "panic/interrupt trace state must stay in uncached memory"
-)]
-#[cfg_attr(
-    target_arch = "riscv32",
-    unsafe(link_section = ".critical.data.trace_pointer")
-)]
-static INSTALLED: AtomicPtr<Trace> = AtomicPtr::new(ptr::null_mut());
+use oer_base_memory::StaticRef;
+
+oer_base_memory::zeroed_static! {
+    /// Enabled channels, one bit each; zero unless a trace is running. In
+    /// SRAM, which interrupt handlers and the panic path reach without a
+    /// cache.
+    static MASK: [AtomicU32; 2] = zeroed in ".critical.bss.trace_mask";
+    /// The installed trace, in SRAM like the mask.
+    static INSTALLED: StaticRef<Trace> = zeroed in ".critical.bss.trace_pointer";
+}
 
 /// Make `trace` the image's trace. Recording stays off, and whatever the
 /// previous boot left stays readable, until [`start`].
 pub fn install(trace: &'static Trace) -> Boot {
     disable();
     let boot = trace.hold();
-    INSTALLED.store(ptr::from_ref(trace).cast_mut(), Ordering::Release);
+    INSTALLED.set(trace);
     boot
 }
 
 /// The installed trace, for draining.
 #[inline(always)]
 pub fn installed() -> Option<&'static Trace> {
-    let trace = INSTALLED.load(Ordering::Acquire);
-    #[allow(
-        unsafe_code,
-        reason = "a static reference published through an atomic pointer"
-    )]
-    // SAFETY: `install` is the only writer, and it stores a pointer derived
-    // from a `&'static Trace`; the pointee is therefore valid, never mutably
-    // borrowed (all its state is atomic) and lives for the rest of the program.
-    unsafe {
-        trace.as_ref()
-    }
+    INSTALLED.get()
 }
 
 /// Discard what the previous boot left and record the channels in `mask`.
@@ -189,16 +169,15 @@ pub fn capture(point: Kind, fill: impl FnOnce(&mut SnapshotWriter<'_>)) {
 /// a global time driver: the trace is global, so the clock is bound at link
 /// time and every record calls it directly. A recording image without one
 /// fails to link on `__oer_trace_now_micros`.
+#[doc(hidden)]
+pub use oer_base_memory as __memory;
+
 #[macro_export]
 macro_rules! clock {
     ($now_micros:path) => {
-        const _: () = {
-            #[allow(unsafe_code, reason = "the trace's clock is bound at link time")]
-            #[unsafe(export_name = "__oer_trace_now_micros")]
-            fn now_micros() -> u64 {
-                $now_micros()
-            }
-        };
+        $crate::__memory::link_fn! {
+            define fn __oer_trace_now_micros() -> u64 = $now_micros;
+        }
     };
 }
 

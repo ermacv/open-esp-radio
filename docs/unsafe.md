@@ -55,7 +55,6 @@ packages. Prefixes below omit `oer-` only to keep the mapping readable.
 | `esp32s31-pac` | `esp32s31/pac/` |
 | `esp32s31-soc-esp-hal` | `adapters/esp-hal/soc/` |
 | `esp32s31-phy` | `esp32s31/phy/` |
-| `espressif-ieee802154-engine` | `espressif/ieee802154-engine/` |
 | `espressif-executor-embassy` | `exec/executor/` |
 | `espressif-interrupt-table-esp-hal` | `exec/esp-hal-irq/` |
 | `interrupt-table` | `exec/interrupt-table/` |
@@ -130,7 +129,16 @@ to one holder at a time without waiting, and its claim lives in a section
 every boot zeroes, so a reset never leaves the record claimed. The cell is
 defined only by `__retained_static!`, whose two statics are its own; the
 staged runtime's `retained_static!` names the sections. `read_volatile`
-reads a value behind a shared borrow with a volatile load.
+reads a value behind a shared borrow with a volatile load. `StaticRef<T>`
+publishes a `&'static T` through an atomic pointer that interrupt handlers
+and the panic path read without a lock. `link_fn!` binds a function at link
+time: the calling crate declares the symbol and its own macro has the image
+define it, so every call is a direct call that the stack analysis follows,
+where a function pointer would leave the callee unknown; the trace's clock
+is one. `DmaBytes<N>` holds bytes whose address a driver publishes to a
+DMA engine: reads copy them out by volatile accesses through `&self`,
+writes copy them in through `&mut self`, so no reference aliases memory the
+engine writes; the IEEE 802.15.4 engine's frame buffers are such bytes.
 
 `HandlerCell` hands one `&'static mut T` from the context that installs it
 to an interrupt handler. Its state (`EMPTY`, `INSTALLING`, `READY`, `BUSY`)

@@ -7,7 +7,7 @@
 //! a complete image in or out with volatile accesses, so no reference ever
 //! aliases memory the DMA may write.
 
-use core::cell::UnsafeCell;
+use oer_base_memory::DmaBytes;
 
 /// Bytes in one `[PHR, PSDU...]` DMA frame image.
 pub const FRAME_SIZE: usize = 128;
@@ -25,79 +25,42 @@ const fn dma_window_contains(window: &core::ops::Range<usize>, start: usize, len
 }
 
 /// One four-byte-aligned DMA frame image.
-#[repr(C, align(4))]
-pub(crate) struct DmaFrame(UnsafeCell<[u8; FRAME_SIZE]>);
-
-#[allow(unsafe_code, reason = "a frame's zero bytes are the empty frame")]
-// SAFETY: a cell of bytes; zero is the frame `new` builds. Written by hand,
-// not derived: this crate is in the source-only PHY build, which runs no
-// proc macro.
-unsafe impl bytemuck::Zeroable for DmaFrame {}
+#[derive(bytemuck::Zeroable)]
+#[repr(transparent)]
+pub(crate) struct DmaFrame(DmaBytes<FRAME_SIZE>);
 
 impl DmaFrame {
     const fn new() -> Self {
-        Self(UnsafeCell::new([0; FRAME_SIZE]))
+        Self(DmaBytes::new())
     }
 
     /// The address published to the MAC DMA.
     pub(crate) fn address(&self) -> u32 {
-        self.0.get() as usize as u32
+        self.0.address() as u32
     }
 
     /// Copy the complete image out.
-    #[allow(
-        unsafe_code,
-        reason = "a volatile whole-image read never forms a reference to DMA-owned memory"
-    )]
     pub(crate) fn read(&self) -> [u8; FRAME_SIZE] {
-        // SAFETY: the pointer comes from this live `UnsafeCell` and is
-        // aligned; the volatile read tolerates a concurrent DMA writer.
-        unsafe { self.0.get().read_volatile() }
+        self.0.read()
     }
 
-    /// Copy `image` in, zero-filling the rest.
-    #[allow(
-        unsafe_code,
-        reason = "a volatile whole-image write never forms a reference to DMA-owned memory"
-    )]
-    pub(crate) fn write(&self, image: &[u8]) {
-        let mut frame = [0; FRAME_SIZE];
-        let length = image.len().min(FRAME_SIZE);
-        frame[..length].copy_from_slice(&image[..length]);
-        // SAFETY: as for `read`; the engine writes an image only while the
-        // DMA does not own it.
-        unsafe { self.0.get().write_volatile(frame) }
+    /// Copy `image` in, zero-filling the rest; the engine writes an image
+    /// only while the DMA does not own it.
+    pub(crate) fn write(&mut self, image: &[u8]) {
+        self.0.write(image);
     }
 
     /// Write the bytes of `image` that differ from `original` into the
-    /// frame the MAC is transmitting, one volatile byte each, as the
-    /// vendor's `esp_ieee802154_transmit_sfd_done` callback edits the frame
-    /// in place at its SFD.
-    #[allow(
-        unsafe_code,
-        reason = "volatile byte writes into a live DMA frame never form a reference to it"
-    )]
-    pub(crate) fn patch(&self, original: &[u8; FRAME_SIZE], image: &[u8; FRAME_SIZE]) {
-        let base = self.0.get().cast::<u8>();
-        for (index, (&old, &new)) in original.iter().zip(image).enumerate() {
-            if old != new {
-                // SAFETY: `index` is below `FRAME_SIZE`, so the byte lies
-                // inside this live, aligned `UnsafeCell`; the MAC reads the
-                // frame's later bytes after its SFD, as in the vendor driver.
-                unsafe { base.add(index).write_volatile(new) }
-            }
-        }
+    /// frame the MAC is transmitting, as the vendor's
+    /// `esp_ieee802154_transmit_sfd_done` callback edits the frame in place
+    /// at its SFD: the MAC reads the frame's later bytes after its SFD.
+    pub(crate) fn patch(&mut self, original: &[u8; FRAME_SIZE], image: &[u8; FRAME_SIZE]) {
+        self.0.write_changed(original, image);
     }
 
     /// Clear bit 7 of the PHR byte, as the vendor receive path does.
-    #[allow(
-        unsafe_code,
-        reason = "one volatile byte access to the PHR of a completed frame"
-    )]
-    pub(crate) fn mask_length(&self) {
-        let phr = self.0.get().cast::<u8>();
-        // SAFETY: byte zero lies inside this live, aligned `UnsafeCell`.
-        unsafe { phr.write_volatile(phr.read_volatile() & 0x7f) }
+    pub(crate) fn mask_length(&mut self) {
+        self.0.update_byte(0, |phr| phr & 0x7f);
     }
 }
 
@@ -107,15 +70,12 @@ impl DmaFrame {
 /// The engine borrows it exclusively for its whole life, so the published
 /// addresses stay valid and no second engine can publish them.
 /// Its zero bytes are the zeroed buffers `new` builds (`bytemuck::Zeroable`).
+#[derive(bytemuck::Zeroable)]
 pub struct Ieee802154EngineBuffers {
     pub(crate) rx: [DmaFrame; RX_BUFFER_COUNT + 1],
     pub(crate) tx: DmaFrame,
     pub(crate) enhanced_ack: DmaFrame,
 }
-
-#[allow(unsafe_code, reason = "zeroed frames are the zeroed buffers")]
-// SAFETY: every field is a `DmaFrame` array or frame, zero-valid above.
-unsafe impl bytemuck::Zeroable for Ieee802154EngineBuffers {}
 
 impl Default for Ieee802154EngineBuffers {
     fn default() -> Self {
@@ -151,15 +111,16 @@ impl Ieee802154EngineBuffers {
             .chain([&self.tx, &self.enhanced_ack])
             .find(|frame| frame.address() == address)
     }
-}
 
-#[allow(
-    unsafe_code,
-    reason = "every buffer access goes through the exclusively borrowed engine"
-)]
-// SAFETY: the buffers are reachable only through the engine's exclusive
-// borrow, and every access is a whole-image volatile copy.
-unsafe impl Sync for Ieee802154EngineBuffers {}
+    /// The buffer whose published address is `address`, to write.
+    #[cfg(not(target_arch = "riscv32"))]
+    pub(crate) fn frame_at_mut(&mut self, address: u32) -> Option<&mut DmaFrame> {
+        self.rx
+            .iter_mut()
+            .chain([&mut self.tx, &mut self.enhanced_ack])
+            .find(|frame| frame.address() == address)
+    }
+}
 
 #[cfg(test)]
 mod tests;

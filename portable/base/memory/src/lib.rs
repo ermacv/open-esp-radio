@@ -19,6 +19,7 @@
 use core::marker::PhantomData;
 
 mod affine_spsc;
+mod dma_bytes;
 mod handler_cell;
 mod indexed_custody;
 mod pinned_tx;
@@ -26,6 +27,7 @@ mod request_slot;
 pub mod retained;
 mod rx_external_handoff;
 mod rx_handoff;
+mod static_ref;
 mod volatile;
 pub mod zeroed;
 
@@ -36,6 +38,7 @@ pub use affine_spsc::{
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError, UniqueQueueIndex,
 };
+pub use dma_bytes::DmaBytes;
 pub use handler_cell::{HandlerCell, Installed};
 pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 pub use pinned_tx::{
@@ -48,6 +51,7 @@ pub use rx_external_handoff::{
     ExternalRxRadioLease,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
+pub use static_ref::StaticRef;
 pub use volatile::read_volatile;
 
 /// Authority to prepare registers for one retained, software-owned TX chain.

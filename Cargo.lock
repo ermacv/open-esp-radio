@@ -2634,6 +2634,9 @@ dependencies = [
 [[package]]
 name = "oer-base-trace"
 version = "0.1.0"
+dependencies = [
+ "oer-base-memory",
+]
 
 [[package]]
 name = "oer-bluetooth-hci"
@@ -2910,6 +2913,7 @@ name = "oer-espressif-ieee802154-engine"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "oer-base-memory",
  "oer-espressif-coex",
  "oer-ieee802154-mac",
 ]

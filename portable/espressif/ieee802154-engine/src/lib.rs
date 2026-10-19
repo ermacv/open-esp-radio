@@ -15,7 +15,7 @@
 //! chip's HAL.
 
 #![no_std]
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 #[cfg(test)]
