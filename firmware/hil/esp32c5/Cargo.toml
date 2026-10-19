@@ -31,7 +31,7 @@ embassy-executor.workspace = true
 embassy-time.workspace = true
 esp-hal.workspace = true
 oer-platform-staged-runtime = { workspace = true, features = ["esp32c5"] }
-oer-platform-esp32c5-board = { workspace = true, features = ["stage-two"] }
+oer-platform-esp32c5-board.workspace = true
 oer-exec-executor = { workspace = true, features = ["esp32c5"] }
 oer-exec-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }

@@ -1,5 +1,6 @@
 #![no_main]
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! W1: a passive scan on the product receive path. The radio system brings
 //! Wi-Fi up on the configured channel (as W0); the receive runner binds its
@@ -168,20 +169,13 @@ struct Boot {
     timer_lines: AffineSpscReceiver<'static, TimerLine, 2>,
 }
 
-#[unsafe(no_mangle)]
-extern "C" fn runtime_main() -> ! {
+oer_platform_staged_runtime::entry!(main);
+
+fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    // SAFETY: `runtime_main` runs once on CPU0, right after `_runtime_start`,
-    // with interrupts disabled and the bootstrap's mapping intact, which
-    // nothing has reset or remapped; interrupts stay disabled until the
-    // executors, the doorbell and the time driver are bound below.
-    let psram = unsafe {
-        oer_platform_staged_runtime::adopt(INTERRUPT_TABLE, || {
-            board::adopt_psram_mapping(peripherals.PSRAM)
-        })
-    };
+    let (psram, adopted) = handoff.adopt(INTERRUPT_TABLE, board::BootstrapPsram(peripherals.PSRAM));
     let mut console = UsbSerialJtag::new(peripherals.USB_DEVICE);
     if let Some(record) = previous {
         let _ = write!(console, "OER-PANIC previous {record}\r\n");
@@ -274,12 +268,7 @@ extern "C" fn runtime_main() -> ! {
     let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
         peripherals.FROM_CPU_INTR0,
     )));
-    // SAFETY: the vectors, the interrupt stack, the time driver, the radio
-    // executor, the doorbell and, from `run`, the application executor's
-    // wake are bound; the MAC and WDEVPWR sources stay silent until the
-    // receive runner enables their routes, and interrupts were disabled
-    // since the handoff.
-    unsafe { oer_platform_staged_runtime::enable_interrupts_after_handoff() };
+    adopted.enable_interrupts();
     let boot = Boot {
         console,
         cell: cells.wifi,
@@ -872,8 +861,5 @@ impl WifiMacPlatform for Platform {
 }
 
 fn park() -> ! {
-    loop {
-        // SAFETY: `wfi` only waits until the next interrupt.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
-    }
+    oer_platform_staged_runtime::idle()
 }

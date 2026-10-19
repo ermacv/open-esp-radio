@@ -24,6 +24,7 @@ mod pinned_tx;
 mod request_slot;
 mod rx_external_handoff;
 mod rx_handoff;
+mod volatile;
 pub mod zeroed;
 
 pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
@@ -45,6 +46,7 @@ pub use rx_external_handoff::{
     ExternalRxRadioLease,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
+pub use volatile::read_volatile;
 
 /// Authority to prepare registers for one retained, software-owned TX chain.
 ///

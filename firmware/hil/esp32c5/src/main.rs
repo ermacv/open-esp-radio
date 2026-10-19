@@ -47,8 +47,9 @@ fn oer_platform_panic_hook(details: &oer_platform_staged_runtime::panic::PanicDe
     system::postmortem::record_panic(details);
 }
 
-#[unsafe(no_mangle)]
-extern "C" fn runtime_main() -> ! {
+oer_platform_staged_runtime::entry!(main);
+
+fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
     // What the previous boot left is taken before anything records.
     #[cfg(feature = "system-watchdog")]
     {
@@ -58,10 +59,10 @@ extern "C" fn runtime_main() -> ! {
     #[cfg(feature = "boot-smoke")]
     let _ = oer_platform_staged_runtime::panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
-    // SAFETY: the stage-two entry runs after the board bootstrap, with global
-    // interrupts disabled and the PSRAM mapping intact.
-    let _psram =
-        unsafe { oer_platform_esp32c5_board::adopt_psram(peripherals.PSRAM, INTERRUPT_TABLE) };
+    let (_psram, adopted) = handoff.adopt(
+        INTERRUPT_TABLE,
+        oer_platform_esp32c5_board::BootstrapPsram(peripherals.PSRAM),
+    );
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
     oer_exec_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
@@ -76,9 +77,7 @@ extern "C" fn runtime_main() -> ! {
         interrupts.console_usb,
         peripherals.TIMG1,
     );
-    // SAFETY: the timer and executor handlers are bound, and the staged
-    // handoff has kept MIE clear since `adopt_psram`.
-    unsafe { oer_platform_staged_runtime::enable_interrupts_after_handoff() };
+    adopted.enable_interrupts();
     executor.run(interrupts.wake, move |spawner| {
         #[cfg(feature = "boot-smoke")]
         spawner.spawn(boot_smoke::run(console).expect("the smoke task's storage is free once"));

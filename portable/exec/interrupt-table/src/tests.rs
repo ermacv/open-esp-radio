@@ -146,3 +146,24 @@ fn an_entry_its_cfg_leaves_out_has_no_binding() {
     assert_eq!(INTERRUPT_TABLE[2].source, Source::Absent);
     assert!(INTERRUPT_TABLE[2].handler.is_none());
 }
+
+#[test]
+fn after_install_no_source_of_the_table_is_routed_until_its_token_enables_it() {
+    // A matrix the bootloader left with every source routed.
+    let mut matrix = FakeMatrix::new(Core::Zero);
+    install(&mut matrix, INTERRUPT_TABLE).unwrap();
+    // No entry of this core is routed: enabling interrupts now dispatches
+    // none of the table's handlers.
+    for (binding, _) in
+        crate::present(INTERRUPT_TABLE).filter(|(binding, _)| binding.core == Core::Zero)
+    {
+        assert_eq!(
+            matrix.routed(Core::Zero, binding.source),
+            None,
+            "{:?}",
+            binding.source
+        );
+    }
+    // Only the source's token routes it again
+    // (`a_token_routes_its_source_to_its_level_on_its_core_alone`).
+}

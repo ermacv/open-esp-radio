@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+oer-platform-staged-layout.workspace = true
 oer-platform-esp32s31-layout.workspace = true
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "unstable"] }
 

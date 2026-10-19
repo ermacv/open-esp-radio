@@ -123,8 +123,9 @@ fn oer_platform_panic_hook(details: &oer_platform_staged_runtime::panic::PanicDe
     fatal::record_panic(stage);
 }
 
-#[unsafe(no_mangle)]
-extern "C" fn runtime_main() -> ! {
+oer_platform_staged_runtime::entry!(main);
+
+fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
     unsafe { ets_install_usb_printf() };
     print(c"OPEN_RADIO_HIL runtime=START profile=");
     print(PROFILE_NAME);
@@ -146,14 +147,10 @@ extern "C" fn runtime_main() -> ! {
     // runtime. `esp_hal::init()` cannot carry process-local mapping metadata
     // across that ELF boundary, so stage two explicitly adopts the live
     // hardware mapping without reinitializing the PSRAM device or MMU.
-    // SAFETY: `runtime_main` runs once on CPU0, right after `_runtime_start`,
-    // with interrupts disabled and the bootstrap's mapping intact; interrupts
-    // stay disabled until the executor and time driver are bound below.
-    let _psram = unsafe {
-        oer_platform_staged_runtime::adopt(INTERRUPT_TABLE, || {
-            oer_platform_esp32s31_board::adopt_psram_mapping(peripherals.PSRAM)
-        })
-    };
+    let (_psram, adopted) = handoff.adopt(
+        INTERRUPT_TABLE,
+        oer_platform_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
+    );
     exception::install_stack_guard(ptr::addr_of!(_stack_end) as usize);
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
@@ -163,9 +160,7 @@ extern "C" fn runtime_main() -> ! {
         peripherals.FROM_CPU_INTR0,
     )));
 
-    // SAFETY: bootstrap intentionally hands MIE over clear, and timer and
-    // software wake interrupt ownership is complete at this point.
-    unsafe { oer_platform_staged_runtime::enable_interrupts_after_handoff() };
+    adopted.enable_interrupts();
 
     #[cfg(feature = "system-panic-reset")]
     system::panic_reset::start(
