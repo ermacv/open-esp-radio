@@ -39,12 +39,15 @@ pub const FLASH_DATA_LINES: u8 = 4;
 /// antenna.
 /// SOURCE: ESP32-S31-WROOM-3 & WROOM-3U datasheet v0.7 (preliminary),
 /// section 10.
+pub const WIFI_ANTENNA_GAIN_MBM: i32 = 233;
+
+/// Conducted power limits for this board and installation.
 pub const fn wifi_power_limits(
     chip_maximum_mbm: i32,
     owner_cap_mbm: Option<i32>,
 ) -> oer_radio_regulatory::PowerLimits {
     oer_radio_regulatory::PowerLimits {
-        antenna_gain_mbm: 233,
+        antenna_gain_mbm: WIFI_ANTENNA_GAIN_MBM,
         chip_maximum_mbm,
         owner_cap_mbm,
     }
