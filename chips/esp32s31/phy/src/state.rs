@@ -113,6 +113,20 @@ impl PhyConfig {
         )
     }
 
+    /// The largest calibrated target power over every rate, in quarter dBm:
+    /// the most the PHY tunes any transmission to.
+    pub const fn highest_target_power_quarter_dbm(&self) -> i8 {
+        let mut highest = self.target_power[0];
+        let mut index = 1;
+        while index < PHY_TX_TARGET_POWER_COUNT {
+            if self.target_power[index] > highest {
+                highest = self.target_power[index];
+            }
+            index += 1;
+        }
+        highest
+    }
+
     pub const fn with_target_power(
         mut self,
         maximum: i8,

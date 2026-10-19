@@ -30,18 +30,22 @@ pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
 pub const FLASH_DATA_LINES: u8 = 4;
 
 /// What bounds Wi-Fi transmit power besides the regulatory domain: the
-/// board's antenna gain and the chip's maximum. The owner cap is a setting of
-/// the installation (the stand's laboratory limit), not a board fact.
+/// board's antenna gain, the chip's maximum (`chip_maximum_mbm`, the PHY's
+/// largest calibrated target power) and an owner cap, a setting of the
+/// installation (the stand's laboratory limit), not a board fact.
 ///
-/// The antenna gain is 0 dBi: no gain is recorded for this board's antenna.
-/// The chip maximum is 21 dBm, the cap the vendor PHY applies to every
-/// target power.
-/// SOURCE(esp32s31): `rom[]::phy_get_chan_target_power`, the four default
-/// FCC bytes at ROM 0x2f84_834c, all 84 quarter dBm.
-pub const fn wifi_power_limits(owner_cap_mbm: Option<i32>) -> oer_radio_regulatory::PowerLimits {
+/// The antenna gain is 2.33 dBi: the gain of the antenna on which the
+/// ESP32-S31-WROOM-3U was certified, not a measured gain of this board's PCB
+/// antenna.
+/// SOURCE: ESP32-S31-WROOM-3 & WROOM-3U datasheet v0.7 (preliminary),
+/// section 10.
+pub const fn wifi_power_limits(
+    chip_maximum_mbm: i32,
+    owner_cap_mbm: Option<i32>,
+) -> oer_radio_regulatory::PowerLimits {
     oer_radio_regulatory::PowerLimits {
-        antenna_gain_mbm: 0,
-        chip_maximum_mbm: 2100,
+        antenna_gain_mbm: 233,
+        chip_maximum_mbm,
         owner_cap_mbm,
     }
 }

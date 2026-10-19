@@ -89,6 +89,15 @@ fn production_config_contains_only_the_qualified_tx_power_policy() {
 }
 
 #[test]
+fn the_chip_maximum_is_the_largest_production_target_power() {
+    // 0x50 quarter dBm: 20 dBm.
+    assert_eq!(
+        crate::state::PhyConfig::production().highest_target_power_quarter_dbm(),
+        0x50
+    );
+}
+
+#[test]
 fn state_owner_cannot_escape_before_a_terminal_parent_outcome() {
     let transition = PhyRegisterTransition::with_production_config();
     assert!(!transition.failure_cleanup_completed());

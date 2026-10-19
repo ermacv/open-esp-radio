@@ -57,8 +57,8 @@ use oer_esp32s31_ieee80211_mac::{
     portable::rx_meta,
 };
 use oer_esp32s31_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, PhyTxTargetPowerProfile,
-    concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
+    PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
@@ -604,7 +604,10 @@ async fn run(
     let channel = domain
         .permit(channel)
         .map_err(|_| "channel-not-permitted")?;
-    let ceiling = channel.tx_ceiling(board::wifi_power_limits(None));
+    let ceiling = channel.tx_ceiling(board::wifi_power_limits(
+        i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+        None,
+    ));
     let start = RadioStartConfig::new(
         WifiColdStartConfig::new(channel, ceiling),
         WifiMacStartConfig::new(MAC_COLD_HANDSHAKE_DEADLINE, station, access_point),
