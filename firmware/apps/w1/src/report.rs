@@ -598,6 +598,7 @@ const fn cause(cause: WifiRxCause) -> &'static str {
         WifiRxCause::LineRefused => "LineRefused",
         WifiRxCause::Start(_) => "Start",
         WifiRxCause::Service(_) => "Service",
+        WifiRxCause::ForeignExecutor => "ForeignExecutor",
     }
 }
 

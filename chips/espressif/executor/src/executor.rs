@@ -6,7 +6,10 @@ use esp_hal::{
     peripherals::Interrupt,
     system::Cpu,
 };
-use oer_interrupt_table::Entry;
+use oer_interrupt_table::{
+    Entry,
+    signal::{IrqSignal, SignalExecutor, SignalList},
+};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 pub(crate) const SOFTWARE_INTERRUPT_COUNT: usize = 4;
@@ -320,6 +323,29 @@ impl<const SWI: u8> Executor<SWI> {
     }
 }
 
+/// The signals each interrupt-mode executor's handler services before it
+/// polls; only that executor's context touches its list.
+static SIGNAL_LISTS: [SignalList; SOFTWARE_INTERRUPT_COUNT] =
+    [const { SignalList::new() }; SOFTWARE_INTERRUPT_COUNT];
+
+/// Pend the interrupt-mode executor `SWI` for a raised signal: raise its
+/// software interrupt, whose handler services the signal and polls. It
+/// wakes no task itself.
+#[esp_hal::ram]
+fn pend_signal<const SWI: u8>(_: &'static IrqSignal) {
+    software_interrupt(SWI, true);
+}
+
+/// Whether the caller runs in the interrupt-mode executor `SWI`'s context:
+/// its handler's poll on this core.
+#[esp_hal::ram]
+fn signal_context<const SWI: u8>() -> bool {
+    running() == SWI
+        && EMBASSY_EXECUTORS_MODE
+            .get(SWI as usize)
+            .is_some_and(|interrupt_mode| interrupt_mode.load(Ordering::Acquire))
+}
+
 /// Embassy executor polled in its software interrupt's handler, at that
 /// interrupt's level: the radio executor (P2) on `FROM_CPU` line 2.
 ///
@@ -331,6 +357,29 @@ pub struct InterruptExecutor<const SWI: u8> {
 }
 
 impl<const SWI: u8> InterruptExecutor<SWI> {
+    /// The executor of this software interrupt's signals: an interrupt
+    /// handler raises an [`IrqSignal`] of it, and the task the signal wakes
+    /// runs on this executor. Only an interrupt-mode executor has one, so a
+    /// signal cannot belong to a thread-mode executor, whose task would share
+    /// its waker with the interrupt.
+    #[allow(unsafe_code, reason = "the executor's signal context contract")]
+    #[allow(
+        clippy::indexing_slicing,
+        reason = "a constant: an SWI beyond the lists fails the build"
+    )]
+    pub const SIGNALS: SignalExecutor =
+        // SAFETY: `signal_context::<SWI>` is true only while this executor's
+        // handler polls (`as_running`), which never reenters itself on its core;
+        // `pend_signal::<SWI>` raises that handler's interrupt, which services
+        // `SIGNAL_LISTS[SWI]` before it polls (`interrupt_handler`).
+        unsafe {
+            SignalExecutor::new(
+                pend_signal::<SWI>,
+                signal_context::<SWI>,
+                &SIGNAL_LISTS[SWI as usize],
+            )
+        };
+
     /// Start polling in the handler of `wake`'s source, whose table entry
     /// names [`interrupt_handler::<SWI>`](interrupt_handler) on this core.
     /// `order` proves that this executor's level lies between the radio
@@ -444,6 +493,9 @@ pub fn interrupt_handler<const SWI: u8>() {
     let executor = unsafe { &*(id as *const raw::Executor) };
     as_running(SWI, || {
         crate::time_driver::service(SWI);
+        // Raised signals wake their tasks here, in this context, before
+        // the poll; a signal raised meanwhile raises this interrupt again.
+        InterruptExecutor::<SWI>::SIGNALS.service();
         #[allow(
             unsafe_code,
             reason = "only this software interrupt's handler polls the executor"

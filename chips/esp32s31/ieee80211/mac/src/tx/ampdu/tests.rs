@@ -558,36 +558,26 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         SequenceNumber::new(0).unwrap(),
         4,
         AmpduRetryPolicy {
-            lifetime: oer_time::RadioDuration::from_micros(
+            lifetime: oer_time::Duration::from_micros(
                 crate::tx::runtime::VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
             retain_single_mpdu: true,
         },
-        radio_stamp(0),
     )
     .unwrap();
     let mut hardware = DetachingCompletionHardware::with_bitmap(0b0101);
     owner
         .submit(&mut hardware, cookie, LegacyTxQueue::BestEffort, config)
         .unwrap();
-    let stale = oer_ieee80211_lower_mac::Ieee80211Stamp {
-        generation: crate::clock_generation(2),
-        ..radio_stamp(0)
-    };
-    assert!(matches!(
-        owner.observe_retry_completion(&mut hardware, cookie, &mut retry, stale, true),
-        Err(crate::tx::ampdu::RetainedAmpduRetryCompletionError::Retry(
-            crate::tx::runtime::AmpduRetryError::ClockGenerationChanged { expected, observed }
-        ))
-     if expected == crate::clock_generation(1) && observed == crate::clock_generation(2)));
-    assert!(
-        hardware.completion.is_some(),
-        "stale timing cannot consume the hardware completion"
-    );
-    assert_eq!(retry.current_subframes(), 4);
-    assert_eq!(retry.aggregate_attempts(), 1);
     let observed = owner
-        .observe_retry_completion(&mut hardware, cookie, &mut retry, radio_stamp(0), true)
+        .observe_retry_completion(
+            &mut hardware,
+            cookie,
+            &mut retry,
+            mono(0),
+            true,
+            admitted_at_zero,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(observed.first_sequence, SequenceNumber::new(0).unwrap());
@@ -616,7 +606,14 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         )
         .unwrap();
     let observed = owner
-        .observe_retry_completion(&mut hardware, cookie, &mut retry, radio_stamp(0), true)
+        .observe_retry_completion(
+            &mut hardware,
+            cookie,
+            &mut retry,
+            mono(0),
+            true,
+            admitted_at_zero,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -1665,11 +1662,13 @@ mod work;
 
 mod exchange_budget;
 
-fn radio_stamp(micros: u64) -> oer_ieee80211_lower_mac::Ieee80211Stamp {
-    oer_ieee80211_lower_mac::Ieee80211Stamp {
-        at: oer_ieee80211_lower_mac::Ieee80211Instant::from_micros(micros),
-        generation: crate::clock_generation(1),
-    }
+fn mono(micros: u64) -> oer_time::Instant {
+    oer_time::Instant::from_micros(micros)
+}
+
+/// Every MPDU's MSDU admitted at zero.
+fn admitted_at_zero(_: u8) -> Option<oer_time::Instant> {
+    Some(oer_time::Instant::from_micros(0))
 }
 
 #[test]

@@ -27,6 +27,9 @@ pub enum WifiRxCause {
     Start(RxFrontierError),
     /// One RX service transaction failed.
     Service(RxStageTransactionError),
+    /// The runner ran outside the executor its interrupt signals belong
+    /// to: no interrupt fact could ever wake it.
+    ForeignExecutor,
 }
 
 /// Why a teardown left its owners quarantined until a radio reset.

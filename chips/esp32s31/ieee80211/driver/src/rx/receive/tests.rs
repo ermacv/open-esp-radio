@@ -320,6 +320,20 @@ where
     harness_staged::<SLOTS, E, M>(|counters, _, _, _| owners(counters))
 }
 
+/// The host executor's signals, each serviced at its raise.
+fn host_signals() -> crate::rx::arena::WifiIrqSignals {
+    crate::rx::arena::WifiIrqSignals {
+        mac: oer_interrupt_table::signal::host::signal(),
+        power: oer_interrupt_table::signal::host::signal(),
+    }
+}
+
+std::thread_local! {
+    /// The signals the next harness binds; the host executor's by default.
+    static SIGNALS: core::cell::Cell<Option<crate::rx::arena::WifiIrqSignals>> =
+        const { core::cell::Cell::new(None) };
+}
+
 /// A harness whose arena has `STAGE` staging slots; `owners` also gets the
 /// upper layer's return notifier, the staged-frame queue's ends and the
 /// clock.
@@ -338,8 +352,11 @@ where
     let host = Host::leaked();
     let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, HostDma, HostEpoch> =
         leak(bytemuck::Zeroable::zeroed());
+    let signals = SIGNALS
+        .with(core::cell::Cell::take)
+        .unwrap_or_else(host_signals);
     let (parts, stop, frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena))
+        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena), signals)
             .expect("a zeroed arena binds");
     let (rx, base) = (parts.rx(), parts.descriptor_base());
     let (requests, counters) = (parts.requests(), parts.counters());
@@ -903,8 +920,14 @@ fn an_occupied_cell_refuses_the_epoch_before_any_route() {
     let cell = &first.host.cell;
     let host = Host::leaked();
     let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
-    let (parts, mut stop, _frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(arena)).unwrap();
+    let (parts, mut stop, _frames) = WifiRxArena::bind(
+        oer_esp32s31_hal::dma_static::Placed::host(arena),
+        crate::rx::arena::WifiIrqSignals {
+            mac: oer_interrupt_table::signal::host::signal(),
+            power: oer_interrupt_table::signal::host::signal(),
+        },
+    )
+    .unwrap();
     let counters = parts.counters();
     let mut runner = Box::pin(receive(
         leak(HostRadio { host }),
@@ -1904,4 +1927,23 @@ fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
     assert_eq!(report.service_errors, 1);
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::ResetRequired);
     held.borrow_mut().clear();
+}
+
+#[test]
+fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
+    SIGNALS.with(|signals| {
+        signals.set(Some(crate::rx::arena::WifiIrqSignals {
+            mac: oer_interrupt_table::signal::host::foreign_signal(),
+            power: oer_interrupt_table::signal::host::foreign_signal(),
+        }));
+    });
+    let mut harness = harness();
+    harness.settle();
+    assert!(matches!(
+        harness.stop.try_exit(),
+        Some(WifiRxExit {
+            cause: WifiRxCause::ForeignExecutor,
+            ..
+        })
+    ));
 }

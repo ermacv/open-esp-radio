@@ -17,19 +17,23 @@
 //!   the unacknowledged subframes, republished unchanged after a failed
 //!   protection exchange, asked for its BlockAck with a BlockAckReq, and
 //!   finished or handed over to individual transmission of its missing
-//!   subframes, each again an MPDU exchange.
+//!   subframes, each again an MPDU exchange. Each subframe ages from its
+//!   MSDU's admission, which the caller gives with every completion; an
+//!   aged subframe is discarded, aggregated or alone, and under an
+//!   operational Block Ack agreement a BlockAckReq moves the recipient's
+//!   window past it.
 //!
 //! The planner never holds frame bytes and never waits: the caller encodes
 //! each attempt from its own copy of the frames, submits it and feeds the
 //! completion back. A retransmission carries the bytes first encoded, so
 //! its sequence number and CCMP packet number repeat.
 
-use oer_ieee80211_lower_mac::Ieee80211Instant;
 use oer_ieee80211_lower_mac::{BlockAckReport, CoexPriority, TxPower, TxResponse, TxStatus};
 use oer_ieee80211_mac::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
 use oer_ieee80211_softmac::{
     MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries, MacTxResult, MacTxStatus,
 };
+use oer_time::Instant;
 
 use crate::{
     ampdu::{
@@ -81,9 +85,6 @@ pub struct AmpduRequest {
     pub first_sequence: SequenceNumber,
     subframes: u8,
     lengths: [u16; MAX_AMPDU_SUBFRAMES as usize],
-    /// When the MSDUs were committed: the aggregate's lifetime runs from
-    /// here, on the backend's radio clock.
-    pub committed_at: Ieee80211Instant,
     /// Whether the Block Ack agreement is operational; while it is not,
     /// missing subframes leave the aggregate.
     pub block_ack_operational: bool,
@@ -97,7 +98,6 @@ impl AmpduRequest {
         tid: u8,
         first_sequence: SequenceNumber,
         lengths: &[u16],
-        committed_at: Ieee80211Instant,
         block_ack_operational: bool,
     ) -> Option<Self> {
         if lengths.is_empty() || lengths.len() > usize::from(MAX_AMPDU_SUBFRAMES) {
@@ -112,7 +112,6 @@ impl AmpduRequest {
             first_sequence,
             subframes: lengths.len() as u8,
             lengths: owned,
-            committed_at,
             block_ack_operational,
         })
     }
@@ -286,6 +285,15 @@ enum Live {
     Mpdu(MpduRetryState, MpduRequest),
     Aggregate(AmpduRetryState, AmpduRequest),
     BlockAckRequest(AmpduRetryState, AmpduRequest),
+    /// A BlockAckReq that moves the recipient's window past subframes
+    /// discarded as aged on their way alone; the rest of `remaining` goes
+    /// alone after it.
+    IndividualBlockAckRequest {
+        aggregate: AmpduRetryState,
+        remaining: u64,
+        ampdu: AmpduRequest,
+        starting_sequence: SequenceNumber,
+    },
     Individual {
         aggregate: AmpduRetryState,
         /// Original subframes still to send, the current one included.
@@ -342,6 +350,7 @@ impl TxExchange {
             Phase::Live(
                 Live::Aggregate(_, ampdu)
                 | Live::BlockAckRequest(_, ampdu)
+                | Live::IndividualBlockAckRequest { ampdu, .. }
                 | Live::Individual { ampdu, .. },
             ) => TxBody::Ampdu(ampdu),
             Phase::Done(_, body) => body,
@@ -367,6 +376,7 @@ impl TxExchange {
             Phase::Live(
                 Live::Aggregate(_, ampdu)
                 | Live::BlockAckRequest(_, ampdu)
+                | Live::IndividualBlockAckRequest { ampdu, .. }
                 | Live::Individual { ampdu, .. },
             )
             | Phase::Done(_, TxBody::Ampdu(ampdu)) => {
@@ -428,13 +438,8 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
         let phase = match request.body {
             TxBody::Mpdu(mpdu) => Live::Mpdu(self.mpdu_retry(&context, mpdu.length)?, mpdu),
             TxBody::Ampdu(ampdu) => Live::Aggregate(
-                AmpduRetryState::new(
-                    ampdu.first_sequence,
-                    ampdu.subframes,
-                    self.ampdu_policy,
-                    ampdu.committed_at,
-                )
-                .map_err(TxPlanError::Ampdu)?,
+                AmpduRetryState::new(ampdu.first_sequence, ampdu.subframes, self.ampdu_policy)
+                    .map_err(TxPlanError::Ampdu)?,
                 ampdu,
             ),
         };
@@ -454,14 +459,17 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
     }
 
     /// Apply the completion of the exchange's last attempt, observed at
-    /// `now` on the backend's radio clock, and plan the next step.
+    /// monotonic `now`, and plan the next step. `admitted` gives the
+    /// admission instant of an A-MPDU's original subframe; one without an
+    /// instant ends the exchange as incomplete.
     ///
     /// A completion after the exchange ended returns its report again.
     pub fn complete(
         &mut self,
         exchange: &mut TxExchange,
         completion: &PublicationReport,
-        now: Ieee80211Instant,
+        now: Instant,
+        admitted: impl Fn(u8) -> Option<Instant>,
         ladder: &impl RateLadder,
     ) -> TxStep {
         if completion.ack_snr_db.is_some() {
@@ -503,11 +511,21 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                 exchange.unanswered = matches!(result, AmpduAttemptResult::NoResponse);
                 let current = state.current_subframes();
                 let operational = self.block_ack_operational(exchange);
-                match state.observe(result, current, now, operational) {
-                    Ok(decision) => match self.after_aggregate(exchange, state, ampdu, decision) {
-                        Some(phase) => phase,
-                        None => return self.finished(exchange, &state),
-                    },
+                match state.observe(result, current, now, operational, &admitted) {
+                    Ok(decision) => {
+                        match self.after_aggregate(exchange, state, ampdu, decision, now, &admitted)
+                        {
+                            Ok(Some(phase)) => phase,
+                            Ok(None) => return self.finished(exchange, &state),
+                            Err(_) => {
+                                return self.finish_ampdu(
+                                    exchange,
+                                    &state,
+                                    MacAmpduTxResult::Incomplete,
+                                );
+                            }
+                        }
+                    }
                     Err(_) => {
                         return self.finish_ampdu(exchange, &state, MacAmpduTxResult::Incomplete);
                     }
@@ -520,57 +538,101 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                 };
                 exchange.unanswered = false;
                 let operational = self.block_ack_operational(exchange);
-                let decision = state.observe_block_ack_request(report, now, operational);
-                match self.after_aggregate(exchange, state, ampdu, decision) {
-                    Some(phase) => phase,
-                    None => return self.finished(exchange, &state),
+                let next = state
+                    .observe_block_ack_request(report, now, operational, &admitted)
+                    .map_err(TxPlanError::Ampdu)
+                    .and_then(|decision| {
+                        self.after_aggregate(exchange, state, ampdu, decision, now, &admitted)
+                    });
+                match next {
+                    Ok(Some(phase)) => phase,
+                    Ok(None) => return self.finished(exchange, &state),
+                    Err(_) => {
+                        return self.finish_ampdu(exchange, &state, MacAmpduTxResult::Incomplete);
+                    }
+                }
+            }
+            // The window moved: the rest goes alone, whatever the
+            // BlockAckReq's outcome.
+            Live::IndividualBlockAckRequest {
+                mut aggregate,
+                remaining,
+                ampdu,
+                ..
+            } => {
+                match self.individual(exchange, &mut aggregate, ampdu, remaining, now, &admitted) {
+                    Ok(Some(phase)) => phase,
+                    Ok(None) => return self.finish_individual(exchange, &aggregate),
+                    Err(_) => {
+                        return self.finish_ampdu(
+                            exchange,
+                            &aggregate,
+                            MacAmpduTxResult::Incomplete,
+                        );
+                    }
                 }
             }
             Live::Individual {
-                aggregate,
-                mut remaining,
+                mut aggregate,
+                remaining,
                 mut retry,
                 ampdu,
                 length,
-            } => match retry.observe(completion.status) {
-                RetryDecision::Retry { .. } => Live::Individual {
-                    aggregate,
-                    remaining,
-                    retry,
-                    ampdu,
-                    length,
-                },
-                RetryDecision::Complete(outcome) => {
-                    let status = Self::mpdu_status(exchange, &retry, outcome);
-                    exchange.individual.record(status);
-                    remaining &= remaining.wrapping_sub(1);
-                    if remaining == 0 {
-                        let result = if exchange.individual.failed == 0 {
-                            MacAmpduTxResult::Delivered
-                        } else {
-                            MacAmpduTxResult::Incomplete
-                        };
-                        return self.finish_ampdu(exchange, &aggregate, result);
+            } => {
+                let index = remaining.trailing_zeros() as u8;
+                let decision = retry.observe(completion.status);
+                let aged = match admitted(index) {
+                    Some(admission) => aggregate.aged(admission, now),
+                    None => {
+                        return self.finish_ampdu(
+                            exchange,
+                            &aggregate,
+                            MacAmpduTxResult::Incomplete,
+                        );
                     }
-                    let index = remaining.trailing_zeros() as u8;
-                    match self.subframe_retry(exchange, index) {
-                        Ok((retry, length)) => Live::Individual {
-                            aggregate,
-                            remaining,
-                            retry,
-                            ampdu,
-                            length,
-                        },
-                        Err(_) => {
-                            return self.finish_ampdu(
-                                exchange,
-                                &aggregate,
-                                MacAmpduTxResult::Incomplete,
-                            );
+                };
+                let outcome = match decision {
+                    RetryDecision::Retry { .. } if !aged => None,
+                    // An aged subframe is discarded instead of retried.
+                    RetryDecision::Retry { .. } => {
+                        aggregate.mark_discarded(1 << index);
+                        Some(RetryOutcome::RetryLimit(completion.status))
+                    }
+                    RetryDecision::Complete(outcome) => Some(outcome),
+                };
+                match outcome {
+                    None => Live::Individual {
+                        aggregate,
+                        remaining,
+                        retry,
+                        ampdu,
+                        length,
+                    },
+                    Some(outcome) => {
+                        let status = Self::mpdu_status(exchange, &retry, outcome);
+                        exchange.individual.record(status);
+                        let rest = remaining & remaining.wrapping_sub(1);
+                        let next = if aged && ampdu.block_ack_operational {
+                            Ok(Some(Self::individual_block_ack_request(
+                                aggregate, ampdu, rest, index,
+                            )))
+                        } else {
+                            self.individual(exchange, &mut aggregate, ampdu, rest, now, &admitted)
+                        };
+                        match next {
+                            Ok(Some(phase)) => phase,
+                            Ok(None) => return self.finish_individual(exchange, &aggregate),
+                            Err(_) => {
+                                return self.finish_ampdu(
+                                    exchange,
+                                    &aggregate,
+                                    MacAmpduTxResult::Incomplete,
+                                );
+                            }
                         }
                     }
                 }
-            },
+            }
         };
         exchange.phase = Phase::Live(next);
         TxStep::Attempt(self.plan(exchange, next, ladder))
@@ -580,16 +642,19 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
     fn after_aggregate(
         &mut self,
         exchange: &mut TxExchange,
-        state: AmpduRetryState,
+        mut state: AmpduRetryState,
         ampdu: AmpduRequest,
         decision: AmpduRetryDecision,
-    ) -> Option<Live> {
-        match decision {
+        now: Instant,
+        admitted: &impl Fn(u8) -> Option<Instant>,
+    ) -> Result<Option<Live>, TxPlanError> {
+        Ok(match decision {
             AmpduRetryDecision::RetainAggregate { .. }
             | AmpduRetryDecision::RepublishUnchanged { .. } => Some(Live::Aggregate(state, ampdu)),
-            AmpduRetryDecision::RequestBlockAck { .. } => {
-                // The exhausted protection retries end this frame exchange
-                // sequence; the BlockAckReq starts the next one.
+            // The exhausted protection retries end this frame exchange
+            // sequence, as aged subframes do under the agreement; the
+            // BlockAckReq starts the next one.
+            AmpduRetryDecision::RequestBlockAck { .. } | AmpduRetryDecision::DiscardAged { .. } => {
                 Some(Live::BlockAckRequest(state, ampdu))
             }
             AmpduRetryDecision::Unaggregate { retry_mask } => {
@@ -599,20 +664,88 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                         remaining |= 1 << state.original_index(position);
                     }
                 }
-                let index = remaining.trailing_zeros() as u8;
-                match self.subframe_retry(exchange, index) {
-                    Ok((retry, length)) => Some(Live::Individual {
-                        aggregate: state,
-                        remaining,
-                        retry,
-                        ampdu,
-                        length,
-                    }),
-                    Err(_) => None,
-                }
+                self.individual(exchange, &mut state, ampdu, remaining, now, admitted)?
             }
             AmpduRetryDecision::Finish { .. } | AmpduRetryDecision::FinishTriggerFlow => None,
+        })
+    }
+
+    /// The next subframe of `remaining` to go alone, after discarding those
+    /// already aged; `None` when none remains. Under an operational
+    /// agreement a discard sends a BlockAckReq first.
+    fn individual(
+        &self,
+        exchange: &TxExchange,
+        aggregate: &mut AmpduRetryState,
+        ampdu: AmpduRequest,
+        mut remaining: u64,
+        now: Instant,
+        admitted: &impl Fn(u8) -> Option<Instant>,
+    ) -> Result<Option<Live>, TxPlanError> {
+        let mut last_aged = None;
+        while remaining != 0 {
+            let index = remaining.trailing_zeros() as u8;
+            let admission =
+                admitted(index).ok_or(TxPlanError::Ampdu(AmpduRetryError::UnknownSubframe {
+                    index,
+                }))?;
+            if !aggregate.aged(admission, now) {
+                break;
+            }
+            aggregate.mark_discarded(1 << index);
+            last_aged = Some(index);
+            remaining &= remaining.wrapping_sub(1);
         }
+        if let Some(index) = last_aged
+            && ampdu.block_ack_operational
+        {
+            return Ok(Some(Self::individual_block_ack_request(
+                *aggregate, ampdu, remaining, index,
+            )));
+        }
+        if remaining == 0 {
+            return Ok(None);
+        }
+        let index = remaining.trailing_zeros() as u8;
+        let (retry, length) = self.subframe_retry(exchange, index)?;
+        Ok(Some(Live::Individual {
+            aggregate: *aggregate,
+            remaining,
+            retry,
+            ampdu,
+            length,
+        }))
+    }
+
+    /// The BlockAckReq after the aged subframe `aged` went alone: it starts
+    /// at the next subframe of `remaining`, or after `aged`.
+    fn individual_block_ack_request(
+        aggregate: AmpduRetryState,
+        ampdu: AmpduRequest,
+        remaining: u64,
+        aged: u8,
+    ) -> Live {
+        let next = if remaining == 0 {
+            aged.wrapping_add(1)
+        } else {
+            remaining.trailing_zeros() as u8
+        };
+        Live::IndividualBlockAckRequest {
+            aggregate,
+            remaining,
+            ampdu,
+            starting_sequence: ampdu.sequence(next),
+        }
+    }
+
+    fn finish_individual(&self, exchange: &mut TxExchange, aggregate: &AmpduRetryState) -> TxStep {
+        let result =
+            if exchange.individual.failed == 0 && aggregate.discarded_original_indices() == 0 {
+                MacAmpduTxResult::Delivered
+            } else {
+                MacAmpduTxResult::Incomplete
+            };
+        self.finish_ampdu(exchange, aggregate, result)
     }
 
     fn finished(&self, exchange: &mut TxExchange, state: &AmpduRetryState) -> TxStep {
@@ -762,7 +895,27 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                     coex: request.coex,
                     content: AttemptContent::BlockAckRequest {
                         tid: ampdu.tid,
-                        starting_sequence: state.current_first_sequence(),
+                        starting_sequence: state.block_ack_request_start(),
+                    },
+                };
+            }
+            Live::IndividualBlockAckRequest {
+                ampdu,
+                starting_sequence,
+                ..
+            } => {
+                exchange.aggregate = 0;
+                let rate = PhyRate::Legacy(self.protection.control_rate(request.initial_rate));
+                exchange.rate = rate;
+                return TxAttemptPlan {
+                    access_category: request.access_category,
+                    rate,
+                    protection: TxProtectionDecision::UNPROTECTED,
+                    power: request.power,
+                    coex: request.coex,
+                    content: AttemptContent::BlockAckRequest {
+                        tid: ampdu.tid,
+                        starting_sequence,
                     },
                 };
             }

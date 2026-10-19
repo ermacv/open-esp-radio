@@ -15,6 +15,7 @@
 use oer_esp32s31_pac::{RadioPhyRegisters, WifiRadioRegisters};
 
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
+use oer_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalList};
 
 mod ampdu_resort;
 mod calibration_leaves;
@@ -24,14 +25,37 @@ mod i2c;
 mod production_trace;
 mod rx_append;
 
+/// The signals of the probe image, which has no interrupt: their context is
+/// the image's one thread, and a pend leaves the facts for a take.
+static PROBE_SIGNALS: SignalList = SignalList::new();
+
+#[esp_hal::ram]
+fn probe_pend(_: &'static IrqSignal) {}
+
+fn probe_context() -> bool {
+    true
+}
+
+// SAFETY: the probe image runs one thread and no interrupt, so its context
+// never runs concurrently with itself; a pend runs nothing.
+#[allow(unsafe_code, reason = "the probe image's signal context contract")]
+const PROBE_EXECUTOR: SignalExecutor =
+    unsafe { SignalExecutor::new(probe_pend, probe_context, &PROBE_SIGNALS) };
+
+/// The MAC facts of the probes' interrupt publications.
+static PROBE_MAC_SIGNAL: IrqSignal = IrqSignal::new(PROBE_EXECUTOR);
+/// The power facts of the probes' interrupt publications.
+static PROBE_POWER_SIGNAL: IrqSignal = IrqSignal::new(PROBE_EXECUTOR);
+
 oer_probe_macros::probe! {
     /// Retain real MAC and power publication paths for SRAM placement checks.
     pub fn open_mac_irq_publication(events: u32) {
-        let mut mac = oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage::new();
-        let mut power = oer_esp32s31_ieee80211_mac::irq::consumer::PowerIrqStorage::new();
+        let mut mac = oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage::new(&PROBE_MAC_SIGNAL);
+        let mut power =
+            oer_esp32s31_ieee80211_mac::irq::consumer::PowerIrqStorage::new(&PROBE_POWER_SIGNAL);
         let (mac, _consumer) = mac.split();
         let (power, _power_consumer) = power.split();
-        // Retain the actual publication and registered-waker paths after LTO.
+        // Retain the actual publication and executor-pend paths after LTO.
         core::hint::black_box(&mac).publish(events);
         core::hint::black_box(&power).publish(
             oer_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
@@ -1304,7 +1328,9 @@ oer_probe_macros::probe! {
             3 => LegacyTxQueue::Background,
             _ => panic!("verification ordinary queue is out of range"),
         };
+        // The vendor comparison runs the station interface's queues.
         let state = OrdinaryMpduRetryState::new(
+            oer_ieee80211_lower_mac::VifRole::Station,
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             mpdu_retry_limit as u8,
@@ -1347,7 +1373,7 @@ oer_probe_macros::probe! {
             .expect("the retry sequence starts with its reset entry");
         let decision = state.observe_completion(policy, disposition);
         let counters = state.counters();
-        let exponent = policy.contention_exponent(*queue);
+        let exponent = policy.contention_exponent(oer_ieee80211_lower_mac::VifRole::Station, *queue);
         // SAFETY: every retry case supplies writable descriptor, context and
         // frame objects covering these bytes.
         unsafe {
@@ -1706,12 +1732,13 @@ fn ordinary_tx_ack_timeout_state(output_address: u32) -> u32 {
     // Route the hardware completion through the exact production atomic
     // interrupt handoff. This keeps the compiled comparison from bypassing
     // the adapter boundary by constructing `WifiTxWake` directly.
-    let mut irq = oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage::new();
+    let mut irq = oer_esp32s31_ieee80211_mac::irq::consumer::IrqStorage::new(&PROBE_MAC_SIGNAL);
     let (publisher, mut consumer) = irq.split();
     publisher.publish(oer_esp32s31_ieee80211_mac::irq::EVENT_TX_COMPLETE);
-    let events = consumer
-        .take_batch()
-        .fold(0, |events, work| events | work.event_bit());
+    let Ok(batch) = consumer.take_batch() else {
+        return 9;
+    };
+    let events = batch.fold(0, |events, work| events | work.event_bit());
     if events == 0 {
         return 8;
     }
@@ -1735,10 +1762,10 @@ fn ordinary_tx_ack_timeout_state(output_address: u32) -> u32 {
             selected_rate: snapshot.current_rate.code(),
             decision: 1,
             retry_bit_mask: u8::from(snapshot.retry_bit_set) * 8,
-            contention_exponent: state
-                .owner
-                .policy()
-                .contention_exponent(oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue::BestEffort),
+            contention_exponent: state.owner.policy().contention_exponent(
+                oer_ieee80211_lower_mac::VifRole::Station,
+                oer_esp32s31_ieee80211_mac::tx::LegacyTxQueue::BestEffort,
+            ),
         })
     };
     0

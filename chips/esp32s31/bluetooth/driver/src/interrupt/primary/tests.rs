@@ -179,20 +179,22 @@ fn unclassified_status_fails_closed_without_reading_scheduler_state() {
 #[test]
 fn one_primary_scheduler_event_updates_the_durable_handoff() {
     let mut backend = Backend::dynamic(false, true, true, true, true, true);
-    let scheduler_wake = SchedulerWakeCell::new();
+    let scheduler_wake =
+        SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
 
     let published = execute_primary_interrupt_step(&mut backend).publish(&scheduler_wake);
 
     assert!(matches!(
         published,
         PrimaryPublishedInterruptStep::Scheduler {
-            scheduler: SchedulerWakePublication::WakeWorker,
+            scheduler: SchedulerWakePublication::Pended,
             ..
         }
     ));
     assert!(
         scheduler_wake
             .take()
+            .expect("the host executor's context")
             .expect("scheduler work must be durable")
             .is_marked()
     );
@@ -205,7 +207,7 @@ fn one_primary_scheduler_event_updates_the_durable_handoff() {
         empty,
         PrimaryPublishedInterruptStep::NoSchedulerWork(_)
     ));
-    assert!(!scheduler_wake.is_pending());
+    assert_eq!(scheduler_wake.is_pending(), Ok(false));
 }
 
 #[test]

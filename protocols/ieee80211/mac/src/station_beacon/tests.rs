@@ -36,9 +36,30 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
                 group_buffered: true,
             }),
             protection: StaBeaconProtection::UNPROTECTED,
+            edca: None,
             channel_switch: None,
         })
     );
+}
+
+#[test]
+fn carries_the_wmm_parameter_element_of_the_beacon() {
+    let mut elements = std::vec![TIM_ELEMENT_ID, 4, 0, 3, 0, 0];
+    let wmm = [
+        221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x07, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42,
+        0x43, 94, 0, 0x62, 0x32, 47, 0,
+    ];
+    elements.extend_from_slice(&wmm);
+    let observation = parse_sta_beacon(&beacon(&elements), BSSID, 1).unwrap();
+    assert_eq!(
+        observation.edca,
+        crate::extensions::wmm::parse_wmm_parameter_element(&wmm)
+    );
+    assert_eq!(observation.edca.unwrap().parameter_set_count, 7);
+
+    // A WMM Information element is not a parameter set.
+    let information = beacon(&[221, 7, 0x00, 0x50, 0xf2, 0x02, 0, 1, 0x07]);
+    assert_eq!(parse_sta_beacon(&information, BSSID, 1).unwrap().edca, None);
 }
 
 #[test]

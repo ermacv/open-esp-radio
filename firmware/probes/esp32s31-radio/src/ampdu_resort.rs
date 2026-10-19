@@ -28,12 +28,9 @@ use oer_esp32s31_ieee80211_mac::tx::runtime::{
 use oer_esp32s31_ieee80211_mac::tx::{
     HtAmpduTxConfig, HtChannelWidth, HtGuardInterval, HtMcs, HtRate, LegacyTxQueue, TxHardware,
 };
-use oer_ieee80211_lower_mac::{
-    GenerationSource, Ieee80211ClockGeneration, Ieee80211Instant, Ieee80211Stamp,
-};
 use oer_ieee80211_mac::sequence::SequenceNumber;
 use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
-use oer_time::RadioDuration;
+use oer_time::{Duration, Instant};
 
 /// MPDUs one compared aggregate may hold.
 const SLOTS: usize = 8;
@@ -57,6 +54,7 @@ const DECISION_REPUBLISH: u32 = 3;
 const DECISION_TRIGGER: u32 = 4;
 const DECISION_UNAGGREGATE: u32 = 5;
 const DECISION_REQUEST_BLOCK_ACK: u32 = 6;
+const DECISION_DISCARD_AGED: u32 = 7;
 /// Failure codes: invalid inputs, then the production step that failed.
 const INVALID_INPUT: u32 = 1;
 const BEGIN_FAILED: u32 = 2;
@@ -68,18 +66,18 @@ const RETAIN_FAILED: u32 = 7;
 const RESOURCES_FAILED: u32 = 8;
 /// Completion status of an ordinary aggregate that received its response.
 const STATUS_COMPLETED: u8 = 0;
-/// The time the probe commits an aggregate, from which its MSDUs age.
+/// The time the probe admits every MSDU of an aggregate, from which each
+/// ages.
 const COMMITTED_MICROS: u64 = 0;
-/// The MAC clock generation every probe sample belongs to: the first of
-/// the probe's one relation.
-const CLOCK_GENERATION: Ieee80211ClockGeneration = GenerationSource::new(1).current();
 
-/// A MAC clock sample `micros` after the probe's epoch.
-fn radio_stamp(micros: u64) -> Ieee80211Stamp {
-    Ieee80211Stamp {
-        at: Ieee80211Instant::from_micros(micros),
-        generation: CLOCK_GENERATION,
-    }
+/// A monotonic instant `micros` after the probe's epoch.
+fn mono(micros: u64) -> Instant {
+    Instant::from_micros(micros)
+}
+
+/// Every MSDU of the compared aggregate admitted at [`COMMITTED_MICROS`].
+fn admitted(_: u8) -> Option<Instant> {
+    Some(mono(COMMITTED_MICROS))
 }
 
 type Pool = PinnedDmaTxPool<FRAME_CAPACITY, 0, 0, SLOTS>;
@@ -317,21 +315,22 @@ oer_probe_macros::probe! {
             return SUBMIT_FAILED;
         }
         let policy = AmpduRetryPolicy {
-            lifetime: RadioDuration::from_micros(u64::from(lifetime_micros)),
+            lifetime: Duration::from_micros(u64::from(lifetime_micros)),
             retain_single_mpdu: retain_single != 0,
         };
         let Ok(mut retry) =
-            AmpduRetryState::<SLOTS>::new(first, count as u8, policy, radio_stamp(COMMITTED_MICROS))
+            AmpduRetryState::<SLOTS>::new(first, count as u8, policy)
         else {
             return INVALID_INPUT;
         };
-        let now = radio_stamp(COMMITTED_MICROS + u64::from(elapsed_micros));
+        let now = mono(COMMITTED_MICROS + u64::from(elapsed_micros));
         let observed = match owner.observe_retry_completion(
             &mut hardware,
             cookie,
             &mut retry,
             now,
             block_ack_operational != 0,
+            admitted,
         ) {
             Ok(Some(observed)) => observed,
             Ok(None) => return NO_COMPLETION,
@@ -344,6 +343,7 @@ oer_probe_macros::probe! {
             AmpduRetryDecision::FinishTriggerFlow => DECISION_TRIGGER,
             AmpduRetryDecision::Unaggregate { .. } => DECISION_UNAGGREGATE,
             AmpduRetryDecision::RequestBlockAck { .. } => DECISION_REQUEST_BLOCK_ACK,
+            AmpduRetryDecision::DiscardAged { .. } => DECISION_DISCARD_AGED,
         };
         if decision == DECISION_RETAIN
             && owner
@@ -482,10 +482,10 @@ oer_probe_macros::probe! {
             return SUBMIT_FAILED;
         }
         let policy = AmpduRetryPolicy {
-            lifetime: RadioDuration::from_micros(u64::from(lifetime_micros)),
+            lifetime: Duration::from_micros(u64::from(lifetime_micros)),
             retain_single_mpdu: false,
         };
-        let Ok(retry) = AmpduRetryState::<SLOTS>::new(first, count as u8, policy, radio_stamp(COMMITTED_MICROS))
+        let Ok(retry) = AmpduRetryState::<SLOTS>::new(first, count as u8, policy)
         else {
             return INVALID_INPUT;
         };
@@ -521,8 +521,9 @@ oer_probe_macros::probe! {
             &mut hardware,
             sequence.cookie,
             &mut sequence.retry,
-            radio_stamp(COMMITTED_MICROS),
+            mono(COMMITTED_MICROS),
             true,
+            admitted,
         ) {
             Ok(Some(observed)) => observed,
             Ok(None) => return NO_COMPLETION,
@@ -555,6 +556,11 @@ oer_probe_macros::probe! {
             AmpduRetryDecision::RequestBlockAck { .. } => {
                 core::mem::forget(slot.take());
                 return DECISION_REQUEST_BLOCK_ACK;
+            }
+            // The step's MSDUs never age: admitted when it is observed.
+            AmpduRetryDecision::DiscardAged { .. } => {
+                core::mem::forget(slot.take());
+                return DECISION_DISCARD_AGED;
             }
         };
         let Ok(retained) =

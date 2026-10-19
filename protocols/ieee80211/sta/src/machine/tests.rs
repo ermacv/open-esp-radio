@@ -14,6 +14,7 @@ use oer_ieee80211_lower_mac::{
     LowerMacCapabilities, PhyFormatSet, RateSupport, RxMeta, WidthSet,
 };
 use oer_ieee80211_mac::channel_switch::ChannelSwitchMode;
+use oer_ieee80211_mac::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
 use oer_ieee80211_mac::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_radio_port::{Mint, branded};
 use std::vec::Vec;
@@ -287,6 +288,7 @@ enum Seen {
     ReplaceGroup(u8),
     SelectGroup,
     RemoveKey,
+    Edca(WmmParameterSet),
 }
 
 /// The loop the thin service runs, with the test as the port.
@@ -460,6 +462,7 @@ impl<'id, const G: usize> World<'id, G> {
                         panic!("unexpected contract violation: {reason:?}")
                     }
                     StaAction::Ready(id) => self.arbiter.ready(id),
+                    StaAction::SetEdca(edca) => self.seen.push(Seen::Edca(edca.get())),
                     StaAction::InstallPairwiseKey {
                         association,
                         pending,
@@ -755,6 +758,100 @@ impl<'id, const G: usize> World<'id, G> {
     }
 }
 
+/// A WMM Parameter element of `count` whose Best Effort record waits
+/// `aifsn` with `ecw_max`; the other records are the standard's.
+fn wmm_element(count: u8, aifsn: u8, ecw_max: u8) -> [u8; 26] {
+    [
+        221,
+        24,
+        0x00,
+        0x50,
+        0xf2,
+        0x02,
+        1,
+        1,
+        count,
+        0,
+        aifsn,
+        (ecw_max << 4) | 4,
+        0,
+        0,
+        0x27,
+        0xa4,
+        0,
+        0,
+        0x42,
+        0x43,
+        94,
+        0,
+        0x62,
+        0x32,
+        47,
+        0,
+    ]
+}
+
+fn with_element(frame: &[u8], element: &[u8]) -> Vec<u8> {
+    let mut frame = frame.to_vec();
+    frame.extend_from_slice(element);
+    frame
+}
+
+fn edca_seen(world: &mut World<'_>) -> Vec<WmmParameterSet> {
+    world
+        .take()
+        .into_iter()
+        .filter_map(|seen| match seen {
+            Seen::Edca(edca) => Some(edca),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_station_contends_with_the_access_points_edca_set_and_follows_its_beacons() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world
+            .station
+            .command(at(0), StaRequest::new(1, StaCommand::Connect))
+            .unwrap();
+        world.run(at(0));
+        world.advance();
+        let advertised = wmm_element(1, 3, 10);
+        world.receive(at(13), &with_element(&beacon(), &advertised));
+        world.advance();
+        world.answer_authentication(at(30), 0);
+        // The Association Response's set wins over the beacon's.
+        let associated = wmm_element(2, 5, 10);
+        world.receive(
+            at(31),
+            &with_element(&open_association_response(), &associated),
+        );
+        assert!(world.station.is_connected());
+        assert_eq!(
+            edca_seen(&mut world),
+            [parse_wmm_parameter_element(&associated).unwrap()]
+        );
+
+        // A beacon repeating the set changes nothing.
+        world.receive(at(32), &with_element(&beacon(), &associated));
+        assert_eq!(edca_seen(&mut world), []);
+        // A beacon announcing another set: the interface takes it.
+        let updated = wmm_element(3, 6, 10);
+        world.receive(at(33), &with_element(&beacon(), &updated));
+        assert_eq!(
+            edca_seen(&mut world),
+            [parse_wmm_parameter_element(&updated).unwrap()]
+        );
+        // A set beyond the backend's contention window leaves the current
+        // one.
+        world.receive(at(34), &with_element(&beacon(), &wmm_element(4, 6, 15)));
+        assert_eq!(edca_seen(&mut world), []);
+        assert!(world.station.is_connected());
+    });
+}
+
 #[test]
 fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
     installed(|mint| {
@@ -823,6 +920,8 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
         assert_eq!(
             world.take(),
             [
+                // A BSS without WMM: the interface contends by the DCF.
+                Seen::Edca(WmmParameterSet::DCF),
                 Seen::Notify(StaNotice::Connected {
                     bssid: oer_ieee80211_mac::address::Bssid::new(
                         oer_ieee80211_mac::address::IndividualAddress::new(BSSID).unwrap()
@@ -2069,6 +2168,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                 ether_type: 0x0800,
                 priority: WmmUserPriority::new(priority).unwrap(),
                 payload: &[0xab; 20],
+                admitted: Instant::from_micros(0),
             };
             data.input(DataInput {
                 msdu,
@@ -2837,6 +2937,11 @@ fn associated_is_the_first_action_after_the_association_response() {
             assert!(matches!(
                 world.station.poll_action(at(31)),
                 Some(StaAction::Associated(_))
+            ));
+            // Then the interface takes the association's EDCA set.
+            assert!(matches!(
+                world.station.poll_action(at(31)),
+                Some(StaAction::SetEdca(_))
             ));
             if protected {
                 assert!(world.station.poll_action(at(31)).is_none());

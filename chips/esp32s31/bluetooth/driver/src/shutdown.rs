@@ -22,6 +22,7 @@ use oer_esp32s31_hal::{
     domain::RadioDomain,
 };
 use oer_esp32s31_phy::{bluetooth_client::BluetoothPhyClientError, concurrent::ConcurrentPhy};
+use oer_interrupt_table::signal::ForeignContext;
 
 use crate::{
     ble_phy::{BlePhyRetainedOwners, DirectionFindingWorkspaceHardwareOwned},
@@ -42,6 +43,9 @@ pub enum ControllerShutdownError {
     Phy(BluetoothPhyClientError),
     /// The Controller reset was rejected or did not read back.
     Reset(BluetoothShutdownError),
+    /// The shutdown ran outside the event cells' executor, which alone
+    /// discards their notifications; the Controller was not reset.
+    ForeignExecutor,
 }
 
 /// Failed shutdown retaining every owner it received.
@@ -86,6 +90,7 @@ enum Retained {
         storage: BlePhyEngineCpuOwned,
         direction_finding: DirectionFindingWorkspaceHardwareOwned,
     },
+    Retired(ControllerRetired),
 }
 
 impl ControllerShutdownFailure {
@@ -130,7 +135,8 @@ pub struct ControllerShutDown {
 
 /// Retire a stopped epoch: take the task owner from its endpoint, release
 /// the Controller output and leave the shared PHY domain and BTBB. Returns
-/// whether Bluetooth was the last PHY client.
+/// whether Bluetooth was the last PHY client. The BUSY samples of the output
+/// release settle on `clock`.
 ///
 /// # Errors
 ///
@@ -146,6 +152,7 @@ pub fn retire(
     retained: BlePhyRetainedOwners,
     output: InterruptOutputAfterRoutesOwner,
     timer: ModemLpTimerInterruptReadyOwner,
+    clock: &dyn oer_time::Clock,
 ) -> Result<(ControllerRetired, bool), ControllerShutdownFailure> {
     let mut task = match task.retire() {
         Ok(task) => task,
@@ -161,7 +168,7 @@ pub fn retire(
             });
         }
     };
-    let output = match task.release_controller_output(output) {
+    let output = match task.release_controller_output(output, clock) {
         Ok(output) => output,
         Err((error, output)) => {
             return Err(ControllerShutdownFailure {
@@ -210,11 +217,13 @@ impl ControllerRetired {
     /// the clocked client with the BLE PHY allocations.
     ///
     /// `cells` are the event cells of the retired epoch; their stale
-    /// notifications are discarded so the next epoch starts quiet.
+    /// notifications are discarded so the next epoch starts quiet. Only
+    /// their executor's context discards them, so the shutdown runs there.
     ///
     /// # Errors
     ///
-    /// The reset was rejected or did not read back.
+    /// The shutdown ran outside the cells' executor, or the reset was
+    /// rejected or did not read back.
     #[allow(
         clippy::result_large_err,
         reason = "the failure retains every owner of the epoch"
@@ -224,6 +233,14 @@ impl ControllerRetired {
         radio: &mut RadioDomain<T>,
         cells: &ControllerEventCells,
     ) -> Result<ControllerShutDown, ControllerShutdownFailure> {
+        // Before the reset: a foreign context could not discard the
+        // notifications after it.
+        if let Err(ForeignContext) = cells.is_quiet() {
+            return Err(ControllerShutdownFailure {
+                error: ControllerShutdownError::ForeignExecutor,
+                _retained: Retained::Retired(self),
+            });
+        }
         let Self {
             task,
             output,
@@ -233,7 +250,8 @@ impl ControllerRetired {
         } = self;
         match task.shut_down(radio, output, timer) {
             Ok((clocked, reset)) => {
-                cells.clear_notifications_after_reset();
+                // The check above ran in this same executor context.
+                let _cleared = cells.clear_notifications_after_reset();
                 let mut ble_phy = storage;
                 ble_phy.reset_after_controller_reset(&reset);
                 let mut direction_finding = direction_finding.storage;

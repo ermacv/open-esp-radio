@@ -15,6 +15,8 @@ use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 #[cfg(any(target_arch = "riscv32", test))]
 use crate::resources::TaskResources;
 
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
+
 use crate::{
     interrupt::SchedulerWakeCell,
     modem_lp_timer_queue::{ModemLpTimerEventCell, ModemLpTimerQueue, ModemLpTimerWorkerWakeCell},
@@ -31,7 +33,9 @@ use oer_esp32s31_bluetooth_memory::scheduler::hardware::{
 ///
 /// The handlers reach them through stable references, so they live in
 /// static storage for the whole boot and serve every Controller epoch. An
-/// epoch starts only while no notification is pending.
+/// epoch starts only while no notification is pending. The interrupt-side
+/// cells carry the image's static signals of the workers' interrupt-mode
+/// executor; only that executor's context observes or clears them.
 pub struct ControllerEventCells {
     scheduler_wake: SchedulerWakeCell,
     modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell,
@@ -39,35 +43,50 @@ pub struct ControllerEventCells {
 }
 
 impl ControllerEventCells {
-    /// Construct quiet cells without allocation or MMIO.
-    pub const fn new() -> Self {
+    /// Quiet cells over the image's scheduler and source-127 signals,
+    /// without allocation or MMIO.
+    pub const fn new(scheduler: &'static IrqSignal, modem_lp_timer: &'static IrqSignal) -> Self {
         Self {
-            scheduler_wake: SchedulerWakeCell::new(),
-            modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell::new(),
+            scheduler_wake: SchedulerWakeCell::new(scheduler),
+            modem_lp_timer_worker_wake: ModemLpTimerWorkerWakeCell::new(modem_lp_timer),
             modem_lp_timer_events: ModemLpTimerEventCell::new(),
         }
     }
 
+    /// Cells over fresh host signals whose facts wait for the take, as
+    /// they wait for an executor the interrupt preempted.
+    #[cfg(test)]
+    pub(crate) fn host() -> Self {
+        use oer_interrupt_table::signal::host::deferred_signal;
+        Self::new(deferred_signal(), deferred_signal())
+    }
+
     /// Whether no notification or expiration is pending.
-    pub fn is_quiet(&self) -> bool {
-        !self.scheduler_wake.is_pending()
-            && !self.modem_lp_timer_worker_wake.is_pending()
-            && !self.modem_lp_timer_events.is_pending()
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signals' executor.
+    pub fn is_quiet(&self) -> Result<bool, ForeignContext> {
+        Ok(!self.scheduler_wake.is_pending()?
+            && !self.modem_lp_timer_worker_wake.is_pending()?
+            && !self.modem_lp_timer_events.is_pending())
     }
 
     /// Coalesced readiness notifications are not work ownership. Discard
     /// them only after the Controller was reset, with every IRQ route of its
     /// epoch removed, so the next epoch starts quiet.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signals' executor; nothing was discarded.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) fn clear_notifications_after_reset(&self) {
-        let _ = self.scheduler_wake.take();
-        let _ = self.modem_lp_timer_worker_wake.take();
-    }
-}
-
-impl Default for ControllerEventCells {
-    fn default() -> Self {
-        Self::new()
+    pub(crate) fn clear_notifications_after_reset(&self) -> Result<(), ForeignContext> {
+        // Both checks precede both discards: a foreign caller discards nothing.
+        self.scheduler_wake.is_pending()?;
+        self.modem_lp_timer_worker_wake.is_pending()?;
+        let _ = self.scheduler_wake.take()?;
+        let _ = self.modem_lp_timer_worker_wake.take()?;
+        Ok(())
     }
 }
 
@@ -317,18 +336,22 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
 
     /// Whether no event, completion drain, list transaction or timer has
     /// entered this epoch yet.
-    pub fn is_pristine(&self) -> bool {
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the event cells' executor.
+    pub fn is_pristine(&self) -> Result<bool, ForeignContext> {
         #[cfg(target_arch = "riscv32")]
         let scheduler_hardware_is_pristine =
             self.scheduler_hardware.is_quiet() && !self.scheduler_hardware.has_run();
         #[cfg(not(target_arch = "riscv32"))]
         let scheduler_hardware_is_pristine = true;
 
-        self.cells.is_quiet()
+        Ok(self.cells.is_quiet()?
             && !self.scheduler_finished_lists.is_active()
             && scheduler_hardware_is_pristine
             && self.modem_lp_timer_queue.is_empty()
-            && self.modem_lp_timer_epoch.high_byte() == 0
+            && self.modem_lp_timer_epoch.high_byte() == 0)
     }
 
     /// Hand out the only interrupt publisher, task worker and modem-timer

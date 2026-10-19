@@ -27,9 +27,11 @@ fn backend(lists: &[u8]) -> Backend {
 }
 
 fn wake(class: SchedulerWorkerWakeClass) -> crate::interrupt::SchedulerWakeBatch {
-    let cell = SchedulerWakeCell::new();
+    let cell = SchedulerWakeCell::new(oer_interrupt_table::signal::host::deferred_signal());
     let _publication = cell.publish_from_interrupt(class);
-    cell.take().expect("one scheduler batch must be pending")
+    cell.take()
+        .expect("the host executor's context")
+        .expect("one scheduler batch must be pending")
 }
 
 fn assert_list(step: SchedulerFinishedListWorkerStep, expected_index: u8, expected_more: bool) {

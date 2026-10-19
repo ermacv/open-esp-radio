@@ -5,7 +5,7 @@
 //! wait for interrupts, access MMIO, mutate DMA storage or produce entropy;
 //! those remain separate hardware/executor boundaries.
 
-use oer_ieee80211_lower_mac::TxStatus;
+use oer_ieee80211_lower_mac::{TxStatus, VifRole};
 use oer_ieee80211_mac::extensions::wmm::WmmParameterSet;
 use oer_ieee80211_mac::qos::{
     WmmAccessCategory, WmmTrafficClass, WmmUserPriority, classify_ethernet_wmm,
@@ -13,7 +13,6 @@ use oer_ieee80211_mac::qos::{
 use oer_ieee80211_mac::sequence::SequenceNumber;
 
 use oer_espressif_ieee80211_policy::lmac;
-use oer_ieee80211_lower_mac::{Ieee80211ClockGeneration, Ieee80211Duration, Ieee80211Stamp};
 use oer_ieee80211_upper_mac::{
     AmpduAttemptResult, AmpduRetryDecision as UpperAmpduRetryDecision,
     AmpduRetryError as UpperAmpduRetryError, AmpduRetryState as UpperAmpduRetryState,
@@ -145,7 +144,9 @@ pub enum WmmHardwareMediumRequest {
 pub struct WifiTxRuntimePolicy {
     ht_ampdu: HtPeerAmpduParameters,
     he_bss_color: u8,
-    edca: EdcaQueues,
+    /// Each interface's contention for the four queues: the station's,
+    /// then the access point's.
+    edca: [EdcaQueues; 2],
     protection: WifiTxProtectionPolicy,
 }
 
@@ -155,10 +156,26 @@ impl WifiTxRuntimePolicy {
         Self {
             ht_ampdu: HtPeerAmpduParameters::from_capability_byte(0),
             he_bss_color: 0,
-            edca: EdcaQueues::vendor_defaults(),
+            edca: [EdcaQueues::vendor_defaults(); 2],
             protection: WifiTxProtectionPolicy::new(Some(
                 crate::tx::protection::RtsLengthThreshold::VENDOR_DEFAULT,
             )),
+        }
+    }
+
+    const fn edca(&self, role: VifRole) -> &EdcaQueues {
+        let [station, access_point] = &self.edca;
+        match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
+        }
+    }
+
+    const fn edca_mut(&mut self, role: VifRole) -> &mut EdcaQueues {
+        let [station, access_point] = &mut self.edca;
+        match role {
+            VifRole::Station => station,
+            VifRole::AccessPoint => access_point,
         }
     }
 
@@ -199,17 +216,26 @@ impl WifiTxRuntimePolicy {
         self.protection
     }
 
-    /// Atomically validate and install all four WMM access categories.
-    pub fn install_wmm(&mut self, parameters: WmmParameterSet) -> Result<(), EdcaParametersError> {
-        self.edca.configure_from_wmm(parameters)
+    /// Atomically validate and install all four WMM access categories of
+    /// the interface of `role`; the other interface keeps its own.
+    pub fn install_wmm(
+        &mut self,
+        role: VifRole,
+        parameters: WmmParameterSet,
+    ) -> Result<(), EdcaParametersError> {
+        self.edca_mut(role).configure_from_wmm(parameters)
     }
 
-    pub fn contention_parameters(&self, queue: LegacyTxQueue) -> EdcaContentionParameters {
-        self.edca.queue(queue).parameters()
+    pub fn contention_parameters(
+        &self,
+        role: VifRole,
+        queue: LegacyTxQueue,
+    ) -> EdcaContentionParameters {
+        self.edca(role).queue(queue).parameters()
     }
 
-    pub const fn access_policy(&self, queue: LegacyTxQueue) -> EdcaAccessPolicy {
-        self.edca.access_policy(queue)
+    pub const fn access_policy(&self, role: VifRole, queue: LegacyTxQueue) -> EdcaAccessPolicy {
+        self.edca(role).access_policy(queue)
     }
 
     /// Classify and admit one network frame under the active peer WMM policy.
@@ -220,12 +246,13 @@ impl WifiTxRuntimePolicy {
     /// admission, the request fails closed.
     pub fn select_network_traffic(
         &self,
+        role: VifRole,
         ethernet: &[u8],
         peer_qos: bool,
     ) -> Result<WifiTxTraffic, WifiTxTrafficError> {
         let requested = classify_ethernet_wmm(ethernet);
         if !peer_qos {
-            let selected = self.edca.access_policy(LegacyTxQueue::BestEffort);
+            let selected = self.edca(role).access_policy(LegacyTxQueue::BestEffort);
             return Ok(WifiTxTraffic {
                 requested,
                 user_priority: WmmUserPriority::UP0,
@@ -238,7 +265,7 @@ impl WifiTxRuntimePolicy {
         let mut category = requested.access_category;
         loop {
             let selected = self
-                .edca
+                .edca(role)
                 .access_policy(LegacyTxQueue::from_access_category(category));
             if !selected.admission_control_mandatory() {
                 let downgraded = category != requested.access_category;
@@ -283,25 +310,25 @@ impl WifiTxRuntimePolicy {
         }
     }
 
-    pub fn contention_exponent(&self, queue: LegacyTxQueue) -> u8 {
-        self.edca.queue(queue).current_exponent()
+    pub fn contention_exponent(&self, role: VifRole, queue: LegacyTxQueue) -> u8 {
+        self.edca(role).queue(queue).current_exponent()
     }
 
     /// Select one hardware backoff slot from platform-provided entropy.
-    pub fn select_backoff(&self, queue: LegacyTxQueue, entropy: u32) -> u16 {
-        self.edca.select_slot(queue, entropy)
+    pub fn select_backoff(&self, role: VifRole, queue: LegacyTxQueue, entropy: u32) -> u16 {
+        self.edca(role).select_slot(queue, entropy)
     }
 
-    pub fn record_retry_failure(&mut self, queue: LegacyTxQueue) {
-        self.edca.record_retry_failure(queue);
+    pub fn record_retry_failure(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).record_retry_failure(queue);
     }
 
-    pub fn record_success(&mut self, queue: LegacyTxQueue) {
-        self.edca.record_success(queue);
+    pub fn record_success(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).record_success(queue);
     }
 
-    pub fn reset_terminal_exchange(&mut self, queue: LegacyTxQueue) {
-        self.edca.reset_terminal_exchange(queue);
+    pub fn reset_terminal_exchange(&mut self, role: VifRole, queue: LegacyTxQueue) {
+        self.edca_mut(role).reset_terminal_exchange(queue);
     }
 }
 
@@ -415,6 +442,7 @@ pub use oer_ieee80211_upper_mac::{FrameClass, RetryCounters};
 /// the chip's rate ladders over [`TxPhyRate`] and applies the contention
 /// changes to the queue's EDCA state.
 pub struct OrdinaryMpduRetryState {
+    role: VifRole,
     queue: LegacyTxQueue,
     initial_rate: TxPhyRate,
     rate_policy: OrdinaryRetryRatePolicy,
@@ -423,6 +451,7 @@ pub struct OrdinaryMpduRetryState {
 
 impl OrdinaryMpduRetryState {
     pub const fn new(
+        role: VifRole,
         queue: LegacyTxQueue,
         initial_rate: TxPhyRate,
         mpdu_retry_limit: u8,
@@ -435,6 +464,7 @@ impl OrdinaryMpduRetryState {
             }
         };
         Ok(Self {
+            role,
             queue,
             initial_rate,
             rate_policy: OrdinaryRetryRatePolicy::Normal,
@@ -447,13 +477,14 @@ impl OrdinaryMpduRetryState {
     /// rate, preventing a caller from changing PHY only after the first ACK
     /// timeout.
     pub fn new_with_rate_policy(
+        role: VifRole,
         queue: LegacyTxQueue,
         initial_rate: TxPhyRate,
         rate_policy: OrdinaryRetryRatePolicy,
         mpdu_retry_limit: u8,
         frame_class: FrameClass,
     ) -> Result<Self, OrdinaryRetryError> {
-        let mut state = Self::new(queue, initial_rate, mpdu_retry_limit, frame_class)?;
+        let mut state = Self::new(role, queue, initial_rate, mpdu_retry_limit, frame_class)?;
         match rate_policy {
             OrdinaryRetryRatePolicy::Normal => {}
             OrdinaryRetryRatePolicy::Schedule(schedule) => {
@@ -564,10 +595,10 @@ impl OrdinaryMpduRetryState {
         let decision = self.retry.observe(status);
         match decision {
             RetryDecision::Complete(RetryOutcome::Delivered) => {
-                policy.record_success(self.queue);
+                policy.record_success(self.role, self.queue);
             }
-            RetryDecision::Complete(_) => policy.reset_terminal_exchange(self.queue),
-            RetryDecision::Retry { .. } => policy.record_retry_failure(self.queue),
+            RetryDecision::Complete(_) => policy.reset_terminal_exchange(self.role, self.queue),
+            RetryDecision::Retry { .. } => policy.record_retry_failure(self.role, self.queue),
         }
         match decision {
             RetryDecision::Complete(_) => OrdinaryRetryDecision::Complete,
@@ -590,7 +621,7 @@ impl OrdinaryMpduRetryState {
 
     /// End ownership after a non-retryable executor or hardware error.
     pub fn abort(&self, policy: &mut WifiTxRuntimePolicy) {
-        policy.reset_terminal_exchange(self.queue);
+        policy.reset_terminal_exchange(self.role, self.queue);
     }
 }
 
@@ -658,9 +689,9 @@ pub const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MIC
 /// MSDU lifetime bounds the retries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduRetryPolicy {
-    /// Time from the aggregate's commit after which its MSDUs are aged and
+    /// Time from an MSDU's admission after which its MPDU is aged and
     /// discarded instead of retried.
-    pub lifetime: Ieee80211Duration,
+    pub lifetime: oer_time::Duration,
     /// Keep one missing MPDU in the aggregate owner.
     ///
     /// The recovered HE path requires this because converting a one-member
@@ -674,11 +705,9 @@ pub struct AmpduRetryPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduRetryError {
     ZeroLifetime,
-    AgingThresholdOutsideEpoch,
-    /// The radio relation changed while this aggregate was retained.
-    ClockGenerationChanged {
-        expected: Ieee80211ClockGeneration,
-        observed: Ieee80211ClockGeneration,
+    /// The caller has no admission instant for this original MPDU.
+    UnknownSubframe {
+        index: u8,
     },
     EmptyAggregate,
     CapacityExceedsHardwareWindow {
@@ -729,6 +758,17 @@ pub enum AmpduRetryDecision {
     /// through `libpp[pp_he.o]::ppHEAMPDU2Normal`. A single missing HT
     /// MPDU takes the same ordinary path.
     Unaggregate { retry_mask: u32 },
+    /// Missing MPDUs aged under an operational Block Ack agreement: compact
+    /// the aggregate to the selected MPDUs, discard those of `aged_mask` and
+    /// send a BlockAckReq at `starting_sequence`, whose BlockAck drives the
+    /// resort ([`AmpduRetryState::observe_block_ack_request`]). Every MPDU
+    /// ages from its MSDU's admission, not from the aggregate's commit as in
+    /// `libpp[lmac.o]::lmacMSDUAged` (`docs/decisions.md`, MSDU age).
+    DiscardAged {
+        retry_mask: u32,
+        aged_mask: u32,
+        starting_sequence: SequenceNumber,
+    },
     /// End aggregate ownership. The selected MPDUs were not acknowledged
     /// and are discarded.
     Finish { retry_mask: u32 },
@@ -745,6 +785,7 @@ impl AmpduRetryDecision {
             Self::RetainAggregate { retry_mask }
             | Self::RepublishUnchanged { retry_mask }
             | Self::RequestBlockAck { retry_mask, .. }
+            | Self::DiscardAged { retry_mask, .. }
             | Self::Unaggregate { retry_mask }
             | Self::Finish { retry_mask } => retry_mask,
             Self::FinishTriggerFlow => 0,
@@ -772,19 +813,16 @@ impl AmpduRetryDecision {
 /// PHY rate.
 pub struct AmpduRetryState<const CAPACITY: usize> {
     state: UpperAmpduRetryState,
-    generation: Ieee80211ClockGeneration,
 }
 
 impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
     /// Start at the first Sequence Control value already consumed by the
-    /// encoded aggregate, whose MSDUs were committed at
-    /// `committed_at`. Every later sample must belong to the same MAC clock
-    /// generation; the monotonic timer only owns executor waits.
+    /// encoded aggregate. Each MPDU ages from its MSDU's admission on the
+    /// monotonic clock, which the caller gives with every completion.
     pub fn new(
         first_sequence: SequenceNumber,
         subframes: u8,
         policy: AmpduRetryPolicy,
-        committed_at: Ieee80211Stamp,
     ) -> Result<Self, AmpduRetryError> {
         if policy.lifetime.as_micros() == 0 {
             return Err(AmpduRetryError::ZeroLifetime);
@@ -805,19 +843,16 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
             first_sequence,
             subframes,
             lmac::ampdu_retry_policy(policy.lifetime, policy.retain_single_mpdu),
-            committed_at.at,
         )
-        .map(|state| Self {
-            state,
-            generation: committed_at.generation,
-        })
+        .map(|state| Self { state })
         .map_err(Self::error)
     }
 
     /// Apply one completion after the hardware queue has been detached.
     ///
-    /// A missing MPDU stays in the aggregate until it is aged at
-    /// `now`; aged MPDUs end the aggregate and are discarded. Once
+    /// A missing MPDU stays in the aggregate until it is aged at monotonic
+    /// `now`, `admitted` giving its MSDU's admission; aged MPDUs are
+    /// discarded, behind a BlockAckReq under the agreement. Once
     /// the TID's BlockAck agreement is no longer `block_ack_operational`,
     /// the live missing MPDUs leave the aggregate for individual retry.
     ///
@@ -835,10 +870,10 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
         &mut self,
         completion: HtAmpduTxCompletion,
         observed_subframes: u8,
-        now: Ieee80211Stamp,
+        now: oer_time::Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
-        self.validate_stamp(now)?;
         let result = if completion.tx.completes_vendor_trigger_flow() {
             AmpduAttemptResult::TriggerFlowEnd
         } else if completion.tx.tx_status() == TxStatus::CtsTimeout {
@@ -853,7 +888,13 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
             )
         };
         self.state
-            .observe(result, observed_subframes, now.at, block_ack_operational)
+            .observe(
+                result,
+                observed_subframes,
+                now,
+                block_ack_operational,
+                admitted,
+            )
             .map(Self::decision)
             .map_err(Self::error)
     }
@@ -867,27 +908,19 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
     pub fn observe_block_ack_request(
         &mut self,
         block_ack: Option<HtBlockAckObservation>,
-        now: Ieee80211Stamp,
+        now: oer_time::Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
-        self.validate_stamp(now)?;
-        Ok(Self::decision(self.state.observe_block_ack_request(
-            block_ack.map(|observation| observation.block_ack.report()),
-            now.at,
-            block_ack_operational,
-        )))
-    }
-
-    /// Validate the radio relation before detaching hardware or changing retry state.
-    pub fn validate_stamp(&self, now: Ieee80211Stamp) -> Result<(), AmpduRetryError> {
-        if now.generation == self.generation {
-            Ok(())
-        } else {
-            Err(AmpduRetryError::ClockGenerationChanged {
-                expected: self.generation,
-                observed: now.generation,
-            })
-        }
+        self.state
+            .observe_block_ack_request(
+                block_ack.map(|observation| observation.block_ack.report()),
+                now,
+                block_ack_operational,
+                admitted,
+            )
+            .map(Self::decision)
+            .map_err(Self::error)
     }
 
     const fn decision(decision: UpperAmpduRetryDecision) -> AmpduRetryDecision {
@@ -911,6 +944,15 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
                 retry_mask: retry_mask as u32,
                 starting_sequence,
             },
+            UpperAmpduRetryDecision::DiscardAged {
+                retry_mask,
+                aged_mask,
+                starting_sequence,
+            } => AmpduRetryDecision::DiscardAged {
+                retry_mask: retry_mask as u32,
+                aged_mask: aged_mask as u32,
+                starting_sequence,
+            },
             UpperAmpduRetryDecision::Unaggregate { retry_mask } => {
                 AmpduRetryDecision::Unaggregate {
                     retry_mask: retry_mask as u32,
@@ -925,8 +967,8 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
 
     const fn error(error: UpperAmpduRetryError) -> AmpduRetryError {
         match error {
-            UpperAmpduRetryError::AgingThresholdOutsideEpoch => {
-                AmpduRetryError::AgingThresholdOutsideEpoch
+            UpperAmpduRetryError::UnknownSubframe { index } => {
+                AmpduRetryError::UnknownSubframe { index }
             }
             UpperAmpduRetryError::ZeroLifetime => AmpduRetryError::ZeroLifetime,
             UpperAmpduRetryError::EmptyAggregate => AmpduRetryError::EmptyAggregate,
@@ -946,11 +988,21 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
         self.state.current_subframes()
     }
 
-    /// Whether the aggregate's MSDUs are aged at `now`: less than
+    /// Whether an MSDU admitted at `admitted` is aged at `now`: less than
     /// one lifetime unit remains.
-    pub fn aged(&self, now: Ieee80211Stamp) -> Result<bool, AmpduRetryError> {
-        self.validate_stamp(now)?;
-        Ok(self.state.aged(now.at))
+    pub fn aged(&self, admitted: oer_time::Instant, now: oer_time::Instant) -> bool {
+        self.state.aged(admitted, now)
+    }
+
+    /// Where the BlockAckReq of the last `RequestBlockAck` or
+    /// `DiscardAged` decision starts.
+    pub const fn block_ack_request_start(&self) -> SequenceNumber {
+        self.state.block_ack_request_start()
+    }
+
+    /// Original aggregate positions discarded as aged.
+    pub const fn discarded_original_indices(&self) -> u32 {
+        self.state.discarded_original_indices() as u32
     }
 
     pub const fn current_first_sequence(&self) -> SequenceNumber {

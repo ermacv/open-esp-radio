@@ -2,9 +2,9 @@ use std::vec::Vec;
 
 use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
-    BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,
-    BluetoothSchedulerSkipResult,
+    BluetoothDiagnosticSettle, BluetoothSchedulerCancellationDisposition,
+    BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerLockModifyObservation,
+    BluetoothSchedulerSkipDisposition, BluetoothSchedulerSkipResult,
 };
 
 use super::{
@@ -15,6 +15,19 @@ use crate::scheduler::{
     SchedulerAction as Action, SchedulerIdleInsertion, SchedulerObservation,
     SchedulerTransactionFault, SchedulerWait,
 };
+
+/// The scripted backend samples nothing; its settle's clock is never read.
+struct Unread;
+
+impl oer_time::Clock for Unread {
+    fn now(&self) -> oer_time::Instant {
+        unreachable!("the scripted backend takes no diagnostic sample")
+    }
+}
+
+fn settle() -> BluetoothDiagnosticSettle<'static> {
+    BluetoothDiagnosticSettle::new(crate::scheduler::DIAGNOSTIC_SETTLE, &Unread)
+}
 
 enum Units {}
 
@@ -97,6 +110,7 @@ impl SchedulerHardwareBackend for Recorder {
     fn observe(
         &mut self,
         wait: SchedulerWait,
+        _settle: BluetoothDiagnosticSettle<'_>,
         _lock: Option<&mut ()>,
         _modify: Option<&mut ()>,
         _cancellation: Option<&mut ()>,
@@ -149,7 +163,7 @@ fn live_insertion_holds_each_publication_until_its_release() {
     )
     .unwrap();
     hardware
-        .observe(&mut backend, SchedulerWait::ExecutionLock)
+        .observe(&mut backend, SchedulerWait::ExecutionLock, settle())
         .unwrap();
     perform(
         &mut hardware,
@@ -165,10 +179,10 @@ fn live_insertion_holds_each_publication_until_its_release() {
         ))
     );
     hardware
-        .observe(&mut backend, SchedulerWait::LockModify)
+        .observe(&mut backend, SchedulerWait::LockModify, settle())
         .unwrap();
     hardware
-        .observe(&mut backend, SchedulerWait::LockModify)
+        .observe(&mut backend, SchedulerWait::LockModify, settle())
         .unwrap();
     perform(&mut hardware, &mut backend, &[Action::ReleaseExecutionLock]).unwrap();
     assert!(hardware.is_quiet());
@@ -200,7 +214,7 @@ fn a_step_out_of_order_changes_no_register() {
         )))
     );
     assert_eq!(
-        hardware.observe(&mut backend, SchedulerWait::ExecutionModify),
+        hardware.observe(&mut backend, SchedulerWait::ExecutionModify, settle()),
         Err(SchedulerHardwareError::NotAwaiting(
             SchedulerWait::ExecutionModify
         ))
@@ -224,7 +238,7 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
     };
     // Cancellation first waits for any earlier lock-modify request.
     hardware
-        .observe(&mut backend, SchedulerWait::LockModify)
+        .observe(&mut backend, SchedulerWait::LockModify, settle())
         .unwrap();
     perform(
         &mut hardware,
@@ -237,7 +251,7 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
     )
     .unwrap();
     hardware
-        .observe(&mut backend, SchedulerWait::Cancellation)
+        .observe(&mut backend, SchedulerWait::Cancellation, settle())
         .unwrap();
     perform(
         &mut hardware,
@@ -245,7 +259,9 @@ fn cancellation_opens_the_hold_skips_and_closes_it() {
         &[Action::PublishSkip(link(0x40))],
     )
     .unwrap();
-    hardware.observe(&mut backend, SchedulerWait::Skip).unwrap();
+    hardware
+        .observe(&mut backend, SchedulerWait::Skip, settle())
+        .unwrap();
     assert_eq!(
         perform(&mut hardware, &mut backend, &[Action::ReleaseCancellation]),
         Err(SchedulerHardwareError::OutOfOrder(

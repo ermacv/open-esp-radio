@@ -278,10 +278,10 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         hardware: &mut H,
         cookie: TxCookie,
         retry: &mut crate::tx::runtime::AmpduRetryState<CAPACITY>,
-        now: oer_ieee80211_lower_mac::Ieee80211Stamp,
+        now: oer_time::Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
     ) -> Result<Option<RetainedAmpduRetryCompletion>, RetainedAmpduRetryCompletionError> {
-        retry.validate_stamp(now)?;
         let Some(CompletionObservation::Observed(completion)) =
             self.acknowledge_completion(hardware)?
         else {
@@ -291,7 +291,8 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         self.detach_completed(hardware, cookie)?;
         let subframes = self.frame_count();
         let first_sequence = retry.current_first_sequence();
-        let decision = retry.observe(completion, subframes, now, block_ack_operational)?;
+        let decision =
+            retry.observe(completion, subframes, now, block_ack_operational, admitted)?;
         Ok(Some(RetainedAmpduRetryCompletion {
             completion,
             first_sequence,

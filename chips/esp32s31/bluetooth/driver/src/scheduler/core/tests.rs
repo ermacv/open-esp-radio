@@ -21,7 +21,7 @@ fn controller_hal_precedes_complete_scheduler_init() {
     });
     let time_scale = initialized.controller_time_scale();
     let scheduler_operations = Rc::clone(&operations);
-    let cells = ControllerEventCells::new();
+    let cells = ControllerEventCells::host();
     let mut scheduler =
         initialized.initialize_scheduler_with(ControllerRuntimeResources::<4>::new(&cells), |_| {
             scheduler_operations.borrow_mut().push("scheduler-hardware");
@@ -38,7 +38,7 @@ fn controller_hal_precedes_complete_scheduler_init() {
     );
     assert!(!scheduler.controller_time_needs_recheck());
     assert_eq!(scheduler.modem_timer_capacity(), 4);
-    assert!(scheduler.runtime_is_pristine());
+    assert_eq!(scheduler.runtime_is_pristine(), Ok(true));
     let _interrupts = scheduler.take_interrupt_owner();
     let (interrupt, task, _modem_timer) = scheduler.split_runtime();
     assert!(core::ptr::eq(

@@ -10,8 +10,8 @@ const LIMITS: RetryLimits = RetryLimits {
 };
 
 const AMPDU_POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::RadioDuration::from_micros(100_000),
-    aged_margin: oer_time::RadioDuration::from_micros(1_024),
+    lifetime: oer_time::Duration::from_micros(100_000),
+    aged_margin: oer_time::Duration::from_micros(1_024),
     retry_limit: 4,
     retain_single_mpdu: false,
 };
@@ -72,8 +72,13 @@ fn attempt(step: TxStep) -> TxAttemptPlan {
     }
 }
 
-fn now(micros: u64) -> Ieee80211Instant {
-    Ieee80211Instant::from_micros(micros)
+fn now(micros: u64) -> Instant {
+    Instant::from_micros(micros)
+}
+
+/// Every subframe admitted at zero.
+fn fresh(_: u8) -> Option<Instant> {
+    Some(Instant::from_micros(0))
 }
 
 #[test]
@@ -92,6 +97,7 @@ fn a_delivered_mpdu_reports_one_attempt() {
         &mut exchange,
         &completion(TxStatus::Success, None),
         now(10),
+        fresh,
         &Ladder,
     );
     let TxStep::Done(TxReport::Mpdu(status)) = step else {
@@ -111,7 +117,7 @@ fn ack_timeouts_walk_the_ladder_with_the_retry_bit() {
     let mut planner = planner();
     let (mut exchange, _) = planner.begin(mpdu(200), &Ladder).unwrap();
     let timeout = completion(TxStatus::AckTimeout, None);
-    let second = attempt(planner.complete(&mut exchange, &timeout, now(1), &Ladder));
+    let second = attempt(planner.complete(&mut exchange, &timeout, now(1), fresh, &Ladder));
     assert_eq!(second.rate, OFDM48);
     assert_eq!(
         second.content,
@@ -119,10 +125,10 @@ fn ack_timeouts_walk_the_ladder_with_the_retry_bit() {
             set_retry_bit: true
         }
     );
-    let third = attempt(planner.complete(&mut exchange, &timeout, now(2), &Ladder));
+    let third = attempt(planner.complete(&mut exchange, &timeout, now(2), fresh, &Ladder));
     assert_eq!(third.rate, OFDM24);
     let TxStep::Done(TxReport::Mpdu(status)) =
-        planner.complete(&mut exchange, &timeout, now(3), &Ladder)
+        planner.complete(&mut exchange, &timeout, now(3), fresh, &Ladder)
     else {
         panic!("the MPDU retry limit ended the exchange");
     };
@@ -144,6 +150,7 @@ fn a_cts_timeout_retries_without_the_retry_bit_under_the_same_protection() {
         &mut exchange,
         &completion(TxStatus::CtsTimeout, None),
         now(1),
+        fresh,
         &Ladder,
     ));
     assert_eq!(
@@ -173,7 +180,6 @@ fn ampdu_request(subframes: usize) -> TxRequest {
                 0,
                 SequenceNumber::new(100).unwrap(),
                 &lengths[..subframes],
-                now(0),
                 true,
             )
             .unwrap(),
@@ -203,6 +209,7 @@ fn a_partial_block_ack_resends_only_the_missing_subframes() {
         &mut exchange,
         &completion(TxStatus::Success, report(100, 0b0101)),
         now(10),
+        fresh,
         &Ladder,
     ));
     assert_eq!(
@@ -217,6 +224,7 @@ fn a_partial_block_ack_resends_only_the_missing_subframes() {
         &mut exchange,
         &completion(TxStatus::Success, report(101, 0b101)),
         now(20),
+        fresh,
         &Ladder,
     ) else {
         panic!("every subframe was acknowledged");
@@ -235,6 +243,7 @@ fn one_missing_subframe_leaves_the_aggregate_for_an_individual_retry() {
         &mut exchange,
         &completion(TxStatus::Success, report(100, 0b011)),
         now(10),
+        fresh,
         &Ladder,
     ));
     assert_eq!(individual.content, AttemptContent::Subframe { index: 2 });
@@ -242,6 +251,7 @@ fn one_missing_subframe_leaves_the_aggregate_for_an_individual_retry() {
         &mut exchange,
         &completion(TxStatus::Success, None),
         now(20),
+        fresh,
         &Ladder,
     ) else {
         panic!("the individual retry delivered the last subframe");
@@ -258,7 +268,7 @@ fn repeated_protection_failures_end_in_a_block_ack_request() {
     let (mut exchange, _) = planner.begin(ampdu_request(2), &Ladder).unwrap();
     let cts = completion(TxStatus::CtsTimeout, None);
     for _ in 0..3 {
-        let plan = attempt(planner.complete(&mut exchange, &cts, now(1), &Ladder));
+        let plan = attempt(planner.complete(&mut exchange, &cts, now(1), fresh, &Ladder));
         assert_eq!(
             plan.content,
             AttemptContent::Ampdu {
@@ -267,7 +277,7 @@ fn repeated_protection_failures_end_in_a_block_ack_request() {
             }
         );
     }
-    let request = attempt(planner.complete(&mut exchange, &cts, now(1), &Ladder));
+    let request = attempt(planner.complete(&mut exchange, &cts, now(1), fresh, &Ladder));
     assert_eq!(
         request.content,
         AttemptContent::BlockAckRequest {
@@ -280,6 +290,7 @@ fn repeated_protection_failures_end_in_a_block_ack_request() {
         &mut exchange,
         &completion(TxStatus::Success, report(100, 0b11)),
         now(2),
+        fresh,
         &Ladder,
     ) else {
         panic!("the BlockAck acknowledged both subframes");
@@ -298,6 +309,7 @@ fn request_snapshot_keeps_the_mpdu_context_through_completion() {
         &mut exchange,
         &completion(TxStatus::Success, None),
         now(10),
+        fresh,
         &Ladder,
     );
     assert!(matches!(step, TxStep::Done(TxReport::Mpdu(_))));
@@ -312,7 +324,6 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
         7,
         SequenceNumber::new(4094).unwrap(),
         &[311, 677, 1234],
-        now(0),
         true,
     )
     .unwrap();
@@ -327,6 +338,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
             &mut exchange,
             &completion(TxStatus::CtsTimeout, None),
             now(1),
+            fresh,
             &Ladder,
         ));
         assert!(matches!(plan.content, AttemptContent::Ampdu { .. }));
@@ -336,6 +348,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
         &mut exchange,
         &completion(TxStatus::CtsTimeout, None),
         now(1),
+        fresh,
         &Ladder,
     ));
     assert_eq!(
@@ -354,6 +367,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
         &mut exchange,
         &completion(TxStatus::Success, report(4094, 0b011)),
         now(2),
+        fresh,
         &Ladder,
     ));
     assert_eq!(individual.content, AttemptContent::Subframe { index: 2 });
@@ -367,6 +381,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
         &mut exchange,
         &completion(TxStatus::Success, None),
         now(3),
+        fresh,
         &Ladder,
     );
     assert!(matches!(finished, TxStep::Done(TxReport::Ampdu(_))));
@@ -380,6 +395,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
             &mut exchange,
             &completion(TxStatus::Success, None),
             now(4),
+            fresh,
             &Ladder,
         ),
         finished
@@ -392,7 +408,7 @@ fn an_unanswered_aggregate_ends_as_a_hardware_timeout() {
     let (mut exchange, _) = planner.begin(ampdu_request(2), &Ladder).unwrap();
     let timeout = completion(TxStatus::AckTimeout, None);
     for _ in 0..3 {
-        let plan = attempt(planner.complete(&mut exchange, &timeout, now(1), &Ladder));
+        let plan = attempt(planner.complete(&mut exchange, &timeout, now(1), fresh, &Ladder));
         assert_eq!(
             plan.content,
             AttemptContent::Ampdu {
@@ -402,7 +418,7 @@ fn an_unanswered_aggregate_ends_as_a_hardware_timeout() {
         );
     }
     let TxStep::Done(TxReport::Ampdu(status)) =
-        planner.complete(&mut exchange, &timeout, now(1), &Ladder)
+        planner.complete(&mut exchange, &timeout, now(1), fresh, &Ladder)
     else {
         panic!("the retry limit ended the aggregate");
     };
@@ -412,20 +428,131 @@ fn an_unanswered_aggregate_ends_as_a_hardware_timeout() {
 
 #[test]
 fn an_aggregate_length_counts_delimiters_and_padding() {
-    let request = AmpduRequest::new(
-        0,
-        SequenceNumber::ZERO,
-        &[101, 102, 103],
-        Ieee80211Instant::from_micros(0),
-        true,
-    )
-    .unwrap();
+    let request = AmpduRequest::new(0, SequenceNumber::ZERO, &[101, 102, 103], true).unwrap();
     // 4 + 101 -> 108, 4 + 102 -> 108, last 4 + 103 unpadded.
     assert_eq!(request.aggregate_length(0b111), 108 + 108 + 107);
     assert_eq!(request.aggregate_length(0b100), 107);
-    assert!(AmpduRequest::new(0, SequenceNumber::ZERO, &[], now(0), true).is_none());
+    assert!(AmpduRequest::new(0, SequenceNumber::ZERO, &[], true).is_none());
     assert_eq!(
         acknowledged_subframes(&request, report(0, 0b101).unwrap()),
         0b101
     );
+}
+
+/// Past the policy's lifetime less its margin, from admission at zero.
+const AGED: u64 = 98_977;
+
+#[test]
+fn an_aged_subframe_alone_is_discarded_behind_a_block_ack_request() {
+    let mut planner = planner();
+    let (mut exchange, _) = planner.begin(ampdu_request(3), &Ladder).unwrap();
+    // 102 alone; its ACK times out once its MSDU aged.
+    let individual = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(100, 0b011)),
+        now(10),
+        fresh,
+        &Ladder,
+    ));
+    assert_eq!(individual.content, AttemptContent::Subframe { index: 2 });
+    let request = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::AckTimeout, None),
+        now(AGED),
+        fresh,
+        &Ladder,
+    ));
+    // The recipient's window moves past it.
+    assert_eq!(
+        request.content,
+        AttemptContent::BlockAckRequest {
+            tid: 0,
+            starting_sequence: SequenceNumber::new(103).unwrap(),
+        }
+    );
+    let TxStep::Done(TxReport::Ampdu(status)) = planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(103, 0)),
+        now(AGED + 10),
+        fresh,
+        &Ladder,
+    ) else {
+        panic!("nothing is left to send");
+    };
+    assert_eq!(status.result, MacAmpduTxResult::Incomplete);
+    assert_eq!(status.individual_retries.failed, 1);
+}
+
+#[test]
+fn without_the_agreement_an_aged_subframe_alone_ends_without_a_request() {
+    let mut planner = planner();
+    let (mut exchange, _) = planner.begin(ampdu_request(3), &Ladder).unwrap();
+    exchange.set_block_ack_operational(false);
+    // Both missing subframes go alone; 101 ages on its first timeout, and
+    // 102, admitted as early, is discarded before it is sent.
+    let individual = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(100, 0b001)),
+        now(10),
+        fresh,
+        &Ladder,
+    ));
+    assert_eq!(individual.content, AttemptContent::Subframe { index: 1 });
+    let TxStep::Done(TxReport::Ampdu(status)) = planner.complete(
+        &mut exchange,
+        &completion(TxStatus::AckTimeout, None),
+        now(AGED),
+        fresh,
+        &Ladder,
+    ) else {
+        panic!("every remaining subframe aged");
+    };
+    assert_eq!(status.result, MacAmpduTxResult::Incomplete);
+}
+
+#[test]
+fn an_aggregate_aged_head_sends_a_block_ack_request_at_the_first_remaining() {
+    let mut planner = planner();
+    let (mut exchange, _) = planner.begin(ampdu_request(4), &Ladder).unwrap();
+    let head_old = |index: u8| Some(Instant::from_micros(if index == 0 { 0 } else { 50_000 }));
+    let request = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(100, 0b0100)),
+        now(AGED),
+        head_old,
+        &Ladder,
+    ));
+    assert_eq!(
+        request.content,
+        AttemptContent::BlockAckRequest {
+            tid: 0,
+            starting_sequence: SequenceNumber::new(101).unwrap(),
+        }
+    );
+    // Its BlockAck acknowledges 101; 103 goes again in an aggregate of one
+    // or alone, never 100.
+    let next = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(101, 0b001)),
+        now(AGED + 10),
+        head_old,
+        &Ladder,
+    ));
+    assert_eq!(next.content, AttemptContent::Subframe { index: 3 });
+}
+
+#[test]
+fn a_subframe_without_an_admission_instant_ends_the_exchange_incomplete() {
+    let mut planner = planner();
+    let (mut exchange, _) = planner.begin(ampdu_request(2), &Ladder).unwrap();
+    let TxStep::Done(TxReport::Ampdu(status)) = planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(100, 0b01)),
+        now(10),
+        |_| None,
+        &Ladder,
+    ) else {
+        panic!("the exchange cannot age its subframes");
+    };
+    assert_eq!(status.result, MacAmpduTxResult::Incomplete);
 }

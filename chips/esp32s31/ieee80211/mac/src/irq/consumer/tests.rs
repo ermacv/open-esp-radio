@@ -21,10 +21,10 @@ impl Wake for WakeCount {
 
 #[test]
 fn finite_batch_preserves_rx_before_tx_under_continuous_publication() {
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     publisher.publish(EVENT_KNOWN_MASK);
-    let mut batch = consumer.take_batch();
+    let mut batch = consumer.take_batch().unwrap();
     for expected in [
         IrqWork::RxSuccess,
         IrqWork::TxComplete,
@@ -36,14 +36,14 @@ fn finite_batch_preserves_rx_before_tx_under_continuous_publication() {
     }
     assert_eq!(batch.next(), None);
     assert_eq!(
-        consumer.take_batch().collect::<std::vec::Vec<_>>(),
+        consumer.take_batch().unwrap().collect::<std::vec::Vec<_>>(),
         [IrqWork::RxSuccess]
     );
 }
 
 #[test]
 fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     let old = Arc::new(WakeCount::default());
     let current = Arc::new(WakeCount::default());
@@ -64,7 +64,7 @@ fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
     publisher.publish(EVENT_RX_SUCCESS);
     assert_eq!(old.0.load(Ordering::Relaxed), 0);
     assert_eq!(current.0.load(Ordering::Relaxed), 1);
-    let Poll::Ready(batch) = next.as_mut().poll(&mut cx) else {
+    let Poll::Ready(Ok(batch)) = next.as_mut().poll(&mut cx) else {
         panic!("published")
     };
     assert_eq!(batch.collect::<std::vec::Vec<_>>(), [IrqWork::RxSuccess]);
@@ -72,7 +72,7 @@ fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
 
 #[test]
 fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
-    let mut storage = PowerIrqStorage::new();
+    let mut storage = PowerIrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     let old = Arc::new(WakeCount::default());
     let current = Arc::new(WakeCount::default());
@@ -95,7 +95,7 @@ fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
     ));
     assert_eq!(old.0.load(Ordering::Relaxed), 0);
     assert_eq!(current.0.load(Ordering::Relaxed), 1);
-    let Poll::Ready(observation) = next.as_mut().poll(&mut cx) else {
+    let Poll::Ready(Ok(observation)) = next.as_mut().poll(&mut cx) else {
         panic!("published")
     };
     assert!(observation.sta_tbtt());
@@ -103,7 +103,7 @@ fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
 
 #[test]
 fn publication_before_registration_and_after_pending_are_both_durable() {
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     let wakes = Arc::new(WakeCount::default());
     let waker = Waker::from(wakes.clone());
@@ -115,7 +115,7 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
         s.spawn(|| publisher.publish(EVENT_TX_TIMEOUT | EVENT_COLLISION));
     });
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
-    let Poll::Ready(batch) = consumer.poll_batch(&mut cx) else {
+    let Poll::Ready(Ok(batch)) = consumer.poll_batch(&mut cx) else {
         panic!("published")
     };
     assert_eq!(
@@ -141,7 +141,9 @@ fn publication_during_waker_registration_cannot_be_lost() {
             self.0.post(EVENT_RX_SUCCESS).wake();
         }
     }
-    let storage = std::boxed::Box::leak(std::boxed::Box::new(IrqStorage::new()));
+    let storage = std::boxed::Box::leak(std::boxed::Box::new(IrqStorage::new(
+        oer_interrupt_table::signal::host::signal(),
+    )));
     let (publisher, mut consumer) = storage.split();
     let old = Waker::from(Arc::new(PublishOnDrop(publisher.storage)));
     assert!(
@@ -151,7 +153,7 @@ fn publication_during_waker_registration_cannot_be_lost() {
     );
     drop(old);
     let next = Waker::from(Arc::new(WakeCount::default()));
-    let Poll::Ready(batch) = consumer.poll_batch(&mut Context::from_waker(&next)) else {
+    let Poll::Ready(Ok(batch)) = consumer.poll_batch(&mut Context::from_waker(&next)) else {
         panic!("registration raced")
     };
     assert_eq!(batch.collect::<std::vec::Vec<_>>(), [IrqWork::RxSuccess]);
@@ -159,7 +161,7 @@ fn publication_during_waker_registration_cannot_be_lost() {
 
 #[test]
 fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     storage.rx_posts.store(u32::MAX - 1, Ordering::Relaxed);
     let (publisher, mut consumer) = storage.split();
     publisher.notify_rx_capacity();
@@ -169,14 +171,14 @@ fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
     assert_eq!(publisher.diagnostics().rx_post_count(), u32::MAX);
     publisher.publish(EVENT_RX_SUCCESS);
     assert_eq!(publisher.diagnostics().rx_post_count(), 0);
-    let batch = consumer.take_batch();
+    let batch = consumer.take_batch().unwrap();
     assert!(batch.rx_capacity_returned());
     assert_eq!(batch.collect::<std::vec::Vec<_>>(), [IrqWork::RxSuccess]);
 }
 
 #[test]
 fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
-    let mut storage = PowerIrqStorage::new();
+    let mut storage = PowerIrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     publisher.publish(MacPowerInterruptObservation::from_semantic_events(
         true, false, true, false, false, true,
@@ -184,7 +186,7 @@ fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
     publisher.publish(MacPowerInterruptObservation::from_semantic_events(
         false, true, false, true, true, false,
     ));
-    let observation = consumer.take();
+    let observation = consumer.take().unwrap();
     assert!(
         observation.tsf_timer_0()
             && observation.tsf_timer_1()
@@ -192,13 +194,13 @@ fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
             && observation.tsf_timer_3()
     );
     assert!(observation.sta_tbtt() && observation.has_unhandled_event());
-    assert!(consumer.take().is_empty());
+    assert!(consumer.take().unwrap().is_empty());
 }
 
 #[test]
 fn diagnostics_borrow_their_installation_and_count_unhandled_per_entry() {
-    let mut first = IrqStorage::new();
-    let mut second = IrqStorage::new();
+    let mut first = IrqStorage::new(oer_interrupt_table::signal::host::signal());
+    let mut second = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (first, _first_consumer) = first.split();
     let (second, _second_consumer) = second.split();
     let first_view = first.diagnostics();
@@ -231,7 +233,8 @@ fn diagnostics_borrow_their_installation_and_count_unhandled_per_entry() {
 
 #[test]
 fn diagnostic_epochs_count_empty_to_pending_transitions_not_each_tx_fact() {
-    let mut storage = IrqStorage::new();
+    // The radio executor runs only after the handler: the facts wait.
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::deferred_signal());
     let (publisher, mut consumer) = storage.split();
     for events in [
         EVENT_TX_COMPLETE,
@@ -251,7 +254,7 @@ fn diagnostic_epochs_count_empty_to_pending_transitions_not_each_tx_fact() {
     assert_eq!(snapshot.mac_irq_entries, 4);
     assert_eq!((snapshot.rx_epochs, snapshot.tx_epochs), (1, 1));
     assert_eq!(
-        consumer.take_batch().collect::<std::vec::Vec<_>>(),
+        consumer.take_batch().unwrap().collect::<std::vec::Vec<_>>(),
         [
             IrqWork::RxSuccess,
             IrqWork::TxComplete,
@@ -284,7 +287,7 @@ fn entry_cycles_stop_before_the_owned_waker_runs() {
         }
     }
     CYCLES.set(10);
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     let waker = Waker::from(Arc::new(ExpensiveWake));
     assert!(
@@ -309,7 +312,7 @@ fn entry_cycles_stop_before_the_owned_waker_runs() {
 
 #[test]
 fn masked_is_published_once_and_survives_only_one_batch() {
-    let mut storage = IrqStorage::new();
+    let mut storage = IrqStorage::new(oer_interrupt_table::signal::host::signal());
     let (publisher, mut consumer) = storage.split();
     let wakes = Arc::new(WakeCount::default());
     let waker = Waker::from(wakes.clone());
@@ -322,7 +325,7 @@ fn masked_is_published_once_and_survives_only_one_batch() {
     publisher.publish(u32::MAX);
 
     assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
-    let batch = consumer.take_batch();
+    let batch = consumer.take_batch().unwrap();
     assert!(batch.masked() && !batch.rx_capacity_returned());
     assert_eq!(
         batch.collect::<std::vec::Vec<_>>(),
@@ -333,8 +336,8 @@ fn masked_is_published_once_and_survives_only_one_batch() {
             IrqWork::Collision,
         ]
     );
-    assert!(consumer.take_batch().is_empty());
+    assert!(consumer.take_batch().unwrap().is_empty());
 
     publisher.publish(EVENT_RX_SUCCESS);
-    assert!(!consumer.take_batch().masked());
+    assert!(!consumer.take_batch().unwrap().masked());
 }

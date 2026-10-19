@@ -73,6 +73,11 @@ pub struct StaAssociatedPeer {
     pub he_bss_color: u8,
     /// The protection facts of the BSS the transmitter's planner applies.
     pub protection: oer_ieee80211_upper_mac::BssProtection,
+    /// The EDCA parameters the station's interface contends with: those
+    /// of the Association Response's WMM Parameter element, else those the
+    /// scan heard, else the standard defaults of a QoS BSS, or the DCF's
+    /// in a BSS without WMM.
+    pub edca: oer_ieee80211_mac::extensions::wmm::WmmParameterSet,
 }
 
 /// Why the associated peer could not be derived.
@@ -114,6 +119,7 @@ impl StaAssociatedPeer {
         he_packet_padding: fn(&[u8]) -> oer_ieee80211_upper_mac::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
         use oer_ieee80211_mac::{
+            extensions::wmm::WmmParameterSet,
             he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},
             protection::{ErpProtection, HtProtectionMode},
         };
@@ -132,6 +138,14 @@ impl StaAssociatedPeer {
             (Some(capabilities), Some(state))
         } else {
             (parse_he20_capabilities(he_capability).ok(), None)
+        };
+        let edca = match response
+            .wmm_parameters
+            .or_else(|| access_point.wmm_parameters())
+        {
+            Some(parameters) => parameters,
+            None if access_point.wmm_ie_bytes().is_empty() => WmmParameterSet::DCF,
+            None => WmmParameterSet::STANDARD_DEFAULT,
         };
         Ok(Self {
             phy,
@@ -168,6 +182,7 @@ impl StaAssociatedPeer {
                 ),
                 short_preamble: access_point.capability_info & CAPABILITY_SHORT_PREAMBLE != 0,
             },
+            edca,
         })
     }
 }

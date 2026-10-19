@@ -1367,7 +1367,7 @@ impl<
                 }
             }
             if transmit && self.data.accepts() && self.station.link().is_some() {
-                self.send(io);
+                self.send(now, io);
             }
             batch = batch.saturating_add(1);
             if batch == MAX_INPUT_STEPS_PER_BATCH {
@@ -1419,8 +1419,10 @@ impl<
 
     /// Hand the network stack's next MSDU to the data machine on the
     /// station's link.
+    /// Its admission is `now`: its age starts when the service takes it.
     fn send<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         &mut self,
+        now: Instant,
         io: &mut ServiceIo<'_, B::Caps, TX_DEPTH, RX_DEPTH, COMMAND_DEPTH>,
     ) {
         let Some(mut link) = self.station.link() else {
@@ -1435,6 +1437,7 @@ impl<
             ether_type: parts.ether_type,
             priority: packet.priority,
             payload: parts.payload,
+            admitted: now,
         };
         // Admission was polled immediately above under this same exclusive
         // service borrow. A too-long MSDU is refused without changing bytes.
@@ -2197,6 +2200,12 @@ where
                 .admissions
                 .insert(PendingTerminal::Control(ControlTerminal::Configure));
             phase.station().configure(pending, receive);
+            return Ok(Follow::Nothing);
+        }
+        StaAction::SetEdca(edca) => {
+            // The station's frames contend with whatever the backend
+            // reconciled; nothing in the station follows from that set.
+            let _applied = phase.station().set_edca(edca);
             return Ok(Follow::Nothing);
         }
         StaAction::InstallPairwiseKey {

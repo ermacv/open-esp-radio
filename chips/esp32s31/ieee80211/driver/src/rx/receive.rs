@@ -52,7 +52,7 @@ use oer_esp32s31_ieee80211_mac::{
     },
     irq::{
         MacInterrupt, MacPowerInterrupt,
-        consumer::{IrqConsumer, PowerIrqConsumer},
+        consumer::{ForeignContext, IrqConsumer, PowerIrqConsumer},
         epoch::{ActiveEpoch, Moderated},
     },
     rx::{RxBufferFullCounter, RxDma, RxRingLive, pool::RxStagePool},
@@ -298,21 +298,24 @@ where
     /// Receive until the stop request or a fault.
     async fn run(&mut self, ring: &mut RxRingLive<'static, COUNT>) -> WifiRxCause {
         loop {
-            // `None` is the stop request; otherwise whether a lease came back.
+            // `None` is the stop request; otherwise whether a lease came back,
+            // or that the runner polls outside its signals' executor.
             let wake = poll_fn(|cx| {
                 if self.control.poll_stop(cx).is_ready() {
                     return Poll::Ready(None);
                 }
                 // WDEVPWR facts are counted by the line; drain them here.
-                while self.power.poll(cx).is_ready() {}
+                while let Poll::Ready(Ok(_)) = self.power.poll(cx) {}
                 // Any fact (RX, capacity) starts one drain.
                 self.irq
                     .poll_batch(cx)
-                    .map(|facts| Some(facts.rx_capacity_returned()))
+                    .map(|facts| Some(facts.map(|facts| facts.rx_capacity_returned())))
             })
             .await;
-            let Some(capacity) = wake else {
-                return WifiRxCause::StopRequested;
+            let capacity = match wake {
+                None => return WifiRxCause::StopRequested,
+                Some(Ok(capacity)) => capacity,
+                Some(Err(ForeignContext)) => return WifiRxCause::ForeignExecutor,
             };
             let (full_since, snapshot) = if capacity {
                 self.counters.capacity_drain();
@@ -594,14 +597,18 @@ where
         let confirmed = poll_fn(|cx| {
             loop {
                 match irq.poll_batch(cx) {
-                    Poll::Ready(facts) if facts.masked() => return Poll::Ready(()),
+                    Poll::Ready(Ok(facts)) if facts.masked() => return Poll::Ready(true),
                     // Facts posted before the mask end with this epoch.
-                    Poll::Ready(_facts) => {}
+                    Poll::Ready(Ok(_facts)) => {}
+                    // Outside the signals' executor no confirmation can come.
+                    Poll::Ready(Err(ForeignContext)) => return Poll::Ready(false),
                     Poll::Pending => return Poll::Pending,
                 }
             }
         });
-        let confirmed = within(self.timer, deadline, confirmed).await.is_some();
+        let confirmed = within(self.timer, deadline, confirmed)
+            .await
+            .unwrap_or(false);
         self.counters
             .mask_confirm(self.timer.now().saturating_duration_since(start));
         confirmed
