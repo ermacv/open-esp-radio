@@ -4,8 +4,8 @@
 //! These output sections are `NOLOAD`: no bytes of their inputs reach the
 //! image, and the boot clears the range. A static placed there by name must
 //! therefore start as all zero bytes, or its initializer is silently lost.
-//! That no input carries initialized bytes there is to be checked by
-//! `cargo fw` after the link (planned; nothing checks it yet). A test keeps
+//! Nothing checks after the link that no input carries initialized bytes
+//! there. A test keeps
 //! [`RUNTIME_ZEROED_REGIONS`] equal to the linker script.
 
 /// One output section the boot zeroes.

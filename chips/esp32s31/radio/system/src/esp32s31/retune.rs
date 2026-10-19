@@ -1,8 +1,7 @@
-//! Wi-Fi channel retune on the radio domain, outside the R0 client contract.
+//! Wi-Fi channel retune on the radio domain, which no client request reaches yet.
 //!
-//! The recovered retune order (`docs/architecture.md`, retune) stays here,
-//! compiled, until `track` and the periodic service gain a retune request at
-//! R1. The client lends its stopped register owner for one transaction.
+//! The recovered retune order (`docs/architecture.md`, retune). The client
+//! lends its stopped register owner for one transaction.
 
 use oer_esp32s31_hal::{domain::RadioDomain, owner::RadioRuntimeOwner};
 use oer_esp32s31_phy::{
@@ -15,7 +14,7 @@ use crate::channel::lower_wifi_channel;
 
 /// Retune an initialized Wi-Fi MAC while its role-specific DMA/IRQ service is
 /// stopped and therefore owns no asynchronous access to these registers.
-#[expect(dead_code, reason = "retune joins the client contract at R1")]
+#[expect(dead_code, reason = "no client request retunes yet")]
 pub(crate) async fn switch_wifi_channel<O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
     domain: &mut RadioDomain<ConcurrentPhy>,
@@ -42,7 +41,7 @@ pub(crate) async fn switch_wifi_channel<O: PhyTargetObserver>(
 /// runner lends its register owner to the switch: the port is enabling, and
 /// every port call and interrupt entry that would reach the registers is
 /// refused or deferred until the switch returns.
-#[expect(dead_code, reason = "retune joins the client contract at R1")]
+#[expect(dead_code, reason = "no client request retunes yet")]
 pub(crate) async fn switch_published_wifi_channel<O: PhyTargetObserver>(
     timer: &impl oer_time::Timer,
     radio: &mut RadioDomain<ConcurrentPhy>,

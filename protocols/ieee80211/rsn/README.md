@@ -92,8 +92,6 @@ not enable the policy.
 
 ## Known defects
 
-Found in a code review of 2026-10-16 (record outside this repository).
-
 - **The authenticator reuses the replay counter on M1/M3 retries.**
   `state/authenticator.rs::RsnApState::retry_transmit` resends the stored
   counter, and M2/M4 match one stored value, not a window of sent ones.

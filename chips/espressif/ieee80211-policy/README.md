@@ -94,8 +94,5 @@ The crate uses the canonical strict lint block.
 ## Known defects
 
 - **`rate_control.rs::ScheduleSelection::Invalid` keeps the current
-  schedule** (code review, 2026-10-16; record outside this repository): `update_tx_per`
-  installs a schedule only on `Selected`, so an invalid selection leaves a
-  possibly too-fast rate in use. The decided rule is to clamp toward the
-  slowest schedule (a precomputed slowest `RateScheduleRef`) and delete
-  `Invalid`.
+  schedule:** `update_tx_per` installs a schedule only on `Selected`, so an
+  invalid selection leaves a possibly too-fast rate in use.

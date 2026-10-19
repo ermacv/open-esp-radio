@@ -514,8 +514,6 @@ configuration replies.
 
 ## Known defects
 
-Found in a code review of 2026-10-16 (record outside this repository).
-
 **Behaviour**
 
 - **PMKSA never forgotten.** `machine.rs::Station::begin_authentication`

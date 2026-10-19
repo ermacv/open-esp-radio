@@ -1,9 +1,8 @@
-//! Wi-Fi modem sleep on the radio domain, outside the R0 client contract.
+//! Wi-Fi modem sleep on the radio domain, which no client request reaches yet.
 //!
 //! The vendor modem sleep puts Wi-Fi's RF to sleep (`wifi_rf_phy_disable`)
-//! and wakes it (`wifi_rf_phy_enable`) while the MAC stays up. It joins the
-//! client contract with doze; until then its domain half stays here,
-//! compiled. The client lends the proof that its clocks are on.
+//! and wakes it (`wifi_rf_phy_enable`) while the MAC stays up. The client
+//! lends the proof that its clocks are on.
 
 use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocksOn};
 use oer_esp32s31_phy::{
@@ -19,10 +18,7 @@ use oer_esp32s31_phy::{
 ///
 /// The domain rejected the release; the receive path is restored and the
 /// membership returned.
-#[expect(
-    dead_code,
-    reason = "modem sleep joins the client contract with doze (R3)"
-)]
+#[expect(dead_code, reason = "no client request sleeps the modem yet")]
 pub(crate) fn suspend_wifi_rf(
     radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &WifiClocksOn,
@@ -49,10 +45,7 @@ pub(crate) fn suspend_wifi_rf(
 ///
 /// The domain rejected the client; nothing changed and the suspended token
 /// is returned.
-#[expect(
-    dead_code,
-    reason = "modem sleep joins the client contract with doze (R3)"
-)]
+#[expect(dead_code, reason = "no client request sleeps the modem yet")]
 pub(crate) fn resume_wifi_rf(
     radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &WifiClocksOn,
