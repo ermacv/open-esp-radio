@@ -184,10 +184,10 @@ fn internal_chain_publishes_phased_dma_authority() {
         },
     ];
     let publication = storage.publish_internal_chain(&entries).unwrap();
-    assert_eq!(publication.descriptor_head(), DESCRIPTOR_BASE);
+    assert_eq!(publication.descriptor_head().bits(), DESCRIPTOR_BASE);
 
     let mut start_head = 0;
-    publication.commit(|start| start_head = start.descriptor_head());
+    publication.commit(|start| start_head = start.descriptor_head().bits());
     assert_eq!(start_head, DESCRIPTOR_BASE);
     assert_eq!(storage.state(), AmpduDmaState::HardwareOwned);
     assert_eq!(storage.descriptor_word0(0).unwrap().size(), 256);
@@ -414,8 +414,8 @@ fn external_chain_retains_backings_through_detach() {
         second.external_descriptor(second_address, 64, 48).unwrap(),
     ];
     let publication = owner.publish_external_chain(&entries).unwrap();
-    assert_eq!(publication.descriptor_head(), DESCRIPTOR_BASE);
-    publication.commit(|start| assert_eq!(start.descriptor_head(), DESCRIPTOR_BASE));
+    assert_eq!(publication.descriptor_head().bits(), DESCRIPTOR_BASE);
+    publication.commit(|start| assert_eq!(start.descriptor_head().bits(), DESCRIPTOR_BASE));
     assert_eq!(owner.state(), AmpduDmaState::HardwareOwned);
     assert_eq!(drops.get(), 0);
 

@@ -1,5 +1,7 @@
 //! Host/oracle tests for A-MPDU protocol, formatting and ownership.
 
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use super::*;
 
 use oer_esp32s31_hal::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
@@ -36,20 +38,35 @@ struct CompletionHardware {
 impl TxHardware for CompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _: &dyn PreparedTxDma,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: u8,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
     }
 
-    fn start_bound_legacy_tx(&mut self, _: &dyn HardwareOwnedTxDma, _: u8) {}
+    fn start_bound_legacy_tx(
+        &mut self,
+        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+    ) {
+    }
 
-    fn prepare_bound_ht_tx(&mut self, _: &dyn PreparedTxDma, _: u8, _: MacHtTxProgram) -> bool {
+    fn prepare_bound_ht_tx(
+        &mut self,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+        _: MacHtTxProgram,
+    ) -> bool {
         true
     }
 
-    fn start_bound_ht_tx(&mut self, _: &dyn HardwareOwnedTxDma, _: u8) {}
+    fn start_bound_ht_tx(
+        &mut self,
+        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+    ) {
+    }
 
     fn take_tx_completion(&mut self, _: u8) -> Option<MacTxCompletionObservation> {
         None
@@ -132,18 +149,23 @@ impl DetachingCompletionHardware {
 impl TxHardware for DetachingCompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _: &dyn PreparedTxDma,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: u8,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
     }
 
-    fn start_bound_legacy_tx(&mut self, _: &dyn HardwareOwnedTxDma, _: u8) {}
+    fn start_bound_legacy_tx(
+        &mut self,
+        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+    ) {
+    }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _: &dyn PreparedTxDma,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: u8,
         program: MacHtTxProgram,
     ) -> bool {
@@ -153,11 +175,16 @@ impl TxHardware for DetachingCompletionHardware {
         !self.reject_publication
     }
 
-    fn start_bound_ht_tx(&mut self, _: &dyn HardwareOwnedTxDma, _: u8) {}
+    fn start_bound_ht_tx(
+        &mut self,
+        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: u8,
+    ) {
+    }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _: &dyn PreparedTxDma,
+        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: u8,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {

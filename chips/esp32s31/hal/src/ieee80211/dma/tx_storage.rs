@@ -15,7 +15,7 @@ use pin_project::pin_project;
 
 use crate::ieee80211::dma::space::DmaSpace;
 
-use crate::layouts::{DmaWindowAddress, WifiTxDmaDescriptorControl};
+use crate::layouts::{DmaRef, DmaWindowAddress, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
 
 use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, TxDescriptor, tx_owned_word};
 
@@ -78,12 +78,14 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
     pub fn pin<S: DmaSpace>(
         placed: Placed<Self>,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
-        let storage = placed.into_inner();
+        let (storage, range) = placed
+            .into_dma_parts::<S>()
+            .ok_or(TxDmaStorageError::Address)?;
         let descriptor_address = S::address(storage, core::ptr::addr_of!(storage.descriptor))
             .ok_or(TxDmaStorageError::Address)?;
         let buffer_address =
             S::address(storage, storage.buffer.0.as_ptr()).ok_or(TxDmaStorageError::Address)?;
-        Self::pin_static_inner(storage, descriptor_address, buffer_address)
+        Self::pin_static_inner(storage, range, descriptor_address, buffer_address)
     }
 
     #[allow(
@@ -92,23 +94,23 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
     )]
     fn pin_static_inner(
         storage: &'static mut Self,
+        range: StableDmaRange<'static>,
         descriptor_address: u32,
         buffer_address: u32,
     ) -> Result<PinnedTxDmaStorage<BUFFER_SIZE>, TxDmaStorageError> {
         let buffer_len = u32::try_from(BUFFER_SIZE).map_err(|_| TxDmaStorageError::Address)?;
 
-        // SAFETY: `storage` is a consumed unique static allocation. The
-        // returned owner retains it permanently, and its state machine is the
-        // only safe route to descriptor/buffer mutation.
-        let descriptor_range = unsafe {
-            StableDmaRange::from_raw_parts(descriptor_address, DESCRIPTOR_BYTES)
-                .ok_or(TxDmaStorageError::Address)?
-        };
-        // SAFETY: the same static owner contains this complete source buffer.
-        let buffer_range = unsafe {
-            StableDmaRange::from_raw_parts(buffer_address, buffer_len)
-                .ok_or(TxDmaStorageError::Address)?
-        };
+        let descriptor_range = range
+            .subrange(descriptor_address, DESCRIPTOR_BYTES)
+            .ok_or(TxDmaStorageError::Address)?;
+        let buffer_range = range
+            .subrange(buffer_address, buffer_len)
+            .ok_or(TxDmaStorageError::Address)?;
+
+        // SAFETY: this address names the initialized descriptor at its placed
+        // static location; the owner retains the allocation permanently.
+        let descriptor_head = unsafe { dma_address::placed_link(descriptor_address) }
+            .ok_or(TxDmaStorageError::Address)?;
 
         // SAFETY: `buffer_address` is the DMA address of the placed static's
         // buffer, which the link keeps in the DMA window and the owner
@@ -118,7 +120,7 @@ impl<const BUFFER_SIZE: usize> TxDmaStorage<BUFFER_SIZE> {
         Ok(PinnedTxDmaStorage {
             storage: Pin::static_mut(storage),
             binding: TxDmaBinding {
-                descriptor_address,
+                descriptor_head,
                 buffer_address,
                 buffer,
                 buffer_capacity: buffer_len,
@@ -137,7 +139,7 @@ impl<const BUFFER_SIZE: usize> Default for TxDmaStorage<BUFFER_SIZE> {
 
 /// Non-forgeable memory authority for one ordinary TX descriptor chain.
 pub struct TxDmaBinding {
-    descriptor_address: u32,
+    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     buffer_address: u32,
     buffer: DmaWindowAddress,
     buffer_capacity: u32,
@@ -147,7 +149,7 @@ pub struct TxDmaBinding {
 
 impl TxDmaBinding {
     pub const fn descriptor_address(&self) -> u32 {
-        self.descriptor_address
+        self.descriptor_head.bits()
     }
 
     pub const fn buffer_address(&self) -> u32 {
@@ -186,9 +188,9 @@ impl TxDmaStart<'_> {
 // only lends it to the start closure; the owner keeps the pinned descriptor
 // and buffer until completion or reset, and the private field prevents
 // forging the token.
-unsafe impl HardwareOwnedTxDma for TxDmaStart<'_> {
-    fn descriptor_head(&self) -> u32 {
-        self.binding.descriptor_address
+unsafe impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>> for TxDmaStart<'_> {
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
+        self.binding.descriptor_head
     }
 }
 
@@ -295,7 +297,7 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), TxDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_address) {
+        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
             return Err(TxDmaStorageError::Address);
         }
         self.transition_to_free(TxDmaState::Completed)
@@ -305,7 +307,7 @@ impl<const BUFFER_SIZE: usize> PinnedTxDmaStorage<BUFFER_SIZE> {
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), TxDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_address) {
+        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
             return Err(TxDmaStorageError::Address);
         }
         self.transition_to_free(TxDmaState::HardwareOwned)
@@ -399,9 +401,11 @@ impl<const BUFFER_SIZE: usize> TxDmaPublication<'_, BUFFER_SIZE> {
 // storage holds the initialized software-owned descriptor and buffer;
 // hardware cannot own it before `commit`, and the private field prevents
 // independent construction.
-unsafe impl<const BUFFER_SIZE: usize> PreparedTxDma for TxDmaPublication<'_, BUFFER_SIZE> {
-    fn descriptor_head(&self) -> u32 {
-        self.owner.binding.descriptor_address
+unsafe impl<const BUFFER_SIZE: usize> PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>
+    for TxDmaPublication<'_, BUFFER_SIZE>
+{
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
+        self.owner.binding.descriptor_head
     }
 }
 

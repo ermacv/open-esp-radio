@@ -59,6 +59,8 @@ pub use volatile::read_volatile;
 /// This trait deliberately exposes only the chain head, not its underlying
 /// [`StableDmaRange`]. Register adapters can therefore validate a TX control
 /// image without treating the same authority as an RX-walker allocation.
+/// `Address` is the register adapter's typed descriptor address; this crate
+/// imposes no chip-specific address representation.
 ///
 /// # Safety
 ///
@@ -93,6 +95,9 @@ pub unsafe trait PreparedTxDma<Address> {
 pub unsafe trait HardwareOwnedTxDma<Address> {
     fn descriptor_head(&self) -> Address;
 }
+
+#[cfg(test)]
+mod dma_range_tests;
 
 /// Non-forgeable proof that one address range remains valid for DMA.
 ///

@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 pub use oer_ieee80211_softmac::tx_cost::TxContention;
 
 use core::{
@@ -185,34 +187,48 @@ pub trait TxHardware {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool;
 
-    fn start_bound_legacy_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8);
+    fn start_bound_legacy_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    );
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: u8,
         _program: MacHtTxProgram,
     ) -> bool {
         false
     }
 
-    fn start_bound_ht_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {}
+    fn start_bound_ht_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
+    }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: u8,
         _program: MacHeTxProgram,
     ) -> bool {
         false
     }
 
-    fn start_bound_he_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {}
+    fn start_bound_he_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
+    }
     /// Sample one ordinary queue without changing or acknowledging it.
     ///
     /// Pure/model backends may omit this low-frequency hardware diagnostic.
@@ -247,40 +263,52 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_legacy_tx(self, dma, queue, program)
     }
 
-    fn start_bound_legacy_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_legacy_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_ht_tx(self, dma, queue, program)
     }
 
-    fn start_bound_ht_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_ht_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {
         WifiMacHal::prepare_bound_he_tx(self, dma, queue, program)
     }
 
-    fn start_bound_he_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_he_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
     }
 
@@ -323,40 +351,52 @@ impl TxHardware for RadioAccess {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_legacy_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_legacy_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         TxHardware::start_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_ht_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_ht_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         TxHardware::start_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma,
+        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {
         TxHardware::prepare_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue, program)
     }
 
-    fn start_bound_he_tx(&mut self, dma: &dyn HardwareOwnedTxDma, queue: u8) {
+    fn start_bound_he_tx(
+        &mut self,
+        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        queue: u8,
+    ) {
         TxHardware::start_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue);
     }
 

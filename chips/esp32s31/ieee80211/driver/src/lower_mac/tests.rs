@@ -1,3 +1,5 @@
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+
 use core::{cell::RefCell, pin::Pin};
 use std::{boxed::Box, vec::Vec};
 
@@ -104,7 +106,7 @@ impl Hardware {
 impl TxHardware for Hardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -112,11 +114,16 @@ impl TxHardware for Hardware {
         true
     }
 
-    fn start_bound_legacy_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {}
+    fn start_bound_legacy_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
+    }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHtTxProgram,
     ) -> bool {
@@ -124,11 +131,16 @@ impl TxHardware for Hardware {
         true
     }
 
-    fn start_bound_ht_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {}
+    fn start_bound_ht_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
+    }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma,
+        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: u8,
         program: MacHeTxProgram,
     ) -> bool {
@@ -136,7 +148,12 @@ impl TxHardware for Hardware {
         true
     }
 
-    fn start_bound_he_tx(&mut self, _dma: &dyn HardwareOwnedTxDma, _queue: u8) {}
+    fn start_bound_he_tx(
+        &mut self,
+        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _queue: u8,
+    ) {
+    }
 
     fn take_tx_completion(&mut self, queue: u8) -> Option<MacTxCompletionObservation> {
         self.completion[usize::from(queue)].take()

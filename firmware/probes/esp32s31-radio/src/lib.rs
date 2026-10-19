@@ -12,6 +12,7 @@
 // PHY partition. They cannot acquire, release, or recover the complete Wi-Fi
 // owner. Release-relevant production probes below acquire opaque HAL owners.
 
+use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 use oer_esp32s31_pac::RadioPhyRegisters;
 
 use oer_esp32s31_ieee80211_mac::ap_tsf::AccessPointTsf;
@@ -709,13 +710,13 @@ struct CanonicalHeTxParameters {
     hardware_key_selector: u32,
 }
 
-struct ValidationPreparedTxDma(u32);
+struct ValidationPreparedTxDma(DmaRef<WifiTxDmaDescriptor>);
 
 // SAFETY: this verification-only authority is instantiated solely from the
 // profile-owned stable descriptor memory used by the isolated instruction
 // trace. It is never exposed to production code or real hardware.
-unsafe impl oer_memory::PreparedTxDma for ValidationPreparedTxDma {
-    fn descriptor_head(&self) -> u32 {
+unsafe impl oer_memory::PreparedTxDma<DmaRef<WifiTxDmaDescriptor>> for ValidationPreparedTxDma {
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
         self.0
     }
 }
@@ -809,7 +810,12 @@ oer_probe_macros::probe! {
         };
         let [data_power_primary, data_power_alternate] = power(ht.power_lookup_code());
         let [rts_power_primary, rts_power_alternate] = power(control.code());
-        let dma = ValidationPreparedTxDma(parameters.descriptor_head);
+        let dma = ValidationPreparedTxDma(
+            // SAFETY: the isolated trace profile owns this stable descriptor
+            // allocation; no real DMA actor is running in the harness.
+            unsafe { oer_esp32s31_hal::dma_address::placed_link(parameters.descriptor_head) }
+                .expect("trace profile owns a non-null TX descriptor"),
+        );
         let program = MacHtTxProgram::new(
             &dma,
             MacHtTxParameters {
@@ -882,7 +888,12 @@ oer_probe_macros::probe! {
         };
         let [data_power, _] = power(rate.code());
         let [rts_power_primary, rts_power_alternate] = power(control.code());
-        let dma = ValidationPreparedTxDma(parameters.descriptor_head);
+        let dma = ValidationPreparedTxDma(
+            // SAFETY: the isolated trace profile owns this stable descriptor
+            // allocation; no real DMA actor is running in the harness.
+            unsafe { oer_esp32s31_hal::dma_address::placed_link(parameters.descriptor_head) }
+                .expect("trace profile owns a non-null TX descriptor"),
+        );
         let program = MacLegacyTxProgram::new(
             &dma,
             MacLegacyTxParameters {
@@ -981,7 +992,12 @@ oer_probe_macros::probe! {
         };
         let [data_power_primary, data_power_alternate] = power(rate.power_lookup_code());
         let [rts_power_primary, rts_power_alternate] = power(control.code());
-        let dma = ValidationPreparedTxDma(parameters.descriptor_head);
+        let dma = ValidationPreparedTxDma(
+            // SAFETY: the isolated trace profile owns this stable descriptor
+            // allocation; no real DMA actor is running in the harness.
+            unsafe { oer_esp32s31_hal::dma_address::placed_link(parameters.descriptor_head) }
+                .expect("trace profile owns a non-null TX descriptor"),
+        );
         let program = MacHeTxProgram::new(
             &dma,
             MacHeTxParameters {

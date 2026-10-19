@@ -13,7 +13,7 @@ use crate::types::MacTxQueueDetached;
 use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
-use crate::layouts::WifiTxDmaDescriptorControl;
+use crate::layouts::{DmaRef, WifiTxDmaDescriptor, WifiTxDmaDescriptorControl};
 
 use crate::ieee80211::dma::descriptor::{DESCRIPTOR_BYTES, TxDescriptor, tx_owned_word};
 
@@ -151,7 +151,9 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
     pub fn pin<S: DmaSpace>(
         placed: Placed<Self>,
     ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
-        let storage = placed.into_inner();
+        let (storage, range) = placed
+            .into_dma_parts::<S>()
+            .ok_or(AmpduDmaStorageError::Address)?;
         let descriptor_base = S::address(storage, storage.descriptors.as_ptr())
             .ok_or(AmpduDmaStorageError::Address)?;
         let buffer_base = if BUFFER_SIZE == 0 {
@@ -161,6 +163,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         };
         Self::pin_static_inner(
             storage,
+            range,
             descriptor_base,
             buffer_base,
             external_region_address::<S>,
@@ -173,6 +176,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
     )]
     fn pin_static_inner(
         storage: &'static mut Self,
+        range: StableDmaRange<'static>,
         descriptor_base: u32,
         buffer_base: u32,
         external_region: fn(&[u8]) -> Option<u32>,
@@ -183,12 +187,13 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         }
         let descriptor_len = u32::try_from(core::mem::size_of_val(&storage.descriptors))
             .map_err(|_| AmpduDmaStorageError::Address)?;
-        let descriptor_range = unsafe {
-            // SAFETY: the returned owner permanently retains this unique
-            // static descriptor allocation and owns every state transition.
-            StableDmaRange::from_raw_parts(descriptor_base, descriptor_len)
-                .ok_or(AmpduDmaStorageError::Address)?
-        };
+        let descriptor_range = range
+            .subrange(descriptor_base, descriptor_len)
+            .ok_or(AmpduDmaStorageError::Address)?;
+        // SAFETY: the head names the first aligned descriptor of the placed
+        // static arena; the owner retains the whole allocation permanently.
+        let descriptor_head = unsafe { dma_address::placed_link(descriptor_base) }
+            .ok_or(AmpduDmaStorageError::Address)?;
 
         let buffer_stride = u32::try_from(core::mem::size_of::<AmpduDmaBuffer<BUFFER_SIZE>>())
             .map_err(|_| AmpduDmaStorageError::Address)?;
@@ -199,18 +204,17 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
         } else {
             let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
                 .map_err(|_| AmpduDmaStorageError::Address)?;
-            Some(unsafe {
-                // SAFETY: the same static owner retains the entire aligned
-                // internal buffer arena for every DMA lifecycle state.
-                StableDmaRange::from_raw_parts(buffer_base, buffer_len)
-                    .ok_or(AmpduDmaStorageError::Address)?
-            })
+            Some(
+                range
+                    .subrange(buffer_base, buffer_len)
+                    .ok_or(AmpduDmaStorageError::Address)?,
+            )
         };
 
         Ok(PinnedAmpduDmaStorage {
             storage: Pin::static_mut(storage),
             binding: AmpduDmaBinding {
-                descriptor_base,
+                descriptor_head,
                 descriptor_count,
                 descriptor_range,
                 buffer_base,
@@ -240,7 +244,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> Default for AmpduDmaStorage<S
 
 /// Private-range authority for one statically retained aggregate arena.
 pub struct AmpduDmaBinding {
-    descriptor_base: u32,
+    descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     descriptor_count: u8,
     descriptor_range: StableDmaRange<'static>,
     buffer_base: u32,
@@ -254,7 +258,7 @@ pub struct AmpduDmaBinding {
 
 impl AmpduDmaBinding {
     pub const fn descriptor_head(&self) -> u32 {
-        self.descriptor_base
+        self.descriptor_head.bits()
     }
 
     pub const fn descriptor_count(&self) -> u8 {
@@ -264,7 +268,8 @@ impl AmpduDmaBinding {
     pub fn descriptor_address(&self, index: usize) -> Option<u32> {
         (index < usize::from(self.descriptor_count))
             .then(|| {
-                self.descriptor_base
+                self.descriptor_head
+                    .bits()
                     .checked_add(u32::try_from(index).ok()?.checked_mul(DESCRIPTOR_BYTES)?)
             })
             .flatten()
@@ -299,9 +304,9 @@ pub struct AmpduDmaStart<'owner> {
 // creating this token and only lends it to the start closure; the owner keeps
 // every descriptor and buffer until completion or reset, and the private
 // field prevents forging the token.
-unsafe impl HardwareOwnedTxDma for AmpduDmaStart<'_> {
-    fn descriptor_head(&self) -> u32 {
-        self.binding.descriptor_base
+unsafe impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>> for AmpduDmaStart<'_> {
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
+        self.binding.descriptor_head
     }
 }
 
@@ -476,7 +481,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_base) {
+        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
             return Err(AmpduDmaStorageError::Address);
         }
         self.transition(AmpduDmaState::Completed, AmpduDmaState::Detached)
@@ -506,7 +511,7 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_base) {
+        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
             return Err(AmpduDmaStorageError::Address);
         }
         self.clear_to_free(AmpduDmaState::HardwareOwned)
@@ -1349,11 +1354,12 @@ pub struct RetainedAmpduDmaPublication<
 // SAFETY: this token exists only after the retaining owner published the
 // complete aggregate chain; it mutably borrows that owner, which retains
 // every external lease, and hardware cannot own the chain before `commit`.
-unsafe impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma
+unsafe impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
+    PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>
     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
 {
-    fn descriptor_head(&self) -> u32 {
-        self.owner.dma().binding.descriptor_base
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
+        self.owner.dma().binding.descriptor_head
     }
 }
 
@@ -1384,11 +1390,11 @@ pub struct AmpduDmaPublication<'owner, const SLOTS: usize, const BUFFER_SIZE: us
 // SAFETY: this token exists only after the pinned owner published and
 // validated the internal aggregate chain; it mutably borrows that owner, and
 // hardware cannot own the chain before `commit`.
-unsafe impl<const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma
+unsafe impl<const SLOTS: usize, const BUFFER_SIZE: usize> PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>
     for AmpduDmaPublication<'_, SLOTS, BUFFER_SIZE>
 {
-    fn descriptor_head(&self) -> u32 {
-        self.owner.binding.descriptor_base
+    fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
+        self.owner.binding.descriptor_head
     }
 }
 
