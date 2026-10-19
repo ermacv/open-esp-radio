@@ -6,17 +6,17 @@ Wi-Fi works again only if it prepares the shared PHY (RF wake) and enables
 coexistence **before** it enters common power again. The first start works in
 either order.
 
-**Order kept by the predecessor:** prepare the shared PHY, enable coexistence,
-then enter common power. Bluetooth LE and IEEE 802.15.4 entered power before
-the PHY and passed their scenarios, but none of their scenarios covered a full
-power cycle with an RF wake.
+**Order that works:** prepare the shared PHY, enable coexistence, then enter
+common power. Bluetooth LE and IEEE 802.15.4 entering power before the PHY
+passed their scenarios, but none of their scenarios covered a full power
+cycle with an RF wake.
 
-Source: predecessor HIL runs and issue discussion, 2026-10-11/12.
+Source: stand measurement, 2026-10-11/12 (record outside this repository).
 
 ## Conditions
 
 - Scenario: station stopped, radio restarted (full common-power cycle with an
-  RF close), station rejoins, on the predecessor's HIL stand. Board
+  RF close), station rejoins, on the HIL stand. Board
   revision, supply and RF environment not recorded.
 - Order changes were applied on the restart and, where stated, on the first
   start.

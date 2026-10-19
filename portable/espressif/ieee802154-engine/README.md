@@ -28,8 +28,8 @@ with the compiled vendor driver.
 
 ## Bring-up and teardown order
 
-No runtime holds the engine now; the former ESP32-S31 runtime brought the
-radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
+No runtime in this repository holds the engine; a runtime that does brings
+the radio up in the order of ESP-IDF's `esp_ieee802154_enable`:
 
 1. the common radio power and the IEEE 802.15.4 module clocks;
 2. the shared PHY domain: registered, woken or joined as the
@@ -47,11 +47,10 @@ runtime was a process singleton: source 132 had one handler.
 ## Enhanced ACK and transmit security
 
 The engine calls its environment for each received 2015 frame that requests
-an ACK and at each transmit SFD; no generator answers it now. The former
-radio role answered as ESP-IDF's OpenThread
-port does (`esp_openthread_radio.c` at ESP-IDF
+an ACK and at each transmit SFD; no generator in this repository answers it.
+A radio role answers as ESP-IDF's OpenThread port does (`esp_openthread_radio.c` at ESP-IDF
 [`7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`](https://github.com/espressif/esp-idf/blob/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/openthread/src/port/esp_openthread_radio.c)),
-and a new generator keeps these rules:
+and a generator keeps these rules:
 
 - IE order (`ot_radio_enh_ack_generator`):
   1. the CSL IE template, when the receiver runs CSL (a nonzero period);

@@ -3,9 +3,7 @@
 `esp32s31-bt-lib` has no license. Under "Sources without a license" in
 [the source policy](../../../docs/source-policy.md), the repository may record
 only facts from it: values, layouts, addresses, order of operations and names.
-It records neither code nor verbatim data blocks. Code and tables of that
-library carried into the predecessor repository were not taken over; the
-facts they held are kept here.
+It records neither code nor verbatim data blocks; the facts are kept here.
 
 Clean-room rule: these notes hold facts only. Our code is written from the
 Bluetooth Core Specification, these facts and hardware measurements, never

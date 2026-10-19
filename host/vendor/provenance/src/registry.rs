@@ -24,7 +24,7 @@
 //! one is an error. The platform's ROM function summaries cite the ROM's
 //! copy. A coverage decision names the function a scenario executed,
 //! whichever copy its link took, and cites every copy until coverage
-//! locations carry the copy (). Accepting a copy no citation names any longer removes its
+//! locations carry the copy. Accepting a copy no citation names any longer removes its
 //! registration.
 use crate::Result;
 use crate::fingerprint::Function;
@@ -473,8 +473,7 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
     );
 
     // A decision names the function a scenario executed, whichever copy its
-    // link took; its copy is not named until coverage locations carry one
-    // (), so it cites every copy.
+    // link took; coverage locations carry no copy, so it cites every copy.
     let decisions = decision_words(&decision_files(root, &scanned)?)?;
     words.extend(decisions.keys().cloned());
     if let Some(rom) = scanned.rom(root)?

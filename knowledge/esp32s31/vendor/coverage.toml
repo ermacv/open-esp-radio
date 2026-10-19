@@ -1,13 +1,13 @@
-# ESP32-S31 vendor coverage decisions: the vendor code locations the
-# predecessor's vendor-comparison scenarios never reached, each with the
-# reason, and how this port stands against it.
+# ESP32-S31 vendor coverage decisions: the vendor code locations that the
+# vendor-comparison scenarios of a stack outside this repository never
+# reached, each with the reason, and how this port stands against it.
 #
-# Carried from the predecessor's reviewed coverage exclusions (state of
-# 2026-10-16). `reason` keeps the predecessor's wording; "production" there
-# means the predecessor's Rust stack. Data only: nothing reads this file.
+# The reviewed coverage exclusions of that stack, state of 2026-10-16.
+# `reason` keeps that review's wording; "production" there means that stack.
+# The provenance check reads the function names the decisions cite.
 #
 # Fields of a `[[decision]]`:
-# - `id`: stable number in the predecessor's order.
+# - `id`: stable number of the decision.
 # - `area`: the vendor area in a few words.
 # - `decision`:
 #   - `covered-differently`: the port has the behaviour through its own
@@ -17,14 +17,11 @@
 #     compiler or C runtime code, arguments or branches no admitted input
 #     reaches, requests the port rejects as outside its profile, vendor roles
 #     with no owner here);
-#   - `deferred`: a radio capability the port does not implement yet; a
-#     change that adds it reopens the decision.
-# - `closes_in` (only for `deferred`): the slice or wave that closes it
-#   (W2–W6, the second block, the coexistence or Bluetooth LE block, PHY
-#   slicing), or `unscheduled`. Each slot is the owner's (2026-10-18).
+#   - `deferred`: a radio capability the port does not implement; a change
+#     that adds it reopens the decision.
 # - `port_status`: `present` (every listed item exists in this repository),
-#   `partial` (some of the counterpart exists only in the predecessor; see
-#   `review`), `predecessor-only`, or `none` (nothing to cover).
+#   `partial` (some of the counterpart exists only outside this repository;
+#   see `review`), or `none` (nothing to cover).
 # - `port`: current items, as "<file> <item>", that implement, bound or
 #   reject the path; a file alone names a module.
 # - `review`: optional; where this repository disagrees with the reason or a
@@ -32,7 +29,7 @@
 #
 # A `[[decision.place]]` names a vendor `function`: the whole function, a
 # `diagnostic` output function, or byte offsets `start` up to `end` inside it,
-# in the pinned artifacts of `artifacts.toml`. `note` keeps the predecessor's
+# in the pinned artifacts of `artifacts.toml`. `note` keeps that review's
 # comment on that place.
 schema = 1
 
@@ -43,7 +40,7 @@ decision = "covered-differently"
 reason = """
 the default buffer recycle handler, which logs an unregistered buffer type \
 and returns zero: production has no untyped buffer-type dispatch; its \
-buffer ownership kinds are typed owners (reviewed with the Wi-Fi owner)"""
+buffer ownership kinds are typed owners"""
 port_status = "present"
 port = [
     "chips/esp32s31/hal/src/ieee80211/dma/rx_ring.rs RxRingLive",
@@ -59,12 +56,12 @@ decision = "covered-differently"
 reason = """
 the overflow of the posted task queue, which logs and reports the post as \
 failed: production has no posted task queue; its wakes coalesce and its \
-control mailbox overflow is terminal (reviewed with the Wi-Fi owner)"""
+control mailbox overflow is terminal"""
 port_status = "partial"
 port = ["chips/esp32s31/ieee80211/driver/src/irq.rs"]
 review = """
 wake coalescing is present; a terminal control-mailbox overflow was not \
-found in this repository (predecessor only)"""
+found in this repository"""
 [[decision.place]]
 function = "pp_post"
 start = 0x112
@@ -75,8 +72,7 @@ id = 3
 area = "Wi-Fi diagnostics: transmit format names"
 decision = "not-needed"
 reason = """
-diagnostic formatting of a transmit format for vendor logs (reviewed with \
-the Wi-Fi owner)"""
+diagnostic formatting of a transmit format for vendor logs"""
 port_status = "none"
 port = []
 [[decision.place]]
@@ -160,7 +156,7 @@ reason = """
 the descriptor class of word-zero bit 24, for which `mac_tx_set_plcp1` \
 publishes vector format three and `mac_tx_set_len` skips the non-HE data \
 length: production publishes vector formats zero to two only and always \
-writes the non-HE data length (reviewed with the Wi-Fi owner)"""
+writes the non-HE data length"""
 port_status = "present"
 port = [
     "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHtTxProgram",
@@ -228,10 +224,8 @@ end = 0x5a
 id = 8
 area = "Wi-Fi TX: HE PPDU at 40 MHz"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
-an HE PPDU at 40 MHz: production transmits HE at 20 MHz only (reviewed \
-with the Wi-Fi owner)"""
+an HE PPDU at 40 MHz: production transmits HE at 20 MHz only"""
 port_status = "present"
 port = ["chips/esp32s31/ieee80211/mac/src/tx.rs HeRate"]
 [[decision.place]]
@@ -249,7 +243,7 @@ container without its first-MPDU bit 19 (only later MPDUs carry that, and \
 no PLCP0 follows them), the bit-20 class of PLCP0 format three, and an HE \
 PPDU without the SU-acknowledgement bit 30 (HE no-ack and trigger-based \
 are fail-closed); production publishes the PLCP0 format from its typed \
-program (reviewed with the Wi-Fi owner)"""
+program"""
 port_status = "present"
 port = [
     "chips/esp32s31/pac/src/wifi/mac/tx.rs MacHeTxProgram",
@@ -354,12 +348,10 @@ end = 0xaa
 id = 14
 area = "Wi-Fi TX: TXOP holding"
 decision = "deferred"
-closes_in = "W6: throughput"
 reason = """
 TXOP holding: the descriptor's TXOP request raises the queue's PTI TXOP \
 bit, and `mac_tx_set_txop_q` programs a granted TXOP slot; production \
-holds no TXOP and clears that bit for every SU PPDU (reviewed with the \
-Wi-Fi owner)"""
+holds no TXOP and clears that bit for every SU PPDU"""
 port_status = "present"
 port = ["chips/esp32s31/pac/src/wifi/mac/tx.rs prepare_ht_mac_tx"]
 review = """
@@ -378,11 +370,9 @@ function = "hal_mac_fill_hwtxop"
 id = 15
 area = "Wi-Fi TX: software HE-Control image"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
 a software HE-Control image: the driver never supplies one, so the \
-hardware BSR path stays selected and `mac_tx_set_tb` is reached (reviewed \
-with the Wi-Fi owner)"""
+hardware BSR path stays selected and `mac_tx_set_tb` is reached"""
 port_status = "present"
 port = ["portable/ieee80211/mac/src/data.rs DataHeControl"]
 [[decision.place]]
@@ -402,11 +392,10 @@ end = 0x20
 id = 16
 area = "Wi-Fi TX: HE trigger-based preparation"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
 HE trigger-based preparation: production keeps HE-TB fail-closed and \
 transmits HE SU only, so the MPDU-length links, their bitmap checks and \
-the TB-flow configuration are not used (reviewed with the Wi-Fi owner)"""
+the TB-flow configuration are not used"""
 port_status = "present"
 port = [
     "chips/esp32s31/ieee80211/mac/src/tx/ampdu/owner.rs submit_he",
@@ -432,10 +421,9 @@ function = "dbg_hal_check_clr_mplen_bitmap"
 id = 17
 area = "Wi-Fi HE: BSS color of a non-station interface"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
 the BSS color of an interface other than the station: the access point \
-transmits no HE (reviewed with the Wi-Fi owner)"""
+transmits no HE"""
 port_status = "present"
 port = ["portable/ieee80211/mac/src/he.rs effective_bss_color"]
 [[decision.place]]
@@ -523,12 +511,11 @@ end = 0xf4
 id = 22
 area = "Wi-Fi EDCA: MU-EDCA minimum exponent after success"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
 the MU-EDCA minimum exponent a success restores for a frame whose \
 descriptor selects MU EDCA: production neither negotiates nor applies the \
 MU-EDCA parameter set (`is_use_muedca` is zero for it) and always restores \
-the ordinary minimum (reviewed with the Wi-Fi owner)"""
+the ordinary minimum"""
 port_status = "present"
 port = ["chips/esp32s31/ieee80211/mac/src/edca.rs EdcaBackoffState"]
 [[decision.place]]
@@ -544,11 +531,10 @@ end = 0x24
 id = 23
 area = "Wi-Fi TX: TXOP bursting completion"
 decision = "deferred"
-closes_in = "W6: throughput"
 reason = """
 TXOP bursting: `lmacProcessTxSuccess` completes a held TXOP slot through \
 `lmacProcessTxopQComplete`; production holds no TXOP slot and runs every \
-transaction as its own exchange (reviewed with the Wi-Fi owner)"""
+transaction as its own exchange"""
 port_status = "none"
 port = []
 [[decision.place]]
@@ -566,8 +552,7 @@ reason = """
 a per-frame RTS length threshold in the transmit descriptor: production \
 has none, only the BSS length and HE TXOP-duration rules; after a success \
 it only chooses which queue short or long counter the vendor resets, and \
-the compared contention exponent is the same on both paths (reviewed with \
-the Wi-Fi owner)"""
+the compared contention exponent is the same on both paths"""
 port_status = "present"
 port = [
     "chips/esp32s31/ieee80211/mac/src/tx/protection.rs WifiTxProtectionPolicy",
@@ -624,7 +609,6 @@ end = 0xf6
 id = 27
 area = "Wi-Fi rate control: HE DCM rate clamp"
 decision = "deferred"
-closes_in = "W5: HE"
 reason = """
 the HE DCM rate clamp of `rcGetDCMMaxRate`, which acts only when transmit \
 descriptor word 0x30 bit 17 is set: the vendor's ordinary data path never \
@@ -632,7 +616,7 @@ sets it (no writer in libpp, libnet80211 or libcoexist; its only DCM path \
 is `esp_wifi_80211_tx` with an explicit `esp_wifi_config_80211_tx` DCM \
 configuration), and production enables no DCM on ordinary frames (its \
 composition sets no HE DCM override); a production raw transmit API with \
-DCM would need this decision revisited (reviewed with the Wi-Fi owner)"""
+DCM would need this decision revisited"""
 port_status = "present"
 port = [
     "chips/esp32s31/ieee80211/mac/src/tx.rs rate_control_dcm_fallback_code",
@@ -640,8 +624,8 @@ port = [
 review = """
 this repository maps a portable DCM HE rate to `HeRate::bcc_dcm` \
 (chips/esp32s31/ieee80211/mac/src/portable.rs); whether that reaches \
-ordinary data frames was not checked, and the predecessor's reason asks \
-for a revisit once a DCM transmit path exists"""
+ordinary data frames was not checked, and the reason asks for a revisit \
+once a DCM transmit path exists"""
 [[decision.place]]
 function = "rcGetDCMMaxRate"
 start = 0x8
@@ -912,7 +896,6 @@ note = "... and their 5-GHz and channel-14 blocks."
 id = 37
 area = "PHY RX-DC: minimum search that admits no estimate"
 decision = "deferred"
-closes_in = "PHY slicing"
 reason = """
 RX-DC minimum search that admits no estimate: readiness activity without a \
 detected RX saturation, whose first radio search returns the ROM's \
@@ -1412,7 +1395,6 @@ note = "The `phy_param[0x26]` guard's enabled path up to the 802.11p guard."
 id = 63
 area = "Coexistence: external work modes 1 and above 2"
 decision = "deferred"
-closes_in = "coexistence block"
 reason = """
 external coexistence work modes production rejects without a write: mode \
 1, whose vendor path sets bits 31:30 of the external configuration, and \
@@ -1452,7 +1434,7 @@ reason = """
 low-power clock selection for the coexistence module (8): production owns \
 only the Bluetooth module's selection \
 (`SharedRadioLease::select_bluetooth_low_power_clock`), and no ESP-IDF \
-path selects the coexistence module's (reviewed with the Bluetooth owner)"""
+path selects the coexistence module's"""
 port_status = "present"
 port = ["chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
 [[decision.place]]
@@ -1473,15 +1455,13 @@ function = "modem_clock_hal_deselect_all_coex_lpclk_source"
 id = 65
 area = "Modem clock: Bluetooth low-power sources other than the main crystal"
 decision = "deferred"
-closes_in = "Bluetooth LE block"
 reason = """
 low-power clock sources other than the main crystal: production implements \
 only the default main-crystal source (ESP-IDF \
 `MODEM_CLOCK_LPCLK_SRC_MAIN_XTAL`) with the ESP32-S31 Bluetooth divider, \
 where other chips' controllers choose RC slow or a 32 kHz crystal by \
 configuration; a source the vendor maps to no module returns before any \
-write, and a module outside the vendor's range asserts (reviewed with the \
-Bluetooth owner)"""
+write, and a module outside the vendor's range asserts"""
 port_status = "present"
 port = [
     "chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock",
@@ -1512,12 +1492,11 @@ reason = """
 the vendor's interrupt-context critical section (`xPortInIsrContext`): the \
 ESP-IDF modem clock driver takes its spinlock through the ISR variant \
 inside an interrupt; production's lease runs the selection in task context \
-only, during the Controller clock transition (reviewed with the Bluetooth \
-owner)"""
+only, during the Controller clock transition"""
 port_status = "present"
 port = ["chips/esp32s31/hal/src/domain.rs select_bluetooth_low_power_clock"]
 review = """
-the predecessor named a shared radio lease as the task-context owner; this \
+the reason names a shared radio lease as the task-context owner; this \
 repository has no such lease, the selection belongs to `RadioDomain`"""
 [[decision.place]]
 function = "modem_clock_select_lp_clock_source"

@@ -1,11 +1,10 @@
 # Wi-Fi interrupt-bank writes requested from task context
 
-Two register transactions on the MAC and WDEVPWR interrupt banks were once
-applied by task context while an interrupt epoch was live: the connected-STA
-beacon-filter disable and the WDEVPWR wake-cause mask and acknowledgement.
-W1 removed both live paths; only the cold path (before the CPU route is bound)
-keeps the beacon-filter disable. This note records their facts so that W3 can
-rebuild them on the radio doorbell.
+Two register transactions on the MAC and WDEVPWR interrupt banks apply while
+an interrupt epoch is live: the connected-STA beacon-filter disable and the
+WDEVPWR wake-cause mask and acknowledgement. No live path in this repository
+applies them; only the cold path (before the CPU route is bound) applies the
+beacon-filter disable. This note records their facts.
 
 ## Banks
 
@@ -74,10 +73,10 @@ proof that the selected cause can wake production firmware.
 The runtime enable set at epoch activation is ENABLE bit 3 (`TBTT_0`) alone
 (complete `libpp[hal_tsf.o]::hal_enable_sta_tbtt`).
 
-## At W3
+## On the radio doorbell
 
-Each of these becomes a request on the radio doorbell: the radio executor
-(P2) sets a request bit and rings the doorbell; the P3 line, which owns both
+Each of these is a request on the radio doorbell: the radio executor (P2)
+sets a request bit and rings the doorbell; the P3 line, which owns both
 interrupt banks, applies the transaction in its doorbell handler. Task context
 never writes the banks of a live epoch. W1's doorbell carries only the
 `UNMASK_RX` and `MASK_ALL` requests.

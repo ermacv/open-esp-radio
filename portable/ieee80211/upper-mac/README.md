@@ -111,6 +111,6 @@ from its chip rate and completion types.
 
 ## Known defects
 
-- **Nit** (predecessor review, 2026-10-16): `protection.rs` asserts a
+- **Nit** (code review, 2026-10-16; record outside this repository): `protection.rs` asserts a
   constant with the `[(); bool as usize]` array hack instead of
   `const { assert!(../../../portable/ieee80211) }`.

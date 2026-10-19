@@ -8,8 +8,7 @@
 This workspace selects the shared board boot and memory profile and owns the
 Embassy executor, the USB Serial/JTAG transport and the HIL workloads of the
 radio-free system images. Effective dependency locks are archived beside each
-image. The radio images and their workloads went with the orchestration in
-; tag `legacy-radio-2026-10-16` holds them.
+image. No radio image is here.
 
 ## Application boundaries
 

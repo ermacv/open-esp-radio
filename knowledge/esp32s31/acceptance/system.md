@@ -1,6 +1,6 @@
 # System acceptance scenarios
 
-Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
+HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too. No scenario here needs a peer.
 
 ## Boot smoke (qualification)
 
@@ -8,7 +8,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
   SRAM and runtime startup. The console shows the boot-smoke and timer PASS
   markers and no panic marker.
 - Gate: within 10 s of boot.
-- Hardware: pass, predecessor HIL run 2026-10-04 and many earlier runs.
+- Hardware: pass, stand run 2026-10-04 and many earlier runs.
 
 ## Timebase: alarm and monotonic clock agree
 
@@ -18,7 +18,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
   - Device elapsed time is 95–110 % of expected.
   - Host elapsed time is 95–120 % of expected.
   - Each interval is 95–150 % of its period, and no interval is early.
-- Hardware: pass, predecessor HIL run 2026-10-04.
+- Hardware: pass, stand run 2026-10-04.
 
 ## Interrupt table enable and disable
 
@@ -26,14 +26,14 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
   enabled.
 - Gate: 10 probes. Per probe, the handler runs 0 times before enable, exactly
   once while enabled and 0 times after disable, within 5 s.
-- Hardware: pass, predecessor HIL run 2026-10-04.
+- Hardware: pass, stand run 2026-10-04.
 
 ## Inter-core call
 
 - Checks: calls core 0 → 0, core 0 → 1 and core 1 → 0 each run on the target
   core.
 - Gate: 20 calls of each kind, 5 s per call. No latency bound.
-- Hardware: pass, predecessor HIL run 2026-10-04.
+- Hardware: pass, stand run 2026-10-04.
 
 ## Panic reset and post-mortem record
 
@@ -42,7 +42,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
   file at a non-zero line, hart 0, in thread context.
 - Gate: the reboot comes 100 ms–15 s after the panic, with reset reason
   Software.
-- Hardware: pass, predecessor HIL run 2026-10-04.
+- Hardware: pass, stand run 2026-10-04.
 
 ## Main watchdog: completion and four failure modes
 
@@ -54,7 +54,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
     last checkpoint is the watchdog arm of that mode.
 - Gate: 3 repetitions. In the failure modes the reboot comes 500 ms–12 s after
   arming; the watchdog budget is 1 s.
-- Hardware: pass, predecessor HIL run 2026-10-04. The post-mortem survived 12
+- Hardware: pass, stand run 2026-10-04. The post-mortem survived 12
   of 12 resets (2026-09-28).
 
 ## Hang watchdog: stalled executor or console
@@ -69,7 +69,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
   - The reboot comes 5–25 s after arming: an executor stall is detected at
     3 s, a waiting command at 5 s, and sampling adds 4 s.
   - Reset reason Software.
-- Hardware: partial, predecessor HIL run 2026-10-04. Both executor stalls were
+- Hardware: partial, stand run 2026-10-04. Both executor stalls were
   detected; the console-stall case failed.
 
 ## Memory copy benchmark: CPU and GDMA from SRAM and PSRAM
@@ -87,7 +87,7 @@ Predecessor HIL catalog, state of 2026-10-16. No scenario here needs a peer.
     per boot × 2 boots).
   - 15 s per case.
   - No bandwidth floor; throughput is diagnostic.
-- Hardware: pass, predecessor HIL runs 2026-10-03 (batch, 144 cases) and
+- Hardware: pass, stand runs 2026-10-03 (batch, 144 cases) and
   2026-10-04 (plain). No bandwidth values were recorded.
 
 ## Stand recovery ladder

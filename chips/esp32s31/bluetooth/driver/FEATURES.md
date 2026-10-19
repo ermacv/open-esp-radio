@@ -9,9 +9,8 @@ for cross-protocol composition limits.
 
 ## Legacy advertising and scanning
 
-The Controller core and the S31 radio role that ran advertising, scanning and
-peripheral connections were removed with the Bluetooth LE orchestration
-(, tag `legacy-radio-2026-10-16`).
+No Controller core or S31 radio role in this repository runs advertising,
+scanning or peripheral connections.
 
 ## Capability advertisement
 

@@ -9,8 +9,8 @@
 //!   ([`StaRateControlAssociation::control_schedule`](crate::rate_control::StaRateControlAssociation::control_schedule)),
 //!   the four-way handshake's EAPOL included. The rates depend on what is
 //!   known of the access point, which the association makes known; the
-//!   former ESP32-S31 path switched only once connected, a consequence of
-//!   when the vendor calls `ic_set_sta` (a deliberate departure).
+//!   vendor switches only once connected, a consequence of when it calls
+//!   `ic_set_sta` (a deliberate departure).
 //! - A data MPDU starts at the rate the association's rate control holds
 //!   ([`EspressifRateControl`]) and steps down the vendor's retry ladder
 //!   ([`ordinary_retry_rate`]), within the publication budget of the

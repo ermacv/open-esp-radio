@@ -1,11 +1,11 @@
 # Wi-Fi HE A-MPDU: hardware HE-Control and Trigger MSDU lengths
 
-Source: the ESP32-S31 A-MPDU formatter in
-`chips/esp32s31/ieee80211/mac/src/tx/ampdu/` as it stood before its
-host-only inline write path was removed, and the two tests that pinned these
-facts there (`hardware_he_control_uses_vendor_metadata_bit_without_dma_placeholder`,
-`he_trigger_preparation_uses_original_msdu_lengths_and_exact_link_range`).
-The SOURCE tags are the ones those comments and tests carried. Facts only.
+Source: a host-only inline write path of an ESP32-S31 A-MPDU formatter and two
+tests that pinned these facts
+(`hardware_he_control_uses_vendor_metadata_bit_without_dma_placeholder`,
+`he_trigger_preparation_uses_original_msdu_lengths_and_exact_link_range`),
+records outside this repository. The SOURCE tags are the ones those comments
+and tests carry. Facts only.
 
 ## The subframe DMA metadata prefix
 

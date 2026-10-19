@@ -3,8 +3,7 @@
 //! anything is built or leased.
 //!
 //! A segment is one image on one board lane. Every segment takes its own
-//! lease, whose hard limit is the segment's estimate times a margin (
-//! Q4). A segment closes before that limit would pass the stand's longest
+//! lease, whose hard limit is the segment's estimate times a margin. A segment closes before that limit would pass the stand's longest
 //! lease, and a scenario that cannot fit in any lease is refused rather
 //! than given a shorter margin. The image is built before its first
 //! segment's lease, so builds count toward the tier's wall time only.
@@ -12,8 +11,7 @@
 //! lane-isolation result.
 //!
 //! Every instance's waits are sized by its contract's ceilings, which no
-//! backend may exceed (, owner decisions  and ),
-//! and the plan adds each instance's boot to Hello from the stand profile,
+//! backend may exceed, and the plan adds each instance's boot to Hello from the stand profile,
 //! so no scenario can leave it out. The plan labels every provisional
 //! stand span it used.
 

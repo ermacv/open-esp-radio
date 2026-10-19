@@ -763,7 +763,7 @@ impl PhyBluetoothTxDcPwdetTransition {
 /// Complete semantic inputs of archive `phy_bt_tx_gain_init`.
 ///
 /// The values are grouped by the Rust transitions which consume them; no
-/// field represents an offset in the former vendor parameter image.
+/// field represents an offset in the vendor parameter image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyBluetoothTxGainInitParameters {
     pub crystal_selector: u8,

@@ -1,9 +1,8 @@
 # Bluetooth LE acceptance scenarios
 
-Predecessor HIL catalog, state of 2026-10-16. DTM is Direct Test Mode; the
+HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too. DTM is Direct Test Mode; the
 Linux adapter is driven over the exclusive HCI user channel unless BlueZ is
-named. "Qualification" marks the scenarios the predecessor's qualification
-required.
+named. "Qualification" marks the scenarios the catalog's qualification requires.
 
 ## DTM both ways against a Linux adapter (qualification)
 
@@ -22,7 +21,7 @@ required.
 - Fixed conditions: RF channel 0 (2402 MHz), PRBS9, 37 bytes, DTM v2, 300 ms
   quiet RX windows.
 - Peer: Linux Bluetooth adapter; no second ESP.
-- Hardware: pass, predecessor HIL run 2026-10-12. An earlier run (2026-09-28)
+- Hardware: pass, stand run 2026-10-12. An earlier run (2026-09-28)
   counted 80 packets S31→adapter with 100 quiet restarts, while adapter→S31
   Test End timed out on the adapter side.
 
@@ -38,7 +37,7 @@ required.
   Receiver/Transmitter Test v2, 500 ms per leg.
 - Peer: ESP32-C5 running an ESP-IDF Controller-only application (vendor BLE
   Controller over VHCI, DTM enabled) driven by a line protocol.
-- Hardware: pass, predecessor HIL run 2026-10-12. LE 2M TX sent half the
+- Hardware: pass, stand run 2026-10-12. LE 2M TX sent half the
   vendor's packet rate; the 100-packet floor still held.
 
 ## Scannable advertising answered by scan response
@@ -52,7 +51,7 @@ required.
   - Advertising interval 100 ms (160 × 0.625 ms) on all three advertising
     channels.
 - Peer: Linux adapter under BlueZ as the active scanner.
-- Hardware: pass, predecessor HIL run 2026-10-12.
+- Hardware: pass, stand run 2026-10-12.
 
 ## Directed advertising, high and low duty
 
@@ -66,7 +65,7 @@ required.
   - High duty ends no earlier than 1200 ms (nominal 1.28 s).
   - Low-duty interval 100 ms. Both events arrive within 5 s.
 - Peer: Linux adapter under BlueZ as the initiating central.
-- Hardware: pass, predecessor HIL run 2026-10-12. High duty timed out after
+- Hardware: pass, stand run 2026-10-12. High duty timed out after
   1280 ms (2026-09-28).
 
 ## Plaintext GATT peripheral, three connection cycles
@@ -89,7 +88,7 @@ required.
   - Connection loss before the first ATT exchange is recorded, not gated.
 - Peer: Linux BlueZ kernel ATT socket as the central. Connection parameters:
   7.5 ms interval, latency 0, supervision timeout 2 s.
-- Hardware: pass, predecessor HIL run 2026-10-12. On 2026-10-11, 20 of 20
+- Hardware: pass, stand run 2026-10-12. On 2026-10-11, 20 of 20
   passed, with 11 of 71 connection attempts lost on the shared air.
 
 ## Plaintext GATT with connection-step trace
@@ -107,7 +106,7 @@ required.
 - Gate: 10 repetitions × 3 connections (30 traced connections), each cycle
   complete. Other limits as for plaintext GATT.
 - Peer: Linux BlueZ.
-- Hardware: pass, predecessor HIL run 2026-10-12, with 66–68 connection events
+- Hardware: pass, stand run 2026-10-12, with 66–68 connection events
   per cycle.
 
 ## Secure GATT: pairing, bonding, cold restart, bond-load failure (qualification)
@@ -139,7 +138,7 @@ required.
   - Transition deadline 10 s; pairing prompt 15 s; fault close 10 s.
   - Retry rule as for plaintext GATT.
 - Peer: Linux BlueZ with a DisplayYesNo agent as central and bonding peer.
-- Hardware: pass, predecessor HIL run 2026-10-12. On 2026-10-11, 10 of 10
+- Hardware: pass, stand run 2026-10-12. On 2026-10-11, 10 of 10
   passed with 0 of 50 attempts lost. Flaky over its history: 7 of 22 runs
   failed.
 
@@ -152,7 +151,7 @@ required.
   - no cold release, restart or SoC reset for 1 s.
 - Gate: 3 repetitions; fault deadline 10 s.
 - Peer: Linux BlueZ.
-- Hardware: pass, predecessor HIL run 2026-10-10. Flaky: 6 of 7 runs failed
+- Hardware: pass, stand run 2026-10-10. Flaky: 6 of 7 runs failed
   over its history.
 
 ## Secure GATT with boundary-only IRQ sampling
@@ -161,4 +160,4 @@ required.
   is a timing comparison, not memory-stress evidence.
 - Gate: 3 repetitions; timeouts as for secure GATT.
 - Peer: Linux BlueZ.
-- Hardware: pass, predecessor HIL run 2026-09-28, 3 of 3.
+- Hardware: pass, stand run 2026-09-28, 3 of 3.

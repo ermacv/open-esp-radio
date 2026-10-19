@@ -2,8 +2,8 @@
 
 The open radio role, runtime and Controller core that this page compares
 with the vendor are not in this repository; the passages that name them
-describe the predecessor repository's implementation, and the kept memory
-codecs, executor and portable pieces still follow them.
+describe an implementation outside this repository, which the memory
+codecs, executor and portable pieces here follow.
 
 This reference describes the hardware contract below the portable
 `ADV_NONCONN_IND` encoder. It does not reproduce the vendor advertising

@@ -57,8 +57,8 @@ transmission.
 private fields. Its kind and record cannot be relabelled independently; the
 record's attached index is read through `index()`. The arenas are arrays of
 records and consumers destructure fixed record arrays. On the 32-bit S31 a
-handle occupies eight bytes instead of the former two-byte kind/index pair;
-the table bytes and publication budgets stay the same.
+handle occupies eight bytes, where a kind/index pair would take two; the
+table bytes and publication budgets do not depend on it.
 
 The rate-code maps return `Option<u8>`: an unknown code, a subtraction
 underflow or a position outside the family's arena has no index. Valid
@@ -95,7 +95,7 @@ The crate uses the canonical strict lint block.
 ## Known defects
 
 - **`rate_control.rs::ScheduleSelection::Invalid` keeps the current
-  schedule** (predecessor review, 2026-10-16; still present): `update_tx_per`
+  schedule** (code review, 2026-10-16; record outside this repository): `update_tx_per`
   installs a schedule only on `Selected`, so an invalid selection leaves a
   possibly too-fast rate in use. The decided rule is to clamp toward the
   slowest schedule (a precomputed slowest `RateScheduleRef`) and delete

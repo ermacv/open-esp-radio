@@ -176,7 +176,7 @@ impl<F: ScenarioFamily> Scenario<F> {
     pub fn validate(&self) -> Result<()> {
         self.header.validate()?;
         self.family.validate()?;
-        // The program-counter sampler was deleted (); no class serves a profile.
+        // No class serves a program-counter profile.
         if self.header.profile.is_some() {
             return Err(format!(
                 "scenario {} requests a profile, but its image {} does not sample the program \

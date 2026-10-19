@@ -207,8 +207,8 @@ impl TxBlockAckSession {
         // (element 159). Linux `net/mac80211/agg-rx.c`::
         // `ieee80211_send_addba_resp` does exactly that after the fixed
         // response fields. A controlled AX211 HE20 hardware test reached
-        // `parse_block_ack_action(AddbaResponse)` and then failed only this
-        // former exact-length check. We deliberately consume only the fixed
+        // `parse_block_ack_action(AddbaResponse)` and then failed only an
+        // exact-length check. We deliberately consume only the fixed
         // prefix here: the negotiated low ten-bit window remains bounded by
         // `self.config.window`; a future owner of extended (>1024) windows
         // must parse the IE separately.

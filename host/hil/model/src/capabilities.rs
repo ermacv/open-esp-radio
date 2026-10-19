@@ -10,7 +10,7 @@ use crate::{CapabilityKey, ChipId, CompositionName};
 
 /// The product composition an image is built on. The HIL image composes
 /// the same crate as the product; only the observer parameter and the
-/// agent's capability servers differ (, owner rule of 2026-10-16).
+/// agent's capability servers differ.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case", tag = "composition", content = "crate")]
 pub enum Composition {

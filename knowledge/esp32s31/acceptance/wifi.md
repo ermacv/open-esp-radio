@@ -1,8 +1,8 @@
 # Wi-Fi acceptance scenarios
 
-Predecessor HIL catalog, state of 2026-10-16. Rates are application payload
+HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too. Rates are application payload
 rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
-"Qualification" marks the scenarios the predecessor's qualification required.
+"Qualification" marks the scenarios the catalog's qualification requires.
 
 ## Peers
 
@@ -92,7 +92,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   artifact.
 - Gate: 2 cold boots × 3 cycles, 90 s each, no beacon loss.
 - Peer: lab AP.
-- Hardware: pass, predecessor HIL run 2026-10-11. Earlier: 3 of 3 on
+- Hardware: pass, stand run 2026-10-11. Earlier: 3 of 3 on
   2026-10-04, 6 of 6 cycles over 2 cold boots on 2026-10-03.
 
 ### Station reconnect cycles, HT40 (qualification)
@@ -100,7 +100,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
 - Checks: as for HE20, on HT40.
 - Gate: 10 cold boots × 3 cycles, 90 s each, no beacon loss.
 - Peer: lab AP.
-- Hardware: pass, predecessor HIL runs 2026-10-04 and 2026-10-11 (the latter
+- Hardware: pass, stand runs 2026-10-04 and 2026-10-11 (the latter
   on an earlier baseline revision).
 
 ### AP loss, reconnect and fresh IP exchange (qualification)
@@ -116,7 +116,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
 - Gate: 3 repetitions. Each step within 120 s; each echo within 2 s; status
   within 3 s.
 - Peer: lab AP that the harness can stop (HT40).
-- Hardware: pass, predecessor HIL runs 2026-10-03 (3 of 3) and 2026-10-11.
+- Hardware: pass, stand runs 2026-10-03 (3 of 3) and 2026-10-11.
 
 ### AP gone after connection: bounded retries exhausted (qualification)
 
@@ -126,7 +126,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   - the control interface answers.
 - Gate: 120 s; status within 3 s.
 - Peer: lab AP that the harness can stop.
-- Hardware: pass, predecessor HIL runs 2026-10-03 and 2026-10-11.
+- Hardware: pass, stand runs 2026-10-03 and 2026-10-11.
 
 ### AP absent from the start (qualification)
 
@@ -135,8 +135,8 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   without a connection. The control interface stays responsive.
 - Gate: 3 repetitions; 3 attempts; 120 s.
 - Peer: lab AP that the harness can stop.
-- Hardware: pass on 2026-10-11, but only in a predecessor run on an earlier
-  baseline revision. Not confirmed on the final tree.
+- Hardware: pass on 2026-10-11, but only in a stand run on an earlier
+  baseline revision of the catalog's stack; not confirmed on its last tree.
 
 ### Radio cold restart of a connected HT40/WPA2 station (qualification)
 
@@ -151,7 +151,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   work run on different cores.
 - Gate: 3 repetitions × 3 cycles, 90 s each.
 - Peer: lab AP (HT40, WPA2).
-- Hardware: pass (flaky), predecessor HIL run 2026-10-11, 3 of 3. 13 of 21
+- Hardware: pass (flaky), stand run 2026-10-11, 3 of 3. 13 of 21
   runs failed over its history.
 
 ### Station restart against a PMF-required AP
@@ -162,7 +162,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
 - Gate: 1 restart cycle, with the same UDP exchange as the radio restart;
   90 s.
 - Peer: OpenWrt AP, HT40, WPA2 with PMF required.
-- Hardware: pass, predecessor HIL runs 2026-09-29 and 2026-10-03.
+- Hardware: pass, stand runs 2026-09-29 and 2026-10-03.
 
 ### Station restart against a WPA3-Personal (SAE-only) AP
 
@@ -170,7 +170,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   and after one station stop and cold restart.
 - Gate: 1 cycle, with the same UDP exchange; 90 s.
 - Peer: OpenWrt AP, HT40, SAE only.
-- Hardware: pass, predecessor HIL run 2026-09-29.
+- Hardware: pass, stand run 2026-09-29.
 
 ## Station roles: scan, monitor, sleep
 
@@ -180,7 +180,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   restarts afterwards.
 - Gate: 200 ms dwell per channel; the total time is 95–150 % of 2.6 s.
 - Peer: lab AP.
-- Hardware: pass, predecessor HIL run 2026-09-29.
+- Hardware: pass, stand run 2026-09-29.
 
 ### Station to monitor and back
 
@@ -190,7 +190,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
 - Gate: 3 s dwell, elapsed time 95–150 % of the dwell, more than 0 frames and
   bytes, 256-byte snapshot.
 - Peer: lab AP (traffic source on air).
-- Hardware: pass, predecessor HIL run 2026-09-29.
+- Hardware: pass, stand run 2026-09-29.
 
 ### Station, idle, scan and monitor roundtrip
 
@@ -198,7 +198,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   the same code as station to monitor.
 - Gate: 3 s dwell, 95–150 %, more than 0 frames.
 - Peer: lab AP.
-- Hardware: pass, predecessor HIL run 2026-09-29.
+- Hardware: pass, stand run 2026-09-29.
 
 ### Finite monitor capture exported as pcapng
 
@@ -207,7 +207,7 @@ rates in Mbit/s. RX means toward the ESP32-S31, TX means from it.
   complete, with no incomplete frame. The station restarts afterwards.
 - Gate: 3 s capture, elapsed 95–110 %, more than 0 frames.
 - Peer: lab AP.
-- Hardware: pass, predecessor HIL run 2026-10-04. More than 1000 frames
+- Hardware: pass, stand run 2026-10-04. More than 1000 frames
   captured on 2026-09-05.
 
 ### Modem sleep: DTIM 1, DTIM 3, and maximum depth (listen interval 10)
@@ -320,7 +320,7 @@ stop) within one boot.
   across cold boots. The stop evidence matches generation, channel and width.
 - Gate: 5 cold boots × 3 epochs, 90 s each.
 - Peer: laptop client.
-- Hardware: pass, predecessor HIL run 2026-10-11.
+- Hardware: pass, stand run 2026-10-11.
 
 ### Two simultaneous WPA2 clients
 
@@ -328,14 +328,14 @@ stop) within one boot.
   and answer ICMP.
 - Gate: 2 epochs; 10 echoes every 100 ms; 0 lost; p95 ≤ 50 ms.
 - Peer: laptop and OpenWrt clients.
-- Hardware: pass, predecessor HIL run 2026-10-03.
+- Hardware: pass, stand run 2026-10-03.
 
 ### AP HT40 ICMP latency
 
 - Checks: latency and loss to the client in each WPA2 epoch at HT40 MCS7.
 - Gate: 2 epochs × 100 echoes every 20 ms; 0 lost; p95 ≤ 20 ms.
 - Peer: OpenWrt client.
-- Hardware: pass, predecessor HIL run 2026-10-05.
+- Hardware: pass, stand run 2026-10-05.
 
 ### AP throughput
 
@@ -375,7 +375,7 @@ run on the performance image.
 - Gate: TX 8 per flow; aggregate ≥ 15, per flow ≥ 7.5, exact; ≥ 95 % of PPDUs
   protected, zero wrong-rate RTS, zero short NAV.
 - Peer: non-HT laptop client, OpenWrt client, and a whole-channel air monitor.
-- Hardware: pass, predecessor HIL run 2026-09-28. Aggregate 16.0 Mbit/s;
+- Hardware: pass, stand run 2026-09-28. Aggregate 16.0 Mbit/s;
   97.4 % of PPDUs had RTS/CTS before data.
 
 ## Station and access point on one channel
@@ -387,7 +387,7 @@ run on the performance image.
   owner (back to Idle, same generation).
 - Gate: 5 s dwell, 120 s timeout.
 - Peer: lab AP (HT40) upstream; laptop client on the S31's AP.
-- Hardware: pass, predecessor HIL run 2026-10-11.
+- Hardware: pass, stand run 2026-10-11.
 
 ### STA+AP simultaneous UDP load
 

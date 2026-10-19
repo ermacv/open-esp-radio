@@ -6,7 +6,7 @@ comparison port, with the chip's vendor calibration comparison
 over the published radio-PHY partition and analog-I2C register images. The
 family crate itself names no chip, and its captures are the chip-neutral
 [`oer-vendor-phy`](../../../phy/capture). No runner registers a
-PHY scenario family ().
+PHY scenario family.
 
 ```console
 cargo test -p oer-vendor-phy-esp32s31

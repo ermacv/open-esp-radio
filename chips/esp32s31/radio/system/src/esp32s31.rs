@@ -1,5 +1,5 @@
 //! The ESP32-S31 backend: the radio domain, its PHY and the Wi-Fi client's
-//! shared steps, in the order of the driver's former cold start and release.
+//! shared steps, in the order of the driver's cold start and release.
 //!
 //! | Request | Steps |
 //! | --- | --- |

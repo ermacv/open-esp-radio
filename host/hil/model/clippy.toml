@@ -7,7 +7,7 @@
 # The nearest clippy.toml wins, so this repeats the workspace's rule. HIL
 # scenario code holds no duration literal and never sleeps: every wait is an
 # `oer_hil_model::Wait` derived from a contract bound, a typed protocol
-# interval or the measured stand profile (, principle 4).
+# interval or the measured stand profile.
 disallowed-methods = [
     { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
     { path = "core::time::Duration::from_secs", reason = "derive the wait: oer_hil_model::Wait" },

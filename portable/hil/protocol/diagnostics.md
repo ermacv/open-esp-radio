@@ -35,10 +35,9 @@ cessation.
 
 ## Program-counter profile
 
-No image samples the program counter: the sampler (`pc-profile`) and its
-agent modules were deleted (, tag `legacy-wifi-2026-10-16`). The `telemetry` profile
-messages (`ProfileControl`, `ProfileStatus`, `GetProfileSamples`) remain in
-the protocol with no producer.
+No image samples the program counter: no image has the sampler
+(`pc-profile`). The `telemetry` profile messages (`ProfileControl`,
+`ProfileStatus`, `GetProfileSamples`) are in the protocol with no producer.
 
 Sampling perturbs timing: a profiled run is diagnostic evidence, never a
 throughput or timing measurement.

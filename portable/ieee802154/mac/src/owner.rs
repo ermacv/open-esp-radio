@@ -2,13 +2,13 @@
 //! `oer-radio-port` ([`Owner`](oer_radio_port::Owner),
 //! [`PortBody`](oer_radio_port::PortBody)).
 //!
-//! Every refusal of the former command port (its `CommandError`) that a
+//! Every refusal of a command port (its `CommandError`) that a
 //! caller's own state explains is a type here (`docs/architecture.md`,
 //! Ownership); what the world controls (the air, time, the hardware) stays a
 //! typed outcome. A backend implements [`Ieee802154Backend`]; no Espressif
-//! backend implements it now.
+//! backend in this repository implements it.
 //!
-//! | Refusal of the former command port | Form here |
+//! | Refusal of a command port | Form here |
 //! | --- | --- |
 //! | lifecycle refusals, `CommandError::Disabled`, `AlreadyEnabled`, `Quiesced` | the owner's state; the shape has no quiesce |
 //! | `CommandError::Busy` (the caller's own operation runs) | the operation permit ([`Ieee802154Client::operation`], awaited in arrival order across the interfaces): a submission moves it into the backend's [`OperationPermits`], which gives it back when it takes the operation's terminal |
@@ -17,7 +17,7 @@
 //! | `CommandError::UnknownInterface`, `SettingError::UnknownInterface` | a client per configured interface ([`ConfiguredInterface`]), of an index the capabilities state |
 //! | `CommandError::PendingTableFull` | a pending-table [`Slot`] of the interface's own kind, which the install's resources give once and the caller counts itself |
 //! | `CommandError::Unsupported`, `CommandError::TransmitPower`, `SettingError::TransmitPower`, `SettingError::CcaThreshold`, `SettingError::Unsupported`, `SettingError::HeaderIesTooLong` | the validated values [`SupportedTransmit`], [`SupportedEnergyScan`], [`SupportedCca`], [`SupportedScheduledReceive`], [`SupportedPower`], [`SupportedCcaThreshold`], [`SupportedHeaderIes`] and the feature witness [`Has`] |
-//! | the former `SettingError::EnhancedAckDisabled` | header IEs and probing initiators are kept while the generator is off and go out once it is on |
+//! | `SettingError::EnhancedAckDisabled` | header IEs and probing initiators are kept while the generator is off and go out once it is on |
 //! | duplicate request identifiers | the backend mints the [`Work`] of each submission |
 //!
 //! These stay the world's outcomes: [`Poisoned`] (a radio fault poisons

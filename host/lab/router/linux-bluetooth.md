@@ -1,17 +1,17 @@
 # Linux Bluetooth peer: notes
 
 Facts about a Linux host adapter as the Bluetooth LE peer of a board, from
-the predecessor's stand (an Intel AX211 adapter, BlueZ, kernel ATT sockets),
+stand use (an Intel AX211 adapter, BlueZ, kernel ATT sockets; records outside this repository),
 2026-09 to 2026-10 (AX211 Test End quirk 2026-09-28, the connection
 collision 2026-10-09). The stand core here has no Bluetooth fixture yet; these
 are what the next one must handle.
 
 ## Adapter ownership
 
-- The adapter is dedicated to the test. Before a raw HCI test the predecessor
-  locked it, saved power and soft-rfkill state, unblocked it, powered the
-  kernel controller down and took the exclusive HCI user channel; afterwards
-  it reset the controller, released the channel and restored and re-checked
+- The adapter is dedicated to the test. Before a raw HCI test a fixture
+  locks it, saves power and soft-rfkill state, unblocks it, powers the
+  kernel controller down and takes the exclusive HCI user channel; afterwards
+  it resets the controller, releases the channel and restores and re-checks
   power and rfkill. Forced termination or device removal can skip the restore.
 - Kernel ATT paths (GATT, advertising workloads) use the kernel and BlueZ
   instead of the user channel: the adapter must start powered off; BlueZ,
@@ -30,18 +30,18 @@ are what the next one must handle.
 - **`bt-hci` 0.10.1** assigns the LE Transmitter Test v1 command the opcode of
   LE Read Supported States; a v1 transmit test needs a corrected opcode.
 - A command acceptance check alone shows nothing about RF: a zero RX count is
-  valid without a coordinated transmitter. The predecessor's board-to-PC DTM
-  run held the ESP's TX while the PC counted, then kept the ESP in RX while
-  the PC was silent and then transmitting; each receiver had a positive count
-  and a zero-count control with the other side inactive.
+  valid without a coordinated transmitter. A board-to-PC DTM run holds the
+  ESP's TX while the PC counts, then keeps the ESP in RX while the PC is
+  silent and then transmitting; each receiver has a positive count and a
+  zero-count control with the other side inactive.
 
 ## Connection parameters
 
 - The kernel's default LE connection parameters (minimum and maximum
   interval, latency, supervision timeout) are set with MGMT Set Default
   System Configuration and read back with Read Default System Configuration;
-  the predecessor used 7.5 ms, latency 0, 2 s on a powered-off adapter, saved
-  the old four values first and restored them afterwards. A cached per-peer
+  a run sets 7.5 ms, latency 0, 2 s on a powered-off adapter, saving
+  the old four values first and restoring them afterwards. A cached per-peer
   override in BlueZ beats the default; the board must report the interval it
   actually got.
 
@@ -53,10 +53,10 @@ are what the next one must handle.
   to be Established) while the board never saw it.
 - The kernel can report an ATT socket connected before the first procedure,
   so the host's connect proves nothing. An attempt counts as established only
-  when the board reports the connection (the predecessor waited 2 s).
+  when the board reports the connection (a fixture waits 2 s).
 - Retry only when the board's own state proves the connection never reached
-  it: no new connection, not connected, still advertising. The predecessor
-  allowed three attempts in all and recorded every attempt.
+  it: no new connection, not connected, still advertising. A fixture allows
+  three attempts in all and records every attempt.
 - A confirmed connection can also end by supervision timeout (0x08) before
   any ATT exchange; that is a separate loss from one never established.
 

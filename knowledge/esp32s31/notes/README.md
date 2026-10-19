@@ -4,8 +4,8 @@ These documents describe pinned public-source and authenticated-artifact
 contracts used by the vendor investigation. They explain hardware ordering,
 software state, memory ownership and the limits of each observation. They are not run
 results, work plans or product readiness declarations; the one exception,
-[measurements](measurements.md), records the predecessor's on-chip values as
-data.
+[measurements](measurements.md), records on-chip values measured outside this
+repository as data.
 
 | Reference | Boundary |
 | --- | --- |
@@ -20,7 +20,7 @@ data.
 | [IEEE 802.15.4 dataplane](ieee802154-dataplane.md) | Static policy, frame storage and IRQ ownership |
 | [IEEE 802.15.4 control](ieee802154-control.md) | Ordered state transitions, STOP and timers |
 | [IEEE 802.15.4 driver port](ieee802154-driver-port.md) | Complete open driver ledger, closed dependencies and ownership map |
-| [Hardware measurements](measurements.md) | Predecessor's recorded on-chip values, conditions and status |
+| [Hardware measurements](measurements.md) | On-chip values whose records are outside this repository, conditions and status |
 
 Platform notes record measured behaviour and techniques, with their
 conditions and dates:

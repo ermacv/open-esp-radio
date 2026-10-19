@@ -1,12 +1,10 @@
 # Wi-Fi DMA: execution-level rules
 
-Source: the Wi-Fi execution form of the predecessor repository
-(`crates/runtime/esp32s31/ieee80211-form` there). The form itself was not
-carried: its interrupt model (a critical section shared by ISR and task) is
-replaced by the P3/P2 contexts. The buffer-level custody rules it relied on live in the carried
-code (`oer-base-memory` `indexed_custody`, the `dma` and `mac` crates); the rules
-below are the execution-level ones the rebuild must keep. They are the W1
-checklist: W1 is the first step where receive DMA runs.
+Source: a Wi-Fi execution form outside this repository, whose interrupt model
+(a critical section shared by ISR and task) this repository replaces with the
+P3/P2 contexts. The buffer-level custody rules live in `oer-base-memory`
+(`indexed_custody`) and the Wi-Fi DMA and MAC crates; the rules below are the
+execution-level ones the receive and transmit DMA keep.
 
 ## Rules
 

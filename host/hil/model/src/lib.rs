@@ -1,4 +1,4 @@
-//! The HIL scenario model ([#761]): what a scenario is, independently of
+//! The HIL scenario model: what a scenario is, independently of
 //! how a run executes it.
 //!
 //! A scenario is a Rust type implementing [`Spec`]: its stable
@@ -13,16 +13,13 @@
 //!
 //! A contract's bounds are its port conformance crate's own type, with a
 //! `CEILINGS` constant; a conformance trace starts with the
-//! `oer-hil-trace-header` header that carries the backend's actual bounds
-//! (, owner decision ).
+//! `oer-hil-trace-header` header that carries the backend's actual bounds.
 //!
 //! Time is never a literal here. A [`Wait`] is a contract ceiling, a typed
 //! protocol interval ([`ProtocolQuantity`]) or a span measured on the
 //! stand ([`StandProfile`]); arithmetic on it is checked ([`Overflow`]),
 //! and a stand span used before its evidence suffices carries a
 //! [`Provisional`] label.
-//!
-//! [#761]: https://github.com/the predecessor repository/issues/761
 #![forbid(unsafe_code)]
 
 pub mod catalog;

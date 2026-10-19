@@ -103,7 +103,7 @@ impl PhyConfig {
         }
     }
 
-    /// Qualified production defaults formerly selected from the vendor init
+    /// Qualified production defaults that the vendor init selects from
     /// profile. Unused bytes from that profile are deliberately absent.
     pub const fn production() -> Self {
         Self::esp32s31_default().with_target_power(
@@ -353,7 +353,7 @@ pub struct PhyState {
 /// Typed retained calibration for one physical ESP32-S31 radio.
 ///
 /// This is deliberately not `Copy` or `Clone`: persistence code must move the
-/// one cache value instead of duplicating a former vendor memory image.
+/// one cache value instead of duplicating a vendor memory image.
 pub struct PhyCalibrationCache {
     snapshot: PhyCalibrationSnapshot,
 }

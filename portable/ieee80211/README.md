@@ -108,9 +108,9 @@ beside their owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the complete layering
 contract.
 
-## Open debt
+## Known defects
 
-- **Before W3** (AP selection by RSSI): `mac/src/scan.rs` `ScanRecord` stores
-  RSSI as `i8` with `i8::MIN` as the "unknown" marker
-  (`sta/src/receive.rs` `observe_scan` writes it for a frame without a
-  signal level); make it `Option<i8>`.
+- **RSSI "unknown" is a value** (AP selection by RSSI depends on it):
+  `mac/src/scan.rs` `ScanRecord` stores RSSI as `i8` with `i8::MIN` as the
+  "unknown" marker (`sta/src/receive.rs` `observe_scan` writes it for a frame
+  without a signal level), not as `Option<i8>`.

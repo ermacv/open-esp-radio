@@ -23,7 +23,7 @@ facts about the Wi-Fi stamp are in
 | Domain | Counted by | Type | Relation to monotonic time |
 | --- | --- | --- | --- |
 | Monotonic CPU time | the system timer, through `oer-adapters-embassy-time` | `oer_base_time::Instant` | itself |
-| ESP32-S31 Wi-Fi MAC local time | `WIFI_MAC_LOCAL_TIME` (`MacLocalTime`), widened by `MacTimeline` | `Ieee80211Instant`, `Ieee80211Stamp` | affine; its relation owner is the lower-MAC port backend (W3), generations `Ieee80211ClockGeneration` |
+| ESP32-S31 Wi-Fi MAC local time | `WIFI_MAC_LOCAL_TIME` (`MacLocalTime`), widened by `MacTimeline` | `Ieee80211Instant`, `Ieee80211Stamp` | affine; its relation owner is the lower-MAC port backend, generations `Ieee80211ClockGeneration` |
 | An interface's TSF | the MAC's TSF of that interface | `TsfInstant`, as `VifTsf` with its interface | affine to the port's radio clock (`TSF_RELATION`, `TSF_DRIFT_PPM` = 200 ppm: the AP's timer and the station's crystal), sampled by `TsfSample` |
 | BLE controller | the controller clock, extended from its 32-bit latch | `LeInstant` | none |
 | BLE modem LP timer | the modem LP timer | `BluetoothModemLpTimerInstant` (wrapping, no claimed unit) | none |

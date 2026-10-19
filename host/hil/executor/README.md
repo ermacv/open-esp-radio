@@ -1,7 +1,7 @@
 # HIL scenario executor
 
 `oer-hil-executor` executes the typed scenarios of
-[`oer-hil-model`](../../model/README.md) ([#761](https://github.com/the predecessor repository/issues/761)).
+[`oer-hil-model`](../model/README.md).
 
 | Module | Owns |
 | --- | --- |
@@ -21,4 +21,4 @@ constructor (`new`, `from_secs`, `from_millis`, `from_micros`,
 HIL scenario crate.
 
 The [`harness_template` test](tests/harness_template.rs) is the conformance
-harness template that the per-port conformance crates follow ( Q3).
+harness template that the per-port conformance crates follow.

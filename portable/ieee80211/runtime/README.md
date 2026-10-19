@@ -5,7 +5,7 @@ handoffs, task shutdown, station network ownership and poll boundaries.
 
 ## Known defects
 
-Found in the predecessor's review of 2026-10-16 and still present.
+Found in a code review of 2026-10-16 (record outside this repository).
 
 - **`station_service.rs::serve` steps once per loop**, then handles the
   event, tick, command and transmit in one pass; a later input sees the

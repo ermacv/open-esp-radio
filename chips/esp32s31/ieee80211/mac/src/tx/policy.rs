@@ -3,7 +3,7 @@
 //! Names containing an offset are intentional. The pinned blob exposes the
 //! effect of those node bytes on the TX descriptor, but not a reliable
 //! semantic name. Recording the observed transformation is safer than
-//! inventing one while the fixed C node layout is still being migrated.
+//! inventing one for a fixed C node layout that is not fully decoded.
 
 use oer_ieee80211_mac::data::DataInterfaceRole;
 

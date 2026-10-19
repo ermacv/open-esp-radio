@@ -93,7 +93,7 @@ pub struct Transmitted {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ProductionBoot {
     /// The relation's output bytes projected from the retained calibration
-    /// the boot published (the former firmware's `phy/calibration-projection/read`, tag `legacy-wifi-2026-10-16`);
+    /// the boot published;
     /// none at an IEEE 802.15.4 point, whose session publishes no startup artifact.
     pub calibration: Option<Vec<u8>>,
     pub registers: Readings,

@@ -13,7 +13,7 @@ use crate::{
 
 /// The contract a scenario exercises. The contract's bound ceilings are its
 /// port conformance crate's typed `CEILINGS` constant, which the scenario's
-/// waits and verdict use directly (, owner decision ).
+/// waits and verdict use directly.
 pub trait Subject {
     const CONTRACT: ContractName;
 }

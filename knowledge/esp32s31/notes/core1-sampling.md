@@ -25,12 +25,12 @@ Not yet in this repository's register model: `registers/esp32s31` has no
 debug-assist block. Use goes through the typed PAC, so the block is added to
 `registers/` and generated before any code reads it.
 
-## How the predecessor sampled
+## The interrupt-based method
 
-- **Mechanism in use (up to 2026-10-16).** Core 0's hang watchdog and PC
-  profiler asked core 1 for a sample through a FROM_CPU software interrupt
-  (one line shared by both requesters, a pending flag per requester), handled
-  on core 1 at the highest level. Core 1's handler recorded its interrupted
+- **Mechanism.** Core 0's hang watchdog and PC profiler ask core 1 for a
+  sample through a FROM_CPU software interrupt (one line shared by both
+  requesters, a pending flag per requester), handled on core 1 at the
+  highest level. Core 1's handler records its interrupted
   `mepc` and `ra` (the profiler) or `mepc`, `ra`, `sp`, `mcause`, `mstatus`
   (the hang watchdog).
 - **Profiler.** SYSTIMER alarm 1 interrupts core 0 at the highest level every
@@ -44,9 +44,9 @@ debug-assist block. Use goes through the typed PAC, so the block is added to
   never takes the request; it reports "not responding". The interrupt also
   takes a FROM_CPU line that the radio needs.
 
-## The record-based method (decided, not run)
+## The record-based method (not run)
 
-Predecessor decision, 2026-10-16: core 0 reads `CORE_1_RCD_PDEBUGPC` and
+Core 0 reads `CORE_1_RCD_PDEBUGPC` and
 `CORE_1_RCD_PDEBUGSP` after enabling `CORE_1_RCD_EN`. No line or interrupt is
 used, core 1's timing is undisturbed, and a core 1 hung with interrupts
 masked is still sampled. The SP replaces the second value of the old sample
@@ -60,6 +60,6 @@ sampling itself on a free timer group timer into a single-writer snapshot
 
 ## Results
 
-None recorded: the record-based method was never implemented or run in the
-predecessor. A related idea, the debug-assist stack-pointer monitor (SP bounds
-and the PC that crossed them) set and read over JTAG, was also only proposed.
+None recorded: the record-based method has not run. A related idea, the
+debug-assist stack-pointer monitor (SP bounds and the PC that crossed them) set
+and read over JTAG, has not run either.

@@ -1,6 +1,6 @@
 # ESP32-C5 notes
 
-Facts about the ESP32-C5 that the predecessor established and that no
+Facts about the ESP32-C5, established outside this repository, that no
 register review or pin records elsewhere.
 
 ## Vendor pins
@@ -21,7 +21,7 @@ register review or pin records elsewhere.
 
 ## Silicon observations
 
-From predecessor HIL runs on one v1.0 board, 2026-09-27 (register evidence
+From stand runs on one v1.0 board, 2026-09-27 (records outside this repository; register evidence
 `registers/esp32c5/evidence/hil-open.toml`):
 
 - Every IEEE 802.15.4 MAC field width the model declares matched the

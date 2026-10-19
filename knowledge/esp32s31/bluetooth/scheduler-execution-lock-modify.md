@@ -3,9 +3,8 @@
 Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `10c50778`), member `18.o`
 `r_sym_bt_9H3AnHbaHJ3auzSvPDme` (role `r_btdm_sched_execution_lock`),
 `r_sym_bt_rPoPGH6BBYjZaunDU5FV` (role `r_btdm_sched_execution_modify`) and
-the shared idle preamble `r_sym_bt_B8fDByebTHuwRe8FZuRt`; extracted from
-the predecessor repository's `chips/esp32s31/hal/src/bluetooth/scheduler_execution_lock.rs`
-and `.../scheduler_execution_modify.rs`. The surrounding insertion and
+the shared idle preamble `r_sym_bt_B8fDByebTHuwRe8FZuRt`; from a vendor-code
+analysis (record outside this repository). The surrounding insertion and
 cancellation contracts are in
 [the scheduler lists reference](../notes/bluetooth-scheduler-lists.md).
 

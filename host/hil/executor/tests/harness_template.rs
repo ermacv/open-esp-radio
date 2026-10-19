@@ -1,5 +1,4 @@
-//! The conformance harness template ( Q3, architecture section 3,
-//! owner decisions  and ) on a toy port.
+//! The conformance harness template on a toy port.
 //!
 //! Two parts, kept apart by the module boundary below:
 //!

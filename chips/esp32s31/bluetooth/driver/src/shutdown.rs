@@ -1,8 +1,8 @@
 //! Shutdown of a stopped Controller epoch.
 //!
 //! Its caller first stops its Controller runtime, drains the source-127 task
-//! and removes the CPU routes (the composition that did this was removed in
-//! , tag `legacy-radio-2026-10-16`); it then recovers the interrupt output
+//! and removes the CPU routes (no composition in this repository does); it
+//! then recovers the interrupt output
 //! and the ready timer owner from stable ISR storage.
 //! [`retire`](crate::shutdown::retire) releases the Controller output and
 //! leaves the shared PHY domain and BTBB, as the vendor Controller disable runs

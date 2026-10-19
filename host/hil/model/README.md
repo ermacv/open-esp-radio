@@ -1,7 +1,7 @@
 # HIL scenario model
 
 `oer-hil-model` defines what a HIL scenario is, independently of how a run
-executes it ([#761](https://github.com/the predecessor repository/issues/761)).
+executes it.
 It is a `formats` package; execution lives in
 [`oer-hil-run`](../host/executor/README.md).
 
@@ -23,7 +23,7 @@ It is a `formats` package; execution lives in
 | `estimate`, `tier` | An instance's own time from its waits and repetitions, with its provisional labels (the plan adds the boot); the tiers and their budgets |
 
 Scenario types live in each block's scenario crate. A conformance scenario
-follows its port's harness template ( Q3, owner decision ):
+follows its port's harness template:
 the port's `no_std` conformance crate holds its `Bounds` type with `const
 CEILINGS`, its case and trace types with a `wire` feature, the harness, and
 a public pure `verify(case, &trace, &bounds)`; the HIL agent sends `(case,

@@ -1,9 +1,9 @@
 # ESP32-S31 acceptance criteria
 
-These files list the hardware-in-the-loop scenarios the predecessor stack ran
-on the ESP32-S31, as it stood on 2026-10-16. They are the acceptance criteria
-for future slices: when a slice rebuilds a capability, its HIL test should
-prove at least what the matching scenario proved, against at least its gate.
+These files list hardware-in-the-loop scenarios of an ESP32-S31 stack
+outside this repository, as its catalog stood on 2026-10-16. They are the
+acceptance criteria of the capabilities: a HIL test of a capability proves at
+least what the matching scenario proved, against at least its gate.
 
 For each scenario they give:
 
@@ -23,34 +23,30 @@ For each scenario they give:
 
 ## Reading the status
 
-- **"Pass"** gives the latest predecessor HIL run that passed, and a measured
-  value where one was recorded. The last runs predate the predecessor's final
-  tree, so no result here proves current code.
-- **"Flaky"** means the scenario also failed often over its history.
+- **"Pass"** gives the latest stand run that passed, and a measured value
+  where one was recorded. The run records are outside this repository, and
+  no result here proves code in it.
+- **"Flaky"** means the scenario also failed often.
 - **"Not confirmed"** means no hardware result was found.
 
 ## Notes
 
-- The gates were set by the predecessor's agents in its scenario files,
-  except these, whose status is:
-  - A/B comparison against a predecessor build: 5 of 5 runs; a throughput
-    regression above 5 % or a p95 latency regression above 10 % blocks —
-    owner criterion (confirmed 2026-10-18);
-  - secure GATT: connection loss at most 20 % over at least 45 attempts —
-    owner criterion (confirmed 2026-10-18);
-  - GATT trace: 10 repetitions — owner criterion (confirmed 2026-10-18);
+- The gates are those of the catalog's scenario files, except these:
+  - A/B comparison against a reference build: 5 of 5 runs; a throughput
+    regression above 5 % or a p95 latency regression above 10 % blocks;
+  - secure GATT: connection loss at most 20 % over at least 45 attempts;
+  - GATT trace: 10 repetitions;
   - PHY calibration tolerance: a field matches when its difference stays
-    within the vendor's own spread for that field — owner criterion
-    (confirmed 2026-10-18);
-  - GATT and secure GATT 10 of 10 — open.
-- The runner, receipts and qualification procedure are not carried; only what
-  each scenario proves and its gate.
+    within the vendor's own spread for that field;
+  - GATT and secure GATT 10 of 10: open.
+- The files hold what each scenario proves and its gate, not the catalog's
+  runner, receipts or qualification procedure.
 - Diagnostic-image scenarios (probes, samplers, traces) are left out; see the
   end of [wifi.md](wifi.md).
 
-## Known gaps of the predecessor's scenarios
+## Known gaps of the catalog's scenarios
 
-New scenarios should not repeat these:
+New scenarios do not repeat these:
 
 - Station TCP floors were fixed (RX 18, TX 45 Mbit/s) and ignored the
   offered load.

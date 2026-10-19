@@ -25,9 +25,9 @@
 //!   after [`Failure::Poisoned`] every later answer returns what was posted.
 //! - **Wi-Fi.** The actor brings the Wi-Fi MAC up inside `track`, after the
 //!   initial tracking, the RX enable and the initial channel, in the order of
-//!   the driver's former cold start: the driver lends its clocked Wi-Fi client
+//!   the driver's cold start: the driver lends its clocked Wi-Fi client
 //!   for that one request and gets it back with the MAC up ([`wifi`]).
-//! - **Bounds.** [`ACTOR_STEP_BOUND`] is the owner's provisional bound of one
+//! - **Bounds.** [`ACTOR_STEP_BOUND`] is the provisional bound of one
 //!   actor poll; the request bounds follow from measurements and are added
 //!   then.
 
@@ -48,7 +48,7 @@ pub use cell::{Doorbell, Responder, Slot};
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
 
-/// The owner's provisional bound of one poll of the actor future
+/// The provisional bound of one poll of the actor future
 /// (docs/decisions.md, "Radio system").
 pub const ACTOR_STEP_BOUND: oer_base_time::Duration = oer_base_time::Duration::from_micros(50);
 

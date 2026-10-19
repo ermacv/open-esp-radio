@@ -196,9 +196,8 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// The previous final MPDU gains its four-byte alignment and requested
     /// empty delimiters only when another MPDU follows it. The new final MPDU
     /// contributes one delimiter and its exact PSDU length. Keeping this
-    /// prefix total makes each append O(1); the former validation replayed all
-    /// preceding lengths on every `commit_frame`, making a 32-MPDU build
-    /// O(n²).
+    /// prefix total makes each append O(1), where replaying all preceding
+    /// lengths on every `commit_frame` would make a 32-MPDU build O(n²).
     ///
     /// SOURCE: complete `libpp[pp.o]::ppCalTxAMPDULength`, complete
     /// `libpp[pp_he.o]::ppCalSubFrameLength`, and the equivalent finite rules in

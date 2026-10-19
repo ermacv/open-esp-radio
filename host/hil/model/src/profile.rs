@@ -97,7 +97,7 @@ pub struct MeasuredSpan {
     pub maximum_micros: u64,
     pub samples: u64,
     pub margin: Factor,
-    /// Why this margin: every bound records it ( Q5).
+    /// Why this margin: every bound records it.
     pub margin_reason: String,
     pub support: Support,
     /// The runs the samples come from.
@@ -354,8 +354,7 @@ pub(crate) mod tests {
 
     /// A field no reader knows is refused at every level, so a run reference
     /// reaches the profile only through `evidence`, the field a reference
-    /// check will read once a profile is tracked (owner decision
-    /// on ).
+    /// check reads for a tracked profile.
     #[test]
     fn a_profile_refuses_fields_it_does_not_read() {
         let provisional = Support::Provisional {

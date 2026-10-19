@@ -4,7 +4,7 @@ This reference describes the pinned primary and NRT interrupt paths, their
 MMIO ordering and deferred-work semantics. Vendor callback/RTOS topology is
 comparison evidence; the Rust runtime owns its typed dispatch and lifecycle.
 Source-124 command-ready causality is not established by callback topology.
-The predecessor repository's radio runtime rechecked pending scheduler waits
+A radio runtime outside this repository rechecks pending scheduler waits
 after a bounded delay.
 
 ## Pinned inputs
@@ -161,10 +161,10 @@ runs. Consequently the required deferred contract is:
 5. a racing publication after dequeue opens a new epoch and emits a new wake.
 
 `SchedulerWakeCell` implements this contract with one `AtomicU8`.
-It is not an async primitive by itself: the platform forwarded each
-`WakeWorker` publication to the predecessor repository's radio runtime signal,
-and that runtime drained the real scheduler list before considering the epoch
-complete; a new driver keeps that order.
+It is not an async primitive by itself: the platform forwards each
+`WakeWorker` publication to the radio runtime signal, and the runtime drains
+the real scheduler list before it considers the epoch complete; a driver
+keeps that order.
 
 The drained list is not a hidden hardware FIFO. Complete producer review shows
 that task-side scheduler item removal/reordering inserts items into a

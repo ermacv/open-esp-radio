@@ -3,28 +3,28 @@ schema = 1
 
 [[sources]]
 id = "PROMOTED_HE20_PEER"
-description = "Before promotion, the predecessor repository's migration/esp32s31-hybrid-runtime/src/he.rs; finite HE Capability/Operation parsing and peer-register transcription subsequently promoted into open driver crates."
+description = "Driver source outside this repository, migration/esp32s31-hybrid-runtime/src/he.rs; finite HE Capability/Operation parsing and peer-register transcription in the open driver crates."
 
 [[sources]]
 id = "PROMOTED_HE20_ASSOCIATION"
-description = "Before promotion, the predecessor repository's migration/esp32s31-hybrid-runtime/src/he.rs and association owner; finite interface-zero MMSS/AID transcription subsequently promoted into open driver crates."
+description = "Driver source outside this repository, migration/esp32s31-hybrid-runtime/src/he.rs and association owner; finite interface-zero MMSS/AID transcription in the open driver crates."
 
 [[sources]]
 id = "PROMOTED_RX_AMPDU"
-description = "Before promotion, the predecessor repository's migration/esp32s31-hybrid-runtime/src/rx_ampdu_hw.rs blob 293a864aae77f5768054b3a0a8e7b5dbe78404e5; recovered RX BlockAck transaction later promoted to crates/hardware/esp32s31/driver/wifi/mac/src/rx_ampdu_hw.rs."
+description = "Driver source outside this repository, migration/esp32s31-hybrid-runtime/src/rx_ampdu_hw.rs blob 293a864aae77f5768054b3a0a8e7b5dbe78404e5; recovered RX BlockAck transaction later promoted to crates/hardware/esp32s31/driver/wifi/mac/src/rx_ampdu_hw.rs."
 
 [[sources]]
 id = "PROMOTED_TX_AMPDU"
-description = "Before promotion, the predecessor repository's migration/esp32s31-hybrid-runtime/src/tx_ampdu.rs blob 14b76600977613fa878d0e9838fabc4b63606bbd; recovered TX BlockAck transaction later promoted to crates/hardware/esp32s31/driver/wifi/mac/src/tx_ampdu.rs."
+description = "Driver source outside this repository, migration/esp32s31-hybrid-runtime/src/tx_ampdu.rs blob 14b76600977613fa878d0e9838fabc4b63606bbd; recovered TX BlockAck transaction later promoted to crates/hardware/esp32s31/driver/wifi/mac/src/tx_ampdu.rs."
 
 [[sources]]
 id = "OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER"
-description = "The predecessor repository's crates/hardware/esp32s31/driver/wifi/mac/src/init.rs, first source-owned open promiscuous RX frontier; subsequently qualified by the connected ESP32-S31 rev0 scan/STA run recorded as HIL_OPEN_RX_LIVE_APPEND_2026_07_27. It publishes zero at 0x20104cac, executes complete BLOB_LIBPP_HAL_SNIFFER_ENABLE, sets bits 15:8 at 0x201040f4 through one fresh-read RMW, then issues a device fence."
+description = "Driver source outside this repository, crates/hardware/esp32s31/driver/wifi/mac/src/init.rs, first source-owned open promiscuous RX frontier; qualified by the connected ESP32-S31 rev0 scan/STA run recorded as HIL_OPEN_RX_LIVE_APPEND_2026_07_27. It publishes zero at 0x20104cac, executes complete BLOB_LIBPP_HAL_SNIFFER_ENABLE, sets bits 15:8 at 0x201040f4 through one fresh-read RMW, then issues a device fence."
 
 [[sources]]
 id = "PROMOTED_CHANNEL_SWITCH"
-description = "The predecessor repository's migration/esp32s31-hybrid-runtime/src/channel_switch.rs and src/radio_hal.rs before their promotion; exact finite WIFI_PS_NONE MAC stop/idle/restart and REGDMA-link-four transcription. This channel-restart leaf was not wired into the live HIL until the open STA timeout investigation."
+description = "Driver sources outside this repository, migration/esp32s31-hybrid-runtime/src/channel_switch.rs and src/radio_hal.rs; exact finite WIFI_PS_NONE MAC stop/idle/restart and REGDMA-link-four transcription. This channel-restart leaf was not wired into the live HIL until the open STA timeout investigation."
 
 [[sources]]
 id = "PROMOTED_LMAC_TX"
-description = "The predecessor repository's migration/esp32s31-hybrid-runtime/src/lmac.rs before its promotion; exact ESP32-S31 queue-bank address/stride transcription and async timeout/completion path later promoted into chips/esp32s31/ieee80211/mac/src/tx.rs. Existing open authentication and connected-network HIL qualify the ordinary queue-zero path."
+description = "Driver source outside this repository, migration/esp32s31-hybrid-runtime/src/lmac.rs; exact ESP32-S31 queue-bank address/stride transcription and async timeout/completion path later promoted into chips/esp32s31/ieee80211/mac/src/tx.rs. Existing open authentication and connected-network HIL qualify the ordinary queue-zero path."

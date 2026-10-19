@@ -1,5 +1,4 @@
-//! How many samples a bound needs, from the bound itself rather than habit
-//! (, principle 4).
+//! How many samples a bound needs, from the bound itself rather than habit.
 //!
 //! A bound reported as the maximum of `n` independent samples covers the
 //! quantile `q` with confidence `c` once `qⁿ ≤ 1 − c`. The loss-rate and

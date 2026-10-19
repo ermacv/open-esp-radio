@@ -2,8 +2,8 @@
 
 The open radio role, runtime and Controller core that this page compares
 with the vendor are not in this repository; the passages that name them
-describe the predecessor repository's implementation, and the kept memory
-codecs, executor and portable pieces still follow them.
+describe an implementation outside this repository, which the memory
+codecs, executor and portable pieces here follow.
 
 This reference describes the DTM descriptor, scheduler, timing and ownership
 contracts of the pinned vendor Controller and how the open implementation
@@ -50,7 +50,7 @@ through `dtm_4.o`:
 | `sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1` | 810 | Build and publish every later event. |
 | `sym_dtm_ifYtgHeQ0rvhqeqBbpl1` | 370 | `r_ble_lll_dtm_recycle_sch_item`: the completion callback installed at item `+0x58`. |
 | `sym_dtm_NsbldBIeGraE2wg0AVy7` | 140 | `r_ble_lll_dtm_end_test`: stop the scheduler and free the graph. |
-| `sym_dtm_ikQ7xyHA5qBHWlaqAjZu` / `sym_dtm_JMPstxdIRcEVY1YJeXkA` | 72 / 28 | RX result projection and the RSSI getter behind `esp_ble_get_dtm_rx_rssi`, described with the predecessor repository's `DtmRxResultProjection`. |
+| `sym_dtm_ikQ7xyHA5qBHWlaqAjZu` / `sym_dtm_JMPstxdIRcEVY1YJeXkA` | 72 / 28 | RX result projection and the RSSI getter behind `esp_ble_get_dtm_rx_rssi`, described with the `DtmRxResultProjection` of an implementation outside this repository. |
 
 The CTE fields of the role context (length at `+0x1d`, type at `+0x1e`, slot
 duration at `+0x1f`, switching pattern at `+0x20..`) select a separate event
@@ -91,8 +91,8 @@ transmitter leaves that word alone. The body does not write `+0x04`.
 
 The power index comes from `r_sym_ble_5YIHPyqYswSaQs7KMvEA`, which searches the
 BLE PHY environment's provider level table for the highest level not above the
-request; the predecessor repository's `LeTxPower` carries it and refuses a
-request below the lowest level, where the vendor asserts.
+request; an implementation outside this repository carries it in `LeTxPower`
+and refuses a request below the lowest level, where the vendor asserts.
 
 The memory codec reproduces the reset as a non-publishable reviewed region.
 It exposes no controller address, storage publication or hardware-ownership
@@ -115,9 +115,9 @@ into the item.
 The recurring body `sym_dtm_C15YAGhOCEEdWMnhjaY3.part.1` rewrites the same
 item. It stores link-state byte `+0x61` into bits 27:20 of `+0x14`, replaces
 the receiver's `+0x2c` with literal one and recomputes the times and `+0x0c`
-the same way. The predecessor repository's memory codec
-`DtmSchedulerItemReviewedWords` applies these transforms; the radio role copied the power only for an event
-after the first one of a test instance.
+the same way. The memory codec `DtmSchedulerItemReviewedWords` of an
+implementation outside this repository applies these transforms; its radio role
+copies the power only for an event after the first one of a test instance.
 
 Channel and PHY inputs are typed. `r_sym_ble_2a66ZbcncZhAIIYsMGHk`
 (`r_ble_phy_chan_to_freq`) maps DTM channel `n` to frequency image `2*n`.

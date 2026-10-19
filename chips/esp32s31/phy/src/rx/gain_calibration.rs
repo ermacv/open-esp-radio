@@ -1077,7 +1077,7 @@ const fn gain(bank: PhyRxGainDcBank, index: u8) -> u16 {
 }
 
 /// Expand complete ROM `phy_pbus_set_rxgain`, size 92, into its three
-/// independently completed PBus commands. The final command's former
+/// independently completed PBus commands. The final command's vendor
 /// `phy_param[0x002]` dependency is an explicit Rust-owned input.
 pub(crate) const fn set_rx_gain_transaction(
     encoded_gain: u32,

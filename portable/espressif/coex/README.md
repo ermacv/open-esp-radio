@@ -12,9 +12,9 @@ shared state, and a chip crate such as
 `CoexTimerHardware::pti` reads the arbiter's table when a request is
 programmed, and a priority change goes through the arbiter's lease. The
 ESP32-S31 arbiter lends only timers 0 through 4: timer 5 carries its PHY
-grant-protect request, so event 48 has no policy timer. No runtime combines
-the core and the schedule now: the former ESP32-S31 radio runtime did, with exclusive
-access to the shared radio, and its policy is recorded below
+grant-protect request, so event 48 has no policy timer. No runtime in this
+repository combines the core and the schedule; a radio runtime that does, with
+exclusive access to the shared radio, runs the policy recorded below
 ([Participants, status and order](#participants-status-and-order)). This
 crate does not implement
 RF grant notification. See the ESP32-S31
@@ -53,10 +53,10 @@ and restarts them itself (`restart`) at its beacons. Each `CoexPhaseStep`
 tells the runtime owner how long to arm the phase timer and whom to notify.
 `CoexScheduleExecutor` turns each step into a phase-timer command with a
 generation; an expiry of an older generation lost a race with a later phase
-change and steps nothing. The former radio runtime ran the timer and
-signalled each notified radio; no runner exists now. A radio publishes its status through the schedule's
-`set_status_bits` and `clear_status_bits`; in the former runtime Wi-Fi
-reacted to its phases, while Bluetooth LE did not wait for its own.
+change and steps nothing. A radio runtime runs the timer and signals each
+notified radio; no runner is in this repository. A radio publishes its status
+through the schedule's `set_status_bits` and `clear_status_bits`; Wi-Fi
+reacts to its phases, while Bluetooth LE does not wait for its own.
 
 On the ESP32-S31, `oer_esp32s31_radio_coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
@@ -116,7 +116,7 @@ events 41 through 44, which a radio publishes per operation scene.
 
 ## Participants, status and order
 
-The former ESP32-S31 radio runtime ran this policy with exclusive access to the shared radio, as the pinned libcoexist does:
+A radio runtime runs this policy with exclusive access to the shared radio, as the pinned libcoexist does:
 
 - **Participants (`coex_enable`/`coex_disable`).** The first participant
   selects the policy timers' clock (`coex_pre_init`) and enables requests

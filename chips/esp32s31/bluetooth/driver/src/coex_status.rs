@@ -2,9 +2,8 @@
 //! vendor status hook.
 //!
 //! A Controller publishes which roles it has active as Bluetooth LE schedule
-//! status bits, and its stop withdraws them all. The composition that
-//! published them was removed with the Bluetooth LE orchestration (, tag
-//! `legacy-radio-2026-10-16`).
+//! status bits, and its stop withdraws them all. No composition in this
+//! repository publishes them.
 
 /// The long-lived roles a Controller has active.
 ///

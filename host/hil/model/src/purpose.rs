@@ -28,7 +28,7 @@ pub enum Interop {}
 pub enum Measurement {}
 
 /// The issue an investigation answers. Without an open issue an
-/// investigation is deleted (, owner decision 2).
+/// investigation is deleted.
 pub trait OpenQuestion {
     const ISSUE: NonZeroU32;
 }

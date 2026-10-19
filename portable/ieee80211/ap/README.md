@@ -6,7 +6,7 @@ tests.
 
 ## Known defects
 
-Found in the predecessor's review of 2026-10-16 and still present.
+Found in a code review of 2026-10-16 (record outside this repository).
 
 **Security**
 

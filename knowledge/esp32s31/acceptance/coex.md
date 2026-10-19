@@ -1,6 +1,6 @@
 # Coexistence acceptance scenarios
 
-Predecessor HIL catalog, state of 2026-10-16. These run a joint Wi-Fi and
+HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too. These run a joint Wi-Fi and
 Bluetooth LE image on the shared radio. Two IEEE 802.15.4 scenarios also
 exercise coexistence; they are in [ieee802154.md](ieee802154.md).
 
@@ -17,7 +17,7 @@ exercise coexistence; they are in [ieee802154.md](ieee802154.md).
   - At least 20 BLE echoes.
 - Peer: Wi-Fi station fixture (the AP side offers paced UDP to the station)
   plus a Linux BlueZ adapter as the GATT central.
-- Hardware: pass, predecessor HIL run 2026-10-11. On 2026-09-29 it measured
+- Hardware: pass, stand run 2026-10-11. On 2026-09-29 it measured
   12.88 Mbit/s Wi-Fi RX and 33 echoes.
 
 ## Shared-PHY tracking hold under Wi-Fi and BLE load
@@ -32,7 +32,7 @@ exercise coexistence; they are in [ieee802154.md](ieee802154.md).
   - As above: 12 s, 20 Mbit/s offered, at least 8 Mbit/s, at least 20 echoes.
   - 2 ticks per configuration. Hold durations are recorded, not bounded.
 - Peer: Wi-Fi station fixture plus Linux BlueZ.
-- Hardware: pass, predecessor HIL run 2026-10-11. Measured: bracket 15.8 ms,
+- Hardware: pass, stand run 2026-10-11. Measured: bracket 15.8 ms,
   tick 30.1 ms.
 
 ## Wi-Fi radio restart while BLE advertises
@@ -49,4 +49,4 @@ exercise coexistence; they are in [ieee802154.md](ieee802154.md).
 - Gate: 3 repetitions × 3 cycles, each within 90 s. No BLE numeric gate; BLE
   only advertises.
 - Peer: Wi-Fi station fixture only.
-- Hardware: pass, predecessor HIL run 2026-10-11.
+- Hardware: pass, stand run 2026-10-11.

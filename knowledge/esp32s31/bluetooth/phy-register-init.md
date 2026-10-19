@@ -3,10 +3,8 @@
 Source: `esp32s31-bt-lib` `libble_app.a` (pin `10c50778`), member `ble_70.o`
 `r_sym_ble_nENHlP4KBuQYlFVffaR5` (role `r_ble_phy_init_registers`) with its
 callees (roles `r_ble_phy_ramup_time_set`, `r_ble_phy_monitor_bb_sync`,
-`r_ble_hw_resolv_list_set`); extracted from
-the predecessor repository's `chips/esp32s31/pac/src/bluetooth/phy.rs`
-(`initialize_ble_phy_registers`, `enable_ble_base_stack_hardware`) and its
-`phy/tests.rs`. The register evidence is
+`r_ble_hw_resolv_list_set`); from a vendor-code analysis (record outside
+this repository). The register evidence is
 `registers/esp32s31/evidence/vendor-radio-libraries.toml`
 (`BLOB_LIBBLE_PHY_INIT_REGISTERS`).
 

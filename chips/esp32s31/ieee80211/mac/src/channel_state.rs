@@ -10,8 +10,8 @@
 //! - the little-endian frequency in MHz starts at byte two.
 //!
 //! The remaining record bytes deliberately stay opaque. They are copied at
-//! cold handoff so vendor leaves that still need a complete record can be
-//! migrated without inventing meanings for fields that have not been proved.
+//! cold handoff so vendor leaves that need a complete record get it without
+//! meanings invented for fields that have not been proved.
 
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
