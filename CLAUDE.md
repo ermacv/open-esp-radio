@@ -30,7 +30,8 @@ without vendor radio binaries. Decisions are in
   written as a local mask or shift. `unsafe` stays narrow and carries
   `// SAFETY:` ([docs/unsafe.md](docs/unsafe.md)).
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
-  code never blocks or spins; it yields to its executor.
+  code never blocks or spins; it yields to its executor. The one exception is
+  a named settle of up to 20 µs ([docs/decisions.md](docs/decisions.md)).
 - **Panics.** Input from outside never panics: frames from the air, any peer
   value (counters, PNs, sequence numbers, lengths, indices), host and API
   input return a handled error. Elsewhere, during development, `todo!`,
