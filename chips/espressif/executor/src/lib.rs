@@ -6,8 +6,9 @@
 //!
 //! This crate owns only executor wake-up and timer-queue integration. It does
 //! not own radio policy, board electrical parameters, credentials, sockets or
-//! a host protocol. Optional timer observations, idle accounting and poll
-//! timing describe only its own execution. Applications supply the ESP-HAL
+//! a host protocol. Timer observations, idle accounting and poll timing,
+//! compiled for an image that declares the profile class (`cfg(oer_profile)`),
+//! describe only its own execution. Applications supply the ESP-HAL
 //! software interrupt capabilities and the system timer explicitly, with the
 //! tokens of their sources in the image's interrupt table.
 //!
@@ -51,11 +52,11 @@ pub use executor::{
 #[cfg(feature = "chip")]
 pub use time_driver::{alarm_interrupt, bind, init};
 
-#[cfg(any(feature = "timer-observation", test))]
+#[cfg(any(all(oer_profile, feature = "chip"), test))]
 pub mod timer_observation;
 
-#[cfg(any(feature = "idle-accounting", test))]
+#[cfg(any(all(oer_profile, feature = "chip"), test))]
 pub mod idle_accounting;
 
-#[cfg(any(feature = "poll-timing", test))]
+#[cfg(any(all(oer_profile, feature = "chip"), test))]
 pub mod poll_timing;

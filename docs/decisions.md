@@ -68,6 +68,14 @@ bounds) live in the code that applies them.
   probe feature. A probe uses the public API where it can. Production stays
   clean by proof: a change that adds or moves hooks shows the S31 images
   unchanged.
+- **Instrumentation** is no probe, and its classes share no logic: `trace`
+  (what happened: values and events), `profile` (what execution costs:
+  time, cycles, load) and `debug-control` (knobs that force execution
+  paths). Each compiles under its own cfg (`oer_trace`, `oer_profile`,
+  `oer_debug_control`), which only `cargo fw` sets, for an image that
+  declares the class in its manifest, in a target directory of its own; the
+  classes have no Cargo features. A further mechanism, such as a profiler,
+  is discussed first.
 - **Every package builds**; the workspace has no `exclude` list.
 
 ## Execution

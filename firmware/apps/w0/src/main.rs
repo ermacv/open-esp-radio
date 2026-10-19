@@ -13,6 +13,12 @@
 //! calibration identity, and the interface addresses esp-hal derives from
 //! the base MAC.
 
+// The image declares the trace class in its manifest; `cargo fw` sets the cfg.
+#[cfg(not(oer_trace))]
+compile_error!(
+    "w0 declares the trace class: build it with `cargo fw build w0`, check it with RUSTFLAGS=\"--cfg oer_trace\""
+);
+
 use core::fmt::Write as _;
 
 use esp_hal::{

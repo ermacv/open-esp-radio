@@ -20,13 +20,15 @@ use std::{
     process::Command,
 };
 
-use crate::Result;
+use crate::{Result, instrumentation::Instrumentation};
 use oer_os_toolchain::Tool;
 
-/// The image compiler setup of an image under `policy`, built from the tree
-/// at `root` with the image linker's build in `linker_target`.
+/// The image compiler setup of an image under `policy` with the classes of
+/// `instrumentation`, built from the tree at `root` with the image linker's
+/// build in `linker_target`.
 pub fn of_policy<'a>(
     policy: &oer_chip_profile::policy::StackPolicy,
+    instrumentation: &Instrumentation,
     root: &'a Path,
     linker_target: &'a Path,
     rust_target: &'a str,
@@ -37,6 +39,7 @@ pub fn of_policy<'a>(
         rust_target,
         max_move_bytes: policy.max_move_bytes,
         runtime_environment: policy.runtime_environment(),
+        instrumentation: instrumentation.clone(),
     }
 }
 
@@ -57,15 +60,17 @@ pub fn host_build_root() -> Result<PathBuf> {
 }
 
 /// The firmware compile cache (`CARGO_TARGET_DIR`) of the checkout at
-/// `root`, inside its own `target/`: every image class and chip of that
-/// checkout. A cache is never shared between checkouts: Cargo decides that a
+/// `root` for images built with `instrumentation`, inside its own
+/// `target/fw/`: every image class and chip of that checkout. Each set of
+/// instrumentation classes has a cache of its own, so a plain image's cache
+/// never compiles an instrumentation cfg. A cache is never shared between checkouts: Cargo decides that a
 /// path package's unit is fresh by comparing modification times, so a unit
 /// another checkout compiled from other sources of the same package would
 /// pass for this one's. Builds uplift their binaries to the same
 /// `<target>/firmware/<name>`, so each holds [`lock_compile_cache`] from its
 /// Cargo run until its outputs are copied out.
-pub fn compile_cache(root: &Path) -> PathBuf {
-    root.join("target/fw/cargo")
+pub fn compile_cache(root: &Path, instrumentation: &Instrumentation) -> PathBuf {
+    root.join("target/fw").join(instrumentation.cache_name())
 }
 
 /// The target directory of the image linker of the checkout at `root`: its
@@ -126,6 +131,8 @@ pub struct ImageCompiler<'a> {
     /// Variables the image's runtime reads at compile time (its stack
     /// policy's reserves).
     pub runtime_environment: Vec<(&'static str, String)>,
+    /// The instrumentation classes whose cfgs the image is compiled under.
+    pub instrumentation: Instrumentation,
 }
 
 /// Configure `command`, a Cargo build of an image, with the compiler flags
@@ -137,7 +144,12 @@ pub fn configure(command: &mut Command, compiler: &ImageCompiler<'_>) -> Result<
     // stack-size ELF section is consumed by a safe host-side parser.
     command.env("RUSTC_BOOTSTRAP", "1").env(
         "RUSTFLAGS",
-        rustflags(env::var("RUSTFLAGS").ok(), compiler.max_move_bytes, &linker)?,
+        rustflags(
+            env::var("RUSTFLAGS").ok(),
+            compiler.max_move_bytes,
+            &linker,
+            &compiler.instrumentation,
+        )?,
     );
     for (variable, value) in &compiler.runtime_environment {
         command.env(variable, value);
@@ -205,7 +217,8 @@ fn with_stack_sizes(existing: Option<String>) -> String {
     }
 }
 
-/// Existing Rust flags with the image flags appended.
+/// Existing Rust flags with the image flags appended, the cfgs of
+/// `instrumentation` last.
 ///
 /// Without shared generics, fat LTO keeps one copy of a generic instance per
 /// crate that instantiates it: the Wi-Fi and Bluetooth compositions both
@@ -215,7 +228,12 @@ fn with_stack_sizes(existing: Option<String>) -> String {
 /// The image linker replaces the target's `rust-lld` and keeps its flavor.
 /// `RUSTFLAGS` separates flags at spaces, so the linker's path must have
 /// none.
-fn rustflags(existing: Option<String>, max_move_bytes: u64, linker: &Path) -> Result<String> {
+fn rustflags(
+    existing: Option<String>,
+    max_move_bytes: u64,
+    linker: &Path,
+    instrumentation: &Instrumentation,
+) -> Result<String> {
     let linker = linker
         .to_str()
         .filter(|path| !path.contains(char::is_whitespace))
@@ -233,7 +251,10 @@ fn rustflags(existing: Option<String>, max_move_bytes: u64, linker: &Path) -> Re
         "-Z share-generics=y".to_owned(),
         format!("-C linker={linker}"),
         "-C linker-flavor=ld.lld".to_owned(),
-    ] {
+    ]
+    .into_iter()
+    .chain(instrumentation.rustflags())
+    {
         if !rustflags.is_empty() {
             rustflags.push(' ');
         }
@@ -273,6 +294,7 @@ mod tests {
                 Some("-C debuginfo=1".into()),
                 4096,
                 Path::new("/repo/target/image-linker/debug/oer-image-linker"),
+                &Instrumentation::default(),
             )
             .unwrap(),
             "-C debuginfo=1 -Z emit-stack-sizes -Z move-size-limit=4096 \
@@ -280,7 +302,36 @@ mod tests {
              -C linker=/repo/target/image-linker/debug/oer-image-linker -C linker-flavor=ld.lld"
         );
         // A path RUSTFLAGS would split is refused.
-        assert!(rustflags(None, 4096, Path::new("/a b/linker")).is_err());
+        assert!(
+            rustflags(
+                None,
+                4096,
+                Path::new("/a b/linker"),
+                &Instrumentation::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn an_instrumented_image_compiles_its_cfgs_in_a_cache_of_its_own() {
+        use crate::instrumentation::Class;
+        let instrumentation: Instrumentation = [Class::Profile, Class::Trace].into_iter().collect();
+        assert_eq!(
+            rustflags(None, 4096, Path::new("/linker"), &instrumentation).unwrap(),
+            "-Z emit-stack-sizes -Z move-size-limit=4096 -W large-assignments \
+             -Z share-generics=y -C linker=/linker -C linker-flavor=ld.lld \
+             --cfg oer_trace --cfg oer_profile"
+        );
+        let root = Path::new("/checkout");
+        assert_eq!(
+            compile_cache(root, &Instrumentation::default()),
+            root.join("target/fw/cargo")
+        );
+        assert_eq!(
+            compile_cache(root, &instrumentation),
+            root.join("target/fw/cargo-trace-profile")
+        );
     }
 
     /// A tree whose `oer-tool-image-linker` builds an `oer-image-linker` stand-in
@@ -349,7 +400,7 @@ mod tests {
         let first = checkout_with("first", std::time::SystemTime::now());
         let second = checkout_with("second", old);
         for (checkout, marker) in [(&first, "first"), (&second, "second")] {
-            let cache = compile_cache(checkout.path());
+            let cache = compile_cache(checkout.path(), &Instrumentation::default());
             assert!(cache.starts_with(checkout.path()));
             oer_os_process::run(
                 oer_os_process::command(
@@ -365,19 +416,29 @@ mod tests {
                 .unwrap();
             assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
         }
-        assert_ne!(compile_cache(first.path()), compile_cache(second.path()));
+        assert_ne!(
+            compile_cache(first.path(), &Instrumentation::default()),
+            compile_cache(second.path(), &Instrumentation::default())
+        );
         assert_ne!(linker_target(first.path()), linker_target(second.path()));
     }
 
     #[test]
     fn a_new_worktree_starts_from_a_copy_of_the_warm_cache() {
         let warm = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(compile_cache(warm.path())).unwrap();
-        std::fs::write(compile_cache(warm.path()).join("unit"), "compiled").unwrap();
+        std::fs::create_dir_all(compile_cache(warm.path(), &Instrumentation::default())).unwrap();
+        std::fs::write(
+            compile_cache(warm.path(), &Instrumentation::default()).join("unit"),
+            "compiled",
+        )
+        .unwrap();
         let fresh = tempfile::tempdir().unwrap();
         seed_build_cache(warm.path(), fresh.path()).unwrap();
         assert_eq!(
-            std::fs::read_to_string(compile_cache(fresh.path()).join("unit")).unwrap(),
+            std::fs::read_to_string(
+                compile_cache(fresh.path(), &Instrumentation::default()).join("unit")
+            )
+            .unwrap(),
             "compiled"
         );
         // A worktree that already has a cache keeps it.

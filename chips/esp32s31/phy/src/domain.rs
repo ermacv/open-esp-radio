@@ -59,7 +59,7 @@ impl PhyDomain {
     }
 
     /// Set the vendor's temperature-tracking debug policy bytes.
-    #[cfg(all(feature = "tracking-diagnostics", target_arch = "riscv32"))]
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
     pub(crate) fn set_temperature_tracking_debug(&mut self, first: u8, second: u8) {
         self.registered
             .target_state_mut()

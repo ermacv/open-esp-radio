@@ -20,9 +20,9 @@ oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio",
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy", features = ["registration-diagnostics"] }
-oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client", features = ["registration-diagnostics"] }
-oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system", features = ["registration-diagnostics"] }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
+oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
 oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
@@ -33,3 +33,7 @@ oer-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true
+
+[package.metadata.open-radio]
+# `cargo fw` builds this image with `cfg(oer_trace)`: the PHY registration's RF calibration results and readiness waits it logs.
+instrumentation = ["trace"]

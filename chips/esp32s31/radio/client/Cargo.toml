@@ -10,9 +10,6 @@ description = "The ESP32-S31 radio system's client contract: membership cells, P
 [features]
 # Host-test construction of cells outside the one static claim.
 test-support = []
-# The registration's RF calibration and readiness-wait diagnostics in
-# `PhyPreparation::Registered`.
-registration-diagnostics = ["oer-esp32s31-phy/registration-diagnostics"]
 
 [dependencies]
 oer-memory = { path = "../../../../portable/memory" }

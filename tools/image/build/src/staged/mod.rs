@@ -16,7 +16,9 @@ use crate::encode;
 use crate::encode::Encoding;
 use oer_chip_profile::policy::StackPolicy;
 
-use crate::{ImageSpec, Result, build_log::BuildLog, exclusion::Staging};
+use crate::{
+    ImageSpec, Result, build_log::BuildLog, exclusion::Staging, instrumentation::Instrumentation,
+};
 
 use crate::encode::stage_two::pack_runtime;
 
@@ -24,7 +26,11 @@ use crate::encode::stage_two::pack_runtime;
 /// pages and stage two starts on one.
 const MMU_PAGE_SIZE: u32 = 0x1_0000;
 
-pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Result<ImageBundle> {
+pub(crate) fn build(
+    spec: &ImageSpec,
+    profile: &oer_chip_profile::Profile,
+    instrumentation: &Instrumentation,
+) -> Result<ImageBundle> {
     let root = spec.root.as_path();
     let target = profile.rust_target.as_str();
     let bootstrap_package = profile.bootstrap_package();
@@ -36,7 +42,9 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Re
     let mut bundle = ImageBundle::new(&output, profile, flash);
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
-    let cache = crate::compile_cache(root);
+    // The runtime and the bootstrap compile with the image's instrumentation,
+    // in its own cache.
+    let cache = crate::compile_cache(root, instrumentation);
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?;
     crate::test_support::refuse(root, &spec.application.package, target)?;
 
@@ -46,7 +54,7 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Re
     let release = cache.join(target).join(crate::FIRMWARE_PROFILE);
     let runtime_elf = {
         let _cache = crate::compiler::lock_compile_cache(&cache)?;
-        let mut runtime = crate::runtime_command(spec, profile, "build", &policy)?;
+        let mut runtime = crate::runtime_command(spec, profile, "build", &policy, instrumentation)?;
         runtime.env("CARGO_TARGET_DIR", &cache);
         crate::cargo::ensure_fetched(root)?;
         {
@@ -108,7 +116,13 @@ pub(crate) fn build(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Re
     crate::zeroed_inputs(&mut bootstrap, profile);
     crate::compiler::configure(
         &mut bootstrap,
-        &crate::compiler::of_policy(&policy, root, &crate::linker_cache(root), target),
+        &crate::compiler::of_policy(
+            &policy,
+            instrumentation,
+            root,
+            &crate::linker_cache(root),
+            target,
+        ),
     )?;
     log.run(&mut bootstrap, "build the Flash/SRAM bootstrap")?;
     let bootstrap_elf = crate::snapshot(

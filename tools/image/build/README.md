@@ -13,8 +13,8 @@ An `ImageSpec` names the tree (`root`: a checkout or a worktree), the
 chip, the application crate (package, binary, features), the stack
 policy, the layout seed, the variables the runtime's build sets or removes
 (`cargo fw`'s stand identity of `w1`), the caller's builder packages and
-extra policy files, the bundle directory (every build compiles in the host's
-one `compile_cache()`) and the checks (`Gates` of `oer-image-checks`): which
+extra policy files, the bundle directory (every build compiles in the checkout's
+`compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
 run, what the interrupt-stack check requires (`Required::Proven`, or
 `Partial` for diagnostic images), an optional audit of the runtime ELF (HIL's
 observer placement), and whether a check that does not pass fails the build
@@ -26,6 +26,17 @@ The chip profile's boot kind selects the pipeline:
 | --- | --- | --- |
 | `staged` (esp32s31, esp32c5) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
 | `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets |
+
+An application package may declare instrumentation classes in its manifest,
+`[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
+happened: values and events), `profile` (what execution costs: time,
+cycles, load) and `debug-control` (knobs that force execution paths). The
+pipeline reads the declaration with `cargo metadata` and compiles the
+runtime and the bootstrap with the classes' cfgs (`oer_trace`,
+`oer_profile`, `oer_debug_control`) in a compile cache of their own
+(`target/fw/cargo-<class>-…`); an image that declares none compiles none, in
+`target/fw/cargo`. The probe hooks are no class: `cfg(oer_probe)` belongs to
+`cargo fw probe` alone.
 
 An `ImageBundle` is one directory with a `bundle.json`:
 

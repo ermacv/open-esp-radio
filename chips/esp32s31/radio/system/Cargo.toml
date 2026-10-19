@@ -7,10 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "The ESP32-S31 radio system: one actor that owns the shared RF front-end"
 
-[features]
-# The registration's diagnostics in `PhyPreparation::Registered`.
-registration-diagnostics = ["oer-esp32s31-radio-client/registration-diagnostics"]
-
 [dependencies]
 embassy-futures = "0.1.2"
 oer-time = { path = "../../../../portable/time" }
