@@ -109,7 +109,7 @@ after a handover.
 
 Every field gets a `[[review]]` like a register field: naming, sources,
 provenance, accuracy, completeness. A fact measured on the stand is evidence
-of a new class, `stand`, citing the `knowledge/` note and the runs; vendor
+of a new class, `stand`, citing the chip's `notes/` and the runs; vendor
 facts keep their `BLOB_*` ids.
 
 `memory.toml` gains the RAM regions the layouts name (`dma-window`,

@@ -15,7 +15,7 @@ application          credentials, network stack (embassy-net), sockets
   radio system       one owner of the shared RF front-end
   PHY                calibration, tracking, channel, TX power (Rust port of libphy)
   HAL                typed register ownership: root, partitions, phased sequences
-  PAC                generated from registers/ (raw) plus single transactions
+  PAC                generated from the register model (raw) plus single transactions
 platform (firmware/) staged boot, interrupt table, panic record, linker layout
 ```
 
@@ -135,7 +135,7 @@ the chip driver directly.
 
 ## Placement
 
-Code goes where the knowledge of the hardware is: `chips/esp32s31/` for this
-chip's registers, `portable/espressif/` and `chips/espressif/` for Espressif IP shared by their chips,
-the protocol directories for portable code, `portable/base/`, `radio/` and
-`exec/` for the rest, `portable/adapters/` and `chips/adapters/` for bindings. See `CLAUDE.md`.
+Code goes where its subject is: `protocols/` for the sans-IO protocols and
+the radio port, `portable/` for generic support, `chips/<chip>/` for one
+chip, `chips/espressif/` for Espressif IP shared by the chips. See the
+[repository layout](repository-layout.md).

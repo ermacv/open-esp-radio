@@ -245,15 +245,18 @@ bounds) live in the code that applies them.
 
 ## Repository and work
 
-- **Layout** ([repository layout](repository-layout.md)): libraries by what
-  they touch (`portable/`, `chips/`, `host/`), chip images in `firmware/`, one
-  host program per folder in `tools/`; chip knowledge is portable; the
-  dependency rules have no exceptions; only `cargo fw` builds images.
+- **Layout** ([repository layout](repository-layout.md)): five roots by what
+  the code is about: `protocols/` (sans-IO protocols and vocabularies),
+  `portable/` (generic support), `chips/` (everything Espressif, the chips'
+  registers, notes and vendor data included), `firmware/` (chip images) and
+  `tools/` (the developer's machine, by domain, each domain with its
+  libraries and its program). Dependency direction is not checked; names and
+  the unsafe boundary are. Only `cargo fw` builds images.
 - **Protocol layers.** Each radio protocol has `wire` (over-the-air formats),
   `port` (the backend contract) and its cores; a backend depends on `port`
   and `wire` only.
 - **Names.** A library is `oer-` and its path below its root; an executable
-  keeps its root (`oer-firmware-<path>`, `oer-tool-<tool>`); no `[lib] name`.
+  keeps its root (`oer-firmware-<path>`, `oer-tool-<path>`); no `[lib] name`.
 - **Merge.** A pull request starts as a draft; marking it ready squash-merges
   it and deletes its branch. Pull requests run no CI; CI checks main after
   every merge; a red main is fixed by whoever broke it.

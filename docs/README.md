@@ -15,5 +15,10 @@ Cross-cutting documents. A component's own details live beside it, in its
   Bluetooth and module names.
 - [Hardware errata](hardware-errata.md): hardware and ROM behaviour seen on the
   boards.
+- [Repository layout](repository-layout.md): the roots, names and where
+  things go.
+- [Unsafe](unsafe.md): the unsafe boundary.
+- [Hardware memory](hardware-memory.md): memory the hardware shares.
 
-Recovered hardware facts and research notes are in each chip's `notes/` and `vendor/` below [chips](../chips/).
+Recovered hardware facts and research notes are in each chip's `notes/` and
+`vendor/` below [chips](../chips/).

@@ -1,8 +1,9 @@
 # Firmware
 
 The images for a chip: applications, the bootstrap, HIL agents, probes, peers
-and vendor references. The staged boot they share is in `chips/platform/` and
-`portable/platform/`, each chip's platform data in `portable/<chip>/platform/`.
+and vendor references. The staged boot they share is in `chips/espressif/staged-*`, each chip's
+memory layout in `chips/<chip>/layout/` and its platform data in
+`chips/<chip>/platform/`.
 The libraries they link are tested on the host.
 
 The boot runs ROM → ESP-IDF bootloader → flash bootstrap → stage two in PSRAM
