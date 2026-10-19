@@ -113,6 +113,7 @@ pub fn cpu0_task_stack_bytes() -> usize {
 /// vector slot against it (`oer_espressif_esp_hal_irq`).
 pub unsafe fn install_current_hart_interrupt_stack() {
     let hart: usize;
+    // SAFETY: reading `mhartid` touches no memory.
     unsafe { asm!("csrr {hart}, mhartid", hart = out(reg) hart, options(nomem, nostack)) };
     let stack = interrupt_stack(hart).unwrap_or_else(|| panic!("invalid hart for interrupt stack"));
     let (bottom, top) = (stack.start, stack.end);
@@ -126,6 +127,7 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     // one ESP-HAL or the stack sampler uses.
     unsafe { guard_interrupt_stack(bottom) };
     let table: *mut u32;
+    // SAFETY: reading `mtvt` touches no memory.
     unsafe {
         asm!(
             "csrr {table}, 0x307",
@@ -138,10 +140,18 @@ pub unsafe fn install_current_hart_interrupt_stack() {
     // while initializing the second core. Preserve that ownership: replace
     // only the hardware-vector slots in whichever table is currently active.
     // Slot zero is not an interrupt entry and remains untouched.
+    // SAFETY: `_runtime_psram_mtvt_source` is the read-only 48-word table the
+    // assembly below defines.
     for (index, source) in unsafe { _runtime_psram_mtvt_source.iter().enumerate().skip(1) } {
+        // SAFETY: `source` is a word of that table.
         let entry = unsafe { ptr::from_ref(source).read_volatile() };
+        // SAFETY: `table` is this hart's active 48-slot MTVT, which ESP-HAL
+        // keeps writable; interrupts are disabled, so no slot dispatches
+        // while it changes.
         unsafe { table.add(index).write_volatile(entry) };
     }
+    // SAFETY: `top` is this hart's interrupt stack top, which the entries
+    // installed above expect in `mscratch`; interrupts stay disabled.
     unsafe {
         asm!(
             "csrw mscratch, {top}",
@@ -163,6 +173,7 @@ pub unsafe fn install_current_hart_interrupt_stack() {
 /// as ESP-HAL's direct IPC binding, would run on the interrupted stack.
 pub(crate) fn verify_current_hart_vectors() {
     let table: *const u32;
+    // SAFETY: reading `mtvt` touches no memory.
     unsafe {
         asm!(
             "csrr {table}, 0x307",
@@ -170,7 +181,9 @@ pub(crate) fn verify_current_hart_vectors() {
             options(nomem, nostack),
         )
     };
+    // SAFETY: the read-only table the assembly below defines.
     let source = unsafe { &*ptr::addr_of!(_runtime_psram_mtvt_source) };
+    // SAFETY: `table` is this hart's active 48-slot MTVT.
     let active: [u32; 48] = core::array::from_fn(|slot| unsafe { table.add(slot).read_volatile() });
     if let Some(slot) = foreign_vector(&active, source) {
         panic!("interrupt vector {slot} is not the runtime's stack-switching entry");
@@ -207,6 +220,8 @@ unsafe fn guard_interrupt_stack(bottom: usize) {
     const TDATA1_M_STORE_NAPOT: usize = (1 << 6) | (1 << 1) | (1 << 7);
     // tcontrol.mte: triggers fire in machine mode.
     const TCONTROL_MTE: usize = 1 << 3;
+    // SAFETY: the caller's contract: interrupts are disabled and trigger
+    // `IRQ_STACK_GUARD_TRIGGER` is ours; programming it touches no memory.
     unsafe {
         asm!(
             "csrw 0x7a0, {select}",
@@ -238,6 +253,7 @@ pub(crate) fn on_interrupt_stack(hart: usize, sp: usize) -> bool {
 pub fn current_hart_interrupt_stack_free_bytes() -> usize {
     let hart: usize;
     let sp: usize;
+    // SAFETY: reads `mhartid` and `sp`; touches no memory.
     unsafe {
         asm!("csrr {hart}, mhartid", "mv {sp}, sp", hart = out(reg) hart, sp = out(reg) sp, options(nomem, nostack))
     };

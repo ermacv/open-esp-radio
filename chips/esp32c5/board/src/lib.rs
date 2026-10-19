@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Memory configuration of the ESP32-C5 devkit with the N16R8 module
 //! (16-MiB quad flash, 8-MiB quad PSRAM).
@@ -9,6 +10,7 @@
 //! runtime's handoff takes. This profile does not
 //! describe every ESP32-C5 board.
 
+#[allow(unsafe_code, reason = "the mask ROM's console is a C ABI")]
 pub mod rom;
 
 use oer_esp32c5_layout::LAYOUT;
@@ -59,6 +61,7 @@ pub fn initialize_psram(peripheral: PSRAM<'static>) -> Psram {
 /// esp-hal's clock tree for the lifetime of the image.
 pub struct BootstrapPsram(pub PSRAM<'static>);
 
+#[allow(unsafe_code, reason = "adopting the bootstrap's PSRAM mapping")]
 // SAFETY: `adopt` takes over the bootstrap's mapping through
 // `Psram::from_existing_mapping`, which neither resets nor remaps PSRAM, and
 // leaves interrupts as it found them.

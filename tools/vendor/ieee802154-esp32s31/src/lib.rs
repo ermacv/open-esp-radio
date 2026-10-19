@@ -1,3 +1,5 @@
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+
 //! Host differential stand for the ESP32-S31 IEEE 802.15.4 driver port.
 //!
 //! The pinned public ESP-IDF driver is compiled unmodified for the host (see
@@ -17,7 +19,9 @@
 pub mod catalog;
 pub mod compare;
 pub mod port;
+#[allow(unsafe_code, reason = "the C callbacks the vendor driver calls")]
 pub mod record;
+#[allow(unsafe_code, reason = "calls into the compiled vendor driver")]
 pub mod scenario;
 
 use std::sync::atomic::{AtomicBool, Ordering};

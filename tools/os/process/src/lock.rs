@@ -21,6 +21,10 @@ use rustix::fs::FlockOperation;
 use crate::Result;
 
 #[cfg(target_os = "linux")]
+#[allow(
+    unsafe_code,
+    reason = "the lock broker passes descriptors over Unix sockets"
+)]
 mod broker;
 #[cfg(target_os = "linux")]
 pub use broker::{BrokerOperation, LockBroker};

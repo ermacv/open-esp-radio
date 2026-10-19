@@ -7,6 +7,8 @@ const PAINT: u32 = 0xa55a_a55a;
 /// caller and not in use as a stack. Paint only before initial stack admission.
 pub unsafe fn paint(bottom: *mut u32, words: usize) {
     for index in 0..words {
+        // SAFETY: `index < words`, which the caller's contract makes
+        // writable, aligned and exclusively ours.
         unsafe { bottom.add(index).write_volatile(PAINT) };
     }
 }
@@ -16,6 +18,8 @@ pub unsafe fn paint(bottom: *mut u32, words: usize) {
 /// This counts the untouched prefix; it does not infer usage above a paint hole.
 pub unsafe fn free_words(bottom: *const u32, words: usize) -> usize {
     for index in 0..words {
+        // SAFETY: `index < words`, which the caller's contract makes
+        // initialized and readable.
         if unsafe { bottom.add(index).read_volatile() } != PAINT {
             return index;
         }

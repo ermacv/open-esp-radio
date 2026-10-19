@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Electrical and memory configuration for ESP32-S31-Function-CoreBoard-1.
 //!
@@ -8,6 +9,7 @@
 //! through [`BootstrapPsram`], which the staged runtime's handoff takes: the
 //! board does not link the runtime.
 
+#[allow(unsafe_code, reason = "the mask ROM's console is a C ABI")]
 pub mod rom;
 
 use oer_esp32s31_layout::LAYOUT;
@@ -52,6 +54,7 @@ pub fn initialize_psram(peripheral: PSRAM<'static>) -> Psram {
 /// that requests and releases MPLL must never power it down under PSRAM.
 pub struct BootstrapPsram(pub PSRAM<'static>);
 
+#[allow(unsafe_code, reason = "adopting the bootstrap's PSRAM mapping")]
 // SAFETY: `adopt` takes over the bootstrap's mapping through
 // `Psram::from_existing_mapping`, which neither resets nor remaps PSRAM, and
 // checks that the PSRAM PHY supply kept its configuration; it leaves

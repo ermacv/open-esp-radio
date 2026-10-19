@@ -211,6 +211,34 @@ fn every_crate_above_the_unsafe_boundary_forbids_unsafe_code() {
 }
 
 #[test]
+fn every_crate_below_the_unsafe_boundary_denies_undocumented_unsafe_code() {
+    let root = root();
+    let missing = all_packages(&root)
+        .into_iter()
+        .filter(|package| below_the_boundary(package) && !package.ends_with("pac-raw"))
+        .flat_map(|package| {
+            // Bootstrap and probe images are unsafe throughout: they deny
+            // only undocumented unsafe blocks (docs/unsafe.md).
+            let image = package.starts_with("firmware/bootstrap/")
+                || package.starts_with("firmware/probes/");
+            crate_roots(&root, &package)
+                .into_iter()
+                .map(move |path| (path, image))
+        })
+        .filter(|(path, image)| {
+            !std::fs::read_to_string(path).unwrap().lines().any(|line| {
+                let line = line.trim();
+                line == "#![forbid(unsafe_code)]"
+                    || line == "#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]"
+                    || (*image && line == "#![deny(clippy::undocumented_unsafe_blocks)]")
+            })
+        })
+        .map(|(path, _)| path.strip_prefix(&root).unwrap().display().to_string())
+        .collect::<Vec<_>>();
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
 fn the_boundary_is_named_by_package_or_domain() {
     for package in [
         "chips/esp32s31/hal",
