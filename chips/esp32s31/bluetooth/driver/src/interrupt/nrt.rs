@@ -6,8 +6,6 @@
 //! module retains only an acknowledged token without assigning Link-Layer
 //! names or publishing synthetic work.
 
-#![forbid(unsafe_code)]
-
 use oer_esp32s31_hal::bluetooth::{BluetoothNrtInterruptAcknowledged, InterruptRegistersOwner};
 
 /// One acknowledged NRT epoch for the pinned standalone default profile.

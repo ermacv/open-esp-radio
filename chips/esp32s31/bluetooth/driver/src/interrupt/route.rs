@@ -7,8 +7,6 @@
 //! This module is policy only: it cannot program an interrupt matrix or mint
 //! an active PAC owner.
 
-#![forbid(unsafe_code)]
-
 /// One hardware interrupt source used by the LE Controller.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]

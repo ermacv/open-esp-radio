@@ -10,8 +10,6 @@
 //! [`SchedulerWakeCell::take`] and must deliver every
 //! [`SchedulerWakePublication::WakeWorker`] result.
 
-#![forbid(unsafe_code)]
-
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::interrupt::SchedulerWorkerWakeClass;

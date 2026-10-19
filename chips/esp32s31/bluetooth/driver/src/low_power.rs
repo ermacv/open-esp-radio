@@ -85,20 +85,16 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MOD
     /// to this exact powered epoch, while the only route installer remains
     /// private and cannot have run yet.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the consuming Controller state proves the lower HAL prerequisites"
-    )]
     pub fn initialize_modem_lp_timer_hardware(
         self,
     ) -> Result<
         ControllerLowPowerHardwareInitialized<'cells, MODEM_TIMER_CAPACITY>,
         ControllerLowPowerHardwareInitializationFailure<'cells, MODEM_TIMER_CAPACITY>,
     > {
+        // This consuming state owns the powered scheduler epoch, and no
+        // public transition can have installed source 127.
         match self.try_initialize_low_power_hardware_with(|task| {
-            // SAFETY: this consuming state owns the powered scheduler
-            // epoch and no public transition can have installed source 127.
-            unsafe { task.initialize_modem_lp_timer_hardware() }
+            task.initialize_modem_lp_timer_hardware()
         }) {
             Ok((scheduler, timer_hardware)) => Ok(ControllerLowPowerHardwareInitialized {
                 scheduler,

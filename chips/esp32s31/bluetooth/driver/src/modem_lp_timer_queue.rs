@@ -5,8 +5,6 @@
 //! owner; expiration delivery crosses an atomic one-event backpressure cell.
 //! No operation allocates, polls hardware in a loop or depends on an RTOS.
 
-#![forbid(unsafe_code)]
-
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicUsize, Ordering};
 
 use oer_esp32s31_hal::bluetooth::{

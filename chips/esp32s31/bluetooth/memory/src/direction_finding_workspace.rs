@@ -6,7 +6,7 @@
 //! reviewed baseline members, validates the complete physical extent and
 //! exposes opaque typed links rather than a vendor allocator or raw words.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::{marker::PhantomPinned, pin::Pin};
 
@@ -204,6 +204,23 @@ impl DirectionFindingWorkspaceCpuOwned {
     /// Borrow the validated address geometry without changing ownership.
     pub const fn binding(&self) -> &DirectionFindingWorkspaceBinding {
         &self.binding
+    }
+
+    /// The disabled-CTE descriptor of this workspace, as the
+    /// direction-finding baseline points the hardware at it.
+    pub fn disabled_cte_descriptor(
+        &self,
+    ) -> oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor {
+        #[allow(unsafe_code, reason = "the owner of the workspace vouches for it")]
+        // SAFETY: this owner holds the workspace `Pin<&'static mut>` for as
+        // long as it lives, its binding names that workspace's disabled-CTE
+        // descriptor, and the workspace words are `VolatileCell`s the CPU
+        // reaches only through volatile accesses.
+        unsafe {
+            oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor::bind(
+                self.binding.disabled_cte_descriptor_address(),
+            )
+        }
     }
 
     /// Return the workspace to its allocation-time image after the Controller

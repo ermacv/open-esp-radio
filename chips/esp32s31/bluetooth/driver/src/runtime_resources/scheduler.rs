@@ -7,12 +7,11 @@
 //! may follow it.
 
 use oer_esp32s31_bluetooth_memory::{
-    ControllerSramLinkAddress, LeDeviceTablePublication, LeRxChain, RxMemoryListClass,
-    SchedulerItemSpace,
+    ControllerSramLinkAddress, LeRxChain, RxMemoryListClass, SchedulerItemSpace,
 };
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerHardwareListIndex, BluetoothSchedulerStop, BluetoothSchedulerStopStep,
-    BluetoothSchedulerStopped,
+    BluetoothSchedulerStopped, DeviceTablePublication,
 };
 
 use super::ControllerPoweredTaskRuntime;
@@ -22,6 +21,15 @@ use oer_esp32s31_bluetooth_memory::scheduler::{
     SchedulerRunInterruptStorage, SchedulerStartError, SchedulerStep, SchedulerStopError,
     SchedulerTransactionFault, SchedulerWait,
 };
+
+/// Why the scanner start was refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControllerScanStartError {
+    /// The receive chains were not published in this epoch.
+    RxChainsNotPublished,
+    /// The HAL refused the scanning list's publication.
+    Refused(oer_esp32s31_hal::bluetooth::ScanStartError),
+}
 
 /// Why the global receive chains were not published.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -161,35 +169,30 @@ impl ControllerPoweredTaskRuntime<'_> {
     /// start at one under the S31 configuration's maximum upper limit, as the pinned
     /// `r_ble_lll_scan_start` does after it resets the scanner link state.
     ///
-    /// # Safety
-    ///
     /// The caller has reset the pinned scanner graph since the last scanner
-    /// it accepted, and published the receive chains before the first RUN
-    /// of this epoch.
-    #[allow(
-        unsafe_code,
-        reason = "the caller publishes the scanner graph and the receive chains before a scanner starts"
-    )]
-    pub unsafe fn publish_scan_start(&mut self) {
+    /// it accepted. The scanner writes through the scanning RX list, so the
+    /// start takes that list's publication of this epoch.
+    ///
+    /// # Errors
+    ///
+    /// The receive chains were not published in this epoch, or the HAL
+    /// refused the publication; nothing is written.
+    pub fn publish_scan_start(&mut self) -> Result<(), ControllerScanStartError> {
+        let scanning = self
+            .scanning_rx
+            .as_ref()
+            .ok_or(ControllerScanStartError::RxChainsNotPublished)?;
         let mut controller = self.task.controller();
-        // SAFETY: the caller reset the scanner graph and published the
-        // receive chains (this function's contract), and the task endpoint,
-        // borrowed mutably, serializes the scanner registers.
-        let _published = unsafe { controller.publish_scan_start() };
+        controller
+            .publish_scan_start(scanning)
+            .map(|_published| ())
+            .map_err(ControllerScanStartError::Refused)
     }
 
     /// Publish where the device table starts and how many entries it holds.
-    #[allow(
-        unsafe_code,
-        reason = "the device table owner binds its storage in controller SRAM for 'static"
-    )]
-    pub fn publish_device_table(&mut self, publication: LeDeviceTablePublication) {
+    pub fn publish_device_table(&mut self, publication: &DeviceTablePublication) {
         let mut controller = self.task.controller();
-        // SAFETY: the publication comes from a device table bound to 'static
-        // controller SRAM, whose first `count` entries are written, and the
-        // task endpoint serializes the device-table registers.
-        let _published =
-            unsafe { controller.publish_device_table(publication.first_entry, publication.count) };
+        let _published = controller.publish_device_table(publication);
     }
 
     /// Route and enable the BLE PHY ETM channel again after a test.
@@ -218,10 +221,6 @@ impl ControllerPoweredTaskRuntime<'_> {
     /// non-scanning chain then installs the software-connection policy, which
     /// stays in force for every later event. Publication precedes the first
     /// RUN of the epoch.
-    #[allow(
-        unsafe_code,
-        reason = "the chains bind 'static storage and no RUN was published in this epoch"
-    )]
     pub fn publish_rx_chains<const SCANNING: usize, const NON_SCANNING: usize>(
         &mut self,
         scanning: &LeRxChain<SCANNING>,
@@ -236,22 +235,11 @@ impl ControllerPoweredTaskRuntime<'_> {
             return Err(ControllerRxChainError::WrongClass);
         }
         let mut controller = self.task.controller();
-        // SAFETY: both chains bind 'static pinned storage, no RUN was
-        // published in this powered epoch, and the task endpoint serializes
-        // the list registers.
-        let _scanning = unsafe {
-            controller.publish_rx_memory_list_initial_head(
-                scanning.class().selector(),
-                scanning.initial_cursor(),
-            )
-        };
-        // SAFETY: as above.
-        let _non_scanning = unsafe {
-            controller.publish_software_connection_rx_memory_list_initial_head(
-                non_scanning.class().selector(),
-                non_scanning.initial_cursor(),
-            )
-        };
+        let scanning = controller.publish_rx_memory_list_initial_head(&scanning.publication_head());
+        let _non_scanning = controller.publish_software_connection_rx_memory_list_initial_head(
+            &non_scanning.publication_head(),
+        );
+        self.scanning_rx = Some(scanning);
         Ok(())
     }
 }

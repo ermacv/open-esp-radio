@@ -9,13 +9,13 @@
 //! accept list only. Entries stay packed from the first: a removal moves the
 //! last entry into the freed slot, so the published count is the number of
 //! members. The owner publishes nothing itself; the caller publishes the
-//! [`LeDeviceTablePublication`] after every change.
+//! [`LeDeviceTable::publication`] after every change.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::pin::Pin;
 
-use oer_esp32s31_hal::bluetooth::BluetoothDeviceTableEntryCount;
+use oer_esp32s31_hal::bluetooth::{BluetoothDeviceTableEntryCount, DeviceTablePublication};
 use oer_esp32s31_hal::types::{
     BluetoothControllerSramAddress, BluetoothControllerSramAddressError,
 };
@@ -95,15 +95,6 @@ pub enum LeDeviceTableError {
     NotFound,
 }
 
-/// What hardware walks: the first entry and the number of entries.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeDeviceTablePublication {
-    /// Address of the first entry.
-    pub first_entry: BluetoothControllerSramAddress,
-    /// Number of entries.
-    pub count: BluetoothDeviceTableEntryCount,
-}
-
 /// The device table bound at its Controller-SRAM address.
 pub struct LeDeviceTable {
     storage: Pin<&'static mut LeDeviceTableStorage>,
@@ -152,12 +143,18 @@ impl LeDeviceTable {
         Ok(table)
     }
 
-    /// Hardware's view of the table after the last change.
-    pub fn publication(&self) -> LeDeviceTablePublication {
-        LeDeviceTablePublication {
-            first_entry: self.first_entry,
-            count: BluetoothDeviceTableEntryCount::new(self.members as u32)
-                .expect("the capacity fits the count field"),
+    /// Hardware's view of the table after the last change: its first entry
+    /// and the number of entries.
+    pub fn publication(&self) -> DeviceTablePublication {
+        let count = BluetoothDeviceTableEntryCount::new(self.members as u32)
+            .expect("the capacity fits the count field");
+        #[allow(unsafe_code, reason = "the table vouches for its storage")]
+        // SAFETY: the table holds its storage `Pin<&'static mut>` from `bind`,
+        // which checked it lies in physical controller SRAM, `members` never
+        // exceeds its capacity, and its words are `VolatileCell`s the CPU
+        // reaches only through volatile accesses.
+        unsafe {
+            DeviceTablePublication::new(self.first_entry, count)
         }
     }
 

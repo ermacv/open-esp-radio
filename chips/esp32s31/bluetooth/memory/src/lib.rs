@@ -114,7 +114,7 @@ pub use dtm::{
 
 pub use le_device_table::{
     BLUETOOTH_FILTER_ACCEPT_LIST_CAPACITY, LeDeviceTable, LeDeviceTableBindError,
-    LeDeviceTableError, LeDeviceTablePublication, LeDeviceTableStorage, LeFilterAcceptListDevice,
+    LeDeviceTableError, LeDeviceTableStorage, LeFilterAcceptListDevice,
 };
 #[cfg(not(target_arch = "riscv32"))]
 pub use le_rx_chain::LeRxChainModelAddress;

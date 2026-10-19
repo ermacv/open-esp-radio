@@ -12,8 +12,6 @@
 //! handler must obtain each observation at its named point; it must not reuse
 //! one register image for both merely because their bit geometry is equal.
 
-#![forbid(unsafe_code)]
-
 use oer_esp32s31_hal::bluetooth::{BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch};
 
 pub use oer_esp32s31_hal::bluetooth::{

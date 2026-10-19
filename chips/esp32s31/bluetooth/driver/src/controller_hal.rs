@@ -69,20 +69,14 @@ impl ControllerHalInitialized {
     /// This consumes the clocked client and arms fail-stop ownership before
     /// the first controller write. The result must continue through
     /// scheduler and interrupt initialization before it can run radio work.
+    ///
+    /// `ClockedOwner` proves the enabled Bluetooth clocks and released
+    /// controller resets, and this transition uniquely owns the task and
+    /// inactive interrupt partitions.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the clocked client discharges the HAL transaction's external prerequisites"
-    )]
     pub fn initialize(clocked: ClockedOwner) -> Self {
         Self::initialize_with(clocked, |task, config| {
-            // SAFETY: `ClockedOwner` proves the enabled Bluetooth clocks and
-            // released controller resets, this transition uniquely owns the
-            // task and inactive interrupt partitions, and the fixed S31
-            // SRAM-prefix profile is retained by the returned affine state.
-            unsafe {
-                task.initialize_controller_hal(config);
-            }
+            task.initialize_controller_hal(config)
         })
     }
 

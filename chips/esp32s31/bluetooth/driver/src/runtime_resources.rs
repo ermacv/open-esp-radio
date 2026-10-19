@@ -10,8 +10,6 @@
 //! starts the idle scheduler, captures finished lists and publishes the
 //! global receive chains.
 
-#![deny(unsafe_code)]
-
 use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 
 #[cfg(any(target_arch = "riscv32", test))]
@@ -196,6 +194,9 @@ pub struct ControllerPoweredTaskRuntime<'runtime> {
     pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
     pub(crate) config: oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig,
+    /// The scanning RX list's publication of this epoch, which a scanner
+    /// start needs.
+    pub(crate) scanning_rx: Option<oer_esp32s31_hal::bluetooth::RxMemoryListPublished>,
 }
 
 /// Why the powered task endpoint cannot be retired yet.
@@ -222,6 +223,7 @@ impl<'runtime> ControllerPoweredTaskRuntime<'runtime> {
             time_scale,
             _standalone_dtm_profile: standalone_dtm_profile,
             config,
+            scanning_rx: None,
         }
     }
 
@@ -376,7 +378,7 @@ pub enum ControllerRuntimeRetirementError {
 mod scheduler;
 
 #[cfg(target_arch = "riscv32")]
-pub use scheduler::ControllerRxChainError;
+pub use scheduler::{ControllerRxChainError, ControllerScanStartError};
 
 #[cfg(test)]
 mod tests;

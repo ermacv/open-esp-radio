@@ -5,8 +5,6 @@
 //! cancellation, and abandoned-request drain. A controller becomes reusable
 //! only after the exact cancelled request reports `Drained`.
 
-#![forbid(unsafe_code)]
-
 use crate::{
     ControllerTimeSample,
     controller_time::{

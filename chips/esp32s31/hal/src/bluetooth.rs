@@ -351,6 +351,7 @@ impl ClockedOwner {
                 modem_lp_timer: Some(modem_lp_timer),
                 time_latch: ControllerTimeLatch::new(),
                 reunitable: true,
+                epoch: ControllerEpoch::next(),
             },
             InterruptSetupOwner {
                 registers: interrupts,
@@ -444,6 +445,21 @@ pub struct TaskOwner {
     modem_lp_timer: Option<BluetoothModemLpTimerRegisters>,
     time_latch: ControllerTimeLatch,
     reunitable: bool,
+    epoch: ControllerEpoch,
+}
+
+/// One task owner's span, from its separation out of the clocked owner to its
+/// return: the Controller's lists hold what this span published, and a reset
+/// clears them only between spans. A publication proof of another span is
+/// stale.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ControllerEpoch(u32);
+
+impl ControllerEpoch {
+    fn next() -> Self {
+        static EPOCHS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        Self(EPOCHS.fetch_add(1, core::sync::atomic::Ordering::Relaxed))
+    }
 }
 
 impl TaskOwner {
@@ -505,6 +521,7 @@ impl TaskOwner {
             modem_lp_timer,
             time_latch: _,
             reunitable: _,
+            epoch: _,
         } = self;
         Ok(ClockedOwner {
             partition: Partition {
@@ -544,44 +561,38 @@ impl TaskOwner {
 
     /// Execute the complete reviewed BLE base-stack task-enable hardware transaction.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the completed common-PHY and BTBB membership,
-    /// the initialized source-owned controller software, an inactive IRQ
-    /// route, and both pointed storage objects for every hardware consumer.
+    /// The two objects the transaction points the hardware at come from
+    /// `storage`; the caller runs it with the common-PHY and BTBB membership,
+    /// the initialized controller software and an inactive IRQ route, orders
+    /// of the Controller's lifecycle.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller must retain external lifecycle and pointed-storage owners"
-    )]
-    pub unsafe fn enable_ble_base_stack_hardware<T>(
+    pub fn enable_ble_base_stack_hardware<T>(
         &mut self,
         radio: &mut RadioDomain<T>,
-        inputs: BluetoothPhyRegisterInitInputs,
+        storage: &BlePhyHardwareObjects,
     ) {
         self.reunitable = false;
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        #[allow(
+            unsafe_code,
+            reason = "the PAC transaction points the hardware at the storage"
+        )]
+        // SAFETY: `storage` binds both pointed objects to `'static`,
+        // volatile-only controller SRAM of the BLE PHY engine; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         unsafe {
             self.registers
-                .enable_ble_base_stack_hardware(radio.registers_mut(), inputs);
+                .enable_ble_base_stack_hardware(radio.registers_mut(), storage.inputs);
         }
     }
 
     /// Execute the complete reviewed 49-operation controller HAL-init body
     /// at the upper controller lifecycle's verified transition.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the selected controller-SRAM prefix and the
-    /// inactive interrupt bank. It must not infer scheduler, PHY, BTBB,
+    /// The SRAM prefix it publishes is the fixed `0x2f` of the PAC's register
+    /// image, so every compressed address the Controller follows resolves
+    /// into that SRAM window. The caller does not infer scheduler, PHY, BTBB,
     /// Link-Layer or HCI readiness from return.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller must retain the external SRAM-prefix and interrupt owners"
-    )]
-    pub unsafe fn initialize_controller_hal_transaction(
+    pub fn initialize_controller_hal_transaction(
         &mut self,
         config: BluetoothControllerHalInitConfig,
     ) {
@@ -596,16 +607,11 @@ impl TaskOwner {
     /// ownership remains available for scheduler and Link-Layer progress while
     /// source 127 retains exclusive timer-register authority.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain initialized controller/timer software and an
-    /// inactive source-127 CPU route for this exact task owner.
+    /// The caller runs it with initialized controller and timer software and
+    /// before source 127 can reach the CPU: an order of the Controller's
+    /// lifecycle, which publishes no memory to the hardware.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller must retain the initialized timer software and inactive source-127 route"
-    )]
-    pub unsafe fn prepare_modem_lp_timer_registers(
+    pub fn prepare_modem_lp_timer_registers(
         &mut self,
     ) -> Result<ModemLpTimerRegistersPreparedOwner, BluetoothModemLpTimerOwnerError> {
         self.reunitable = false;
@@ -646,17 +652,12 @@ pub struct ModemLpTimerRegistersPreparedOwner {
 impl ModemLpTimerRegistersPreparedOwner {
     /// Complete the low-power hardware component with the retained task owner.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the matching initialized controller software
-    /// environment and must invoke this after the timer-register prefix but
-    /// before source 127 can reach the CPU.
+    /// The caller runs it with the matching initialized controller software,
+    /// after the timer-register prefix and before source 127 can reach the
+    /// CPU: an order of the Controller's lifecycle, which publishes no memory
+    /// to the hardware.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller must retain the matching controller software and inactive source-127 route"
-    )]
-    pub unsafe fn initialize_low_power_hardware(
+    pub fn initialize_low_power_hardware(
         self,
         task: &mut TaskOwner,
     ) -> ModemLpTimerLowPowerHardwareInitializedOwner {
@@ -918,15 +919,11 @@ impl InterruptSetupOwner {
     /// sources. The returned state remains retained until stable ISR storage
     /// is ready.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain completed controller HAL-init, quiescent dynamic
-    /// sources, and inactive primary/NRT CPU routes for this interrupt owner.
-    #[allow(
-        unsafe_code,
-        reason = "the caller must retain completed controller init and inactive CPU routes"
-    )]
-    pub unsafe fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
+    /// The caller runs it after the completed controller HAL-init, with
+    /// quiescent dynamic sources and the primary and NRT CPU routes still
+    /// inactive: an order of the Controller's lifecycle, which publishes no
+    /// memory to the hardware.
+    pub fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
         InterruptOutputPreparedOwner {
             registers: self.registers.prepare_controller_output(),
         }
@@ -1171,6 +1168,7 @@ pub struct InterruptOutputReleasedOwner {
 pub struct ControllerHal<'registers> {
     registers: &'registers mut BluetoothTaskRegisters,
     time_latch: &'registers mut ControllerTimeLatch,
+    epoch: ControllerEpoch,
 }
 
 /// Public Bluetooth Controller identity in canonical display order.
@@ -1237,6 +1235,129 @@ impl ControllerRandomAddress {
 pub struct RxMemoryListPublished {
     selector: BluetoothMemoryListSelector,
     head: BluetoothControllerSramAddress,
+    scanning: bool,
+    epoch: ControllerEpoch,
+}
+
+/// Why the scanner start was refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanStartError {
+    /// The publication is not the scanning RX list's.
+    NotScanningList,
+    /// Another Controller epoch published the list.
+    StaleList,
+}
+
+/// The two objects of the BLE PHY engine that the base-stack enable points
+/// the hardware at.
+pub struct BlePhyHardwareObjects {
+    inputs: BluetoothPhyRegisterInitInputs,
+}
+
+impl BlePhyHardwareObjects {
+    /// # Safety
+    ///
+    /// The environment and the resolving list `inputs` names are `'static`
+    /// controller-SRAM storage of the BLE PHY engine that the CPU reaches
+    /// only through volatile accesses. The memory crate's BLE PHY engine
+    /// binding is the one caller.
+    #[allow(
+        unsafe_code,
+        reason = "the memory crate's codec vouches for the storage"
+    )]
+    pub const unsafe fn bind(inputs: BluetoothPhyRegisterInitInputs) -> Self {
+        Self { inputs }
+    }
+}
+
+/// The disabled-CTE descriptor the direction-finding baseline points the
+/// hardware at.
+pub struct DirectionFindingDescriptor {
+    address: BluetoothControllerSramAddress,
+}
+
+impl DirectionFindingDescriptor {
+    /// # Safety
+    ///
+    /// `address` is the disabled-CTE descriptor of a `'static`
+    /// direction-finding workspace in controller SRAM that the CPU reaches
+    /// only through volatile accesses. The memory crate's workspace binding is
+    /// the one caller.
+    #[allow(
+        unsafe_code,
+        reason = "the memory crate's codec vouches for the storage"
+    )]
+    pub const unsafe fn bind(address: BluetoothControllerSramAddress) -> Self {
+        Self { address }
+    }
+}
+
+/// The device table hardware filters against: its first entry and count.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeviceTablePublication {
+    first_entry: BluetoothControllerSramAddress,
+    count: BluetoothDeviceTableEntryCount,
+}
+
+impl DeviceTablePublication {
+    /// # Safety
+    ///
+    /// `count` entries from `first_entry` are a `'static` device table in
+    /// controller SRAM that the CPU reaches only through volatile accesses.
+    /// The memory crate's device table is the one caller.
+    #[allow(
+        unsafe_code,
+        reason = "the memory crate's codec vouches for the storage"
+    )]
+    pub const unsafe fn new(
+        first_entry: BluetoothControllerSramAddress,
+        count: BluetoothDeviceTableEntryCount,
+    ) -> Self {
+        Self { first_entry, count }
+    }
+
+    /// Address of the first entry.
+    pub const fn first_entry(&self) -> BluetoothControllerSramAddress {
+        self.first_entry
+    }
+
+    /// Number of entries.
+    pub const fn count(&self) -> BluetoothDeviceTableEntryCount {
+        self.count
+    }
+}
+
+/// The first header of one receive chain and the list it belongs to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RxChainHead {
+    selector: BluetoothMemoryListSelector,
+    head: BluetoothControllerSramAddress,
+    scanning: bool,
+}
+
+impl RxChainHead {
+    /// # Safety
+    ///
+    /// `head` is the first header of a `'static` receive chain in controller
+    /// SRAM whose every link points into that chain's own storage, which the
+    /// CPU reaches only through volatile accesses; `selector` is the chain's
+    /// list and `scanning` whether it is the scanner's. The memory crate's
+    /// receive chain is the one caller.
+    #[allow(
+        unsafe_code,
+        reason = "the memory crate's codec vouches for the storage"
+    )]
+    pub const unsafe fn new(
+        selector: BluetoothMemoryListSelector,
+        head: BluetoothControllerSramAddress,
+        scanning: bool,
+    ) -> Self {
+        Self {
+            selector,
+            head,
+            scanning,
+        }
+    }
 }
 
 /// HAL ownership of the controller-global disabled-CTE publication.
@@ -1379,24 +1500,22 @@ impl ControllerHal<'_> {
 
     /// Publish the controller-global CTE-disabled descriptor baseline.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the powered Controller epoch and the matching
-    /// initialized pinned descriptor until a reviewed retirement transition.
+    /// The descriptor comes from `descriptor`; the caller runs it in the
+    /// powered Controller epoch, an order of its lifecycle.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains powered-controller and descriptor-lifetime prerequisites"
-    )]
-    pub unsafe fn prepare_direction_finding_disabled_baseline(
+    pub fn prepare_direction_finding_disabled_baseline(
         &mut self,
-        descriptor: BluetoothControllerSramAddress,
+        descriptor: &DirectionFindingDescriptor,
     ) -> DirectionFindingDisabledBaselineOwner {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
+        #[allow(
+            unsafe_code,
+            reason = "the PAC transaction points the hardware at the descriptor"
+        )]
+        // SAFETY: `descriptor` binds it to the `'static`, volatile-only
+        // direction-finding workspace in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
         let prepared = unsafe {
             self.registers
-                .prepare_direction_finding_disabled_baseline(descriptor)
+                .prepare_direction_finding_disabled_baseline(descriptor.address)
         };
         DirectionFindingDisabledBaselineOwner {
             _prepared: prepared,
@@ -1412,22 +1531,19 @@ impl ControllerHal<'_> {
     /// The controller-default opcode policy is restored before either pointer;
     /// software-owned connections use their separate publication transaction.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the selected powered-controller lifecycle epoch,
-    /// must have no active RUN, retain the complete initialized pinned memory graph, and
-    /// serialize all task and interrupt access to this list until a later
-    /// verified retirement transaction consumes the returned token.
+    /// The head comes from `chain`; the caller runs it in the powered
+    /// Controller epoch with no active RUN and serializes the list's task and
+    /// interrupt access, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains pinned-list lifetime and controller-lifecycle prerequisites"
-    )]
-    pub unsafe fn publish_rx_memory_list_initial_head(
+    pub fn publish_rx_memory_list_initial_head(
         &mut self,
-        selector: BluetoothMemoryListSelector,
-        head: BluetoothControllerSramAddress,
+        chain: &RxChainHead,
     ) -> RxMemoryListPublished {
+        let RxChainHead {
+            selector,
+            head,
+            scanning,
+        } = *chain;
         let mut transaction = PacBluetoothRxMemoryListInitialPublication {
             registers: self.registers,
             selector,
@@ -1437,7 +1553,12 @@ impl ControllerHal<'_> {
             &mut transaction,
             RxPacketControl::ControllerDefault,
         );
-        RxMemoryListPublished { selector, head }
+        RxMemoryListPublished {
+            selector,
+            head,
+            scanning,
+            epoch: self.epoch,
+        }
     }
 
     /// Publish RX for a connection whose control PDUs are owned by software.
@@ -1447,21 +1568,19 @@ impl ControllerHal<'_> {
     /// byte matches a hardware abort opcode. Repeating this transaction also
     /// restores the policy after PHY maintenance reinitializes BLE registers.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the initialized pinned connection graph and the
-    /// exclusive powered task epoch, with no active RUN. It must serialize RX
-    /// list access until the returned publication is retired.
+    /// The head comes from `chain`; the caller runs it in the powered
+    /// Controller epoch with no active RUN and serializes the list's task and
+    /// interrupt access, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the connection owner retains the powered graph and idle hardware"
-    )]
-    pub unsafe fn publish_software_connection_rx_memory_list_initial_head(
+    pub fn publish_software_connection_rx_memory_list_initial_head(
         &mut self,
-        selector: BluetoothMemoryListSelector,
-        head: BluetoothControllerSramAddress,
+        chain: &RxChainHead,
     ) -> RxMemoryListPublished {
+        let RxChainHead {
+            selector,
+            head,
+            scanning,
+        } = *chain;
         let mut transaction = PacBluetoothRxMemoryListInitialPublication {
             registers: self.registers,
             selector,
@@ -1471,48 +1590,70 @@ impl ControllerHal<'_> {
             &mut transaction,
             RxPacketControl::SoftwareConnection,
         );
-        RxMemoryListPublished { selector, head }
+        RxMemoryListPublished {
+            selector,
+            head,
+            scanning,
+            epoch: self.epoch,
+        }
     }
 
     /// Publish one complete reviewed scanner command transaction.
     ///
     /// # Safety
     ///
-    /// The caller must retain the initialized pinned scanner graph, its
-    /// matching RX-list publication and an exclusive powered controller epoch.
+    /// The scanner writes received PDUs through the scanning RX list, so
+    /// the start takes that list's publication of this Controller epoch: a
+    /// reset head would point the hardware at `0x2f000000`. The caller runs
+    /// it with the initialized scanner graph in the powered epoch, orders of
+    /// the Controller's lifecycle.
+    ///
+    /// # Errors
+    ///
+    /// `scanning` is not the scanning list's publication, or another epoch
+    /// published it; nothing is written.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains scanner graph lifetime and controller-lifecycle prerequisites"
-    )]
-    pub unsafe fn publish_scan_start(&mut self) -> BluetoothScanStartPublished {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
-        unsafe { self.registers.publish_scan_start() }
+    pub fn publish_scan_start(
+        &mut self,
+        scanning: &RxMemoryListPublished,
+    ) -> Result<BluetoothScanStartPublished, ScanStartError> {
+        if !scanning.scanning {
+            return Err(ScanStartError::NotScanningList);
+        }
+        if scanning.epoch != self.epoch {
+            return Err(ScanStartError::StaleList);
+        }
+        #[allow(
+            unsafe_code,
+            reason = "the PAC scanner start relies on the published RX list"
+        )]
+        // SAFETY: the scanning RX list of this epoch is published from a
+        // memory-crate chain in `'static`, volatile-only controller SRAM
+        // (`RxChainHead`); the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        Ok(unsafe { self.registers.publish_scan_start() })
     }
 
     /// Publish the device table hardware filters advertising against: its
     /// entry count, then the address of its first entry.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain `count` initialized, pinned entries from
-    /// `first_entry` and an exclusive powered controller epoch, and must
-    /// serialize this publication with every role that filters against the
-    /// table.
+    /// The table comes from `table`; the caller runs it in the powered
+    /// Controller epoch and serializes it with every role that filters
+    /// against the table, orders of the Controller's lifecycle.
     #[doc(hidden)]
-    #[allow(
-        unsafe_code,
-        reason = "the caller retains table lifetime and controller-lifecycle prerequisites"
-    )]
-    pub unsafe fn publish_device_table(
+    pub fn publish_device_table(
         &mut self,
-        first_entry: BluetoothControllerSramAddress,
-        count: BluetoothDeviceTableEntryCount,
+        table: &DeviceTablePublication,
     ) -> BluetoothDeviceTablePublished {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the PAC transaction's prerequisites.
-        unsafe { self.registers.publish_device_table(first_entry, count) }
+        #[allow(
+            unsafe_code,
+            reason = "the PAC transaction points the hardware at the table"
+        )]
+        // SAFETY: `table` binds `count` entries from `first_entry` to the
+        // `'static`, volatile-only device table in controller SRAM; the PAC contract's other conditions (membership, routes, initialized software, power, serialization) are orders of the Controller's lifecycle that the caller's typestate keeps; they publish no memory.
+        unsafe {
+            self.registers
+                .publish_device_table(table.first_entry, table.count)
+        }
     }
 
     /// Disable the BLE PHY ETM route for one Direct Test Mode event without
@@ -1979,6 +2120,7 @@ pub trait ControllerHalBorrow: sealed::ControllerHalBorrow {
         ControllerHal {
             registers: &mut owner.registers,
             time_latch: &mut owner.time_latch,
+            epoch: owner.epoch,
         }
     }
 }
