@@ -33,7 +33,7 @@ use oer_esp32s31_hal::{
 };
 
 use crate::concurrent::{
-    ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyReady, acquire_client,
+    ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyClientReady, acquire_client,
     release_client,
 };
 
@@ -47,7 +47,7 @@ use crate::concurrent::{
 /// ```
 #[must_use = "the IEEE 802.15.4 PHY membership must be left through leave_ieee802154"]
 pub struct Ieee802154PhyMembership {
-    _private: (),
+    key: crate::state::client::PhyClientKey,
 }
 
 impl fmt::Debug for Ieee802154PhyMembership {
@@ -81,7 +81,7 @@ pub enum Ieee802154PhyClientError {
 /// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
 pub fn join_ieee802154<'l>(
-    ready: PhyReady<'l>,
+    ready: PhyClientReady<'l, Ieee802154PhyMembership>,
     clocked: &Ieee802154Clocked,
     clock: &impl oer_time::Clock,
 ) -> Result<Joined<'l, Ieee802154PhyMembership>, JoinRefused<'l, Ieee802154PhyClientError>> {
@@ -110,6 +110,7 @@ pub fn join_ieee802154<'l>(
         }
     };
 
+    let key = radio.attachment().permission_key();
     // The settled registered state publishes its current gain byte right
     // before the acquisition, so BTBB starts with the value the vendor reads
     // from `phy_param[0x120]` at that moment; a tracking or registration in
@@ -125,14 +126,14 @@ pub fn join_ieee802154<'l>(
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.
-        let _ = release_client(radio, RadioClient::Ieee802154);
+        let _ = release_client(radio, RadioClient::Ieee802154, key);
         return Err(JoinRefused {
             error: Ieee802154PhyClientError::Btbb(error),
             radio,
         });
     }
     Ok(Joined {
-        membership: Ieee802154PhyMembership { _private: () },
+        membership: Ieee802154PhyMembership { key },
         acquired,
         radio,
     })
@@ -186,7 +187,8 @@ pub fn leave_ieee802154(
             error: Ieee802154PhyClientError::Btbb(BtbbError::NotAcquired),
         });
     }
-    let last = match release_client(radio, RadioClient::Ieee802154) {
+    let key = membership.key;
+    let last = match release_client(radio, RadioClient::Ieee802154, key) {
         Ok(last) => last,
         Err(error) => {
             return Err(Ieee802154PhyLeaveFailure {
@@ -195,7 +197,7 @@ pub fn leave_ieee802154(
             });
         }
     };
-    let Ieee802154PhyMembership { _private: () } = membership;
+    let Ieee802154PhyMembership { key: _ } = membership;
     // The reference was checked above, so the release cannot be rejected.
     let _ = clocked.release_btbb(radio);
     Ok(last)
@@ -351,7 +353,9 @@ impl<M> fmt::Debug for RegisteredIeee802154ReturnFailure<M> {
 #[cfg(test)]
 impl Ieee802154PhyMembership {
     fn for_test() -> Self {
-        Self { _private: () }
+        Self {
+            key: crate::state::client::model_permission_key_for_test(),
+        }
     }
 }
 

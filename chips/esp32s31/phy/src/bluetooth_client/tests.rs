@@ -121,7 +121,7 @@ fn join_bluetooth_prepared(
     task: &TaskOwner,
     clock: &impl oer_time::Clock,
 ) -> Result<(BluetoothPhyMembership, ConcurrentAcquire), BluetoothPhyClientError> {
-    let ready = crate::concurrent::PhyReady::for_test(radio);
+    let ready = crate::concurrent::PhyClientReady::<BluetoothPhyMembership>::for_test(radio);
     join_bluetooth(ready, task, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)

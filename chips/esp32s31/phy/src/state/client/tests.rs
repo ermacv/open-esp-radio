@@ -60,10 +60,9 @@ impl PhyClientStateTestExt for PhyClientState {
         client: RadioClient,
         now_micros: u64,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
-        self.acquire(
-            client,
-            &VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(now_micros)),
-        )
+        available(self, client).acquire(&VirtualClock::<8>::starting_at(
+            oer_time::Instant::from_micros(now_micros),
+        ))
     }
 
     fn evaluate_immediate_at(
@@ -120,12 +119,10 @@ fn exhaustive_acquire_preserves_unrelated_bits_and_reports_first_user() {
             let state = state_for_mask(mask, 0);
             let before = state.snapshot();
             if mask & client_bit(client) != 0 {
-                let failure = state.acquire_at(client, 0).unwrap_err();
-                assert_eq!(
-                    failure.error(),
-                    PhyClientAcquireError::AlreadyAcquired(client)
-                );
-                assert_eq!(failure.owner().snapshot(), before);
+                let PhyClientAccess::Member(member) = state.client(client) else {
+                    panic!("acquired phase exposes no acquire operation");
+                };
+                assert_eq!(member.owner().snapshot(), before);
                 continue;
             }
 
@@ -155,13 +152,14 @@ fn exhaustive_release_preserves_unrelated_bits_and_reports_last_user() {
             let state = state_for_mask(mask, 0);
             let before = state.snapshot();
             if mask & client_bit(client) == 0 {
-                let failure = state.release(client).unwrap_err();
-                assert_eq!(failure.error(), PhyClientReleaseError::NotAcquired(client));
-                assert_eq!(failure.owner().snapshot(), before);
+                let PhyClientAccess::Available(available) = state.client(client) else {
+                    panic!("vacant phase exposes no release operation");
+                };
+                assert_eq!(available.owner().snapshot(), before);
                 continue;
             }
 
-            let outcome = state.release(client).unwrap();
+            let outcome = member(state, client).release();
             assert_eq!(outcome.is_last(), mask == client_bit(client));
             assert_eq!(
                 observed_mask(outcome.owner().snapshot()),
@@ -247,7 +245,7 @@ fn one_due_class_refreshes_and_requests_all_active_classes() {
             .acquire_at(RadioClient::Wifi, DEFAULT_PLL_TRACK_PERIOD_MICROS + 1)
             .unwrap(),
     );
-    let state = state.release(RadioClient::Wifi).unwrap().into_owner();
+    let state = member(state, RadioClient::Wifi).release().into_owner();
     let state = complete_acquire_for_test(
         state
             .acquire_at(RadioClient::Ieee802154, DEFAULT_PLL_TRACK_PERIOD_MICROS + 2)
@@ -759,12 +757,12 @@ fn tracking_deadline_excludes_released_classes_and_detects_overflow() {
         owner.snapshot().next_tracking_deadline_micros(),
         Ok(Some(1_000_101))
     );
-    let owner = owner.release(RadioClient::Wifi).unwrap().into_owner();
+    let owner = member(owner, RadioClient::Wifi).release().into_owner();
     assert_eq!(
         owner.snapshot().next_tracking_deadline_micros(),
         Ok(Some(1_000_201))
     );
-    let mut owner = owner.release(RadioClient::Bluetooth).unwrap().into_owner();
+    let mut owner = member(owner, RadioClient::Bluetooth).release().into_owner();
     assert_eq!(
         owner.snapshot().next_tracking_deadline_micros(),
         Ok(Some(1_000_201))
@@ -776,7 +774,9 @@ fn tracking_deadline_excludes_released_classes_and_detects_overflow() {
             class: PhyPllTrackClass::BluetoothIeee802154
         })
     );
-    let owner = owner.release(RadioClient::Ieee802154).unwrap().into_owner();
+    let owner = member(owner, RadioClient::Ieee802154)
+        .release()
+        .into_owner();
     assert_eq!(owner.snapshot().next_tracking_deadline_micros(), Ok(None));
 }
 
@@ -816,8 +816,8 @@ fn an_untracked_class_is_due_at_once_and_a_tracked_one_waits_the_period() {
     );
 
     // Never tracked: the first acquisition requests tracking at once.
-    let outcome = owner
-        .acquire(RadioClient::Wifi, &VirtualClock::<8>::new())
+    let outcome = available(owner, RadioClient::Wifi)
+        .acquire(&VirtualClock::<8>::new())
         .unwrap();
     assert!(outcome.request().is_some_and(|request| request.wifi()));
     let owner = complete_acquire_for_test(outcome);
@@ -866,4 +866,17 @@ fn a_new_registration_epoch_starts_untracked() {
         snapshot.previous_micros(PhyPllTrackClass::BluetoothIeee802154),
         None
     );
+}
+
+fn available(owner: PhyClientState, client: RadioClient) -> PhyClientAvailable {
+    match owner.client(client) {
+        PhyClientAccess::Available(available) => available,
+        _ => panic!("fixture owns a vacant client phase"),
+    }
+}
+fn member(owner: PhyClientState, client: RadioClient) -> PhyClientMember {
+    match owner.client(client) {
+        PhyClientAccess::Member(member) => member,
+        _ => panic!("fixture owns an acquired client phase"),
+    }
 }

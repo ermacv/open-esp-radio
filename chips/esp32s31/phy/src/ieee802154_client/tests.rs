@@ -115,7 +115,7 @@ fn join_ieee802154_prepared(
     clocked: &Ieee802154Clocked,
     clock: &impl oer_time::Clock,
 ) -> Result<(Ieee802154PhyMembership, ConcurrentAcquire), Ieee802154PhyClientError> {
-    let ready = crate::concurrent::PhyReady::for_test(radio);
+    let ready = crate::concurrent::PhyClientReady::<Ieee802154PhyMembership>::for_test(radio);
     join_ieee802154(ready, clocked, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)

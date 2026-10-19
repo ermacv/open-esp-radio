@@ -135,6 +135,117 @@ impl PhyClientSnapshot {
     }
 }
 
+// Permission identity is one existing physical registration word on target.
+// Native models have independent roots, so their test-only identity must also
+// distinguish two separate modeled radios with equal hardware epoch values.
+#[cfg(target_arch = "riscv32")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PhyClientKey(oer_esp32s31_hal::owner::PhyRegistrationEpoch);
+#[cfg(not(target_arch = "riscv32"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PhyClientKey(core::num::NonZeroU32);
+
+#[cfg(not(target_arch = "riscv32"))]
+fn next_model_identity() -> core::num::NonZeroU32 {
+    use core::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(1);
+    let value = NEXT
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+        .expect("native PHY model identity space is not exhausted");
+    core::num::NonZeroU32::new(value).expect("native PHY model identity is nonzero")
+}
+
+#[cfg(all(test, not(target_arch = "riscv32")))]
+pub(crate) fn model_permission_key_for_test() -> PhyClientKey {
+    PhyClientKey(next_model_identity())
+}
+
+/// A consumed client-set owner exposes exactly one operation for a selected
+/// client's phase. The phase cannot be reused after acquire or release.
+pub enum PhyClientAccess {
+    Available(PhyClientAvailable),
+    Member(PhyClientMember),
+    Suspended(PhyClientSuspended),
+}
+
+/// Consumed authority for one acquisition; it cannot start another acquisition.
+///
+/// ```no_run
+/// use oer_esp32s31_phy::state::client::PhyClientAvailable;
+/// fn once(available: PhyClientAvailable, clock: &impl oer_time::Clock) {
+///     let _ = available.acquire(clock);
+/// }
+/// ```
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_phy::state::client::PhyClientAvailable;
+/// fn twice(available: PhyClientAvailable, clock: &impl oer_time::Clock) {
+///     let _ = available.acquire(clock);
+///     let _ = available.acquire(clock);
+/// }
+/// ```
+pub struct PhyClientAvailable {
+    owner: PhyClientState,
+}
+
+pub struct PhyClientMember {
+    owner: PhyClientState,
+}
+
+impl PhyClientAvailable {
+    pub fn owner(&self) -> &PhyClientState {
+        &self.owner
+    }
+    pub fn into_owner(self) -> PhyClientState {
+        self.owner
+    }
+    pub fn acquire(
+        self,
+        clock: &impl oer_time::Clock,
+    ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
+        let client = self.owner.selected_client;
+        self.owner.acquire_available(client, clock)
+    }
+}
+
+impl PhyClientMember {
+    pub fn owner(&self) -> &PhyClientState {
+        &self.owner
+    }
+    pub fn into_owner(self) -> PhyClientState {
+        self.owner
+    }
+    pub fn release(self) -> PhyClientReleaseOutcome {
+        let client = self.owner.selected_client;
+        self.owner.release_member(client, false)
+    }
+}
+
+/// A client temporarily released RF while retaining its sole join permission.
+pub struct PhyClientSuspended {
+    owner: PhyClientState,
+}
+impl PhyClientSuspended {
+    pub fn resume(
+        self,
+        clock: &impl oer_time::Clock,
+    ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
+        let client = self.owner.selected_client;
+        self.owner.acquire_available(client, clock)
+    }
+    pub fn retire(mut self) -> PhyClientState {
+        self.owner.loaned_clients &= !client_bit(self.owner.selected_client);
+        self.owner
+    }
+}
+
+impl PhyClientMember {
+    pub fn suspend(self) -> PhyClientReleaseOutcome {
+        let client = self.owner.selected_client;
+        self.owner.release_member(client, true)
+    }
+}
+
 /// Unique owner of the source-reviewed software client and scheduler state.
 ///
 /// This type is deliberately neither `Clone` nor `Copy`. Its private bit image
@@ -142,8 +253,14 @@ impl PhyClientSnapshot {
 /// an RF/PLL readiness proof.
 #[must_use = "the PHY client model owns its unique software state"]
 pub struct PhyClientState {
+    #[cfg(not(target_arch = "riscv32"))]
+    model_identity: core::num::NonZeroU32,
     bits: u8,
     tracker_model_armed: bool,
+    // Software permissions remain held while a client temporarily releases RF.
+    // Both bytes use the alignment padding beside the registration word.
+    loaned_clients: u8,
+    selected_client: RadioClient,
     // Registration that minted this client set. It occupies alignment padding
     // beside the flags, so detached owners carry it without growing.
     epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
@@ -166,7 +283,7 @@ impl PhyClientState {
     /// This constructor is crate-controlled so application code cannot create
     /// an unrelated client mask and present it beside registered hardware.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn for_registration(
+    pub(crate) fn for_registration(
         period_micros: u64,
         epoch: oer_esp32s31_hal::owner::PhyRegistrationEpoch,
     ) -> Self {
@@ -179,19 +296,23 @@ impl PhyClientState {
     /// never describes a hardware partition, so it cannot authorize a hardware
     /// operation that checks [`Self::describes`].
     #[cfg(any(test, oer_probe))]
-    pub(crate) const fn without_registration(period_micros: u64) -> Self {
+    pub(crate) fn without_registration(period_micros: u64) -> Self {
         Self::empty(period_micros, None)
     }
 
     #[cfg(any(target_arch = "riscv32", test, oer_probe))]
-    const fn empty(
+    fn empty(
         period_micros: u64,
         epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
     ) -> Self {
         Self {
+            #[cfg(not(target_arch = "riscv32"))]
+            model_identity: next_model_identity(),
             epoch,
             bits: 0,
             tracker_model_armed: false,
+            loaned_clients: 0,
+            selected_client: RadioClient::Wifi,
             wifi_previous_micros: None,
             bluetooth_ieee802154_previous_micros: None,
             period_micros,
@@ -203,7 +324,7 @@ impl PhyClientState {
     /// The caller must not use this constructor as evidence about a target
     /// global or vendor-owned client mask.
     #[cfg(test)]
-    const fn new_empty(period_micros: u64) -> Self {
+    fn new_empty(period_micros: u64) -> Self {
         Self::without_registration(period_micros)
     }
 
@@ -244,25 +365,53 @@ impl PhyClientState {
         }
     }
 
-    /// Consume the owner and acquire one client bit.
-    ///
-    /// Duplicate acquisition is rejected before any model state changes. A
-    /// first aggregate acquisition records the reviewed arm-before-set-before-
-    /// evaluate ordering. Later acquisitions record set-before-evaluate. The
-    /// arm is an infallible model fact, not evidence of a target timer.
-    pub fn acquire(
+    pub(crate) fn is_claimed(&self, client: RadioClient) -> bool {
+        (self.bits | self.loaned_clients) & client_bit(client) != 0
+    }
+
+    pub fn client(mut self, client: RadioClient) -> PhyClientAccess {
+        self.selected_client = client;
+        if self.snapshot().contains(client) {
+            PhyClientAccess::Member(PhyClientMember { owner: self })
+        } else if self.is_claimed(client) {
+            PhyClientAccess::Suspended(PhyClientSuspended { owner: self })
+        } else {
+            PhyClientAccess::Available(PhyClientAvailable { owner: self })
+        }
+    }
+
+    pub(crate) fn retire_suspended_wifi(&mut self) {
+        (self.bits & WIFI_BIT == 0 && self.loaned_clients & WIFI_BIT != 0)
+            .then_some(())
+            .expect("PHY suspended claim missing");
+        self.loaned_clients &= !WIFI_BIT;
+    }
+
+    pub(crate) fn permission_key(&self) -> PhyClientKey {
+        #[cfg(target_arch = "riscv32")]
+        {
+            PhyClientKey(self.epoch.expect("PHY registration missing"))
+        }
+        #[cfg(not(target_arch = "riscv32"))]
+        {
+            PhyClientKey(self.model_identity)
+        }
+    }
+
+    pub(crate) fn assert_permission(&self, key: PhyClientKey) {
+        (self.permission_key() == key)
+            .then_some(())
+            .expect("PHY registration mismatch");
+    }
+
+    /// Only the consumed available phase can set a client bit. The reviewed
+    /// arm-before-set-before-evaluate order and clock-error rollback remain.
+    fn acquire_available(
         mut self,
         client: RadioClient,
         clock: &impl oer_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let bit = client_bit(client);
-        if self.bits & bit != 0 {
-            return Err(PhyClientAcquireFailure {
-                owner: self,
-                error: PhyClientAcquireError::AlreadyAcquired(client),
-            });
-        }
-
         let was_empty = self.bits == 0;
         let prospective_bits = self.bits | bit;
         let evaluation = match self.evaluate_for_bits(prospective_bits, clock) {
@@ -279,6 +428,7 @@ impl PhyClientState {
             self.tracker_model_armed = true;
         }
         self.bits = prospective_bits;
+        self.loaned_clients |= bit;
         self.apply_evaluation(evaluation);
 
         debug_assert_eq!(self.bits & !VALID_CLIENT_BITS, 0);
@@ -296,26 +446,19 @@ impl PhyClientState {
         })
     }
 
-    /// Consume the owner and release one client bit.
-    ///
-    /// Missing release is rejected without changing the owner. `is_last`
-    /// matches the reviewed saved-mask equality test; unrelated bits survive.
-    /// Last-user timer stop is an infallible model fact here, not a target
-    /// executor or rollback contract.
-    pub fn release(
+    /// Only a consumed member phase can clear its bit. Last-user timer
+    /// stop remains the same infallible software-model fact.
+    fn release_member(
         mut self,
         client: RadioClient,
-    ) -> Result<PhyClientReleaseOutcome, PhyClientReleaseFailure> {
+        retain_permission: bool,
+    ) -> PhyClientReleaseOutcome {
         let bit = client_bit(client);
-        if self.bits & bit == 0 {
-            return Err(PhyClientReleaseFailure {
-                owner: self,
-                error: PhyClientReleaseError::NotAcquired(client),
-            });
-        }
-
         let saved_bits = self.bits;
         self.bits &= !bit;
+        if !retain_permission {
+            self.loaned_clients &= !bit;
+        }
         let is_last = saved_bits == bit;
         if is_last {
             self.tracker_model_armed = false;
@@ -324,11 +467,11 @@ impl PhyClientState {
         debug_assert_eq!(self.bits & !VALID_CLIENT_BITS, 0);
         debug_assert_eq!(self.tracker_model_armed, self.bits != 0);
 
-        Ok(PhyClientReleaseOutcome {
+        PhyClientReleaseOutcome {
             owner: self,
             client,
             is_last,
-        })
+        }
     }
 
     /// Apply the reviewed immediate-on-enable due check without performing PLL
@@ -581,6 +724,10 @@ impl fmt::Debug for PhyPendingTrack {
 }
 
 impl PhyPendingTrack {
+    pub(crate) fn permission_key(&self) -> PhyClientKey {
+        self.owner.permission_key()
+    }
+
     pub const fn request(&self) -> &PhyParamTrackRequest {
         &self.request
     }
@@ -784,7 +931,6 @@ pub enum PhyTrackTimeError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyClientAcquireError {
-    AlreadyAcquired(RadioClient),
     TrackingTime(PhyTrackTimeError),
 }
 
@@ -863,41 +1009,6 @@ impl PhyClientAcquireOutcome {
     /// Recover the ordinary owner only when no tracking request is pending.
     pub fn into_owner(self) -> Result<PhyClientState, PhyPendingTrack> {
         self.continuation.into_owner()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyClientReleaseError {
-    NotAcquired(RadioClient),
-}
-
-/// Failed release retaining the exact unchanged owner.
-#[must_use = "failure retains the unique PHY client owner"]
-pub struct PhyClientReleaseFailure {
-    owner: PhyClientState,
-    error: PhyClientReleaseError,
-}
-
-impl fmt::Debug for PhyClientReleaseFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("PhyClientReleaseFailure")
-            .field("error", &self.error)
-            .finish_non_exhaustive()
-    }
-}
-
-impl PhyClientReleaseFailure {
-    pub const fn error(&self) -> PhyClientReleaseError {
-        self.error
-    }
-
-    pub const fn owner(&self) -> &PhyClientState {
-        &self.owner
-    }
-
-    pub fn into_owner(self) -> PhyClientState {
-        self.owner
     }
 }
 

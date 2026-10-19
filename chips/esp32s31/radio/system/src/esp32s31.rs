@@ -351,7 +351,7 @@ where
             });
         }
         let joined = match phy_ready(&mut self.radio) {
-            Ok(ready) => join_wifi(ready, &clocked, &self.timer)
+            Ok(ready) => join_wifi(vacant_wifi(ready), &clocked, &self.timer)
                 .map(|joined| (joined.membership, joined.acquired))
                 .map_err(|refused| refused.error),
             Err(error) => Err(error),
@@ -542,5 +542,15 @@ where
             ),
             Err(returned) => poisoned(returned, last),
         }
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn vacant_wifi(
+    ready: oer_esp32s31_phy::concurrent::PhyReady<'_>,
+) -> oer_esp32s31_phy::concurrent::PhyClientReady<'_, WifiPhyMembership> {
+    match ready.client::<WifiPhyMembership>() {
+        oer_esp32s31_phy::concurrent::PhyClientAccess::Available(available) => available,
+        _ => panic!("Wi-Fi join phase owns the unacquired PHY client"),
     }
 }

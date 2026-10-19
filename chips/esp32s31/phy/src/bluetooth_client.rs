@@ -19,7 +19,7 @@ use oer_esp32s31_hal::{
 };
 
 use crate::concurrent::{
-    ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyReady, acquire_client,
+    ConcurrentPhy, ConcurrentPhyError, JoinRefused, Joined, PhyClientReady, acquire_client,
     release_client,
 };
 
@@ -33,7 +33,7 @@ use crate::concurrent::{
 /// ```
 #[must_use = "the Bluetooth PHY membership must be left through leave_bluetooth"]
 pub struct BluetoothPhyMembership {
-    _private: (),
+    key: crate::state::client::PhyClientKey,
 }
 
 impl fmt::Debug for BluetoothPhyMembership {
@@ -63,7 +63,7 @@ pub enum BluetoothPhyClientError {
 /// holds BTBB, or the client set rejects the client. The radio comes back
 /// either way.
 pub fn join_bluetooth<'l>(
-    ready: PhyReady<'l>,
+    ready: PhyClientReady<'l, BluetoothPhyMembership>,
     task: &TaskOwner,
     clock: &impl oer_time::Clock,
 ) -> Result<Joined<'l, BluetoothPhyMembership>, JoinRefused<'l, BluetoothPhyClientError>> {
@@ -92,6 +92,7 @@ pub fn join_bluetooth<'l>(
         }
     };
 
+    let key = radio.attachment().permission_key();
     // The settled registered state publishes its current gain byte right
     // before the acquisition, so BTBB starts with the value the vendor reads
     // from `phy_param[0x120]` at that moment; a tracking or registration in
@@ -107,14 +108,14 @@ pub fn join_bluetooth<'l>(
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.
-        let _ = release_client(radio, RadioClient::Bluetooth);
+        let _ = release_client(radio, RadioClient::Bluetooth, key);
         return Err(JoinRefused {
             error: BluetoothPhyClientError::Btbb(error),
             radio,
         });
     }
     Ok(Joined {
-        membership: BluetoothPhyMembership { _private: () },
+        membership: BluetoothPhyMembership { key },
         acquired,
         radio,
     })
@@ -168,7 +169,8 @@ pub fn leave_bluetooth(
             error: BluetoothPhyClientError::Btbb(BtbbError::NotAcquired),
         });
     }
-    let last = match release_client(radio, RadioClient::Bluetooth) {
+    let key = membership.key;
+    let last = match release_client(radio, RadioClient::Bluetooth, key) {
         Ok(last) => last,
         Err(error) => {
             return Err(BluetoothPhyLeaveFailure {
@@ -177,7 +179,7 @@ pub fn leave_bluetooth(
             });
         }
     };
-    let BluetoothPhyMembership { _private: () } = membership;
+    let BluetoothPhyMembership { key: _ } = membership;
     // The reference was checked above, so the release cannot be rejected.
     let _ = task.release_btbb(radio);
     Ok(last)
@@ -186,7 +188,9 @@ pub fn leave_bluetooth(
 #[cfg(test)]
 impl BluetoothPhyMembership {
     fn for_test() -> Self {
-        Self { _private: () }
+        Self {
+            key: crate::state::client::model_permission_key_for_test(),
+        }
     }
 }
 

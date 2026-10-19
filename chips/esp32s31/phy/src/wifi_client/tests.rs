@@ -51,8 +51,10 @@ fn wifi_joins_and_leaves_the_shared_domain_as_its_last_client() {
     );
     // A second membership would double the client bit.
     assert!(matches!(
-        join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new()),
-        Err(ConcurrentPhyError::Acquire(_))
+        crate::concurrent::phy_ready(domain)
+            .unwrap()
+            .client::<WifiPhyMembership>(),
+        crate::concurrent::PhyClientAccess::Member(_)
     ));
     assert_eq!(leave_wifi(domain, &clocked, membership).ok(), Some(true));
 }
@@ -102,7 +104,14 @@ fn a_suspended_wifi_leaves_the_domain_and_resumes_as_a_client() {
     );
     let (suspended, _) = suspend_wifi(domain, clocked.clocks_on(), membership)
         .unwrap_or_else(|failure| panic!("second suspend failed: {failure:?}"));
-    leave_suspended_wifi(suspended);
+    leave_suspended_wifi(domain, suspended)
+        .unwrap_or_else(|failure| panic!("retirement failed: {failure:?}"));
+    assert!(matches!(
+        crate::concurrent::phy_ready(domain)
+            .unwrap()
+            .client::<WifiPhyMembership>(),
+        crate::concurrent::PhyClientAccess::Available(_)
+    ));
 }
 
 #[test]
@@ -115,20 +124,29 @@ fn a_rejected_resume_returns_the_suspended_client() {
     assert!(domain.attachment_mut().complete_tracking_for_test());
     let (suspended, _) = suspend_wifi(domain, clocked.clocks_on(), membership)
         .unwrap_or_else(|failure| panic!("suspend failed: {failure:?}"));
-    // Another membership holds the client bit, so the resume is rejected.
-    let (other, _) = join_wifi_prepared(domain, &clocked, &VirtualClock::<8>::new())
-        .unwrap_or_else(|error| panic!("join failed: {error:?}"));
-    let failure = resume_wifi_prepared(
+    // The RF bit is clear, but the suspended token still owns fresh join
+    // authority; a second join cannot obtain the available-client view.
+    assert!(matches!(
+        crate::concurrent::phy_ready(domain)
+            .unwrap()
+            .client::<WifiPhyMembership>(),
+        crate::concurrent::PhyClientAccess::Member(_)
+    ));
+    // A backwards external clock is still a typed outcome and returns the
+    // exact suspended permission, which can subsequently resume normally.
+    let backwards = VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    let failure = resume_wifi_prepared(domain, clocked.clocks_on(), suspended, &backwards)
+        .err()
+        .unwrap_or_else(|| panic!("backwards clock rejects resume"));
+    assert!(matches!(failure.error(), ConcurrentPhyError::Acquire(_)));
+    let (membership, _) = resume_wifi_prepared(
         domain,
         clocked.clocks_on(),
-        suspended,
+        failure.into_suspended(),
         &VirtualClock::<8>::new(),
     )
-    .err()
-    .unwrap_or_else(|| panic!("a held client bit rejects the resume"));
-    assert!(matches!(failure.error(), ConcurrentPhyError::Acquire(_)));
-    leave_suspended_wifi(failure.into_suspended());
-    assert!(leave_wifi(domain, &clocked, other).is_ok());
+    .unwrap_or_else(|failure| panic!("retry failed: {failure:?}"));
+    assert!(leave_wifi(domain, &clocked, membership).is_ok());
 }
 
 /// Join with a proof for the domain's registration.
@@ -137,7 +155,10 @@ fn join_wifi_prepared(
     clocked: &WifiClocked,
     clock: &impl oer_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
-    let ready = PhyReady::for_test(radio);
+    let ready = match crate::concurrent::phy_ready(radio)?.client::<WifiPhyMembership>() {
+        crate::concurrent::PhyClientAccess::Available(available) => available,
+        _ => panic!("fixture joins its unclaimed Wi-Fi client"),
+    };
     join_wifi(ready, clocked, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)
@@ -150,8 +171,28 @@ fn resume_wifi_prepared(
     suspended: WifiPhySuspended,
     clock: &impl oer_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), WifiPhySuspendedFailure> {
-    let ready = PhyReady::for_test(radio);
+    let ready = match crate::concurrent::phy_ready(radio) {
+        Ok(ready) => ready,
+        Err(error) => return Err(WifiPhySuspendedFailure { suspended, error }),
+    };
     resume_wifi(ready, clocks, suspended, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)
+}
+
+#[test]
+#[should_panic(expected = "PHY registration mismatch")]
+fn a_foreign_membership_is_an_internal_identity_fault() {
+    let (mut first, first_clocked) = registered();
+    let (mut second, second_clocked) = registered();
+    let (membership, _) = join_wifi_prepared(&mut first, &first_clocked, &VirtualClock::<8>::new())
+        .unwrap_or_else(|error| panic!("first join: {error:?}"));
+    assert!(first.attachment_mut().complete_tracking_for_test());
+    let (_second_membership, _) =
+        join_wifi_prepared(&mut second, &second_clocked, &VirtualClock::<8>::new())
+            .unwrap_or_else(|error| panic!("second join: {error:?}"));
+    assert!(second.attachment_mut().complete_tracking_for_test());
+    // Test deliberately violates the private handoff invariant. Neither
+    // public construction nor copying can manufacture a matching permission.
+    let _ = leave_wifi(&mut second, &second_clocked, membership);
 }
