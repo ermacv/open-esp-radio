@@ -1,5 +1,6 @@
 #![no_main]
 #![no_std]
+#![forbid(unsafe_code)]
 #![recursion_limit = "256"]
 #[cfg(not(any(
     feature = "boot-smoke",
@@ -19,7 +20,9 @@ compile_error!("system-watchdog requires an exclusive image");
 ))]
 compile_error!("system-panic-reset requires an exclusive image with the product panic entry");
 
-use core::{arch::asm, ffi::CStr, ptr};
+use core::ffi::CStr;
+use core::ops::Range;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(feature = "boot-smoke")]
 use embassy_time::{Duration, Timer};
@@ -59,74 +62,52 @@ const PROFILE_DATA_END: u32 = 0x5100_0000;
 const PROFILE_NAME: &core::ffi::CStr = c"psram-code-psram-data-psram-stack";
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
-static mut INITIALIZED_DATA: u32 = DATA_SENTINEL;
-static mut BSS_PROBE: u32 = 0;
-
-#[used]
-#[unsafe(link_section = ".isr.rodata.profile_probe")]
-static ISR_RODATA_PROBE: u32 = 0x4953_5231;
-#[used]
-#[unsafe(link_section = ".critical.data.profile_probe")]
-static mut CRITICAL_DATA_PROBE: u32 = 0x4352_5431;
-#[used]
-#[unsafe(link_section = ".dma.data.profile_probe")]
-static mut DMA_DATA_PROBE: u32 = 0x444d_4131;
+/// Layout probes: each lives in the section it checks and reads back its
+/// initializer once the runtime has loaded or zeroed that section.
+static INITIALIZED_DATA: AtomicU32 = AtomicU32::new(DATA_SENTINEL);
+static BSS_PROBE: AtomicU32 = AtomicU32::new(0);
+oer_platform_staged_runtime::placed_static! {
+    #[used]
+    static ISR_RODATA_PROBE: u32 = 0x4953_5231, in isr_rodata "profile_probe";
+    #[used]
+    static CRITICAL_DATA_PROBE: AtomicU32 = AtomicU32::new(0x4352_5431), in critical_data "profile_probe";
+    #[used]
+    static DMA_DATA_PROBE: AtomicU32 = AtomicU32::new(0x444d_4131), in dma_data "profile_probe";
+}
 oer_base_memory::zeroed_static! {
     #[used]
-    static mut DMA_BSS_PROBE: u32 =
+    static DMA_BSS_PROBE: AtomicU32 =
         zeroed in ".dma.bss.profile_probe";
-}
-
-unsafe extern "C" {
-    fn ets_install_usb_printf();
-    fn ets_printf(format: *const core::ffi::c_char, ...) -> i32;
-
-    static __runtime_image_start: u8;
-    static __runtime_payload_end: u8;
-    static __runtime_bss_start: u8;
-    static __runtime_bss_end: u8;
-    static __runtime_data_load_start: u8;
-    static __runtime_data_start: u8;
-    static __runtime_data_end: u8;
-    static __runtime_data_bss_start: u8;
-    static __runtime_data_bss_end: u8;
-    static __runtime_isr_start: u8;
-    static __runtime_isr_end: u8;
-    static __runtime_dma_data_start: u8;
-    static __runtime_dma_data_end: u8;
-    static __runtime_dma_bss_start: u8;
-    static __runtime_dma_bss_end: u8;
-    static __runtime_cpu0_irq_stack_bottom: u8;
-    static __runtime_cpu0_irq_stack_top: u8;
-    static __runtime_cpu1_irq_stack_bottom: u8;
-    static __runtime_cpu1_irq_stack_top: u8;
-    static _stack_end: u8;
-    static _stack_start: u8;
 }
 
 use oer_platform_staged_runtime as _;
 
-/// The image's record of a panic, which the platform's panic entry calls
-/// after its own record and before it resets the chip (feature `panic-hook`):
-/// it records the post-mortem fault and the machine
-/// state, formatting nothing, so the panic path stays a leaf in every stack
-/// bound. The next boot reports what it recorded.
 #[cfg(feature = "panic-hook")]
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".flash.critical.text.panic_hook")]
-fn oer_platform_panic_hook(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
-    #[cfg(feature = "system-watchdog")]
-    system::postmortem::record_panic(details);
-    #[cfg(not(feature = "system-watchdog"))]
-    let _ = details;
-    let stage = 0;
-    fatal::record_panic(stage);
+oer_platform_staged_runtime::panic_hook!(panic_hook);
+
+#[cfg(feature = "panic-hook")]
+oer_platform_staged_runtime::sram_fn! {
+    in critical_text "panic_hook";
+    /// The image's record of a panic, which the platform's panic entry calls
+    /// after its own record and before it resets the chip (feature
+    /// `panic-hook`): it records the post-mortem fault and the machine state,
+    /// formatting nothing, so the panic path stays a leaf in every stack
+    /// bound. The next boot reports what it recorded.
+    #[inline(always)]
+    fn panic_hook(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+        #[cfg(feature = "system-watchdog")]
+        system::postmortem::record_panic(details);
+        #[cfg(not(feature = "system-watchdog"))]
+        let _ = details;
+        let stage = 0;
+        fatal::record_panic(stage);
+    }
 }
 
 oer_platform_staged_runtime::entry!(main);
 
 fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
-    unsafe { ets_install_usb_printf() };
+    oer_platform_esp32s31_board::rom::install_usb_printf();
     print(c"OPEN_RADIO_HIL runtime=START profile=");
     print(PROFILE_NAME);
     print(c"\r\n");
@@ -151,7 +132,7 @@ fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
         INTERRUPT_TABLE,
         oer_platform_esp32s31_board::BootstrapPsram(peripherals.PSRAM),
     );
-    exception::install_stack_guard(ptr::addr_of!(_stack_end) as usize);
+    exception::report_stack_guard();
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
     oer_exec_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
@@ -202,30 +183,21 @@ async fn boot_smoke(mut console: boot_smoke_console::BootSmokeConsole) {
 }
 
 fn validate_runtime_layout() {
-    let image_start = symbol(ptr::addr_of!(__runtime_image_start));
-    let payload_end = symbol(ptr::addr_of!(__runtime_payload_end));
-    let bss_start = symbol(ptr::addr_of!(__runtime_bss_start));
-    let bss_end = symbol(ptr::addr_of!(__runtime_bss_end));
-    let data_load_start = symbol(ptr::addr_of!(__runtime_data_load_start));
-    let data_start = symbol(ptr::addr_of!(__runtime_data_start));
-    let data_end = symbol(ptr::addr_of!(__runtime_data_end));
-    let runtime_bss_start = symbol(ptr::addr_of!(__runtime_data_bss_start));
-    let runtime_bss_end = symbol(ptr::addr_of!(__runtime_data_bss_end));
-    let isr_start = symbol(ptr::addr_of!(__runtime_isr_start));
-    let isr_end = symbol(ptr::addr_of!(__runtime_isr_end));
-    let dma_data_start = symbol(ptr::addr_of!(__runtime_dma_data_start));
-    let dma_data_end = symbol(ptr::addr_of!(__runtime_dma_data_end));
-    let dma_bss_start = symbol(ptr::addr_of!(__runtime_dma_bss_start));
-    let dma_bss_end = symbol(ptr::addr_of!(__runtime_dma_bss_end));
-    let stack_bottom = symbol(ptr::addr_of!(_stack_end));
-    let stack_top = symbol(ptr::addr_of!(_stack_start));
-    let stack = current_stack_pointer();
+    let sections = oer_platform_staged_runtime::layout::sections();
+    let [image_start, payload_end] = [sections.image.start, sections.image.end].map(word);
+    let data_load_start = word(sections.data_load_start);
+    let [data_start, data_end] = bounds(&sections.data);
+    let [bss_start, bss_end] = bounds(&sections.bss);
+    let [runtime_bss_start, runtime_bss_end] = bounds(&sections.data_bss);
+    let [isr_start, isr_end] = bounds(&sections.isr);
+    let [dma_data_start, dma_data_end] = bounds(&sections.dma_data);
+    let [dma_bss_start, dma_bss_end] = bounds(&sections.dma_bss);
+    let [stack_bottom, stack_top] = bounds(&sections.task_stack);
+    let stack = word(oer_platform_staged_runtime::trap::stack_pointer());
 
     let interrupt_stacks_valid = {
-        let cpu0_bottom = symbol(ptr::addr_of!(__runtime_cpu0_irq_stack_bottom));
-        let cpu0_top = symbol(ptr::addr_of!(__runtime_cpu0_irq_stack_top));
-        let cpu1_bottom = symbol(ptr::addr_of!(__runtime_cpu1_irq_stack_bottom));
-        let cpu1_top = symbol(ptr::addr_of!(__runtime_cpu1_irq_stack_top));
+        let [cpu0_bottom, cpu0_top] = bounds(&sections.irq_stacks[0]);
+        let [cpu1_bottom, cpu1_top] = bounds(&sections.irq_stacks[1]);
         range_in_internal_sram(cpu0_bottom, cpu0_top)
             && range_in_internal_sram(cpu1_bottom, cpu1_top)
             && cpu0_top - cpu0_bottom == oer_platform_esp32s31_layout::LAYOUT.irq_stack_bytes
@@ -235,12 +207,12 @@ fn validate_runtime_layout() {
         && stack_top <= PROFILE_DATA_END
         && stack_top - stack_bottom == oer_platform_esp32s31_layout::LAYOUT.cpu0_task_stack_bytes;
 
-    let initialized_data = unsafe { ptr::addr_of!(INITIALIZED_DATA).read_volatile() };
-    let bss_probe = unsafe { ptr::addr_of!(BSS_PROBE).read_volatile() };
-    let isr_probe = unsafe { ptr::addr_of!(ISR_RODATA_PROBE).read_volatile() };
-    let critical_probe = unsafe { ptr::addr_of!(CRITICAL_DATA_PROBE).read_volatile() };
-    let dma_probe = unsafe { ptr::addr_of!(DMA_DATA_PROBE).read_volatile() };
-    let dma_bss_probe = unsafe { ptr::addr_of!(DMA_BSS_PROBE).read_volatile() };
+    let initialized_data = INITIALIZED_DATA.load(Ordering::Relaxed);
+    let bss_probe = BSS_PROBE.load(Ordering::Relaxed);
+    let isr_probe = oer_base_memory::read_volatile(&ISR_RODATA_PROBE);
+    let critical_probe = CRITICAL_DATA_PROBE.load(Ordering::Relaxed);
+    let dma_probe = DMA_DATA_PROBE.load(Ordering::Relaxed);
+    let dma_bss_probe = DMA_BSS_PROBE.load(Ordering::Relaxed);
 
     if image_start != PROFILE_CODE_START
         || payload_end <= image_start
@@ -275,14 +247,12 @@ fn range_in_internal_sram(start: u32, end: u32) -> bool {
     start >= INTERNAL_SRAM_START && end >= start && end <= INTERNAL_SRAM_END
 }
 
-fn symbol(address: *const u8) -> u32 {
-    address as usize as u32
+fn word(address: usize) -> u32 {
+    address as u32
 }
 
-fn current_stack_pointer() -> u32 {
-    let value: usize;
-    unsafe { asm!("mv {value}, sp", value = out(reg) value, options(nomem, nostack)) };
-    value as u32
+fn bounds(range: &Range<usize>) -> [u32; 2] {
+    [range.start, range.end].map(word)
 }
 
 /// Halt the image unless the TRNG produces health-tested entropy.
@@ -296,7 +266,7 @@ pub(crate) fn check_entropy_source() {
 }
 
 fn print(message: &'static CStr) {
-    unsafe { ets_printf(message.as_ptr()) };
+    oer_platform_esp32s31_board::rom::print(message);
 }
 
 fn fail(message: &'static CStr) -> ! {
@@ -305,7 +275,5 @@ fn fail(message: &'static CStr) -> ! {
 }
 
 fn halt() -> ! {
-    loop {
-        unsafe { asm!("wfi", options(nomem, nostack)) };
-    }
+    oer_platform_staged_runtime::idle()
 }

@@ -13,7 +13,8 @@
 //! statics in regions the boot zeroes an initializer that is all zero bytes;
 //! [`HandlerCell`] in such a static hands one value to an interrupt handler.
 //! [`RequestSlot`] carries one request at a time from a client to a server
-//! and its answer back, without a lock.
+//! and its answer back, without a lock. [`retained`] holds records in memory
+//! that survives a reset, one holder at a time.
 
 use core::marker::PhantomData;
 
@@ -22,6 +23,7 @@ mod handler_cell;
 mod indexed_custody;
 mod pinned_tx;
 mod request_slot;
+pub mod retained;
 mod rx_external_handoff;
 mod rx_handoff;
 mod volatile;

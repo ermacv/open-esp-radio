@@ -19,6 +19,7 @@ panic-hook = []
 
 [dependencies]
 oer-platform-staged-layout.workspace = true
+oer-base-memory = { path = "../../../portable/base/memory" }
 esp-hal = { workspace = true, features = ["static-interrupts", "rt", "unstable"] }
 oer-exec-interrupt-table = { path = "../../../portable/exec/interrupt-table" }
 oer-exec-esp-hal-irq.workspace = true

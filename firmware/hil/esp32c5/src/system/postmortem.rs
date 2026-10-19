@@ -3,34 +3,31 @@
 //! The record lives in `.rtc_fast.persistent`, LP RAM that no reset entry
 //! initializes (the staged runtime's retained region), so what one boot writes is there for the next unless
 //! the chip lost power. [`begin`] runs once, early in every boot: it takes
-//! what the previous boot left and starts this boot's ring. The record is
-//! written only inside the critical section, except by the panic handler.
+//! what the previous boot left and starts this boot's ring. The checkpoint
+//! ring is written inside the critical section, the fault by the panic
+//! handler, each in its own retained cell.
 
-use core::cell::{RefCell, UnsafeCell};
+use core::cell::RefCell;
 
 use critical_section::Mutex;
-use oer_hil_agent::postmortem::{Previous, Record};
+use oer_hil_agent::postmortem::{FaultRecord, Previous, Record};
 
-struct Retained(UnsafeCell<Record>);
-
-// SAFETY: every access goes through `with_record`, inside the critical
-// section, or through the panic path documented at `record_panic`.
-unsafe impl Sync for Retained {}
-
-// Every bit pattern is a `Record`, so memory no reset initialized is a value;
-// the initializer is never loaded into this NOLOAD section.
-#[unsafe(link_section = ".rtc_fast.persistent")]
-static RECORD: Retained = Retained(UnsafeCell::new(Record::EMPTY));
+oer_platform_staged_runtime::retained_static! {
+    /// The checkpoint ring, taken only inside the critical section.
+    static RECORD: Record;
+}
+oer_platform_staged_runtime::retained_static! {
+    /// The fault, taken by the panic handler without waiting, from a cell no
+    /// checkpoint takes.
+    static FAULT: FaultRecord;
+}
 
 static PREVIOUS: Mutex<RefCell<Option<Previous>>> = Mutex::new(RefCell::new(None));
 
-fn with_record<T>(access: impl FnOnce(&mut Record) -> T) -> T {
-    critical_section::with(|_| {
-        // SAFETY: the critical section excludes every other access but the
-        // panic path.
-        let record = unsafe { &mut *RECORD.0.get() };
-        access(record)
-    })
+/// The ring, inside the critical section. Only the critical section takes
+/// the ring, so `None` is unreachable but for a panic inside `access`.
+fn with_record<T>(access: impl FnOnce(&mut Record) -> T) -> Option<T> {
+    critical_section::with(|_| RECORD.try_lock().map(|mut record| access(&mut record)))
 }
 
 fn uptime_ms() -> u32 {
@@ -41,7 +38,10 @@ fn uptime_ms() -> u32 {
 
 /// Take what the previous boot left and start this boot's record.
 pub(crate) fn begin() {
-    let previous = with_record(Record::begin_boot);
+    let previous = critical_section::with(|_| {
+        let mut fault = FAULT.try_lock()?;
+        RECORD.try_lock()?.begin_boot(&mut fault)
+    });
     critical_section::with(|cs| *PREVIOUS.borrow_ref_mut(cs) = previous);
 }
 
@@ -57,14 +57,16 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     with_record(|record| record.checkpoint(name, arg, now, 0));
 }
 
-/// Record the panic being handled, from the platform's panic entry. It is
-/// written without the critical section, which the panicking code may hold;
-/// the chip resets next and never reads the record again in this boot.
-/// Formatting would put `core::fmt` on every context's panic path: a message
-/// with arguments is recorded empty.
-#[unsafe(link_section = ".flash.critical.text.panic_hook")]
-pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
-    // SAFETY: see above.
-    let record = unsafe { &mut *RECORD.0.get() };
-    record.record_panic(details.file, details.line, details.message.unwrap_or(""));
+oer_platform_staged_runtime::sram_fn! {
+    in critical_text "panic_hook";
+    /// Record the panic being handled, from the platform's panic entry. The
+    /// fault has its own cell, so the panic takes it without the critical
+    /// section, which the panicking code may hold; the chip resets next.
+    /// Formatting would put `core::fmt` on every context's panic path: a
+    /// message with arguments is recorded empty.
+    pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+        if let Some(mut fault) = FAULT.try_lock() {
+            fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
+        }
+    }
 }

@@ -8,6 +8,8 @@
 //! through [`BootstrapPsram`], which the staged runtime's handoff takes: the
 //! board does not link the runtime.
 
+pub mod rom;
+
 use oer_platform_esp32s31_layout::LAYOUT;
 
 use esp_hal::{

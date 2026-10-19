@@ -96,10 +96,10 @@ impl Phase {
 /// The phases the P2 timings are kept for, by slot.
 pub const TIMED_PHASES: [Phase; 3] = [Phase::Window, Phase::Stress, Phase::Hold];
 
-oer_platform_staged_runtime::critical_static! {
-    static PHASE: AtomicU8 = AtomicU8::new(Phase::BringUp as u8), in "w1";
+oer_platform_staged_runtime::placed_static! {
+    static PHASE: AtomicU8 = AtomicU8::new(Phase::BringUp as u8), in critical_data "w1";
     /// The P2 timer task waits on it for the phase to change.
-    static PHASE_WAKER: AtomicWaker = AtomicWaker::new(), in "w1";
+    static PHASE_WAKER: AtomicWaker = AtomicWaker::new(), in critical_data "w1";
 }
 
 /// The phase now.
@@ -134,24 +134,24 @@ pub fn stamp() -> u32 {
     Mcycle.now().max(1)
 }
 
-oer_platform_staged_runtime::critical_static! {
+oer_platform_staged_runtime::placed_static! {
     /// Cycles of each run of the radio executor's handler (SWI2), per timed
     /// phase; written by that handler alone.
-    pub static SWI2: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in "w1";
+    pub static SWI2: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in critical_data "w1";
     /// Cycles of each poll of the radio system's actor, per timed phase.
-    pub static ACTOR: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in "w1";
+    pub static ACTOR: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in critical_data "w1";
     /// Cycles of each poll of the receive runner, per timed phase.
-    pub static RECEIVE: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in "w1";
+    pub static RECEIVE: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in critical_data "w1";
     /// The longest MAC handler entry to the next receive poll, in cycles, per
     /// timed phase; written by the receive runner's polls.
-    pub static MAC_TO_POLL_MAX: [AtomicU32; 3] = [const { AtomicU32::new(0) }; 3], in "w1";
+    pub static MAC_TO_POLL_MAX: [AtomicU32; 3] = [const { AtomicU32::new(0) }; 3], in critical_data "w1";
     /// The longest doorbell ring to its handler, in cycles, per timed phase;
     /// written by the doorbell handler.
-    pub static RING_TO_DOORBELL_MAX: [AtomicU32; 3] = [const { AtomicU32::new(0) }; 3], in "w1";
+    pub static RING_TO_DOORBELL_MAX: [AtomicU32; 3] = [const { AtomicU32::new(0) }; 3], in critical_data "w1";
     /// The MAC handler's entry stamp, until the next receive poll takes it.
-    pub static MAC_LATCH: AtomicU32 = AtomicU32::new(0), in "w1";
+    pub static MAC_LATCH: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
     /// The doorbell's ring stamp, until its handler takes it.
-    pub static RING_AT: AtomicU32 = AtomicU32::new(0), in "w1";
+    pub static RING_AT: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
 }
 
 /// Record `cycles` into the slot of the phase now, if it is timed.
@@ -250,13 +250,13 @@ impl ClockOp {
 
 const RECORDED_PHASES: usize = Phase::Report as usize;
 
-oer_platform_staged_runtime::critical_static! {
+oer_platform_staged_runtime::placed_static! {
     /// Per clock, operation and phase (before the report): the operations.
     static CLOCK_COUNT: [[[AtomicU32; RECORDED_PHASES]; 3]; 5] =
-        [const { [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 3] }; 5], in "w1";
+        [const { [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 3] }; 5], in critical_data "w1";
     /// Per clock, operation and phase: the longest operation, in cycles.
     static CLOCK_MAX: [[[AtomicU32; RECORDED_PHASES]; 3]; 5] =
-        [const { [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 3] }; 5], in "w1";
+        [const { [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 3] }; 5], in critical_data "w1";
 }
 
 fn clock_cell(
@@ -313,12 +313,12 @@ impl ClockBackend for TimedEspHal {
 /// The periodic tracking ticks the log keeps, the latest ones.
 pub const TICKS: usize = 32;
 
-oer_platform_staged_runtime::critical_static! {
-    static TICK_START: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in "w1";
-    static TICK_END: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in "w1";
-    static TICK_OK: [AtomicU8; TICKS] = [const { AtomicU8::new(0) }; TICKS], in "w1";
+oer_platform_staged_runtime::placed_static! {
+    static TICK_START: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in critical_data "w1";
+    static TICK_END: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in critical_data "w1";
+    static TICK_OK: [AtomicU8; TICKS] = [const { AtomicU8::new(0) }; TICKS], in critical_data "w1";
     /// Ticks logged; the entry of tick `n` is `n % TICKS`.
-    static TICK_COUNT: AtomicU32 = AtomicU32::new(0), in "w1";
+    static TICK_COUNT: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
 }
 
 /// One logged tracking tick: SYSTIMER µs, low 32 bits.
@@ -478,13 +478,13 @@ pub async fn p1_stress(deadline: oer_base_time::Instant) {
     }
 }
 
-oer_platform_staged_runtime::critical_static! {
+oer_platform_staged_runtime::placed_static! {
     /// Per executor (by its comparator) and phase: the image's timer waits.
     static WAITS: [[AtomicU32; RECORDED_PHASES]; 2] =
-        [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2], in "w1";
+        [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2], in critical_data "w1";
     /// Per executor and phase: the waits that returned before their deadline.
     static WOKE_EARLY: [[AtomicU32; RECORDED_PHASES]; 2] =
-        [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2], in "w1";
+        [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2], in critical_data "w1";
 }
 
 /// Wait until `deadline` on the executor of `comparator`, which is the

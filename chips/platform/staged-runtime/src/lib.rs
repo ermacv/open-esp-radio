@@ -11,8 +11,11 @@
 //! second hart's interrupt stack.
 mod entry;
 pub mod interrupts;
+pub mod layout;
 pub mod panic;
+pub mod placement;
 pub mod stacks;
+pub mod trap;
 
 #[doc(hidden)]
 pub use oer_exec_interrupt_table as __interrupt_table;
@@ -21,6 +24,9 @@ pub use oer_exec_interrupt_table as __interrupt_table;
 pub type InterruptTable = oer_exec_interrupt_table::Table<oer_exec_esp_hal_irq::EspHalMatrix>;
 
 pub use oer_platform_staged_layout::handoff::AdoptsBootstrapMapping;
+
+#[doc(hidden)]
+pub use oer_base_memory as __memory;
 
 /// The image's control at the runtime's entry: stage two runs on CPU0 right
 /// after `_runtime_start`, with interrupts disabled and the bootstrap's
@@ -133,26 +139,6 @@ macro_rules! entry {
             let handoff = unsafe { $crate::Handoff::__new() };
             $main(handoff)
         }
-    };
-}
-
-/// A static in the SRAM critical data of the image (`.critical.data.<name>`),
-/// which interrupt handlers reach without a PSRAM access.
-///
-/// ```ignore
-/// oer_platform_staged_runtime::critical_static! {
-///     /// Handler entries without an installed line.
-///     pub static UNSERVICED: AtomicU32 = AtomicU32::new(0), in "w1";
-/// }
-/// ```
-#[macro_export]
-macro_rules! critical_static {
-    ($($(#[$attribute:meta])* $vis:vis static $name:ident: $ty:ty = $init:expr, in $section:literal;)*) => {
-        $(
-            $(#[$attribute])*
-            #[unsafe(link_section = concat!(".critical.data.", $section))]
-            $vis static $name: $ty = $init;
-        )*
     };
 }
 

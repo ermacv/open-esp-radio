@@ -10,6 +10,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 #[cfg(not(any(feature = "boot-smoke", feature = "system-watchdog")))]
 compile_error!("select the boot-smoke or system-watchdog image");
@@ -37,15 +38,11 @@ oer_platform_staged_runtime::interrupt_table! {
 
 static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 
-/// The image's record of a panic, which the platform's panic entry calls
-/// after its own record and before it resets the chip: the post-mortem's
-/// fault, formatting nothing. The next boot reports it.
+// The image's record of a panic, which the platform's panic entry calls
+// after its own record and before it resets the chip: the post-mortem's
+// fault, formatting nothing. The next boot reports it.
 #[cfg(feature = "system-watchdog")]
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".flash.critical.text.panic_hook")]
-fn oer_platform_panic_hook(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
-    system::postmortem::record_panic(details);
-}
+oer_platform_staged_runtime::panic_hook!(system::postmortem::record_panic);
 
 oer_platform_staged_runtime::entry!(main);
 

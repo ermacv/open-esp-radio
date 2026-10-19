@@ -16,6 +16,7 @@ default = []
 
 [dev-dependencies]
 oer-test-ui-cases = { path = "../../../host/test/ui-cases" }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 
 [lints]
 workspace = true

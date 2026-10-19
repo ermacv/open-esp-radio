@@ -13,16 +13,9 @@ use oer_hil_protocol::base::{
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
 
-unsafe extern "C" {
-    fn ets_printf(format: *const core::ffi::c_char, ...) -> i32;
-}
-
 /// Writes one line through the ROM, independently of the USB driver.
 fn rom_line(line: &core::ffi::CStr) {
-    // SAFETY: the format consumes exactly one NUL-terminated string argument.
-    unsafe {
-        ets_printf(c"%s\r\n".as_ptr(), line.as_ptr());
-    }
+    oer_platform_esp32c5_board::rom::line(line);
 }
 
 pub(crate) static CONSOLE: HilConsole<256, 8, 8> = HilConsole::new(rom_line);

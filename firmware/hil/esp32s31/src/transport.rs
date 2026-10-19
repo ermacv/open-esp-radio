@@ -14,20 +14,14 @@ const LINE: usize = 384;
 const LINES: usize = 8;
 const MESSAGES: usize = 8;
 
-unsafe extern "C" {
-    fn ets_printf(format: *const core::ffi::c_char, ...) -> i32;
-}
-
 /// Writes one line through the ROM, independently of the USB driver.
 fn rom_line(line: &CStr) {
-    // SAFETY: the format consumes exactly one NUL-terminated string argument.
-    unsafe {
-        ets_printf(c"%s\r\n".as_ptr(), line.as_ptr());
-    }
+    oer_platform_esp32s31_board::rom::line(line);
 }
 
-#[unsafe(link_section = ".critical.data.logging")]
-pub(crate) static CONSOLE: Console<LINE, LINES, MESSAGES> = Console::new(rom_line);
+oer_platform_staged_runtime::placed_static! {
+    pub(crate) static CONSOLE: Console<LINE, LINES, MESSAGES> = Console::new(rom_line), in critical_data "logging";
+}
 
 /// Installs the `log` facade over [`CONSOLE`]. Calling this more than once
 /// is harmless.

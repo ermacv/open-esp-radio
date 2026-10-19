@@ -3,45 +3,33 @@
 //! The record lives in `.rtc_fast.persistent`, RTC fast memory that no reset
 //! entry initializes, so what one boot writes is there for the next unless
 //! the chip lost power. [`begin`] runs once, early in every boot: it takes
-//! what the previous boot left and starts this boot's ring. The record is
-//! written only inside the critical section, except by the panic handler,
-//! which must not wait for another hart.
+//! what the previous boot left and starts this boot's ring. The checkpoint
+//! ring and the fault are separate retained cells: checkpoints are written
+//! inside the critical section, the fault by the panic handler, which must
+//! not wait for another hart and so never shares a cell with a checkpoint.
 
-use core::cell::{RefCell, UnsafeCell};
+use core::cell::RefCell;
 
 use critical_section::Mutex;
-use oer_hil_agent::postmortem::{Previous, RateMonitor, Record};
+use oer_hil_agent::postmortem::{FaultRecord, Previous, RateMonitor, Record};
 
-struct Retained(UnsafeCell<Record>);
-
-// SAFETY: every access goes through `with_record`, inside the critical
-// section, or through the panic path documented at `record_panic`.
-#[allow(
-    unsafe_code,
-    reason = "a static in retained memory needs interior mutability"
-)]
-unsafe impl Sync for Retained {}
-
-// Every bit pattern is a `Record`, so memory no reset initialized is a value;
-// the initializer is never loaded into this NOLOAD section.
-#[allow(
-    unsafe_code,
-    reason = "placing the record in retained memory needs a link section"
-)]
-#[unsafe(link_section = ".rtc_fast.persistent")]
-static RECORD: Retained = Retained(UnsafeCell::new(Record::EMPTY));
+oer_platform_staged_runtime::retained_static! {
+    /// The checkpoint ring, taken only inside the critical section.
+    static RECORD: Record;
+}
+oer_platform_staged_runtime::retained_static! {
+    /// The fault, taken by the panic handler without waiting: while the
+    /// other hart records its own panic, this one's is skipped.
+    static FAULT: FaultRecord;
+}
 
 static PREVIOUS: Mutex<RefCell<Option<Previous>>> = Mutex::new(RefCell::new(None));
 static RATE: Mutex<RefCell<RateMonitor>> = Mutex::new(RefCell::new(RateMonitor::new()));
 
-fn with_record<T>(access: impl FnOnce(&mut Record) -> T) -> T {
-    critical_section::with(|_| {
-        // SAFETY: the critical section excludes every other access but the
-        // panic path.
-        #[allow(unsafe_code, reason = "the retained record is a raw static")]
-        let record = unsafe { &mut *RECORD.0.get() };
-        access(record)
-    })
+/// The ring, inside the critical section. Only the critical section takes
+/// the ring, so `None` is unreachable but for a panic inside `access`.
+fn with_record<T>(access: impl FnOnce(&mut Record) -> T) -> Option<T> {
+    critical_section::with(|_| RECORD.try_lock().map(|mut record| access(&mut record)))
 }
 
 fn uptime_ms() -> u32 {
@@ -57,7 +45,10 @@ fn hart() -> u8 {
 /// Take what the previous boot left and start this boot's record.
 #[cfg(feature = "system-watchdog")]
 pub(crate) fn begin() {
-    let previous = with_record(Record::begin_boot);
+    let previous = critical_section::with(|_| {
+        let mut fault = FAULT.try_lock()?;
+        RECORD.try_lock()?.begin_boot(&mut fault)
+    });
     critical_section::with(|cs| *PREVIOUS.borrow_ref_mut(cs) = previous);
 }
 
@@ -76,14 +67,15 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     let _ = excess;
 }
 
-/// Record the panic being handled. The other hart may hold the critical
-/// section while this one panics, so the record is written without it; a
-/// checkpoint racing this write can at worst fail its own CRC.
-#[cfg(feature = "system-watchdog")]
-#[unsafe(link_section = ".flash.critical.text.panic_hook")]
-pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
-    // SAFETY: see above; the halted boot never reads the record again.
-    #[allow(unsafe_code, reason = "a panic cannot wait for the critical section")]
-    let record = unsafe { &mut *RECORD.0.get() };
-    record.record_panic(details.file, details.line, details.message.unwrap_or(""));
+oer_platform_staged_runtime::sram_fn! {
+    in critical_text "panic_hook";
+    /// Record the panic being handled. The other hart may hold the critical
+    /// section while this one panics, so the fault is taken without it, from
+    /// its own cell that no checkpoint takes.
+    #[cfg(feature = "system-watchdog")]
+    pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+        if let Some(mut fault) = FAULT.try_lock() {
+            fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
+        }
+    }
 }
