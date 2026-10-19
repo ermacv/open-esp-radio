@@ -13,8 +13,8 @@ product qualification are separate contracts.
 
 Source types define the accepted wire layout; these references explain its
 meaning and limits. Host scenario execution belongs to the
-[runner](../host/README.md); firmware setup belongs to the
-[ESP32-S31 target](../targets/esp32s31/README.md).
+[runner](../../../tools/hil/run/HOST.md); firmware setup belongs to the
+[ESP32-S31 target](../../../firmware/hil/esp32s31/README.md).
 
 ## Modules and messages
 

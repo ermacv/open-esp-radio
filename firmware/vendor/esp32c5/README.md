@@ -5,7 +5,7 @@ hardware cross-checks observe the device under test from a vendor
 implementation on the air. Each project is an entry of the stand's firmware
 catalog (its `firmware.toml`): `cargo hil firmware build <image>` builds it
 against the pinned ESP-IDF and the pinned vendor archives of
-[`artifacts.toml`](../artifacts.toml), with outputs in
+[`artifacts.toml`](../../../chips/esp32c5/vendor/artifacts.toml), with outputs in
 `target/vendor-firmware/esp32c5/<project>/`, and `cargo fw flash
 <image> --device <MAC|PORT> builds, flashes and journals it.
 

@@ -29,7 +29,7 @@ Memory lookups use the ordered selection/chunk index without cloning snapshots.
 Unknown and unavailable bytes are distinct retained facts. Elapsed time and
 abstract service internals are outside this implemented relation. Results concern explicit cases and the declared
 compiled binding; they do not establish whole-domain equivalence or qualification.
-See [selected comparison contracts](../../docs/design/contracts.md#selected-final-memory-and-comparison-relations).
+See [selected comparison contracts](../blobray-docs/design/contracts.md#selected-final-memory-and-comparison-relations).
 
 A relation that compares calls compares every captured call physically: the
 same target and every captured argument word, with raw evidence retained. It
@@ -61,7 +61,7 @@ The result exposes the review's claim ceiling and first policy gap; a refined MA
 never asserts physical equality. Shared bounded domain counters let record
 validation check that accounting independently. `classify_effects` returns the
 selection a contract gives each effect of one side, so a caller can count the
-effects each rule selects. See [effect contracts](../../docs/design/contracts.md#reviewed-effect-contracts).
+effects each rule selects. See [effect contracts](../blobray-docs/design/contracts.md#reviewed-effect-contracts).
 
 ## Record validation
 
@@ -76,4 +76,4 @@ closure, goal and blocking outcomes, effect accounting and coverage order. A
 a selected effect outside the reviewed contract or projection is an
 `Integrity` error. It never re-executes instructions. Application applies it to
 every in-process run; see
-[record validation](../../cli/reference/execution/README.md#record-validation).
+[record validation](../cli/reference/execution/README.md#record-validation).

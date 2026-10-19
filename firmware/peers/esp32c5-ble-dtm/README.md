@@ -8,7 +8,7 @@ exchanges with the device under test run against the vendor implementation.
 
 ## Build and flash
 
-The peer is a [firmware catalog](../../host/stand.md#esp-idf-firmware-catalog) entry
+The peer is a [firmware catalog](../../../tools/hil/run/stand.md#esp-idf-firmware-catalog) entry
 (`firmware.toml`). It builds against the ESP-IDF revision and the
 `esp32c5-bt-lib` Controller archive pinned in
 [`chips/esp32c5/vendor/artifacts.toml`](../../../chips/esp32c5/vendor/artifacts.toml):

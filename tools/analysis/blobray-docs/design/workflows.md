@@ -13,20 +13,20 @@ cache, provider registry, or correspondence between library versions. The
 | Link a PHY entry with explicit ROM companions → analysis | Limited RV32 integer static profile, unsupported semantics remain gaps |
 | Final-image target audit | Implemented for resolved static transfers |
 | Execute / compare implementations in process | Limited explicit integer scenario profile, scoped MATCH/DIFF/INCOMPLETE |
-| Captured PHY I2C → compiled-production comparison | [Native real scenario](../../../../verification/esp32s31/README.md#captured-i2c-command-memory-comparison); 45 command-memory writes, descriptor/no-op leaves and both-host byte/field/reset transport under explicit bounded peripheral responses; independent MATCH/DIFF/INCOMPLETE expectations, no physical timing or RF claim |
-| Current PHY calibration leaves → compiled-production comparison | [Finite native matrix](../../../../verification/esp32s31/README.md#current-calibration-leaves); TX-gain restore, forced gain, temperature conversion and post-init AGC with explicit domains and independent writes/returns; enclosing calibration remains outside this profile |
+| Captured PHY I2C → compiled-production comparison | [Native real scenario](../../../hil/acceptance/esp32s31/README.md#captured-i2c-command-memory-comparison); 45 command-memory writes, descriptor/no-op leaves and both-host byte/field/reset transport under explicit bounded peripheral responses; independent MATCH/DIFF/INCOMPLETE expectations, no physical timing or RF claim |
+| Current PHY calibration leaves → compiled-production comparison | [Finite native matrix](../../../hil/acceptance/esp32s31/README.md#current-calibration-leaves); TX-gain restore, forced gain, temperature conversion and post-init AGC with explicit domains and independent writes/returns; enclosing calibration remains outside this profile |
 | Exact data ranges → bytes with provenance | Implemented for captured RV32 ELF bytes; relocations are counted, never applied |
 
 ### Contract verification links
 
 | Contract | Implementation | Regression coverage |
 | --- | --- | --- |
-| Failed record growth releases the incoming payload without losing old records | [record memory](../../../riscv/model/src/record_memory.rs) | `failed_record_growth_rolls_back_payload_and_allows_reuse` in the same module |
-| Inventory keeps repeated members distinct and broken framing visible | [captured executables](../../crates/application/src/captured.rs) | [inventory tests](../../cli/tests/inventory.rs) |
-| Exact data ranges keep their provenance and reject unmapped ranges | [data export](../../crates/application/src/data.rs) | [data tests](../../cli/tests/data.rs) |
-| Section relocation admission supports small extents | [prepared object](../../crates/artifacts/src/function.rs) | `ten_thousand_section_relocations_fit_small_function_capacity` in [analysis tests](../../cli/tests/analysis.rs) |
-| A memory failure names the phase it happened in | [in-process limits](../../crates/application/src/in_process.rs) | `value_state_capacity_failure_names_its_phase` in [analysis tests](../../cli/tests/analysis.rs) |
-| Links validate every linker claim and report blockers | [linking](../../crates/application/src/linking.rs) | [linking tests](../../crates/linker/tests/linking.rs) |
+| Failed record growth releases the incoming payload without losing old records | [record memory](../../riscv-model/src/record_memory.rs) | `failed_record_growth_rolls_back_payload_and_allows_reuse` in the same module |
+| Inventory keeps repeated members distinct and broken framing visible | [captured executables](../../blobray-application/src/captured.rs) | [inventory tests](../../cli/tests/inventory.rs) |
+| Exact data ranges keep their provenance and reject unmapped ranges | [data export](../../blobray-application/src/data.rs) | [data tests](../../cli/tests/data.rs) |
+| Section relocation admission supports small extents | [prepared object](../../blobray-artifacts/src/function.rs) | `ten_thousand_section_relocations_fit_small_function_capacity` in [analysis tests](../../cli/tests/analysis.rs) |
+| A memory failure names the phase it happened in | [in-process limits](../../blobray-application/src/in_process.rs) | `value_state_capacity_failure_names_its_phase` in [analysis tests](../../cli/tests/analysis.rs) |
+| Links validate every linker claim and report blockers | [linking](../../blobray-application/src/linking.rs) | [linking tests](../../blobray-linker/tests/linking.rs) |
 
 ## Workflow contract map
 
@@ -164,7 +164,7 @@ review supplies canonical physical identities, evidence, applicability and hardw
 semantics in reviewed packs. Validation composes those with the selected model,
 memory/ownership and PAC policies, then generates all four outputs. There is no
 automatic Blobray-to-hardware acceptance or binary-derived write-semantics fallback.
-See the [source-authoring commands](../../../registers/README.md) and
+See the [source-authoring commands](../../../registers/generate/README.md) and
 [library register accesses](../../cli/reference/registers-data/README.md#library-register-accesses).
 
 ## Concrete execution profiles
@@ -175,8 +175,8 @@ Sequence/FIFO
 obligations close at the declared lifetime; code return cannot turn missing model
 participation into MATCH. The [device regressions](../../cli/tests/execution/devices.rs)
 cover all eight mechanisms, ownership conflicts and closure;
-[record validation](../../crates/verification/src/records/models.rs) rejects forged
-records. [Memory tests](../../crates/application/src/devices.rs) verify release of model
+[record validation](../../blobray-verification/src/records/models.rs) rejects forged
+records. [Memory tests](../../blobray-application/src/devices.rs) verify release of model
 payload/state and cancellation before response consumption.
 
 

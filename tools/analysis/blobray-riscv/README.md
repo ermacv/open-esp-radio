@@ -1,7 +1,7 @@
 # Concrete RV32 execution
 
 `oer-analysis-blobray-riscv` owns Blobray's concrete RV32 executor over the decoding
-and lifting of [`oer-analysis-riscv-lift`](../../../riscv/lift/README.md). It receives
+and lifting of [`oer-analysis-riscv-lift`](../riscv-lift/README.md). It receives
 bytes and structural facts, never an archive path or loader capability.
 
 Neither executor profile runs floating point: the Rv32imac profile decodes
@@ -18,7 +18,7 @@ instructions end with an explicit gap. Decoded instructions are cached per
 thread, keyed by instruction bytes and profile, so a cached decode stays valid
 for any address and for code that later changes. The backend cannot select images, acquire
 memory regions, choose models or publish a verdict. See the
-[concrete profile](../../cli/reference/execution/README.md#concrete-execution-and-comparison).
+[concrete profile](../cli/reference/execution/README.md#concrete-execution-and-comparison).
 
 Concrete execution consumes the typed fence record and retains its own
 supported fence-mode check, reporting unsupported modes explicitly.

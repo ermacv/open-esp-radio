@@ -6,7 +6,7 @@ one JSON shard per scenario, so each scenario run rewrites only its own file.
 Producers write it, `cargo vendor-check evidence` computes it for the
 checkout, and the qualification evaluator reads it.
 The shared data contract and store live in
-[`oer-vendor-evidence`](../../qualification/evidence-shard/README.md), a root-workspace format
+[`oer-vendor-evidence`](SHARD.md), a root-workspace format
 package. This verification workspace library owns comparison policy and
 producer orchestration. Qualification reads the format directly.
 
@@ -21,10 +21,10 @@ producer orchestration. Qualification reads the format directly.
 | `run` (feature `producers`) | The producers' orchestration: `probes` (each chip's Rust comparison probe images, built and their catalogs validated: `cargo vendor-check probes`), `scenario` (the typed Blobray scenarios built in the Blobray workspace and run: `cargo vendor-check scenario`), `regenerate` (which producer computes which shard of the derived index, whole or named, and the untriaged listing: `cargo vendor-check evidence`) and `phase` (the `phase <name>: <seconds> s` timing lines) |
 
 The producers are the Blobray scenario engine
-([`harness/scenarios`](../harness/scenarios), `command = "vendor-scenario"`)
-and the host stands ([`esp32s31/host/i`](../esp32s31/host/ieee802154/README.md),
+([`harness/scenarios`](../scenario), `command = "vendor-scenario"`)
+and the host stands ([`esp32s31/host/i`](../ieee802154-esp32s31/README.md),
 `command = "vendor-host"`). Which of them reruns which shard is decided by
-`run::regenerate`, which `cargo vendor-check evidence` ([xtask](../../tools/xtask/README.md)) calls.
+`run::regenerate`, which `cargo vendor-check evidence` (xtask) calls.
 
 Without `producers` this library exposes comparison policy and the index
 API. `producers` adds toolchain, chip profiles and the probe orchestration.

@@ -8,29 +8,29 @@ Reference application owners, content identities, result assessment and native f
 
 | Crate | Responsibility |
 | --- | --- |
-| [domain](../../../crates/domain/README.md) | Identities, records, limits and portable control/stream ports |
-| [artifacts](../../../crates/artifacts/README.md) | ELF/AR inventory over borrowed captured bytes |
-| [verification](../../../crates/verification/README.md) | Concrete observation comparison and verdicts |
-| [analysis](../../../crates/analysis/README.md) | Target audit, code closure and register navigation over the shared function analysis |
-| [riscv](../../../crates/riscv/README.md) | Concrete RV32 execution over the shared decoder and lifter |
-| [application](../../../crates/application/README.md) | Operations over given executables: inventory, library analysis, linking, data, audit and in-process comparison |
-| [linker](../../../crates/linker/src/lib.rs) | Linux adapters of the external ELF linkers behind `LinkerHost` |
+| [domain](../../../blobray-domain/README.md) | Identities, records, limits and portable control/stream ports |
+| [artifacts](../../../blobray-artifacts/README.md) | ELF/AR inventory over borrowed captured bytes |
+| [verification](../../../blobray-verification/README.md) | Concrete observation comparison and verdicts |
+| [analysis](../../../blobray-analysis/README.md) | Target audit, code closure and register navigation over the shared function analysis |
+| [riscv](../../../blobray-riscv/README.md) | Concrete RV32 execution over the shared decoder and lifter |
+| [application](../../../blobray-application/README.md) | Operations over given executables: inventory, library analysis, linking, data, audit and in-process comparison |
+| [linker](../../../blobray-linker/src/lib.rs) | Linux adapters of the external ELF linkers behind `LinkerHost` |
 | [cli](../../src/main.rs) | CLI rendering and host composition |
 
 Which crate may depend on which, the `oer-riscv-*` crates of the
-[shared RV32 layer](../../../../riscv/README.md) included, is the enforced table
-of [Blobray's architecture](../../../docs/design/architecture.md#crates-and-modules).
+[shared RV32 layer](../../../riscv-README.md) included, is the enforced table
+of [Blobray's architecture](../../../blobray-docs/design/architecture.md#crates-and-modules).
 
 Every operation is a function call over `oer_analysis_blobray_application::in_process::Executable`
 values, a `WorkingMemory` and a `RunControl`; the
-[contracts](../../../docs/design/contracts.md#operations-in-process) list them.
+[contracts](../../../blobray-docs/design/contracts.md#operations-in-process) list them.
 Libraries do not discover executables, install signal handlers or change
 process-global state. The host supplies the decoder/executor and the linker
 adapter.
 
 ## Identity and schema 1
 
-[Domain records](../../../crates/domain/src/lib.rs) define identities:
+[Domain records](../../../blobray-domain/src/lib.rs) define identities:
 
 - `ArtifactId` hashes exact bytes with SHA-256.
 - `ObjectId` combines the container artifact with standalone or zero-based archive

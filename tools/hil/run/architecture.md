@@ -2,7 +2,7 @@
 
 This document defines the host runner's ownership and evidence bundle
 contract. Operational setup and commands are in the
-[HIL host guide](README.md).
+[HIL host guide](HOST.md).
 
 The runner owns the typed CLI, scenario catalog and build/flash
 orchestration; the family crates own their workloads, and the link owns the
@@ -97,7 +97,7 @@ claim an earlier physical action:
 | --- | --- |
 | 1. Selection and plan | CLI/catalog code resolves typed scenarios. `RunSession` creates a unique directory and writes `plan.json`. |
 | 2. Firmware archive | `image` builds every selected class whose scenarios meet their configuration preconditions, before the stand is leased. `RunSession::record_firmware` stores the subjects and returns the run-local `firmware/<class>/application.bin`. An explicit replay source is checked by `oer_hil_run_bundle::replay` under the lease. |
-| 3. Leases and lab provenance | The runner waits for the [arbiter](../../stand/arbiter/README.md) lease on the boards, fixtures and air the selection claims. The run's fixture lock then takes the arbiter's lock files of its boards (by MAC), the local wiphy and the managed OpenWrt host its selection uses; these are local user-account locks, not distributed reservations. While they are held, `lab::provenance` records the secret-free topology before any flash. |
+| 3. Leases and lab provenance | The runner waits for the [arbiter](../../lab/arbiter/README.md) lease on the boards, fixtures and air the selection claims. The run's fixture lock then takes the arbiter's lock files of its boards (by MAC), the local wiphy and the managed OpenWrt host its selection uses; these are local user-account locks, not distributed reservations. While they are held, `lab::provenance` records the secret-free topology before any flash. |
 | 4. Flash | The flash operation (`oer-hil-run`) writes the bundle around that archived application under the run's lock of the board, through board I/O's one writer, journals it and starts it as the chip profile says. The workload never flashes a different build-tree copy. |
 | 5. Repetitions | `fixture::prepared` owns peer/host preparation; `session` owns serial reset, raw `uart.bin`, decoded protocol and target-health state; a workload owns its child processes and typed observations. Primary failures remain distinct from infrastructure failures. |
 | 6. Cleanup and attachment indexing | Each repetition enters a cleanup scope before fixture preparation. Cleanup/restoration finishes before attachments and `result.json` are collected. `cleanup.json` preserves every attempted restoration and its failure independently of the workload result. |
@@ -311,7 +311,7 @@ External unmanaged APs have no discovered physical identity and are not
 claimed. Build/flash-only commands and device inspection acquire no
 AP or laptop-radio resources.
 
-The [stand arbiter](../../stand/arbiter/README.md) orders these locks. Every command that
+The [stand arbiter](../../lab/arbiter/README.md) orders these locks. Every command that
 takes them first waits for a host-wide lease on the resources it claims; the
 locks remain the final exclusion, and a granted holder waits for any lock
 still held by a process outside the queue. A run holds the lease from its
@@ -403,7 +403,7 @@ The host packages own these roles:
   query, statistic and view; `oer-tool-hil-cli` launches every run, and `oer-os-durable` provides atomic files,
   digests and timestamps to every producer.
 - `oer-hil-run` turns an image class into an image spec for the one image
-  pipeline, [`oer-image-build`](../../tools/image/pipeline/README.md) (the class's features
+  pipeline, `oer-image-build` (the class's features
   and network, each chip's agent and HIL stack policy, the radio observers'
   placement audit), builds a run's images into a directory of built images
   (`images`) and writes the records it hands to evidence (`record`). The pipeline compiles, runs every gate

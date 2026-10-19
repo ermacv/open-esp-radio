@@ -3,7 +3,7 @@
 Source coverage does not imply RF delivery or interoperability. Classic BR/EDR
 remains source inventory.
 
-See the [whole-radio feature map](../FEATURES.md) for shared ownership and
+See the whole-radio feature map for shared ownership and
 the [PHY concurrent clients](../../phy/README.md#concurrent-clients)
 for cross-protocol composition limits.
 

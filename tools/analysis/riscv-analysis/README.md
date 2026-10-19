@@ -10,11 +10,11 @@ The private `values` module owns finite-lattice register states and a bounded
 fixed-point queue. It emits values and accesses only after convergence, through
 the same borrowed sink as the CFG. Input-dependent allocations share the caller's
 working capacity, and all repeated visits share its work/deadline budget.
-See [value semantics and limits](../../blobray/cli/reference/analysis/README.md#values-and-memory-effects).
+See [value semantics and limits](../cli/reference/analysis/README.md#values-and-memory-effects).
 
 An optional borrowed `ImageMemory` port supplies immutable load bytes: loaded
 sections neither writable nor executable, and writable ones a caller's
-read-only window covers whole ([static RV32 images](../program/README.md));
+read-only window covers whole ([static RV32 images](../riscv-program/README.md));
 other writable, code and unmapped memory stays unknown.
 Image PC-relative values use virtual addresses, and saved transfer records expose
 resolved and unresolved calls/outgoing jumps without expanding the local CFG.

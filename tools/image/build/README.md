@@ -61,7 +61,7 @@ way.
 ## Flash map
 
 Each chip's `platform/<chip>/chip.toml` `[flash]` table
-([`oer-chip-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
+([`oer-chip-profile`](../../chip/profile/src/lib.rs)'s `FlashMap`) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition table CSVs (`chips/esp32s31/platform/partitions/`). The flash map is
 host data: no target code reads it (the bootstrap finds its payload through

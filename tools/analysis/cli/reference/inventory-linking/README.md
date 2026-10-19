@@ -70,7 +70,7 @@ takes 1–512 inputs and at most 63 additional roots.
 
 `linking::propose_companions` links the same request as a trial with
 unresolved names permitted and resolves each unresolved name against up to 16
-candidate executables; see [contracts](../../../docs/design/contracts.md#image-linking).
+candidate executables; see [contracts](../../../blobray-docs/design/contracts.md#image-linking).
 It never keeps an image.
 
 ### Link policy and evidence

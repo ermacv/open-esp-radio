@@ -417,7 +417,7 @@ unchanged bytes. Fixed-size `final-memory` chunks carry bytes, availability and
 knownness masks; unknown/unreadable/unmapped bytes never become known zeros.
 Capturing normal memory does not read a device port or consume model values.
 
-The [verifier](../../../crates/verification/README.md) uses the exact per-case relation.
+The [verifier](../../../blobray-verification/README.md) uses the exact per-case relation.
 Low and high return words are independently selectable; event channels retain their
 relative order. Unselected events and memory observations remain in the result.
 `difference` identifies an event index in the selected stream, a return word, or a
@@ -427,7 +427,7 @@ Memory snapshots from unfinished phases remain evidence but cannot establish a
 difference between completed final states. Already observed event or returned-value
 differences remain valid independently of other unknowns or unmet model obligations.
 `MATCH` covers only the selected observations in the enumerated scenarios, not every
-argument, path, callback or internal state. [Selected comparison contracts](../../../docs/design/contracts.md#selected-final-memory-and-comparison-relations)
+argument, path, callback or internal state. [Selected comparison contracts](../../../blobray-docs/design/contracts.md#selected-final-memory-and-comparison-relations)
 define the precise completion and ownership boundaries.
 `complete` means every phase reached its declared goal and all model
 obligations due at closure were met, independently of the verdict. Only a `returned` outcome proves the entry returned.

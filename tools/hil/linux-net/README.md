@@ -1,6 +1,6 @@
 # Linux network fixture
 
-Use the canonical [Linux fixture software installation](../fixtures.md#linux-fixture-software-installation)
+Use the canonical [Linux fixture software installation](../run/fixtures.md#linux-fixture-software-installation)
 route from the repository root:
 
 ```console
@@ -19,4 +19,4 @@ root-owned staging, policy validation and activation.
 The provider is deliberately restricted to `wlan0`. Installing it does not
 discover or assign adapters, change network state, start hostapd, reset rfkill,
 open serial/SSH, flash a DUT or transmit RF. Those effects belong to explicit
-fixture checks and HIL runs described in the [host operations guide](../README.md).
+fixture checks and HIL runs described in the [host operations guide](../cli/README.md).

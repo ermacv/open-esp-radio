@@ -25,7 +25,7 @@ cargo hil run --chip esp32c5 boot-smoke
 `system-watchdog` serves the HIL wire protocol on the USB Serial/JTAG
 console and serves `system::WatchdogTest`,
 and nothing radio. Its SoC deadline watchdog is the production service of
-[`oer-esp32c5-esp-hal-soc`](../../../chips/adapters/esp-hal/esp32c5/soc/)
+[`oer-esp32c5-esp-hal-soc`](../../../chips/esp32c5/esp-hal-soc)
 on TIMG1's main watchdog; its boot evidence maps the chip's reset reasons
 (`CoreMwdt1` is `MainWatchdog1`) and reads the reset-retained post-mortem and the
 platform panic record in LP RAM. The runner classifies a flashed esp32c5 image from its

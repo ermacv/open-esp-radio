@@ -72,11 +72,11 @@ cargo blobray --format json audit-targets --artifact firmware.elf --forbid rom=0
 
 `--working-memory-mib`, `--timeout-secs` and `--max-work-units` bound each
 command cooperatively inside its process. CLI/JSON share the
-[application](crates/application/README.md) operations. Register accesses are
+[application](blobray-application/README.md) operations. Register accesses are
 observations, separate from reviewed physical declarations.
 
 Register source publication belongs to the independent
-[register tool](../registers/README.md). It consumes reviewed hardware models and
+[register tool](../registers/generate/README.md). It consumes reviewed hardware models and
 policies, without loading an investigation or executing vendor code.
 
 ```console
@@ -98,5 +98,5 @@ remains `INCOMPLETE`. The typed vendor scenarios run the same execution and
 comparison inside their own process through
 [in-process verification](cli/reference/execution/README.md#in-process-verification).
 
-The [architecture](docs/design/architecture.md), [contracts](docs/design/contracts.md)
-and [workflows](docs/design/workflows.md) describe the implemented scope. Qualifying production behavior remains an external responsibility.
+The [architecture](blobray-docs/design/architecture.md), [contracts](blobray-docs/design/contracts.md)
+and [workflows](blobray-docs/design/workflows.md) describe the implemented scope. Qualifying production behavior remains an external responsibility.

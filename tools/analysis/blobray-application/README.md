@@ -2,9 +2,9 @@
 
 `oer-analysis-blobray-application` owns the operations Blobray performs over executables
 its caller gives as bytes, inside the caller's process. Its internal
-dependencies are [domain](../domain/README.md),
-[artifacts](../artifacts/README.md), [analysis](../analysis/README.md) and
-[verification](../verification/README.md). It does not depend on a concrete
+dependencies are [domain](../blobray-domain/README.md),
+[artifacts](../blobray-artifacts/README.md), [analysis](../blobray-analysis/README.md) and
+[verification](../blobray-verification/README.md). It does not depend on a concrete
 ISA backend or linker adapter: both are injected.
 
 Every operation takes `in_process::Executable` values, a `WorkingMemory` and a
@@ -13,7 +13,7 @@ returns. A request names executables by content, and `in_process::find` fails
 with `invalid-request` when it names content that was not given.
 `in_process::Limits` is the work-unit, deadline and run-position control the
 CLI and the vendor scenarios use. See
-[cooperative control](../../cli/reference/resources/README.md#cooperative-control-and-failure-diagnostics)
+[cooperative control](../cli/reference/resources/README.md#cooperative-control-and-failure-diagnostics)
 for policy and working-memory boundaries.
 
 ## Captured executables
@@ -23,7 +23,7 @@ each object once: `inventory` returns the `ArtifactInventory`, and the other
 operations visit members through the same cursor. A thin archive member and a
 malformed member payload are members with a diagnostic; broken framing ends
 enumeration and marks the membership incomplete. See
-[inventory](../../cli/reference/inventory-linking/README.md#inventory).
+[inventory](../cli/reference/inventory-linking/README.md#inventory).
 
 ## Library analysis and register accesses
 
@@ -36,7 +36,7 @@ becomes a gap; resource and integrity failures fail the call.
 ranges and streams `RegisterAccess` records with a summary. Observed access
 widths and masks are never promoted to hardware declarations; source
 publication remains with the independent register tool. See
-[function analysis](../../cli/reference/analysis/README.md#function-analysis-contract).
+[function analysis](../cli/reference/analysis/README.md#function-analysis-contract).
 
 ## Linking and ROM companions
 
@@ -50,8 +50,8 @@ receives raw output, normalized observations and the reaped seekable ELF.
 Application never parses linker-specific map text. `companions` validates exact
 ROM function and data definitions; `proposal` trial-links a request and proposes
 them from ordered candidate executables. See
-[linked images](../../cli/reference/inventory-linking/README.md#synthetic-linked-images)
-and [ROM companions](../../cli/reference/analysis/README.md#explicit-rom-companions).
+[linked images](../cli/reference/inventory-linking/README.md#synthetic-linked-images)
+and [ROM companions](../cli/reference/analysis/README.md#explicit-rom-companions).
 
 ## Data and audit
 
@@ -60,8 +60,8 @@ one prepared object; it returns the bytes with per-span provenance and
 relocation counts and never applies a relocation. `audit::audit_targets`
 validates a final image's executable sections through the artifact owner and
 streams forbidden-target findings and coverage gaps with a summary. See
-[captured data](../../cli/reference/registers-data/README.md#captured-data-tables-and-coefficients)
-and [target audit](../../cli/reference/analysis/README.md#final-image-target-audit).
+[captured data](../cli/reference/registers-data/README.md#captured-data-tables-and-coefficients)
+and [target audit](../cli/reference/analysis/README.md#final-image-target-audit).
 
 ## Concrete execution
 
@@ -74,7 +74,7 @@ later `verify` of the same vendor side reuses, and `coverage` over the results.
 bounded events. `Executor` is injected from domain; application has no concrete
 ISA dependency. The pure verification crate owns comparison and the
 independent record validation `verify` and `vendor` apply to every run. See
-[execution and comparison](../../cli/reference/execution/README.md#concrete-execution-and-comparison)
+[execution and comparison](../cli/reference/execution/README.md#concrete-execution-and-comparison)
 for stateful lifetimes, resource obligations and claim limits.
 
 `execution_coverage` accumulates the code one side reaches over all its
@@ -84,7 +84,7 @@ dependence requested, `execution_steps` records each replacement session's
 step log and `dependence` derives which executed instructions the compared
 observations depend on. Image patches replace replacement bytes in every
 session without a rebuild. See
-[in-process verification](../../cli/reference/execution/README.md#in-process-verification).
+[in-process verification](../cli/reference/execution/README.md#in-process-verification).
 
 Concrete invocation setup owns the aligned stack argument area and its knownness.
 Explicit unknown words invalidate seeded bytes before execution. Domain validates

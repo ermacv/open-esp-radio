@@ -8,7 +8,7 @@ a network as its leader, hands out the active operational dataset, reports
 its role and addresses, and exchanges UDP datagrams.
 
 It shares the ESP32-C5 board with the
-[IEEE 802.15.4 peer](../esp32c5-i/README.md); each scenario names
+IEEE 802.15.4 peer; each scenario names
 the image it needs, and the runner restores that image before it runs.
 
 ## Build and flash
@@ -23,7 +23,7 @@ cargo fw flash openthread-peer --device <MAC|PORT>
 
 Like the IEEE 802.15.4 peer, it keeps the ROM's I2C master clock map so a
 USB Serial/JTAG reset of the running peer boots normally; see
-[USB Serial/JTAG resets](../esp32c5-i/README.md#usb-serialjtag-resets).
+USB Serial/JTAG resets.
 
 ## Line protocol
 

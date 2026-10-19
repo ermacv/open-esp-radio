@@ -2,11 +2,11 @@
 
 Every checkout of this user shares one stand: its boards, host fixtures and
 air. This guide covers leases, boards and their firmware; the
-[host guide](README.md) covers configuration, building and running, and
+[host guide](HOST.md) covers configuration, building and running, and
 [runs and investigation](runs.md) what a run leaves behind.
 
 
-The [arbiter](../../stand/arbiter/README.md) orders every use of the stand. A
+The [arbiter](../../lab/arbiter/README.md) orders every use of the stand. A
 lease claims the resources its work uses: boards by MAC, fixtures such as the
 laptop radio or the OpenWrt host, and the air, shared by all radio work and
 exclusive for scenarios tagged `air-exclusive` that measure the radio
@@ -60,7 +60,7 @@ fails at once on a leased board (or waits with `--wait`) and never writes
 under a run; the write is the receipted image write of `oer_lab_devices::image`,
 and `--monitor` reads the console afterwards. Over JTAG only the runner's
 flash operation writes (an image that breaks USB Serial/JTAG resets, see
-[Hardware errata](../../docs/hardware-errata.md)). The OpenOCD
+[Hardware errata](../../../docs/hardware-errata.md)). The OpenOCD
 build comes from the ESP-IDF tools in the shared cache. The lease ends with
 the capture, so an open monitor never holds a board.
 
@@ -220,7 +220,7 @@ The stand holds several equal boards, currently an ESP32-S31 and an ESP32-C5.
 No board has a fixed role: a scenario or other consumer chooses which board it
 uses as its device under test or as a peer, and may flash its own firmware.
 The stand file (`~/.config/open-esp-radio/stand.toml`,
-[`oer-lab-model`](../../stand/file/README.md)) describes the hubs and
+`oer-lab-model`) describes the hubs and
 the boards: each board's id, chip, radios, roles, hub port and reset ladder.
 Each board is identified by the MAC address its USB Serial/JTAG port reports
 as USB serial number, independent of `/dev/ttyACM*` numbering. Every board is part of the

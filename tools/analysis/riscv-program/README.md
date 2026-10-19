@@ -1,11 +1,11 @@
 # Static RV32 images
 
 `oer-analysis-riscv-program` reads one borrowed static RV32 ELF executable, through
-[`oer-analysis-elf`](../../elf/README.md) only, for the program model of
-[`oer-analysis-riscv-model`](../model/README.md): its ELF
+[`oer-analysis-elf`](../elf/README.md) only, for the program model of
+[`oer-analysis-riscv-model`](../riscv-model/README.md): its ELF
 floating-point ABI (`abi`), the `ProgramView` of its memory and the file-backed
 constants it serves as `ImageMemory` to the
-[analysis](../analysis/README.md), its code symbols
+[analysis](../riscv-analysis/README.md), its code symbols
 (`code_symbols`, `code_symbol_at`) and its executable sections. It performs
 no loading, relocation or execution, and has no filesystem access.
 
