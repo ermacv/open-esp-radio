@@ -180,7 +180,7 @@ impl IcmpSocket {
             Some(ipproto::ICMP),
         )?;
         if let Some(interface) = interface {
-            oer_hil_fixture::linux_socket::bind_to_device(&descriptor, interface)?;
+            oer_os_process::linux_socket::bind_to_device(&descriptor, interface)?;
         }
         connect(&descriptor, &SocketAddrV4::new(device, 0))?;
         Ok(Self { descriptor })

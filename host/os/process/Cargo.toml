@@ -6,6 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+# The Linux socket addresses and options rustix does not model
+# (`linux_socket`); the HIL fixtures enable it, the root fixture installer
+# does not.
+linux-socket = ["rustix/net"]
+
 [dependencies]
 serde_json = "=1.0.151"
 

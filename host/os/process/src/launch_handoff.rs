@@ -1,8 +1,10 @@
-//! Hand the provider lease from a fixed launcher to its helper across `exec`.
+//! Hand a descriptor from a fixed launcher to its helper across `exec`.
 //!
-//! The launcher places a non-close-on-exec duplicate at [`LEASE_FD`]; the
-//! helper adopts that descriptor exactly once. This module is the only owner
-//! of the raw descriptor number and of the helper's launch environment.
+//! The launcher places a non-close-on-exec duplicate at the handoff's
+//! descriptor number; the helper adopts that descriptor exactly once, before
+//! it starts a thread, and clears the handoff's launch environment. This
+//! module is the only owner of the raw descriptor number and of that
+//! environment, which is what makes adopting the number sound.
 
 use std::{
     fs::File,
@@ -14,16 +16,43 @@ use rustix::io::{FdFlags, fcntl_dupfd_cloexec, fcntl_setfd};
 
 use crate::Result;
 
-/// Descriptor number agreed between the fixed launchers and their helpers.
-const LEASE_FD: RawFd = 9;
-pub(super) const BOUND: &str = "OPEN_RADIO_GENERATION_BOUND";
-pub(super) const DIRECTORY: &str = "OPEN_RADIO_GENERATION_DIR";
+/// One launcher-to-helper handoff: the descriptor number both sides agree
+/// on, the variable whose value marks a helper entered through its launcher,
+/// and every variable of the launch environment the helper clears.
+#[derive(Clone, Copy, Debug)]
+pub struct LaunchHandoff {
+    pub descriptor: RawFd,
+    pub marker: &'static str,
+    pub environment: &'static [&'static str],
+}
 
 static ADOPTED: AtomicBool = AtomicBool::new(false);
 
-/// Leave a duplicate of `lease` open at [`LEASE_FD`] for the next `exec`.
-pub(super) fn pass(lease: impl AsFd) -> Result<()> {
-    pass_at(lease, LEASE_FD)
+impl LaunchHandoff {
+    /// Leave a duplicate of `lease` open at the handoff's number for the next
+    /// `exec`.
+    pub fn pass(&self, lease: impl AsFd) -> Result<()> {
+        pass_at(lease, self.descriptor)
+    }
+
+    /// Take the launcher marker and the descriptor passed by [`Self::pass`].
+    ///
+    /// Call this first in the helper's `main`, before it starts any thread.
+    pub fn adopt(&self, expected_marker: &str) -> Result<File> {
+        let marker = std::env::var(self.marker).unwrap_or_default();
+        if marker != expected_marker {
+            return Err("generation helper was not entered through its fixed launcher".into());
+        }
+        if ADOPTED.swap(true, Ordering::AcqRel) {
+            return Err("provider lease was already adopted".into());
+        }
+        for variable in self.environment {
+            // SAFETY: the helper calls `adopt` before starting threads, so no
+            // other thread reads or writes the environment concurrently.
+            unsafe { std::env::remove_var(variable) };
+        }
+        adopt_at(self.descriptor)
+    }
 }
 
 fn pass_at(lease: impl AsFd, number: RawFd) -> Result<()> {
@@ -37,41 +66,14 @@ fn pass_at(lease: impl AsFd, number: RawFd) -> Result<()> {
     Ok(())
 }
 
-/// Take the launcher marker and the lease descriptor passed by [`pass`].
-///
-/// Call this first in the helper's `main`, before it starts any thread.
-pub(super) fn adopt(expected_marker: &str) -> Result<File> {
-    let marker = std::env::var(BOUND).unwrap_or_default();
-    if marker != expected_marker {
-        return Err("generation helper was not entered through its fixed launcher".into());
-    }
-    if ADOPTED.swap(true, Ordering::AcqRel) {
-        return Err("provider lease was already adopted".into());
-    }
-    #[allow(
-        unsafe_code,
-        reason = "the launch environment is private to this handoff"
-    )]
-    // SAFETY: the helper calls `adopt` before starting threads, so no other
-    // thread reads or writes the environment concurrently.
-    unsafe {
-        std::env::remove_var(BOUND);
-        std::env::remove_var(DIRECTORY);
-    }
-    adopt_at(LEASE_FD)
-}
-
 /// Own the inherited descriptor `number` and close it on any later `exec`.
 fn adopt_at(number: RawFd) -> Result<File> {
     if std::fs::symlink_metadata(format!("/proc/self/fd/{number}")).is_err() {
         return Err("generation helper did not inherit its provider lease descriptor".into());
     }
-    #[allow(
-        unsafe_code,
-        reason = "adopting the inherited lease asserts descriptor ownership"
-    )]
     // SAFETY: the descriptor is open (checked above) and was passed to this
-    // process for this owner; `adopt` admits one caller through `ADOPTED`.
+    // process for this owner by `pass`; `adopt` admits one caller through
+    // `ADOPTED`, and nothing else in the process names the agreed number.
     let lease = unsafe { OwnedFd::from_raw_fd(number) };
     fcntl_setfd(&lease, FdFlags::CLOEXEC)?;
     Ok(File::from(lease))

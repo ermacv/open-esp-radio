@@ -5,6 +5,9 @@
 pub mod child_setup;
 pub mod context;
 pub mod git;
+pub mod launch_handoff;
+#[cfg(all(target_os = "linux", feature = "linux-socket"))]
+pub mod linux_socket;
 pub use context::{Context, command};
 #[cfg(unix)]
 mod io_lifetime;

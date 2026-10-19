@@ -2,7 +2,7 @@
 //! Requires an initially powered-off adapter; restores its power and rfkill state.
 use super::model::{Adapter, PeerAddress};
 use crate::Result;
-use oer_hil_fixture::linux_socket::{L2capAddress, set_bluetooth_security_low};
+use oer_os_process::linux_socket::{L2capAddress, set_bluetooth_security_low};
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
     io::Errno,

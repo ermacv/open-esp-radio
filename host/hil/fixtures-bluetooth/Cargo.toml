@@ -10,7 +10,7 @@ description = "The Linux Bluetooth fixture over BlueZ: DTM peer check, discovery
 
 [dependencies]
 oer-os-durable = { path = "../../os/durable" }
-oer-os-process = { path = "../../os/process" }
+oer-os-process = { path = "../../os/process", features = ["linux-socket"] }
 oer-hil-protocol = { path = "../../../portable/hil/protocol" }
 oer-hil-runs = { path = "../runs" }
 oer-hil-fixture = { path = "../fixture" }

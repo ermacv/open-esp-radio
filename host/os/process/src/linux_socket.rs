@@ -3,8 +3,8 @@
 //!
 //! Each address type is constructed only from validated fields, so its raw
 //! representation is always a complete, fully initialized address of its
-//! family. This module is the only place in the HIL host that passes raw
-//! memory to socket system calls.
+//! family. This module is the only place on the host that passes raw memory to
+//! socket system calls.
 
 use std::{
     io,

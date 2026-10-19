@@ -3239,7 +3239,6 @@ name = "oer-hil-fixture"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libc",
  "oer-hil-protocol",
  "oer-ieee80211-mac",
  "oer-lab-fixtures",

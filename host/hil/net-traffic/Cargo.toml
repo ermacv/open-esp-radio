@@ -12,7 +12,7 @@ description = "HIL network traffic: the target's traffic sessions and their type
 oer-hil-fixture = { path = "../fixture" }
 oer-hil-link = { path = "../link" }
 oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
-oer-os-process = { path = "../../os/process" }
+oer-os-process = { path = "../../os/process", features = ["linux-socket"] }
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
 serde = { version = "1.0", features = ["derive"] }
 

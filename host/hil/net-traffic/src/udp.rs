@@ -33,7 +33,7 @@ pub fn configure_qualification_receive_buffer(socket: &UdpSocket) -> io::Result<
 /// packet with no subsequent ancillary message. Read before and after collection.
 #[cfg(target_os = "linux")]
 pub fn kernel_drops(socket: &UdpSocket) -> io::Result<Option<u32>> {
-    oer_hil_fixture::linux_socket::dropped_packets(socket).map(Some)
+    oer_os_process::linux_socket::dropped_packets(socket).map(Some)
 }
 
 #[cfg(not(target_os = "linux"))]

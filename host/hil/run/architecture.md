@@ -42,7 +42,7 @@ its dependency graph is the whole root-executed installation surface.
 The three packages deny `unsafe_code` at their crate roots, and the helper and
 installer binaries forbid it. System calls go through `rustix`. Raw memory
 reaches the kernel in three places, each with its `SAFETY` justification:
-`fixture/src/linux_socket.rs` for link-layer, HCI and L2CAP addresses,
+`host/os/process/src/linux_socket.rs` for link-layer, HCI and L2CAP addresses,
 `BT_SECURITY`, `SO_MEMINFO` and `SO_BINDTODEVICE`; `fixture-install/src/launcher/handoff.rs` for the
 lease descriptor passed across `exec`; and the runner's adoption of the serial
 port descriptor.
