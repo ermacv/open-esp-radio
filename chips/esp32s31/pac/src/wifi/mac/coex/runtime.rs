@@ -11,14 +11,8 @@ impl WifiRadioRegisters {
     /// `libpp.a[hal_coex.o]::hal_set_rx_beacon_pti`.
     pub fn set_rx_beacon_pti(&mut self, beacon: MacPti, shared: MacPti) {
         let runtime = &self.peripherals.wifi_mac.wifi_mac_coex_runtime;
-        crate::generated::publish_mac_rx_beacon_pti(
-            runtime,
-            crate::generated::MacRxBeaconPtiMaskedInput::new(beacon.get() << 12),
-        );
-        crate::generated::publish_mac_shared_rx_pti(
-            runtime,
-            crate::generated::MacSharedRxPtiMaskedInput::new(shared.get()),
-        );
+        crate::generated::publish_mac_rx_beacon_pti(runtime, beacon);
+        crate::generated::publish_mac_shared_rx_pti(runtime, shared);
     }
 
     /// Set the hardware beacon receive window and time.
@@ -63,10 +57,7 @@ impl WifiRadioRegisters {
             runtime,
             crate::generated::MacItwtControlMaskedInput::new(u32::from(argument_is_zero)),
         );
-        crate::generated::publish_mac_shared_rx_pti(
-            runtime,
-            crate::generated::MacSharedRxPtiMaskedInput::new(shared.get()),
-        );
+        crate::generated::publish_mac_shared_rx_pti(runtime, shared);
     }
 
     /// Set one machine-bounded request bit like complete `hal_clr_itwt_pti`.

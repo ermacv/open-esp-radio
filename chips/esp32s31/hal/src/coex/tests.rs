@@ -22,7 +22,13 @@ fn the_vendor_external_levels_become_the_published_priorities() {
 #[test]
 fn a_grant_delay_above_the_field_is_refused() {
     let config = ExternalCoexConfig::vendor(ExternalCoexRole::Leader, ExternalCoexWires::Three);
-    let delay = |grant_delay_us| ExternalCoexConfig { grant_delay_us, ..config }.grant_delay();
+    let delay = |grant_delay_us| {
+        ExternalCoexConfig {
+            grant_delay_us,
+            ..config
+        }
+        .grant_delay()
+    };
     assert_eq!(delay(15).map(|delay| delay.get()), Some(15));
     assert_eq!(delay(16), None);
     assert_eq!(delay(u8::MAX), None);

@@ -1,6 +1,6 @@
 //! Ownership boundary for the complete cold COEX/PTI transaction.
 
-use oer_esp32s31_hal::{coex::CoexEventId, ieee80211::mac::WifiMacColdHal};
+use oer_esp32s31_hal::{coex::CoexEventId, ieee80211::mac::WifiMacColdHal, types::MacPti};
 
 /// The four OSI coexistence event numbers queried by complete cold init.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,16 +34,24 @@ impl MacCoexEvent {
     }
 }
 
-/// One byte returned by `_coex_pti_get`.
+/// One four-bit priority returned by `_coex_pti_get`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacCoexPti(u8);
+pub struct MacCoexPti(MacPti);
 
 impl MacCoexPti {
-    pub const fn from_osi_value(value: u8) -> Self {
-        Self(value)
+    /// The priority, or `None` above the four bits the MAC fields hold.
+    pub const fn new(value: u8) -> Option<Self> {
+        match MacPti::new(value as u32) {
+            Some(pti) => Some(Self(pti)),
+            None => None,
+        }
     }
 
     pub const fn value(self) -> u8 {
+        self.0.get() as u8
+    }
+
+    const fn pti(self) -> MacPti {
         self.0
     }
 }
@@ -103,11 +111,12 @@ pub trait MacColdCoexHardware {
 impl MacColdCoexHardware for WifiMacColdHal<'_> {
     fn initialize_cold_coex(&mut self, pti: MacColdCoexPti) {
         self.initialize_coex(
-            pti.rx_ack.value(),
-            pti.wifi_default.value(),
-            pti.tb.map(MacCoexPti::value),
-            pti.beamforming.map(MacCoexPti::value),
-            pti.multi_target.map(MacCoexPti::value),
+            pti.rx_ack.pti(),
+            pti.wifi_default.pti(),
+            pti.tb.map(MacCoexPti::pti),
+            pti.beamforming.map(MacCoexPti::pti),
+            pti.multi_target[0].value(),
+            pti.multi_target[1].pti(),
         );
     }
 }

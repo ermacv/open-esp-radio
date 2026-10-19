@@ -2374,38 +2374,6 @@ impl AgcSaturationGainHigh {
     }
 }
 
-/// Register-positioned receive-beacon PTI nibble accepted only by the reviewed masked RMW helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxBeaconPtiMaskedInput(u32);
-
-impl MacRxBeaconPtiMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-/// Register-positioned shared receive PTI nibble accepted only by the reviewed masked replacement helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacSharedRxPtiMaskedInput(u32);
-
-impl MacSharedRxPtiMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MacItwtControlMaskedInput(u32);
@@ -3281,24 +3249,6 @@ pub(crate) fn publish_pbus_force_test(registers: &crate::svd::PhyPbus, value: Pb
     crate::svd::masked_register_modify::publish_pbus_force_test(registers, value.get());
 }
 
-/// Typed bridge for the reviewed `publish_mac_rx_beacon_pti` masked transaction.
-#[inline]
-pub(crate) fn publish_mac_rx_beacon_pti(
-    registers: &crate::svd::WifiMacCoexRuntime,
-    value: MacRxBeaconPtiMaskedInput,
-) {
-    crate::svd::masked_register_modify::publish_mac_rx_beacon_pti(registers, value.get());
-}
-
-/// Typed bridge for the reviewed `publish_mac_shared_rx_pti` masked transaction.
-#[inline]
-pub(crate) fn publish_mac_shared_rx_pti(
-    registers: &crate::svd::WifiMacCoexRuntime,
-    value: MacSharedRxPtiMaskedInput,
-) {
-    crate::svd::masked_register_modify::publish_mac_shared_rx_pti(registers, value.get());
-}
-
 /// Typed bridge for the reviewed `publish_mac_itwt_control` masked transaction.
 #[inline]
 pub(crate) fn publish_mac_itwt_control(
@@ -3655,6 +3605,18 @@ pub(crate) fn raise_phy_pbus_work_mode_pulse(registers: &crate::svd::PhyAgcOracl
 #[inline]
 pub(crate) fn lower_phy_pbus_work_mode_pulse(registers: &crate::svd::PhyAgcOracle) {
     crate::svd::field_replace_modify::lower_phy_pbus_work_mode_pulse(registers);
+}
+
+/// Typed bridge for the reviewed `publish_mac_rx_beacon_pti` field-replacement transaction.
+#[inline]
+pub(crate) fn publish_mac_rx_beacon_pti(registers: &crate::svd::WifiMacCoexRuntime, value: MacPti) {
+    crate::svd::field_replace_modify::publish_mac_rx_beacon_pti(registers, value.get());
+}
+
+/// Typed bridge for the reviewed `publish_mac_shared_rx_pti` field-replacement transaction.
+#[inline]
+pub(crate) fn publish_mac_shared_rx_pti(registers: &crate::svd::WifiMacCoexRuntime, value: MacPti) {
+    crate::svd::field_replace_modify::publish_mac_shared_rx_pti(registers, value.get());
 }
 
 /// Typed bridge for the reviewed `set_coex_external_priority_0` field-replacement transaction.

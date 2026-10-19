@@ -1,4 +1,4 @@
-use super::MacCoexEvent;
+use super::{MacCoexEvent, MacCoexPti};
 
 #[test]
 fn cold_queries_read_their_own_shared_coexistence_events() {
@@ -10,4 +10,10 @@ fn cold_queries_read_their_own_shared_coexistence_events() {
     ] {
         assert_eq!(query.coex_event().value(), event);
     }
+}
+
+#[test]
+fn a_priority_above_four_bits_is_not_a_mac_priority() {
+    assert_eq!(MacCoexPti::new(15).map(MacCoexPti::value), Some(15));
+    assert!(MacCoexPti::new(16).is_none());
 }

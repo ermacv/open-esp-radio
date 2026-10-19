@@ -66803,28 +66803,6 @@ pub mod masked_register_modify {
         });
     }
 
-    /// Preserve mask 0xffff0fff, accept input mask 0x0000f000, and set 0x00000000 in WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI.
-    #[inline]
-    pub fn publish_mac_rx_beacon_pti(registers: &crate::WifiMacCoexRuntime, input: u32) {
-        registers.rx_beacon_pti().modify(|reader, writer| {
-            let image = (reader.bits() & 0xffff0fff) | (input & 0x0000f000);
-            // SAFETY: generator validation proves the three masks are
-            // disjoint and partition every bit of this ordinary register.
-            unsafe { writer.bits(image) }
-        });
-    }
-
-    /// Preserve mask 0xfffffff0, accept input mask 0x0000000f, and set 0x00000000 in WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI.
-    #[inline]
-    pub fn publish_mac_shared_rx_pti(registers: &crate::WifiMacCoexRuntime, input: u32) {
-        registers.shared_rx_pti().modify(|reader, writer| {
-            let image = (reader.bits() & 0xfffffff0) | (input & 0x0000000f);
-            // SAFETY: generator validation proves the three masks are
-            // disjoint and partition every bit of this ordinary register.
-            unsafe { writer.bits(image) }
-        });
-    }
-
     /// Preserve mask 0xffffff00, accept input mask 0x000000ff, and set 0x00000000 in WIFI_MAC_COEX_RUNTIME.ITWT_CONTROL.
     #[inline]
     pub fn publish_mac_itwt_control(registers: &crate::WifiMacCoexRuntime, input: u32) {
@@ -67475,6 +67453,26 @@ pub mod field_replace_modify {
             // SAFETY: generator validation proves every logical input projection
             // fits its named SVD field; no whole-register image crosses this API.
             writer.forced_gain_enable().bit((input & 0x00000001) != 0)
+        });
+    }
+
+    /// Replace WIFI_MAC_COEX_RUNTIME.RX_BEACON_PTI fields `[PTI]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn publish_mac_rx_beacon_pti(registers: &crate::WifiMacCoexRuntime, input: u32) {
+        registers.rx_beacon_pti().modify(|_, writer| {
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe { writer.pti().bits((input & 0x0000000f) as u8) }
+        });
+    }
+
+    /// Replace WIFI_MAC_COEX_RUNTIME.SHARED_RX_PTI fields `[PTI]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn publish_mac_shared_rx_pti(registers: &crate::WifiMacCoexRuntime, input: u32) {
+        registers.shared_rx_pti().modify(|_, writer| {
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe { writer.pti().bits((input & 0x0000000f) as u8) }
         });
     }
 

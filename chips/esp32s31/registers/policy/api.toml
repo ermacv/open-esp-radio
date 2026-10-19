@@ -1497,20 +1497,6 @@ output-mask = 0x0001fffc
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
 [[opaque-domains]]
-name = "MacRxBeaconPtiMaskedInput"
-description = "Register-positioned receive-beacon PTI nibble accepted only by the reviewed masked RMW helper."
-peripheral = "WIFI_MAC_COEX_RUNTIME"
-register = "RX_BEACON_PTI"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[opaque-domains]]
-name = "MacSharedRxPtiMaskedInput"
-description = "Register-positioned shared receive PTI nibble accepted only by the reviewed masked replacement helper."
-peripheral = "WIFI_MAC_COEX_RUNTIME"
-register = "SHARED_RX_PTI"
-sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
-
-[[opaque-domains]]
 name = "MacItwtControlMaskedInput"
 description = "Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper."
 peripheral = "WIFI_MAC_COEX_RUNTIME"
@@ -3391,25 +3377,21 @@ set-mask = 0x00000002
 exposure = "facade"
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
-[[masked-register-modifies]]
+[[field-replace-modifies]]
 name = "publish_mac_rx_beacon_pti"
 peripheral = "WIFI_MAC_COEX_RUNTIME"
 register = "RX_BEACON_PTI"
-domain = "MacRxBeaconPtiMaskedInput"
-preserve-mask = 0xffff0fff
-input-mask = 0x0000f000
-set-mask = 0x00000000
+fields = [{ field = "PTI", source-bit-offset = 0 }]
+domain = "MacPti"
 exposure = "facade"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
-[[masked-register-modifies]]
+[[field-replace-modifies]]
 name = "publish_mac_shared_rx_pti"
 peripheral = "WIFI_MAC_COEX_RUNTIME"
 register = "SHARED_RX_PTI"
-domain = "MacSharedRxPtiMaskedInput"
-preserve-mask = 0xfffffff0
-input-mask = 0x0000000f
-set-mask = 0x00000000
+fields = [{ field = "PTI", source-bit-offset = 0 }]
+domain = "MacPti"
 exposure = "facade"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
 
