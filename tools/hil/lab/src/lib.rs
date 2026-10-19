@@ -10,6 +10,7 @@
 //! journal belong to the arbiter, flashing to the flash operation.
 #![forbid(unsafe_code)]
 
+pub mod air;
 pub mod config;
 mod dut;
 pub use dut::{attach_console, peer_console};

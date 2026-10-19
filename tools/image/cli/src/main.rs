@@ -11,6 +11,7 @@ use clap::{CommandFactory as _, Parser, Subcommand};
 mod command;
 mod image;
 mod w1;
+mod w2;
 
 use oer_image_build::probe;
 
