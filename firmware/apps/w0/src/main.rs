@@ -19,8 +19,8 @@ use esp_hal::{
     Blocking, efuse, interrupt::software::SoftwareInterrupt, rng::Rng,
     usb::usb_serial_jtag::UsbSerialJtag,
 };
-use oer_adapters_embassy_time::EmbassyClock;
-use oer_adapters_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
+use oer_embassy_time::EmbassyClock;
+use oer_esp32s31_board as board;
 use oer_esp32s31_hal::root::ProtocolPartitions;
 use oer_esp32s31_ieee80211_driver::startup::{
     RadioStartConfig, RadioStartFailure, WifiColdStartConfig, WifiMacPlatform, WifiMacStartConfig,
@@ -35,22 +35,22 @@ use oer_esp32s31_phy::{
 };
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
-use oer_exec_executor::{Executor, InterruptExecutor, LevelOrder};
+use oer_espressif_esp_hal_radio::{EspHalClocks, RadioSingletons, take_radio};
+use oer_espressif_executor::{Executor, InterruptExecutor, LevelOrder};
+use oer_espressif_staged_runtime::panic;
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
-use oer_platform_esp32s31_board as board;
-use oer_platform_staged_runtime::panic;
 use static_cell::StaticCell;
 
-oer_platform_staged_runtime::interrupt_table! {
+oer_espressif_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
+    wake: WakeToken = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FROM_CPU_INTR2 => oer_exec_executor::interrupt_handler::<2>, Priority2, ProCpu;
+    radio: RadioToken = FROM_CPU_INTR2 => oer_espressif_executor::interrupt_handler::<2>, Priority2, ProCpu;
     /// The radio executor's timer alarm; it only acknowledges and pends.
-    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority3, ProCpu;
+    radio_alarm: RadioAlarmToken = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority3, ProCpu;
     /// The application executor's timer alarm.
-    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_exec_executor::alarm_interrupt::<1>, Priority1, ProCpu;
+    app_alarm: AppAlarmToken = SYSTIMER_TARGET1 => oer_espressif_executor::alarm_interrupt::<1>, Priority1, ProCpu;
 }
 
 /// The radio executor between the latching interrupts and the application.
@@ -77,9 +77,9 @@ struct Boot {
     access_point: [u8; 6],
 }
 
-oer_platform_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main);
 
-fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
+fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
@@ -151,8 +151,8 @@ fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
 
     // The radio executor writes the system timer; the application executor
     // publishes its deadlines to it.
-    oer_exec_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
-    oer_exec_executor::bind::<0, _>(interrupts.app_alarm);
+    oer_espressif_executor::init::<2, _>(peripherals.SYSTIMER, interrupts.radio_alarm);
+    oer_espressif_executor::bind::<0, _>(interrupts.app_alarm);
     let radio = RADIO_EXECUTOR
         .init(InterruptExecutor::<2>::new(SoftwareInterrupt::new(
             peripherals.FROM_CPU_INTR2,
@@ -324,5 +324,5 @@ impl WifiMacPlatform for Platform {
 }
 
 fn park() -> ! {
-    oer_platform_staged_runtime::idle()
+    oer_espressif_staged_runtime::idle()
 }

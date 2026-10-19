@@ -11,13 +11,13 @@ build = "build.rs"
 
 [dependencies]
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
-oer-platform-esp32s31-board = { path = "../../../chips/platform/esp32s31-board" }
-oer-platform-staged-runtime = { path = "../../../chips/platform/staged-runtime", features = ["esp32s31", "two-harts"] }
-oer-adapters-esp-hal-radio = { path = "../../../chips/adapters/esp-hal/radio", features = ["esp32s31"] }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 
 [build-dependencies]
-oer-platform-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

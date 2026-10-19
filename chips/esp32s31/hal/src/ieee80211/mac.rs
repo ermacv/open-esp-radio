@@ -28,7 +28,7 @@ use crate::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use oer_esp32s31_pac::{
     CoexistenceLowPowerClockObservation, MacInterruptSetup as PacMacInterruptSetup,

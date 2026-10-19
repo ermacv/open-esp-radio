@@ -413,7 +413,7 @@ fn completion(status: u8, starting_sequence: u16, bitmap: u64) -> HtAmpduTxCompl
 }
 
 const HT_POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_base_time::RadioDuration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64),
+    lifetime: oer_time::RadioDuration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64),
     retain_single_mpdu: false,
 };
 
@@ -966,7 +966,7 @@ fn radio_generation_failure_preserves_retry_counts_and_frame_selection() {
 #[test]
 fn full_range_lifetimes_have_an_exact_last_representable_aging_threshold() {
     let policy = AmpduRetryPolicy {
-        lifetime: oer_base_time::RadioDuration::from_micros(u64::MAX),
+        lifetime: oer_time::RadioDuration::from_micros(u64::MAX),
         retain_single_mpdu: true,
     };
     let retry = AmpduRetryState::<2>::new(

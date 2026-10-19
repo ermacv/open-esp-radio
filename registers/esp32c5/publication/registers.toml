@@ -34,4 +34,4 @@ edition = "2024"
 # The model names no DMA address field: the generated check refuses DMA
 # storage until it does.
 [outputs.linker]
-path = "../../../portable/platform/esp32c5-layout/linker/dma-window.x"
+path = "../../../chips/esp32c5/layout/linker/dma-window.x"

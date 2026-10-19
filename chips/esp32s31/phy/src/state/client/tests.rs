@@ -1,5 +1,5 @@
 use super::*;
-use oer_base_time_virtual::VirtualClock;
+use oer_time_virtual::VirtualClock;
 
 const CLIENTS: [RadioClient; 3] = [
     RadioClient::Wifi,
@@ -28,11 +28,11 @@ impl<const COUNT: usize> ScriptedClock<COUNT> {
     }
 }
 
-impl<const COUNT: usize> oer_base_time::Clock for ScriptedClock<COUNT> {
-    fn now(&self) -> oer_base_time::Instant {
+impl<const COUNT: usize> oer_time::Clock for ScriptedClock<COUNT> {
+    fn now(&self) -> oer_time::Instant {
         let next = self.next.get();
         self.next.set(next + 1);
-        oer_base_time::Instant::from_micros(self.samples[next])
+        oer_time::Instant::from_micros(self.samples[next])
     }
 }
 
@@ -62,7 +62,7 @@ impl PhyClientStateTestExt for PhyClientState {
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         self.acquire(
             client,
-            &VirtualClock::<8>::starting_at(oer_base_time::Instant::from_micros(now_micros)),
+            &VirtualClock::<8>::starting_at(oer_time::Instant::from_micros(now_micros)),
         )
     }
 
@@ -71,7 +71,7 @@ impl PhyClientStateTestExt for PhyClientState {
         now_micros: u64,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         self.evaluate_immediate_tracking(&VirtualClock::<8>::starting_at(
-            oer_base_time::Instant::from_micros(now_micros),
+            oer_time::Instant::from_micros(now_micros),
         ))
     }
 
@@ -80,7 +80,7 @@ impl PhyClientStateTestExt for PhyClientState {
         now_micros: u64,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         self.evaluate_periodic_tracking(&VirtualClock::<8>::starting_at(
-            oer_base_time::Instant::from_micros(now_micros),
+            oer_time::Instant::from_micros(now_micros),
         ))
     }
 }
@@ -802,7 +802,7 @@ fn only_the_minting_registration_describes_a_detached_client_set() {
 
 #[test]
 fn an_untracked_class_is_due_at_once_and_a_tracked_one_waits_the_period() {
-    let start = oer_base_time_virtual::START.as_micros();
+    let start = oer_time_virtual::START.as_micros();
     let owner = PhyClientState::new_empty(DEFAULT_PLL_TRACK_PERIOD_MICROS);
     assert_eq!(
         owner.snapshot().previous_micros(PhyPllTrackClass::Wifi),

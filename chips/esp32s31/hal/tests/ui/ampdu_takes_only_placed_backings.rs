@@ -1,7 +1,7 @@
 #![no_std]
 use oer_esp32s31_hal::dma_static::PlacedTxLease;
 use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDma;
-use oer_base_memory::PinnedDmaTxRadioLease;
+use oer_memory::PinnedDmaTxRadioLease;
 
 // An aggregate publishes a retained backing's address without a check, so
 // it takes only a lease of a pool placed in the DMA window: a lease of an

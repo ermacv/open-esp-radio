@@ -1,0 +1,25 @@
+[package]
+name = "oer-hil-family-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "System HIL workloads: boot smoke, watchdog, panic reset and stand recovery"
+
+[dependencies]
+oer-lab-board = { path = "../../lab/board" }
+oer-hil-model = { path = "../model" }
+oer-hil-scenario = { path = "../scenario" }
+oer-os-process = { path = "../../os/process" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+toml = "1.1"
+
+[lints]
+workspace = true
+

@@ -1,0 +1,17 @@
+[package]
+name = "oer-esp32c5-board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Memory configuration of the ESP32-C5 devkit with the N16R8 module"
+
+[dependencies]
+oer-espressif-staged-layout.workspace = true
+oer-esp32c5-layout.workspace = true
+esp-hal = { workspace = true, features = ["esp32c5", "static-interrupts", "unstable"] }
+
+[lints]
+workspace = true
+

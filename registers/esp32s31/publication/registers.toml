@@ -35,5 +35,5 @@ target = "none"
 edition = "2024"
 
 [outputs.linker]
-path = "../../../portable/platform/esp32s31-layout/linker/dma-window.x"
+path = "../../../chips/esp32s31/layout/linker/dma-window.x"
 address-low-field = "WIFI_MAC_RX_DMA.RX_NEXT_DESCRIPTOR.ADDRESS_LOW"

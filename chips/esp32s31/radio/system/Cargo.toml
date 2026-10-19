@@ -13,17 +13,17 @@ registration-diagnostics = ["oer-esp32s31-radio-client/registration-diagnostics"
 
 [dependencies]
 embassy-futures = "0.1.2"
-oer-base-time = { path = "../../../../portable/base/time" }
+oer-time = { path = "../../../../portable/time" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-ieee80211-mac = { path = "../../ieee80211/mac" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-esp32s31-radio-client = { path = "../client" }
-oer-ieee80211-mac = { path = "../../../../portable/ieee80211/mac" }
+oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac" }
 
 [dev-dependencies]
 oer-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
-oer-base-time-virtual = { path = "../../../../portable/base/time-virtual" }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [lints]
 workspace = true

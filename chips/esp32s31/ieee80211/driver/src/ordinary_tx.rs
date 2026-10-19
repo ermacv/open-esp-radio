@@ -11,7 +11,7 @@
 
 use core::pin::Pin;
 
-use oer_base_time::{Clock, Instant, Timer};
+use oer_time::{Clock, Instant, Timer};
 
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
 use oer_esp32s31_ieee80211_mac::{
@@ -42,8 +42,7 @@ pub const TX_FCS_SIZE: usize = 4;
 /// Settle interval between the forced-CCA edge of a queue's timeout abort
 /// and its detach (`SOURCE[PROMOTED_LMAC_TX]`, see
 /// `TxSlot::begin_timeout_abort`).
-pub(crate) const TX_ABORT_SETTLE: oer_base_time::Duration =
-    oer_base_time::Duration::from_micros(16);
+pub(crate) const TX_ABORT_SETTLE: oer_time::Duration = oer_time::Duration::from_micros(16);
 /// Metadata bit set by the complete HE S-MPDU preparation leaf before DMA
 /// publication. It selects the single-MPDU container geometry while the low
 /// twenty bits retain MPDU+MIC+FCS length.
@@ -395,7 +394,7 @@ impl<const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, BUFFER_SIZE> {
 
     /// The publication deadline, or the end of the abort settle while one
     /// runs.
-    pub const fn deadline(&self) -> oer_base_time::Instant {
+    pub const fn deadline(&self) -> oer_time::Instant {
         self.active.deadline
     }
 
@@ -465,10 +464,10 @@ struct ActiveTx {
     response: MacLegacyTxResponse,
     /// Protection selected for the current publication.
     protection: TxProtectionDecision,
-    completion_timeout: oer_base_time::Duration,
+    completion_timeout: oer_time::Duration,
     /// Next service boundary: publication expiry or abort-settle expiry.
     /// The previous phase's deadline is no longer actionable after transition.
-    deadline: oer_base_time::Instant,
+    deadline: oer_time::Instant,
     phase: OrdinaryTxPhase,
     retries: OrdinaryTxRetryReport,
 }
@@ -703,7 +702,7 @@ where
     }
 
     /// The next service deadline, including an in-progress hardware abort.
-    pub fn next_deadline(&self) -> Option<oer_base_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
         self.active.as_ref().map(|active| active.deadline)
     }
 
@@ -1099,7 +1098,7 @@ where
             response,
             protection: TxProtectionDecision::UNPROTECTED,
             completion_timeout: plan.exchange.publication_timeout,
-            deadline: oer_base_time::Instant::EPOCH,
+            deadline: oer_time::Instant::EPOCH,
             phase: OrdinaryTxPhase::Published,
             retries: OrdinaryTxRetryReport::default(),
         };
@@ -1206,7 +1205,7 @@ where
     pub async fn service_polling<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        poll_interval: oer_base_time::Duration,
+        poll_interval: oer_time::Duration,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
         let progress = self.poll_once(hardware)?;
         if progress == WifiTxProgress::Pending {

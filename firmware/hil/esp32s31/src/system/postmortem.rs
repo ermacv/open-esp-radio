@@ -13,11 +13,11 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use oer_hil_agent::postmortem::{FaultRecord, Previous, RateMonitor, Record};
 
-oer_platform_staged_runtime::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     /// The checkpoint ring, taken only inside the critical section.
     static RECORD: Record;
 }
-oer_platform_staged_runtime::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     /// The fault, taken by the panic handler without waiting: while the
     /// other hart records its own panic, this one's is skipped.
     static FAULT: FaultRecord;
@@ -67,13 +67,13 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     let _ = excess;
 }
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in critical_text "panic_hook";
     /// Record the panic being handled. The other hart may hold the critical
     /// section while this one panics, so the fault is taken without it, from
     /// its own cell that no checkpoint takes.
     #[cfg(feature = "system-watchdog")]
-    pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+    pub(crate) fn record_panic(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
         if let Some(mut fault) = FAULT.try_lock() {
             fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
         }

@@ -24,7 +24,7 @@ without vendor radio binaries. Decisions are in
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time in tests comes from the virtual clocks of `oer-base-time-virtual`.
+  constants; time in tests comes from the virtual clocks of `oer-time-virtual`.
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
@@ -64,7 +64,7 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
   an OS (protocol cores, the HIL protocol, chip knowledge such as tables and
   pure functions); `chips/` accesses a chip's registers (PAC, HAL, PHY,
   drivers, platform); `host/` needs an OS. A domain may split across roots
-  (`portable/hil/protocol`, `host/hil/run`).
+  (`protocols/hil/protocol`, `tools/hil/run`).
 - **Executables:** `firmware/` holds chip images, `tools/<tool>/` one host
   program each (`main.rs` and its own modules).
 - **Dependencies:** `portable` → `portable`; `chips` → `portable`, `chips`;
@@ -72,8 +72,8 @@ The layout is [docs/repository-layout.md](docs/repository-layout.md).
   `portable`, `host`. No exceptions: a host tool that needs a chip fact takes
   it from `portable/<chip>/`.
 - **Names:** a library is `oer-` and its path below the root
-  (`portable/ieee80211/mac` is `oer-ieee80211-mac`); an executable keeps its
-  root (`oer-firmware-apps-w1`, `oer-tool-fw`).
+  (`protocols/ieee80211/mac` is `oer-ieee80211-mac`); an executable keeps its
+  root (`oer-firmware-apps-w1`, `oer-tool-image-cli`).
 - Only `cargo fw` builds images; other programs take artifacts.
 - A crate never sits inside another crate's directory. A new crate needs a
   reason: dependency direction, a license boundary, a different target or

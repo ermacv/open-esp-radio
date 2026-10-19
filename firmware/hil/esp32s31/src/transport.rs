@@ -16,10 +16,10 @@ const MESSAGES: usize = 8;
 
 /// Writes one line through the ROM, independently of the USB driver.
 fn rom_line(line: &CStr) {
-    oer_platform_esp32s31_board::rom::line(line);
+    oer_esp32s31_board::rom::line(line);
 }
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     pub(crate) static CONSOLE: Console<LINE, LINES, MESSAGES> = Console::new(rom_line), in critical_data "logging";
 }
 
@@ -76,7 +76,7 @@ pub(crate) async fn serve<C: Requests>(
         ImageKeySet::new(crate::image_features::keys()),
         maximum_payload_bytes,
     );
-    oer_exec_esp_hal_irq::enable(&usb.route)
+    oer_espressif_esp_hal_irq::enable(&usb.route)
         .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
     let (rx, tx) = UsbSerialJtag::new(usb.device).into_async().split();
     CONSOLE.run(rx, tx, intake, &Chip, serve).await

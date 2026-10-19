@@ -97,7 +97,7 @@ const CRC_TABLE: [u32; 256] = {
 pub fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = !0_u32;
     for byte in bytes {
-        let byte = oer_base_memory::read_volatile(byte);
+        let byte = oer_memory::read_volatile(byte);
         crc = CRC_TABLE[usize::from(crc as u8 ^ byte)] ^ (crc >> 8);
     }
     !crc

@@ -1,10 +1,10 @@
-use oer_base_time_virtual::VirtualClock;
 use oer_esp32s31_hal::{
     domain::{BtbbError, RadioClient, RadioDomain},
     ieee802154::Ieee802154Clocked,
     owner::PhyInitializationAccess,
     root::{ProtocolPartitions, RadioHardware},
 };
+use oer_time_virtual::VirtualClock;
 
 use super::*;
 use crate::concurrent::ConcurrentAcquire;
@@ -104,7 +104,7 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
 fn enter_client(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     client: oer_esp32s31_hal::domain::RadioClient,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }
@@ -113,7 +113,7 @@ fn enter_client(
 fn join_ieee802154_prepared(
     radio: &mut oer_esp32s31_hal::domain::RadioDomain<crate::concurrent::ConcurrentPhy>,
     clocked: &Ieee802154Clocked,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<(Ieee802154PhyMembership, ConcurrentAcquire), Ieee802154PhyClientError> {
     let ready = crate::concurrent::PhyReady::for_test(radio);
     join_ieee802154(ready, clocked, clock)

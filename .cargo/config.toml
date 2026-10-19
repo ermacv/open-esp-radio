@@ -1,20 +1,20 @@
 [alias]
 # The register tool: validate the register model and generate SVD, PAC and
-# bindings (host/registers/generate/README.md).
-registers = "run --quiet --profile tools -p oer-tool-registers --"
+# bindings (tools/registers/generate/README.md).
+registers = "run --quiet --profile tools -p oer-tool-registers-cli --"
 # The firmware tool: build, flash and run staged images on the stand's
-# boards (tools/fw/README.md).
-fw = "run --quiet --profile tools -p oer-tool-fw --"
+# boards (tools/image/cli/README.md).
+fw = "run --quiet --profile tools -p oer-tool-image-cli --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
-# (host/pins).
+# (tools/pins).
 pins = "run --quiet --profile tools -p oer-tool-pins --"
-# The stand: boards, leases, power, fixtures (tools/stand).
-stand = "run --quiet --profile tools -p oer-tool-stand --"
-# HIL runs (host/hil/run/HIL.md).
-hil = "run --quiet --profile tools -p oer-tool-hil --"
+# The stand: boards, leases, power, fixtures (tools/lab/cli).
+stand = "run --quiet --profile tools -p oer-tool-lab-cli --"
+# HIL runs (tools/hil/run/HIL.md).
+hil = "run --quiet --profile tools -p oer-tool-hil-cli --"
 # The vendor comparison: provenance, scenarios, evidence shards and the probe
-# images (tools/vendor).
-vendor-check = "run --quiet --profile tools -p oer-tool-vendor --"
+# images (tools/vendor/cli).
+vendor-check = "run --quiet --profile tools -p oer-tool-vendor-cli --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git

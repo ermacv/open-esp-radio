@@ -7,7 +7,7 @@ codecs, executor and portable pieces here follow.
 
 This reference describes reviewed hardware-facing facts consumed by the Rust
 driver. Vendor Controller architecture does not define the open ownership model.
-Portable Link Layer policy remains in `portable/bluetooth/le/ll`; this document
+Portable Link Layer policy remains in `protocols/bluetooth/le/ll`; this document
 identifies the S31 controller-SRAM fields and event edges that a chip backend
 must lower.
 
@@ -17,7 +17,7 @@ The connection functions of the pinned
 [`esp32s31-bt-lib@10c5077`](https://github.com/espressif/esp32s31-bt-lib/tree/10c507788e9da0993709cf82e405c896561172d8)
 `libble_app.a` are identified below by their symbol names; role names come
 from the reviewed lineage in
-[`knowledge/esp32s31/vendor/facts/names/`](../../../knowledge/esp32s31/vendor/facts/names/)
+[`knowledge/esp32s31/vendor/facts/names/`](../vendor/facts/names/)
 or, where it names no body, from the pinned call graph.
 
 `r_sym_ble_bgOSnaHsEjrTC0mkupqH`, the lineage's
@@ -162,7 +162,7 @@ thresholds from which events are raised. The decision rules (the first events
 of a connection, more missed receptions than the interval band allows, and a
 local control procedure raise the level; `r_sym_coexConn_zaMn...`) are
 recorded in
-[LE coexistence priorities](../../../knowledge/esp32s31/bluetooth/le-coexistence-priorities.md).
+[LE coexistence priorities](../bluetooth/le-coexistence-priorities.md).
 `r_sym_coexConn_H75Y...` protects the connection for a number of 625 us slots
 from the same table, converted to units of 256 us in link-state `+0x30` bits
 19:14 with bits 21:20 set; that count is to be measured on the stand by

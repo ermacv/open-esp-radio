@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Closed typed ESP32-C5 radio peripheral access crate"
 
 [dependencies]
-oer-espressif-ieee802154-pac = { path = "../../../portable/espressif/ieee802154-pac" }
+oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
 oer-esp32c5-pac-raw = { path = "../pac-raw", features = ["critical-section"] }
 
 [lints]

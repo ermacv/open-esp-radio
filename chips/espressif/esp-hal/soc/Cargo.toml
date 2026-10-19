@@ -1,0 +1,41 @@
+[package]
+name = "oer-espressif-esp-hal-soc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ESP32-S31 SoC cache, flash and DMA services backed by esp-hal"
+
+[features]
+default = []
+esp32s31 = ["dep:esp-hal", "dep:oer-espressif-esp-hal-irq"]
+axi-gdma-mem2mem = ["esp32s31", "dep:atomic-waker"]
+psram-dma-diagnostic = ["axi-gdma-mem2mem"]
+
+[dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
+oer-memory = { path = "../../../../portable/memory" }
+atomic-waker = { version = "1.1.2", optional = true }
+critical-section = "1.2.0"
+oer-time = { path = "../../../../portable/time" }
+esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }
+oer-interrupt-table = { path = "../../../../portable/interrupt-table" }
+oer-espressif-esp-hal-irq = { path = "../../esp-hal-irq", features = ["esp32s31"], optional = true }
+
+# Host tests need the std implementation; chip doctests use esp-hal's.
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+critical-section = { version = "1.2.0", features = ["std"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []
+
+[package.metadata.open-radio]
+layer = "adapter"
+platform = "chip"
+chip = "esp32s31"

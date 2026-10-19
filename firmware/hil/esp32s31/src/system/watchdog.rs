@@ -1,5 +1,5 @@
 //! Destructive tests of the SoC deadline service, without a radio owner.
-use oer_adapters_esp_hal_soc::watchdog::DeadlineLease;
+use oer_espressif_esp_hal_soc::watchdog::DeadlineLease;
 /// Deliberately leave the real SoC service armed; no radio implementation is
 /// replaced. This verifies service cancellation, not an injected PHY failure.
 pub(super) async fn inject(

@@ -1,0 +1,24 @@
+[package]
+name = "oer-esp32c5-layout"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Staged-boot address map of the ESP32-C5 devkit with the N16R8 module"
+
+[features]
+# Link a binary with the shared linker scripts from a Cargo build script
+# (requires std).
+build = ["oer-espressif-staged-layout/build"]
+
+[dependencies]
+oer-espressif-staged-layout = { path = "../../espressif/staged-layout" }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+features = ["build"]
+

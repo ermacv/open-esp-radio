@@ -657,7 +657,7 @@ pub fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     registers: &mut impl SharedPhyContext,
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<(), PhyTargetPortError> {
     child.execute_target_direct(
         registers,
@@ -668,7 +668,7 @@ pub fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
     scope: crate::executor::wait::tx::Scope,
     micros: u32,
 ) -> Result<(), PhyTargetPortError> {

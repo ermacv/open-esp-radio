@@ -9,16 +9,16 @@
 use core::fmt::Write as _;
 
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
-use oer_adapters_esp_hal_radio::{RadioSingletons, take_radio};
+use oer_esp32s31_board as board;
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockProvider as _};
-use oer_platform_esp32s31_board as board;
-use oer_platform_staged_runtime::panic;
+use oer_espressif_esp_hal_radio::{RadioSingletons, take_radio};
+use oer_espressif_staged_runtime::panic;
 
-oer_platform_staged_runtime::interrupt_table! {}
+oer_espressif_staged_runtime::interrupt_table! {}
 
-oer_platform_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main);
 
-fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
+fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // Before anything can panic and overwrite it.
     let previous = panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
@@ -74,5 +74,5 @@ fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
     } else if verdict.is_some() {
         let _ = console.write(b"OER-RESULT: fail radio-root clock\r\n");
     }
-    oer_platform_staged_runtime::idle()
+    oer_espressif_staged_runtime::idle()
 }

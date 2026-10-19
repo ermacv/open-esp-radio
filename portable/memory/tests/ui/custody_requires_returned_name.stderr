@@ -1,0 +1,23 @@
+warning: unused import: `RetainedName`
+ --> tests/ui/custody_requires_returned_name.rs:2:66
+  |
+2 | use oer_memory::{CustodyDomain, IndexedCustody, Quarantine, RetainedName};
+  |                                                                  ^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0308]: mismatched types
+  --> tests/ui/custody_requires_returned_name.rs:17:18
+   |
+17 |     storage.take(name).1 // ui-error: E0308
+   |             ---- ^^^^ expected `RetainedName<..., N>`, found associated type
+   |             |
+   |             arguments to this method are incorrect
+   |
+   = note:       expected struct `RetainedName<<D as CustodyDomain<N>>::Name, N>`
+           found associated type `<D as CustodyDomain<N>>::Name`
+note: method defined here
+  --> src/indexed_custody.rs
+   |
+   |     pub fn take(&self, name: RetainedName<D::Name, N>) -> (D::Name, T) {
+   |            ^^^^

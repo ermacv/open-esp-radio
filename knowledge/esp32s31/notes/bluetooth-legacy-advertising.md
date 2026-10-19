@@ -22,7 +22,7 @@ always-awake operation, one non-connectable PDU on primary channels 37, 38 and
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
-  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../../../knowledge/esp32s31/vendor/facts/names/).
+  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../vendor/facts/names/).
 
 Every behavioral claim below comes from a complete pinned instruction body.
 Role names come from the lineage where it names the body; otherwise the call
@@ -253,7 +253,7 @@ from a running vendor image under shared-radio load, and infer the thresholds
 from which events are raised. The decision rule, which raises every Nth event
 with N chosen by the interval band (`r_sym_coexAdv_VG7v...`,
 `r_sym_coexAdv_A5DX...`), is recorded in
-[LE coexistence priorities](../../../knowledge/esp32s31/bluetooth/le-coexistence-priorities.md).
+[LE coexistence priorities](../bluetooth/le-coexistence-priorities.md).
 Alone on the antenna,
 every lane requests 15; this equal standalone policy is a product choice.
 

@@ -2,11 +2,11 @@
 //!
 //! The recovered PHY transitions describe what must happen, while this module
 //! owns the common polling contract for the target. Time is the caller's
-//! [`oer_base_time::Timer`], so neither Embassy nor an RTOS becomes a dependency of
+//! [`oer_time::Timer`], so neither Embassy nor an RTOS becomes a dependency of
 //! the PHY crate; short settles are a [`PhyShortDelay`].
 
 use crate::executor::wait::{Kind, PhyShortDelay, delay};
-use oer_base_time::Timer;
+use oer_time::Timer;
 
 use core::future::Future;
 

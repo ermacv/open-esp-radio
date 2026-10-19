@@ -24,7 +24,7 @@ the survey (`oer-ieee80211-runtime::survey`).
 
 After the exit the image prints a block from `OER-W1-BEGIN v=1` to
 `OER-W1-END lines=<n>` (its format is checked by `cargo fw`,
-`host/image/build/src/w1.rs`), then `OER-RESULT: pass w1 beacons=<N> required=<R>`
+`tools/image/build/src/w1.rs`), then `OER-RESULT: pass w1 beacons=<N> required=<R>`
 or `OER-RESULT: fail w1 <gate> <reason>[; …]`. The gates: the stand's
 beacons in the window (N = beacons − duplicates, at least
 ⌊8·window / (10·interval)⌋; the stand is the BSSID of the stand router's
@@ -173,7 +173,7 @@ minutes, w1's run time, which `cargo fw run` waits without `--timeout`.
 
 `cargo fw run w1` first brings the stand router to the W1 profile (the
 stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;
-`host/lab/router/README.md`) and reads its AP's BSSID and channel. They and the
+`tools/lab/router/README.md`) and reads its AP's BSSID and channel. They and the
 SSID reach the image as build-time values (`OER_W1_CHANNEL`,
 `OER_W1_BSSID`, `OER_W1_SSID_HEX`) that `build.rs` writes to
 `$OUT_DIR/w1_config.rs`; built without them (`cargo fw build w1`) the image

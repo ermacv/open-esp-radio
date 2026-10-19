@@ -16,35 +16,34 @@ boot-smoke = []
 # scenarios. A panic records the post-mortem through the platform's panic
 # entry before the reset.
 system-watchdog = [
-    "oer-platform-staged-runtime/panic-hook",
+    "oer-espressif-staged-runtime/panic-hook",
     "dep:critical-section",
     "dep:embassy-futures",
     "dep:embassy-sync",
-    "dep:oer-adapters-esp-hal-soc-esp32c5",
+    "dep:oer-esp32c5-esp-hal-soc",
     "dep:oer-hil-protocol",
     "dep:oer-hil-agent",
-    "dep:oer-hil-image-keys",
+    "dep:oer-hil-protocol",
 ]
 
 [dependencies]
 embassy-executor.workspace = true
 embassy-time.workspace = true
 esp-hal.workspace = true
-oer-platform-staged-runtime = { workspace = true, features = ["esp32c5"] }
-oer-platform-esp32c5-board.workspace = true
-oer-exec-executor = { workspace = true, features = ["esp32c5"] }
-oer-exec-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
+oer-espressif-staged-runtime = { workspace = true, features = ["esp32c5"] }
+oer-esp32c5-board.workspace = true
+oer-espressif-executor = { workspace = true, features = ["esp32c5"] }
+oer-espressif-esp-hal-irq = { workspace = true, features = ["esp32c5"] }
 critical-section = { workspace = true, optional = true }
 embassy-futures = { workspace = true, optional = true }
 embassy-sync = { workspace = true, optional = true }
-oer-adapters-esp-hal-soc-esp32c5 = { workspace = true, optional = true, features = ["esp32c5"] }
+oer-esp32c5-esp-hal-soc = { workspace = true, optional = true, features = ["esp32c5"] }
 oer-hil-protocol = { workspace = true, optional = true }
 oer-hil-agent = { workspace = true, optional = true }
-oer-hil-image-keys = { workspace = true, optional = true }
 static_cell.workspace = true
 
 [build-dependencies]
-oer-platform-esp32c5-layout = { workspace = true, features = ["build"] }
+oer-esp32c5-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

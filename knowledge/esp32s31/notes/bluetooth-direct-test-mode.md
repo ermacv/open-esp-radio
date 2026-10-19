@@ -9,10 +9,10 @@ This reference describes the DTM descriptor, scheduler, timing and ownership
 contracts of the pinned vendor Controller and how the open implementation
 follows them. DTM is a Lower Link Layer role; its implementation does not
 require the vendor allocator, callback registry or RTOS. The portable
-[DTM session](../../../portable/bluetooth/le/ll/src/dtm.rs) plans the
+[DTM session](../../../protocols/bluetooth/le/ll/src/dtm.rs) plans the
 test events, the removed radio role lowered each event into the controller-memory
 graph, and supported HCI commands belong to the portable
-[HCI crate](../../../portable/bluetooth/hci/).
+[HCI crate](../../../protocols/bluetooth/hci/).
 
 ## Pinned public inputs
 
@@ -25,7 +25,7 @@ graph, and supported HCI commands belong to the portable
 - same-chip role-name reference only:
   [`espressif/esp32s31-bt-lib@31c30949541a5d3abd4043a1cb66d55aa55577dd`](https://github.com/espressif/esp32s31-bt-lib/tree/31c30949541a5d3abd4043a1cb66d55aa55577dd),
   whose unobfuscated names reach the pinned symbols through the reviewed
-  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../../../knowledge/esp32s31/vendor/facts/names/).
+  lineage in [`knowledge/esp32s31/vendor/facts/names/`](../vendor/facts/names/).
 
 Every behavioral claim below comes from a complete pinned instruction body.
 Role names come from the lineage and are accepted only where the pinned body

@@ -12,11 +12,11 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use oer_hil_agent::postmortem::{FaultRecord, Previous, Record};
 
-oer_platform_staged_runtime::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     /// The checkpoint ring, taken only inside the critical section.
     static RECORD: Record;
 }
-oer_platform_staged_runtime::retained_static! {
+oer_espressif_staged_runtime::retained_static! {
     /// The fault, taken by the panic handler without waiting, from a cell no
     /// checkpoint takes.
     static FAULT: FaultRecord;
@@ -57,14 +57,14 @@ pub(crate) fn checkpoint(name: &str, arg: u32) {
     with_record(|record| record.checkpoint(name, arg, now, 0));
 }
 
-oer_platform_staged_runtime::sram_fn! {
+oer_espressif_staged_runtime::sram_fn! {
     in critical_text "panic_hook";
     /// Record the panic being handled, from the platform's panic entry. The
     /// fault has its own cell, so the panic takes it without the critical
     /// section, which the panicking code may hold; the chip resets next.
     /// Formatting would put `core::fmt` on every context's panic path: a
     /// message with arguments is recorded empty.
-    pub(crate) fn record_panic(details: &oer_platform_staged_runtime::panic::PanicDetails<'_>) {
+    pub(crate) fn record_panic(details: &oer_espressif_staged_runtime::panic::PanicDetails<'_>) {
         if let Some(mut fault) = FAULT.try_lock() {
             fault.record_panic(details.file, details.line, details.message.unwrap_or(""));
         }

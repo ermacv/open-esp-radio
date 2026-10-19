@@ -17,20 +17,20 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
-use oer_adapters_esp_hal_radio::{ClockBackend, EspHal};
-use oer_base_memory::AffineSpscSender;
-use oer_base_time::{Clock, Duration, Timer};
 use oer_esp32s31_hal::power::{PlatformClock, PlatformClockAbandonment};
 use oer_esp32s31_radio_client::{Client, Failed, LpClock, LpSource, PhyPreparation};
 use oer_esp32s31_radio_system::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
 };
-use oer_exec_executor::{
+use oer_espressif_esp_hal_radio::{ClockBackend, EspHal};
+use oer_espressif_executor::{
     poll_timing::{CycleHistogram, CycleSource, Mcycle},
     timer_observation::{Report, Window},
 };
+use oer_memory::AffineSpscSender;
+use oer_time::{Clock, Duration, Timer};
 
-use oer_adapters_embassy_time::EmbassyClock;
+use oer_embassy_time::EmbassyClock;
 
 /// The phases of one run, in order.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -96,7 +96,7 @@ impl Phase {
 /// The phases the P2 timings are kept for, by slot.
 pub const TIMED_PHASES: [Phase; 3] = [Phase::Window, Phase::Stress, Phase::Hold];
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     static PHASE: AtomicU8 = AtomicU8::new(Phase::BringUp as u8), in critical_data "w1";
     /// The P2 timer task waits on it for the phase to change.
     static PHASE_WAKER: AtomicWaker = AtomicWaker::new(), in critical_data "w1";
@@ -134,7 +134,7 @@ pub fn stamp() -> u32 {
     Mcycle.now().max(1)
 }
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     /// Cycles of each run of the radio executor's handler (SWI2), per timed
     /// phase; written by that handler alone.
     pub static SWI2: [CycleHistogram; 3] = [const { CycleHistogram::new() }; 3], in critical_data "w1";
@@ -250,7 +250,7 @@ impl ClockOp {
 
 const RECORDED_PHASES: usize = Phase::Report as usize;
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     /// Per clock, operation and phase (before the report): the operations.
     static CLOCK_COUNT: [[[AtomicU32; RECORDED_PHASES]; 3]; 5] =
         [const { [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 3] }; 5], in critical_data "w1";
@@ -313,7 +313,7 @@ impl ClockBackend for TimedEspHal {
 /// The periodic tracking ticks the log keeps, the latest ones.
 pub const TICKS: usize = 32;
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     static TICK_START: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in critical_data "w1";
     static TICK_END: [AtomicU32; TICKS] = [const { AtomicU32::new(0) }; TICKS], in critical_data "w1";
     static TICK_OK: [AtomicU8; TICKS] = [const { AtomicU8::new(0) }; TICKS], in critical_data "w1";
@@ -382,7 +382,7 @@ impl<B: PhyDomain> PhyDomain for TickStamped<B> {
         self.0.close_rf(last).await
     }
 
-    fn tracking_deadline(&self) -> Option<oer_base_time::Instant> {
+    fn tracking_deadline(&self) -> Option<oer_time::Instant> {
         self.0.tracking_deadline()
     }
 
@@ -468,7 +468,7 @@ pub async fn p2_timers(lines: AffineSpscSender<'static, TimerLine, 2>) {
 }
 
 /// The application's timer stress: a timer every 113 µs until `deadline`.
-pub async fn p1_stress(deadline: oer_base_time::Instant) {
+pub async fn p1_stress(deadline: oer_time::Instant) {
     while EmbassyClock.now() < deadline {
         wait_until(
             P1_COMPARATOR,
@@ -478,7 +478,7 @@ pub async fn p1_stress(deadline: oer_base_time::Instant) {
     }
 }
 
-oer_platform_staged_runtime::placed_static! {
+oer_espressif_staged_runtime::placed_static! {
     /// Per executor (by its comparator) and phase: the image's timer waits.
     static WAITS: [[AtomicU32; RECORDED_PHASES]; 2] =
         [const { [const { AtomicU32::new(0) }; RECORDED_PHASES] }; 2], in critical_data "w1";
@@ -490,7 +490,7 @@ oer_platform_staged_runtime::placed_static! {
 /// Wait until `deadline` on the executor of `comparator`, which is the
 /// caller's; count the wait, and count it early when it returned before
 /// the deadline.
-pub async fn wait_until(comparator: u8, deadline: oer_base_time::Instant) {
+pub async fn wait_until(comparator: u8, deadline: oer_time::Instant) {
     EmbassyClock.wait_until(deadline).await;
     let early = EmbassyClock.now() < deadline;
     let phase = phase();

@@ -21,15 +21,15 @@
 use core::{future::poll_fn, task::Poll};
 
 use atomic_waker::AtomicWaker;
-use oer_base_memory::{
-    AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, AffineSpscTryReceiveError,
-    AffineSpscTrySendError,
-};
-use oer_base_time::Clock;
 use oer_esp32s31_ieee80211_mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, decode_rx_local_timestamp, first_segment_layout,
     pool::{NetworkRxFrame, RxTimes},
 };
+use oer_memory::{
+    AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, AffineSpscTryReceiveError,
+    AffineSpscTrySendError,
+};
+use oer_time::Clock;
 
 use super::{
     counters::WifiRxCounters,

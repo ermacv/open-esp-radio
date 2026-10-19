@@ -30,8 +30,8 @@ package.
 
 The [source-only publication configuration](../../../registers/esp32s31/publication/registers.toml)
 declares the outputs below. Generation belongs to the host-side
-[`cargo registers` publisher](../../../host/registers/generate/README.md), with shared schemas
-and invariants in `host/registers/model`. Reviewed model, ownership policy and provenance live together under
+[`cargo registers` publisher](../../../tools/registers/generate/README.md), with shared schemas
+and invariants in `tools/registers/model`. Reviewed model, ownership policy and provenance live together under
 [`registers/esp32s31`](../../../registers/esp32s31/README.md). There is no runtime
 `pac-gen` dependency or additional generator crate in the production dependency graph.
 
@@ -51,9 +51,9 @@ that does not authorize a broad register escape hatch.
 ## Upstream PAC and esp-hal
 
 The separate upstream chain is the pinned `esp-pacs` dependency used by
-`esp-hal`. The [`soc` adapter](../../adapters/esp-hal/soc/README.md) owns
+`esp-hal`. The [`soc` adapter](../../espressif/esp-hal/soc/README.md) owns
 typed upstream-register operations, cache/MMU and GDMA transactions. It is
-the handwritten `oer-adapters-esp-hal-soc` package. It neither generates
+the handwritten `oer-espressif-esp-hal-soc` package. It neither generates
 nor replaces this radio PAC.
 
 The two chains use their reviewed dependency revisions. A capability exposed

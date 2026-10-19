@@ -265,7 +265,7 @@ the host semantic model and vendor-comparison boundary; firmware does not lower
 each hot edge through the async action/binding/advance path.
 
 A PHY wait (`executor::wait::delay`) is a minimum elapsed duration. It
-captures an absolute deadline on the caller's `oer_base_time::Timer` when the wait
+captures an absolute deadline on the caller's `oer_time::Timer` when the wait
 is created; the timer contract ends a wait for an elapsed deadline without
 registering a wake, and a future deadline uses ordinary timer wake
 registration. There is no busy wait; the target's hardware edge limits and

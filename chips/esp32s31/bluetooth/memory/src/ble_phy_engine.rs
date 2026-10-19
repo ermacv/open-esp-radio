@@ -42,7 +42,7 @@ const TX_POWER_LEVELS_POINTER_OFFSET: usize = 0x48;
 const TX_POWER_LEVEL_COUNT_OFFSET: usize = 0x4c;
 const TX_POWER_FIRST_LEVEL_OFFSET: usize = 0x78;
 const TX_POWER_LAST_LEVEL_OFFSET: usize = 0x7c;
-const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_tables::tx_power::TX_POWER_LEVELS_DBM;
+const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 const TX_POWER_LEVELS_BYTES: usize = TX_POWER_LEVELS.len();
 const RESOLVING_LIST_INITIAL_HEAD_IMAGE: u32 = 0x8000_0000;
 

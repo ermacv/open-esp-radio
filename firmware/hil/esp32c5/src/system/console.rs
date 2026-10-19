@@ -3,20 +3,20 @@
 //! and an intentional panic through the HIL panic hook.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
-use oer_adapters_esp_hal_soc_esp32c5::watchdog::{DeadlineBudget, DeadlineWatchdog};
+use oer_esp32c5_esp_hal_soc::watchdog::{DeadlineBudget, DeadlineWatchdog};
 use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
 use oer_hil_agent::console::Console as HilConsole;
-use oer_hil_image_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::RequestIdentity;
 use oer_hil_protocol::base::{
     BootEvidence, ImageKeySet, PostMortemCheckpoints, RejectReason, Rejected,
 };
+use oer_hil_protocol::feature_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::system::{WatchdogArmed, WatchdogTest, WatchdogTestMode};
 use static_cell::StaticCell;
 
 /// Writes one line through the ROM, independently of the USB driver.
 fn rom_line(line: &core::ffi::CStr) {
-    oer_platform_esp32c5_board::rom::line(line);
+    oer_esp32c5_board::rom::line(line);
 }
 
 pub(crate) static CONSOLE: HilConsole<256, 8, 8> = HilConsole::new(rom_line);
@@ -65,7 +65,7 @@ impl Console {
 /// before the driver turns async, which requires the route.
 #[embassy_executor::task]
 pub(crate) async fn run(console: Console) {
-    oer_exec_esp_hal_irq::enable(&console.route)
+    oer_espressif_esp_hal_irq::enable(&console.route)
         .unwrap_or_else(|error| panic!("the console's USB route: {error:?}"));
     let usb = UsbSerialJtag::new(console.usb).into_async();
     // The boot identity only has to differ between boots.

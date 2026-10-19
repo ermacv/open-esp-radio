@@ -11,7 +11,7 @@ CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 # The HIL flash layout: the application occupies ota_0 of the shared table.
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../portable/esp32s31/platform/partitions/applications.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../chips/esp32s31/platform/partitions/applications.csv"
 # The digest depends only on the sources.
 CONFIG_APP_REPRODUCIBLE_BUILD=y
 # The stand reaches the device through its USB Serial/JTAG port, which

@@ -386,7 +386,7 @@ pub fn phy_ready<'l>(
 pub(crate) fn acquire_client(
     radio: &mut RadioDomain<ConcurrentPhy>,
     client: RadioClient,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {
@@ -453,7 +453,7 @@ pub fn release_client(
 /// domain is unchanged.
 pub fn evaluate_periodic_tracking(
     radio: &mut RadioDomain<ConcurrentPhy>,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {

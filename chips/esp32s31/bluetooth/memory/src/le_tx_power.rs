@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_tables::tx_power::TX_POWER_LEVELS_DBM;
+use oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 
 /// One LE transmit-power request the controller can encode.
 ///

@@ -9,7 +9,7 @@ build = "build.rs"
 description = "Isolated ESP32-S31 PAC/HAL register conformance probes, and the linked probe image"
 
 [dependencies]
-oer-probe-macros = { path = "../../../host/probe/macros" }
+oer-probe-macros = { path = "../../../tools/probe/macros" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 [lib]
 crate-type = ["rlib", "staticlib"]
@@ -19,7 +19,7 @@ name = "oer-firmware-probes-esp32s31-register"
 path = "src/main.rs"
 
 [build-dependencies]
-oer-probe-codegen = { path = "../../../host/probe/codegen" }
+oer-probe-codegen = { path = "../../../tools/probe/codegen" }
 
 [lints]
 workspace = true

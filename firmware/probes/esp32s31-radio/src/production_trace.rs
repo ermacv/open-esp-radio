@@ -11,7 +11,7 @@ use core::{
     future::{Future, ready},
 };
 
-use oer_base_time::{Clock, Instant, Timer};
+use oer_time::{Clock, Instant, Timer};
 
 /// Time for the compiled-production comparison: each wait hands its
 /// requested interval to the harness `deliver` edge at once, and time then
@@ -258,7 +258,7 @@ fn trace_channel(
     cbw: u32,
     [dot11p_enabled, dot11p_configuration]: [u8; 2],
 ) -> Result<oer_esp32s31_phy::PhyState, ()> {
-    let mut platform = oer_adapters_esp_hal_radio::EspHalClocks::new();
+    let mut platform = oer_espressif_esp_hal_radio::EspHalClocks::new();
     let (mut radio, partitions) = oer_esp32s31_hal::root::RadioHardware::for_probe().split(());
     let mut clocked = oer_esp32s31_hal::ieee80211::client::WifiClocked::for_host_test(
         oer_esp32s31_hal::ieee80211::client::WifiCold::from_partition(partitions.wifi),

@@ -40,4 +40,4 @@ From stand runs on one v1.0 board, 2026-09-27 (records outside this repository; 
   `CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP`, and a USB Serial/JTAG reset then
   enters ROM download mode.
 - The stand's handling of a wedged ESP32-C5 USB console is in
-  [`host/lab/router`](../../../host/lab/router/README.md).
+  [`tools/lab/router`](../../../tools/lab/router/README.md).

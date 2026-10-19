@@ -1,6 +1,6 @@
 fn main() {
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    oer_platform_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31");
+    oer_esp32s31_layout::build::configure_runtime("oer-firmware-hil-esp32s31");
     enabled_features(manifest);
 }
 

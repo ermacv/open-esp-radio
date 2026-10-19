@@ -15,28 +15,28 @@ oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-esp32s31-ieee80211-mac = { path = "../mac" }
 oer-esp32s31-radio-client = { path = "../../radio/client" }
-oer-ieee80211-lower-mac = { path = "../../../../portable/ieee80211/lower-mac" }
-oer-base-memory = { path = "../../../../portable/base/memory" }
-oer-radio-port = { path = "../../../../portable/radio/port" }
-oer-ieee80211-mac = { path = "../../../../portable/ieee80211/mac" }
-oer-ieee80211-softmac = { path = "../../../../portable/ieee80211/softmac" }
-oer-base-time = { path = "../../../../portable/base/time" }
+oer-ieee80211-lower-mac = { path = "../../../../protocols/ieee80211/lower-mac" }
+oer-memory = { path = "../../../../portable/memory" }
+oer-radio-port = { path = "../../../../protocols/radio/port" }
+oer-ieee80211-mac = { path = "../../../../protocols/ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../../../protocols/ieee80211/softmac" }
+oer-time = { path = "../../../../portable/time" }
 
 [features]
 default = []
 test-support = ["oer-esp32s31-ieee80211-mac/test-support"]
 
 [dev-dependencies]
-oer-base-time-virtual = { path = "../../../../portable/base/time-virtual" }
-oer-test-ui-cases = { path = "../../../../host/test/ui-cases" }
+oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 # Host unit tests use the allocating MAC model. RV32 API doctests exercise
 # the production API without introducing an allocator into their binaries.
 [target.'cfg(not(target_arch = "riscv32"))'.dev-dependencies]
 oer-esp32s31-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 # The W1 survey consumes the frames the host receive tests hand to P1.
-oer-ieee80211-runtime = { path = "../../../../portable/ieee80211/runtime" }
-oer-ieee80211-sta = { path = "../../../../portable/ieee80211/sta" }
+oer-ieee80211-runtime = { path = "../../../../protocols/ieee80211/runtime" }
+oer-ieee80211-sta = { path = "../../../../protocols/ieee80211/sta" }
 
 [lints]
 workspace = true

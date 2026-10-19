@@ -16,26 +16,26 @@ embassy-futures = "0.1.2"
 esp-hal = { workspace = true, features = ["esp32s31", "static-interrupts", "rt", "unstable"] }
 heapless = "0.9.3"
 static_cell = { workspace = true }
-oer-platform-esp32s31-board = { path = "../../../chips/platform/esp32s31-board" }
-oer-platform-staged-runtime = { path = "../../../chips/platform/staged-runtime", features = ["esp32s31", "two-harts"] }
-oer-exec-esp-hal-irq = { workspace = true }
-oer-exec-executor = { path = "../../../chips/exec/executor", features = ["esp32s31", "timer-observation", "poll-timing"] }
-oer-adapters-esp-hal-radio = { path = "../../../chips/adapters/esp-hal/radio", features = ["esp32s31"] }
-oer-adapters-embassy-time = { path = "../../../portable/adapters/embassy/time" }
-oer-base-time = { path = "../../../portable/base/time" }
-oer-base-memory = { path = "../../../portable/base/memory" }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime", features = ["esp32s31", "two-harts"] }
+oer-espressif-esp-hal-irq = { workspace = true }
+oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["esp32s31", "timer-observation", "poll-timing"] }
+oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
 oer-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
 oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
 oer-esp32s31-ieee80211-mac = { path = "../../../chips/esp32s31/ieee80211/mac" }
-oer-ieee80211-mac = { path = "../../../portable/ieee80211/mac" }
-oer-ieee80211-runtime = { path = "../../../portable/ieee80211/runtime" }
-oer-ieee80211-softmac = { path = "../../../portable/ieee80211/softmac" }
+oer-ieee80211-mac = { path = "../../../protocols/ieee80211/mac" }
+oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime" }
+oer-ieee80211-softmac = { path = "../../../protocols/ieee80211/softmac" }
 
 [build-dependencies]
-oer-platform-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

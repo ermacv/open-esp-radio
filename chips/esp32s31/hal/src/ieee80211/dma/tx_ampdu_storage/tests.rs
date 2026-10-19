@@ -1,6 +1,6 @@
 extern crate std;
 
-use oer_base_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaRegion};
+use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaBacking, StableDmaRegion};
 use std::{boxed::Box, cell::Cell, rc::Rc};
 
 use super::*;
@@ -768,7 +768,7 @@ fn retained_owner_is_a_small_handle_over_the_external_lease_arena() {
 
 #[test]
 fn zeroed_arena_is_the_free_arena_new_builds() {
-    let zeroed = oer_base_memory::zeroed::zeroed::<AmpduDmaStorage<4, 32>>();
+    let zeroed = oer_memory::zeroed::zeroed::<AmpduDmaStorage<4, 32>>();
     let new = AmpduDmaStorage::<4, 32>::new();
     assert_eq!(zeroed.state, new.state);
     assert_eq!(zeroed.state, AmpduDmaState::Free);
@@ -835,7 +835,7 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
         let mut owner = RetainedAmpduDma::new(descriptor_only_storage(), &mut retention);
         owner.begin().unwrap();
         let lease =
-            oer_base_memory::TaggedStableDmaBacking::new(&mut tag, TestBacking::new(drops.clone()));
+            oer_memory::TaggedStableDmaBacking::new(&mut tag, TestBacking::new(drops.clone()));
         let (backing, region) = owner.push_backing_region(lease).unwrap();
         region[0] = 0x5d;
         dma_address = region.as_ptr();

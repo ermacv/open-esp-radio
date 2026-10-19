@@ -9,10 +9,10 @@ description = "Ownership boundaries of the ESP32-C5 radio over its closed PAC"
 
 [dependencies]
 oer-esp32c5-pac = { path = "../pac" }
-oer-espressif-coex = { path = "../../../portable/espressif/coex" }
-oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
-oer-espressif-analog = { path = "../../../portable/espressif/analog" }
-oer-espressif-modem-clock = { path = "../../../portable/espressif/modem-clock" }
+oer-espressif-coex = { path = "../../espressif/coex" }
+oer-espressif-ieee802154-engine = { path = "../../espressif/ieee802154-engine" }
+oer-espressif-analog = { path = "../../espressif/analog" }
+oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
 
 [lints]
 workspace = true

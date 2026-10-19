@@ -2399,58 +2399,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-adapters-embassy-net"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-net",
- "embassy-sync 0.8.0",
- "oer-base-memory",
- "oer-base-network",
- "oer-ieee80211-datapath",
- "xarxa-driver",
-]
-
-[[package]]
-name = "oer-adapters-embassy-time"
-version = "0.1.0"
-dependencies = [
- "embassy-time",
- "oer-base-time",
-]
-
-[[package]]
-name = "oer-adapters-esp-hal-radio"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-esp32s31-hal",
-]
-
-[[package]]
-name = "oer-adapters-esp-hal-soc"
-version = "0.1.0"
-dependencies = [
- "atomic-waker",
- "bytemuck",
- "critical-section",
- "esp-hal",
- "oer-base-deadline",
- "oer-base-memory",
- "oer-exec-esp-hal-irq",
- "oer-exec-interrupt-table",
-]
-
-[[package]]
-name = "oer-adapters-esp-hal-soc-esp32c5"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "esp-hal",
- "oer-espressif-soc-deadline",
-]
-
-[[package]]
 name = "oer-analysis-blobray-analysis"
 version = "0.1.0"
 dependencies = [
@@ -2596,49 +2544,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-base-deadline"
-version = "0.1.0"
-
-[[package]]
-name = "oer-base-memory"
-version = "0.1.0"
-dependencies = [
- "atomic-waker",
- "bytemuck",
- "oer-test-ui-cases",
-]
-
-[[package]]
-name = "oer-base-network"
-version = "0.1.0"
-
-[[package]]
-name = "oer-base-time"
-version = "0.1.0"
-dependencies = [
- "postcard",
- "postcard-schema",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "oer-base-time-virtual"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "embassy-sync 0.8.0",
- "oer-base-time",
-]
-
-[[package]]
-name = "oer-base-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-memory",
-]
-
-[[package]]
 name = "oer-bluetooth-hci"
 version = "0.1.0"
 dependencies = [
@@ -2666,8 +2571,8 @@ dependencies = [
 name = "oer-bluetooth-le-radio"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-radio-coex",
+ "oer-time",
 ]
 
 [[package]]
@@ -2677,6 +2582,45 @@ dependencies = [
  "serde",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-embassy-net"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-net",
+ "embassy-sync 0.8.0",
+ "oer-ieee80211-datapath",
+ "oer-memory",
+ "oer-network",
+ "xarxa-driver",
+]
+
+[[package]]
+name = "oer-embassy-time"
+version = "0.1.0"
+dependencies = [
+ "embassy-time",
+ "oer-time",
+]
+
+[[package]]
+name = "oer-esp32c5-board"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32c5-layout",
+ "oer-espressif-staged-layout",
+]
+
+[[package]]
+name = "oer-esp32c5-esp-hal-soc"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "esp-hal",
+ "oer-time",
 ]
 
 [[package]]
@@ -2691,11 +2635,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-esp32c5-layout"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-staged-layout",
+]
+
+[[package]]
 name = "oer-esp32c5-pac"
 version = "0.1.0"
 dependencies = [
  "oer-esp32c5-pac-raw",
- "oer-espressif-ieee802154-pac",
+ "oer-espressif-ieee802154-mac-values",
 ]
 
 [[package]]
@@ -2712,12 +2663,12 @@ name = "oer-esp32s31-bluetooth-driver"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "oer-base-time",
  "oer-bluetooth-hci",
  "oer-bluetooth-le-radio",
  "oer-esp32s31-bluetooth-memory",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
+ "oer-time",
 ]
 
 [[package]]
@@ -2725,9 +2676,18 @@ name = "oer-esp32s31-bluetooth-memory"
 version = "0.1.0"
 dependencies = [
  "oer-esp32s31-hal",
- "oer-esp32s31-tables",
+ "oer-esp32s31-knowledge",
  "pin-project",
  "vcell",
+]
+
+[[package]]
+name = "oer-esp32s31-board"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-layout",
+ "oer-espressif-staged-layout",
 ]
 
 [[package]]
@@ -2736,12 +2696,12 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
- "oer-base-memory",
  "oer-esp32s31-pac",
  "oer-espressif-analog",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-espressif-modem-clock",
+ "oer-memory",
  "oer-radio-coex",
  "oer-test-ui-cases",
  "pin-project",
@@ -2754,9 +2714,6 @@ version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "bytemuck",
- "oer-base-memory",
- "oer-base-time",
- "oer-base-time-virtual",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-phy",
@@ -2767,8 +2724,11 @@ dependencies = [
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
+ "oer-memory",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2777,18 +2737,33 @@ version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "bytemuck",
- "oer-base-memory",
- "oer-base-time",
  "oer-esp32s31-hal",
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
  "oer-ieee80211-upper-mac",
+ "oer-memory",
  "oer-test-ui-cases",
+ "oer-time",
  "pin-project",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "oer-esp32s31-knowledge"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-coex",
+ "oer-espressif-ieee802154-engine",
+]
+
+[[package]]
+name = "oer-esp32s31-layout"
+version = "0.1.0"
+dependencies = [
+ "oer-espressif-staged-layout",
 ]
 
 [[package]]
@@ -2796,10 +2771,10 @@ name = "oer-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-base-memory",
  "oer-esp32s31-pac-raw",
  "oer-espressif-ieee80211-pac",
- "oer-espressif-ieee802154-pac",
+ "oer-espressif-ieee802154-mac-values",
+ "oer-memory",
  "vcell",
 ]
 
@@ -2816,28 +2791,24 @@ dependencies = [
 name = "oer-esp32s31-phy"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
- "oer-base-time-virtual",
  "oer-esp32s31-hal",
  "oer-espressif-analog",
+ "oer-time",
+ "oer-time-virtual",
  "pin-project-lite",
 ]
-
-[[package]]
-name = "oer-esp32s31-phy-relation"
-version = "0.1.0"
 
 [[package]]
 name = "oer-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-base-memory",
- "oer-base-time",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-phy",
  "oer-ieee80211-mac",
+ "oer-memory",
+ "oer-time",
 ]
 
 [[package]]
@@ -2853,21 +2824,13 @@ name = "oer-esp32s31-radio-system"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-base-time",
- "oer-base-time-virtual",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-ieee80211-mac",
-]
-
-[[package]]
-name = "oer-esp32s31-tables"
-version = "0.1.0"
-dependencies = [
- "oer-espressif-coex",
- "oer-espressif-ieee802154-engine",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -2879,6 +2842,52 @@ name = "oer-espressif-coex"
 version = "0.1.0"
 dependencies = [
  "oer-radio-coex",
+]
+
+[[package]]
+name = "oer-espressif-esp-hal-irq"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-interrupt-table",
+]
+
+[[package]]
+name = "oer-espressif-esp-hal-radio"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "oer-esp32s31-hal",
+]
+
+[[package]]
+name = "oer-espressif-esp-hal-soc"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "bytemuck",
+ "critical-section",
+ "esp-hal",
+ "oer-espressif-esp-hal-irq",
+ "oer-interrupt-table",
+ "oer-memory",
+ "oer-time",
+]
+
+[[package]]
+name = "oer-espressif-executor"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "embassy-executor",
+ "embassy-time-driver",
+ "embassy-time-queue-utils",
+ "esp-hal",
+ "oer-espressif-esp-hal-irq",
+ "oer-interrupt-table",
+ "oer-memory",
+ "portable-atomic",
+ "riscv",
 ]
 
 [[package]]
@@ -2899,13 +2908,13 @@ dependencies = [
 name = "oer-espressif-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
@@ -2913,13 +2922,13 @@ name = "oer-espressif-ieee802154-engine"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-base-memory",
  "oer-espressif-coex",
  "oer-ieee802154-mac",
+ "oer-memory",
 ]
 
 [[package]]
-name = "oer-espressif-ieee802154-pac"
+name = "oer-espressif-ieee802154-mac-values"
 version = "0.1.0"
 
 [[package]]
@@ -2927,45 +2936,36 @@ name = "oer-espressif-modem-clock"
 version = "0.1.0"
 
 [[package]]
-name = "oer-espressif-soc-deadline"
-version = "0.1.0"
-
-[[package]]
-name = "oer-exec-esp-hal-irq"
+name = "oer-espressif-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "oer-exec-interrupt-table",
+ "oer-espressif-staged-layout",
 ]
 
 [[package]]
-name = "oer-exec-executor"
+name = "oer-espressif-staged-layout"
+version = "0.1.0"
+
+[[package]]
+name = "oer-espressif-staged-runtime"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
- "embassy-executor",
- "embassy-time-driver",
- "embassy-time-queue-utils",
  "esp-hal",
- "oer-base-memory",
- "oer-exec-esp-hal-irq",
- "oer-exec-interrupt-table",
- "portable-atomic",
- "riscv",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-staged-layout",
+ "oer-interrupt-table",
+ "oer-memory",
 ]
-
-[[package]]
-name = "oer-exec-interrupt-table"
-version = "0.1.0"
 
 [[package]]
 name = "oer-firmware-apps-boot-smoke"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-runtime",
+ "oer-esp32s31-board",
+ "oer-esp32s31-layout",
+ "oer-espressif-staged-runtime",
 ]
 
 [[package]]
@@ -2973,11 +2973,11 @@ name = "oer-firmware-apps-radio-root"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "oer-adapters-esp-hal-radio",
+ "oer-esp32s31-board",
  "oer-esp32s31-hal",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-runtime",
+ "oer-esp32s31-layout",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-staged-runtime",
 ]
 
 [[package]]
@@ -2986,21 +2986,21 @@ version = "0.1.0"
 dependencies = [
  "embassy-executor",
  "esp-hal",
- "oer-adapters-embassy-time",
- "oer-adapters-esp-hal-radio",
- "oer-base-time",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-layout",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-system",
- "oer-exec-executor",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-runtime",
+ "oer-time",
  "static_cell",
 ]
 
@@ -3013,24 +3013,24 @@ dependencies = [
  "embassy-futures",
  "esp-hal",
  "heapless 0.9.3",
- "oer-adapters-embassy-time",
- "oer-adapters-esp-hal-radio",
- "oer-base-memory",
- "oer-base-time",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
+ "oer-esp32s31-layout",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
  "oer-esp32s31-radio-system",
- "oer-exec-esp-hal-irq",
- "oer-exec-executor",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-radio",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
  "oer-ieee80211-mac",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-runtime",
+ "oer-memory",
+ "oer-time",
  "static_cell",
 ]
 
@@ -3040,9 +3040,9 @@ version = "0.1.0"
 dependencies = [
  "esp-bootloader-esp-idf",
  "esp-hal",
- "oer-platform-esp32c5-board",
- "oer-platform-esp32c5-layout",
- "oer-platform-staged-bootstrap",
+ "oer-esp32c5-board",
+ "oer-esp32c5-layout",
+ "oer-espressif-staged-bootstrap",
 ]
 
 [[package]]
@@ -3051,10 +3051,10 @@ version = "0.1.0"
 dependencies = [
  "esp-bootloader-esp-idf",
  "esp-hal",
- "oer-adapters-esp-hal-soc",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-bootstrap",
+ "oer-esp32s31-board",
+ "oer-esp32s31-layout",
+ "oer-espressif-esp-hal-soc",
+ "oer-espressif-staged-bootstrap",
  "static_cell",
 ]
 
@@ -3068,15 +3068,14 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "esp-hal",
- "oer-adapters-esp-hal-soc-esp32c5",
- "oer-exec-esp-hal-irq",
- "oer-exec-executor",
+ "oer-esp32c5-board",
+ "oer-esp32c5-esp-hal-soc",
+ "oer-esp32c5-layout",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
  "oer-hil-agent",
- "oer-hil-image-keys",
  "oer-hil-protocol",
- "oer-platform-esp32c5-board",
- "oer-platform-esp32c5-layout",
- "oer-platform-staged-runtime",
  "static_cell",
 ]
 
@@ -3091,16 +3090,15 @@ dependencies = [
  "embassy-time",
  "esp-hal",
  "log",
- "oer-adapters-esp-hal-soc",
- "oer-base-memory",
- "oer-exec-esp-hal-irq",
- "oer-exec-executor",
+ "oer-esp32s31-board",
+ "oer-esp32s31-layout",
+ "oer-espressif-esp-hal-irq",
+ "oer-espressif-esp-hal-soc",
+ "oer-espressif-executor",
+ "oer-espressif-staged-runtime",
  "oer-hil-agent",
- "oer-hil-image-keys",
  "oer-hil-protocol",
- "oer-platform-esp32s31-board",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-runtime",
+ "oer-memory",
  "static_cell",
 ]
 
@@ -3147,20 +3145,20 @@ dependencies = [
  "bytemuck",
  "embassy-futures",
  "esp-hal",
- "oer-adapters-esp-hal-radio",
- "oer-base-memory",
- "oer-base-time",
  "oer-esp32s31-hal",
  "oer-esp32s31-ieee80211-driver",
  "oer-esp32s31-ieee80211-mac",
  "oer-esp32s31-pac",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-coex",
+ "oer-espressif-esp-hal-radio",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
+ "oer-memory",
  "oer-probe-codegen",
  "oer-probe-macros",
+ "oer-time",
 ]
 
 [[package]]
@@ -3185,8 +3183,8 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "heapless 0.9.3",
  "log",
- "oer-base-memory",
  "oer-hil-protocol",
+ "oer-memory",
 ]
 
 [[package]]
@@ -3210,11 +3208,11 @@ name = "oer-hil-executor"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-base-time",
  "oer-hil-executor",
  "oer-hil-model",
  "oer-hil-trace-header",
  "oer-lab-arbiter",
+ "oer-time",
  "postcard",
  "postcard-schema",
  "serde",
@@ -3235,30 +3233,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-fixture"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-hil-protocol",
- "oer-ieee80211-mac",
- "oer-lab-fixtures",
- "rustix",
- "serde",
-]
-
-[[package]]
 name = "oer-hil-fixtures-bluetooth"
 version = "0.1.0"
 dependencies = [
  "async-channel",
  "async-io",
  "futures-lite",
- "oer-hil-fixture",
  "oer-hil-lab",
  "oer-hil-protocol",
  "oer-hil-runs",
  "oer-os-durable",
  "oer-os-process",
+ "oer-tool-hil-fixture",
  "rustix",
  "serde",
  "serde_json",
@@ -3267,31 +3253,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-image-keys"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
- "oer-hil-protocol",
-]
-
-[[package]]
 name = "oer-hil-lab"
 version = "0.1.0"
 dependencies = [
  "oer-analysis-elf",
  "oer-chip-profile",
- "oer-hil-fixture",
  "oer-hil-link",
  "oer-hil-model",
  "oer-hil-protocol",
  "oer-hil-runs",
  "oer-lab-arbiter",
  "oer-lab-board",
- "oer-lab-fixtures",
  "oer-lab-model",
  "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
+ "oer-tool-hil-fixture",
+ "oer-tool-lab-fixture-install",
  "serde",
  "serde_json",
  "tempfile",
@@ -3321,11 +3299,10 @@ dependencies = [
 name = "oer-hil-model"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-chip-profile",
- "oer-hil-image-keys",
  "oer-hil-protocol",
  "oer-os-durable",
+ "oer-time",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3336,10 +3313,10 @@ dependencies = [
 name = "oer-hil-net-traffic"
 version = "0.1.0"
 dependencies = [
- "oer-hil-fixture",
  "oer-hil-link",
  "oer-hil-protocol",
  "oer-os-process",
+ "oer-tool-hil-fixture",
  "rustix",
  "serde",
 ]
@@ -3439,13 +3416,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-trace"
-version = "0.1.0"
-dependencies = [
- "oer-base-trace",
-]
-
-[[package]]
 name = "oer-hil-trace-header"
 version = "0.1.0"
 dependencies = [
@@ -3458,29 +3428,29 @@ dependencies = [
 name = "oer-ieee80211-ap"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-ieee80211-mac",
  "oer-ieee80211-rsn",
+ "oer-time",
 ]
 
 [[package]]
 name = "oer-ieee80211-arbiter"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
 name = "oer-ieee80211-datapath"
 version = "0.1.0"
 dependencies = [
- "oer-base-memory",
- "oer-base-network",
  "oer-ieee80211-softmac",
+ "oer-memory",
+ "oer-network",
 ]
 
 [[package]]
@@ -3488,19 +3458,19 @@ name = "oer-ieee80211-lower-mac"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
- "oer-base-time",
  "oer-ieee80211-mac",
  "oer-radio-coex",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
 name = "oer-ieee80211-mac"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-test-ui-cases",
+ "oer-time",
  "zeroize",
 ]
 
@@ -3511,8 +3481,8 @@ dependencies = [
  "aes",
  "cmac",
  "hmac",
- "oer-base-time",
  "oer-ieee80211-mac",
+ "oer-time",
  "p256",
  "pbkdf2",
  "sha1",
@@ -3526,10 +3496,10 @@ name = "oer-ieee80211-rsn-service"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-base-time",
- "oer-base-time-virtual",
  "oer-ieee80211-mac",
  "oer-ieee80211-rsn",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
@@ -3541,9 +3511,6 @@ dependencies = [
  "embassy-futures",
  "embassy-sync 0.8.0",
  "heapless 0.9.3",
- "oer-base-memory",
- "oer-base-time",
- "oer-base-time-virtual",
  "oer-espressif-ieee80211-policy",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-lower-mac",
@@ -3552,17 +3519,20 @@ dependencies = [
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
+ "oer-memory",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
+ "oer-time-virtual",
 ]
 
 [[package]]
 name = "oer-ieee80211-softmac"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
+ "oer-time",
  "zeroize",
 ]
 
@@ -3571,7 +3541,6 @@ name = "oer-ieee80211-sta"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
- "oer-base-time",
  "oer-ieee80211-arbiter",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
@@ -3579,25 +3548,26 @@ dependencies = [
  "oer-ieee80211-upper-mac",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
 name = "oer-ieee80211-upper-mac"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
+ "oer-time",
 ]
 
 [[package]]
 name = "oer-ieee802154-mac"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
  "scopeguard",
 ]
 
@@ -3634,7 +3604,7 @@ dependencies = [
  "oer-analysis-riscv-stack",
  "oer-chip-profile",
  "oer-os-process",
- "oer-pins",
+ "oer-tool-pins",
  "rustc-demangle",
  "serde",
  "tempfile",
@@ -3655,12 +3625,16 @@ version = "0.1.0"
 dependencies = [
  "oer-os-durable",
  "oer-os-process",
- "oer-pins",
+ "oer-tool-pins",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
 ]
+
+[[package]]
+name = "oer-interrupt-table"
+version = "0.1.0"
 
 [[package]]
 name = "oer-lab-arbiter"
@@ -3696,21 +3670,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-fixtures"
-version = "0.1.0"
-dependencies = [
- "clap",
- "libc",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
 name = "oer-lab-model"
 version = "0.1.0"
 dependencies = [
@@ -3735,6 +3694,19 @@ dependencies = [
  "tempfile",
  "toml",
 ]
+
+[[package]]
+name = "oer-memory"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "bytemuck",
+ "oer-test-ui-cases",
+]
+
+[[package]]
+name = "oer-network"
+version = "0.1.0"
 
 [[package]]
 name = "oer-os-command-tree"
@@ -3783,73 +3755,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-pins"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-platform-esp32c5-board"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-platform-esp32c5-layout",
- "oer-platform-staged-layout",
-]
-
-[[package]]
-name = "oer-platform-esp32c5-layout"
-version = "0.1.0"
-dependencies = [
- "oer-platform-staged-layout",
-]
-
-[[package]]
-name = "oer-platform-esp32s31-board"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-platform-esp32s31-layout",
- "oer-platform-staged-layout",
-]
-
-[[package]]
-name = "oer-platform-esp32s31-layout"
-version = "0.1.0"
-dependencies = [
- "oer-platform-staged-layout",
-]
-
-[[package]]
-name = "oer-platform-staged-bootstrap"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-platform-staged-layout",
-]
-
-[[package]]
-name = "oer-platform-staged-layout"
-version = "0.1.0"
-
-[[package]]
-name = "oer-platform-staged-runtime"
-version = "0.1.0"
-dependencies = [
- "esp-hal",
- "oer-base-memory",
- "oer-exec-esp-hal-irq",
- "oer-exec-interrupt-table",
- "oer-platform-staged-layout",
-]
-
-[[package]]
 name = "oer-probe-codegen"
 version = "0.1.0"
 dependencies = [
@@ -3880,9 +3785,9 @@ version = "0.1.0"
 name = "oer-radio-permit-pool"
 version = "0.1.0"
 dependencies = [
- "oer-base-time",
  "oer-radio-port",
  "oer-test-ui-cases",
+ "oer-time",
 ]
 
 [[package]]
@@ -3890,8 +3795,8 @@ name = "oer-radio-port"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
- "oer-base-time",
  "oer-test-ui-cases",
+ "oer-time",
  "scopeguard",
 ]
 
@@ -3921,10 +3826,10 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
- "oer-pins",
  "oer-registers-contracts",
  "oer-registers-model",
  "oer-registers-review",
+ "oer-tool-pins",
  "quote",
  "roxmltree",
  "serde",
@@ -3979,7 +3884,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-blobray"
+name = "oer-time"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "postcard-schema",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "oer-time-virtual"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "embassy-sync 0.8.0",
+ "oer-time",
+]
+
+[[package]]
+name = "oer-tool-analysis-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -3989,7 +3913,7 @@ dependencies = [
  "oer-analysis-blobray-riscv",
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
- "oer-pins",
+ "oer-tool-pins",
  "serde",
  "serde_json",
  "tempfile",
@@ -3997,34 +3921,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-fixture-install"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-lab-fixtures",
- "serde_json",
-]
-
-[[package]]
-name = "oer-tool-fw"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-chip-profile",
- "oer-image-build",
- "oer-image-checks",
- "oer-lab-board",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-command-tree",
- "oer-os-durable",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-tool-hil"
+name = "oer-tool-hil-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4065,10 +3962,10 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "libc",
  "oer-bluetooth-le-ll",
- "oer-hil-fixture",
  "oer-hil-protocol",
- "oer-lab-fixtures",
+ "oer-ieee80211-mac",
  "oer-os-process",
+ "oer-tool-lab-fixture-install",
  "rustix",
  "serde",
  "serde_json",
@@ -4090,6 +3987,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-image-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-chip-profile",
+ "oer-image-build",
+ "oer-image-checks",
+ "oer-lab-board",
+ "oer-lab-model",
+ "oer-lab-router",
+ "oer-os-command-tree",
+ "oer-os-durable",
+ "serde",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "oer-tool-image-linker"
 version = "0.1.0"
 dependencies = [
@@ -4097,16 +4012,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-tool-lab-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-chip-profile",
+ "oer-lab-arbiter",
+ "oer-lab-board",
+ "oer-lab-model",
+ "oer-lab-router",
+ "oer-os-command-tree",
+ "oer-os-durable",
+ "oer-os-process",
+ "oer-os-toolchain",
+ "oer-tool-lab-fixture-install",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tool-lab-fixture-install"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "oer-os-durable",
+ "oer-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
 name = "oer-tool-pins"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "oer-chip-profile",
  "oer-os-command-tree",
- "oer-pins",
+ "oer-os-durable",
+ "oer-os-process",
+ "serde",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]
-name = "oer-tool-registers"
+name = "oer-tool-registers-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4119,27 +4074,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-stand"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-chip-profile",
- "oer-lab-arbiter",
- "oer-lab-board",
- "oer-lab-fixtures",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-command-tree",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "rustix",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-vendor"
+name = "oer-tool-vendor-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4153,8 +4088,8 @@ dependencies = [
  "oer-os-command-tree",
  "oer-os-process",
  "oer-os-toolchain",
- "oer-pins",
  "oer-registers-model",
+ "oer-tool-pins",
  "oer-vendor-evidence",
  "oer-vendor-lineage",
  "oer-vendor-phy",
@@ -4164,18 +4099,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-vendor-ieee802154-esp32s31"
+name = "oer-tool-vendor-ieee802154-esp32s31-cli"
 version = "0.1.0"
 dependencies = [
  "oer-os-durable",
  "oer-os-process",
- "oer-pins",
+ "oer-tool-pins",
  "oer-vendor-evidence",
  "oer-vendor-ieee802154-esp32s31",
 ]
 
 [[package]]
-name = "oer-tool-vendor-scenarios-esp32c5"
+name = "oer-tool-vendor-scenarios-esp32c5-cli"
 version = "0.1.0"
 dependencies = [
  "oer-vendor-scenario-report",
@@ -4183,11 +4118,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-vendor-scenarios-esp32s31"
+name = "oer-tool-vendor-scenarios-esp32s31-cli"
 version = "0.1.0"
 dependencies = [
  "oer-vendor-scenario-report",
  "oer-vendor-scenarios-esp32s31",
+]
+
+[[package]]
+name = "oer-trace"
+version = "0.1.0"
+dependencies = [
+ "oer-memory",
 ]
 
 [[package]]
@@ -4198,8 +4140,8 @@ dependencies = [
  "oer-image-build",
  "oer-os-process",
  "oer-os-toolchain",
- "oer-pins",
  "oer-probe-codegen",
+ "oer-tool-pins",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4212,11 +4154,11 @@ name = "oer-vendor-ieee802154-esp32s31"
 version = "0.1.0"
 dependencies = [
  "cc",
- "oer-esp32s31-tables",
+ "oer-esp32s31-knowledge",
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-ieee802154-mac",
- "oer-pins",
+ "oer-tool-pins",
 ]
 
 [[package]]
@@ -4248,7 +4190,7 @@ dependencies = [
 name = "oer-vendor-phy-esp32s31"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-phy-relation",
+ "oer-esp32s31-knowledge",
  "oer-os-process",
  "oer-registers-model",
  "oer-vendor-phy",
@@ -4263,8 +4205,8 @@ version = "0.1.0"
 dependencies = [
  "oer-analysis-elf",
  "oer-os-process",
- "oer-pins",
  "oer-registers-model",
+ "oer-tool-pins",
  "sha2 0.10.9",
  "tempfile",
  "toml",
@@ -4286,9 +4228,9 @@ dependencies = [
  "oer-image-build",
  "oer-os-durable",
  "oer-os-process",
- "oer-pins",
  "oer-probe-codegen",
  "oer-registers-bindings",
+ "oer-tool-pins",
  "oer-vendor-evidence",
  "serde",
  "serde_json",
@@ -4330,12 +4272,12 @@ dependencies = [
  "oer-analysis-blobray-domain",
  "oer-analysis-elf",
  "oer-analysis-riscv-model",
- "oer-esp32s31-phy-relation",
+ "oer-esp32s31-knowledge",
  "oer-image-build",
  "oer-image-esp-idf",
  "oer-os-durable",
  "oer-os-process",
- "oer-pins",
+ "oer-tool-pins",
  "oer-vendor-evidence",
  "oer-vendor-scenario",
  "serde",

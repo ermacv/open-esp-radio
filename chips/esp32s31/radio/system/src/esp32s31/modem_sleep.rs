@@ -57,7 +57,7 @@ pub(crate) fn resume_wifi_rf(
     radio: &mut RadioDomain<ConcurrentPhy>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_base_time::Clock,
+    clock: &impl oer_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), (WifiPhySuspended, ConcurrentPhyError)> {
     let ready = match phy_ready(radio) {
         Ok(ready) => ready,

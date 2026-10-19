@@ -3,7 +3,7 @@
 The editable hardware source is the schema-3 [`model/device.toml`](model/device.toml)
 and its schema-2 peripheral fragments. It follows the layout of the
 [ESP32-S31 register project](../esp32s31/README.md); the generator is
-[`host/registers/model`](../../host/registers/model/README.md).
+[`tools/registers/model`](../../tools/registers/model/README.md).
 
 | Path | Owner and purpose |
 | --- | --- |

@@ -69,10 +69,10 @@ reset or retained-sleep wakeup replay.
 | [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi, Bluetooth and IEEE 802.15.4 join it as clients | Every operation borrows the radio domain mutably |
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs) and [HAL PHY](../hal/src/phy.rs) | Typed MMIO, analog buses, hardware completion and bounded waits | Hardware access is borrowed from the admitted owner |
-| [Analog register bus](../../../portable/espressif/analog/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
+| [Analog register bus](../../espressif/analog/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
 | The owner of the shared radio (none in this tree yet; the radio system) | The radio domain, the platform resources and the vendor periodic tracking timer | Tracking runs on the borrowed domain and the grant-protect brackets; it pauses no protocol |
 | [HAL stopped-MAC check](../hal/src/owner/maintenance.rs) | The stopped Wi-Fi MAC check at the final-client boundary | A CPU mutex does not stop MAC or DMA |
-| [Hardware coex control](../../../portable/espressif/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
+| [Hardware coex control](../../espressif/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 
 ```mermaid
 flowchart TD
@@ -265,7 +265,7 @@ recovered vendor graph; bounded PBus, I2C, DC/IQ and SAR readiness reads poll
 directly. Interrupts remain enabled and the physical owner remains held until
 terminal restoration. The complete common/Wi-Fi runtime calibration graph
 runs in one caller poll without a timer suspension. Longer registration,
-tracking and lifecycle operations wait on the caller's `oer_base_time::Timer`
+tracking and lifecycle operations wait on the caller's `oer_time::Timer`
 through `executor::wait::delay` and its `executor::wait::Kind`.
 
 RX gain PBus completion matches the rev0 ROM command loop while retaining

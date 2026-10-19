@@ -66,8 +66,8 @@ jobs:
           cargo test --locked -p oer-ieee80211-runtime --features test-support
           cargo test --locked -p oer-ieee80211-sta
           cargo test --locked -p oer-esp32s31-ieee80211-mac
-          cargo test --locked -p oer-base-time --features serde
-          cargo test --locked -p oer-base-time --features schema
+          cargo test --locked -p oer-time --features serde
+          cargo test --locked -p oer-time --features schema
 
   chip:
     runs-on: ubuntu-latest
@@ -89,7 +89,7 @@ jobs:
         # firmware is checked apart: esp-hal takes one chip feature per build.
         run: |
           cargo clippy --locked --target riscv32imafc-unknown-none-elf \
-            -p oer-adapters-esp-hal-radio --features esp32s31
+            -p oer-espressif-esp-hal-radio --features esp32s31
           : > "$RUNNER_TEMP/empty-runtime.bin"
           export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
           meta=$(cargo metadata --format-version 1 --no-deps --locked)

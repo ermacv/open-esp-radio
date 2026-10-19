@@ -3,7 +3,7 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 //! The ESP32-S31 bootstrap: the staged boot's chip-neutral steps
-//! (`oer-platform-staged-bootstrap`) around this board's PSRAM and its
+//! (`oer-espressif-staged-bootstrap`) around this board's PSRAM and its
 //! 120-MHz Flash tuning, which needs the stage-two copy made first and a
 //! cold XIP span.
 
@@ -13,7 +13,7 @@ esp_bootloader_esp_idf::esp_app_desc!(
     "00:00:00",
     "2026-07-31",
     "6.1",
-    oer_platform_esp32s31_board::FLASH_MMU_PAGE_SIZE_BYTES,
+    oer_esp32s31_board::FLASH_MMU_PAGE_SIZE_BYTES,
     0,
     u16::MAX,
     0
@@ -21,10 +21,10 @@ esp_bootloader_esp_idf::esp_app_desc!(
 
 use core::mem::size_of;
 
-use oer_adapters_esp_hal_soc::FlashMmu;
-use oer_platform_esp32s31_board as board;
-use oer_platform_esp32s31_layout::LAYOUT;
-use oer_platform_staged_bootstrap::{self as staged, fail, print};
+use oer_esp32s31_board as board;
+use oer_esp32s31_layout::LAYOUT;
+use oer_espressif_esp_hal_soc::FlashMmu;
+use oer_espressif_staged_bootstrap::{self as staged, fail, print};
 use static_cell::ConstStaticCell;
 
 const FLASH_TUNING_REFERENCE_WORDS: usize =

@@ -1,0 +1,24 @@
+[package]
+name = "oer-trace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Typed, reset-retained event trace and snapshot slots for open ESP radio drivers"
+
+[features]
+default = []
+# Record events. Without it `emit`, `freeze` and `capture` compile to nothing,
+# while the event types stay available to host decoders.
+record = []
+
+[dependencies]
+oer-memory = { path = "../memory" }
+
+[lints]
+workspace = true
+
+
+[package.metadata.docs.rs]
+features = ["record"]

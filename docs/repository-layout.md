@@ -39,7 +39,7 @@ registers/ knowledge/ docs/   data and documents
 
 A domain may appear under several roots, split by what each part touches,
 the way `defmt` (portable) and `defmt-decoder` (host) split one format:
-`portable/hil/protocol` and `host/hil/run`, `portable/esp32s31/` (chip
+`protocols/hil/protocol` and `tools/hil/run`, `portable/esp32s31/` (chip
 knowledge) and `chips/esp32s31/` (hardware access).
 
 The roots follow embedded systems written in Rust: tock (`kernel/`,
@@ -102,11 +102,11 @@ no exceptions.
 ## Names
 
 A library's package name is `oer-` and its path below the root:
-`portable/ieee80211/mac` is `oer-ieee80211-mac`, `chips/esp32s31/hal` is
-`oer-esp32s31-hal`, `host/hil/run` is `oer-hil-run`. The layer test
+`protocols/ieee80211/mac` is `oer-ieee80211-mac`, `chips/esp32s31/hal` is
+`oer-esp32s31-hal`, `tools/hil/run` is `oer-hil-run`. The layer test
 refuses two libraries with the same name below different roots. An
 executable keeps its root: `firmware/apps/w1` is `oer-firmware-apps-w1`,
-`tools/fw` is `oer-tool-fw`. There is no `[lib] name`.
+`tools/image/cli` is `oer-tool-image-cli`. There is no `[lib] name`.
 
 ## One program, one folder
 
@@ -126,18 +126,18 @@ and runs is a thin wrapper over `cargo fw` and the program.
 
 | I want to | Command | Where |
 |---|---|---|
-| run an app on a board | `cargo fw run w1 --board s31-a` | `firmware/apps/w1`, `tools/fw` |
-| run a HIL scenario | `cargo hil run <scenario>` (builds through the image pipeline), or `--images <dir>` for images built before | `firmware/hil/*` and `host/hil/` speak `portable/hil/protocol` |
-| add a HIL message | edit `portable/hil/protocol` | both sides build against one definition |
+| run an app on a board | `cargo fw run w1 --board s31-a` | `firmware/apps/w1`, `tools/image/cli` |
+| run a HIL scenario | `cargo hil run <scenario>` (builds through the image pipeline), or `--images <dir>` for images built before | `firmware/hil/*` and `tools/hil/` speak `protocols/hil/protocol` |
+| add a HIL message | edit `protocols/hil/protocol` | both sides build against one definition |
 | compare a HAL leaf with the vendor | `cargo fw probe <package>`, then `cargo vendor-check` with the probe ELF | hook under `cfg(oer_probe)` in `chips/`; catalog in `portable/probe/` |
-| run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- compare <scenario>` | vendor driver and `portable/espressif/ieee802154-engine` meet at the low-level boundary; chip tables from `portable/esp32s31/` |
-| check an image's stack | `cargo fw build <image>` | `host/image/checks` reads the ELF |
+| run the 802.15.4 vendor stand | `cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare <scenario>` | vendor driver and `chips/espressif/ieee802154-engine` meet at the low-level boundary; chip tables from `portable/esp32s31/` |
+| check an image's stack | `cargo fw build <image>` | `tools/image/checks` reads the ELF |
 | add a register field | edit `registers/`, `cargo registers generate` | `chips/<chip>/pac` |
 
 ## Known deviations
 
 The tree does not yet follow these rules in one place:
 
-- `portable/ieee80211/mac` holds the Wi-Fi frame formats and protocol state
+- `protocols/ieee80211/mac` holds the Wi-Fi frame formats and protocol state
   together; chip backends and the radio system depend on it for formats
   alone (the radio system for the channel type only).

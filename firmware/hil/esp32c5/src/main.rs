@@ -1,9 +1,9 @@
 //! ESP32-C5 HIL runtime.
 //!
 //! The platform bootstrap stages this runtime into PSRAM and enters it at
-//! `_runtime_start` (`oer-platform-staged-runtime`), which calls
+//! `_runtime_start` (`oer-espressif-staged-runtime`), which calls
 //! [`runtime_main`]. It runs the scheduler-free Embassy executor of
-//! `oer-exec-executor` on the image's interrupt table. Each image
+//! `oer-espressif-executor` on the image's interrupt table. Each image
 //! selects one feature: `boot-smoke` proves the boot path with text lines,
 //! `system-watchdog` serves the HIL protocol with the SoC deadline watchdog
 //! and the reset-retained post-mortem.
@@ -18,7 +18,7 @@ compile_error!("select the boot-smoke or system-watchdog image");
 compile_error!("boot-smoke and system-watchdog are separate images");
 
 use esp_hal::interrupt::software::SoftwareInterrupt;
-use oer_exec_executor::Executor;
+use oer_espressif_executor::Executor;
 use static_cell::StaticCell;
 
 #[cfg(feature = "boot-smoke")]
@@ -26,11 +26,11 @@ mod boot_smoke;
 #[cfg(feature = "system-watchdog")]
 mod system;
 
-oer_platform_staged_runtime::interrupt_table! {
+oer_espressif_staged_runtime::interrupt_table! {
     /// Wakes the Embassy executor.
-    wake: ExecutorWake = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
+    wake: ExecutorWake = FROM_CPU_INTR0 => oer_espressif_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The Embassy time driver's alarm (system timer comparator 0).
-    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_exec_executor::alarm_interrupt::<0>, Priority1, ProCpu;
+    alarm: TimeAlarm = SYSTIMER_TARGET0 => oer_espressif_executor::alarm_interrupt::<0>, Priority1, ProCpu;
     #[cfg(feature = "system-watchdog")]
     /// The USB Serial/JTAG console, to esp-hal's async driver.
     console_usb: ConsoleUsb = USB_DEVICE => esp_hal::usb::usb_serial_jtag::handle_async_interrupt, Priority1, ProCpu;
@@ -42,11 +42,11 @@ static EXECUTOR: StaticCell<Executor<0>> = StaticCell::new();
 // after its own record and before it resets the chip: the post-mortem's
 // fault, formatting nothing. The next boot reports it.
 #[cfg(feature = "system-watchdog")]
-oer_platform_staged_runtime::panic_hook!(system::postmortem::record_panic);
+oer_espressif_staged_runtime::panic_hook!(system::postmortem::record_panic);
 
-oer_platform_staged_runtime::entry!(main);
+oer_espressif_staged_runtime::entry!(main);
 
-fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
+fn main(handoff: oer_espressif_staged_runtime::Handoff) -> ! {
     // What the previous boot left is taken before anything records.
     #[cfg(feature = "system-watchdog")]
     {
@@ -54,15 +54,15 @@ fn main(handoff: oer_platform_staged_runtime::Handoff) -> ! {
         system::take_platform_panic();
     }
     #[cfg(feature = "boot-smoke")]
-    let _ = oer_platform_staged_runtime::panic::take_previous();
+    let _ = oer_espressif_staged_runtime::panic::take_previous();
     let peripherals = esp_hal::init(esp_hal::Config::default());
     let (_psram, adopted) = handoff.adopt(
         INTERRUPT_TABLE,
-        oer_platform_esp32c5_board::BootstrapPsram(peripherals.PSRAM),
+        oer_esp32c5_board::BootstrapPsram(peripherals.PSRAM),
     );
 
     let interrupts = Interrupts::take().expect("the image takes its interrupt tokens once");
-    oer_exec_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
+    oer_espressif_executor::init::<0, _>(peripherals.SYSTIMER, interrupts.alarm);
     let executor = EXECUTOR.init(Executor::<0>::new(SoftwareInterrupt::new(
         peripherals.FROM_CPU_INTR0,
     )));

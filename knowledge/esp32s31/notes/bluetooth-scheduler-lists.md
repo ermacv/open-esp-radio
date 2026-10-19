@@ -277,7 +277,7 @@ progress signal (selector `0x0c01`), whose conflict states make the request
 repeat, and a settle signal (selector 7), which must leave the value 9. A
 repeated request is withdrawn by clearing START and issued again. The
 observable protocol and the open questions are recorded in
-[scheduler execution lock and modify](../../../knowledge/esp32s31/bluetooth/scheduler-execution-lock-modify.md).
+[scheduler execution lock and modify](../bluetooth/scheduler-execution-lock-modify.md).
 Every vendor wait polls only while BUSY is set and asserts after 9999
 iterations.
 

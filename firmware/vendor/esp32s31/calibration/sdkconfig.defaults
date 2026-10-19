@@ -4,7 +4,7 @@ CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n
 CONFIG_ESP_PHY_RF_CAL_FULL=y
 # The HIL flash layout: the application occupies ota_0 of the shared table.
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../portable/esp32s31/platform/partitions/applications.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../chips/esp32s31/platform/partitions/applications.csv"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 # The HIL serial device is the USB-Serial/JTAG console.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

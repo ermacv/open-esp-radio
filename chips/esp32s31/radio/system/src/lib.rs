@@ -77,7 +77,7 @@ pub trait PhyDomain {
     /// Close RF after the last member left.
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault>;
     /// When the periodic tracking falls due, while a member is tracked.
-    fn tracking_deadline(&self) -> Option<oer_base_time::Instant>;
+    fn tracking_deadline(&self) -> Option<oer_time::Instant>;
     /// One periodic tracking tick.
     async fn track_tick(&mut self) -> Result<(), Fault>;
 }
@@ -120,7 +120,7 @@ pub struct RadioSystem<K: Client, S: LpSource, B, T> {
     state: State,
 }
 
-impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_base_time::Timer> RadioSystem<Wifi, S, B, T> {
+impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
     /// The Wi-Fi radio system over `backend`, with the claimed actor end.
     pub fn new(end: ActorEnd, backend: B, timer: T, lp: LpClock<S>) -> Self {
         let ActorEnd {
@@ -140,9 +140,7 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_base_time::Timer> RadioSyste
     }
 }
 
-impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_base_time::Timer>
-    RadioSystem<K, S, B, T>
-{
+impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSystem<K, S, B, T> {
     /// Serve the cells for the rest of the program.
     pub async fn run(mut self) -> Infallible {
         loop {

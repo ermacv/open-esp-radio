@@ -8,12 +8,12 @@ repository.workspace = true
 description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
 
 [dependencies]
-oer-bluetooth-hci = { path = "../../../../portable/bluetooth/hci" }
-oer-bluetooth-le-radio = { path = "../../../../portable/bluetooth/le/radio" }
+oer-bluetooth-hci = { path = "../../../../protocols/bluetooth/hci" }
+oer-bluetooth-le-radio = { path = "../../../../protocols/bluetooth/le/radio" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-bluetooth-memory = { path = "../memory" }
 oer-esp32s31-phy = { path = "../../phy" }
-oer-base-time = { path = "../../../../portable/base/time" }
+oer-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }

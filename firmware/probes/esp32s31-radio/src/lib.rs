@@ -791,7 +791,7 @@ struct ValidationPreparedTxDma(u32);
 // SAFETY: this verification-only authority is instantiated solely from the
 // profile-owned stable descriptor memory used by the isolated instruction
 // trace. It is never exposed to production code or real hardware.
-unsafe impl oer_base_memory::PreparedTxDma for ValidationPreparedTxDma {
+unsafe impl oer_memory::PreparedTxDma for ValidationPreparedTxDma {
     fn descriptor_head(&self) -> u32 {
         self.0
     }
@@ -1504,17 +1504,14 @@ impl oer_esp32s31_ieee80211_driver::tx::WifiTxEntropy for OrdinaryTxProbeEntropy
 struct OrdinaryTxProbeTimer;
 
 /// Time that stands still; waits end at once.
-impl oer_base_time::Clock for OrdinaryTxProbeTimer {
-    fn now(&self) -> oer_base_time::Instant {
-        oer_base_time::Instant::from_micros(1)
+impl oer_time::Clock for OrdinaryTxProbeTimer {
+    fn now(&self) -> oer_time::Instant {
+        oer_time::Instant::from_micros(1)
     }
 }
 
-impl oer_base_time::Timer for OrdinaryTxProbeTimer {
-    fn wait_until(
-        &self,
-        _deadline: oer_base_time::Instant,
-    ) -> impl core::future::Future<Output = ()> {
+impl oer_time::Timer for OrdinaryTxProbeTimer {
+    fn wait_until(&self, _deadline: oer_time::Instant) -> impl core::future::Future<Output = ()> {
         core::future::ready(())
     }
 }
@@ -1670,7 +1667,7 @@ fn initialize_ordinary_tx_probe() -> Result<OrdinaryTxProbeState, u32> {
                     access_category: LegacyTxQueue::BestEffort.access_category(),
                     initial_rate: TxPhyRate::Legacy(LegacyRate::Ofdm54M),
                     publication_limit: 0x20,
-                    publication_timeout: oer_base_time::Duration::from_micros(1_000),
+                    publication_timeout: oer_time::Duration::from_micros(1_000),
                 },
                 hardware_mic_length: 0,
                 hardware_key_selector: 0,

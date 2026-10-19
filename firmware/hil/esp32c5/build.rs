@@ -2,5 +2,5 @@
 //! board's layout.
 
 fn main() {
-    oer_platform_esp32c5_layout::build::configure_runtime("oer-firmware-hil-esp32c5");
+    oer_esp32c5_layout::build::configure_runtime("oer-firmware-hil-esp32c5");
 }

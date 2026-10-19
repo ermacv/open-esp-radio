@@ -10,7 +10,7 @@ it:
 
 - Every crate above the boundary starts with `#![forbid(unsafe_code)]`. The
   layer test `every_crate_above_the_unsafe_boundary_forbids_unsafe_code`
-  (`host/test/layers`) checks each library and executable root against the
+  (`tools/test/layers`) checks each library and executable root against the
   boundary below, which it lists.
 - A crate below the boundary starts with
   `#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]`, permits unsafe
@@ -43,9 +43,9 @@ Below it are, by directory (`/` ends a domain):
 | Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
 | Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32s31/hal` |
 | Platform, executor and framework bindings | `chips/platform/`, `chips/exec/`, `chips/adapters/`, `portable/adapters/` |
-| Cores of memory the hardware shares | `portable/base/memory`, `portable/exec/interrupt-table`, `portable/platform/staged-layout`, `chips/esp32s31/bluetooth/memory` |
-| The host's operating-system bindings | `host/os/process`, `host/os/serial` |
-| The C-driver stand | `host/vendor/ieee802154-esp32s31` |
+| Cores of memory the hardware shares | `portable/memory`, `portable/interrupt-table`, `chips/espressif/staged-layout`, `chips/esp32s31/bluetooth/memory` |
+| The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
+| The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
 
 ## Generated access and trusted handwritten code
@@ -65,7 +65,7 @@ Rust outputs from its handwritten ownership and domain modules,
 including the IEEE 802.15.4 task/interrupt split. Non-radio register
 access through upstream `esp-hal`/`esp-pacs` belongs to
 `adapters/esp-hal/soc/`, which also contains cache/MMU and GDMA
-transactions. Its Cargo package is `oer-adapters-esp-hal-soc`; its implementation
+transactions. Its Cargo package is `oer-espressif-esp-hal-soc`; its implementation
 is handwritten code.
 
 The crates below cover distinct obligations: singleton acquisition and MMIO
@@ -73,7 +73,7 @@ serialization, stable addresses and CPU/DMA transfer, target ABI and placement,
 and one-time static resource or interrupt binding. The embassy network
 adapter binds Xarxa's external-packet API, which is unsafe by design, in one
 unsafe module, `external_rx`: it adopts a detached RX DMA buffer from an
-`oer-base-memory` handoff slot as a Xarxa `PacketBuf` (`ExternalPacketOrigin::new`
+`oer-memory` handoff slot as a Xarxa `PacketBuf` (`ExternalPacketOrigin::new`
 and `adopt`) and returns the slot through `release_adopted` when the packet
 drops. A slot is adopted again only after that release returned, because the
 radio must first claim the slot the release freed. Preserve the proof at the
@@ -123,7 +123,7 @@ upper owner. Its caller lends the arena's live ring shared:
 completed-descriptor views borrow that ring mutably, and the ring is not
 `Sync`, so no CPU view of the bytes is live meanwhile.
 
-`oer-base-memory` holds the shared proofs for executor-crossing storage.
+`oer-memory` holds the shared proofs for executor-crossing storage.
 `AffineIndexedSpscQueue` lets an affine permission's place select its value
 cell while the audited SPSC ring stores only indices; available ring space
 follows from N distinct indices, without an occupancy check, a backend

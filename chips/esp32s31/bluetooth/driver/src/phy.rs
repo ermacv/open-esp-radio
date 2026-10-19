@@ -128,7 +128,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     pub fn join_phy(
         self,
         ready: PhyReady<'_>,
-        clock: &impl oer_base_time::Clock,
+        clock: &impl oer_time::Clock,
     ) -> Result<
         (
             ControllerPhyJoined<'cells, MODEM_TIMER_CAPACITY>,

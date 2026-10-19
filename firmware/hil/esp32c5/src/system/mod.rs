@@ -42,13 +42,13 @@ pub(crate) fn boot_evidence() -> oer_hil_protocol::base::BootEvidence {
 /// The platform panic entry's record of the previous boot, taken once at
 /// boot: taking it clears the retained slot.
 static PLATFORM_PANIC: embassy_sync::once_lock::OnceLock<
-    Option<oer_platform_staged_runtime::panic::PanicRecord>,
+    Option<oer_espressif_staged_runtime::panic::PanicRecord>,
 > = embassy_sync::once_lock::OnceLock::new();
 
 /// Take the previous boot's platform panic record; before the first boot
 /// evidence is served.
 pub(crate) fn take_platform_panic() {
-    let _ = PLATFORM_PANIC.init(oer_platform_staged_runtime::panic::take_previous());
+    let _ = PLATFORM_PANIC.init(oer_espressif_staged_runtime::panic::take_previous());
 }
 
 /// Checkpoints `first..` of the previous boot's post-mortem.

@@ -9,10 +9,10 @@ build = "build.rs"
 description = "Retained ESP32-C5 Rust entry points for compiled vendor verification, and the linked probe image"
 
 [dependencies]
-oer-probe-macros = { path = "../../../host/probe/macros" }
+oer-probe-macros = { path = "../../../tools/probe/macros" }
 oer-esp32c5-hal = { path = "../../../chips/esp32c5/hal" }
 oer-esp32c5-pac = { path = "../../../chips/esp32c5/pac" }
-oer-espressif-analog = { path = "../../../portable/espressif/analog" }
+oer-espressif-analog = { path = "../../../chips/espressif/analog" }
 [lib]
 crate-type = ["rlib", "staticlib"]
 
@@ -21,7 +21,7 @@ name = "oer-firmware-probes-esp32c5-radio"
 path = "src/main.rs"
 
 [build-dependencies]
-oer-probe-codegen = { path = "../../../host/probe/codegen" }
+oer-probe-codegen = { path = "../../../tools/probe/codegen" }
 
 [lints]
 workspace = true
