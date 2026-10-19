@@ -154,6 +154,9 @@ pub enum LeRxChainError {
     NoSpare,
     /// The source receives through the other class.
     ForeignClass,
+    /// The links from the head visit more headers than the ring has: a
+    /// successor links back into the walked chain.
+    Cycle,
 }
 
 /// Synthetic controller-SRAM base used only by native ownership models.
@@ -292,10 +295,12 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
     }
 
     /// The vendor walk: find the first completed node recorded for `tag`.
+    /// Each step moves to the next header, so a walk longer than the ring's
+    /// headers (the cursor and one per packet) follows a corrupted link.
     fn find(&mut self, tag: Option<LeRxTag>) -> Result<Option<Header>, LeRxChainError> {
         let mut current = self.ring.head;
         self.header(current).set_predecessor(None);
-        loop {
+        for _ in 0..=PACKETS {
             let header = self.header(current);
             if !header.completion_observed() {
                 return Ok(None);
@@ -349,6 +354,7 @@ impl<const PACKETS: usize> LeRxRingView<'_, PACKETS> {
             }
             current = next;
         }
+        Err(LeRxChainError::Cycle)
     }
 
     /// The vendor return: rearm the node and append it after the tail.

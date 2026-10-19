@@ -175,3 +175,14 @@ fn a_source_of_the_other_class_is_refused() {
     let scanning = LeRxSource::new(A, RxMemoryListClass::Scanning, false);
     assert_eq!(chain.take(scanning), Err(LeRxChainError::ForeignClass));
 }
+
+#[test]
+fn a_successor_linking_back_into_the_chain_ends_the_walk() {
+    let mut chain = chain();
+    assert!(chain.emulate_receive(&pdu(5), A.number(), 1_000));
+    assert!(chain.emulate_receive(&pdu(6), A.number(), 1_000));
+    // Corrupt the second packet's header to link back to the first: a walk
+    // for another tag passes both and would circle them forever.
+    chain.with_view(|view| view.header(2).link_successor(Some(view.link(1))));
+    assert_eq!(chain.take(source(B)), Err(LeRxChainError::Cycle));
+}
