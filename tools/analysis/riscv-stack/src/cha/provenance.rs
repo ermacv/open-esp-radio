@@ -2,172 +2,23 @@
 //! only absolute globals. An unfamiliar location or address use is unknown;
 //! it never licenses excluding a function by its declaration's signature.
 use super::{Field, TypeFacts};
-use crate::dwarf::{Reader, dwarf_error, invalid, reference};
+use crate::dwarf::locations::Place;
 use crate::{Analysis, Fact, Resolutions, TransferKind};
-use oer_analysis_elf::dwarf::{DebugSections, gimli};
+use oer_analysis_elf::dwarf::gimli;
 use oer_analysis_elf::rv32::Role;
 use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Place {
-    /// The value (or a piece of it) is in a register.
-    Register(u8),
-    /// Bytes of the value are stored at register + offset.
-    Memory(u8, i64),
-    /// A pointer's value is register + offset.
-    Pointer(u8, i64),
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Location {
-    start: u32,
-    end: u32,
-    owner: usize,
-    offset: u64,
-    bytes: Option<u64>,
-    place: Place,
-}
-
-#[derive(Default)]
-struct Locations {
-    /// A concrete/abstract variable's own type and its origin.
-    variables: BTreeMap<usize, (Option<usize>, Option<usize>)>,
-    registers: BTreeMap<u8, Vec<Location>>,
+struct Locations<'a> {
+    debug: &'a crate::dwarf::locations::LocalLocations,
     /// Equal register values at a memory operand, proved by moves since
     /// the last CFG merge. Only nontrivial equivalences are retained.
     aliases: BTreeMap<(u32, u8), u32>,
 }
 
-impl Locations {
-    fn variable_type(&self, mut owner: usize) -> Option<usize> {
-        for _ in 0..16 {
-            let &(ty, origin) = self.variables.get(&owner)?;
-            if ty.is_some() {
-                return ty;
-            }
-            owner = origin?;
-        }
-        None
-    }
-
-    fn add(
-        &mut self,
-        location: Location,
-        keep: &mut Ledger<'_>,
-        control: &mut dyn RunControl,
-    ) -> Result<()> {
-        let register = match location.place {
-            Place::Register(register)
-            | Place::Memory(register, _)
-            | Place::Pointer(register, _) => register,
-            Place::Unknown => return Ok(()),
-        };
-        let locations = keep.entry(&mut self.registers, register, Vec::new, control)?;
-        keep.push(locations, location, control)
-    }
-
-    /// Each supported expression is a sequence of independent, byte-aligned
-    /// pieces. Empty/unsupported pieces still advance the object offset.
-    #[allow(clippy::too_many_arguments)]
-    fn expression(
-        &mut self,
-        expression: gimli::Expression<Reader<'_>>,
-        encoding: gimli::Encoding,
-        owner: usize,
-        ranges: &[(u32, u32)],
-        keep: &mut Ledger<'_>,
-        control: &mut dyn RunControl,
-    ) -> Result<()> {
-        let mut operations = expression.operations(encoding);
-        let mut place = Place::Unknown;
-        let mut offset = 0_u64;
-        let mut started = false;
-        let mut valid = true;
-        while let Some(operation) = operations.next().map_err(dwarf_error)? {
-            control.checkpoint(1)?;
-            match operation {
-                gimli::Operation::Register { register } if !started => {
-                    place = u8::try_from(register.0)
-                        .ok()
-                        .filter(|r| *r < 32)
-                        .map(Place::Register)
-                        .unwrap_or(Place::Unknown);
-                    started = true;
-                }
-                gimli::Operation::RegisterOffset {
-                    register, offset, ..
-                } if !started => {
-                    place = u8::try_from(register.0)
-                        .ok()
-                        .filter(|r| *r < 32)
-                        .map(|r| Place::Memory(r, offset))
-                        .unwrap_or(Place::Unknown);
-                    started = true;
-                }
-                gimli::Operation::StackValue => {
-                    place = match place {
-                        Place::Memory(register, offset) => Place::Pointer(register, offset),
-                        _ => Place::Unknown,
-                    };
-                }
-                gimli::Operation::Piece {
-                    size_in_bits,
-                    bit_offset,
-                } => {
-                    if size_in_bits % 8 != 0 || bit_offset.is_some_and(|bit| bit != 0) {
-                        // Unsupported bit pieces also make all subsequent
-                        // byte offsets ambiguous.
-                        return Ok(());
-                    }
-                    let bytes = size_in_bits / 8;
-                    if valid && size_in_bits % 8 == 0 && bit_offset.is_none_or(|bit| bit == 0) {
-                        for &(start, end) in ranges {
-                            self.add(
-                                Location {
-                                    start,
-                                    end,
-                                    owner,
-                                    offset,
-                                    bytes: Some(bytes),
-                                    place,
-                                },
-                                keep,
-                                control,
-                            )?;
-                        }
-                    }
-                    offset = offset.saturating_add(bytes);
-                    place = Place::Unknown;
-                    started = false;
-                    valid = true;
-                }
-                gimli::Operation::Nop => {}
-                _ => valid = false,
-            }
-        }
-        if valid && started {
-            for &(start, end) in ranges {
-                self.add(
-                    Location {
-                        start,
-                        end,
-                        owner,
-                        offset,
-                        bytes: None,
-                        place,
-                    },
-                    keep,
-                    control,
-                )?;
-            }
-        }
-        Ok(())
-    }
-
+impl Locations<'_> {
     /// Function-pointer fields at a machine memory operand. Registers named
     /// by DWARF describe their values at this PC, so no ABI/register-layout
     /// guess or scope extension is needed.
@@ -185,12 +36,12 @@ impl Locations {
             if aliases & (1 << register) == 0 {
                 continue;
             }
-            for location in self.registers.get(&register).into_iter().flatten() {
+            for location in self.debug.registers.get(&register).into_iter().flatten() {
                 control.checkpoint(1)?;
                 if pc < location.start || pc >= location.end {
                     continue;
                 }
-                let Some(ty) = self.variable_type(location.owner) else {
+                let Some(ty) = self.debug.variable_type(location.owner) else {
                     continue;
                 };
                 let Some((_, record)) = types.resolve(ty) else {
@@ -262,7 +113,7 @@ impl Locations {
         control: &mut dyn RunControl,
     ) -> Result<Option<Field>> {
         let mut found = BTreeSet::new();
-        for location in self.registers.get(&register).into_iter().flatten() {
+        for location in self.debug.registers.get(&register).into_iter().flatten() {
             control.checkpoint(1)?;
             if pc < location.start
                 || pc >= location.end
@@ -270,7 +121,7 @@ impl Locations {
             {
                 continue;
             }
-            let Some(ty) = self.variable_type(location.owner) else {
+            let Some(ty) = self.debug.variable_type(location.owner) else {
                 continue;
             };
             if location.bytes.or_else(|| types.size(ty)) != Some(4) {
@@ -283,115 +134,6 @@ impl Locations {
         } else {
             None
         })
-    }
-
-    fn read(
-        image: &ImageFacts<'_>,
-        keep: &mut Ledger<'_>,
-        control: &mut dyn RunControl,
-    ) -> Result<Self> {
-        let sections =
-            DebugSections::load(image.file()).map_err(|error| invalid(error.to_string()))?;
-        let dwarf = sections
-            .dwarf()
-            .map_err(|error| invalid(error.to_string()))?;
-        let mut locations = Self::default();
-        let mut units = dwarf.units();
-        while let Some(header) = units.next().map_err(dwarf_error)? {
-            let unit = dwarf.unit(header).map_err(dwarf_error)?;
-            let mut scopes: Vec<(isize, Vec<(u32, u32)>)> = Vec::new();
-            let mut scratch = Ledger::new(keep.memory(), control)?;
-            let mut entries = unit.entries();
-            while let Some(entry) = entries.next_dfs().map_err(dwarf_error)? {
-                control.checkpoint(1)?;
-                let depth = entry.depth();
-                scopes.retain(|(at, _)| *at < depth);
-                let Some(owner) = entry
-                    .offset()
-                    .to_debug_info_offset(&unit.header)
-                    .map(|at| at.0)
-                else {
-                    continue;
-                };
-                if matches!(
-                    entry.tag(),
-                    gimli::DW_TAG_subprogram
-                        | gimli::DW_TAG_inlined_subroutine
-                        | gimli::DW_TAG_lexical_block
-                ) {
-                    let mut ranges = dwarf.die_ranges(&unit, entry).map_err(dwarf_error)?;
-                    let mut own = Vec::new();
-                    while let Some(range) = ranges.next().map_err(dwarf_error)? {
-                        if let (Ok(start), Ok(end)) =
-                            (u32::try_from(range.begin), u32::try_from(range.end))
-                        {
-                            scratch.push(&mut own, (start, end), control)?;
-                        }
-                    }
-                    if !own.is_empty() {
-                        scratch.push(&mut scopes, (depth, own), control)?;
-                    }
-                }
-                if !matches!(
-                    entry.tag(),
-                    gimli::DW_TAG_variable | gimli::DW_TAG_formal_parameter
-                ) {
-                    continue;
-                }
-                let ty = entry
-                    .attr_value(gimli::DW_AT_type)
-                    .and_then(|value| reference(&unit, value));
-                let origin = entry
-                    .attr_value(gimli::DW_AT_abstract_origin)
-                    .or_else(|| entry.attr_value(gimli::DW_AT_specification))
-                    .and_then(|value| reference(&unit, value));
-                if ty.is_some() || origin.is_some() {
-                    keep.insert(&mut locations.variables, owner, (ty, origin), control)?;
-                }
-                let Some(value) = entry.attr_value(gimli::DW_AT_location) else {
-                    continue;
-                };
-                match value {
-                    gimli::AttributeValue::Exprloc(expression) => {
-                        if entry.attr_value(gimli::DW_AT_start_scope).is_none()
-                            && let Some((_, ranges)) = scopes.last()
-                        {
-                            locations.expression(
-                                expression,
-                                unit.encoding(),
-                                owner,
-                                ranges,
-                                keep,
-                                control,
-                            )?;
-                        }
-                    }
-                    value => {
-                        if let Some(mut list) =
-                            dwarf.attr_locations(&unit, value).map_err(dwarf_error)?
-                        {
-                            while let Some(location) = list.next().map_err(dwarf_error)? {
-                                if let (Ok(start), Ok(end)) = (
-                                    u32::try_from(location.range.begin),
-                                    u32::try_from(location.range.end),
-                                ) {
-                                    locations.expression(
-                                        location.data,
-                                        unit.encoding(),
-                                        owner,
-                                        &[(start, end)],
-                                        keep,
-                                        control,
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        locations.read_aliases(image, keep, control)?;
-        Ok(locations)
     }
 
     fn read_aliases(
@@ -728,6 +470,9 @@ fn compatible(types: &TypeFacts, a: Field, b: Field) -> bool {
 /// in every site's candidate set. Empty sets do not prove an unreachable
 /// call. The existing type/executor assumption still applies to memory
 /// reconstructed through an erased pointer.
+/// `types` must come from `read_debug` with `DebugMetadata::TypedLocations`
+/// for this image. This resolver reads prepared metadata and instructions;
+/// it does not load or traverse DWARF.
 pub fn typed_function_pointer_resolutions(
     image: &ImageFacts<'_>,
     analysis: &Analysis,
@@ -736,7 +481,17 @@ pub fn typed_function_pointer_resolutions(
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
     let mut scratch = Ledger::new(keep.memory(), control)?;
-    let locations = Locations::read(image, &mut scratch, control)?;
+    let debug = types.locations.as_ref().ok_or_else(|| {
+        Error::new(
+            ErrorCode::Incompatible,
+            "typed locations were not requested by read_debug",
+        )
+    })?;
+    let mut locations = Locations {
+        debug,
+        aliases: BTreeMap::new(),
+    };
+    locations.read_aliases(image, &mut scratch, control)?;
     let uses = address_uses(image, analysis, types, &locations, &mut scratch, control)?;
     let mut resolutions = Resolutions::new();
     for facts in analysis.functions.values() {

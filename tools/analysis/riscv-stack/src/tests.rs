@@ -33,7 +33,13 @@ pub(crate) fn ledger() -> Ledger<'static> {
 
 /// [`crate::read_debug`] of `elf` without a work budget.
 pub(crate) fn debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
-    crate::read_debug(&std::rc::Rc::from(elf), &mut ledger(), &mut || Ok(())).unwrap()
+    crate::read_debug(
+        &std::rc::Rc::from(elf),
+        DebugMetadata::Standard,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap()
 }
 
 /// [`crate::analyze`] of `elf` and its `companions` under `memory` and `control`.
@@ -51,7 +57,12 @@ fn analyze_within(
         .collect::<Result<Vec<_>>>()?;
     let companions: Vec<&ImageFacts<'_>> = companions.iter().collect();
     let mut keep = Ledger::new(memory, control)?;
-    let (dwarf, _) = crate::read_debug(&std::rc::Rc::from(elf), &mut keep, control)?;
+    let (dwarf, _) = crate::read_debug(
+        &std::rc::Rc::from(elf),
+        DebugMetadata::Standard,
+        &mut keep,
+        control,
+    )?;
     crate::analyze(&image, &companions, summaries, &dwarf, &mut keep, control)
 }
 
@@ -2486,9 +2497,14 @@ fn the_analyzers_own_structures_fail_on_working_memory() {
     let elf = compiled(WAKER_PROGRAM);
     let shared = std::rc::Rc::from(&elf[..]);
     limited(
-        crate::read_debug(&shared, &mut kept(&tiny), &mut || Ok(()))
-            .err()
-            .unwrap(),
+        crate::read_debug(
+            &shared,
+            DebugMetadata::Standard,
+            &mut kept(&tiny),
+            &mut || Ok(()),
+        )
+        .err()
+        .unwrap(),
     );
     with_facts(&elf, |facts| {
         limited(crate::stack_sizes(facts, &mut kept(&tiny), &mut || Ok(())).unwrap_err());
@@ -2550,6 +2566,7 @@ fn a_compressed_debug_section_is_an_error_not_a_read() {
     let compressed = compiled_linking(WRITER_PROGRAM, &["--compress-debug-sections=zlib"]);
     let error = crate::read_debug(
         &std::rc::Rc::from(&compressed[..]),
+        DebugMetadata::Standard,
         &mut ledger(),
         &mut || Ok(()),
     )

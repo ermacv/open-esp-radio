@@ -40,6 +40,26 @@ borrowed from the ELF's bytes; its inline chains are addr2line's over the
 same bytes (`Symbolizer::shared`), whose lazily grown caches are library
 internals the working memory does not account.
 
+`read_debug` takes `DebugMetadata::Standard` for the normal image pipeline.
+`DebugMetadata::TypedLocations` additionally retains local-variable and
+parameter locations in the returned `TypeFacts`, in the same DIE walk. The
+experimental `typed_function_pointer_resolutions` requires those prepared
+facts; it reads no debug sections and prepares machine-register aliases
+separately from instructions. Standard metadata allocates no local-location
+records or lexical-range state, and no global cache is used.
+
+Local locations preserve exact half-open PC ranges, location-list gaps and
+independent byte-aligned aggregate pieces. Missing or unsupported pieces
+advance the object offset; unsupported bit pieces stop subsequent offsets.
+A variable's own type takes precedence over its origin/specification chain;
+locations themselves are direct attributes. Globals retain their separate
+absolute-address/piece rules, signatures retain their own inheritance rule,
+and `noreturn` requires agreement of direct attributes on concrete
+subprograms. Sharing expression decoding and source-reference selection
+does not unify those interpretation policies. Retained facts and temporary
+range/piece storage use the caller's memory ledger; per-unit ranges and
+per-expression global pieces release their reservations when complete.
+
 Facts of the build come first. An image linked with `--emit-relocs` keeps
 its relocations, each checked against the word it describes (a mismatch is an
 integrity error): a compiler jump table is the run of relocated words from its

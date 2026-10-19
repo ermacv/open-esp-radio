@@ -21,7 +21,7 @@
 //! the debuginfo name is computed from the type's path and generic arguments
 //! by one rule. A test holds the toolchain to it across crates and codegen
 //! units. A site whose load address or field is unknown stays unresolved.
-use crate::dwarf::{Entry, Reader, Unit, reference, text};
+use crate::dwarf::{Entry, Reader, Unit, origin_reference, reference, text};
 use crate::{Analysis, Fact, Resolutions, TransferKind};
 use oer_analysis_elf::dwarf::gimli;
 use oer_analysis_riscv_model::{Ledger, Result, RunControl};
@@ -97,6 +97,8 @@ struct Field {
 /// What the image's DWARF states about types, globals and functions.
 #[derive(Debug, Default)]
 pub struct TypeFacts {
+    /// Optional prepared locals, with type DIE identities from this same ELF.
+    pub(crate) locations: Option<crate::dwarf::locations::LocalLocations>,
     types: BTreeMap<usize, Type>,
     /// Pieces of global variables: address, bytes (`None` for the whole
     /// variable), offset in the variable, the variable's type.
@@ -342,24 +344,16 @@ impl TypeWalk {
                 if let (Some(gimli::AttributeValue::Exprloc(expression)), Some(ty)) =
                     (entry.attr_value(gimli::DW_AT_location), type_of)
                 {
-                    // A function-local static (Embassy's task pools) is still
-                    // a typed global. A local pointer or stack value is not.
-                    let mut operations = expression.operations(unit.encoding());
-                    let mut static_location = true;
-                    while let Some(operation) =
-                        operations.next().map_err(crate::dwarf::dwarf_error)?
-                    {
-                        control.checkpoint(1)?;
-                        static_location &= matches!(
-                            operation,
-                            gimli::Operation::Address { .. }
-                                | gimli::Operation::PlusConstant { .. }
-                                | gimli::Operation::Piece { .. }
-                        );
-                    }
-                    if !inside_function || static_location {
-                        facts.add_global(&expression, unit.encoding(), ty, keep, control)?;
-                    }
+                    // Function-local statics still use the global policy;
+                    // local register/stack expressions use optional locations.
+                    facts.add_global(
+                        &expression,
+                        unit.encoding(),
+                        ty,
+                        inside_function,
+                        keep,
+                        control,
+                    )?;
                 }
             }
             gimli::DW_TAG_subprogram => {
@@ -390,10 +384,7 @@ impl TypeWalk {
                     Some(gimli::AttributeValue::Addr(low)) => u32::try_from(low).ok(),
                     _ => None,
                 };
-                let origin = entry
-                    .attr_value(gimli::DW_AT_abstract_origin)
-                    .or_else(|| entry.attr_value(gimli::DW_AT_specification))
-                    .and_then(|value| reference(unit, value));
+                let origin = origin_reference(unit, entry);
                 if let Some(low) = low {
                     scratch.push(&mut self.entries, (low, offset, origin), control)?;
                 }
@@ -684,14 +675,23 @@ impl TypeFacts {
         expression: &gimli::Expression<Reader<'_>>,
         encoding: gimli::Encoding,
         ty: usize,
+        inside_function: bool,
         keep: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
+        let mut scratch = Ledger::new(keep.memory(), control)?;
         let mut operations = (*expression).operations(encoding);
         let mut pending: Option<u32> = None;
         let mut at = 0u64;
         let mut pieces = Vec::new();
-        while let Ok(Some(operation)) = operations.next() {
+        let mut static_location = true;
+        while let Some(operation) = crate::dwarf::next_operation(&mut operations, control)? {
+            static_location &= matches!(
+                operation,
+                gimli::Operation::Address { .. }
+                    | gimli::Operation::PlusConstant { .. }
+                    | gimli::Operation::Piece { .. }
+            );
             match operation {
                 gimli::Operation::Address { address } => pending = u32::try_from(address).ok(),
                 gimli::Operation::PlusConstant { value } => {
@@ -701,7 +701,7 @@ impl TypeFacts {
                 gimli::Operation::Piece { size_in_bits, .. } => {
                     let bytes = size_in_bits / 8;
                     if let Some(address) = pending.take() {
-                        pieces.push((address, Some(bytes), at));
+                        scratch.push(&mut pieces, (address, Some(bytes), at), control)?;
                     }
                     at += bytes;
                 }
@@ -709,7 +709,10 @@ impl TypeFacts {
             }
         }
         if let Some(address) = pending {
-            pieces.push((address, None, 0));
+            scratch.push(&mut pieces, (address, None, 0), control)?;
+        }
+        if inside_function && !static_location {
+            return Ok(());
         }
         for (address, bytes, at) in pieces {
             keep.push(&mut self.globals, (address, bytes, at, ty), control)?;
@@ -983,5 +986,50 @@ mod tests {
         assert!(shape_matches(&renamed, &field, false));
         assert!(!shape_matches(&resized, &field, false));
         assert!(!shape_matches(&arity, &field, false));
+    }
+
+    #[test]
+    fn global_expression_rules_preserve_absolute_pieces_and_local_static_admission() {
+        let collect = |bytes: &[u8], inside_function| {
+            let expression = gimli::Expression(Reader::new(bytes, gimli::RunTimeEndian::Little));
+            let encoding = gimli::Encoding {
+                address_size: 4,
+                format: gimli::Format::Dwarf32,
+                version: 4,
+            };
+            let mut facts = TypeFacts::default();
+            facts
+                .add_global(
+                    &expression,
+                    encoding,
+                    7,
+                    inside_function,
+                    &mut crate::tests::ledger(),
+                    &mut || Ok(()),
+                )
+                .unwrap();
+            facts.globals
+        };
+        // Address plus constant, including function-local statics.
+        let merged = [0x03, 0, 0x20, 0, 0, 0x23, 8];
+        assert_eq!(collect(&merged, false), [(0x2008, None, 0, 7)]);
+        assert_eq!(collect(&merged, true), [(0x2008, None, 0, 7)]);
+        // Missing pieces advance offsets. A final unbounded address retains
+        // the global decoder's original whole-variable offset of zero.
+        let pieces = [0x93, 4, 0x03, 0, 0x21, 0, 0, 0x93, 4, 0x03, 0, 0x22, 0, 0];
+        assert_eq!(
+            collect(&pieces, false),
+            [(0x2100, Some(4), 4, 7), (0x2200, None, 0, 7)]
+        );
+        // Global bit-piece rules intentionally differ from typed locals.
+        assert_eq!(
+            collect(&[0x03, 0, 0x20, 0, 0, 0x9d, 7, 1], false),
+            [(0x2000, Some(0), 0, 7)]
+        );
+        // An unsupported operation is ignored at global scope but rejects
+        // a function-local expression as evidence of a static object.
+        let nop = [0x03, 0, 0x20, 0, 0, 0x96];
+        assert_eq!(collect(&nop, false), [(0x2000, None, 0, 7)]);
+        assert!(collect(&nop, true).is_empty());
     }
 }

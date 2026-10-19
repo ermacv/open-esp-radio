@@ -19,6 +19,18 @@ use oer_analysis_riscv_model::{
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+pub(crate) mod locations;
+use locations::{LocalLocations, LocationWalk};
+
+/// Additional metadata retained by the shared DWARF pass. Standard image
+/// checks do not need PC-specific local/parameter locations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DebugMetadata {
+    #[default]
+    Standard,
+    TypedLocations,
+}
+
 pub(crate) type Reader<'d> = SliceReader<'d>;
 pub(crate) type Unit<'d> = gimli::Unit<Reader<'d>>;
 pub(crate) type Entry<'d> = gimli::DebuggingInformationEntry<Reader<'d>>;
@@ -43,6 +55,19 @@ pub(crate) fn invalid(message: impl Into<String>) -> Error {
 
 pub(crate) fn dwarf_error(error: gimli::Error) -> Error {
     invalid(format!("DWARF: {error}"))
+}
+
+/// Shared expression decoding and work/error accounting. Global addresses
+/// and typed local pieces deliberately retain separate interpretation rules.
+pub(crate) fn next_operation<'d>(
+    operations: &mut gimli::OperationIter<Reader<'d>>,
+    control: &mut dyn RunControl,
+) -> Result<Option<gimli::Operation<Reader<'d>>>> {
+    let operation = operations.next().map_err(dwarf_error)?;
+    if operation.is_some() {
+        control.checkpoint(1)?;
+    }
+    Ok(operation)
 }
 
 /// A demangled name without the crate disambiguators v0 symbols carry
@@ -93,10 +118,24 @@ pub(crate) fn reference(
     }
 }
 
+/// Select a source DIE identity, preferring a present abstract_origin to a
+/// specification. This does not inherit any attribute: each consumer keeps
+/// its own rules for following this reference (noreturn never follows it).
+pub(crate) fn origin_reference(unit: &Unit<'_>, entry: &Entry<'_>) -> Option<usize> {
+    entry
+        .attr_value(gimli::DW_AT_abstract_origin)
+        .or_else(|| entry.attr_value(gimli::DW_AT_specification))
+        .and_then(|value| reference(unit, value))
+}
+
 /// Read the debug information of `elf`: its DWARF facts and type facts,
 /// admitted in `keep`, which the caller holds while it keeps them.
+/// `TypedLocations` additionally prepares PC-specific local/parameter
+/// locations in TypeFacts for the experimental typed resolver. `Standard`
+/// skips that collector and allocates no local-location records or scopes.
 pub fn read(
     elf: &Rc<[u8]>,
+    metadata: DebugMetadata,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<(Dwarf, TypeFacts)> {
@@ -110,11 +149,16 @@ pub fn read(
     let mut returns = Returns::default();
     let mut copies = Copies::default();
     let mut types = TypeWalk::new(&file, keep, control)?;
+    let mut locations = (metadata == DebugMetadata::TypedLocations).then(LocalLocations::default);
     let mut units = dwarf.units();
     while let Some(header) = units.next().map_err(dwarf_error)? {
         let unit = dwarf.unit(header).map_err(dwarf_error)?;
         returns.scope.clear();
         types.begin_unit();
+        let mut location_walk = locations
+            .as_mut()
+            .map(|facts| LocationWalk::new(facts, memory, control))
+            .transpose()?;
         let mut entries = unit.entries();
         while let Some(entry) = entries.next_dfs().map_err(dwarf_error)? {
             control.checkpoint(1)?;
@@ -138,10 +182,14 @@ pub fn read(
                 &mut scratch,
                 control,
             )?;
+            if let Some(locations) = &mut location_walk {
+                locations.entry(&dwarf, &unit, entry, offset, keep, control)?;
+            }
         }
         types.end_unit(keep, &mut scratch, control)?;
     }
-    let types = types.finish(keep, control)?;
+    let mut types = types.finish(keep, control)?;
+    types.locations = locations;
     let symbolizer = Symbolizer::shared(elf.clone()).map_err(|error| invalid(error.to_string()))?;
     let mut out = Dwarf {
         symbolizer,
@@ -296,11 +344,7 @@ impl Copies {
             keep.insert(&mut self.paths, offset, path, control)?;
         }
         // A copy names its subprogram by origin, or is one itself.
-        let origin = entry
-            .attr_value(gimli::DW_AT_abstract_origin)
-            .or_else(|| entry.attr_value(gimli::DW_AT_specification))
-            .and_then(|value| reference(unit, value))
-            .unwrap_or(offset);
+        let origin = origin_reference(unit, entry).unwrap_or(offset);
         let start = match entry.attr_value(gimli::DW_AT_low_pc) {
             Some(gimli::AttributeValue::Addr(low)) => Some(low),
             _ => {
@@ -362,3 +406,6 @@ impl Dwarf {
         found
     }
 }
+
+#[cfg(test)]
+mod tests;
