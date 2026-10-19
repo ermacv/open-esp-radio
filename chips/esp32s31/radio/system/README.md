@@ -25,5 +25,5 @@ orders it with the client's power as the hardware requires.
 `Esp32s31Radio` (chip only, `src/esp32s31.rs`) is the ESP32-S31 backend over
 the radio domain; its module documentation lists each request's steps. Its
 `retune` and `modem_sleep` modules hold the domain halves of the channel
-retune and of modem sleep, which no client request reaches yet. The `registration-diagnostics` feature carries the PHY
+retune and of modem sleep, which no client request reaches yet. Under `cfg(oer_trace)` it carries the PHY
 registration's diagnostics to the client.

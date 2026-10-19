@@ -252,7 +252,7 @@ operations nested in them:
 - `WifiBasebandOff` runs from `DisableWifiBaseband` to `EnableMacBaseband`.
 
 A grant-protect interval is the time the request was programmed. It is not
-an observation of RF exclusion. The opt-in `tracking-diagnostics` feature
+an observation of RF exclusion. The debug-control class (`cfg(oer_debug_control)`)
 lets a diagnostic image force branches through the vendor's
 temperature-tracking debug policy
 (`ConcurrentPhy::set_temperature_tracking_debug`); no firmware in this tree

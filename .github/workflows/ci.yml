@@ -94,14 +94,34 @@ jobs:
           : > "$RUNNER_TEMP/empty-runtime.bin"
           export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          # A package that declares instrumentation classes is checked apart,
+          # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
+              | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
+          }
+          # `<package> <target> <cfg flags>` of each instrumented image.
+          instrumented() {
+            jq -r '.packages[]
+              | select(.metadata."open-radio".instrumentation != null)
+              | [.name,
+                 (if (.manifest_path | test("esp32c5")) then "riscv32imac-unknown-none-elf"
+                  else "riscv32imafc-unknown-none-elf" end),
+                 (.metadata."open-radio".instrumentation
+                  | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
+              | join(" ")' <<<"$meta"
           }
           cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware false)
           cargo clippy --locked --target riscv32imac-unknown-none-elf $(firmware true)
+          # Each in a target directory of its own, as `cargo fw` keeps the
+          # plain cache free of the cfgs.
+          while read -r package target cfgs; do
+            RUSTFLAGS="$cfgs" CARGO_TARGET_DIR="target/instrumented/$package" \
+              cargo clippy --locked --target "$target" -p "$package"
+          done < <(instrumented)
       - name: Firmware packages for the chip target
         run: |
           # The bootstrap embeds a packed stage-two runtime; an empty one
@@ -109,10 +129,12 @@ jobs:
           : > "$RUNNER_TEMP/empty-runtime.bin"
           export PSRAM_RUNTIME_BIN="$RUNNER_TEMP/empty-runtime.bin"
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r --arg c5 "$1" '.packages[]
               | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/chips/(esp32c5/board|esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
               | select((.manifest_path | test("esp32c5")) == ($c5 == "true"))
+              | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
           cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware false)

@@ -187,7 +187,7 @@ impl ConcurrentPhy {
     /// # Errors
     ///
     /// The domain is not registered and settled.
-    #[cfg(all(feature = "tracking-diagnostics", target_arch = "riscv32"))]
+    #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
     pub fn set_temperature_tracking_debug(
         &mut self,
         first: u8,

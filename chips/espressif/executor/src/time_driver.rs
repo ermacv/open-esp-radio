@@ -55,7 +55,7 @@ struct Slot {
     /// The writer's view of each comparator it programs for another
     /// executor: the generation of the deadline it programmed.
     programmed: [Option<u32>; COMPARATOR_COUNT],
-    #[cfg(feature = "timer-observation")]
+    #[cfg(oer_profile)]
     observation: crate::timer_observation::Recorder,
 }
 
@@ -75,7 +75,7 @@ static SLOTS: [SlotCell; SOFTWARE_INTERRUPT_COUNT] = [const {
         queue: WakeQueue::new(),
         armed: u64::MAX,
         programmed: [None; COMPARATOR_COUNT],
-        #[cfg(feature = "timer-observation")]
+        #[cfg(oer_profile)]
         observation: crate::timer_observation::Recorder::new(),
     }))
 }; SOFTWARE_INTERRUPT_COUNT];
@@ -94,7 +94,7 @@ static PUBLISHED: [DeadlineCell; SOFTWARE_INTERRUPT_COUNT] =
 /// SYSTIMER ticks per microsecond.
 static TICKS_PER_MICROSECOND: AtomicU32 = AtomicU32::new(0);
 
-#[cfg(feature = "timer-observation")]
+#[cfg(oer_profile)]
 /// Each comparator's last alarm entry and acknowledgement, in microseconds.
 static ALARM_AT: [(DeadlineCell, DeadlineCell); COMPARATOR_COUNT] =
     [const { (DeadlineCell::new(0), DeadlineCell::new(0)) }; COMPARATOR_COUNT];
@@ -264,7 +264,7 @@ fn rearm(swi: u8, slot: &mut Slot, now: u64) {
     slot.armed = next;
     let comparator = COMPARATOR_OF[swi as usize].load(Ordering::Relaxed);
     let writer = WRITER.load(Ordering::Relaxed);
-    #[cfg(feature = "timer-observation")]
+    #[cfg(oer_profile)]
     let start = now;
     if swi == writer {
         program(comparator, next);
@@ -272,7 +272,7 @@ fn rearm(swi: u8, slot: &mut Slot, now: u64) {
         PUBLISHED[swi as usize].publish(next);
         pend(writer);
     }
-    #[cfg(feature = "timer-observation")]
+    #[cfg(oer_profile)]
     if next == u64::MAX {
         slot.observation.stop();
     } else {
@@ -295,7 +295,7 @@ pub(crate) fn service(swi: u8) {
         let comparator = COMPARATOR_OF[swi as usize].load(Ordering::Relaxed);
         let fired = ALARM_FIRED[comparator as usize].swap(false, Ordering::AcqRel);
         let start = now();
-        #[cfg(feature = "timer-observation")]
+        #[cfg(oer_profile)]
         if fired {
             let (entered, acknowledged) = &ALARM_AT[comparator as usize];
             if let (Some(entered), Some(acknowledged)) = (entered.read(), acknowledged.read()) {
@@ -305,7 +305,7 @@ pub(crate) fn service(swi: u8) {
         }
         let _ = fired;
         slot.queue.dispatch_expired(start);
-        #[cfg(feature = "timer-observation")]
+        #[cfg(oer_profile)]
         slot.observation.dispatch(start, now());
         // A dispatched alarm leaves the comparator idle: arm it again.
         slot.armed = u64::MAX - 1;
@@ -341,12 +341,12 @@ fn program_published(writer: &mut Slot) {
 /// comparator's executor. It writes no other register and touches no queue.
 #[esp_hal::ram]
 pub fn alarm_interrupt<const COMPARATOR: u8>() {
-    #[cfg(feature = "timer-observation")]
+    #[cfg(oer_profile)]
     let entered = now();
     SYSTIMER::regs()
         .int_clr()
         .write(|w| w.target(COMPARATOR).clear_bit_by_one());
-    #[cfg(feature = "timer-observation")]
+    #[cfg(oer_profile)]
     {
         let (entry, acknowledgement) = &ALARM_AT[COMPARATOR as usize];
         entry.publish(entered);
@@ -410,7 +410,7 @@ impl Driver for EmbassyTimeDriver {
             "executor {swi} has no timer comparator"
         );
         let registered = with_slot(swi, |slot| {
-            #[cfg(feature = "timer-observation")]
+            #[cfg(oer_profile)]
             slot.observation.registration(at, now());
             if let Some(now) = slot.queue.schedule_wake(at, waker, now) {
                 rearm(swi, slot, now);
@@ -424,12 +424,12 @@ impl Driver for EmbassyTimeDriver {
     }
 }
 
-#[cfg(feature = "timer-observation")]
+#[cfg(oer_profile)]
 pub(crate) fn begin_observation() -> bool {
     with_slot(running(), |slot| slot.observation.begin(now())).unwrap_or(false)
 }
 
-#[cfg(feature = "timer-observation")]
+#[cfg(oer_profile)]
 pub(crate) fn finish_observation() -> crate::timer_observation::Report {
     with_slot(running(), |slot| slot.observation.finish(now())).unwrap_or_default()
 }

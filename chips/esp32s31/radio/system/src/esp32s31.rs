@@ -224,7 +224,7 @@ where
                 Ok(PhyPreparation::Registered {
                     calibration_path: outcome.calibration_path,
                     micros: self.micros_since(start),
-                    #[cfg(feature = "registration-diagnostics")]
+                    #[cfg(oer_trace)]
                     outcome,
                 })
             }

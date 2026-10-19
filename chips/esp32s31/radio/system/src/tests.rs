@@ -73,10 +73,7 @@ impl PhyDomain for Model {
         } else if !script.registered {
             script.registered = true;
             script.rf_open = true;
-            Ok(PhyPreparation::Registered {
-                calibration_path: PhyCalibrationPath::FullUncached,
-                micros: 10,
-            })
+            Ok(REGISTRATION)
         } else if !script.rf_open {
             script.rf_open = true;
             Ok(PhyPreparation::Woke { micros: 3 })
@@ -229,10 +226,24 @@ fn model(script: Script) -> Model {
     Model(Rc::new(RefCell::new(script)))
 }
 
-const REGISTERED: Event = Event::Prepare(Ok(PhyPreparation::Registered {
+/// The model's registration; under `cfg(oer_trace)` its outcome carries no
+/// RF calibration and no not-ready runs.
+const REGISTRATION: PhyPreparation = PhyPreparation::Registered {
     calibration_path: PhyCalibrationPath::FullUncached,
     micros: 10,
-}));
+    #[cfg(oer_trace)]
+    outcome: oer_esp32s31_phy::PhyRegisterOutcome {
+        rf_calibration: None,
+        ready_waits: oer_esp32s31_phy::ReadyWaitDiagnostics {
+            tx_dc_max_not_ready_samples: 0,
+            pwdet_sar_max_not_ready_samples: 0,
+        },
+        full_calibration_performed: true,
+        calibration_path: PhyCalibrationPath::FullUncached,
+    },
+};
+
+const REGISTERED: Event = Event::Prepare(Ok(REGISTRATION));
 
 #[test]
 fn join_track_and_leave_run_in_order_and_the_last_leave_closes_rf() {

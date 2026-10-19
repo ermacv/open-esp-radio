@@ -7,14 +7,6 @@ license.workspace = true
 repository.workspace = true
 description = "Allocation-free Rust ESP32-S31 PHY state machines"
 
-[features]
-default = []
-# Retain value-only RF measurements in registration and role start reports.
-registration-diagnostics = []
-# Let a diagnostic image set the vendor's temperature-tracking debug policy,
-# which forces the RFPLL and calibration tracking branches.
-tracking-diagnostics = []
-
 [dependencies]
 oer-espressif-analog = { path = "../../espressif/analog" }
 oer-time = { path = "../../../portable/time" }

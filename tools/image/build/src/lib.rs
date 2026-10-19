@@ -25,6 +25,7 @@ pub mod compiler;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
+pub mod instrumentation;
 pub mod probe;
 pub mod staged;
 mod test_support;
@@ -94,10 +95,13 @@ impl Application {
     }
 }
 
-/// Build `spec`: the staged pipeline of its chip.
+/// Build `spec`: the staged pipeline of its chip, with the instrumentation
+/// classes its application declares.
 pub fn build(spec: &ImageSpec) -> Result<crate::bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
-    staged::build(spec, &profile)
+    let instrumentation =
+        instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
+    staged::build(spec, &profile, &instrumentation)
 }
 
 /// Type-check the runtime of `spec` against the committed pins with the
@@ -111,10 +115,12 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
     }
     let profile = profile(&spec.root, &spec.chip)?;
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?;
-    let cache = compile_cache(&spec.root);
+    let instrumentation =
+        instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
+    let cache = compile_cache(&spec.root, &instrumentation);
     // The image linker the flags name is this checkout's.
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
-    let mut command = runtime_command(spec, &profile, "check", &policy)?;
+    let mut command = runtime_command(spec, &profile, "check", &policy, &instrumentation)?;
     command.env("CARGO_TARGET_DIR", &cache);
     cargo::ensure_fetched(&spec.root)?;
     // Through the shared runner, so a caller's output policy (xtask logs
@@ -140,14 +146,15 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
 }
 
 /// The Cargo `subcommand` (`build` or `check`) of `spec`'s runtime with the
-/// image compiler of `policy`: the application package for the chip's
-/// target with the firmware profile, its features alone, against the
-/// committed pins.
+/// image compiler of `policy` and the classes of `instrumentation`: the
+/// application package for the chip's target with the firmware profile, its
+/// features alone, against the committed pins.
 fn runtime_command(
     spec: &ImageSpec,
     profile: &oer_chip_profile::Profile,
     subcommand: &str,
     policy: &StackPolicy,
+    instrumentation: &instrumentation::Instrumentation,
 ) -> Result<std::process::Command> {
     let application = &spec.application;
     let mut command = cargo::command();
@@ -182,7 +189,8 @@ fn runtime_command(
     crate::compiler::configure(
         &mut command,
         &crate::compiler::of_policy(
-            &policy,
+            policy,
+            instrumentation,
             &spec.root,
             &linker_cache(&spec.root),
             &profile.rust_target,
@@ -212,12 +220,12 @@ pub fn host_build_root() -> Result<PathBuf> {
     crate::compiler::host_build_root()
 }
 
-/// The firmware compile cache of the checkout at `root`
-/// ([`crate::compiler::compile_cache`]); a build holds
-/// [`crate::compiler::lock_compile_cache`] from its Cargo run until its
-/// ELF and dependency information are copied out.
-pub fn compile_cache(root: &Path) -> PathBuf {
-    crate::compiler::compile_cache(root)
+/// The firmware compile cache of the checkout at `root` for images built
+/// with `instrumentation` ([`crate::compiler::compile_cache`]); a build
+/// holds [`crate::compiler::lock_compile_cache`] from its Cargo run until
+/// its ELF and dependency information are copied out.
+pub fn compile_cache(root: &Path, instrumentation: &instrumentation::Instrumentation) -> PathBuf {
+    crate::compiler::compile_cache(root, instrumentation)
 }
 
 /// The target directory of the image linker of the checkout at `root`;
