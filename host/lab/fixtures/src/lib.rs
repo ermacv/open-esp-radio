@@ -3,7 +3,7 @@
 //! The privileged `open-radio-fixture-install` binary and the fixed launchers
 //! (`tools/fixture-install`) link only this package, so its dependency
 //! closure is the root-executed surface. The runner uses the same library for planning and preparation.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 mod admission;
 pub mod bluetooth_contract;

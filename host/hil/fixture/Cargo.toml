@@ -10,7 +10,6 @@ description = "The runner contract of the HIL fixture helpers: the Bluetooth and
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-libc = "0.2"
 rustix = { version = "1.1.4", features = ["event", "fs", "net", "process"] }
 oer-ieee80211-mac = { path = "../../../portable/ieee80211/mac" }
 oer-lab-fixtures = { path = "../../lab/fixtures" }

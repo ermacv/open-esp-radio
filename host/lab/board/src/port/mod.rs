@@ -13,7 +13,7 @@
 
 use std::{
     io,
-    os::fd::{AsRawFd, IntoRawFd, RawFd},
+    os::fd::{AsRawFd, OwnedFd, RawFd},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -199,9 +199,9 @@ impl AsRawFd for Port {
     }
 }
 
-impl IntoRawFd for Port {
-    fn into_raw_fd(self) -> RawFd {
-        self.serial.into_raw_fd()
+impl From<Port> for OwnedFd {
+    fn from(port: Port) -> Self {
+        oer_os_serial::owned_descriptor(port.serial)
     }
 }
 

@@ -2500,12 +2500,12 @@ dependencies = [
 name = "oer-analysis-blobray-linker"
 version = "0.1.0"
 dependencies = [
- "libc",
  "object 0.39.1",
  "oer-analysis-blobray-application",
  "oer-analysis-blobray-domain",
  "oer-analysis-riscv-model",
  "oer-os-process",
+ "rustix",
  "sha2 0.10.9",
  "tempfile",
 ]
@@ -3239,7 +3239,6 @@ name = "oer-hil-fixture"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libc",
  "oer-hil-protocol",
  "oer-ieee80211-mac",
  "oer-lab-fixtures",
@@ -3667,7 +3666,6 @@ dependencies = [
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "libc",
  "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
@@ -3689,6 +3687,7 @@ dependencies = [
  "oer-lab-router",
  "oer-os-durable",
  "oer-os-process",
+ "oer-os-serial",
  "oer-registers-bindings",
  "serde",
  "serde_json",
@@ -3765,6 +3764,13 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
+]
+
+[[package]]
+name = "oer-os-serial"
+version = "0.1.0"
+dependencies = [
+ "serialport",
 ]
 
 [[package]]
@@ -4117,7 +4123,6 @@ name = "oer-tool-stand"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libc",
  "oer-chip-profile",
  "oer-lab-arbiter",
  "oer-lab-board",

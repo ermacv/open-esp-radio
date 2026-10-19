@@ -17,23 +17,21 @@ pub(super) fn link(
             "--why-extract=/proc/self/fd/{}",
             extract_write.as_raw_fd()
         ));
-    inherit(
-        &mut command,
-        vec![map_write.as_raw_fd(), extract_write.as_raw_fd()],
-    );
+    // The command owns both write ends; dropping it after the spawn closes
+    // the parent's copies.
+    oer_os_process::child_setup::inherit(&mut command, vec![map_write, extract_write]);
     let mut child = ChildOwner(command.spawn().map_err(io)?);
-    drop(map_write);
-    drop(extract_write);
+    drop(command);
     let stdout = child.0.stdout.take().unwrap();
     let stderr = child.0.stderr.take().unwrap();
     let mut observed = records::Observed::new(sink, request, Parser);
     drain(
         &mut child,
         &[
-            (stdout.as_raw_fd(), LinkOutput::Elf),
-            (map_read.as_raw_fd(), LinkOutput::Map),
-            (extract_read.as_raw_fd(), LinkOutput::Extraction),
-            (stderr.as_raw_fd(), LinkOutput::Stderr),
+            (stdout.as_fd(), LinkOutput::Elf),
+            (map_read.as_fd(), LinkOutput::Map),
+            (extract_read.as_fd(), LinkOutput::Extraction),
+            (stderr.as_fd(), LinkOutput::Stderr),
         ],
         &mut observed,
         control,

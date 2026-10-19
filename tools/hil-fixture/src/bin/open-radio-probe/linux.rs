@@ -1,5 +1,5 @@
 use super::model::{self, Config, Report};
-use oer_hil_fixture::linux_socket::LinkAddress;
+use oer_os_process::linux_socket::LinkAddress;
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
     net::{

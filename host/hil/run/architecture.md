@@ -40,12 +40,14 @@ The installer package depends on no radio or HIL execution crate, so
 its dependency graph is the whole root-executed installation surface.
 
 The three packages deny `unsafe_code` at their crate roots, and the helper and
-installer binaries forbid it. System calls go through `rustix`. Raw memory
-reaches the kernel in three places, each with its `SAFETY` justification:
-`fixture/src/linux_socket.rs` for link-layer, HCI and L2CAP addresses,
-`BT_SECURITY`, `SO_MEMINFO` and `SO_BINDTODEVICE`; `fixture-install/src/launcher/handoff.rs` for the
-lease descriptor passed across `exec`; and the runner's adoption of the serial
-port descriptor.
+installer binaries forbid it. System calls go through `rustix`. The host's
+operating-system bindings with unsafe code are `oer-os-process` and
+`oer-os-serial`, each site with its `SAFETY` justification: `linux_socket` for
+link-layer, HCI and L2CAP addresses, `BT_SECURITY`, `SO_MEMINFO` and
+`SO_BINDTODEVICE`; `launch_handoff` for the lease descriptor passed across
+`exec`; `child_setup` for the steps a child takes between fork and exec; and
+`oer-os-serial` for an open serial port's descriptor, apart from the root
+fixture installer's dependencies.
 
 Fixture installation has a separate ownership boundary. The general runner
 owns the offline provider plan, unprivileged locked build, content-addressed

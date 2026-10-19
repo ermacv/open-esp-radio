@@ -4,8 +4,19 @@ use std::process::ExitCode;
 
 use crate::{ArtifactRole, Provider};
 
+/// The provider lease's handoff from a fixed launcher to its helper.
 #[cfg(target_os = "linux")]
-mod handoff;
+mod handoff {
+    use oer_os_process::launch_handoff::LaunchHandoff;
+
+    pub(super) const BOUND: &str = "OPEN_RADIO_GENERATION_BOUND";
+    pub(super) const DIRECTORY: &str = "OPEN_RADIO_GENERATION_DIR";
+    pub(super) const LEASE: LaunchHandoff = LaunchHandoff {
+        descriptor: 9,
+        marker: BOUND,
+        environment: &[BOUND, DIRECTORY],
+    };
+}
 
 #[derive(Clone, Copy)]
 pub enum LaunchTarget {
@@ -112,7 +123,7 @@ fn adopt_lease(target: LaunchTarget) -> crate::Result<std::fs::File> {
         path::Path,
     };
 
-    let file = handoff::adopt(target.marker())?;
+    let file = handoff::LEASE.adopt(target.marker())?;
     let metadata = file.metadata()?;
     if !metadata.file_type().is_file()
         || metadata.uid() != 0
@@ -149,7 +160,7 @@ fn launch(target: LaunchTarget) -> crate::Result<std::convert::Infallible> {
 
     let lease = super::admit_system(target.provider())?;
     let helper = lease.artifact(target.role())?;
-    handoff::pass(lease.file())?;
+    handoff::LEASE.pass(lease.file())?;
     let error = oer_os_process::command(&helper)
         .args(std::env::args_os().skip(1))
         .env(handoff::BOUND, target.marker())

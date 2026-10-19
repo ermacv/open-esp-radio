@@ -7,7 +7,7 @@ use bt_hci::{
     cmd::SyncCmd,
     event::{CommandCompleteWithStatus, Event},
 };
-use oer_hil_fixture::linux_socket::HciAddress;
+use oer_os_process::linux_socket::HciAddress;
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
     io::Errno,

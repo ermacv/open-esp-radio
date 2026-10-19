@@ -9,7 +9,7 @@ use bt_hci::cmd::{
     controller_baseband::Reset,
     info::{ReadBdAddr, ReadLocalVersionInformation},
 };
-use oer_hil_fixture::linux_socket::HciAddress;
+use oer_os_process::linux_socket::HciAddress;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write as _,
