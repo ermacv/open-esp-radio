@@ -183,7 +183,7 @@ count = 12
 fn ble_node() -> String {
     NODE.replace(
         "{ name = \"ADDRESS\", bits = \"31:0\", writer = \"cpu\", placement = [\"dma-window\"] }",
-        "{ name = \"ADDRESS\", bits = \"23:4\", writer = \"phased\", phases = [{ name = \"arm\", writer = \"cpu\" }, { name = \"complete\", writer = \"hardware\" }], points-to = \"NODE\", encoding = \"ble-compressed\" }",
+        "{ name = \"LOW_TAG\", bits = \"3:0\", writer = \"cpu\" },\n{ name = \"ADDRESS\", bits = \"23:4\", writer = \"phased\", phases = [{ name = \"arm\", writer = \"cpu\" }, { name = \"complete\", writer = \"hardware\" }], points-to = \"NODE\", encoding = \"ble-compressed\" },\n{ name = \"HIGH_TAG\", bits = \"31:24\", writer = \"cpu\" }",
     )
 }
 
@@ -250,10 +250,14 @@ fn ble_links_round_trip_preserve_other_fields_and_reject_invalid_references() {
         for address in [0x2f00_0004, 0x2f00_1340, 0x2f07_fffc] {
             let value = original.with_address(Some(reference(address))).expect("valid generated-layout fixture");
             assert_eq!(value.address_address(), Some(address));
+            assert_eq!(value.low_tag(), original.low_tag());
+            assert_eq!(value.high_tag(), original.high_tag());
             assert_eq!(value.with_address(None).expect("valid generated-layout fixture"), original.with_address(None).expect("valid generated-layout fixture"));
         }
         let empty = original.with_address(None).expect("valid generated-layout fixture");
         assert_eq!(empty.address_address(), None);
+        assert_eq!(empty.low_tag(), original.low_tag());
+        assert_eq!(empty.high_tag(), original.high_tag());
         assert_ne!(empty.bits(), 0, "neighboring fields survive clearing a link");
         for address in [0x2f00_0000, 0x2f00_0001, 0x3000_0100, 0x2f40_0004] {
             assert!(original.with_address(Some(reference(address))).is_none());
@@ -282,10 +286,14 @@ fn ble_buffer_pointers_check_encoding_without_requiring_a_layout_reference() {
         for buffer in [0x2f00_0004, 0x2f00_1380, 0x2f07_fffc] {
             let value = original.with_address(address(buffer)).expect("encodable buffer");
             assert_eq!(value.address_address(), Some(buffer));
+            assert_eq!(value.low_tag(), original.low_tag());
+            assert_eq!(value.high_tag(), original.high_tag());
             assert_eq!(value.without_address(), original.without_address());
         }
         let empty = original.without_address();
         assert_eq!(empty.address_address(), None);
+        assert_eq!(empty.low_tag(), original.low_tag());
+        assert_eq!(empty.high_tag(), original.high_tag());
         assert_ne!(empty.bits(), 0, "clearing a buffer preserves neighboring fields");
         for buffer in [0x2f00_0000, 0x2f00_0001, 0x3000_0100, 0x2f40_0004] {
             assert!(original.with_address(address(buffer)).is_none());
