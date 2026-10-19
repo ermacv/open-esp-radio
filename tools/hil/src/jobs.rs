@@ -2,7 +2,7 @@
 //! [--after JOB]`, `cargo hil wait JOB`, and `--after JOB` in the
 //! foreground.
 //!
-//! A job is the arbiter's ticket model ([`oer_lab_stand_arbiter::jobs`]): its
+//! A job is the arbiter's ticket model ([`oer_lab_arbiter::jobs`]): its
 //! record lives in the arbiter directory and every stand request its process
 //! and runner make carries its id. This module keeps what a job needs of the
 //! command line: a copy of this binary, the checkout's runner and the images
@@ -10,7 +10,7 @@
 
 use std::{ffi::OsString, fs, path::PathBuf};
 
-use oer_lab_stand_arbiter::jobs::{After, Job, JobState};
+use oer_lab_arbiter::jobs::{After, Job, JobState};
 
 use crate::Result;
 use oer_os_process::Checkout;
@@ -25,8 +25,8 @@ pub const FROZEN_IMAGES_ENV: &str = "OER_HIL_JOB_IMAGES";
 pub const ENQUEUE: &str = "--enqueue";
 pub use oer_hil_experiment::job::{AFTER, AFTER_ANY};
 
-fn jobs() -> Result<oer_lab_stand_arbiter::jobs::Jobs> {
-    Ok(oer_lab_stand_arbiter::Arbiter::open()?.jobs())
+fn jobs() -> Result<oer_lab_arbiter::jobs::Jobs> {
+    Ok(oer_lab_arbiter::Arbiter::open()?.jobs())
 }
 
 /// What a job runs with, fixed before it waits: a copy of this binary, the
@@ -212,7 +212,7 @@ pub fn enqueue(
                 after.job.as_str(),
             ]
         }))
-        .env(oer_lab_stand_owners::OWNER_ENV, owner)
+        .env(oer_lab_arbiter::owner::OWNER_ENV, owner)
         .stdin(std::process::Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output);
@@ -224,7 +224,7 @@ pub fn enqueue(
         command.process_group(0);
     }
     oer_os_process::Context::default()
-        .with(oer_lab_stand_arbiter::jobs::JOB_KEY, &id)
+        .with(oer_lab_arbiter::jobs::JOB_KEY, &id)
         .apply(&mut command)?;
     let child = command.spawn()?;
     job.run_by(child.id());

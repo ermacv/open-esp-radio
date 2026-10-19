@@ -2,7 +2,7 @@
 //! fixture helpers, which are this package's binaries.
 //!
 //! `open-radio-bluetooth` and `open-radio-probe` run through the fixed
-//! launchers of `oer-lab-stand-fixture-install`. The runner parses
+//! launchers of `oer-lab-fixtures`. The runner parses
 //! their requests and reports with the same types.
 
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]

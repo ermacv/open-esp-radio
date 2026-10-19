@@ -9,8 +9,8 @@ use std::{
     time::Duration,
 };
 
-use oer_lab_stand_arbiter::{Arbiter, Request};
-use oer_lab_stand_claims::Claim;
+use oer_lab_arbiter::claims::Claim;
+use oer_lab_arbiter::{Arbiter, Request};
 
 use crate::launch::Runner;
 
@@ -63,7 +63,7 @@ pub fn within_enclosing_lease(test: &str, experiment: impl FnOnce(&Path, Runner)
             grant
                 .context()
                 .unwrap()
-                .with(oer_lab_stand_arbiter::jobs::JOB_KEY, "parent-job")
+                .with(oer_lab_arbiter::jobs::JOB_KEY, "parent-job")
                 .apply(&mut nested)
                 .unwrap();
             oer_os_process::run_with_timeout(&mut nested, Duration::from_secs(10)).unwrap();
@@ -80,18 +80,18 @@ pub fn within_enclosing_lease(test: &str, experiment: impl FnOnce(&Path, Runner)
         }
         Some("runner") => {
             let context = oer_os_process::Context::current().unwrap();
-            assert!(context.get(oer_lab_stand_arbiter::LEASE_KEY).is_some());
+            assert!(context.get(oer_lab_arbiter::LEASE_KEY).is_some());
             assert_eq!(
-                context.get(oer_lab_stand_owners::OWNER_KEY),
+                context.get(oer_lab_arbiter::owner::OWNER_KEY),
                 Some("experiment-test")
             );
-            assert!(context.get(oer_lab_stand_arbiter::jobs::JOB_KEY).is_some());
+            assert!(context.get(oer_lab_arbiter::jobs::JOB_KEY).is_some());
             assert_ne!(
-                context.get(oer_lab_stand_arbiter::jobs::JOB_KEY),
+                context.get(oer_lab_arbiter::jobs::JOB_KEY),
                 Some("parent-job")
             );
             assert_eq!(
-                oer_lab_stand_owners::from_environment().unwrap().as_str(),
+                oer_lab_arbiter::owner::from_environment().unwrap().as_str(),
                 "experiment-test"
             );
             let grant = Arbiter::open()

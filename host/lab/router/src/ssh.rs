@@ -1,6 +1,7 @@
-//! The one way to the stand router: non-interactive SSH running a script
-//! that goes over stdin, so no value of the stand file but the target
-//! itself is ever in an argument list (local or remote `ps`).
+//! The one way to the stand's OpenWrt hosts (the router, the station
+//! fixture, the air observer): non-interactive SSH running a script that
+//! goes over stdin, so no value of the stand file but the target itself is
+//! ever in an argument list (local or remote `ps`).
 
 use std::{fmt, io::Write as _, process::Stdio, time::Duration};
 
@@ -60,10 +61,11 @@ impl Ssh {
             .stderr(Stdio::piped());
         ssh
     }
-}
 
-impl Remote for Ssh {
-    fn run(&mut self, script: &str) -> Result<String> {
+    /// `script`'s run on the host within `timeout`, whatever its exit
+    /// status: what a caller that reads the status or the error output
+    /// itself takes.
+    pub fn output(&self, script: &str, timeout: Duration) -> Result<std::process::Output> {
         let mut child = oer_os_process::owned::Child::spawn(&mut self.command())
             .map_err(|error| format!("cannot run ssh: {error}"))?;
         // A script far below the pipe's capacity: the write never waits for
@@ -74,15 +76,46 @@ impl Remote for Ssh {
             .ok_or("ssh has no stdin")?
             .write_all(script.as_bytes())
             .map_err(|error| format!("cannot hand ssh the script: {error}"))?;
-        let output = child
-            .wait_with_output_timeout(Some(COMMAND_TIMEOUT))
+        child
+            .wait_with_output_timeout(Some(timeout))
             .map_err(|error| {
                 if error.to_string().contains("deadline") {
-                    format!("no answer within {} s", COMMAND_TIMEOUT.as_secs())
+                    format!("no answer within {} s", timeout.as_secs())
                 } else {
                     format!("ssh failed: {error}")
                 }
-            })?;
+            })
+    }
+}
+
+/// The script that prints a host's boot identity.
+pub const BOOT_ID: &str = "cat /proc/sys/kernel/random/boot_id";
+
+/// The resource key a lease claims an OpenWrt host by, from the boot
+/// identity it printed: one owner covers the whole boot of the host,
+/// whichever SSH alias or radio interface a caller uses.
+pub fn host_key(boot_id: &str) -> Result<String> {
+    let identity = boot_id.trim();
+    if identity.len() != 36
+        || !identity.bytes().enumerate().all(|(index, byte)| {
+            if [8, 13, 18, 23].contains(&index) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+    {
+        return Err("OpenWrt host did not return a valid boot identity".to_owned());
+    }
+    Ok(format!(
+        "openwrt-host-boot:{}",
+        identity.to_ascii_lowercase()
+    ))
+}
+
+impl Remote for Ssh {
+    fn run(&mut self, script: &str) -> Result<String> {
+        let output = self.output(script, COMMAND_TIMEOUT)?;
         match output.status.code() {
             Some(0) => String::from_utf8(output.stdout)
                 .map_err(|_| "the router's answer is not UTF-8".to_owned()),
@@ -132,6 +165,15 @@ mod tests {
                 "-s"
             ]
         );
+    }
+
+    #[test]
+    fn a_host_is_claimed_by_its_boot() {
+        assert_eq!(
+            host_key("9A1B2C3D-0000-4000-8000-00000000000A\n").unwrap(),
+            "openwrt-host-boot:9a1b2c3d-0000-4000-8000-00000000000a"
+        );
+        assert!(host_key("not a boot id").is_err());
     }
 
     #[test]

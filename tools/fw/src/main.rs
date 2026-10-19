@@ -1,11 +1,16 @@
 //! `cargo fw`: build, flash and run the staged images of `firmware/apps` on
-//! the stand's boards (`host/image/build/FW.md`). This binary parses the
-//! command line and calls the commands of `oer-image-build` (`fw`).
+//! the stand's boards (README.md). This binary parses the
+//! command line; its modules hold the commands, over the image pipeline
+//! (`oer-image-build`) and the stand's one board path (`oer-lab-board`).
 
 use std::{process::ExitCode, time::Duration};
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_image_build::fw;
+mod command;
+mod image;
+mod w1;
+
+use oer_image_build::probe;
 
 #[derive(Parser)]
 #[command(about = "Build, flash and run staged firmware images on the stand's boards")]
@@ -91,22 +96,22 @@ fn main() -> ExitCode {
     }
     let cli = Cli::parse();
     let result = (|| -> oer_image_build::Result<ExitCode> {
-        let root = fw::root()?;
+        let root = command::root()?;
         match cli.command {
-            Command::Build { image } => fw::build(&root, &image)?,
+            Command::Build { image } => command::build(&root, &image)?,
             Command::Probe { package, jobs } => {
-                println!("{}", fw::probe::build(&root, &package, jobs)?.display());
+                println!("{}", probe::build(&root, &package, jobs)?.display());
             }
-            Command::Flash { image, board } => fw::flash_image(&root, &image, &board)?,
+            Command::Flash { image, board } => command::flash_image(&root, &image, &board)?,
             Command::Run {
                 image,
                 board,
                 timeout,
-            } => return fw::run(&root, &image, &board, timeout),
-            Command::Monitor { board } => fw::monitor(&board)?,
-            Command::Router => fw::router_ready()?,
-            Command::Boards => fw::list_boards()?,
-            Command::PowerCycle { board } => fw::power_cycle(&board)?,
+            } => return command::run(&root, &image, &board, timeout),
+            Command::Monitor { board } => command::monitor(&root, &board)?,
+            Command::Router => command::router_ready()?,
+            Command::Boards => command::list_boards()?,
+            Command::PowerCycle { board } => command::power_cycle(&root, &board)?,
         }
         Ok(ExitCode::SUCCESS)
     })();

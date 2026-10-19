@@ -22,7 +22,7 @@ pub mod cargo;
 pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
-pub mod fw;
+pub mod probe;
 pub mod staged;
 mod test_support;
 

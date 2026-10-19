@@ -44,14 +44,14 @@ fn enclosing_lease_reaches_preparation_and_replay() {
                 )
                 .unwrap();
             assert_eq!(run, RunId::new("7"));
-            let grant = oer_lab_stand_arbiter::Arbiter::open()
+            let grant = oer_lab_arbiter::Arbiter::open()
                 .unwrap()
-                .acquire(&oer_lab_stand_arbiter::Request {
+                .acquire(&oer_lab_arbiter::Request {
                     owner: "experiment-test".into(),
                     work: "replay".into(),
                     scenarios: Vec::new(),
                     run: None,
-                    claims: vec![oer_lab_stand_claims::Claim::stand()],
+                    claims: vec![oer_lab_arbiter::claims::Claim::stand()],
                 })
                 .unwrap();
             assert!(grant.is_nested());

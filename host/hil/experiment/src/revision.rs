@@ -52,7 +52,7 @@ const REPORT_SCHEMA: u16 = 1;
 const ARBITER_DIRECTORY: [&str; 2] = [oer_lab_model::paths::ARBITER_ENV, "OER_HIL_ARBITER_DIR"];
 
 /// Every name a revision's runner has read its stand owner from.
-const OWNER: [&str; 2] = [oer_lab_stand_owners::OWNER_ENV, "OER_HIL_OWNER"];
+const OWNER: [&str; 2] = [oer_lab_arbiter::owner::OWNER_ENV, "OER_HIL_OWNER"];
 
 /// The report every runner writes into its run directory: each scenario's
 /// outcome, in a form every revision shares.
@@ -184,12 +184,12 @@ impl<'a> Revision<'a> {
         let launched = launch_run(
             &Launch::new(self.checkout, &self.runner)
                 .args(arguments)
-                .env(oer_lab_stand_owners::OWNER_ENV, self.owner)
+                .env(oer_lab_arbiter::owner::OWNER_ENV, self.owner)
                 .context(
                     oer_os_process::Context::current()?
                         .clone()
-                        .with(oer_lab_stand_owners::OWNER_KEY, self.owner)
-                        .with(oer_lab_stand_arbiter::jobs::JOB_KEY, job.id()),
+                        .with(oer_lab_arbiter::owner::OWNER_KEY, self.owner)
+                        .with(oer_lab_arbiter::jobs::JOB_KEY, job.id()),
                 ),
         )?;
         job.finish_with(&self.store, &launched.runs)?;
@@ -208,7 +208,7 @@ impl<'a> Revision<'a> {
         arguments: &[String],
         work: &str,
     ) -> Result<Ran> {
-        let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+        let arbiter = oer_lab_arbiter::Arbiter::open()?;
         fs::create_dir_all(&self.arbiter)?;
         // A revision's runner reads the user's stand file; a revision before
         // the stand model read it beside its arbiter's state, and one before
@@ -219,12 +219,12 @@ impl<'a> Revision<'a> {
         if devices.exists() {
             fs::copy(&devices, self.arbiter.join("devices.json"))?;
         }
-        let _grant = arbiter.acquire(&oer_lab_stand_arbiter::Request {
+        let _grant = arbiter.acquire(&oer_lab_arbiter::Request {
             owner: self.owner.to_owned(),
             work: work.to_owned(),
             scenarios: scenarios.to_vec(),
             run: None,
-            claims: vec![oer_lab_stand_claims::Claim::stand()],
+            claims: vec![oer_lab_arbiter::claims::Claim::stand()],
         })?;
         // The revision's runner records its runs in the shared store.
         let runner = match launch::Runner::prepare(&self.worktree)
@@ -270,7 +270,7 @@ impl Revision<'_> {
             .chain(scenarios.iter().cloned())
             .chain(arguments.iter().cloned());
         let mut launch = Launch::new(&self.worktree, runner).args(arguments).context(
-            oer_os_process::Context::default().with(oer_lab_stand_owners::OWNER_KEY, self.owner),
+            oer_os_process::Context::default().with(oer_lab_arbiter::owner::OWNER_KEY, self.owner),
         );
         for name in ARBITER_DIRECTORY {
             launch = launch.env(name, &self.arbiter);

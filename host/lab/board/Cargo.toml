@@ -1,0 +1,30 @@
+[package]
+name = "oer-lab-board"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Board discovery, serial consoles, resets, OpenOCD and receipted image writes under a device lock"
+
+[dependencies]
+espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
+oer-image-profile = { path = "../../image/profile" }
+oer-lab-model = { path = "../model" }
+oer-os-durable = { path = "../../os/durable" }
+oer-image-build = { path = "../../image/build" }
+oer-os-process = { path = "../../os/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+serialport = { version = "4.8.1", default-features = false }
+tempfile = { version = "3" }
+oer-lab-router = { path = "../router" }
+oer-registers-bindings = { path = "../../registers/bindings" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+

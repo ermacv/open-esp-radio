@@ -205,8 +205,8 @@ mod tests {
             "packages": [
                 {"name": "oer-tool-stand", "id": "x", "source": null,
                  "manifest_path": root.join("tools/stand/Cargo.toml")},
-                {"name": "oer-lab-stand-arbiter", "id": "a", "source": null,
-                 "manifest_path": root.join("host/lab/stand-arbiter/Cargo.toml")},
+                {"name": "oer-lab-arbiter", "id": "a", "source": null,
+                 "manifest_path": root.join("host/lab/arbiter/Cargo.toml")},
                 {"name": "serde", "id": "s", "source": "registry+https://github.com/rust-lang/crates.io-index",
                  "manifest_path": "/registry/serde/Cargo.toml"},
                 {"name": "unrelated", "id": "u", "source": null,
@@ -219,7 +219,7 @@ mod tests {
         });
         let mut inputs = path_package_closure(&metadata, PACKAGE, &root).unwrap();
         inputs.sort();
-        assert_eq!(inputs, ["host/lab/stand-arbiter", "tools/stand"]);
+        assert_eq!(inputs, ["host/lab/arbiter", "tools/stand"]);
     }
 
     #[test]

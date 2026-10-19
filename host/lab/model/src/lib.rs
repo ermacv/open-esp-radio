@@ -16,6 +16,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod device_id;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
@@ -23,7 +25,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-pub use oer_lab_device_mac::DeviceId;
+pub use crate::device_id::DeviceId;
 
 pub mod paths;
 

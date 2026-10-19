@@ -29,7 +29,7 @@ their metadata because their code and stack already require the live mapping.
 The hook and all state it reads must stay in SRAM or retained memory and take
 no locks.
 
-Images are built, written and run by [`cargo fw`](../../../host/image/build/FW.md);
+Images are built, written and run by [`cargo fw`](../../../tools/fw/README.md);
 no `.cargo/config.toml` adds Rust flags.
 
 The boot sequence is ROM → ESP-IDF bootloader → Flash bootstrap → application.

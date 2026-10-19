@@ -1,10 +1,10 @@
 //! The HIL flash operation, how a run writes a board's flash:
 //!
-//! 1. **lease**: the target is a leased board ([`oer_lab_stand_board::LeasedBoard`]),
+//! 1. **lease**: the target is a leased board ([`oer_lab_board::stand::LeasedBoard`]),
 //!    which holds the board's device access: the arbiter's grant takes it
 //!    for every leased board;
 //! 2. **write**: the devices layer's one write operation
-//!    (`oer_lab_devices::image`) invalidates the board's receipt, writes the image
+//!    (`oer_lab_board::image`) invalidates the board's receipt, writes the image
 //!    bundle's segments, publishes the receipt of the whole bundle, starts
 //!    the image as the chip profile's `[flash] start` says and confirms the
 //!    start;
@@ -21,16 +21,16 @@
 use std::path::Path;
 
 use oer_image_build::bundle::ImageBundle;
-use oer_lab_device_lock::DeviceId;
-use oer_lab_devices::image::{Receipt, Store};
-use oer_lab_stand_board::Via;
-use oer_lab_stand_journal::{ImageIdentity, Journal};
+use oer_lab_arbiter::journal::{ImageIdentity, Journal};
+use oer_lab_board::image::{Receipt, Store};
+use oer_lab_board::lock::DeviceId;
+use oer_lab_board::stand::Via;
 
 pub mod catalog;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// A board the operation writes: a [`oer_lab_stand_board::LeasedBoard`], or a
+/// A board the operation writes: a [`oer_lab_board::stand::LeasedBoard`], or a
 /// test's fake.
 pub trait Target {
     /// The board.
@@ -50,9 +50,9 @@ pub trait Target {
     fn carries(&self, store: &Store, bundle: &ImageBundle) -> Result<Option<Receipt>>;
 }
 
-impl Target for oer_lab_stand_board::LeasedBoard {
+impl Target for oer_lab_board::stand::LeasedBoard {
     fn mac(&self) -> &DeviceId {
-        oer_lab_stand_board::LeasedBoard::mac(self)
+        oer_lab_board::stand::LeasedBoard::mac(self)
     }
 
     fn flash(
@@ -63,11 +63,11 @@ impl Target for oer_lab_stand_board::LeasedBoard {
         via: Via,
         by: &str,
     ) -> Result<Receipt> {
-        oer_lab_stand_board::LeasedBoard::flash(self, store, bundle, image, via, by)
+        oer_lab_board::stand::LeasedBoard::flash(self, store, bundle, image, via, by)
     }
 
     fn carries(&self, store: &Store, bundle: &ImageBundle) -> Result<Option<Receipt>> {
-        oer_lab_stand_board::LeasedBoard::carries(self, store, bundle)
+        oer_lab_board::stand::LeasedBoard::carries(self, store, bundle)
     }
 }
 

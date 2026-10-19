@@ -233,17 +233,17 @@ pub fn run(checkout: &Path, owner: &str, runner: &Runner, spec: &Spec) -> Result
     // shorter work of owners with a higher balance goes first. Every round
     // leases the same work, so the arbiter estimates the next round from
     // the rounds before it.
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     let work = round_work(&spec.scenarios);
     for index in 1..=spec.repetitions {
         for seed in &seeds {
             let round = round_of(*seed, index);
-            let grant = arbiter.acquire(&oer_lab_stand_arbiter::Request {
+            let grant = arbiter.acquire(&oer_lab_arbiter::Request {
                 owner: owner.to_owned(),
                 work: work.clone(),
                 scenarios: spec.scenarios.clone(),
                 run: None,
-                claims: vec![oer_lab_stand_claims::Claim::stand()],
+                claims: vec![oer_lab_arbiter::claims::Claim::stand()],
             })?;
             for arm in round.order.arms() {
                 let built = &first[&(arm, *seed)];
@@ -443,7 +443,7 @@ impl PreparedArm {
         scenarios: &[String],
         firmware: &Firmware,
         round: Round,
-        grant: Option<&oer_lab_stand_arbiter::Grant>,
+        grant: Option<&oer_lab_arbiter::Grant>,
     ) -> Result<RunId> {
         let mut arguments = vec![String::from("run")];
         arguments.extend(scenarios.iter().cloned());
@@ -462,7 +462,7 @@ impl PreparedArm {
         let mut job = Running::new(session.checkout, session.owner, &arguments)?;
         let mut launch = Launch::new(session.checkout, session.runner)
             .args(arguments)
-            .env(oer_lab_stand_owners::OWNER_ENV, session.owner)
+            .env(oer_lab_arbiter::owner::OWNER_ENV, session.owner)
             .env(
                 oer_hil_run_bundle_format::experiment::EXPERIMENT_ENV,
                 serde_json::to_string(&experiment)?,
@@ -476,8 +476,8 @@ impl PreparedArm {
             Some(grant) => grant.context()?,
             None => oer_os_process::Context::current()?.clone(),
         };
-        context.set(oer_lab_stand_owners::OWNER_KEY, session.owner);
-        context.set(oer_lab_stand_arbiter::jobs::JOB_KEY, job.id());
+        context.set(oer_lab_arbiter::owner::OWNER_KEY, session.owner);
+        context.set(oer_lab_arbiter::jobs::JOB_KEY, job.id());
         launch = launch.context(context);
         let launched = launch_run(&launch)?;
         job.finish_with(&session.store, &launched.runs)?;

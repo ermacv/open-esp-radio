@@ -1,12 +1,14 @@
 //! `cargo stand discover|doctor`: the stand file against the host
-//! (`oer-lab-stand-discover`, `oer-lab-stand-doctor`), and the hub port switches
+//! (`discovery`, `doctor`), and the hub port switches
 //! of `discover --blink` and `--verify-power` under a lease.
 
 use std::ffi::OsString;
 
 use oer_lab_model::Stand;
-use oer_lab_stand_discover as discover;
-use oer_lab_stand_doctor as doctor;
+mod discovery;
+mod doctor;
+
+use discovery as discover;
 
 use crate::Result;
 use oer_os_process::Checkout;
@@ -100,8 +102,8 @@ fn blink<'a>(
     owner: String,
 ) -> Result<(&'a oer_lab_model::Hub, u8)> {
     let (hub, port) = discover::blink_target(stand, target)?;
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
-    let mut claims = vec![oer_lab_stand_claims::Claim::exclusive(format!(
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+    let mut claims = vec![oer_lab_arbiter::claims::Claim::exclusive(format!(
         "hub-port:{}:{port}",
         hub.usb2
     ))];
@@ -111,9 +113,9 @@ fn blink<'a>(
             .as_ref()
             .is_some_and(|place| place.hub == hub.id && place.port == u32::from(port))
     }) {
-        claims.push(oer_lab_stand_claims::Claim::board(&board.device_id()?));
+        claims.push(oer_lab_arbiter::claims::Claim::board(&board.device_id()?));
     }
-    let grant = arbiter.acquire(&oer_lab_stand_arbiter::Request {
+    let grant = arbiter.acquire(&oer_lab_arbiter::Request {
         owner,
         work: format!("stand discover --blink {}:{port}", hub.id),
         scenarios: Vec::new(),
@@ -127,15 +129,15 @@ fn blink<'a>(
             let mac = board.device_id().ok()?;
             grant
                 .device(&mac)
-                .map(oer_lab_device_lock::DeviceAccess::operation)
+                .map(oer_lab_board::lock::DeviceAccess::operation)
         })
         .transpose()?;
     // A newly discovered port may have no board identity yet.
     let no_device = oer_os_process::IoLifetime::default();
     let lifetime = operation
         .as_ref()
-        .map_or(&no_device, oer_lab_device_lock::DeviceOperation::lifetime);
-    oer_lab_stand_power::HubPower::new(oer_lab_stand_power::HubPort {
+        .map_or(&no_device, oer_lab_board::lock::DeviceOperation::lifetime);
+    oer_lab_board::power::HubPower::new(oer_lab_board::power::HubPort {
         location: hub.usb2.clone(),
         port,
     })
@@ -150,16 +152,16 @@ fn verify_power(
     stand: &oer_lab_model::Stand,
     query: &str,
     owner: String,
-) -> Result<oer_lab_stand_power::PowerLoss> {
-    let board = oer_lab_stand_board::Board::attached(root, stand, query)?;
-    let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+) -> Result<oer_lab_board::power::PowerLoss> {
+    let board = oer_lab_board::stand::Board::attached(root, stand, query)?;
+    let arbiter = oer_lab_arbiter::Arbiter::open()?;
     // The grant holds the board's device access through the power cycle.
-    let grant = arbiter.acquire(&oer_lab_stand_arbiter::Request {
+    let grant = arbiter.acquire(&oer_lab_arbiter::Request {
         owner,
         work: format!("stand discover --verify-power {query}"),
         scenarios: Vec::new(),
         run: None,
-        claims: vec![oer_lab_stand_claims::Claim::board(board.mac())],
+        claims: vec![oer_lab_arbiter::claims::Claim::board(board.mac())],
     })?;
     let access = grant
         .device(board.mac())

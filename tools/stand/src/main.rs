@@ -87,7 +87,7 @@ impl Options {
     /// The owner: `--owner`, else an enclosing lease's, else the
     /// checkout's registered one.
     pub(crate) fn owner(&self, ctx: &Checkout) -> Result<String> {
-        Ok(oer_lab_stand_owners::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
+        Ok(oer_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
     }
 }
 
@@ -120,7 +120,7 @@ enum FixtureCli {
     Install {
         /// Finite Linux fixture provider to provision.
         #[arg(long, value_enum)]
-        provider: oer_lab_stand_fixture_install::Provider,
+        provider: oer_lab_fixtures::Provider,
         /// Print the offline plan without executing any installer step.
         #[arg(long)]
         dry_run: bool,
@@ -211,7 +211,7 @@ fn run() -> Result<ExitCode> {
             let stand_file = oer_lab_model::paths::stand_file()?;
             print!(
                 "{}",
-                oer_lab_stand_fixtures::describe(&oer_lab_stand_fixtures::probe(&stand_file))
+                oer_lab_router::fixtures::describe(&oer_lab_router::fixtures::probe(&stand_file))
             );
             Ok(ExitCode::SUCCESS)
         }
@@ -225,7 +225,7 @@ fn run() -> Result<ExitCode> {
                 Ok(ExitCode::SUCCESS)
             }
             FixtureCli::BuildHostapd => {
-                oer_lab_stand_hostapd::build(&ctx.root)?;
+                oer_lab_router::hostapd::build(&ctx.root)?;
                 Ok(ExitCode::SUCCESS)
             }
         },

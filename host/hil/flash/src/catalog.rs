@@ -5,9 +5,9 @@
 use std::path::Path;
 
 use oer_image_build::esp_idf::catalog;
-use oer_lab_devices::image::Store;
-use oer_lab_stand_board::Via;
-use oer_lab_stand_journal::Journal;
+use oer_lab_arbiter::journal::Journal;
+use oer_lab_board::image::Store;
+use oer_lab_board::stand::Via;
 
 use crate::{Flashed, Image, Revision, Target};
 

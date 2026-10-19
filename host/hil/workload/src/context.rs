@@ -25,7 +25,7 @@ pub struct Context<'a> {
     images: Option<&'a dyn BoardImages>,
     /// The run's access to the board under test, when its lease holds it:
     /// what every operation of a workload on the board goes through.
-    device: Option<&'a oer_lab_device_lock::DeviceAccess>,
+    device: Option<&'a oer_lab_board::lock::DeviceAccess>,
 }
 
 /// The images of the board under test within the run's lease, for a
@@ -60,14 +60,14 @@ impl<'a> Context<'a> {
     }
 
     /// Let the workload operate the board under test under `device`.
-    pub fn with_device(mut self, device: Option<&'a oer_lab_device_lock::DeviceAccess>) -> Self {
+    pub fn with_device(mut self, device: Option<&'a oer_lab_board::lock::DeviceAccess>) -> Self {
         self.device = device;
         self
     }
 
     /// The board under test, leased under the run's access to it: its
     /// resets, console and power.
-    pub fn dut_board(&self) -> Result<oer_lab_stand_board::LeasedBoard> {
+    pub fn dut_board(&self) -> Result<oer_lab_board::stand::LeasedBoard> {
         let device = self
             .device
             .ok_or("this run holds no lease of its device under test")?;

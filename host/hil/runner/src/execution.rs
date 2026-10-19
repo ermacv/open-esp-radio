@@ -49,7 +49,7 @@ pub(crate) fn execute_workload(
     output: &Path,
     fixtures: &oer_hil_workload::fixture::Fixtures,
     images: Option<&dyn oer_hil_workload::context::BoardImages>,
-    device: Option<&oer_lab_device_lock::DeviceAccess>,
+    device: Option<&oer_lab_board::lock::DeviceAccess>,
 ) -> Result<ExecutionEvidence> {
     // The board's MAC outlives its port name, which a reset can change.
     let mac = lab.dut.mac.as_str();

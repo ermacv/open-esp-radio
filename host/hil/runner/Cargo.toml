@@ -10,7 +10,7 @@ description = "Host build, placement-audit and HIL runner for open ESP radio"
 
 [dependencies]
 oer-image-checks = { path = "../../image/checks" }
-oer-lab-devices = { path = "../../lab/devices", features = ["image"] }
+oer-lab-board = { path = "../../lab/board" }
 oer-hil-run-bundle-format = { path = "../run-bundle-format" }
 oer-hil-schema = { path = "../schema" }
 oer-hil-scenario-catalog = { path = "../scenario-catalog" }
@@ -25,7 +25,6 @@ oer-hil-analysis = { path = "../analysis" }
 oer-hil-scenario = { path = "../scenario" }
 oer-os-durable = { path = "../../os/durable" }
 oer-hil-image-class = { path = "../image-class" }
-oer-lab-stand-board = { path = "../../lab/stand-board" }
 oer-hil-flash = { path = "../flash" }
 oer-hil-workload = { path = "../workload" }
 oer-hil-family-system = { path = "../family-system" }
@@ -38,9 +37,7 @@ oer-hil-protocol = { path = "../../../portable/hil/protocol" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-oer-lab-device-lock = { path = "../../lab/device-lock" }
-oer-lab-stand-journal = { path = "../../lab/stand-journal" }
-oer-lab-stand-owners = { path = "../../lab/stand-owners" }
+oer-lab-arbiter = { path = "../../lab/arbiter" }
 [dev-dependencies]
 oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
 toml = "1.1"

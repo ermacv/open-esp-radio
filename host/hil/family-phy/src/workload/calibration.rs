@@ -172,8 +172,8 @@ pub(crate) fn run<C: Comparison>(
 /// The console port of the board under test, just reset. The port is
 /// opened through the stand's opener, which never resets the chip on its
 /// own.
-fn reset_console(port: &Path) -> Result<oer_lab_devices::port::Port> {
-    use oer_lab_devices::reset::{open_without_reset, reset_usb_serial_jtag};
+fn reset_console(port: &Path) -> Result<oer_lab_board::port::Port> {
+    use oer_lab_board::reset::{open_without_reset, reset_usb_serial_jtag};
     let mut serial = open_without_reset(port)?;
     serial.set_timeout(READ_TIMEOUT)?;
     reset_usb_serial_jtag(&mut serial)?;
@@ -260,7 +260,7 @@ fn reference_boot(
 
 /// The console of one reset vendor boot, up to its closed report, and the
 /// open port the firmware keeps answering on.
-fn vendor_boot(port: &Path) -> Result<(String, oer_lab_devices::port::Port)> {
+fn vendor_boot(port: &Path) -> Result<(String, oer_lab_board::port::Port)> {
     let mut serial = reset_console(port)?;
     let started = Instant::now();
     let mut console = Vec::new();
@@ -287,7 +287,7 @@ fn vendor_boot(port: &Path) -> Result<(String, oer_lab_devices::port::Port)> {
 /// released every PHY modem, which closes RF. `replies` accumulates the
 /// console.
 fn vendor_restart(
-    serial: &mut oer_lab_devices::port::Port,
+    serial: &mut oer_lab_board::port::Port,
     replies: &mut String,
 ) -> Result<()> {
     let done = vendor::restarts(replies)?.len();
@@ -323,7 +323,7 @@ fn vendor_restart(
 /// [`Lifecycle::Restart`] point. `replies` holds the console so far, and
 /// its restarts.
 fn vendor_registers(
-    serial: &mut oer_lab_devices::port::Port,
+    serial: &mut oer_lab_board::port::Port,
     space: Space,
     registers: &[Register],
     lifecycle: Lifecycle,

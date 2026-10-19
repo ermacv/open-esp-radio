@@ -5,7 +5,7 @@
 1. **lease**: the caller holds the board's lock (`oer_hil_arbiter::lock::
    BoardLock`), taken under the arbiter's grant; a lock of another board is
    refused;
-2. **write**: the stand board (`oer-lab-stand-board`, through `oer_lab_devices::image`) writes the image bundle;
+2. **write**: the stand board (`oer-lab-board`, through `oer_lab_devices::image`) writes the image bundle;
 3. **journal**: the board journal records the image the board now carries,
    with the SHA-256 of the bundle's application computed here;
 4. **start**: the image starts as the chip profile says, unless the write's

@@ -5,20 +5,20 @@
 
 use std::path::{Path, PathBuf};
 
-use oer_lab_device_lock::{DeviceAccess, DeviceId};
-use oer_lab_stand_resource_lock::ResourceLock;
+use oer_lab_arbiter::resource_lock::ResourceLock;
+use oer_lab_board::lock::{DeviceAccess, DeviceId};
 use oer_os_process::CommandExt as _;
 
 use crate::Result;
 
 /// The frequency ranges a lease uses and how.
-pub use oer_lab_stand_claims::spectrum::{BAND_2G4, Emits, Need, Spectrum};
+pub use oer_lab_arbiter::claims::spectrum::{BAND_2G4, Emits, Need, Spectrum};
 
 /// Holds exclusive fixture ownership until the hardware command returns.
 pub struct FixtureLock {
     /// The lease itself is an admitted operation, including peer protocols
     /// whose serial sessions are owned by the workload's concrete fixtures.
-    _operations: Vec<oer_lab_device_lock::DeviceOperation>,
+    _operations: Vec<oer_lab_board::lock::DeviceOperation>,
     /// The device under test, when the lease includes it.
     device: Option<DeviceId>,
     /// The peer board, when the run uses the peer.
@@ -28,7 +28,7 @@ pub struct FixtureLock {
     _software: Option<crate::software::SoftwareLease>,
     // Declared last so the fixture locks are released before the stand's
     // lease that ordered them.
-    grant: Option<oer_lab_stand_arbiter::Grant>,
+    grant: Option<oer_lab_arbiter::Grant>,
     /// What to request again after yielding.
     request: Option<LeaseRequest>,
 }
@@ -57,7 +57,7 @@ impl LeaseRequest {
             required,
             scenarios: Vec::new(),
             air: vec![Spectrum::new(
-                oer_lab_stand_claims::spectrum::BAND_2G4,
+                oer_lab_arbiter::claims::spectrum::BAND_2G4,
                 Need::Tolerant,
                 Emits::Normal,
             )],
@@ -103,13 +103,13 @@ impl FixtureLock {
     pub fn lease(lab: &super::config::LabConfig, request: LeaseRequest) -> Result<Self> {
         let keys = resource_keys(lab, request.required)?;
         let grant = acquire_stand(
-            &oer_lab_stand_arbiter::Arbiter::open()?.with_stand_file(lab.path().to_owned()),
+            &oer_lab_arbiter::Arbiter::open()?.with_stand_file(lab.path().to_owned()),
             claims(lab, &request, &keys),
             &request.scenarios,
             request.run.as_deref(),
             request.divisible,
         )?;
-        let mut owner = oer_lab_stand_resource_lock::wait_while_busy(|| Self::lock_now(&keys))?;
+        let mut owner = oer_lab_arbiter::resource_lock::wait_while_busy(|| Self::lock_now(&keys))?;
         owner.device = if request.device {
             Some(DeviceId::parse(&lab.dut.mac)?)
         } else {
@@ -163,7 +163,7 @@ impl FixtureLock {
     pub fn context(&self) -> Result<oer_os_process::Context> {
         self.grant.as_ref().map_or_else(
             || Ok(oer_os_process::Context::default()),
-            oer_lab_stand_arbiter::Grant::context,
+            oer_lab_arbiter::Grant::context,
         )
     }
 
@@ -172,7 +172,7 @@ impl FixtureLock {
     pub fn yield_requested(&self) -> bool {
         self.grant
             .as_ref()
-            .is_some_and(oer_lab_stand_arbiter::Grant::yield_requested)
+            .is_some_and(oer_lab_arbiter::Grant::yield_requested)
     }
 
     /// Whether divisible work should renew this lease at its next boundary
@@ -180,7 +180,7 @@ impl FixtureLock {
     pub fn renewal_due(&self) -> bool {
         self.grant
             .as_ref()
-            .is_some_and(oer_lab_stand_arbiter::Grant::renewal_due)
+            .is_some_and(oer_lab_arbiter::Grant::renewal_due)
     }
 
     /// Release the lease, queue again behind the waiting requests and return
@@ -208,7 +208,7 @@ impl FixtureLock {
     ) -> Result<()> {
         let keys = resource_keys(lab, required)?;
         let claims = claims(lab, &LeaseRequest::device(required), &keys);
-        let arbiter = oer_lab_stand_arbiter::Arbiter::open()?;
+        let arbiter = oer_lab_arbiter::Arbiter::open()?;
         if let Some(busy) = arbiter.foreign_devices(&claims)?.into_iter().next() {
             return Err(busy.into());
         }
@@ -254,8 +254,8 @@ fn claims(
     lab: &super::config::LabConfig,
     request: &LeaseRequest,
     keys: &[String],
-) -> Vec<oer_lab_stand_claims::Claim> {
-    use oer_lab_stand_claims::Claim;
+) -> Vec<oer_lab_arbiter::claims::Claim> {
+    use oer_lab_arbiter::claims::Claim;
     let mut claims = Vec::new();
     if request.device {
         claims.push(Claim::board(&lab.dut.mac));
@@ -269,7 +269,7 @@ fn claims(
     claims.extend(
         crate::software::providers(lab, request.required)
             .into_iter()
-            .map(|provider| Claim::shared(oer_lab_stand_fixture_install::resource(provider))),
+            .map(|provider| Claim::shared(oer_lab_fixtures::resource(provider))),
     );
     claims.extend(request.air.iter().flat_map(Spectrum::claims));
     claims
@@ -280,7 +280,7 @@ fn claims(
 /// with its claims, so a measurement under a strict need is told apart from
 /// one taken beside other radio work.
 pub fn air_record(request: &LeaseRequest) -> Result<serde_json::Value> {
-    use oer_lab_stand_claims::spectrum::{Emits, Need};
+    use oer_lab_arbiter::claims::spectrum::{Emits, Need};
     let ranges = request
         .air
         .iter()
@@ -301,7 +301,7 @@ pub fn air_record(request: &LeaseRequest) -> Result<serde_json::Value> {
             })
         })
         .collect::<Vec<_>>();
-    let concurrent = oer_lab_stand_arbiter::Arbiter::open()?
+    let concurrent = oer_lab_arbiter::Arbiter::open()?
         .status()?
         .holders
         .into_iter()
@@ -317,14 +317,14 @@ pub fn air_record(request: &LeaseRequest) -> Result<serde_json::Value> {
 /// runner's arguments; the environment supplies owner, budget and
 /// short-lease choice. The lease supervises this process.
 pub fn acquire_stand(
-    arbiter: &oer_lab_stand_arbiter::Arbiter,
-    claims: Vec<oer_lab_stand_claims::Claim>,
+    arbiter: &oer_lab_arbiter::Arbiter,
+    claims: Vec<oer_lab_arbiter::claims::Claim>,
     scenarios: &[String],
     run: Option<&str>,
     divisible: bool,
-) -> Result<oer_lab_stand_arbiter::Grant> {
+) -> Result<oer_lab_arbiter::Grant> {
     let work = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
-    let mut request = oer_lab_stand_arbiter::Request::from_environment(work)?;
+    let mut request = oer_lab_arbiter::Request::from_environment(work)?;
     request.scenarios = scenarios.to_vec();
     request.run = run.map(str::to_owned);
     request.claims = claims;
@@ -351,15 +351,13 @@ fn resource_keys(
                 &PathBuf::from("/sys/class/net").join(&config.interface),
             )?),
             StationFixtureConfig::OpenWrt(config) => {
-                let output =
-                    oer_lab_stand_ssh::command(&config.ssh_target, oer_lab_stand_ssh::BOOT_ID)
-                        .supervised_output()?;
+                let output = ssh_output(&config.ssh_target, oer_lab_router::ssh::BOOT_ID)?;
                 if !output.status.success() {
                     return Err(
                         "cannot resolve OpenWrt host ownership over noninteractive SSH".into(),
                     );
                 }
-                keys.push(oer_lab_stand_ssh::host_key(std::str::from_utf8(
+                keys.push(oer_lab_router::ssh::host_key(std::str::from_utf8(
                     &output.stdout,
                 )?)?);
             }
@@ -369,16 +367,22 @@ fn resource_keys(
     if required.station_network
         && let Some(observer) = &lab.air_observer
     {
-        let output = oer_lab_stand_ssh::command(&observer.ssh_target, oer_lab_stand_ssh::BOOT_ID)
-            .supervised_output()?;
+        let output = ssh_output(&observer.ssh_target, oer_lab_router::ssh::BOOT_ID)?;
         if !output.status.success() {
             return Err("cannot resolve independent OpenWrt host ownership".into());
         }
-        keys.push(oer_lab_stand_ssh::host_key(std::str::from_utf8(
+        keys.push(oer_lab_router::ssh::host_key(std::str::from_utf8(
             &output.stdout,
         )?)?);
     }
     Ok(keys)
+}
+
+/// `script`'s run on the OpenWrt host `target`, through the stand's one
+/// SSH path.
+pub(crate) fn ssh_output(target: &str, script: &str) -> Result<std::process::Output> {
+    Ok(oer_lab_router::ssh::Ssh::new(target)?
+        .output(script, oer_lab_router::ssh::COMMAND_TIMEOUT)?)
 }
 
 fn local_radio_key(interface: &Path) -> Result<String> {
@@ -423,7 +427,7 @@ fn bluetooth_key(adapter: oer_hil_fixture::bluetooth::model::Adapter) -> Result<
 /// The Bluetooth adapter alone, under the stand's lease.
 pub struct BluetoothLease {
     _resource: ResourceLock,
-    _grant: oer_lab_stand_arbiter::Grant,
+    _grant: oer_lab_arbiter::Grant,
 }
 
 pub fn acquire_bluetooth(
@@ -431,10 +435,10 @@ pub fn acquire_bluetooth(
 ) -> Result<BluetoothLease> {
     let key = bluetooth_key(adapter)?;
     let grant = acquire_stand(
-        &oer_lab_stand_arbiter::Arbiter::open()?,
+        &oer_lab_arbiter::Arbiter::open()?,
         vec![
-            oer_lab_stand_claims::Claim::exclusive(&key),
-            oer_lab_stand_claims::Claim::shared(oer_lab_stand_claims::AIR),
+            oer_lab_arbiter::claims::Claim::exclusive(&key),
+            oer_lab_arbiter::claims::Claim::shared(oer_lab_arbiter::claims::AIR),
         ],
         &[],
         None,

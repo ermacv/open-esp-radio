@@ -68,22 +68,22 @@ fn resolved_owner_reaches_the_runner_without_losing_enclosing_authority() {
     const TEST: &str = "resolved_owner_reaches_the_runner_without_losing_enclosing_authority";
 
     let enclosing = oer_os_process::Context::default()
-        .with(oer_lab_stand_owners::OWNER_KEY, "enclosing-owner")
-        .with(oer_lab_stand_arbiter::LEASE_KEY, "enclosing-lease")
-        .with(oer_lab_stand_arbiter::jobs::JOB_KEY, "enclosing-job")
+        .with(oer_lab_arbiter::owner::OWNER_KEY, "enclosing-owner")
+        .with(oer_lab_arbiter::LEASE_KEY, "enclosing-lease")
+        .with(oer_lab_arbiter::jobs::JOB_KEY, "enclosing-job")
         .with("device:/fixture/device.lock", "delegated-capability");
     if std::env::var_os(ROLE).is_some() {
         let owner = std::env::var(EXPECTED).unwrap();
         assert_eq!(
             oer_os_process::Context::current().unwrap(),
-            &enclosing.with(oer_lab_stand_owners::OWNER_KEY, &owner),
+            &enclosing.with(oer_lab_arbiter::owner::OWNER_KEY, &owner),
         );
         assert_eq!(
-            oer_lab_stand_owners::from_environment().unwrap().as_str(),
+            oer_lab_arbiter::owner::from_environment().unwrap().as_str(),
             owner
         );
         assert_eq!(
-            std::env::var(oer_lab_stand_owners::OWNER_ENV).unwrap(),
+            std::env::var(oer_lab_arbiter::owner::OWNER_ENV).unwrap(),
             owner
         );
         return;
@@ -112,7 +112,7 @@ fn resolved_owner_reaches_the_runner_without_losing_enclosing_authority() {
         command
             .args(args)
             .env(EXPECTED, owner)
-            .env(oer_lab_stand_owners::OWNER_ENV, "env-owner");
+            .env(oer_lab_arbiter::owner::OWNER_ENV, "env-owner");
         enclosing.apply(&mut command).unwrap();
         oer_os_process::run_with_timeout(&mut command, Duration::from_secs(15)).unwrap();
     }
@@ -130,8 +130,8 @@ fn invalid_explicit_owner_is_refused_before_runner_or_job_creation() {
         let mut command = wrapper(root);
         command.args(args);
         oer_os_process::Context::default()
-            .with(oer_lab_stand_owners::OWNER_KEY, "enclosing-owner")
-            .with(oer_lab_stand_arbiter::LEASE_KEY, "enclosing-lease")
+            .with(oer_lab_arbiter::owner::OWNER_KEY, "enclosing-owner")
+            .with(oer_lab_arbiter::LEASE_KEY, "enclosing-lease")
             .apply(&mut command)
             .unwrap();
         let output = command.output().unwrap();

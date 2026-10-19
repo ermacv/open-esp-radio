@@ -222,10 +222,10 @@ fn a_wifi_link_occupies_its_channel_and_secondary_channel() {
         (2_426_000, 2_468_000)
     );
     // The IEEE 802.15.4 channel 15 (2424-2426 MHz) just touches channel 6.
-    let peer = oer_lab_stand_claims::spectrum::Spectrum::ieee802154(
+    let peer = oer_lab_arbiter::claims::spectrum::Spectrum::ieee802154(
         15,
-        oer_lab_stand_claims::spectrum::Need::None,
-        oer_lab_stand_claims::spectrum::Emits::None,
+        oer_lab_arbiter::claims::spectrum::Need::None,
+        oer_lab_arbiter::claims::spectrum::Emits::None,
     );
     assert_eq!(peer.high_khz, 2_426_000);
 }

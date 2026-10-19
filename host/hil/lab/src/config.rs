@@ -284,7 +284,7 @@ pub struct ExternalConfig {
 /// The serial port of `board`, its `/dev/serial/by-id` link among the
 /// attached ports.
 fn attached_port(board: &oer_lab_model::Board) -> Result<PathBuf> {
-    oer_lab_devices::discovery::port_of(&board.device_id()?)
+    oer_lab_board::discovery::port_of(&board.device_id()?)
         .map_err(|error| format!("board `{}`: {error}", board.id).into())
 }
 
@@ -729,12 +729,12 @@ impl LabConfig {
 
     /// The device under test as the stand describes it; its I/O needs the
     /// run's access to it (`Board::lease`).
-    pub fn dut_board(&self) -> Result<oer_lab_stand_board::Board> {
+    pub fn dut_board(&self) -> Result<oer_lab_board::stand::Board> {
         let board = self
             .stand
             .board(&self.dut.id)
             .ok_or_else(|| format!("board `{}` is not in the stand file", self.dut.id))?;
-        oer_lab_stand_board::Board::new(
+        oer_lab_board::stand::Board::new(
             &oer_os_process::built_root(),
             &self.stand,
             board,
@@ -744,13 +744,13 @@ impl LabConfig {
 
     /// The run's peer board as the stand describes it; its I/O needs the
     /// run's access to it (`Board::lease`).
-    pub fn peer_board(&self) -> Result<oer_lab_stand_board::Board> {
+    pub fn peer_board(&self) -> Result<oer_lab_board::stand::Board> {
         let peer = self.peer()?;
         let board = self
             .stand
             .board(&peer.id)
             .ok_or_else(|| format!("board `{}` is not in the stand file", peer.id))?;
-        oer_lab_stand_board::Board::new(
+        oer_lab_board::stand::Board::new(
             &oer_os_process::built_root(),
             &self.stand,
             board,

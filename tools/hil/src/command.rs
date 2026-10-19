@@ -70,7 +70,7 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
         Ok(owner) => Some(owner),
         // Read-only runner commands need no registered stand owner. Invalid
         // overrides and registry/context failures must still reach the caller.
-        Err(error) if error.is::<oer_lab_stand_owners::NoOwner>() => None,
+        Err(error) if error.is::<oer_lab_arbiter::owner::NoOwner>() => None,
         Err(error) => return Err(error),
     };
     // Only a command that produces runs is a job; a read-only one is not.
@@ -103,11 +103,11 @@ pub fn run(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode> 
     // The runner's stand requests are the job's tickets.
     let mut context = oer_os_process::Context::current()?.clone();
     if let Some(owner) = owner {
-        launch = launch.env(oer_lab_stand_owners::OWNER_ENV, &owner);
-        context.set(oer_lab_stand_owners::OWNER_KEY, owner);
+        launch = launch.env(oer_lab_arbiter::owner::OWNER_ENV, &owner);
+        context.set(oer_lab_arbiter::owner::OWNER_KEY, owner);
     }
     if let Some(job) = &job {
-        context.set(oer_lab_stand_arbiter::jobs::JOB_KEY, job.id());
+        context.set(oer_lab_arbiter::jobs::JOB_KEY, job.id());
     }
     launch = launch.context(context);
     let launched = oer_hil_experiment::launch::launch_run(&launch)?;
@@ -265,7 +265,7 @@ impl LeaseOptions {
             match name {
                 "--owner" => {
                     options.owner =
-                        Some(oer_lab_stand_owners::Owner::new(value()?.trim())?.to_string());
+                        Some(oer_lab_arbiter::owner::Owner::new(value()?.trim())?.to_string());
                 }
                 _ => {
                     remaining.push(argument.clone());
@@ -308,7 +308,7 @@ impl LeaseOptions {
                     continue;
                 }
             };
-            let owner = oer_lab_stand_owners::Owner::new(owner.trim())?.to_string();
+            let owner = oer_lab_arbiter::owner::Owner::new(owner.trim())?.to_string();
             if let Some(earlier) = options.owner.as_ref().filter(|earlier| **earlier != owner) {
                 return Err(format!("--owner is given twice, as {earlier} and {owner}").into());
             }
@@ -321,7 +321,7 @@ impl LeaseOptions {
     /// the owner registered for this checkout. Nothing is derived from the
     /// checkout's directory name.
     fn owner(&self, ctx: &Checkout) -> Result<String> {
-        Ok(oer_lab_stand_owners::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
+        Ok(oer_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
     }
 }
 
@@ -430,11 +430,7 @@ fn wait(args: &[OsString]) -> Result<std::process::ExitCode> {
         return Err("usage: cargo hil wait JOB|RUN".into());
     };
     let text = id.to_str().ok_or("an id is text")?;
-    if oer_lab_stand_arbiter::Arbiter::open()?
-        .jobs()
-        .read(text)
-        .is_ok()
-    {
+    if oer_lab_arbiter::Arbiter::open()?.jobs().read(text).is_ok() {
         return crate::jobs::wait_command(args);
     }
     let run = oer_hil_analysis::Run::open(&oer_hil_run_bundle::RunStore::shared()?, text)
@@ -446,7 +442,7 @@ fn wait(args: &[OsString]) -> Result<std::process::ExitCode> {
 }
 
 fn parse_budget(text: &str) -> std::result::Result<std::time::Duration, String> {
-    oer_lab_stand_arbiter::parse_duration(text).map_err(|error| error.to_string())
+    oer_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
 }
 
 /// `cargo hil runs list|why|compare|history|pin|unpin|prune` over the shared
@@ -692,7 +688,7 @@ fn firmware(ctx: &Checkout, args: &[OsString]) -> Result<std::process::ExitCode>
 /// cannot be collected is reported and skipped.
 fn collect_objects(ctx: &Checkout) -> oer_hil_run_bundle::build::CollectedObjects {
     let mut checkouts = vec![ctx.root.clone()];
-    if let Ok(owners) = oer_lab_stand_owners::Owners::open()
+    if let Ok(owners) = oer_lab_arbiter::owner::Owners::open()
         && let Ok(registered) = owners.checkouts()
     {
         checkouts.extend(registered);

@@ -9,7 +9,7 @@ publish = false
 description = "System HIL workloads: boot smoke, watchdog, panic reset and stand recovery"
 
 [dependencies]
-oer-lab-devices = { path = "../../lab/devices" }
+oer-lab-board = { path = "../../lab/board" }
 oer-hil-schema = { path = "../schema" }
 oer-hil-scenario = { path = "../scenario" }
 oer-hil-workload = { path = "../workload" }

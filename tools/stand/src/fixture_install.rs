@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use oer_lab_stand_fixture_install::{INSTALLER_BINARY, Provider, build_plan, prepare};
+use oer_lab_fixtures::{INSTALLER_BINARY, Provider, build_plan, prepare};
 
 use crate::Result;
 
@@ -25,7 +25,7 @@ pub(crate) fn run(
         // All downloads, patching and compilation happen without root, before
         // the installer takes terminal control for its narrow system writes.
         if provider == Provider::LinuxNet {
-            oer_lab_stand_hostapd::build(root)?;
+            oer_lab_router::hostapd::build(root)?;
         }
 
         let provider_binaries: &[&str] = match provider {
@@ -41,7 +41,7 @@ pub(crate) fn run(
             "build",
             "--locked",
             "-p",
-            "oer-lab-stand-fixture-install",
+            "oer-lab-fixtures",
             "-p",
             "oer-hil-fixture",
         ]);
@@ -62,7 +62,7 @@ pub(crate) fn run(
         // worse than a late one.
         eprintln!(
             "stand: queueing for {}",
-            oer_lab_stand_fixture_install::resource(provider)
+            oer_lab_fixtures::resource(provider)
         );
         let grant = install_grant(provider)?;
         // sudo runs in this foreground process group with the terminal's
@@ -92,20 +92,20 @@ pub(crate) fn run(
 /// preempted with the ordinary cleanup and a notice. The grant keeps later
 /// runs of the provider queued until it is dropped.
 #[cfg(target_os = "linux")]
-fn install_grant(provider: Provider) -> Result<oer_lab_stand_arbiter::Grant> {
-    let mut request = oer_lab_stand_arbiter::Request::from_environment(format!(
+fn install_grant(provider: Provider) -> Result<oer_lab_arbiter::Grant> {
+    let mut request = oer_lab_arbiter::Request::from_environment(format!(
         "fixture install --provider {}",
         provider.as_str()
     ))?;
-    request.claims = vec![oer_lab_stand_claims::Claim::exclusive(
-        oer_lab_stand_fixture_install::resource(provider),
+    request.claims = vec![oer_lab_arbiter::claims::Claim::exclusive(
+        oer_lab_fixtures::resource(provider),
     )];
     let reason = format!(
         "fixture maintenance: {} install by {}",
         provider.as_str(),
         request.owner
     );
-    oer_lab_stand_arbiter::Arbiter::open()?.acquire_maintenance(&request, &reason)
+    oer_lab_arbiter::Arbiter::open()?.acquire_maintenance(&request, &reason)
 }
 
 #[cfg(target_os = "linux")]

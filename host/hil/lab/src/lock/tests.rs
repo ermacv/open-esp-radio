@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn a_run_claims_its_boards_fixtures_and_the_air() {
-    use oer_lab_stand_claims::{AIR, Claim};
+    use oer_lab_arbiter::claims::{AIR, Claim};
     let lab = crate::config::LabConfig::for_test();
     let measured = Spectrum::new(BAND_2G4, Need::Strict, Emits::Noisy);
     let request = LeaseRequest {
@@ -33,7 +33,7 @@ fn a_run_claims_its_boards_fixtures_and_the_air() {
 
 #[test]
 fn a_run_shares_its_fixture_software_with_other_runs_but_not_an_installation() {
-    use oer_lab_stand_claims::Claim;
+    use oer_lab_arbiter::claims::Claim;
     let lab = crate::config::LabConfig::for_test();
     let required = oer_hil_scenario_catalog::requirements::Requirements {
         laptop_client: true,
@@ -46,8 +46,7 @@ fn a_run_shares_its_fixture_software_with_other_runs_but_not_an_installation() {
             ..LeaseRequest::device(required)
         },
     );
-    let software =
-        oer_lab_stand_fixture_install::resource(oer_lab_stand_fixture_install::Provider::LinuxNet);
+    let software = oer_lab_fixtures::resource(oer_lab_fixtures::Provider::LinuxNet);
     assert!(claims.contains(&Claim::shared(&software)), "{claims:?}");
     assert!(!claims.contains(&Claim::exclusive(&software)));
 }
@@ -55,7 +54,7 @@ fn a_run_shares_its_fixture_software_with_other_runs_but_not_an_installation() {
 fn claims_of(
     lab: &crate::config::LabConfig,
     request: &LeaseRequest,
-) -> Vec<oer_lab_stand_claims::Claim> {
+) -> Vec<oer_lab_arbiter::claims::Claim> {
     claims(lab, request, &[])
 }
 

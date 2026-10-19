@@ -4,7 +4,7 @@
 //! USB Serial/JTAG console: `@READY protocol=N key=value...` at boot and after
 //! `SYNC`, `@OK <command>` or `@ERR <command> <reason>` for every command,
 //! and `@<REPORT> fields...` reports at any time. The grammar is
-//! `oer-lab-device-peer-line`; this module owns [`PeerConsole`], the one session
+//! `oer-lab-board`; this module owns [`PeerConsole`], the one session
 //! every peer driver and `cargo hil peer` speak: opening the console without
 //! resetting the board, synchronizing with `SYNC`, commands and their
 //! answers, queued reports, and the transcript a run keeps. A driver only
@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_lab_device_peer_line::{Line, Report, parse};
+use oer_lab_board::peer_line::{Line, Report, parse};
 
 use crate::Result;
 
@@ -424,7 +424,7 @@ mod console_error_tests {
 #[cfg(test)]
 mod sync_tests {
     use super::*;
-    use oer_lab_device_peer_line::{hex, to_hex};
+    use oer_lab_board::peer_line::{hex, to_hex};
 
     use std::collections::VecDeque;
 

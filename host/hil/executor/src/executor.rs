@@ -3,7 +3,7 @@
 use core::marker::PhantomData;
 
 use oer_hil_model::{Conformance, Interop, Investigation, Measurement, OpenQuestion};
-use oer_lab_stand_arbiter::Grant;
+use oer_lab_arbiter::Grant;
 use serde::Serialize;
 
 /// Which executor ran an outcome.
