@@ -4,6 +4,16 @@
 //! 802.11-2020, 9.4.2.167 and 9.6.7.1/32/33. This codec deliberately stops at
 //! the Action body. A MAC owner remains responsible for the management header,
 //! sequence control, FCS, protection policy and physical publication.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 pub const PUBLIC_ACTION_CATEGORY: u8 = 4;
 pub const FTM_REQUEST_PUBLIC_ACTION: u8 = 32;
@@ -399,8 +409,10 @@ fn parameter_fields(element: &[u8]) -> Result<[u8; FTM_PARAMETERS_FIELD_LEN], Ft
     {
         return Err(FtmParameterError::WrongElementLength);
     }
-    let mut fields = [0_u8; FTM_PARAMETERS_FIELD_LEN];
-    fields.copy_from_slice(&element[2..]);
+    let fields: [u8; FTM_PARAMETERS_FIELD_LEN] = element
+        .get(2..)
+        .and_then(|fields| fields.try_into().ok())
+        .ok_or(FtmParameterError::WrongElementLength)?;
     if fields[0] & 0x80 != 0 || fields[6] & 0x03 != 0 {
         return Err(FtmParameterError::ReservedBitsSet);
     }
@@ -417,9 +429,9 @@ pub struct FtmRequest<'a> {
 
 impl<'a> FtmRequest<'a> {
     pub fn decode_body(body: &'a [u8]) -> Result<Self, FtmWireError> {
-        validate_prefix(body, FTM_REQUEST_PUBLIC_ACTION, FTM_REQUEST_PREFIX_LEN)?;
-        let trigger = FtmTrigger::from_wire(body[2])?;
-        let information_elements = &body[FTM_REQUEST_PREFIX_LEN..];
+        let (&[_, _, trigger], information_elements) =
+            validate_prefix::<FTM_REQUEST_PREFIX_LEN>(body, FTM_REQUEST_PUBLIC_ACTION)?;
+        let trigger = FtmTrigger::from_wire(trigger)?;
         let parameters =
             find_parameters(information_elements, FtmRequestParameters::decode_element)?;
         Ok(Self {
@@ -498,14 +510,13 @@ impl FtmTimestampPs {
         self.0
     }
 
-    fn decode(bytes: &[u8]) -> Self {
-        let mut wide = [0_u8; 8];
-        wide[..6].copy_from_slice(bytes);
-        Self(u64::from_le_bytes(wide))
+    fn decode([b0, b1, b2, b3, b4, b5]: [u8; 6]) -> Self {
+        Self(u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0]))
     }
 
-    fn encode(self, output: &mut [u8]) {
-        output.copy_from_slice(&self.0.to_le_bytes()[..6]);
+    fn encode(self) -> [u8; 6] {
+        let [b0, b1, b2, b3, b4, b5, _, _] = self.0.to_le_bytes();
+        [b0, b1, b2, b3, b4, b5]
     }
 }
 
@@ -540,21 +551,41 @@ pub struct FtmMeasurement<'a> {
 
 impl<'a> FtmMeasurement<'a> {
     pub fn decode_body(body: &'a [u8]) -> Result<Self, FtmWireError> {
-        validate_prefix(
-            body,
-            FTM_MEASUREMENT_PUBLIC_ACTION,
-            FTM_MEASUREMENT_PREFIX_LEN,
-        )?;
-        let tod = FtmTimestampPs::decode(&body[4..10]);
-        let toa = FtmTimestampPs::decode(&body[10..16]);
-        let tod_error_wire = u16::from_le_bytes([body[16], body[17]]);
-        let toa_error_wire = u16::from_le_bytes([body[18], body[19]]);
+        let (
+            &[
+                _,
+                _,
+                dialog_token,
+                follow_up_dialog_token,
+                d0,
+                d1,
+                d2,
+                d3,
+                d4,
+                d5,
+                a0,
+                a1,
+                a2,
+                a3,
+                a4,
+                a5,
+                e0,
+                e1,
+                g0,
+                g1,
+            ],
+            information_elements,
+        ) = validate_prefix::<FTM_MEASUREMENT_PREFIX_LEN>(body, FTM_MEASUREMENT_PUBLIC_ACTION)?;
+        let tod = FtmTimestampPs::decode([d0, d1, d2, d3, d4, d5]);
+        let toa = FtmTimestampPs::decode([a0, a1, a2, a3, a4, a5]);
+        let tod_error_wire = u16::from_le_bytes([e0, e1]);
+        let toa_error_wire = u16::from_le_bytes([g0, g1]);
         if tod_error_wire & 0x7fe0 != 0 || toa_error_wire & 0xffe0 != 0 {
             return Err(FtmWireError::ReservedTimestampErrorBits);
         }
         let fields = FtmMeasurementFields {
-            dialog_token: body[2],
-            follow_up_dialog_token: body[3],
+            dialog_token,
+            follow_up_dialog_token,
             tod,
             toa,
             tod_error: FtmTodError {
@@ -573,7 +604,6 @@ impl<'a> FtmMeasurement<'a> {
         {
             return Err(FtmWireError::ReservedTimestampFields);
         }
-        let information_elements = &body[FTM_MEASUREMENT_PREFIX_LEN..];
         let parameters =
             find_parameters(information_elements, FtmResponseParameters::decode_element)?;
         Ok(Self {
@@ -602,41 +632,66 @@ pub fn encode_measurement(
     {
         return Err(FtmWireError::ReservedTimestampFields);
     }
-    let len = FTM_MEASUREMENT_PREFIX_LEN
-        .checked_add(information_elements.len())
+    let (prefix, rest) = output
+        .split_first_chunk_mut::<FTM_MEASUREMENT_PREFIX_LEN>()
         .ok_or(FtmWireError::OutputTooShort)?;
-    if output.len() < len {
-        return Err(FtmWireError::OutputTooShort);
-    }
-    output[0] = PUBLIC_ACTION_CATEGORY;
-    output[1] = FTM_MEASUREMENT_PUBLIC_ACTION;
-    output[2] = fields.dialog_token;
-    output[3] = fields.follow_up_dialog_token;
-    fields.tod.encode(&mut output[4..10]);
-    fields.toa.encode(&mut output[10..16]);
-    let tod_error = u16::from(fields.tod_error.max_error_exponent)
+    let elements = rest
+        .get_mut(..information_elements.len())
+        .ok_or(FtmWireError::OutputTooShort)?;
+    let [d0, d1, d2, d3, d4, d5] = fields.tod.encode();
+    let [a0, a1, a2, a3, a4, a5] = fields.toa.encode();
+    let [e0, e1] = (u16::from(fields.tod_error.max_error_exponent)
         | if fields.tod_error.not_continuous {
             0x8000
         } else {
             0
-        };
-    output[16..18].copy_from_slice(&tod_error.to_le_bytes());
-    output[18..20].copy_from_slice(&u16::from(fields.toa_error.max_error_exponent).to_le_bytes());
-    output[FTM_MEASUREMENT_PREFIX_LEN..len].copy_from_slice(information_elements);
-    Ok(len)
+        })
+    .to_le_bytes();
+    let [g0, g1] = u16::from(fields.toa_error.max_error_exponent).to_le_bytes();
+    *prefix = [
+        PUBLIC_ACTION_CATEGORY,
+        FTM_MEASUREMENT_PUBLIC_ACTION,
+        fields.dialog_token,
+        fields.follow_up_dialog_token,
+        d0,
+        d1,
+        d2,
+        d3,
+        d4,
+        d5,
+        a0,
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        e0,
+        e1,
+        g0,
+        g1,
+    ];
+    elements.copy_from_slice(information_elements);
+    Ok(FTM_MEASUREMENT_PREFIX_LEN.saturating_add(information_elements.len()))
 }
 
-fn validate_prefix(body: &[u8], action: u8, minimum: usize) -> Result<(), FtmWireError> {
-    if body.len() < minimum {
-        return Err(FtmWireError::BodyTooShort);
-    }
-    if body[0] != PUBLIC_ACTION_CATEGORY {
+/// Split the fixed `N`-byte prefix off `body` after checking its Public Action
+/// category and action code.
+fn validate_prefix<const N: usize>(
+    body: &[u8],
+    action: u8,
+) -> Result<(&[u8; N], &[u8]), FtmWireError> {
+    let (prefix, rest) = body
+        .split_first_chunk::<N>()
+        .ok_or(FtmWireError::BodyTooShort)?;
+    let (&category, tail) = prefix.split_first().ok_or(FtmWireError::BodyTooShort)?;
+    let &public_action = tail.first().ok_or(FtmWireError::BodyTooShort)?;
+    if category != PUBLIC_ACTION_CATEGORY {
         return Err(FtmWireError::WrongCategory);
     }
-    if body[1] != action {
+    if public_action != action {
         return Err(FtmWireError::WrongPublicAction);
     }
-    Ok(())
+    Ok((prefix, rest))
 }
 
 fn find_parameters<T>(
@@ -645,23 +700,22 @@ fn find_parameters<T>(
 ) -> Result<Option<T>, FtmWireError> {
     let mut found = None;
     while !bytes.is_empty() {
-        if bytes.len() < 2 {
-            return Err(FtmWireError::MalformedInformationElement);
-        }
-        let total = 2_usize
-            .checked_add(usize::from(bytes[1]))
+        let (&[id, length], _) = bytes
+            .split_first_chunk::<2>()
             .ok_or(FtmWireError::MalformedInformationElement)?;
-        if bytes.len() < total {
-            return Err(FtmWireError::MalformedInformationElement);
-        }
-        let element = &bytes[..total];
-        if element[0] == FTM_PARAMETERS_ELEMENT_ID {
+        let total = 2_usize
+            .checked_add(usize::from(length))
+            .ok_or(FtmWireError::MalformedInformationElement)?;
+        let (element, rest) = bytes
+            .split_at_checked(total)
+            .ok_or(FtmWireError::MalformedInformationElement)?;
+        if id == FTM_PARAMETERS_ELEMENT_ID {
             if found.is_some() {
                 return Err(FtmWireError::DuplicateParametersElement);
             }
             found = Some(decode(element)?);
         }
-        bytes = &bytes[total..];
+        bytes = rest;
     }
     Ok(found)
 }

@@ -33,6 +33,14 @@ pub struct MonitorChannelSequence {
 }
 
 impl MonitorChannelSequence {
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn new(
         channels: &[WifiChannel],
         dwell_millis: NonZeroU16,
@@ -46,24 +54,38 @@ impl MonitorChannelSequence {
                 capacity: MONITOR_CHANNEL_SEQUENCE_CAPACITY,
             });
         }
-        let mut stored = [first; MONITOR_CHANNEL_SEQUENCE_CAPACITY];
-        let mut length = 0_usize;
-        for &channel in channels {
-            if stored[..length].contains(&channel) {
+        for (index, &channel) in channels.iter().enumerate() {
+            if channels
+                .iter()
+                .take(index)
+                .any(|earlier| *earlier == channel)
+            {
                 return Err(MonitorChannelSequenceError::Duplicate(channel));
             }
-            stored[length] = channel;
-            length += 1;
+        }
+        let mut stored = [first; MONITOR_CHANNEL_SEQUENCE_CAPACITY];
+        for (slot, &channel) in stored.iter_mut().zip(channels) {
+            *slot = channel;
         }
         Ok(Self {
             channels: stored,
-            length: length as u8,
+            length: channels.len() as u8,
             dwell_millis,
         })
     }
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn channels(&self) -> &[WifiChannel] {
-        &self.channels[..usize::from(self.length)]
+        self.channels
+            .get(..usize::from(self.length))
+            .unwrap_or_default()
     }
 
     pub const fn len(self) -> u8 {
@@ -239,6 +261,14 @@ pub struct MonitorInjectionMpdu<'frame> {
 }
 
 impl<'frame> MonitorInjectionMpdu<'frame> {
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn from_no_fcs(bytes: &'frame [u8]) -> Result<Self, MonitorInjectionFrameError> {
         const BASE_HEADER_LENGTH: usize = 24;
         const PROTOCOL_VERSION_MASK: u16 = 0x0003;
@@ -251,13 +281,13 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
         const PROTECTED: u16 = 0x4000;
         const ORDERED: u16 = 0x8000;
 
-        if bytes.len() < BASE_HEADER_LENGTH {
+        let Some((header, _)) = bytes.split_first_chunk::<BASE_HEADER_LENGTH>() else {
             return Err(MonitorInjectionFrameError::TooShort {
                 required: BASE_HEADER_LENGTH,
                 available: bytes.len(),
             });
-        }
-        let frame_control = u16::from_le_bytes([bytes[0], bytes[1]]);
+        };
+        let frame_control = u16::from_le_bytes([header[0], header[1]]);
         if frame_control & PROTOCOL_VERSION_MASK != 0 {
             return Err(MonitorInjectionFrameError::UnsupportedProtocolVersion(
                 (frame_control & PROTOCOL_VERSION_MASK) as u8,
@@ -267,7 +297,7 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
             return Err(MonitorInjectionFrameError::ProtectedFrame);
         }
         if frame_control & MORE_FRAGMENTS != 0
-            || u16::from_le_bytes([bytes[22], bytes[23]]) & 0x000f != 0
+            || u16::from_le_bytes([header[22], header[23]]) & 0x000f != 0
         {
             return Err(MonitorInjectionFrameError::FragmentedFrame);
         }
@@ -325,8 +355,16 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
         self.frame_type
     }
 
-    pub const fn is_group_addressed(self) -> bool {
-        self.bytes[4] & 1 != 0
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
+    pub fn is_group_addressed(self) -> bool {
+        self.bytes.get(4).is_some_and(|byte| byte & 1 != 0)
     }
 }
 

@@ -95,3 +95,14 @@ fn ethernet_classifier_extracts_ipv4_and_ipv6_dscp_fail_closed() {
         WmmUserPriority::UP0
     );
 }
+
+#[test]
+fn every_prefix_of_an_ethernet_frame_is_classified() {
+    for ether_type in [[0x81, 0x00], [0x88, 0xa8], [0x08, 0x00], [0x86, 0xdd]] {
+        let mut frame = [0x45_u8; 24];
+        frame[12..14].copy_from_slice(&ether_type);
+        for len in 0..=frame.len() {
+            let _ = classify_ethernet_wmm(&frame[..len]);
+        }
+    }
+}

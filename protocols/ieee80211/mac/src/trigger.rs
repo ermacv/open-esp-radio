@@ -13,6 +13,16 @@
 //! Every extraction below reproduces the loads, shifts and masks in those
 //! functions. Derived units such as dBm are exposed separately from their
 //! wire encodings.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::sequence::SequenceNumber;
 
@@ -308,14 +318,18 @@ impl BasicTriggerFrameEncoding {
         let common = self.common.encode(TriggerType::Basic)?;
         let user = self.user.encode()?;
         let dependent = self.dependent.encode()?;
-        output[..TRIGGER_BASIC_FRAME_LEN].fill(0);
-        output[0..2].copy_from_slice(&0x0024_u16.to_le_bytes());
-        output[2..4].copy_from_slice(&self.duration.to_le_bytes());
-        output[4..10].copy_from_slice(&self.receiver_address);
-        output[10..16].copy_from_slice(&self.transmitter_address);
-        output[16..24].copy_from_slice(&common);
-        output[24..29].copy_from_slice(&user);
-        output[29] = dependent;
+        let fields: [&[u8]; 7] = [
+            &0x0024_u16.to_le_bytes(),
+            &self.duration.to_le_bytes(),
+            &self.receiver_address,
+            &self.transmitter_address,
+            &common,
+            &user,
+            &[dependent],
+        ];
+        for (out, byte) in output.iter_mut().zip(fields.into_iter().flatten()) {
+            *out = *byte;
+        }
         Ok(TRIGGER_BASIC_FRAME_LEN)
     }
 }
@@ -350,19 +364,19 @@ impl TriggerRuAllocation {
         match raw {
             0..=8 => Some(Self::Narrow {
                 resource_unit: HeResourceUnit::Ru26,
-                one_based_index: raw + 1,
+                one_based_index: raw.saturating_add(1),
             }),
             37..=40 => Some(Self::Narrow {
                 resource_unit: HeResourceUnit::Ru52,
-                one_based_index: raw - 36,
+                one_based_index: raw.saturating_sub(36),
             }),
             53..=54 => Some(Self::Narrow {
                 resource_unit: HeResourceUnit::Ru106,
-                one_based_index: raw - 52,
+                one_based_index: raw.saturating_sub(52),
             }),
             61..=62 => Some(Self::Narrow {
                 resource_unit: HeResourceUnit::Ru242,
-                one_based_index: raw - 60,
+                one_based_index: raw.saturating_sub(60),
             }),
             69..=0x7f => Some(Self::WiderThan242),
             _ => None,
@@ -388,7 +402,7 @@ impl TriggerTargetRssi {
         if value == 0x7f {
             Self::Reserved
         } else {
-            Self::Dbm(value as i8 - 110)
+            Self::Dbm((value as i8).wrapping_sub(110))
         }
     }
 
@@ -396,7 +410,7 @@ impl TriggerTargetRssi {
         if value == 0x1f {
             Self::Reserved
         } else {
-            Self::Dbm((value as i8 - 45) * 2)
+            Self::Dbm((value as i8).wrapping_sub(45).wrapping_mul(2))
         }
     }
 }
@@ -409,14 +423,14 @@ pub enum TriggerApTxPower {
 
 impl TriggerApTxPower {
     const fn from_common_encoding(value: u8) -> Self {
-        Self::Dbm(value as i8 - 20)
+        Self::Dbm((value as i8).wrapping_sub(20))
     }
 
     const fn from_trs_encoding(value: u8) -> Self {
         if value == 0x1f {
             Self::Reserved
         } else {
-            Self::Dbm((value as i8 - 10) * 2)
+            Self::Dbm((value as i8).wrapping_sub(10).wrapping_mul(2))
         }
     }
 }
@@ -480,7 +494,7 @@ impl<'a> TriggerFrame<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerUserField<'a> {
     /// The common five-byte User Info field.
-    pub user_info: &'a [u8],
+    pub user_info: &'a [u8; TRIGGER_USER_INFO_LEN],
     /// Basic contributes one byte and MU-BAR contributes four; other
     /// instruction-proven layouts expose an empty slice.
     pub dependent_info: &'a [u8],
@@ -542,14 +556,14 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
         if self.finished || self.remaining.is_empty() {
             return None;
         }
-        if self.remaining.len() < TRIGGER_USER_INFO_LEN {
+        let Some((user_info, _)) = self.remaining.split_first_chunk::<TRIGGER_USER_INFO_LEN>()
+        else {
             return self.fail(TriggerParseError::Truncated {
                 required: TRIGGER_USER_INFO_LEN,
             });
-        }
-
-        let aid12 = u16::from(self.remaining[0]) | (u16::from(self.remaining[1] & 0x0f) << 8);
-        let ru_allocation = (self.remaining[1] >> 5) | ((self.remaining[2] & 0x0f) << 3);
+        };
+        let aid12 = u16::from(user_info[0]) | (u16::from(user_info[1] & 0x0f) << 8);
+        let ru_allocation = (user_info[1] >> 5) | ((user_info[2] & 0x0f) << 3);
         if aid12 == 0x0fff && ru_allocation == 0x7f {
             self.padding = self.remaining;
             self.remaining = &[];
@@ -571,15 +585,16 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
                 });
             }
         };
-        let required = TRIGGER_USER_INFO_LEN + dependent_len;
-        if self.remaining.len() < required {
+        let required = TRIGGER_USER_INFO_LEN.saturating_add(dependent_len);
+        let Some((field, rest)) = self.remaining.split_at_checked(required) else {
             return self.fail(TriggerParseError::Truncated { required });
-        }
-
-        let (field, rest) = self.remaining.split_at(required);
+        };
+        let Some((user_info, dependent_info)) = field.split_first_chunk() else {
+            return self.fail(TriggerParseError::Truncated { required });
+        };
         let user = TriggerUserField {
-            user_info: &field[..TRIGGER_USER_INFO_LEN],
-            dependent_info: &field[TRIGGER_USER_INFO_LEN..],
+            user_info,
+            dependent_info,
         };
         if terminal {
             self.padding = rest;
@@ -600,22 +615,30 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
 /// control check uses IEEE 802.11 type/subtype bits and allows legal flag bits
 /// in the second byte.
 pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerParseError> {
-    require(frame, TRIGGER_FRAME_MIN_LEN)?;
-    let frame_control = u16::from_le_bytes([frame[0], frame[1]]);
+    let truncated = TriggerParseError::Truncated {
+        required: TRIGGER_FRAME_MIN_LEN,
+    };
+    let (header, rest) = frame
+        .split_first_chunk::<TRIGGER_MAC_HEADER_LEN>()
+        .ok_or(truncated)?;
+    let (common, user_info_and_padding) = rest
+        .split_first_chunk::<TRIGGER_COMMON_INFO_LEN>()
+        .ok_or(truncated)?;
+    let (frame_control, header) = header.split_first_chunk::<2>().ok_or(truncated)?;
+    let (duration, header) = header.split_first_chunk::<2>().ok_or(truncated)?;
+    let (receiver_address, header) = header.split_first_chunk::<6>().ok_or(truncated)?;
+    let transmitter_address = header.first_chunk::<6>().ok_or(truncated)?;
+    let frame_control = u16::from_le_bytes(*frame_control);
     if frame_control & 0x00fc != 0x0024 {
         return Err(TriggerParseError::NotTriggerFrame);
     }
-    let mut receiver_address = [0; 6];
-    receiver_address.copy_from_slice(&frame[4..10]);
-    let mut transmitter_address = [0; 6];
-    transmitter_address.copy_from_slice(&frame[10..16]);
     Ok(TriggerFrame {
         frame_control,
-        duration: u16::from_le_bytes([frame[2], frame[3]]),
-        receiver_address,
-        transmitter_address,
-        common: parse_trigger_common_info(&frame[TRIGGER_MAC_HEADER_LEN..TRIGGER_FRAME_MIN_LEN])?,
-        user_info_and_padding: &frame[TRIGGER_FRAME_MIN_LEN..],
+        duration: u16::from_le_bytes(*duration),
+        receiver_address: *receiver_address,
+        transmitter_address: *transmitter_address,
+        common: parse_trigger_common_info(common)?,
+        user_info_and_padding,
     })
 }
 
@@ -627,10 +650,8 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
 /// bit 63 is retained as `trailing_reserved` even though the debug printer
 /// omits it.
 pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, TriggerParseError> {
-    require(bytes, TRIGGER_COMMON_INFO_LEN)?;
-    let bits = u64::from_le_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-    ]);
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = *chunk::<TRIGGER_COMMON_INFO_LEN>(bytes)?;
+    let bits = u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7]);
     let ap_tx_power_encoding = field(bits, 28, 0x3f) as u8;
     let pre_fec_padding_factor_encoding = field(bits, 34, 0x03) as u8;
     Ok(TriggerCommonInfo {
@@ -680,20 +701,20 @@ pub struct TriggerUserRuInfo {
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_USER_RU]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_user_ru`.
 pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerParseError> {
-    require(bytes, TRIGGER_USER_INFO_LEN)?;
-    let target_rssi_encoding = bytes[4] & 0x7f;
+    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_USER_INFO_LEN>(bytes)?;
+    let target_rssi_encoding = b4 & 0x7f;
     Ok(TriggerUserRuInfo {
-        aid12: u16::from(bytes[0]) | (u16::from(bytes[1] & 0x0f) << 8),
-        ru_allocation_region: bytes[1] & 0x10 != 0,
-        ru_allocation: (bytes[1] >> 5) | ((bytes[2] & 0x0f) << 3),
-        coding_type: bytes[2] & 0x10 != 0,
-        mcs: (bytes[2] >> 5) | ((bytes[3] & 0x01) << 3),
-        dcm: bytes[3] & 0x02 != 0,
-        number_of_ra_ru: (bytes[3] >> 2) & 0x1f,
-        more_ra_ru: bytes[3] & 0x80 != 0,
+        aid12: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
+        ru_allocation_region: b1 & 0x10 != 0,
+        ru_allocation: (b1 >> 5) | ((b2 & 0x0f) << 3),
+        coding_type: b2 & 0x10 != 0,
+        mcs: (b2 >> 5) | ((b3 & 0x01) << 3),
+        dcm: b3 & 0x02 != 0,
+        number_of_ra_ru: (b3 >> 2) & 0x1f,
+        more_ra_ru: b3 & 0x80 != 0,
         target_rssi_encoding,
         target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
-        reserved: bytes[4] & 0x80 != 0,
+        reserved: b4 & 0x80 != 0,
     })
 }
 
@@ -723,24 +744,24 @@ pub struct TriggerUserSpatialStreamInfo {
 pub fn parse_trigger_user_spatial_stream(
     bytes: &[u8],
 ) -> Result<TriggerUserSpatialStreamInfo, TriggerParseError> {
-    require(bytes, TRIGGER_USER_INFO_LEN)?;
-    let starting_spatial_stream_encoding = (bytes[3] >> 2) & 0x07;
-    let spatial_stream_count_encoding = bytes[3] >> 5;
-    let target_rssi_encoding = bytes[4] & 0x7f;
+    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_USER_INFO_LEN>(bytes)?;
+    let starting_spatial_stream_encoding = (b3 >> 2) & 0x07;
+    let spatial_stream_count_encoding = b3 >> 5;
+    let target_rssi_encoding = b4 & 0x7f;
     Ok(TriggerUserSpatialStreamInfo {
-        aid12: u16::from(bytes[0]) | (u16::from(bytes[1] & 0x0f) << 8),
-        ru_allocation_region: bytes[1] & 0x10 != 0,
-        ru_allocation: (bytes[1] >> 5) | ((bytes[2] & 0x0f) << 3),
-        coding_type: bytes[2] & 0x10 != 0,
-        mcs: (bytes[2] >> 5) | ((bytes[3] & 0x01) << 3),
-        dcm: bytes[3] & 0x02 != 0,
+        aid12: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
+        ru_allocation_region: b1 & 0x10 != 0,
+        ru_allocation: (b1 >> 5) | ((b2 & 0x0f) << 3),
+        coding_type: b2 & 0x10 != 0,
+        mcs: (b2 >> 5) | ((b3 & 0x01) << 3),
+        dcm: b3 & 0x02 != 0,
         starting_spatial_stream_encoding,
-        starting_spatial_stream: starting_spatial_stream_encoding + 1,
+        starting_spatial_stream: starting_spatial_stream_encoding.saturating_add(1),
         spatial_stream_count_encoding,
-        spatial_stream_count: spatial_stream_count_encoding + 1,
+        spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
         target_rssi_encoding,
         target_rssi: TriggerTargetRssi::from_user_encoding(target_rssi_encoding),
-        reserved: bytes[4] & 0x80 != 0,
+        reserved: b4 & 0x80 != 0,
     })
 }
 
@@ -757,20 +778,20 @@ pub struct TriggerBasicDependentInfo {
 pub fn parse_trigger_basic_dependent(
     bytes: &[u8],
 ) -> Result<TriggerBasicDependentInfo, TriggerParseError> {
-    require(bytes, TRIGGER_BASIC_DEPENDENT_LEN)?;
+    let [b0] = *chunk::<TRIGGER_BASIC_DEPENDENT_LEN>(bytes)?;
     Ok(TriggerBasicDependentInfo {
-        mpdu_mu_spacing_factor: bytes[0] & 0x03,
-        tid_aggregation_limit: (bytes[0] >> 2) & 0x07,
-        reserved: bytes[0] & 0x20 != 0,
-        preferred_access_category: bytes[0] >> 6,
+        mpdu_mu_spacing_factor: b0 & 0x03,
+        tid_aggregation_limit: (b0 >> 2) & 0x07,
+        reserved: b0 & 0x20 != 0,
+        preferred_access_category: b0 >> 6,
     })
 }
 
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_BFRP_DEPENDENT]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_bfrp_dependent`.
 pub fn parse_trigger_bfrp_dependent(bytes: &[u8]) -> Result<u8, TriggerParseError> {
-    require(bytes, TRIGGER_BFRP_DEPENDENT_LEN)?;
-    Ok(bytes[0])
+    let [b0] = *chunk::<TRIGGER_BFRP_DEPENDENT_LEN>(bytes)?;
+    Ok(b0)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -788,9 +809,9 @@ pub struct TriggerMuBarDependentInfo {
 pub fn parse_trigger_mu_bar_dependent(
     bytes: &[u8],
 ) -> Result<TriggerMuBarDependentInfo, TriggerParseError> {
-    require(bytes, TRIGGER_MU_BAR_DEPENDENT_LEN)?;
-    let bar_control = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let bar_information = u16::from_le_bytes([bytes[2], bytes[3]]);
+    let [b0, b1, b2, b3] = *chunk::<TRIGGER_MU_BAR_DEPENDENT_LEN>(bytes)?;
+    let bar_control = u16::from_le_bytes([b0, b1]);
+    let bar_information = u16::from_le_bytes([b2, b3]);
     Ok(TriggerMuBarDependentInfo {
         bar_control,
         ack_policy: bar_control & 0x0001 != 0,
@@ -814,14 +835,14 @@ pub struct TriggerNfrpUserInfo {
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_NFRP_USER]: complete
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_nfrp_user`.
 pub fn parse_trigger_nfrp_user(bytes: &[u8]) -> Result<TriggerNfrpUserInfo, TriggerParseError> {
-    require(bytes, TRIGGER_NFRP_USER_INFO_LEN)?;
+    let [b0, b1, b2, b3, b4] = *chunk::<TRIGGER_NFRP_USER_INFO_LEN>(bytes)?;
     Ok(TriggerNfrpUserInfo {
-        starting_aid: u16::from(bytes[0]) | (u16::from(bytes[1] & 0x0f) << 8),
-        reserved_9: u16::from(bytes[1] >> 4) | (u16::from(bytes[2] & 0x1f) << 4),
-        feedback_type: (bytes[2] >> 5) | ((bytes[3] & 0x01) << 3),
-        reserved_7: bytes[3] >> 1,
-        uplink_target_rssi: bytes[4] & 0x7f,
-        multiplexing: bytes[4] & 0x80 != 0,
+        starting_aid: u16::from(b0) | (u16::from(b1 & 0x0f) << 8),
+        reserved_9: u16::from(b1 >> 4) | (u16::from(b2 & 0x1f) << 4),
+        feedback_type: (b2 >> 5) | ((b3 & 0x01) << 3),
+        reserved_7: b3 >> 1,
+        uplink_target_rssi: b4 & 0x7f,
+        multiplexing: b4 & 0x80 != 0,
     })
 }
 
@@ -891,16 +912,14 @@ pub fn parse_uplink_power_headroom_control(
 }
 
 fn parse_he_control_word(bytes: &[u8]) -> Result<u32, TriggerParseError> {
-    require(bytes, HE_CONTROL_INFO_LEN)?;
-    Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    let [b0, b1, b2, b3] = *chunk::<HE_CONTROL_INFO_LEN>(bytes)?;
+    Ok(u32::from_le_bytes([b0, b1, b2, b3]))
 }
 
-const fn require(bytes: &[u8], required: usize) -> Result<(), TriggerParseError> {
-    if bytes.len() < required {
-        Err(TriggerParseError::Truncated { required })
-    } else {
-        Ok(())
-    }
+fn chunk<const N: usize>(bytes: &[u8]) -> Result<&[u8; N], TriggerParseError> {
+    bytes
+        .first_chunk::<N>()
+        .ok_or(TriggerParseError::Truncated { required: N })
 }
 
 const fn field(bits: u64, shift: u32, mask: u64) -> u64 {

@@ -255,3 +255,22 @@ fn compressed_feedback_parser_rejects_other_actions_and_missing_snr() {
         Err(HeCompressedBeamformingReportError::NotActionNoAck)
     );
 }
+
+#[test]
+fn every_prefix_of_an_ndpa_or_report_is_handled() {
+    let mut ndpa = [0u8; 25];
+    ndpa[0] = 0x54;
+    ndpa[16] = HE_MARKER;
+    let mut report = [0u8; 40];
+    report[0] = 0xe0;
+    report[MANAGEMENT_HEADER_SIZE] = HE_ACTION_CATEGORY;
+    report[MANAGEMENT_HEADER_SIZE + 2] = 0x07;
+    for len in 0..=report.len() {
+        if let Ok(parsed) = HeNdpa::parse(&ndpa[..len.min(ndpa.len())]) {
+            assert!(parsed.stations().count() > 0);
+        }
+        if let Ok(parsed) = HeCompressedBeamformingReport::parse(&report[..len]) {
+            let _ = (parsed.average_snr(), parsed.feedback_matrices());
+        }
+    }
+}
