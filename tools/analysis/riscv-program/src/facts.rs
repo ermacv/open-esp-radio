@@ -1,11 +1,14 @@
 //! The facts of one static RV32 executable that more than one analysis
 //! reads: its functions, executable ranges, read-only words, sized data
-//! objects, the address words an `--emit-relocs` link kept and the
+//! objects, the address uses an `--emit-relocs` link kept and the
 //! compiler's jump-table labels. One parse reads them all under the caller's
 //! working memory and run control; lookups never parse again.
 use oer_analysis_elf::rv32::{self, Role};
 use oer_analysis_elf::{Function, SymbolKind};
 use oer_analysis_riscv_model::*;
+
+pub mod addresses;
+use addresses::{AddressUse, FunctionLookup};
 
 pub struct ImageFacts<'a> {
     bytes: &'a [u8],
@@ -24,6 +27,9 @@ pub struct ImageFacts<'a> {
     /// Relocated address words of allocated data: address and the address
     /// it holds, by address.
     words: AdmittedVec<'a, (u32, u32)>,
+    /// Relocation-visible address uses, in section/relocation order. Each
+    /// identity and function relation belongs to this ELF alone.
+    address_uses: AdmittedVec<'a, AddressUse<'a>>,
     /// Starts of the compiler's jump tables (`.LJTI*` labels) and the next
     /// symbol of their section or its end, by start.
     jump_tables: AdmittedVec<'a, (u32, u32)>,
@@ -83,18 +89,25 @@ impl<'a> ImageFacts<'a> {
             read_only: AdmittedVec::new(memory),
             objects: AdmittedVec::new(memory),
             words: AdmittedVec::new(memory),
+            address_uses: AdmittedVec::new(memory),
             jump_tables: AdmittedVec::new(memory),
             bytes,
             file,
         };
-        facts.sections(read_only, c)?;
+        facts.sections(read_only, memory, c)?;
         facts.symbols(memory, c)?;
         Ok(facts)
     }
 
-    /// Executable ranges, read-only sections and relocated words.
-    fn sections(&mut self, read_only: &[ReadOnlyWindow], c: &mut dyn RunControl) -> Result<()> {
+    /// Executable ranges, read-only sections, address uses and checked words.
+    fn sections(
+        &mut self,
+        read_only: &[ReadOnlyWindow],
+        memory: &'a WorkingMemory,
+        c: &mut dyn RunControl,
+    ) -> Result<()> {
         let file = &self.file;
+        let lookup = FunctionLookup::new(&self.functions, memory, c)?;
         for section in file.sections() {
             c.checkpoint(1)?;
             if section.executable {
@@ -112,7 +125,7 @@ impl<'a> ImageFacts<'a> {
                 self.read_only
                     .push((section.address, section.size, section.data), c.position())?;
             }
-            if !section.allocated || section.executable || section.data.is_empty() {
+            if !section.allocated {
                 continue;
             }
             let relocations = file
@@ -120,12 +133,19 @@ impl<'a> ImageFacts<'a> {
                 .map_err(|error| invalid(error.to_string()))?;
             for relocation in relocations {
                 c.checkpoint(1)?;
-                if rv32::kind(relocation.r_type).role != Role::Word {
+                let role = rv32::kind(relocation.r_type).role;
+                if role == Role::Hint || rv32::transfers(relocation.r_type) {
                     continue;
                 }
-                let target = file
-                    .target_address(&relocation)
-                    .map_err(|error| invalid(error.to_string()))?;
+                let address_use = AddressUse::new(file, relocation, &lookup, c)?;
+                let value = address_use.value;
+                self.address_uses.push(address_use, c.position())?;
+                if section.executable || section.data.is_empty() || role != Role::Word {
+                    continue;
+                }
+                // Keep the existing relocated-word integrity contract. The
+                // broader address-use index does not prove word contents.
+                let target = value.elf_value()?;
                 let target =
                     u32::try_from(target).map_err(|_| invalid("relocation target beyond RV32"))?;
                 let address =
@@ -254,6 +274,14 @@ impl<'a> ImageFacts<'a> {
     /// ascending by address.
     pub fn words(&self) -> &[(u32, u32)] {
         &self.words
+    }
+
+    /// Every non-transfer, non-hint relocation in allocated code or data.
+    /// Unknown roles, undefined symbols and unsupported targets stay visible.
+    /// These structural observations alone prove neither type preservation
+    /// nor completeness of a callback's provenance.
+    pub fn address_uses(&self) -> &[AddressUse<'a>] {
+        &self.address_uses
     }
 
     /// The address the relocated word at `address` holds, if a relocation

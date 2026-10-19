@@ -6,10 +6,22 @@ its machine code, over the program model of
 [`oer-analysis-riscv-analysis`](../riscv-analysis/README.md) and
 [`oer-analysis-riscv-lift`](../riscv-lift/README.md). It reads the image through one
 `ImageFacts` of `oer-analysis-riscv-program` (functions with their aliases,
-executable ranges, read-only words, sized data objects, relocated address
-words and `.LJTI*` labels, parsed once) and its frame records, relocations
+executable ranges, read-only words, sized data objects, relocation-visible
+address uses, checked address words and `.LJTI*` labels, parsed once) and its frame records, relocations
 and DWARF through [`oer-analysis-elf`](../elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
+
+`taken_addresses`, task-spawn ownership and experimental typed provenance
+read the common address-use index. Their projections preserve distinct
+rules: `taken_addresses` excludes direct section targets and clears the
+instruction low bit; spawn ownership recognizes source function symbols
+only of kind `Text`; typed provenance recognizes any source symbol at a
+function entry. Both all-uses audits retain arithmetic, odd, interior and
+unknown-role uses, which cannot prove an exact typed materialization.
+They project onto the joint analysis's numerical function catalog without
+interpreting another ELF's section identities. Field-type, executor and
+instruction-pattern proofs remain in their consumers. Experimental typed
+provenance is not part of the firmware pipeline.
 
 `analyze` works in the caller's `WorkingMemory` and charges the caller's
 `RunControl`, as Blobray's analyses do: running out of either fails it with

@@ -3,7 +3,7 @@
 //! lowering, an escaped poll address, or a spawn on another spawner leaves
 //! the task available to every executor.
 use crate::{Analysis, FunctionFacts, TypeFacts};
-use oer_analysis_elf::rv32::{self, Role};
+use oer_analysis_elf::rv32::Role;
 use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, research};
 use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
@@ -364,72 +364,45 @@ pub(super) fn owners(
     control: &mut dyn RunControl,
 ) -> Result<BTreeMap<u32, Vec<u8>>> {
     let mut scratch = Ledger::new(keep.memory(), control)?;
-    let mut symbols = BTreeMap::new();
-    for symbol in image.file().symbols() {
-        control.checkpoint(1)?;
-        if symbol.kind == oer_analysis_elf::SymbolKind::Text
-            && let Ok(address) = u32::try_from(symbol.address)
-            && analysis.functions.contains_key(&address)
-        {
-            scratch.insert(&mut symbols, symbol.index, address, control)?;
-        }
-    }
     let mut taken = BTreeSet::new();
     let mut uses: BTreeMap<u32, BTreeMap<u32, Role>> = BTreeMap::new();
-    for section in image.file().sections().filter(|s| s.allocated) {
-        for relocation in image
-            .file()
-            .relocations(section.index)
-            .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?
-        {
-            control.checkpoint(1)?;
-            let mut role = rv32::kind(relocation.r_type).role;
-            if role == Role::Hint || rv32::transfers(relocation.r_type) {
-                continue;
-            }
-            let target = image
-                .file()
-                .target_address(&relocation)
-                .map_err(|e| Error::new(ErrorCode::Integrity, e.to_string()))?;
-            let Ok(mut target) = u32::try_from(target) else {
-                continue;
-            };
-            if let oer_analysis_elf::Target::Symbol(index) = relocation.target
-                && let Some(&base) = symbols.get(&index)
-            {
-                scratch.add(&mut taken, base, control)?;
-                // Arithmetic or a nonzero addend still takes this function's
-                // address. It cannot escape the all-uses audit.
-                if target != base {
-                    role = Role::Other;
-                }
-                target = base;
-            }
-            let canonical = target & !1;
-            scratch.add(&mut taken, canonical, control)?;
-            // A section relocation (or a section symbol plus an addend)
-            // still takes a function's address. Odd and interior addresses
-            // cannot disappear from the all-uses audit.
-            if let Some((&base, function)) = analysis.functions.range(..=canonical).next_back()
-                && canonical - base < function.function.size
-            {
-                scratch.add(&mut taken, base, control)?;
-                if target != base {
-                    role = Role::Other;
-                }
-                target = base;
-            }
-            if !polls.contains(&target) {
-                continue;
-            }
-            let entries = scratch.entry(&mut uses, target, BTreeMap::new, control)?;
-            let site = u32::try_from(relocation.at)
-                .map_err(|_| Error::new(ErrorCode::Integrity, "task relocation exceeds RV32"))?;
-            if entries.get(&site).is_some_and(|previous| *previous != role) {
-                role = Role::Other;
-            }
-            scratch.insert(entries, site, role, control)?;
+    for address_use in image.address_uses() {
+        control.checkpoint(1)?;
+        let Some(projected) = crate::relocations::function_use(
+            address_use,
+            analysis,
+            crate::relocations::FunctionUsePolicy::TaskPoll,
+        )?
+        else {
+            continue;
+        };
+        if let Some(symbol) = projected.symbol {
+            scratch.add(&mut taken, symbol, control)?;
         }
+        scratch.add(&mut taken, projected.canonical, control)?;
+        if let Some(containing) = projected.containing {
+            scratch.add(&mut taken, containing, control)?;
+        }
+        let Some(target) = projected.function else {
+            continue;
+        };
+        if !polls.contains(&target) {
+            continue;
+        }
+        // Arithmetic, odd and interior targets remain in the all-uses audit,
+        // but cannot prove an exact poll-address materialization.
+        let mut role = if projected.exact {
+            address_use.role
+        } else {
+            Role::Other
+        };
+        let entries = scratch.entry(&mut uses, target, BTreeMap::new, control)?;
+        let site = u32::try_from(address_use.relocation.at)
+            .map_err(|_| Error::new(ErrorCode::Integrity, "task relocation exceeds RV32"))?;
+        if entries.get(&site).is_some_and(|previous| *previous != role) {
+            role = Role::Other;
+        }
+        scratch.insert(entries, site, role, control)?;
     }
     let (Some(poll_offset), Some(executor_offset)) = (
         types.member_offset("TaskHeader", "poll_fn", control)?,
