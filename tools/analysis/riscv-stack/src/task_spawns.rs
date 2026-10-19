@@ -5,7 +5,7 @@
 use crate::{Analysis, FunctionFacts, TypeFacts};
 use oer_analysis_elf::rv32::{self, Role};
 use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, research};
-use oer_analysis_riscv_lift::RiscvDecoder;
+use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::{ProgramView, facts::ImageFacts};
 use std::collections::{BTreeMap, BTreeSet};
@@ -271,8 +271,8 @@ fn unused(
         let Some(decoded) = RiscvDecoder.decode(bytes) else {
             return Ok(None);
         };
-        if !base_instruction(bytes)
-            || reads(RiscvDecoder.lift(bytes), register)
+        if !is_base_instruction(bytes)
+            || RiscvDecoder.lift(bytes).reads_register(register)
             || decoded
                 .flow
                 .through_register()
@@ -280,7 +280,7 @@ fn unused(
         {
             return Ok(None);
         }
-        if writes(RiscvDecoder.lift(bytes)) == Some(register) {
+        if RiscvDecoder.lift(bytes).destination_register() == Some(register) {
             return Ok(Some(true));
         }
         match decoded.flow {
@@ -290,33 +290,6 @@ fn unused(
         }
     }
     Ok(None)
-}
-
-fn base_instruction(bytes: &[u8]) -> bool {
-    matches!(
-        oer_analysis_riscv_lift::decode_instruction(bytes),
-        Some((oer_analysis_riscv_decode::Instruction::Base(_), _))
-    )
-}
-
-fn reads(op: SemanticOp, register: u8) -> bool {
-    let operand = |operand| operand == Operand::Register(register);
-    match op {
-        SemanticOp::Integer { left, right, .. } => operand(left) || operand(right),
-        SemanticOp::Memory { base, source, .. } => base == register || source == Some(register),
-        SemanticOp::Unsupported => true,
-        _ => false,
-    }
-}
-fn writes(op: SemanticOp) -> Option<u8> {
-    match op {
-        SemanticOp::Integer { dest, .. }
-        | SemanticOp::Upper { dest, .. }
-        | SemanticOp::Link { dest }
-        | SemanticOp::Opaque { dest } => Some(dest),
-        SemanticOp::Memory { dest, .. } => dest,
-        _ => None,
-    }
 }
 
 /// Follow the materialized poll address until it is killed. Every use must
@@ -337,8 +310,8 @@ fn consumed(
             return Ok(false);
         };
         let op = RiscvDecoder.lift(bytes);
-        if !base_instruction(bytes)
-            || reads(op, register)
+        if !is_base_instruction(bytes)
+            || op.reads_register(register)
             || decoded
                 .flow
                 .through_register()
@@ -348,7 +321,7 @@ fn consumed(
         }
         match decoded.flow {
             InstructionFlow::Next => {
-                if writes(op) == Some(register) {
+                if op.destination_register() == Some(register) {
                     return Ok(true);
                 }
             }

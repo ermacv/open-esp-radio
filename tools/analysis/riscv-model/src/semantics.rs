@@ -181,6 +181,49 @@ pub enum SemanticOp {
     None,
     Unsupported,
 }
+
+impl SemanticOp {
+    /// Whether a described input names `register`, or the operation is
+    /// `Unsupported` (which conservatively may read any register).
+    ///
+    /// This is not a complete machine-instruction read set: `Link` omits
+    /// the indirect jump's base, `None` can represent a branch, and `Opaque`
+    /// can omit inputs. A false result alone cannot prove a register unused;
+    /// callers must retain their ISA and control-flow checks. Register zero
+    /// is treated like any other explicitly named operand.
+    pub fn reads_register(self, register: u8) -> bool {
+        match self {
+            Self::Integer { left, right, .. } => {
+                [left, right].contains(&Operand::Register(register))
+            }
+            Self::Memory { base, source, .. } => base == register || source == Some(register),
+            Self::Unsupported => true,
+            Self::Fence { .. }
+            | Self::Upper { .. }
+            | Self::Link { .. }
+            | Self::Opaque { .. }
+            | Self::None => false,
+        }
+    }
+
+    /// The described integer destination, including `x0`, even for an
+    /// `Opaque` value. Callers decide whether to discard writes to zero.
+    ///
+    /// `None` means no destination is described, not that the machine
+    /// instruction writes nothing. In particular, `Unsupported` must still
+    /// invalidate proofs that require known effects.
+    pub fn destination_register(self) -> Option<u8> {
+        match self {
+            Self::Integer { dest, .. }
+            | Self::Upper { dest, .. }
+            | Self::Link { dest }
+            | Self::Opaque { dest } => Some(dest),
+            Self::Memory { dest, .. } => dest,
+            Self::Fence { .. } | Self::None | Self::Unsupported => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValueRelocation {
     Ignore,
@@ -442,6 +485,138 @@ pub enum BranchTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_registers(op: SemanticOp, inputs: &[u8], destination: Option<u8>) {
+        assert_eq!(op.destination_register(), destination, "{op:?}");
+        for register in 0..32 {
+            assert_eq!(
+                op.reads_register(register),
+                inputs.contains(&register),
+                "{op:?}, x{register}"
+            );
+        }
+    }
+
+    #[test]
+    fn register_queries_retain_explicit_operands_and_zero_destinations() {
+        for dest in [0, 10, 31] {
+            assert_registers(
+                SemanticOp::Integer {
+                    op: IntegerOp::Add,
+                    dest,
+                    left: Operand::Register(0),
+                    right: Operand::Immediate(10),
+                },
+                &[0],
+                Some(dest),
+            );
+            assert_registers(
+                SemanticOp::Integer {
+                    op: IntegerOp::Add,
+                    dest,
+                    left: Operand::Register(11),
+                    right: Operand::Register(12),
+                },
+                &[11, 12],
+                Some(dest),
+            );
+            assert_registers(
+                SemanticOp::Integer {
+                    op: IntegerOp::Add,
+                    dest,
+                    left: Operand::Immediate(11),
+                    right: Operand::Register(12),
+                },
+                &[12],
+                Some(dest),
+            );
+            for op in [
+                SemanticOp::Upper {
+                    dest,
+                    value: 11,
+                    pc_relative: false,
+                },
+                SemanticOp::Upper {
+                    dest,
+                    value: 12,
+                    pc_relative: true,
+                },
+                SemanticOp::Link { dest },
+                SemanticOp::Opaque { dest },
+            ] {
+                assert_registers(op, &[], Some(dest));
+            }
+        }
+        assert_registers(SemanticOp::None, &[], None);
+        assert_registers(
+            SemanticOp::Fence {
+                fm: 0,
+                predecessor: 15,
+                successor: 15,
+            },
+            &[],
+            None,
+        );
+    }
+
+    #[test]
+    fn memory_queries_cover_bases_sources_and_optional_integer_destinations() {
+        for (kind, dest, source, inputs) in [
+            (MemoryKind::Load, Some(10), None, &[11][..]),
+            (MemoryKind::Store, None, Some(12), &[11, 12][..]),
+            (MemoryKind::LoadReserved, Some(10), None, &[11][..]),
+            (
+                MemoryKind::StoreConditional,
+                Some(10),
+                Some(12),
+                &[11, 12][..],
+            ),
+            (MemoryKind::Atomic, Some(10), Some(12), &[11, 12][..]),
+            (MemoryKind::FloatLoad, None, None, &[11][..]),
+            (MemoryKind::FloatStore, None, None, &[11][..]),
+            (MemoryKind::Atomic, Some(0), Some(0), &[0, 11][..]),
+        ] {
+            assert_registers(
+                SemanticOp::Memory {
+                    kind,
+                    base: 11,
+                    displacement: 10,
+                    width: 4,
+                    dest,
+                    source,
+                    swap: false,
+                    signed: false,
+                },
+                inputs,
+                dest,
+            );
+        }
+        assert_registers(
+            SemanticOp::Memory {
+                kind: MemoryKind::Load,
+                base: 0,
+                displacement: 12,
+                width: 4,
+                dest: Some(10),
+                source: None,
+                swap: false,
+                signed: false,
+            },
+            &[0],
+            Some(10),
+        );
+    }
+
+    #[test]
+    fn unsupported_may_read_any_register_without_describing_a_destination() {
+        assert_eq!(SemanticOp::Unsupported.destination_register(), None);
+        for register in 0..32 {
+            assert!(
+                SemanticOp::Unsupported.reads_register(register),
+                "x{register}"
+            );
+        }
+    }
 
     #[test]
     fn the_psabi_register_roles_partition_the_integer_registers() {

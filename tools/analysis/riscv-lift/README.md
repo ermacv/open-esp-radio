@@ -41,6 +41,12 @@ rv-asm 0.2.1) cover every behavior below; any change to decoding or lifting
 changes its identity. `decode_instruction` is the decoding Blobray's executor
 shares.
 
+`is_base_instruction` shares the provenance consumers' classification of
+`Instruction::Base`, including expanded compressed RV32IMAC forms. It
+excludes extension and floating-point forms even when their semantics are
+supported; it does not assert complete register effects. Queries over
+`SemanticOp` live in the model, independently of this machine classification.
+
 Lifting returns bounded typed operations over RV32 registers. Loads, stores and
 atomics describe effects without reading memory. Compressed instructions use the
 shared normalized operands, including the decoder's signed C.ANDI immediate.
