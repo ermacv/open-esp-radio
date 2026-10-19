@@ -346,6 +346,14 @@ fn mmio_pointer_fields_encode_layout_references_and_validate_targets() {
         .expect("policy syntax");
         assert!(oer_registers_model::validate_pointer_writes(model.layouts(), &invalid).is_err());
     }
+    let second = POINTER_POLICY
+        .strip_prefix("schema = 5\n")
+        .expect("fixture header");
+    assert!(pointer_policy(&format!("{POINTER_POLICY}{second}")).is_err());
+    let second = second.replace("node_pointer", "another_pointer");
+    let error = pointer_policy(&format!("{POINTER_POLICY}{second}"))
+        .expect_err("one register field cannot have two target declarations");
+    assert!(error.contains("duplicate PAC pointer field"));
     for source in [
         POINTER_POLICY.replace("field = \"ADDRESS_LOW\"", "field = \"FLAG\""),
         POINTER_POLICY.replace("encoding = \"ble-compressed\"", ""),

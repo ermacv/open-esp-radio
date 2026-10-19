@@ -2,6 +2,15 @@ use std::boxed::Box;
 
 use super::*;
 
+#[test]
+fn a_null_compressed_base_is_rejected_before_a_table_can_be_published() {
+    let storage = std::boxed::Box::leak(std::boxed::Box::new(LeDeviceTableStorage::new()));
+    assert!(matches!(
+        LeDeviceTable::bind_model(storage, BLUETOOTH_CONTROLLER_PHYSICAL_SRAM_LOW),
+        Err(LeDeviceTableBindError::ZeroCompressedImage)
+    ));
+}
+
 fn table() -> LeDeviceTable {
     LeDeviceTable::bind_model(
         Box::leak(Box::new(LeDeviceTableStorage::new())),
