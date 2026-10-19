@@ -11,6 +11,7 @@
 
 use core::pin::Pin;
 
+use oer_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 use oer_time::{Clock, Instant, Timer};
 
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
@@ -44,10 +45,6 @@ pub const TX_FCS_SIZE: usize = 4;
 /// and its detach (`SOURCE[PROMOTED_LMAC_TX]`, see
 /// `TxSlot::begin_timeout_abort`).
 pub(crate) const TX_ABORT_SETTLE: oer_time::Duration = oer_time::Duration::from_micros(16);
-/// Metadata bit set by the complete HE S-MPDU preparation leaf before DMA
-/// publication. It selects the single-MPDU container geometry while the low
-/// twenty bits retain MPDU+MIC+FCS length.
-const HE_SMPDU_METADATA_FLAG: u32 = 1 << 24;
 /// First Frame Control byte of a BlockAckReq: control type, subtype eight.
 const BLOCK_ACK_REQUEST_FRAME_CONTROL: u8 = 0x84;
 
@@ -1502,17 +1499,17 @@ where
             .ok_or(OrdinaryTxError::DeadlineOverflow)?;
         let rate = active.retry.current_rate()?;
         let metadata = self.slot.as_mut().buffer_mut()?;
-        let mut metadata_word = u32::from_le_bytes(
-            metadata[..4]
-                .try_into()
-                .expect("TX metadata word has a fixed four-byte prefix"),
-        );
-        if matches!(rate, TxPhyRate::He(_)) {
-            metadata_word |= HE_SMPDU_METADATA_FLAG;
-        } else {
-            metadata_word &= !HE_SMPDU_METADATA_FLAG;
-        }
-        metadata[..4].copy_from_slice(&metadata_word.to_le_bytes());
+        let head = <&mut [u8; WifiTxMetadataHead::SIZE]>::try_from(
+            &mut metadata[..WifiTxMetadataHead::SIZE],
+        )
+        .expect("TX metadata begins with its fixed head");
+        // The HE S-MPDU bit selects the single-MPDU container geometry; the
+        // low bits keep the MPDU+MIC+FCS length.
+        let mut head = WifiTxMetadataHeadMut::new(head);
+        let control = head
+            .control()
+            .with_he_smpdu(matches!(rate, TxPhyRate::He(_)));
+        head.set_control(control);
         let cookie = self
             .slot
             .as_mut()
