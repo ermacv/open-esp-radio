@@ -1,6 +1,6 @@
 # The facts of the ESP32-C5 that host tools cannot derive from the chip id.
-# Paths follow the id by convention: verification/<id>, registers/<id>,
-# hil/targets/<id>, target/hil/<id>.
+# Paths follow the id by convention: chips/<id>/{vendor,registers},
+# firmware/hil/<id>, target/hil/<id>.
 schema = 1
 id = "esp32c5"
 # The family whose shared code the chip uses (`platform = "family"` packages).
@@ -168,7 +168,7 @@ header-size-offset = 28
 crc-offset = 40
 
 # The HIL agent's graph is the source-only stack: the root lock and
-# hil/targets/esp32c5 must not pull in esp-rtos, whose scheduler and
+# firmware/hil/esp32c5 must not pull in esp-rtos, whose scheduler and
 # interrupt bindings the staged runtime's static table replaces.
 [hil]
 forbidden-packages = ["esp-rtos"]

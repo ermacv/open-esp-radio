@@ -1,11 +1,10 @@
 //! Run one catalog scenario against the compiled vendor driver and print its
 //! boundary trace, one record per line, or compare it with the production
 //! engine and print the verdict; or compare every scenario, each in its own
-//! process, and write the stand's evidence shard.
+//! process, and print its verdict.
 
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -15,24 +14,14 @@ use oer_vendor_ieee802154_esp32s31::{Verdict, catalog, claim, compare, port};
 fn main() -> ExitCode {
     let mut arguments = std::env::args().skip(1);
     let first = arguments.next();
-    if first.as_deref() == Some("shard") {
-        let index = match (
-            arguments.next().as_deref(),
-            arguments.next(),
-            arguments.next(),
-        ) {
-            (Some("--index"), Some(index), None) => PathBuf::from(index),
-            _ => return usage(),
-        };
-        return match shard(&index) {
+    match (first.as_deref(), arguments.next()) {
+        (Some("compare"), Some(name)) if name == "all" => match compare_all() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("error: {error}");
                 ExitCode::FAILURE
             }
-        };
-    }
-    match (first.as_deref(), arguments.next()) {
+        },
         (Some("list"), None) => {
             for scenario in catalog::SCENARIOS {
                 println!("{}", scenario.name);
@@ -72,53 +61,61 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: oer-tool-vendor-ieee802154-esp32s31-cli list | run <scenario> | compare <scenario> | shard --index <directory>"
+        "usage: oer-tool-vendor-ieee802154-esp32s31-cli list | run <scenario> | compare <scenario> | compare all"
     );
     ExitCode::FAILURE
 }
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// The chip, the artifact source of the compiled vendor files and the
-/// production entry every scenario drives.
-const CHIP: &str = "esp32s31";
-const SOURCE: &str = "esp-idf";
-const PRODUCTION: &str = "oer_espressif_ieee802154_engine::engine";
-
-/// Compare every catalog scenario, each in a process of its own (the
-/// vendor driver runs one scenario per process), and write the stand's
-/// shard into `index` when every one compared MATCH.
-fn shard(index: &Path) -> Result<()> {
+/// Compare every catalog scenario in its own process.
+fn compare_all() -> Result<()> {
     let program = std::env::current_exe()?;
-    let mut matched = Vec::new();
-    for scenario in catalog::SCENARIOS {
+    compare_scenarios(|name| {
         let status = oer_os_process::command(&program)
-            .args(["compare", scenario.name])
-            .stdout(std::process::Stdio::null())
+            .args(["compare", name])
             .status()?;
         if !status.success() {
-            return Err(format!("{} did not compare MATCH ({status})", scenario.name).into());
+            return Err(format!("{name} did not compare MATCH ({status})").into());
         }
-        matched.push(scenario.name.to_owned());
-    }
-    let directory = Path::new(oer_vendor_ieee802154_esp32s31::DIRECTORY);
-    let root = directory.join("../../..");
-    let inputs = oer_tool_pins::artifacts::pinned(&root, CHIP)?
-        .into_iter()
-        .filter(|artifact| artifact.source == SOURCE)
-        .map(|artifact| Ok((artifact.id, oer_os_durable::sha256_file(&artifact.path)?)))
-        .collect::<Result<_>>()?;
-    let shard = oer_vendor_evidence::producer::host_stand::shard(
-        &oer_vendor_evidence::producer::host_stand::Stand {
-            chip: CHIP,
-            directory,
-            source: SOURCE,
-            production: PRODUCTION,
-        },
-        &matched,
-        inputs,
-    )?;
-    let path = oer_vendor_evidence::shard::store::write(index, &shard)?;
-    println!("evidence shard {}", path.display());
+        Ok(())
+    })?;
+    println!("all IEEE 802.15.4 host scenarios passed");
     Ok(())
+}
+
+fn compare_scenarios(mut run: impl FnMut(&str) -> Result<()>) -> Result<()> {
+    for scenario in catalog::SCENARIOS {
+        run(scenario.name)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_catalog_scenario_is_compared_and_the_first_failure_stops_the_run() {
+        let mut names = vec![];
+        compare_scenarios(|name| {
+            names.push(name.to_owned());
+            Ok(())
+        })
+        .expect("every scenario matched");
+        assert_eq!(
+            names,
+            catalog::SCENARIOS
+                .iter()
+                .map(|s| s.name)
+                .collect::<Vec<_>>()
+        );
+        let mut calls = 0;
+        let error = compare_scenarios(|_| {
+            calls += 1;
+            Err("DIFF".into())
+        })
+        .expect_err("a failed comparison fails the run");
+        assert_eq!(calls, 1);
+        assert_eq!(error.to_string(), "DIFF");
+    }
 }

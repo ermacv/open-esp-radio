@@ -22,10 +22,9 @@
 //! define (the ROM's copy and a library's, which may handle the same
 //! register bits differently) must be cited by its copy, and a bare name of
 //! one is an error. The platform's ROM function summaries cite the ROM's
-//! copy. A coverage decision names the function a scenario executed,
-//! whichever copy its link took, and cites every copy until coverage
-//! locations carry the copy. Accepting a copy no citation names any longer removes its
-//! registration.
+//! copy. Observation and state decisions name the functions their scenarios
+//! compare and cite every pinned copy. Accepting a copy no citation names
+//! any longer removes its registration.
 use crate::Result;
 use crate::fingerprint::Function;
 use oer_tool_pins::artifacts::project::{self, Project};
@@ -144,14 +143,10 @@ fn is_code_name(word: &str) -> bool {
         || word.chars().skip(1).any(|c| c.is_ascii_uppercase())
 }
 
-/// The chip's reviewed verification decisions: its coverage decisions and
-/// accepted losses, and every decision module of its scenario library. A
-/// missing file or directory is an error, never an empty list.
+/// The chip's observation and state decision modules. A missing directory
+/// or unreadable module is an error, never an empty list.
 fn decision_files(root: &Path, project: &Project) -> Result<Vec<PathBuf>> {
-    let mut files = vec![
-        root.join(project.coverage()),
-        root.join(project.accepted_losses()),
-    ];
+    let mut files = vec![];
     let modules = root.join(project.scenario_decisions());
     for entry in std::fs::read_dir(&modules).map_err(|e| format!("{}: {e}", modules.display()))? {
         let path = entry?.path();
@@ -164,8 +159,8 @@ fn decision_files(root: &Path, project: &Project) -> Result<Vec<PathBuf>> {
 }
 
 /// Code-shaped string literals of the decision `files`, by name, with the
-/// names of the files that name them: a decision's `Place` names the vendor
-/// function whose code it excludes.
+/// names of the files that name them: observation and state decisions
+/// name the vendor functions they review.
 fn decision_words(files: &[PathBuf]) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut words: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for path in files {
@@ -472,8 +467,8 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
         &mut bare_at,
     );
 
-    // A decision names the function a scenario executed, whichever copy its
-    // link took; coverage locations carry no copy, so it cites every copy.
+    // Observation and state decisions name the compared function and cite
+    // every pinned copy.
     let decisions = decision_words(&decision_files(root, &scanned)?)?;
     words.extend(decisions.keys().cloned());
     if let Some(rom) = scanned.rom(root)?

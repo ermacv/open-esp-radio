@@ -4102,27 +4102,26 @@ dependencies = [
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-chip-profile",
+ "oer-image-build",
  "oer-os-command-tree",
  "oer-os-process",
  "oer-os-toolchain",
+ "oer-probe-codegen",
  "oer-registers-model",
  "oer-tool-pins",
- "oer-vendor-evidence",
  "oer-vendor-lineage",
  "oer-vendor-phy",
  "oer-vendor-provenance",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
 name = "oer-tool-vendor-ieee802154-esp32s31-cli"
 version = "0.1.0"
 dependencies = [
- "oer-os-durable",
  "oer-os-process",
- "oer-tool-pins",
- "oer-vendor-evidence",
  "oer-vendor-ieee802154-esp32s31",
 ]
 
@@ -4147,23 +4146,6 @@ name = "oer-trace"
 version = "0.1.0"
 dependencies = [
  "oer-memory",
-]
-
-[[package]]
-name = "oer-vendor-evidence"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-image-build",
- "oer-os-process",
- "oer-os-toolchain",
- "oer-probe-codegen",
- "oer-tool-pins",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "toml",
 ]
 
 [[package]]
@@ -4249,12 +4231,9 @@ dependencies = [
  "oer-probe-codegen",
  "oer-registers-bindings",
  "oer-tool-pins",
- "oer-vendor-evidence",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "tempfile",
- "toml",
 ]
 
 [[package]]
@@ -4266,7 +4245,6 @@ dependencies = [
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-os-process",
- "oer-vendor-evidence",
  "oer-vendor-scenario",
  "sha2 0.10.9",
 ]
@@ -4296,7 +4274,6 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-tool-pins",
- "oer-vendor-evidence",
  "oer-vendor-scenario",
  "serde",
  "toml",

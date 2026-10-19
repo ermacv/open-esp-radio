@@ -234,7 +234,8 @@ impl Gates {
     pub fn runtime(&self, input: &CheckInput<'_>) -> Result<CheckOutcome> {
         let mut outcome = CheckOutcome::default();
         let profile = input.profile;
-        let chip = |table: &str| format!("platform/{}/chip.toml names no {table}", profile.id);
+        let chip =
+            |table: &str| format!("chips/{}/platform/chip.toml names no {table}", profile.id);
         let missing = |what: String| CheckResult::MissingContract(what);
         // What each analysis needs.
         let rom = profile.rom.is_some();
@@ -356,7 +357,7 @@ impl Gates {
         }
         let result = if input.profile.rom.is_none() {
             CheckResult::MissingContract(format!(
-                "platform/{}/chip.toml names no [rom] ELF",
+                "chips/{}/platform/chip.toml names no [rom] ELF",
                 input.profile.id
             ))
         } else if input.policy.stacks().is_err() {

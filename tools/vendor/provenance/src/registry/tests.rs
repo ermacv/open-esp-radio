@@ -163,54 +163,54 @@ fn an_untagged_neutral_block_fails_only_the_chips_it_cites() {
 }
 
 #[test]
-fn decisions_cite_the_code_shaped_names_their_places_quote() {
-    let directory = tempfile::tempdir().unwrap();
+fn decisions_cite_names_from_observation_and_state() {
+    let directory = tempfile::tempdir().expect("temporary decision directory");
     std::fs::write(
-        directory.path().join("coverage.toml"),
-        "[[decision]]\nreason = \"\"\"\nthe TXOP holding path, \\\nnot used\"\"\"\n\
-         [[decision.place]]\nfunction = \"mac_tx_set_txop_q\"\nstart = 0x30\nend = 0x34\n\
-         [[decision.place]]\nfunction = \"hal_mac_fill_hwtxop\"\n",
+        directory.path().join("observation.rs"),
+        r#"Decision { reason: "review", lines: &[("hal/src/a.rs", "self.registers,")] }"#,
     )
-    .unwrap();
+    .expect("decision source");
     std::fs::write(
         directory.path().join("state.rs"),
-        r#"("phy/src/target_port.rs", "self.registers,"), Place::Function("mac_tx_set_txop_q")"#,
+        r#"Decision { vendor: "phy_i2c_readReg", production: "open_phy_trace_i2c_transfer" }"#,
     )
-    .unwrap();
+    .expect("decision source");
     let words = decision_words(&[
-        directory.path().join("coverage.toml"),
+        directory.path().join("observation.rs"),
         directory.path().join("state.rs"),
     ])
-    .unwrap();
+    .expect("decision source");
     assert_eq!(
-        words.keys().collect::<Vec<_>>(),
-        ["hal_mac_fill_hwtxop", "mac_tx_set_txop_q"]
+        words.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["open_phy_trace_i2c_transfer", "phy_i2c_readReg"]
     );
     assert_eq!(
-        words["mac_tx_set_txop_q"].iter().collect::<Vec<_>>(),
-        ["coverage.toml", "state.rs"]
+        words["phy_i2c_readReg"],
+        BTreeSet::from(["state.rs".to_owned()])
     );
 }
 
 #[test]
-fn every_decision_file_of_this_checkout_is_read_and_a_missing_one_fails() {
+fn only_the_retained_decision_modules_are_read_and_a_missing_one_fails() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let project = Project::new(&root, "esp32s31").unwrap();
-    let files = decision_files(&root, &project).unwrap();
-    let names: Vec<_> = files
-        .iter()
-        .map(|file| file.file_name().unwrap().to_str().unwrap())
-        .collect();
-    for name in [
-        "coverage.toml",
-        "accepted-losses.toml",
-        "state.rs",
-        "observation.rs",
-    ] {
-        assert!(names.contains(&name), "{names:?}");
+    for chip in ["esp32s31", "esp32c5"] {
+        let project = Project::new(&root, chip).expect("decision source");
+        let files = decision_files(&root, &project).expect("decision source");
+        let names = files
+            .iter()
+            .map(|f| {
+                f.file_name()
+                    .expect("decision file name")
+                    .to_str()
+                    .expect("UTF-8 file name")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["mod.rs", "observation.rs", "state.rs"]);
     }
-    let empty = tempfile::tempdir().unwrap();
-    assert!(decision_words(&[empty.path().join("coverage.toml")]).is_err());
+    let empty = tempfile::tempdir().expect("temporary decision directory");
+    assert!(decision_words(&[empty.path().join("state.rs")]).is_err());
+    let project = Project::new(&root, "esp32s31").expect("decision source");
+    assert!(decision_files(empty.path(), &project).is_err());
 }
 
 #[test]
@@ -218,15 +218,15 @@ fn notes_are_scanned_but_the_generated_facts_are_not() {
     assert!(PRODUCTION.contains(&"chips"));
     assert!(generated("chips/esp32s31/vendor/facts/provenance.toml"));
     assert!(!generated("chips/esp32s31/notes/wifi/rx-walker.md"));
-    assert!(!generated("chips/esp32s31/vendor/coverage.toml"));
+    assert!(!generated("chips/esp32s31/vendor/artifacts.toml"));
 }
 
 #[test]
-fn a_changed_decision_function_names_the_exclusions_to_review() {
-    let files: BTreeSet<String> = ["coverage.toml".to_owned()].into();
+fn a_changed_decision_function_names_the_decisions_to_review() {
+    let files: BTreeSet<String> = ["state.rs".to_owned()].into();
     assert_eq!(
         review_hint(Some(&files)),
-        "; re-review the exclusions in coverage.toml"
+        "; re-review the exclusions in state.rs"
     );
     assert_eq!(review_hint(None), "");
 }

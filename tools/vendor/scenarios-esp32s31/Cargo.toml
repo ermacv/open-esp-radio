@@ -12,7 +12,6 @@ description = "Typed ESP32-S31 vendor-comparison scenarios driven through the Bl
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-oer-vendor-evidence = { path = "../evidence" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
 oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }

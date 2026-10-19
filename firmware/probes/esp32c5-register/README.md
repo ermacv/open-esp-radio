@@ -34,8 +34,8 @@ flashes this ELF under a board lease. From the repository root, with the
 board's port from `cargo stand board check esp32c5`:
 
 ```console
-(cd verification/esp32c5/hardware/register-probe && cargo build --release)
-elf=verification/esp32c5/hardware/register-probe/target/riscv32imac-unknown-none-elf/release/oer-esp32c5-register-probe
+cargo fw probe oer-firmware-probes-esp32c5-register
+elf=target/fw-probe/riscv32imac-unknown-none-elf/firmware/oer-firmware-probes-esp32c5-register
 cargo stand lease --board esp32c5 --air none --flashed esp32c5-register-probe \
   --device esp32c5 --application "$elf" -- sh -c \
   "espflash flash --chip esp32c5 --port PORT $elf && timeout 30 espflash monitor --chip esp32c5 --port PORT --non-interactive --elf $elf"

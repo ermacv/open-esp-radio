@@ -1,59 +1,21 @@
-//! Reviewer reports of the typed vendor-comparison scenarios.
-//!
-//! Nothing here decides a verdict or a recorded set: the engine hands each
-//! claimed suite's [`Findings`] to [`Reviewer`], which writes the untriaged
-//! locations, the function view and the closure gateways beside the run and
-//! prints the compared pairs no claim names. [`inspect`] reads pinned vendor
-//! code without running a scenario. The dependency runs from this crate to
-//! the engine only, so an edit here leaves the evidence shards current.
-
+//! Reports compared pairs with no claim and inspects pinned vendor code.
 #![forbid(unsafe_code)]
 pub mod command;
-
 pub mod inspect;
-pub mod triage;
 
-use oer_vendor_scenario::coverage;
 use oer_vendor_scenario::findings::{Findings, RunReport};
 use oer_vendor_scenario::harness::Result;
-use oer_vendor_scenario::registers::Registers;
 
-/// The report every scenario binary passes to the engine.
 #[derive(Default)]
 pub struct Reviewer;
 
 impl RunReport for Reviewer {
     fn report(&self, findings: &Findings<'_>) -> Result<()> {
-        let suite = findings.suite;
         for (vendor, production) in findings.unclaimed {
-            println!("{suite} compared pair {vendor} -> {production} has no claim");
-        }
-        if let Some(untriaged) = &findings.untriaged {
-            // A reviewer's aid beside the run: each untriaged location's code.
-            let code = triage::Code::of(
-                &untriaged.images,
-                Registers::load(
-                    &oer_os_process::built_root().join(oer_vendor_scenario::chip().registers),
-                )?,
-                coverage::diagnostic(untriaged.decisions),
-            )?;
-            let path = triage::write(findings.directory, suite, &code, untriaged.listed)?;
-            println!("{suite} untriaged locations: {}", path.display());
-            let view = triage::functions(
-                &code,
-                untriaged.listed,
-                untriaged.uncovered,
-                untriaged.consequential,
-                |location| coverage::reason(untriaged.decisions, location),
+            println!(
+                "{} compared pair {vendor} -> {production} has no claim",
+                findings.suite
             );
-            let path = findings.directory.join(format!("functions-{suite}.txt"));
-            std::fs::write(&path, view)?;
-            println!("{suite} untriaged functions: {}", path.display());
-        }
-        if !findings.gateways.is_empty() {
-            let path = findings.directory.join(format!("gateways-{suite}.txt"));
-            std::fs::write(&path, findings.gateways.join("\n") + "\n")?;
-            println!("{suite} closure gateways: {}", path.display());
         }
         Ok(())
     }

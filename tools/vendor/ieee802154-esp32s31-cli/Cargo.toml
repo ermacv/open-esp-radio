@@ -5,13 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "The IEEE 802.15.4 host stand's program: list, run and compare the catalog scenarios, one per process, and write the stand's evidence shard"
+description = "The IEEE 802.15.4 host stand's program: list, run and compare the catalog scenarios, one per process,"
 
 [dependencies]
-oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }
-oer-tool-pins = { path = "../../pins" }
-oer-vendor-evidence = { path = "../evidence" }
 oer-vendor-ieee802154-esp32s31 = { path = "../ieee802154-esp32s31" }
 
 [features]

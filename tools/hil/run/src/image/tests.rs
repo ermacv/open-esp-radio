@@ -54,9 +54,9 @@ fn a_seeded_build_has_artifacts_of_its_own() {
 
 #[test]
 fn cargo_tree_lines_name_their_packages() {
-    let tree = "oer-chip-a-hil-agent v0.1.0 (/repo/hil/targets/chip-a/agent)\n\
+    let tree = "oer-chip-a-hil-agent v0.1.0 (/repo/firmware/hil/chip-a)\n\
                 critical-section v1.2.0\n\
-                oer-ieee802154-mac v0.1.0 (/repo/crates/protocols/ieee802154) (*)\n";
+                oer-ieee802154-mac v0.1.0 (/repo/protocols/ieee802154/mac) (*)\n";
     assert_eq!(
         tree_packages(tree),
         [

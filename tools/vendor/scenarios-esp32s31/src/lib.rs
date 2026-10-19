@@ -18,8 +18,7 @@ pub mod wifi;
 pub use bluetooth::ble;
 pub use coexistence::{coex, coex_hw};
 pub use engine::{
-    artifacts, contracts, coverage, evidence, harness, harness_edges, layout, observation, session,
-    state,
+    artifacts, contracts, evidence, harness, harness_edges, layout, observation, session, state,
 };
 pub use phy::{
     calibration_leaves, calibration_prefix, channel, gain, gain_state, i2c, i2c_transport, rfpll,
@@ -30,16 +29,13 @@ pub use wifi::{ampdu_resort, low_power_clock, mac, retry, rx_append};
 /// The ESP32-S31 facts the scenario engine runs with.
 pub static CHIP: oer_vendor_scenario::Chip = oer_vendor_scenario::Chip {
     name: "esp32s31",
-    manifest: "chips/esp32s31/vendor/artifacts.toml",
     manifest_text: include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
     hardware_scope: "chips/esp32s31",
     shared_scopes: &["protocols/ieee80211", "chips/espressif/coex"],
     rom_input: layout::ROM_INPUT,
     rom_symbols: &layout::ROM_SYMBOLS,
     stack: (layout::STACK_ADDRESS, layout::STACK_BYTES),
-    coverage: "chips/esp32s31/vendor/coverage.toml",
     observation: decisions::observation::DECISIONS,
-    state: decisions::state::DECISIONS,
     phy: Some(&layout::PHY_LAYOUT),
     isa: oer_vendor_scenario::Isa::Rv32imafcZbaZbbZbsZcbZcmp,
     registers: "chips/esp32s31/registers/published/radio.bindings.toml",
@@ -50,29 +46,11 @@ pub fn install() {
     oer_vendor_scenario::install(&CHIP);
 }
 
-/// The directory of the chip's probe packages, relative to the repository
-/// root, and the probe ELF package whose path dependencies are the compiled
-/// production sources.
-pub const PROBES_DIRECTORY: &str = "firmware/probes";
-pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-radio";
-/// Package of the compiled Bluetooth probe image.
-pub const BLUETOOTH_PROBES_PACKAGE: &str = "oer-firmware-probes-esp32s31-bluetooth";
-pub const PROBES_TARGET: &str = "riscv32imafc-unknown-none-elf";
-
 #[cfg(test)]
 mod tests {
     use crate::artifacts::{manifest, path, sha256};
     use oer_tool_pins::SourceKind;
     use std::path::Path;
-
-    #[test]
-    fn only_fetched_pins_are_shard_input_identities() {
-        super::install();
-        assert!(crate::artifacts::is_fetched_pin(sha256("libphy").unwrap()));
-        assert!(crate::artifacts::is_fetched_pin(sha256("rom").unwrap()));
-        // A host build's digest, such as a probe's, is no pin.
-        assert!(!crate::artifacts::is_fetched_pin(&"0".repeat(64)));
-    }
 
     #[test]
     fn a_firmware_input_has_the_digest_of_its_current_build_or_none() {
@@ -142,11 +120,6 @@ mod tests {
                 artifact.id
             );
         }
-        // The recipes are shard sources: every firmware project.
-        assert_eq!(
-            crate::artifacts::firmware_projects(&root).unwrap(),
-            [Path::new("firmware/vendor/esp32s31/phy-tracking-reference")]
-        );
     }
 
     #[test]

@@ -63,7 +63,7 @@ pub fn parse(text: &str) -> Result<Vec<Entry>> {
 pub fn render(entries: &[Entry]) -> String {
     let mut text = String::from(
         "# Code fingerprints of the vendor functions production `SOURCE:` blocks\n\
-         # and the register model cite, and those the verification decisions\n\
+         # and the register model cite, and those observation and state decisions\n\
          # exclude code of, as reviewed. Maintained by\n\
          # `cargo vendor-check provenance`; checked by `cargo vendor-check\n\
          # check provenance`.\n\
@@ -108,7 +108,7 @@ mod tests {
                 member: "hal_mac_tx.o".into(),
                 symbol: "mac_tx_set_txop_q".into(),
                 code: "abc".into(),
-                decisions: vec!["coverage.rs".into()],
+                decisions: vec!["state.rs".into()],
             },
         ];
         assert_eq!(parse(&render(&entries)).unwrap(), entries);

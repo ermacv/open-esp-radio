@@ -76,16 +76,13 @@ pub static PHY_LAYOUT: PhyLayout = PhyLayout {
 /// The ESP32-C5 facts the scenario engine runs with.
 pub static CHIP: Chip = Chip {
     name: "esp32c5",
-    manifest: "chips/esp32c5/vendor/artifacts.toml",
     manifest_text: include_str!("../../../../chips/esp32c5/vendor/artifacts.toml"),
     hardware_scope: "chips/esp32c5",
     shared_scopes: &["protocols/ieee80211"],
     rom_input: ROM_INPUT,
     rom_symbols: &[],
     stack: STACK,
-    coverage: "chips/esp32c5/vendor/coverage.toml",
     observation: decisions::observation::DECISIONS,
-    state: decisions::state::DECISIONS,
     phy: Some(&PHY_LAYOUT),
     isa: Isa::Rv32imac,
     registers: "chips/esp32c5/registers/published/radio.bindings.toml",
@@ -95,9 +92,3 @@ pub static CHIP: Chip = Chip {
 pub fn install() {
     oer_vendor_scenario::install(&CHIP);
 }
-
-/// The directory of the chip's probe packages, relative to the repository
-/// root, and the probe ELF package whose path dependencies are the compiled
-/// production sources.
-pub const PROBES_DIRECTORY: &str = "firmware/probes";
-pub const PROBES_PACKAGE: &str = "oer-firmware-probes-esp32c5-radio";

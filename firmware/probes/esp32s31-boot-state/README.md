@@ -24,8 +24,8 @@ images only, so `espflash` flashes this ELF under a board lease. From the
 repository root, with the board's port from `cargo stand board check esp32s31`:
 
 ```console
-(cd verification/esp32s31/hardware/boot-state-probe && cargo build --release)
-elf=verification/esp32s31/hardware/boot-state-probe/target/riscv32imafc-unknown-none-elf/release/oer-esp32s31-boot-state-probe
+cargo fw probe oer-firmware-probes-esp32s31-boot-state
+elf=target/fw-probe/riscv32imafc-unknown-none-elf/firmware/oer-firmware-probes-esp32s31-boot-state
 cargo stand lease --board esp32s31 --air none --flashed esp32s31-boot-state-probe \
   --device esp32s31 --application "$elf" -- sh -c \
   "espflash flash --chip esp32s31 --port PORT $elf && timeout 25 espflash monitor --chip esp32s31 --port PORT --non-interactive --elf $elf"

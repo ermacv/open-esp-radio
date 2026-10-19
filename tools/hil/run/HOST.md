@@ -43,7 +43,7 @@ hil/
     └── esp32s31/      current embedded target workspace
 ```
 
-Target firmware lives under `hil/targets/<chip>`. Runs are immutable bundles
+Target firmware lives under `firmware/hil/<chip>`. Runs are immutable bundles
 in the run store (`target/hil/runs`); Markdown is not proof input.
 
 Vendor-linked oracles remain isolated under `verification`; they are
@@ -100,7 +100,7 @@ boards' ids are written into every run manifest so results from different
 stands and boards cannot be silently mixed.
 
 A run's device under test is a board of the pool with the `dut` role and the
-run's chip, which has a profile in `platform/<chip>/chip.toml`. There is no
+run's chip, which has a profile in `chips/<chip>/platform/chip.toml`. There is no
 default chip: a command that uses a device under test takes it from its
 `--chip` or from the only chip that builds its scenarios' images, and checks
 and resolves only that board, so an absent board, or one whose chip has no

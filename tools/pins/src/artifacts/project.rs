@@ -27,24 +27,13 @@ pub fn projects(root: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Directory of `chip`'s vendor scenario evidence shards, relative to the
-/// root: derived data, which `cargo vendor-check evidence` writes for the
-/// checkout from its sources and pins, and nothing tracks. Its one location
-/// for every reader.
-pub fn evidence_shards(chip: &str) -> String {
-    format!("target/verification/{chip}/evidence")
-}
-
-/// A chip's typed vendor scenarios: the verdict library that decides their
-/// verdicts, and the entry package whose binary, of the same name, runs
-/// them through the shared scenario command line (a report package the
-/// verdict library never depends on).
+/// The package and binary that run a chip's typed vendor scenarios.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Scenarios {
-    /// `tools/vendor/scenarios-<chip>`.
-    pub library: String,
-    /// `tools/vendor-scenarios-<chip>`.
+    /// Entry package in `tools/vendor/scenarios-<chip>-cli`.
     pub entry: String,
+    /// Its explicitly named binary.
+    pub binary: String,
 }
 
 /// The vendor verification project of one supported chip.
@@ -69,29 +58,11 @@ impl Project {
         crate::manifest(&self.0)
     }
 
-    /// Directory of the chip's vendor scenario evidence shards
-    /// ([`evidence_shards`]).
-    pub fn evidence_shards(&self) -> String {
-        evidence_shards(&self.0)
-    }
-
     /// The chip's ROM as its profile's `[rom]` names it: the pinned ROM
     /// ELF's artifact id and the reviewed summaries of the ROM functions its
     /// images call, relative to the root; `None` for a chip without one.
     pub fn rom(&self, root: &Path) -> Result<Option<oer_chip_profile::Rom>> {
         Ok(oer_chip_profile::Profile::load(root, &self.0)?.rom)
-    }
-
-    /// The chip's reviewed acceptances of vendor roots its index retired or
-    /// whose comparisons it narrowed, which a comparison with an earlier
-    /// index accepts as intended rather than lost evidence.
-    pub fn accepted_losses(&self) -> String {
-        format!("{CHIPS}/{}/vendor/accepted-losses.toml", self.0)
-    }
-
-    /// The chip's reviewed coverage decisions.
-    pub fn coverage(&self) -> String {
-        format!("{CHIPS}/{}/vendor/coverage.toml", self.0)
     }
 
     /// Directory of the chip's typed vendor scenario library.
@@ -112,8 +83,8 @@ impl Project {
     /// The package of the chip's typed vendor scenarios.
     pub fn scenarios(&self) -> Scenarios {
         Scenarios {
-            library: format!("oer-vendor-scenarios-{}", self.0),
-            entry: format!("oer-tool-vendor-scenarios-{}", self.0),
+            entry: format!("oer-tool-vendor-scenarios-{}-cli", self.0),
+            binary: format!("oer-tool-vendor-scenarios-{}", self.0),
         }
     }
 }
@@ -153,8 +124,6 @@ mod tests {
             // Every path of a project lies in this checkout.
             for path in [
                 chip.artifacts(),
-                chip.accepted_losses(),
-                chip.coverage(),
                 format!("{}/Cargo.toml", chip.scenarios_directory()),
                 chip.scenario_decisions(),
             ] {
@@ -165,23 +134,25 @@ mod tests {
                 format!("chips/{name}/vendor/artifacts.toml")
             );
             assert_eq!(
-                chip.evidence_shards(),
-                format!("target/verification/{name}/evidence")
-            );
-            assert_eq!(
-                chip.accepted_losses(),
-                format!("chips/{name}/vendor/accepted-losses.toml")
-            );
-            assert_eq!(
                 chip.scenarios_directory(),
                 format!("tools/vendor/scenarios-{name}")
             );
+            let manifest = root().join(format!("{}-cli/Cargo.toml", chip.scenarios_directory()));
+            let entry: toml::Table = toml::from_str(
+                &std::fs::read_to_string(manifest).expect("scenario entry manifest"),
+            )
+            .expect("valid scenario entry manifest");
+            let scenarios = chip.scenarios();
             assert_eq!(
-                chip.scenarios(),
-                Scenarios {
-                    library: format!("oer-vendor-scenarios-{name}"),
-                    entry: format!("oer-tool-vendor-scenarios-{name}"),
-                }
+                entry["package"]["name"].as_str(),
+                Some(scenarios.entry.as_str())
+            );
+            assert!(
+                entry["bin"]
+                    .as_array()
+                    .expect("scenario entry declares its binary")
+                    .iter()
+                    .any(|bin| bin["name"].as_str() == Some(scenarios.binary.as_str()))
             );
         }
     }

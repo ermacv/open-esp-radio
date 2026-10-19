@@ -39,7 +39,6 @@ const ALL: u32 = u32::MAX;
 /// ones a call preserves.
 const REGISTERS: usize = 32;
 pub(crate) const ZERO: u8 = 0;
-pub(crate) const STACK: u8 = 2;
 const CALLEE_SAVED: [u8; 13] = [2, 8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
 /// Smallest instruction, the step of the undecodable-bytes fallback.
 const PARCEL: usize = 2;
@@ -200,34 +199,6 @@ impl Corpus {
             corpus.add_artifact(origin, bytes)?;
         }
         Ok(corpus)
-    }
-
-    /// A corpus of linked functions, for tests: (name, entry, code).
-    #[cfg(test)]
-    pub(crate) fn linked(functions: &[(&str, u32, &[u8])], registers: Registers) -> Self {
-        let mut corpus = Self {
-            functions: vec![],
-            names: BTreeMap::new(),
-            registers,
-            missing: vec![],
-        };
-        for (name, entry, code) in functions {
-            corpus.names.insert(*entry, (*name).to_owned());
-            corpus.functions.push(Function {
-                origin: "image".into(),
-                name: (*name).to_owned(),
-                entry: *entry,
-                code: code.to_vec(),
-                references: BTreeMap::new(),
-                linked: true,
-            });
-        }
-        corpus
-    }
-
-    /// The first definition of `name`, in artifact order.
-    pub(crate) fn function(&self, name: &str) -> Option<&Function> {
-        self.functions.iter().find(|function| function.name == name)
     }
 
     fn add_artifact(&mut self, id: &str, bytes: &[u8]) -> Result<()> {
@@ -436,10 +407,6 @@ impl Corpus {
                     notes: vec![],
                     access: None,
                     print: None,
-                    op: SemanticOp::Unsupported,
-                    flow: InstructionFlow::Stop,
-                    branch: vec![],
-                    callee: None,
                 },
             );
         };
@@ -456,44 +423,27 @@ impl Corpus {
         );
         // A linked image names its callees by address; an archive member
         // names them through the call's relocation, noted above.
-        let mut callee = None;
-        if call {
-            if let Some(reference) = reference.filter(|r| r.is_call()) {
-                callee = Some(reference.target.clone());
-            } else if function.linked {
-                let target = match op.flow {
-                    InstructionFlow::Jump { displacement, .. } => {
-                        Some(address.wrapping_add_signed(displacement))
-                    }
-                    InstructionFlow::Indirect { base, offset, .. } => match state.get(base) {
-                        Value::Constant(value) => Some(value.wrapping_add_signed(offset)),
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                callee = target.map(|target| {
-                    self.names
-                        .get(&target)
-                        .cloned()
-                        .unwrap_or_else(|| format!("{target:#010x}"))
-                });
-                if let Some(name) = &callee {
-                    notes.push(format!("<{name}>"));
+        if call && function.linked && !reference.is_some_and(|r| r.is_call()) {
+            let target = match op.flow {
+                InstructionFlow::Jump { displacement, .. } => {
+                    Some(address.wrapping_add_signed(displacement))
                 }
+                InstructionFlow::Indirect { base, offset, .. } => match state.get(base) {
+                    Value::Constant(value) => Some(value.wrapping_add_signed(offset)),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let callee = target.map(|target| {
+                self.names
+                    .get(&target)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{target:#010x}"))
+            });
+            if let Some(name) = &callee {
+                notes.push(format!("<{name}>"));
             }
         }
-        let branch = RiscvDecoder
-            .branch(raw)
-            .map(|(_, a, b)| {
-                [a, b]
-                    .into_iter()
-                    .filter_map(|operand| match operand {
-                        Operand::Register(register) => Some(register),
-                        Operand::Immediate(_) => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
         let lifted = RiscvDecoder.lift(raw);
         let access = state.step(lifted, address, reference, &mut notes, &self.registers);
         // A tail call jumps through a register without returning and passes
@@ -511,10 +461,6 @@ impl Corpus {
                 notes,
                 access,
                 print,
-                op: lifted,
-                flow: op.flow,
-                branch,
-                callee,
             },
         )
     }
@@ -544,13 +490,6 @@ pub(crate) struct Step {
     notes: Vec<String>,
     access: Option<Access>,
     print: Option<Print>,
-    /// The lifted instruction and how control leaves it.
-    pub(crate) op: SemanticOp,
-    pub(crate) flow: InstructionFlow,
-    /// Registers a conditional branch compares.
-    pub(crate) branch: Vec<u8>,
-    /// A call's target, by name where a symbol or relocation gives one.
-    pub(crate) callee: Option<String>,
 }
 
 impl Step {

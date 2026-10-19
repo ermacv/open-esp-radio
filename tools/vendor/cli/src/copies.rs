@@ -76,7 +76,7 @@ pub struct Function {
     pub rom_only: Vec<MmioAccess>,
     /// Accesses only the library copy makes.
     pub library_only: Vec<MmioAccess>,
-    /// The copies our facts cite (`verification/<chip>/facts/provenance.toml`).
+    /// The copies our facts cite (`chips/<chip>/vendor/facts/provenance.toml`).
     pub cited: Vec<String>,
 }
 

@@ -7,7 +7,7 @@
 //! output at its pinned location once its build follows the current recipe
 //! of its catalog image. The manifest is the only place a pin changes.
 use crate::harness::{Result, invalid};
-use oer_tool_pins::{Artifact, Manifest, SourceKind};
+use oer_tool_pins::{Artifact, Manifest};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -50,16 +50,6 @@ pub fn sha256(id: &str) -> Result<&'static str> {
         .map_err(|error| invalid(format!("{id}: {error}")))
 }
 
-/// Whether `digest` is the pinned SHA-256 of a fetched artifact: the one
-/// input identity every host shares. Compiled production and firmware
-/// outputs are identified by their recipe instead.
-pub fn is_fetched_pin(digest: &str) -> bool {
-    manifest()
-        .artifact
-        .iter()
-        .any(|artifact| artifact.sha256.as_deref() == Some(digest))
-}
-
 /// The digest of the firmware output `artifact` of the current build.
 fn built_digest(artifact: &Artifact) -> Result<String> {
     let root = oer_os_process::built_root();
@@ -70,22 +60,6 @@ fn built_digest(artifact: &Artifact) -> Result<String> {
         .ok_or_else(|| invalid("a firmware source names its image"))?;
     oer_image_build::esp_idf::catalog::current(&root, image)?;
     oer_os_durable::sha256_file(&path(&root, &artifact.id))
-}
-
-/// The tracked catalog project of every firmware source, relative to the
-/// repository `root`: the recipes its outputs follow.
-pub fn firmware_projects(root: &Path) -> Result<Vec<PathBuf>> {
-    let entries = oer_image_build::esp_idf::catalog::entries(root)?;
-    manifest()
-        .source
-        .iter()
-        .filter(|source| source.kind == SourceKind::Firmware)
-        .map(|source| {
-            let image = source.image.as_deref().unwrap_or_default();
-            let entry = oer_image_build::esp_idf::catalog::entry(&entries, image)?;
-            Ok(entry.directory.clone())
-        })
-        .collect()
 }
 
 /// Location of artifact `id` below the repository `root`: the fetch cache

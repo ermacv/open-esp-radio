@@ -1,6 +1,6 @@
 //! `cargo vendor-check`: the vendor verification application. It compares vendor revisions, records and
-//! checks provenance, runs the typed scenarios, regenerates and checks the
-//! evidence shards, builds the comparison probes and host stands, carries
+//! checks provenance, runs the typed scenarios, builds the comparison probes
+//! and checks host stands, carries
 //! symbol lineage and audits the PHY archive. The gate runs it as a process.
 
 #![forbid(unsafe_code)]
@@ -12,12 +12,14 @@ use clap::{Parser, Subcommand};
 
 mod copies;
 mod lineage;
+mod run;
+mod workspace;
 use oer_os_process::Checkout;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Parser)]
-#[command(about = "Vendor verification: pins, provenance, scenarios and evidence")]
+#[command(about = "Vendor verification: pins, provenance and scenarios")]
 struct Cli {
     #[arg(long, global = true)]
     root: Option<PathBuf>,
@@ -80,33 +82,6 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
-    /// Compute the chip's derived vendor evidence index for this checkout:
-    /// every shard, its firmware inputs built from their recipes, or only the
-    /// named scenarios' shards.
-    Evidence {
-        /// The chip; every verified chip's whole index when omitted.
-        #[arg(long)]
-        chip: Option<String>,
-        /// Linker the scenarios prepare images with; the pinned Rust
-        /// toolchain's LLD when omitted.
-        #[arg(long)]
-        linker: Option<PathBuf>,
-        /// Ignored output root of the scenario runs.
-        #[arg(long, default_value = "target/blobray-research/evidence")]
-        output: PathBuf,
-        /// Print every vendor location the index leaves untriaged that no
-        /// other scenario covers, without running a scenario.
-        #[arg(long)]
-        untriaged: bool,
-        /// Compare every computed index with the one `main` computed at the
-        /// change's merge base, below this directory as
-        /// `<chip>/evidence`; fail when evidence was lost. An absent
-        /// directory skips the comparison.
-        #[arg(long, conflicts_with_all = ["chip", "untriaged", "scenarios"])]
-        compare: Option<PathBuf>,
-        /// Scenarios whose shards to rewrite; the whole index when empty.
-        scenarios: Vec<String>,
-    },
     /// Build the chip's Rust comparison probe images.
     Probes {
         #[arg(long)]
@@ -163,11 +138,8 @@ fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
 const STAND_CLIPPY: [&str; 4] = ["clippy", "--locked", "--all-targets", "--manifest-path"];
 
 fn host_stands(ctx: &Checkout) -> Result<()> {
-    let workspace = oer_vendor_evidence::workspace::Workspace::load(&ctx.root, None)?;
     for chip in verified_chips(ctx)? {
-        for stand in
-            oer_vendor_evidence::producer::host_stand::stands(&workspace, &chip).into_values()
-        {
+        for stand in workspace::host_stands(&ctx.root, &chip)? {
             for manifest in [stand.library, stand.program] {
                 let manifest = ctx.root.join(manifest);
                 oer_os_process::run(
@@ -218,11 +190,7 @@ fn run() -> Result<ExitCode> {
             show,
         } => {
             let show_code = |symbol: &str| -> oer_vendor_provenance::Result<()> {
-                let code = oer_vendor_evidence::run::scenario::run(
-                    &ctx,
-                    &chip,
-                    &["show".into(), symbol.into()],
-                )?;
+                let code = run::scenario::run(&ctx, &chip, &["show".into(), symbol.into()])?;
                 if code == ExitCode::SUCCESS {
                     Ok(())
                 } else {
@@ -239,56 +207,9 @@ fn run() -> Result<ExitCode> {
             )?
         }
         Command::Scenario { chip, args } => {
-            return oer_vendor_evidence::run::scenario::run(&ctx, &chip, &args);
+            return run::scenario::run(&ctx, &chip, &args);
         }
-        Command::Evidence {
-            chip,
-            linker,
-            output,
-            untriaged,
-            compare,
-            scenarios,
-        } => {
-            use oer_vendor_evidence::run::regenerate;
-            let Some(chip) = chip else {
-                if untriaged || !scenarios.is_empty() {
-                    return Err("naming scenarios or `--untriaged` needs `--chip`".into());
-                }
-                // Every verified chip's whole index, as the vendor-evidence check runs it.
-                let chips = verified_chips(&ctx)?;
-                for chip in &chips {
-                    regenerate::run(&ctx, chip, vec![], linker.clone(), output.clone())?;
-                }
-                let Some(base) = compare.map(|base| ctx.root.join(base)) else {
-                    return Ok(ExitCode::SUCCESS);
-                };
-                if !base.is_dir() {
-                    println!(
-                        "no base vendor evidence index at {}: the comparison is skipped",
-                        base.display()
-                    );
-                    return Ok(ExitCode::SUCCESS);
-                }
-                let mut lost = false;
-                for chip in &chips {
-                    lost |= regenerate::compare(&ctx, chip, &base.join(chip).join("evidence"))?;
-                }
-                return if lost {
-                    Err("the change loses vendor evidence the merge base's index holds".into())
-                } else {
-                    println!("no vendor evidence of the merge base's index is lost");
-                    Ok(ExitCode::SUCCESS)
-                };
-            };
-            return if untriaged {
-                regenerate::untriaged(&ctx, &chip)
-            } else {
-                regenerate::run(&ctx, &chip, scenarios, linker, output)
-            };
-        }
-        Command::Probes { chip, list_roles } => {
-            oer_vendor_evidence::run::probes::run(&ctx, &chip, list_roles)?
-        }
+        Command::Probes { chip, list_roles } => run::probes::run(&ctx, &chip, list_roles)?,
         Command::Check { check } => match check {
             Check::Provenance { chip: Some(chip) } => provenance(&ctx, &chip)?,
             Check::Provenance { chip: None } => {
@@ -298,7 +219,7 @@ fn run() -> Result<ExitCode> {
             }
             Check::Probes => {
                 for chip in verified_chips(&ctx)? {
-                    oer_vendor_evidence::run::probes::run(&ctx, &chip, false)?;
+                    run::probes::run(&ctx, &chip, false)?;
                 }
             }
             Check::HostStands => host_stands(&ctx)?,
@@ -329,22 +250,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_host_stand_keeps_the_workspace_lint_levels() {
-        // A warning, such as an existing panic site, never fails the check.
-        assert!(!STAND_CLIPPY.iter().any(|arg| *arg == "-D" || *arg == "--"));
+    fn evidence_is_rejected_and_scenario_arguments_are_forwarded() {
+        assert!(Cli::try_parse_from(["vendor-check", "evidence"]).is_err());
+        let cli = Cli::try_parse_from([
+            "vendor-check",
+            "scenario",
+            "--chip",
+            "esp32s31",
+            "all",
+            "--production",
+            "probe.elf",
+            "--output",
+            "runs",
+        ])
+        .expect("scenario arguments parse");
+        let Command::Scenario { chip, args } = cli.command else {
+            panic!("scenario command")
+        };
+        assert_eq!(chip, "esp32s31");
+        assert_eq!(
+            args,
+            ["all", "--production", "probe.elf", "--output", "runs"].map(OsString::from)
+        );
     }
 
     #[test]
-    fn the_comparison_covers_every_chip_and_never_one() {
-        let parse =
-            |args: &[&str]| Cli::try_parse_from([&["vendor-check", "evidence"], args].concat());
-        assert!(parse(&["--compare", "base"]).is_ok());
-        for args in [
-            &["--chip", "esp32s31", "--compare", "base"][..],
-            &["--untriaged", "--compare", "base"],
-            &["wifi-mac", "--compare", "base"],
-        ] {
-            assert!(parse(args).is_err(), "{args:?}");
-        }
+    fn a_host_stand_keeps_the_workspace_lint_levels() {
+        // A warning, such as an existing panic site, never fails the check.
+        assert!(!STAND_CLIPPY.iter().any(|arg| *arg == "-D" || *arg == "--"));
     }
 }

@@ -7,10 +7,8 @@ use std::sync::OnceLock;
 
 /// One chip's scenario configuration.
 pub struct Chip {
-    /// Chip identifier, as `platform/<id>/chip.toml` names it.
+    /// Chip identifier, as `chips/<id>/platform/chip.toml` names it.
     pub name: &'static str,
-    /// The tracked artifact manifest, relative to the repository root.
-    pub manifest: &'static str,
     /// Its text, compiled into the scenario binary.
     pub manifest_text: &'static str,
     /// Production hardware sources the observation analysis attributes
@@ -27,20 +25,14 @@ pub struct Chip {
     pub rom_symbols: &'static [(&'static str, u32, u64)],
     /// Caller-owned stack of every compared call, as (address, bytes).
     pub stack: (u32, u32),
-    /// The reviewed coverage decisions of every scenario, relative to the
-    /// repository root and outside the scenario crate, so that a shard
-    /// depends only on the decisions that apply to its closures.
-    pub coverage: &'static str,
     /// Reviewed decisions on unobserved production lines.
     pub observation: &'static [crate::observation::Decision],
-    /// Reviewed decisions on unprojected vendor state.
-    pub state: &'static [crate::state::Decision],
     /// PHY session layout, for chips whose scenarios link the PHY archive.
     pub phy: Option<&'static crate::phy::PhyLayout>,
     /// The instruction set both implementations run under.
     pub isa: Isa,
-    /// The published register bindings the triage report names addresses
-    /// and fields with, relative to the repository root.
+    /// Published register bindings for discovery and inspection, relative
+    /// to the repository root.
     pub registers: &'static str,
 }
 
@@ -99,16 +91,13 @@ pub fn chip() -> &'static Chip {
 #[cfg(test)]
 pub(crate) static TEST: Chip = Chip {
     name: "test",
-    manifest: "verification/test/artifacts.toml",
     manifest_text: "schema = 1\nsource = []\nartifact = []\n",
     hardware_scope: "crates/hardware/test",
     shared_scopes: &["crates/hardware/shared-test"],
     rom_input: 1,
     rom_symbols: &[],
     stack: (0, 0),
-    coverage: "verification/test/decisions/coverage.toml",
     observation: &[],
-    state: &[],
     phy: Some(&TEST_PHY),
     isa: Isa::Rv32imac,
     registers: "chips/test/registers/published/radio.bindings.toml",

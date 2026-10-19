@@ -15,7 +15,7 @@ regdb = "run --quiet --profile tools -p oer-tool-regulatory-generate --"
 stand = "run --quiet --profile tools -p oer-tool-lab-cli --"
 # HIL runs (tools/hil/run/HIL.md).
 hil = "run --quiet --profile tools -p oer-tool-hil-cli --"
-# The vendor comparison: provenance, scenarios, evidence shards and the probe
+# The vendor comparison: provenance, scenarios and the probe
 # images (tools/vendor/cli).
 vendor-check = "run --quiet --profile tools -p oer-tool-vendor-cli --"
 

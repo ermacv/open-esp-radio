@@ -50,16 +50,14 @@ cargo test -p oer-vendor-ieee802154-esp32s31 -p oer-tool-vendor-ieee802154-esp32
 cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- list
 cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- run transmit-with-ack
 cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare transmit-with-ack
-cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- shard --index <directory>
+cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare all
 ```
 
 The library here decides the verdicts; its program,
-`tools/vendor/ieee802154-esp32s31-cli`, runs them, a report package that no shard
-records. `shard` compares every catalog scenario, each in its own process, and writes
-the stand's evidence shard `ieee802154-host` through `oer-vendor-evidence`
-when all of them compare MATCH; `compare` exits 0 for MATCH, 1 for DIFF and 2
-for INCOMPLETE. `cargo vendor-check evidence --chip esp32s31 ieee802154-host` runs
-it as the stand's producer.
+`tools/vendor/ieee802154-esp32s31-cli`, runs them. `compare all` compares every
+catalog scenario, each in its own process, and fails at the first failed
+comparison. A single `compare` exits 0 for MATCH, 1 for DIFF and 2 for
+INCOMPLETE.
 
 The compiled driver keeps its state in C globals, so each process runs one
 scenario. `run` prints the scenario's boundary trace, one record per line;
@@ -92,14 +90,6 @@ records nothing for it: `MATCH` means the vendor call leaves no
 register-layer access in any state either. The value is not compared; a test
 pins it to the signed low byte of one `bt_bb_get_cur_rx_info` call, the
 geometry the register model publishes for the PAC read.
-
-`cargo vendor-check evidence --chip esp32s31 ieee802154-host` runs `compare` for every catalog
-scenario and, only when all of them MATCH, writes the stand's evidence shard `ieee802154-host.json` into the
-chip's derived evidence index `target/verification/esp32s31/evidence`: one entry per
-scenario (source `esp-idf`, production `oer_espressif_ieee802154_engine::engine`), the
-digests of the pinned ESP-IDF files and of the stand's path-dependency
-closure. The stand measures no vendor coverage, production observation or
-vendor state, so its entries leave those out.
 
 ## Multi-PAN
 

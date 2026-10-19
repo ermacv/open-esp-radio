@@ -2,7 +2,7 @@
 
 Vendor function provenance. A recovered fact names the vendor function it
 came from in a `SOURCE(<chip>):` block, and the citation is registered with
-that function's fingerprint in `verification/<chip>/facts/provenance.toml`
+that function's fingerprint in `chips/<chip>/vendor/facts/provenance.toml`
 (see the [vendor evidence rules](../../analysis/blobray-verification/README.md)).
 
 `fingerprint` is the one fingerprint of vendor RV32 functions. It reads each
@@ -27,7 +27,7 @@ them:
 
 - `citation`: the one recogniser and parser of the `SOURCE` grammar
   (`marker`, `is_marker_line`, `blocks_in`, chip attribution);
-- `registry`: the chip's registry (`verification/<chip>/facts/provenance.toml`),
+- `registry`: the chip's registry (`chips/<chip>/vendor/facts/provenance.toml`),
   the survey of every citation — production `SOURCE` blocks, the register
   model's descriptions (read through `oer_registers_model::descriptions`),
   verification decisions, ROM summaries and vendor documents — and `check`,
