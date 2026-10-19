@@ -148,14 +148,14 @@ where
     D: PhyShortDelay,
     O: PhyTargetObserver,
 {
-    let epoch = registers.begin_registration_epoch();
+    let grant = registers.begin_registration();
     let mut port =
         TargetPhyRegisterPort::<_, _, D, _, _>::new(platform, registers, timer, observer);
     let result = run_phy_register(transition, &mut port).await;
     (
         result,
         port.counters(),
-        TargetRegistrationWitness::new(epoch),
+        TargetRegistrationWitness::new(grant),
     )
 }
 

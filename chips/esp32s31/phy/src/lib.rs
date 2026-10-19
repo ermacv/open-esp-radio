@@ -1,7 +1,5 @@
 #![no_std]
-// The `bluetooth_client` and `ieee802154_client` modules hold the only scoped
-// overrides.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 // A forgotten owner never releases what it holds, such as a modem clock lease,
 // so radio ownership must end in `Drop`.
 #![deny(clippy::mem_forget)]

@@ -520,32 +520,18 @@ impl Ieee802154Clocked {
     /// Join the shared BTBB baseband as the IEEE 802.15.4 client.
     ///
     /// This is `esp_btbb_enable`: only the first holder initializes the
-    /// baseband.
+    /// baseband, with `gain`'s byte. The module clocks and resets BTBB
+    /// requires are held by this clocked owner.
     ///
     /// # Errors
     ///
-    /// IEEE 802.15.4 already holds BTBB, or no PHY registration describes the
-    /// shared PHY.
-    ///
-    /// # Safety
-    ///
-    /// The shared PHY registration must be complete, and `gain_parameter`
-    /// must be the byte at offset `0x120` of that registration's `phy_param`
-    /// state. The module clocks and resets BTBB requires are held by this
-    /// clocked owner.
-    #[allow(
-        unsafe_code,
-        reason = "the unsafe signature carries the domain's common-PHY prerequisite"
-    )]
-    pub unsafe fn acquire_btbb<T>(
+    /// As [`crate::domain::RadioDomain::btbb_acquire`].
+    pub fn acquire_btbb<T>(
         &self,
         radio: &mut RadioDomain<T>,
-        gain_parameter: u8,
+        gain: &crate::domain::BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
-        // SAFETY: this owner holds the IEEE 802.15.4 module clocks, which
-        // include the BTBB clocks; the caller upholds the registration and
-        // gain provenance.
-        unsafe { radio.btbb_acquire(&self.inner.backend().task, gain_parameter) }
+        radio.btbb_acquire(&self.inner.backend().task, gain)
     }
 
     /// Leave the shared BTBB baseband. This performs no register access.

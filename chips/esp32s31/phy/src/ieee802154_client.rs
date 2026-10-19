@@ -17,9 +17,9 @@
 //! operational MAC owners, so an interrupt-driven MAC epoch cannot exist apart
 //! from a PHY client and a BTBB reference.
 //!
-//! This module holds the crate's single scoped `unsafe` override: the BTBB
-//! gain parameter is projected here from the settled registration that
-//! describes the radio, never supplied by a caller.
+//! The BTBB gain parameter is projected here from the settled registration
+//! that describes the radio and published to the domain right before the
+//! acquisition, never supplied by a caller.
 
 use core::fmt;
 
@@ -88,21 +88,12 @@ pub fn join_ieee802154<'l>(
     let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the
     // radio.
-    let gain_parameter = match radio.attachment().settled() {
-        Ok(domain) => {
-            domain
-                .registered
-                .state()
-                .register_init_parameters()
-                .parameter_120
-        }
-        Err(error) => {
-            return Err(JoinRefused {
-                error: Ieee802154PhyClientError::Phy(error),
-                radio,
-            });
-        }
-    };
+    if let Err(error) = radio.attachment().settled() {
+        return Err(JoinRefused {
+            error: Ieee802154PhyClientError::Phy(error),
+            radio,
+        });
+    }
     if radio.holds_btbb(RadioClient::Ieee802154) {
         return Err(JoinRefused {
             error: Ieee802154PhyClientError::Btbb(BtbbError::AlreadyAcquired),
@@ -119,18 +110,18 @@ pub fn join_ieee802154<'l>(
         }
     };
 
-    #[allow(
-        unsafe_code,
-        reason = "the gain byte is projected from the registration that describes the radio"
-    )]
-    let btbb = {
-        // SAFETY: the settled domain was registered by a completed target
-        // run whose epoch is the radio's current registration, and
-        // `gain_parameter` is the `phy_param` byte at 0x120 projected from
-        // that same registered state. `clocked` proves the IEEE 802.15.4
-        // module clocks.
-        unsafe { clocked.acquire_btbb(radio, gain_parameter) }
+    // The settled registered state publishes its current gain byte right
+    // before the acquisition, so BTBB starts with the value the vendor reads
+    // from `phy_param[0x120]` at that moment; a tracking or registration in
+    // progress leaves the domain unsettled, and no gain is published then.
+    let gain = {
+        let (phy, publisher) = radio.btbb_publisher();
+        phy.settled()
+            .map_or(Err(BtbbError::Unregistered), |domain| {
+                domain.registered.publish_btbb_gain(publisher)
+            })
     };
+    let btbb = gain.and_then(|gain| clocked.acquire_btbb(radio, &gain));
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.

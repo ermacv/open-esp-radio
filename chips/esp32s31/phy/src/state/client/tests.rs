@@ -787,8 +787,8 @@ fn only_the_minting_registration_describes_a_detached_client_set() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
     let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test().split(());
     let domain = &mut radio;
-    let first = domain.phy_hal().begin_registration_epoch();
-    let second = domain.phy_hal().begin_registration_epoch();
+    let first = domain.phy_hal().begin_registration().epoch();
+    let second = domain.phy_hal().begin_registration().epoch();
     let clients = PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, first);
 
     assert!(clients.describes_epoch(Some(first)));
@@ -858,7 +858,7 @@ fn an_untracked_active_class_has_a_deadline_due_now() {
 fn a_new_registration_epoch_starts_untracked() {
     use oer_esp32s31_hal::owner::PhyInitializationAccess;
     let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test().split(());
-    let epoch = radio.phy_hal().begin_registration_epoch();
+    let epoch = radio.phy_hal().begin_registration().epoch();
     let snapshot =
         PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch).snapshot();
     assert_eq!(snapshot.previous_micros(PhyPllTrackClass::Wifi), None);

@@ -44,7 +44,7 @@ impl Restore {
 
 /// Begin one registration in `shared`.
 fn register(shared: &mut RadioDomain<()>) -> crate::owner::PhyRegistrationEpoch {
-    shared.phy_hal().begin_registration_epoch()
+    shared.phy_hal().begin_registration().epoch()
 }
 
 #[test]

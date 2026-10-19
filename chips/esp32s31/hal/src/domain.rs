@@ -101,6 +101,63 @@ pub enum BtbbError {
     /// No PHY registration describes the shared PHY, so no gain parameter can
     /// come from a registered state.
     Unregistered,
+    /// The gain was published for an earlier registration, or a later
+    /// publication replaced it.
+    Stale,
+}
+
+/// The BTBB gain byte (`phy_param[0x120]`) one registered PHY state published
+/// to the domain ([`BtbbPublisher::publish`]). Only the latest
+/// publication of the current registration admits [`RadioDomain::btbb_acquire`];
+/// any earlier one is [`BtbbError::Stale`].
+#[derive(Debug, Eq, PartialEq)]
+pub struct BtbbGain {
+    epoch: PhyRegistrationEpoch,
+    generation: u32,
+    value: u8,
+}
+
+impl BtbbGain {
+    /// The published byte, as the vendor's `phy_param[0x120]`.
+    pub const fn value(&self) -> u8 {
+        self.value
+    }
+}
+
+/// The domain's right to publish a BTBB gain, borrowed beside its attachment
+/// ([`RadioDomain::btbb_publisher`]).
+pub struct BtbbPublisher<'d> {
+    current: Option<PhyRegistrationEpoch>,
+    generation: &'d mut u32,
+}
+
+impl BtbbPublisher<'_> {
+    /// Publish `value`, the BTBB gain byte of the registered PHY state that
+    /// `grant` is the right over, replacing every earlier publication. The
+    /// registered state's owner publishes its current byte right before a
+    /// BTBB acquisition, so the acquisition writes the value the vendor reads
+    /// from `phy_param[0x120]` at that moment.
+    ///
+    /// # Errors
+    ///
+    /// No registration describes the shared PHY, or `grant` is the right over
+    /// an earlier one ([`BtbbError::Stale`]).
+    pub fn publish(
+        self,
+        grant: &crate::owner::PhyRegistrationGrant,
+        value: u8,
+    ) -> Result<BtbbGain, BtbbError> {
+        let epoch = self.current.ok_or(BtbbError::Unregistered)?;
+        if grant.epoch() != epoch {
+            return Err(BtbbError::Stale);
+        }
+        *self.generation = self.generation.wrapping_add(1);
+        Ok(BtbbGain {
+            epoch,
+            generation: *self.generation,
+            value,
+        })
+    }
 }
 
 /// Whether a BTBB acquisition ran the shared initialization.
@@ -119,6 +176,8 @@ struct SharedRadioState<T> {
     phy: PhyRouteState,
     power: CommonRadioPower,
     btbb_clients: u8,
+    /// The generation of the latest BTBB gain publication.
+    btbb_gain_generation: u32,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
@@ -285,6 +344,7 @@ impl<T> RadioDomain<T> {
                 phy,
                 power: CommonRadioPower::default(),
                 btbb_clients: 0,
+                btbb_gain_generation: 0,
                 clocks: ModemClocks::new(),
                 modem_platform_clocks: ModemPlatformClocks::default(),
                 coex_pti: CoexPtiTable::VENDOR,
@@ -543,42 +603,51 @@ impl<T> RadioDomain<T> {
         self.state().btbb_clients & client_bit(client) != 0
     }
 
+    /// The attachment beside the domain's BTBB gain publisher, borrowed
+    /// apart, so the registered PHY state the attachment holds can publish
+    /// its gain with its registration's grant ([`BtbbPublisher::publish`]).
+    pub fn btbb_publisher(&mut self) -> (&T, BtbbPublisher<'_>) {
+        let state = self.state_mut();
+        (
+            &state.attachment,
+            BtbbPublisher {
+                current: state.phy.registration_epoch(),
+                generation: &mut state.btbb_gain_generation,
+            },
+        )
+    }
+
     /// Take the shared BTBB baseband as the protocol that owns `owner`.
     ///
     /// This is ESP-IDF's reference-counted `esp_btbb_enable`: only the first
-    /// holder runs the `bt_bb_v2_init_cmplx(1)` body, which also writes the
-    /// Bluetooth value of the shared TX-on delay; later holders join without
-    /// register access.
+    /// holder runs the `bt_bb_v2_init_cmplx(1)` body with `gain`'s byte, which
+    /// also writes the Bluetooth value of the shared TX-on delay; later
+    /// holders join without register access. `owner` proves the
+    /// Bluetooth/BTBB clocks and resets.
     ///
     /// # Errors
     ///
-    /// The client already holds BTBB, or no registration describes the
-    /// shared PHY. Both are rejected before any register access.
-    ///
-    /// # Safety
-    ///
-    /// The Bluetooth/BTBB clocks and resets must be active, the shared PHY
-    /// registration must be complete, and `gain_parameter` must be the byte at
-    /// offset `0x120` of that registration's `phy_param` state.
-    #[allow(
-        unsafe_code,
-        reason = "the unsafe signature carries the common-PHY and clock prerequisites"
-    )]
-    pub unsafe fn btbb_acquire<O: BtbbClientOwner>(
+    /// The client already holds BTBB, no registration describes the shared
+    /// PHY, or `gain` is not the latest publication of the current
+    /// registration. Each is rejected before any register access.
+    pub fn btbb_acquire<O: BtbbClientOwner>(
         &mut self,
         _owner: &O,
-        gain_parameter: u8,
+        gain: &BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
         let bit = client_bit(O::CLIENT);
         let state = self.state_mut();
         if state.btbb_clients & bit != 0 {
             return Err(BtbbError::AlreadyAcquired);
         }
-        if state.phy.registration_epoch().is_none() {
+        let Some(epoch) = state.phy.registration_epoch() else {
             return Err(BtbbError::Unregistered);
+        };
+        if gain.epoch != epoch || gain.generation != state.btbb_gain_generation {
+            return Err(BtbbError::Stale);
         }
         let acquired = if state.btbb_clients == 0 {
-            state.registers.initialize_btbb_v2_arg_one(gain_parameter);
+            state.registers.initialize_btbb_v2_arg_one(gain.value);
             BtbbAcquired::Initialized
         } else {
             BtbbAcquired::Joined

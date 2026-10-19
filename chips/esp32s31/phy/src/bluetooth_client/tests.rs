@@ -21,12 +21,16 @@ fn radio_domain(stale: bool) -> (RadioDomain<ConcurrentPhy>, ProtocolPartitions)
     let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
     {
         let domain = &mut radio;
-        let epoch = domain.phy_hal().begin_registration_epoch();
+        let grant = domain.phy_hal().begin_registration();
+        let epoch = grant.epoch();
         if stale {
-            let _current = domain.phy_hal().begin_registration_epoch();
+            let _current = domain.phy_hal().begin_registration().epoch();
         }
         *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
-            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
+            RegisteredPhyState::from_wrapper_test_model(
+                PhyState::new(PhyConfig::production()),
+                grant,
+            ),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
     }
@@ -121,4 +125,29 @@ fn join_bluetooth_prepared(
     join_bluetooth(ready, task, clock)
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)
+}
+
+#[test]
+fn btbb_is_taken_only_from_a_settled_registered_state() {
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    let domain = &mut radio;
+    // Wi-Fi's entry makes the first tracking due: a tracking transition now
+    // holds the PHY state, and the domain is not settled.
+    assert_eq!(
+        enter_client(domain, RadioClient::Wifi, &VirtualClock::<8>::new()),
+        Ok(ConcurrentAcquire::TrackingDue)
+    );
+    assert!(domain.attachment().tracking_pending());
+    // Even with a forged ready proof the join publishes no gain and takes no
+    // BTBB.
+    assert!(matches!(
+        join_bluetooth_prepared(domain, &task, &VirtualClock::<8>::new()),
+        Err(BluetoothPhyClientError::Phy(
+            ConcurrentPhyError::TrackingPending
+        ))
+    ));
+    assert!(!domain.holds_btbb(RadioClient::Bluetooth));
+    // The settled acquisition writes BTBB registers, which a host test does
+    // not reach; `oer-esp32s31-hal` tests the published gain's admission.
 }

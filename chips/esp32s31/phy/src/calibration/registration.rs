@@ -292,15 +292,33 @@ enum Phase {
 /// ```
 pub struct RegisteredPhyState {
     state: crate::state::PhyState,
+    /// The registration's one grant: only this state publishes the BTBB
+    /// gain of its registration.
+    grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
 }
 
 impl RegisteredPhyState {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn from_target_completion(
         state: crate::state::PhyState,
-        _witness: crate::target_port::TargetRegistrationWitness,
+        witness: crate::target_port::TargetRegistrationWitness,
     ) -> Self {
-        Self { state }
+        Self {
+            state,
+            grant: witness.into_grant(),
+        }
+    }
+
+    /// Publish this registered state's current BTBB gain byte
+    /// (`phy_param[0x120]`) with its registration's grant.
+    pub(crate) fn publish_btbb_gain(
+        &self,
+        publisher: oer_esp32s31_hal::domain::BtbbPublisher<'_>,
+    ) -> Result<oer_esp32s31_hal::domain::BtbbGain, oer_esp32s31_hal::domain::BtbbError> {
+        publisher.publish(
+            &self.grant,
+            self.state.register_init_parameters().parameter_120,
+        )
     }
 
     /// Borrow the calibrated state without weakening the registration proof.
@@ -327,9 +345,12 @@ impl RegisteredPhyState {
 
     /// Build an internal wrapper fixture without adding a production mint path.
     #[cfg(test)]
-    pub(crate) fn from_wrapper_test_model(mut state: crate::state::PhyState) -> Self {
+    pub(crate) fn from_wrapper_test_model(
+        mut state: crate::state::PhyState,
+        grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
+    ) -> Self {
         state.mark_phy_registered();
-        Self { state }
+        Self { state, grant }
     }
 }
 

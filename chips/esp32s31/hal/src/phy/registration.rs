@@ -17,6 +17,28 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyRegistrationEpoch(core::num::NonZeroU32);
 
+/// The one owner's right over one PHY registration: [`begin`] gives it, and
+/// it is neither `Clone` nor `Copy`, so only the owner that began the
+/// registration (the registered PHY domain) holds it. A BTBB gain is
+/// published only with it ([`crate::domain::BtbbPublisher::publish`]).
+///
+/// [`begin`]: crate::owner::PhyInitializationAccess::begin_registration
+#[derive(Debug, Eq, PartialEq)]
+pub struct PhyRegistrationGrant {
+    epoch: PhyRegistrationEpoch,
+}
+
+impl PhyRegistrationGrant {
+    pub(crate) const fn new(epoch: PhyRegistrationEpoch) -> Self {
+        Self { epoch }
+    }
+
+    /// The registration this grant is the right over.
+    pub const fn epoch(&self) -> PhyRegistrationEpoch {
+        self.epoch
+    }
+}
+
 /// Registration bookkeeping carried by the root and by the active route.
 ///
 /// One word holds the last issued epoch in its low 31 bits and whether that

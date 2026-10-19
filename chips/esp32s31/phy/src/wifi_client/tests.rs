@@ -18,9 +18,13 @@ fn registered() -> (RadioDomain<ConcurrentPhy>, WifiClocked) {
     let (mut radio, partitions) = RadioHardware::for_host_test().split(ConcurrentPhy::new());
     {
         let domain = &mut radio;
-        let epoch = domain.phy_hal().begin_registration_epoch();
+        let grant = domain.phy_hal().begin_registration();
+        let epoch = grant.epoch();
         *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
-            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
+            RegisteredPhyState::from_wrapper_test_model(
+                PhyState::new(PhyConfig::production()),
+                grant,
+            ),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
     }

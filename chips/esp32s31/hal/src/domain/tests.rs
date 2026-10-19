@@ -29,7 +29,7 @@ fn registration_epoch_persists_in_the_domain() {
         assert_eq!(domain.registration_epoch(), None);
         // Protocol transactions and PHY operations borrow the same owner.
         let _shared = domain.registers_mut().radio_phy();
-        domain.phy_hal().begin_registration_epoch()
+        domain.phy_hal().begin_registration().epoch()
     };
     let domain = &mut radio;
     assert_eq!(domain.registration_epoch(), Some(epoch));
@@ -54,31 +54,56 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
     let mut radio = radio_domain();
     let domain = &mut radio;
 
-    // Without a registration no gain parameter can be valid.
-    // SAFETY: rejected before any register access.
-    #[allow(unsafe_code)]
-    let unregistered = unsafe { domain.btbb_acquire(&bluetooth, 0) };
-    assert_eq!(unregistered, Err(BtbbError::Unregistered));
     assert_eq!(domain.btbb_release(&bluetooth), Err(BtbbError::NotAcquired));
-    let _epoch = domain.phy_hal().begin_registration_epoch();
+    let grant = domain.phy_hal().begin_registration();
+    let gain = domain.btbb_publisher().1.publish(&grant, 0x4f).unwrap();
+    assert_eq!(gain.value(), 0x4f);
     drop(domain);
 
-    // Bluetooth already initialized the baseband.
+    // Bluetooth already initialized the baseband: joining touches no register.
     radio.hold_btbb_for_test(RadioClient::Bluetooth);
     let domain = &mut radio;
-    // SAFETY: the baseband is initialized, so joining touches no register.
-    #[allow(unsafe_code)]
-    let joined = unsafe { domain.btbb_acquire(&ieee802154, 0) };
-    assert_eq!(joined, Ok(BtbbAcquired::Joined));
-    // SAFETY: rejected before any register access.
-    #[allow(unsafe_code)]
-    let again = unsafe { domain.btbb_acquire(&ieee802154, 0) };
-    assert_eq!(again, Err(BtbbError::AlreadyAcquired));
+    assert_eq!(
+        domain.btbb_acquire(&ieee802154, &gain),
+        Ok(BtbbAcquired::Joined)
+    );
+    assert_eq!(
+        domain.btbb_acquire(&ieee802154, &gain),
+        Err(BtbbError::AlreadyAcquired)
+    );
     assert!(domain.holds_btbb(RadioClient::Ieee802154));
     assert_eq!(domain.btbb_release(&ieee802154), Ok(()));
     assert_eq!(domain.btbb_release(&bluetooth), Ok(()));
     drop(domain);
     assert!(radio.into_parts().is_ok());
+}
+
+#[test]
+fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
+    use crate::owner::PhyInitializationAccess;
+    let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
+    let (ieee802154, _interrupts) = oer_esp32s31_pac::Ieee802154TaskRegisters::new(ieee802154);
+    let mut radio = radio_domain();
+    let first = radio.phy_hal().begin_registration();
+    let earlier = radio.btbb_publisher().1.publish(&first, 0x4e).unwrap();
+    let latest = radio.btbb_publisher().1.publish(&first, 0x4f).unwrap();
+    // A later publication replaces an earlier one, before any register access.
+    assert_eq!(
+        radio.btbb_acquire(&ieee802154, &earlier),
+        Err(BtbbError::Stale)
+    );
+    // A new registration replaces every gain of the earlier one, and the
+    // earlier registration's grant publishes nothing.
+    let _second = radio.phy_hal().begin_registration();
+    assert_eq!(
+        radio.btbb_acquire(&ieee802154, &latest),
+        Err(BtbbError::Stale)
+    );
+    assert_eq!(
+        radio.btbb_publisher().1.publish(&first, 0x4f),
+        Err(BtbbError::Stale)
+    );
+    assert!(!radio.holds_btbb(RadioClient::Ieee802154));
 }
 
 #[test]
