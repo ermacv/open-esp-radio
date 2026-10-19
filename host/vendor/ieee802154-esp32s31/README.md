@@ -34,7 +34,7 @@ abort reasons and received frames are explicit scenario steps.
 ## Obtaining the sources
 
 ```console
-cargo verification fetch esp32s31
+cargo pins fetch --chip esp32s31
 ```
 
 downloads every pinned ESP-IDF file of source `esp-idf` into
@@ -46,17 +46,19 @@ file must match its pinned SHA-256. The stand needs a host C compiler.
 ## Running
 
 ```console
-cargo test -p oer-vendor-ieee802154-esp32s31
-cargo run -p oer-vendor-ieee802154-esp32s31 -- list
-cargo run -p oer-vendor-ieee802154-esp32s31 -- run transmit-with-ack
-cargo run -p oer-vendor-ieee802154-esp32s31 -- compare transmit-with-ack
-cargo run -p oer-vendor-ieee802154-esp32s31 -- shard --index <directory>
+cargo test -p oer-vendor-ieee802154-esp32s31 -p oer-tool-vendor-ieee802154-esp32s31
+cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- list
+cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- run transmit-with-ack
+cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- compare transmit-with-ack
+cargo run -p oer-tool-vendor-ieee802154-esp32s31 -- shard --index <directory>
 ```
 
-`shard` compares every catalog scenario, each in its own process, and writes
+The library here decides the verdicts; its program,
+`tools/vendor-ieee802154-esp32s31`, runs them, a report package that no shard
+records. `shard` compares every catalog scenario, each in its own process, and writes
 the stand's evidence shard `ieee802154-host` through `oer-vendor-evidence`
 when all of them compare MATCH; `compare` exits 0 for MATCH, 1 for DIFF and 2
-for INCOMPLETE. `cargo verification evidence --chip esp32s31 ieee802154-host` runs
+for INCOMPLETE. `cargo vendor-check evidence --chip esp32s31 ieee802154-host` runs
 it as the stand's producer.
 
 The compiled driver keeps its state in C globals, so each process runs one
@@ -91,7 +93,7 @@ register-layer access in any state either. The value is not compared; a test
 pins it to the signed low byte of one `bt_bb_get_cur_rx_info` call, the
 geometry the register model publishes for the PAC read.
 
-`cargo verification evidence --chip esp32s31 ieee802154-host` runs `compare` for every catalog
+`cargo vendor-check evidence --chip esp32s31 ieee802154-host` runs `compare` for every catalog
 scenario and, only when all of them MATCH, writes the stand's evidence shard `ieee802154-host.json` into the
 chip's derived evidence index `target/verification/esp32s31/evidence`: one entry per
 scenario (source `esp-idf`, production `oer_espressif_ieee802154_engine::engine`), the
@@ -109,7 +111,7 @@ in both builds; the two expectation tests that pin the default build's trace
 run only without the feature.
 
 ```console
-cargo test -p oer-vendor-ieee802154-esp32s31 --features multipan
+cargo test -p oer-tool-vendor-ieee802154-esp32s31 --features multipan
 ```
 
 ## Software coexistence
@@ -126,7 +128,7 @@ with the HAL. The test that pins the build without coexistence runs only
 without the feature.
 
 ```console
-cargo test -p oer-vendor-ieee802154-esp32s31 --features sw-coex
+cargo test -p oer-tool-vendor-ieee802154-esp32s31 --features sw-coex
 ```
 
 ## Limits

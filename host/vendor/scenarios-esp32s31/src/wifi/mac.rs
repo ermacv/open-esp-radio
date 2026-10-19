@@ -12,7 +12,7 @@ use oer_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallDeclaration, CallOutput, CallOutputScope, CallRepetition,
     CallResponse, ExecutionTarget, RegionLifetime, SessionReset,
 };
-pub use oer_vendor_scenario_engine::leaf::{
+pub use oer_vendor_scenario::leaf::{
     Dispatch, DispatchTarget, Domain, LEAF_EVENTS, LEAF_FILLS, Leaf, LeafCase,
     LeafOptions as MacOptions, LeafRun as Mac, OUTPUT_FILL, Objects, Replacement, Suite, Vendor,
     VendorAbi, call_boundary, claims, compared_bytes, dispatching, exercise, image_symbols,

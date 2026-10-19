@@ -96,7 +96,7 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
         },
     )?;
     eprintln!(
-        "Rust analysis inputs are ready; the typed vendor scenarios compare them (cargo verification scenario)."
+        "Rust analysis inputs are ready; the typed vendor scenarios compare them (cargo vendor-check scenario)."
     );
     Ok(())
 }

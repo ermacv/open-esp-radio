@@ -12,7 +12,6 @@ readme = "README.md"
 [dependencies]
 oer-os-process = { path = "../../os/process" }
 oer-analysis-elf = { path = "../../analysis/elf" }
-oer-vendor-markers = { path = "../markers" }
 oer-registers-model = { path = "../../registers/model" }
 oer-pins = { path = "../../pins" }
 sha2 = "=0.10.9"

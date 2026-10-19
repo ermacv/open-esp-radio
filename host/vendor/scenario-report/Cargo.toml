@@ -11,10 +11,10 @@ description = "Reviewer reports of the typed vendor-comparison scenarios: untria
 [dependencies]
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-os-process = { path = "../../os/process" }
-oer-vendor-evidence-shard = { path = "../evidence-shard" }
+oer-vendor-evidence = { path = "../evidence" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
-oer-vendor-scenario-engine = { path = "../scenario-engine" }
+oer-vendor-scenario = { path = "../scenario" }
 clap = { version = "=4.5.48", features = ["derive"] }
 sha2 = "=0.10.9"
 

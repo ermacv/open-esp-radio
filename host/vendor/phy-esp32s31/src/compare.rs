@@ -15,10 +15,10 @@ use crate::committed::{
     CALIBRATION, CALIBRATION_BYTES, OutputField, PARENT, PARENT_BYTES, TRACKING_PROGRESS_FIELD,
     committed,
 };
-use oer_vendor_phy_calibration_capture::boots::{
+use oer_vendor_phy::calibration_capture::boots::{
     Images, Lifecycle, ProductionBoot, Readings, VendorBoot,
 };
-use oer_vendor_phy_calibration_capture::space::Register;
+use oer_vendor_phy::calibration_capture::space::Register;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn registers_compare_within_their_own_vendor_spread() {
-        let image = |name: &str, address| oer_vendor_phy_calibration_capture::space::Register {
+        let image = |name: &str, address| oer_vendor_phy::calibration_capture::space::Register {
             name: name.into(),
             address,
         };

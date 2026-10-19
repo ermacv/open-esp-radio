@@ -6,8 +6,8 @@
 //! implements [`Comparison`]; this crate names no chip.
 use std::path::Path;
 
-use oer_vendor_phy_calibration_capture::boots::{Images, Lifecycle, ProductionBoot, VendorBoot};
-use oer_vendor_phy_calibration_capture::space::Register;
+use crate::calibration_capture::boots::{Images, Lifecycle, ProductionBoot, VendorBoot};
+use crate::calibration_capture::space::Register;
 
 use crate::Result;
 

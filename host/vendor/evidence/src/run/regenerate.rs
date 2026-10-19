@@ -7,11 +7,11 @@
 //! This module decides which producer computes which shard: the Blobray
 //! scenario engine ([`super::scenario`]) or a host stand below
 //! `verification/<chip>/host/` (its own `shard` command);
-//! `cargo verification evidence` calls it.
+//! `cargo vendor-check evidence` calls it.
 use crate::producer::{Producer, host_stand};
+use crate::shard::{Index, store};
 use crate::{Result, baseline};
 use oer_os_process::Checkout;
-use oer_vendor_evidence_shard::{Index, store};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -47,7 +47,7 @@ struct Blobray<'a> {
 
 impl Producer for Blobray<'_> {
     fn command(&self) -> &'static str {
-        oer_vendor_evidence_shard::BLOBRAY
+        crate::shard::BLOBRAY
     }
 
     fn owns(&self, _scenario: &str) -> bool {
@@ -93,17 +93,17 @@ impl Producer for Blobray<'_> {
     }
 }
 
-/// One host stand of a chip: its own workspace, whose `shard` command
-/// compares every scenario and writes the stand's shard.
+/// One host stand of a chip: its program's `shard` command compares every
+/// scenario and writes the stand's shard.
 struct HostStand<'a> {
     ctx: &'a Checkout,
     scenario: String,
-    manifest: String,
+    program: String,
 }
 
 impl Producer for HostStand<'_> {
     fn command(&self) -> &'static str {
-        oer_vendor_evidence_shard::HOST_STAND
+        crate::shard::HOST_STAND
     }
 
     fn owns(&self, scenario: &str) -> bool {
@@ -114,7 +114,7 @@ impl Producer for HostStand<'_> {
         super::phase::timed(&format!("stand {}", self.scenario), || {
             oer_os_process::run(
                 oer_os_toolchain::cargo_in(&self.ctx.root)
-                    .args(["run", "--quiet", "--manifest-path", &self.manifest, "--"])
+                    .args(["run", "--quiet", "--manifest-path", &self.program, "--"])
                     .arg("shard")
                     .arg("--index")
                     .arg(index),
@@ -135,11 +135,11 @@ fn producers<'a>(
     let workspace = crate::workspace::Workspace::load(&ctx.root, None)?;
     let mut producers: Vec<Box<dyn Producer + 'a>> = host_stand::stands(&workspace, chip)
         .into_iter()
-        .map(|(scenario, manifest)| {
+        .map(|(scenario, stand)| {
             Box::new(HostStand {
                 ctx,
                 scenario,
-                manifest,
+                program: stand.program,
             }) as Box<dyn Producer>
         })
         .collect();
@@ -295,7 +295,7 @@ pub fn untriaged(ctx: &Checkout, chip: &str) -> Result<ExitCode> {
 /// in `directory`, or every location when `all`.
 fn render_untriaged(directory: &Path, all: bool) -> Result<String> {
     let shards = store::shards(directory)?;
-    let locations = oer_vendor_evidence_shard::untriaged(&shards.iter().collect::<Vec<_>>());
+    let locations = crate::shard::untriaged(&shards.iter().collect::<Vec<_>>());
     let mut functions = std::collections::BTreeMap::<&str, usize>::new();
     for location in &locations {
         *functions.entry(&location.function).or_default() += 1;

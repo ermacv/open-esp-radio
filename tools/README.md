@@ -13,8 +13,10 @@ tools/
   pins/            `cargo pins` (oer-tool-pins): fetch the vendor pins
   stand/           `cargo stand` (oer-tool-stand): boards, leases, power, fixtures
   hil/             `cargo hil` (oer-tool-hil): HIL runs, the run store and its analyses
-  verification/    `cargo verification` (oer-tool-verification): the vendor comparison
-  vendor-scenarios-<chip>/  each chip's typed vendor scenarios
+  hil-runner/      the HIL runner the observer builds (oer-tool-hil-runner)
+  vendor/          `cargo vendor-check` (oer-tool-vendor): the vendor comparison, lineage and the PHY archive audit
+  vendor-scenarios-<chip>/  each chip's typed vendor scenarios, one chip per program
+  vendor-ieee802154-esp32s31/  the IEEE 802.15.4 host stand's program
 ```
 
 ## Rules

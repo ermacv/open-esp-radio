@@ -18,8 +18,8 @@ use oer_analysis_riscv_model::{
     DecodedOp, FunctionDecoder, FunctionSemantics, InstructionFlow, IntegerOp, MemoryKind, Operand,
     SemanticOp,
 };
-use oer_vendor_scenario_engine::harness::{Result, invalid};
-use oer_vendor_scenario_engine::registers::Registers;
+use oer_vendor_scenario::harness::{Result, invalid};
+use oer_vendor_scenario::registers::Registers;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -154,24 +154,24 @@ impl Corpus {
         let mut corpus = Self {
             functions: vec![],
             names: BTreeMap::new(),
-            registers: Registers::load(&root.join(oer_vendor_scenario_engine::chip().registers))?,
+            registers: Registers::load(&root.join(oer_vendor_scenario::chip().registers))?,
             missing: vec![],
         };
-        for artifact in &oer_vendor_scenario_engine::artifacts::manifest().artifact {
+        for artifact in &oer_vendor_scenario::artifacts::manifest().artifact {
             if !CODE_EXTENSIONS
                 .iter()
                 .any(|extension| artifact.path.ends_with(extension))
             {
                 continue;
             }
-            let path = oer_vendor_scenario_engine::artifacts::path(root, &artifact.id);
+            let path = oer_vendor_scenario::artifacts::path(root, &artifact.id);
             let Ok(bytes) = std::fs::read(&path) else {
                 corpus.missing.push(artifact.id.clone());
                 continue;
             };
             // A firmware output whose build does not follow its current
             // recipe has no digest to match: it is not held as pinned.
-            let Ok(pin) = oer_vendor_scenario_engine::artifacts::sha256(&artifact.id) else {
+            let Ok(pin) = oer_vendor_scenario::artifacts::sha256(&artifact.id) else {
                 corpus.missing.push(artifact.id.clone());
                 continue;
             };
@@ -1485,7 +1485,7 @@ pub fn show(corpus: &Corpus, name: &str) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// The Blobray executable `cargo verification scenario` passes to every
+/// The Blobray executable `cargo vendor-check scenario` passes to every
 /// command; inspection reads the pinned artifacts itself and ignores it.
 #[derive(clap::Args)]
 pub struct Runner {

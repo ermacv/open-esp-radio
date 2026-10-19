@@ -6,13 +6,15 @@
 //! prints the compared pairs no claim names. [`inspect`] reads pinned vendor
 //! code without running a scenario. The dependency runs from this crate to
 //! the engine only, so an edit here leaves the evidence shards current.
+pub mod command;
+
 pub mod inspect;
 pub mod triage;
 
-use oer_vendor_scenario_engine::coverage;
-use oer_vendor_scenario_engine::findings::{Findings, RunReport};
-use oer_vendor_scenario_engine::harness::Result;
-use oer_vendor_scenario_engine::registers::Registers;
+use oer_vendor_scenario::coverage;
+use oer_vendor_scenario::findings::{Findings, RunReport};
+use oer_vendor_scenario::harness::Result;
+use oer_vendor_scenario::registers::Registers;
 
 /// The report every scenario binary passes to the engine.
 #[derive(Default)]
@@ -29,8 +31,7 @@ impl RunReport for Reviewer {
             let code = triage::Code::of(
                 &untriaged.images,
                 Registers::load(
-                    &oer_os_process::built_root()
-                        .join(oer_vendor_scenario_engine::chip().registers),
+                    &oer_os_process::built_root().join(oer_vendor_scenario::chip().registers),
                 )?,
                 coverage::diagnostic(untriaged.decisions),
             )?;

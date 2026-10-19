@@ -76,7 +76,7 @@ fn merge_into(from: &Path, into: &Path) -> Result<()> {
 }
 
 /// The verified file of the fetched artifact `id` of `chip` in the
-/// host-wide [`store`]: an error naming `cargo verification fetch` when it is
+/// host-wide [`store`]: an error naming `cargo pins fetch` when it is
 /// missing, and naming the pin when it differs.
 pub fn fetched(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
     let manifest = Manifest::load(root, chip)?;
@@ -88,7 +88,7 @@ pub fn fetched(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
     let path = cache_directory(&store()?, source)?.join(&artifact.path);
     if !path.is_file() {
         return Err(format!(
-            "the pinned `{id}` artifact {} is missing: run `cargo verification fetch {chip} --artifact {id}`",
+            "the pinned `{id}` artifact {} is missing: run `cargo pins fetch --chip {chip} {id}`",
             path.display()
         )
         .into());
@@ -219,14 +219,14 @@ pub struct Pinned {
 }
 
 /// Every pinned artifact of `chip` at its verified path; fails when one is
-/// missing or differs, naming `cargo verification fetch` for fetched ones.
+/// missing or differs, naming `cargo pins fetch` for fetched ones.
 /// Firmware outputs are skipped when unbuilt: they are not vendor sources.
 pub fn pinned(root: &Path, chip: &str) -> Result<Vec<Pinned>> {
     let resolved = resolve(root, chip)?;
     match resolved.unfetched.first() {
         None => Ok(resolved.pinned),
         Some(id) => Err(format!(
-            "{id} is not fetched as pinned; run `cargo verification fetch {chip}`"
+            "{id} is not fetched as pinned; run `cargo pins fetch --chip {chip}`"
         )
         .into()),
     }
@@ -447,7 +447,7 @@ mod tests {
                 Err(error) => assert!(
                     error
                         .to_string()
-                        .contains(&format!("{} --artifact {}", profile.id, rom.elf)),
+                        .contains(&format!("--chip {} {}", profile.id, rom.elf)),
                     "{error}"
                 ),
             }

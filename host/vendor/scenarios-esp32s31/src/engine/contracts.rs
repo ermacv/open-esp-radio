@@ -9,7 +9,7 @@ use oer_analysis_blobray_domain::{
 };
 
 pub use crate::phy::committed::OutputField;
-pub use oer_vendor_scenario_engine::phy::contracts::*;
+pub use oer_vendor_scenario::phy::contracts::*;
 
 /// Final-state projection from the vendor `phy_param` at `parameter` to the
 /// production output at `OUTPUT`. Output bytes outside `fields` are not claimed.

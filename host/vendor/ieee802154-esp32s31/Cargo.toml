@@ -15,20 +15,12 @@ description = "Host stand that runs the pinned public ESP-IDF IEEE 802.15.4 driv
 build = "build.rs"
 links = "oer_esp32s31_ieee802154_vendor"
 
-[[bin]]
-name = "oer-vendor-ieee802154-esp32s31"
-path = "src/main.rs"
 
 [dependencies]
-oer-os-process = { path = "../../os/process" }
 oer-esp32s31-tables = { path = "../../../portable/esp32s31/tables" }
 oer-espressif-coex = { path = "../../../portable/espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../../portable/espressif/ieee802154-engine" }
 oer-ieee802154-mac = { path = "../../../portable/ieee802154/mac" }
-oer-os-durable = { path = "../../os/durable" }
-oer-pins = { path = "../../pins" }
-oer-vendor-evidence = { path = "../evidence" }
-oer-vendor-evidence-shard = { path = "../evidence-shard" }
 
 [features]
 # Build the vendor driver and the port with multi-PAN and two interfaces.

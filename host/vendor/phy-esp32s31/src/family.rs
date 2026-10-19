@@ -6,8 +6,8 @@
 use std::path::Path;
 
 use crate::{compare, registers};
+use oer_vendor_phy::calibration_capture::boots::{Images, Lifecycle, ProductionBoot, VendorBoot};
 use oer_vendor_phy::comparison::{Compared, Comparison, RegisterImages};
-use oer_vendor_phy_calibration_capture::boots::{Images, Lifecycle, ProductionBoot, VendorBoot};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

@@ -6,7 +6,7 @@ archives of RISC-V relocatable objects, pairs the functions of every adjacent
 revision and composes those pairs from the oldest revision to the newest.
 
 ```console
-cargo run --release -p oer-vendor-lineage -- \
+cargo vendor-check lineage \
   --repo ../esp32s31-bt-lib --library libbtdm_common.a \
   --obfuscated-prefix r_sym_ \
   --source https://github.com/espressif/esp32s31-bt-lib \

@@ -11,7 +11,6 @@ readme = "README.md"
 
 [dependencies]
 oer-os-process = { path = "../../os/process" }
-oer-vendor-evidence-shard = { path = "../evidence-shard" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = "=1.1.4"
@@ -20,6 +19,7 @@ oer-probe-codegen = { path = "../../probe/codegen", optional = true }
 oer-os-toolchain = { path = "../../os/toolchain", optional = true }
 oer-pins = { path = "../../pins", optional = true }
 oer-image-build = { path = "../../image/build", optional = true }
+sha2 = "=0.10.9"
 
 [features]
 # The producers' orchestration (`run`): probe builds, the Blobray scenario

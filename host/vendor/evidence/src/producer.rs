@@ -2,18 +2,18 @@
 //!
 //! A [`Producer`] compares pinned vendor code with compiled production code
 //! scenario by scenario and writes one shard per scenario that compared
-//! MATCH, through [`oer_vendor_evidence_shard::store::write`]; a scenario that is not MATCH
+//! MATCH, through [`crate::shard::store::write`]; a scenario that is not MATCH
 //! fails without a shard. The Blobray scenario engine and the host stands
-//! are the producers; `cargo verification evidence` decides which of them run for
+//! are the producers; `cargo vendor-check evidence` decides which of them run for
 //! which stale or named shards. Each shard names its producer in `command`
-//! ([`oer_vendor_evidence_shard::BLOBRAY`] or [`oer_vendor_evidence_shard::HOST_STAND`]).
+//! ([`crate::shard::BLOBRAY`] or [`crate::shard::HOST_STAND`]).
 use crate::{Result, policy};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// One producer of a chip's shards.
 pub trait Producer {
-    /// The `command` its shards record, one of [`oer_vendor_evidence_shard::COMMANDS`].
+    /// The `command` its shards record, one of [`crate::shard::COMMANDS`].
     fn command(&self) -> &'static str;
     /// Whether `scenario` names one of its shards.
     fn owns(&self, scenario: &str) -> bool;
@@ -42,9 +42,11 @@ pub mod host_stand {
             .ok_or_else(|| format!("{} names no {chip} stand", directory.display()).into())
     }
 
-    /// The stand packages of `chip`, by shard name, with their manifests
-    /// relative to the root.
-    pub fn stands(workspace: &crate::workspace::Workspace, chip: &str) -> BTreeMap<String, String> {
+    /// The stand packages of `chip`, by shard name.
+    pub fn stands(
+        workspace: &crate::workspace::Workspace,
+        chip: &str,
+    ) -> BTreeMap<String, crate::workspace::HostStand> {
         workspace.host_stands(chip)
     }
 
@@ -72,7 +74,7 @@ pub mod host_stand {
         stand: &Stand<'_>,
         matched: &[String],
         inputs: BTreeMap<String, String>,
-    ) -> Result<oer_vendor_evidence_shard::Index> {
+    ) -> Result<crate::shard::Index> {
         let root = oer_os_process::checkout_of(stand.directory)
             .ok_or_else(|| format!("{} is outside a checkout", stand.directory.display()))?;
         let directory = stand
@@ -94,20 +96,20 @@ pub mod host_stand {
         let sources = directories
             .into_iter()
             .map(|path| {
-                Ok(oer_vendor_evidence_shard::SourceDigest {
-                    sha256: oer_vendor_evidence_shard::digest_directory(&root, &path)?,
+                Ok(crate::shard::SourceDigest {
+                    sha256: crate::shard::digest_directory(&root, &path)?,
                     path,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         let entries = matched
             .iter()
-            .map(|symbol| oer_vendor_evidence_shard::Entry {
+            .map(|symbol| crate::shard::Entry {
                 suite: scenario.clone(),
                 source: stand.source.into(),
                 symbol: symbol.clone(),
                 production: stand.production.into(),
-                verdict: oer_vendor_evidence_shard::MATCH.into(),
+                verdict: crate::shard::MATCH.into(),
                 cases: 1,
                 reviews: vec![],
                 coverage: None,
@@ -115,14 +117,14 @@ pub mod host_stand {
                 state: None,
             })
             .collect();
-        let shard = oer_vendor_evidence_shard::Index {
-            schema: oer_vendor_evidence_shard::SCHEMA,
-            command: oer_vendor_evidence_shard::HOST_STAND.into(),
+        let shard = crate::shard::Index {
+            schema: crate::shard::SCHEMA,
+            command: crate::shard::HOST_STAND.into(),
             target: stand.chip.into(),
             scenario,
             inputs,
             sources,
-            dependence: oer_vendor_evidence_shard::Dependence::whole_closure(WHOLE_CLOSURE),
+            dependence: crate::shard::Dependence::whole_closure(WHOLE_CLOSURE),
             entries,
             untriaged: vec![],
             functions: vec![],
@@ -155,8 +157,8 @@ mod tests {
         let workspace = crate::workspace::Workspace::load(&root, None).unwrap();
         let stands = host_stand::stands(&workspace, "esp32s31");
         assert!(!stands.is_empty());
-        for (scenario, manifest) in &stands {
-            let directory = Path::new(manifest).parent().unwrap();
+        for (scenario, stand) in &stands {
+            let directory = Path::new(&stand.library).parent().unwrap();
             assert_eq!(
                 &host_stand::scenario("esp32s31", directory).unwrap(),
                 scenario

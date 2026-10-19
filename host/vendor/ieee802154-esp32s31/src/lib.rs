@@ -10,9 +10,9 @@
 //! [`compare`] reports `MATCH`, `DIFF` or `INCOMPLETE`.
 //!
 //! The compiled driver keeps its state in C globals. One process therefore
-//! runs one scenario, which [`claim`] enforces; the
-//! `oer-vendor-ieee802154-esp32s31` binary runs a named catalog scenario
-//! per invocation.
+//! runs one scenario, which [`claim`] enforces; the stand's program
+//! (`tools/vendor-ieee802154-esp32s31`) runs a named catalog scenario per
+//! invocation.
 
 pub mod catalog;
 pub mod compare;
@@ -25,6 +25,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub use compare::{Verdict, compare};
 pub use record::{Argument, Inputs, Record};
 pub use scenario::{Scenario, Step};
+
+/// The stand's package directory: its shard records this package's path
+/// closure, and the program, a report package, stays out of it.
+pub const DIRECTORY: &str = env!("CARGO_MANIFEST_DIR");
 
 static CLAIMED: AtomicBool = AtomicBool::new(false);
 

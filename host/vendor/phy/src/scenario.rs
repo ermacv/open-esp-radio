@@ -9,7 +9,7 @@ use oer_hil_lab::config::LabConfig;
 use oer_hil_scenario::{AirUse, Plan, ScenarioFamily};
 use oer_hil_scenario::workload::context::Context;
 use oer_hil_scenario::workload::{family::Workload, fixture::Fixtures};
-use oer_vendor_phy_calibration_capture::boots::Lifecycle;
+use crate::calibration_capture::boots::Lifecycle;
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -186,9 +186,9 @@ mod tests {
 
         fn compare(
             _: Lifecycle,
-            _: &oer_vendor_phy_calibration_capture::boots::Images,
-            _: &[oer_vendor_phy_calibration_capture::boots::VendorBoot],
-            _: &[oer_vendor_phy_calibration_capture::boots::ProductionBoot],
+            _: &crate::calibration_capture::boots::Images,
+            _: &[crate::calibration_capture::boots::VendorBoot],
+            _: &[crate::calibration_capture::boots::ProductionBoot],
             _: &RegisterImages,
         ) -> Result<Compared> {
             Err("no comparison".into())

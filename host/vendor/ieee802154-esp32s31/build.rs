@@ -1,6 +1,6 @@
 //! Compile the pinned public ESP-IDF IEEE 802.15.4 driver for the host.
 //!
-//! Every vendor file is read from the sources `cargo verification fetch`
+//! Every vendor file is read from the sources `cargo pins fetch`
 //! fetched, or from the checkout `OER_ESP_IDF_DIR` names, and must match the
 //! SHA-256 pinned in the repository's `artifacts.toml`. The build generates a recording
 //! replacement for every `ieee802154_ll_*` accessor declared by the real

@@ -4096,23 +4096,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tool-vendor-scenarios-esp32c5"
-version = "0.1.0"
-dependencies = [
- "oer-vendor-scenario-command",
- "oer-vendor-scenarios-esp32c5",
-]
-
-[[package]]
-name = "oer-tool-vendor-scenarios-esp32s31"
-version = "0.1.0"
-dependencies = [
- "oer-vendor-scenario-command",
- "oer-vendor-scenarios-esp32s31",
-]
-
-[[package]]
-name = "oer-tool-verification"
+name = "oer-tool-vendor"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4129,9 +4113,38 @@ dependencies = [
  "oer-pins",
  "oer-registers-model",
  "oer-vendor-evidence",
+ "oer-vendor-lineage",
+ "oer-vendor-phy",
  "oer-vendor-provenance",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oer-tool-vendor-ieee802154-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "oer-os-durable",
+ "oer-os-process",
+ "oer-pins",
+ "oer-vendor-evidence",
+ "oer-vendor-ieee802154-esp32s31",
+]
+
+[[package]]
+name = "oer-tool-vendor-scenarios-esp32c5"
+version = "0.1.0"
+dependencies = [
+ "oer-vendor-scenario-report",
+ "oer-vendor-scenarios-esp32c5",
+]
+
+[[package]]
+name = "oer-tool-vendor-scenarios-esp32s31"
+version = "0.1.0"
+dependencies = [
+ "oer-vendor-scenario-report",
+ "oer-vendor-scenarios-esp32s31",
 ]
 
 [[package]]
@@ -4144,17 +4157,6 @@ dependencies = [
  "oer-os-toolchain",
  "oer-pins",
  "oer-probe-codegen",
- "oer-vendor-evidence-shard",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-vendor-evidence-shard"
-version = "0.1.0"
-dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4171,56 +4173,32 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-ieee802154-mac",
- "oer-os-durable",
- "oer-os-process",
  "oer-pins",
- "oer-vendor-evidence",
- "oer-vendor-evidence-shard",
 ]
 
 [[package]]
 name = "oer-vendor-lineage"
 version = "0.1.0"
 dependencies = [
- "clap",
  "object 0.39.1",
  "oer-analysis-elf",
- "oer-os-process",
  "oer-vendor-provenance",
  "serde",
- "serde_json",
  "sha2 0.10.9",
 ]
-
-[[package]]
-name = "oer-vendor-markers"
-version = "0.1.0"
 
 [[package]]
 name = "oer-vendor-phy"
 version = "0.1.0"
 dependencies = [
+ "oer-analysis-elf",
  "oer-hil-scenario",
  "oer-lab-board",
- "oer-vendor-phy-calibration-capture",
- "serde_json",
-]
-
-[[package]]
-name = "oer-vendor-phy-archive"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-elf",
  "oer-os-process",
  "oer-os-toolchain",
- "tempfile",
-]
-
-[[package]]
-name = "oer-vendor-phy-calibration-capture"
-version = "0.1.0"
-dependencies = [
  "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -4231,7 +4209,6 @@ dependencies = [
  "oer-os-process",
  "oer-registers-model",
  "oer-vendor-phy",
- "oer-vendor-phy-calibration-capture",
  "serde",
  "serde_json",
  "toml",
@@ -4245,22 +4222,13 @@ dependencies = [
  "oer-os-process",
  "oer-pins",
  "oer-registers-model",
- "oer-vendor-markers",
  "sha2 0.10.9",
  "tempfile",
  "toml",
 ]
 
 [[package]]
-name = "oer-vendor-scenario-command"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-vendor-scenario-report",
-]
-
-[[package]]
-name = "oer-vendor-scenario-engine"
+name = "oer-vendor-scenario"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4279,7 +4247,6 @@ dependencies = [
  "oer-probe-codegen",
  "oer-registers-bindings",
  "oer-vendor-evidence",
- "oer-vendor-evidence-shard",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4296,8 +4263,8 @@ dependencies = [
  "oer-analysis-riscv-lift",
  "oer-analysis-riscv-model",
  "oer-os-process",
- "oer-vendor-evidence-shard",
- "oer-vendor-scenario-engine",
+ "oer-vendor-evidence",
+ "oer-vendor-scenario",
  "sha2 0.10.9",
 ]
 
@@ -4308,7 +4275,7 @@ dependencies = [
  "clap",
  "oer-analysis-blobray-domain",
  "oer-os-process",
- "oer-vendor-scenario-engine",
+ "oer-vendor-scenario",
 ]
 
 [[package]]
@@ -4326,8 +4293,8 @@ dependencies = [
  "oer-os-durable",
  "oer-os-process",
  "oer-pins",
- "oer-vendor-evidence-shard",
- "oer-vendor-scenario-engine",
+ "oer-vendor-evidence",
+ "oer-vendor-scenario",
  "serde",
  "toml",
 ]

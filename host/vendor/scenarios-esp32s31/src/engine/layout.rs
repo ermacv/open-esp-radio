@@ -95,29 +95,28 @@ pub const RADIO_MMIO: u32 = 0x2010_0000;
 pub const RADIO_MMIO_BYTES: u32 = 0x1_0000;
 
 /// The ESP32-S31 PHY session layout.
-pub static PHY_LAYOUT: oer_vendor_scenario_engine::phy::PhyLayout =
-    oer_vendor_scenario_engine::phy::PhyLayout {
-        library: "libphy",
-        rom: "rom",
-        phy_sdk: Some("phy-sdk"),
-        input: INPUT,
-        output: OUTPUT,
-        parameter_copy: PARAMETER_COPY,
-        phy_param_bytes: PHY_PARAM_BYTES,
-        rom_interface_pointer: ROM_INTERFACE_POINTER,
-        rom_parameter_pointer: ROM_PARAMETER_POINTER,
-        rom_callback_table: ROM_CALLBACK_TABLE,
-        image_code_start: IMAGE_CODE_START,
-        image_data_start: IMAGE_DATA_START,
-        image_region_bytes: IMAGE_REGION_BYTES,
-        i2c_ports: I2C_PORTS,
-        i2c_read_mask: I2C_READ_MASK,
-        i2c_host_map: I2C_HOST_MAP,
-        radio_mmio: RADIO_MMIO,
-        radio_mmio_bytes: RADIO_MMIO_BYTES,
-    };
+pub static PHY_LAYOUT: oer_vendor_scenario::phy::PhyLayout = oer_vendor_scenario::phy::PhyLayout {
+    library: "libphy",
+    rom: "rom",
+    phy_sdk: Some("phy-sdk"),
+    input: INPUT,
+    output: OUTPUT,
+    parameter_copy: PARAMETER_COPY,
+    phy_param_bytes: PHY_PARAM_BYTES,
+    rom_interface_pointer: ROM_INTERFACE_POINTER,
+    rom_parameter_pointer: ROM_PARAMETER_POINTER,
+    rom_callback_table: ROM_CALLBACK_TABLE,
+    image_code_start: IMAGE_CODE_START,
+    image_data_start: IMAGE_DATA_START,
+    image_region_bytes: IMAGE_REGION_BYTES,
+    i2c_ports: I2C_PORTS,
+    i2c_read_mask: I2C_READ_MASK,
+    i2c_host_map: I2C_HOST_MAP,
+    radio_mmio: RADIO_MMIO,
+    radio_mmio_bytes: RADIO_MMIO_BYTES,
+};
 
-pub use oer_vendor_scenario_engine::phy::layout::{
+pub use oer_vendor_scenario::phy::layout::{
     COMMAND_BUSY, COMMAND_DATA_MASK, COMMAND_READ, COMMAND_SELECTOR_MASK, COMMAND_WRITE, FILLS,
     MAX_EVENTS, analog_bank, constant_read, fill_word, radio_aperture, register_bank,
     sequence_read,

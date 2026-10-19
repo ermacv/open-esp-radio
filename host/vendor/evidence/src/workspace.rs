@@ -17,11 +17,21 @@ use crate::Result;
 pub const REPORT_SERVICE: &str = "host/vendor/scenario-report";
 /// The programs, which only render and dispatch.
 pub const CLI_LAYER: &str = "tools/";
-/// The folder of the vendor packages; a host stand is one of them.
+/// The folder of the vendor packages; a host stand's library is one of them.
 pub const VENDOR_LAYER: &str = "host/vendor/";
-/// The engines a host stand compares, each one stand per chip
-/// (`host/vendor/<engine>-<chip>`).
+/// The engines a host stand compares, each one stand per chip: the library
+/// `host/vendor/<engine>-<chip>`, which decides the verdicts, and its
+/// program `tools/vendor-<engine>-<chip>`, a report package.
 pub const HOST_STAND_ENGINES: &[&str] = &["ieee802154"];
+
+/// One host stand's packages, by manifest relative to the root.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HostStand {
+    /// The library: the stand's shard records its path closure.
+    pub library: String,
+    /// The program that runs the scenarios and writes the shard.
+    pub program: String,
+}
 
 /// One path package of the workspace.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -207,10 +217,11 @@ impl Workspace {
         closure
     }
 
-    /// The host stands of `chip`, by shard name, with their manifests: the
-    /// packages `host/vendor/<engine>-<chip>` of [`HOST_STAND_ENGINES`],
-    /// whose shard is `<engine>-host`.
-    pub fn host_stands(&self, chip: &str) -> BTreeMap<String, String> {
+    /// The host stands of `chip`, by shard name: the packages
+    /// `host/vendor/<engine>-<chip>` of [`HOST_STAND_ENGINES`] whose program
+    /// `tools/vendor-<engine>-<chip>` is a package too; the shard is
+    /// `<engine>-host`.
+    pub fn host_stands(&self, chip: &str) -> BTreeMap<String, HostStand> {
         self.packages()
             .filter_map(|package| {
                 let engine = package
@@ -218,9 +229,18 @@ impl Workspace {
                     .strip_prefix(VENDOR_LAYER)?
                     .strip_suffix(chip)?
                     .strip_suffix('-')?;
-                HOST_STAND_ENGINES
-                    .contains(&engine)
-                    .then(|| (format!("{engine}-host"), package.manifest.clone()))
+                if !HOST_STAND_ENGINES.contains(&engine) {
+                    return None;
+                }
+                let program = format!("{CLI_LAYER}vendor-{engine}-{chip}");
+                let program = self.packages().find(|p| p.directory == program)?;
+                Some((
+                    format!("{engine}-host"),
+                    HostStand {
+                        library: package.manifest.clone(),
+                        program: program.manifest.clone(),
+                    },
+                ))
             })
             .collect()
     }
@@ -240,10 +260,39 @@ mod tests {
 
     #[test]
     fn the_folder_decides_a_report_package() {
-        assert!(package("tools/verification").is_report());
+        assert!(package("tools/vendor").is_report());
         assert!(package(REPORT_SERVICE).is_report());
-        assert!(!package("host/vendor/scenario-engine").is_report());
+        assert!(!package("host/vendor/scenario").is_report());
         assert!(!package("chips/esp32s31/hal").is_report());
+    }
+
+    fn workspace(directories: &[&str]) -> Workspace {
+        Workspace {
+            packages: directories
+                .iter()
+                .map(|directory| (directory.to_string(), package(directory)))
+                .collect(),
+            names: BTreeMap::new(),
+            build_edges: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn a_stand_is_its_library_with_its_program() {
+        let both = workspace(&[
+            "host/vendor/ieee802154-chip-a",
+            "tools/vendor-ieee802154-chip-a",
+        ]);
+        assert_eq!(
+            both.host_stands("chip-a").get("ieee802154-host"),
+            Some(&HostStand {
+                library: "host/vendor/ieee802154-chip-a/Cargo.toml".into(),
+                program: "tools/vendor-ieee802154-chip-a/Cargo.toml".into(),
+            })
+        );
+        // A library without its program, or another engine, is no stand.
+        let alone = workspace(&["host/vendor/ieee802154-chip-a", "tools/vendor-x-chip-a"]);
+        assert!(alone.host_stands("chip-a").is_empty());
     }
 
     #[test]
@@ -252,8 +301,11 @@ mod tests {
         let workspace = Workspace::load(&root, None).unwrap();
         let stands = workspace.host_stands("esp32s31");
         assert_eq!(
-            stands.get("ieee802154-host").map(String::as_str),
-            Some("host/vendor/ieee802154-esp32s31/Cargo.toml")
+            stands.get("ieee802154-host"),
+            Some(&HostStand {
+                library: "host/vendor/ieee802154-esp32s31/Cargo.toml".into(),
+                program: "tools/vendor-ieee802154-esp32s31/Cargo.toml".into(),
+            })
         );
         let evidence = workspace.package("oer-vendor-evidence").unwrap();
         let closure: Vec<_> = workspace
@@ -262,7 +314,6 @@ mod tests {
             .map(|package| package.directory.as_str())
             .collect();
         assert!(closure.contains(&"host/vendor/evidence"));
-        assert!(closure.contains(&"host/vendor/evidence-shard"));
         assert!(
             !closure
                 .iter()

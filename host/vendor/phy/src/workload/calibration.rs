@@ -17,11 +17,11 @@ use std::time::{Duration, Instant};
 use oer_hil_model::schema::image::ImageClass;
 use oer_hil_link::{SerialCapture, Target};
 use oer_hil_scenario::workload::context::Context;
-use oer_vendor_phy_calibration_capture::boots::{
+use crate::calibration_capture::boots::{
     Images, Lifecycle, ProductionBoot, Readings, Transmitted, VendorBoot,
 };
-use oer_vendor_phy_calibration_capture::space::{Register, Space};
-use oer_vendor_phy_calibration_capture::vendor;
+use crate::calibration_capture::space::{Register, Space};
+use crate::calibration_capture::vendor;
 
 use super::reference::{self, Peer};
 use crate::Result;

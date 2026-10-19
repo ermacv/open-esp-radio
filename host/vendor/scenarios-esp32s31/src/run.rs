@@ -12,8 +12,8 @@ use crate::{
     retry, rfpll, rx_append, rx_gain, session, state, tracking, tx_dc,
 };
 use clap::Subcommand;
-use oer_vendor_evidence_shard::Index;
-use oer_vendor_scenario_engine::findings::RunReport;
+use oer_vendor_evidence::shard::Index;
+use oer_vendor_scenario::findings::RunReport;
 use std::{
     path::{Path, PathBuf},
     process::ExitCode,
@@ -176,13 +176,13 @@ pub struct Common {
     /// the probe holds when omitted), REPLACEMENT hexadecimal bytes, `nop` or
     /// `ret`; repeat for several. The probe is not rebuilt; a failing
     /// scenario kills the mutant, and a passing one reports whether it ran.
-    #[arg(long = "patch", value_parser = oer_vendor_scenario_engine::mutant::parse)]
-    mutants: Vec<oer_vendor_scenario_engine::mutant::Spec>,
+    #[arg(long = "patch", value_parser = oer_vendor_scenario::mutant::parse)]
+    mutants: Vec<oer_vendor_scenario::mutant::Spec>,
     /// Point mutant of the Bluetooth production probe image, in the same
     /// form: the Bluetooth comparisons load that image instead of the radio
     /// probe, so they take only these.
-    #[arg(long = "bluetooth-patch", value_parser = oer_vendor_scenario_engine::mutant::parse)]
-    bluetooth_mutants: Vec<oer_vendor_scenario_engine::mutant::Spec>,
+    #[arg(long = "bluetooth-patch", value_parser = oer_vendor_scenario::mutant::parse)]
+    bluetooth_mutants: Vec<oer_vendor_scenario::mutant::Spec>,
     /// The resolved radio and Bluetooth mutants.
     #[arg(skip)]
     patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
@@ -201,7 +201,7 @@ pub struct Common {
 /// Resolve `common`'s mutants against the radio probe and, for the
 /// comparisons that load it, the Bluetooth probe.
 fn resolve_mutants(common: &mut Common, bluetooth: Option<&Path>) -> Result<()> {
-    use oer_vendor_scenario_engine::mutant::resolve;
+    use oer_vendor_scenario::mutant::resolve;
     if !common.mutants.is_empty() {
         common.patches = resolve(&std::fs::read(&common.production)?, &common.mutants)?;
     }
@@ -243,7 +243,7 @@ fn single(shard: Shard, outcome: Result<Outcome>) -> Result<ExitCode> {
             return Ok(code);
         }
         let index = evidence::shard(shard.scenario, &shard.production, &claims, &shard.verdict)?;
-        oer_vendor_scenario_engine::shard::record(directory, &index)?;
+        oer_vendor_scenario::shard::record(directory, &index)?;
     }
     Ok(code)
 }
@@ -433,7 +433,7 @@ fn gain(common: Common, rftest: Option<PathBuf>, report: &dyn RunReport) -> Resu
         "gain",
         &g.roots,
         &GAIN_CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -491,7 +491,7 @@ fn i2c(
         "i2c",
         &ctx.roots,
         &list,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -522,7 +522,7 @@ fn channel(common: Common, report: &dyn RunReport) -> Result<Outcome> {
         "channel",
         &ctx.roots,
         &CHANNEL_CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -570,7 +570,7 @@ fn wifi_mac(
         "wifi-mac",
         &ctx.roots,
         &mac::claims(&ctx),
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -606,7 +606,7 @@ fn bluetooth(
         "bluetooth",
         &ctx.roots,
         &mac::claims(&ctx),
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -641,7 +641,7 @@ fn coex_hw(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<O
         "coex-hw",
         &ctx.roots,
         &mac::claims(&ctx),
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -670,7 +670,7 @@ fn coex(common: Common, libcoexist: PathBuf, report: &dyn RunReport) -> Result<O
         "coex",
         &ctx.roots,
         coex::CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -686,7 +686,7 @@ fn rx_gain(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<O
         "rx-gain",
         &ctx.roots,
         &RX_GAIN_CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -706,7 +706,7 @@ fn tx_dc(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Out
         "tx-dc",
         &ctx.roots,
         &TX_DC_CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -726,7 +726,7 @@ fn tracking(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<
         "tracking",
         &ctx.roots,
         &TRACKING_CLAIMS,
-        oer_vendor_scenario_engine::coverage::decisions()?,
+        oer_vendor_scenario::coverage::decisions()?,
         report,
     )?;
     Ok((
@@ -744,7 +744,7 @@ mod evidence {
     use super::*;
 
     use crate::{BLUETOOTH_PROBES_PACKAGE, PROBES_DIRECTORY, PROBES_PACKAGE, PROBES_TARGET};
-    use oer_vendor_scenario_engine::shard::ProbeImages;
+    use oer_vendor_scenario::shard::ProbeImages;
 
     /// The probe images of the ESP32-S31 scenarios.
     const PROBES: ProbeImages = ProbeImages {
@@ -759,7 +759,7 @@ mod evidence {
         claims: &session::Claims,
         verdict: &[PathBuf],
     ) -> Result<Index> {
-        oer_vendor_scenario_engine::shard::shard(
+        oer_vendor_scenario::shard::shard(
             scenario,
             production,
             claims,
@@ -901,7 +901,7 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
         } else {
             &common.production
         };
-        oer_vendor_scenario_engine::shard::record(
+        oer_vendor_scenario::shard::record(
             directory,
             &evidence::shard(name, production, claims, &common.verdict)?,
         )
@@ -957,8 +957,7 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
     }
     // Decisions are shared by every scenario, so one is stale only when no
     // scenario's closures leave a location it excludes uncovered.
-    coverage::Observed::of(&closures)
-        .check("all", oer_vendor_scenario_engine::coverage::decisions()?)?;
+    coverage::Observed::of(&closures).check("all", oer_vendor_scenario::coverage::decisions()?)?;
     // A state decision is stale when no claim writes a byte it reviews
     // without comparing it.
     state::check(decisions::state::DECISIONS, &unprojected)?;

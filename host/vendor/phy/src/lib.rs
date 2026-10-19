@@ -5,6 +5,9 @@
 //! composition implements the port.
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
+pub mod archive;
+pub mod calibration_capture;
+
 pub mod comparison;
 pub mod reference;
 

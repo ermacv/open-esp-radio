@@ -26,7 +26,7 @@ pub use phy::{
 pub use wifi::{ampdu_resort, low_power_clock, mac, retry, rx_append};
 
 /// The ESP32-S31 facts the scenario engine runs with.
-pub static CHIP: oer_vendor_scenario_engine::Chip = oer_vendor_scenario_engine::Chip {
+pub static CHIP: oer_vendor_scenario::Chip = oer_vendor_scenario::Chip {
     name: "esp32s31",
     manifest: "knowledge/esp32s31/vendor/artifacts.toml",
     manifest_text: include_str!("../../../../knowledge/esp32s31/vendor/artifacts.toml"),
@@ -39,13 +39,13 @@ pub static CHIP: oer_vendor_scenario_engine::Chip = oer_vendor_scenario_engine::
     observation: decisions::observation::DECISIONS,
     state: decisions::state::DECISIONS,
     phy: Some(&layout::PHY_LAYOUT),
-    isa: oer_vendor_scenario_engine::Isa::Rv32imafcZbaZbbZbsZcbZcmp,
+    isa: oer_vendor_scenario::Isa::Rv32imafcZbaZbbZbsZcbZcmp,
     registers: "registers/esp32s31/published/radio.bindings.toml",
 };
 
 /// Run the scenario engine for the ESP32-S31.
 pub fn install() {
-    oer_vendor_scenario_engine::install(&CHIP);
+    oer_vendor_scenario::install(&CHIP);
 }
 
 /// The directory of the chip's probe packages, relative to the repository

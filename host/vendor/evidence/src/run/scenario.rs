@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 /// The engine library behind every chip's verdicts; with the chip's
 /// scenario library it decides what a shard records.
-const ENGINE_PACKAGE: &str = "oer-vendor-scenario-engine";
+const ENGINE_PACKAGE: &str = "oer-vendor-scenario";
 /// Cargo's machine-readable build messages, with human diagnostics kept.
 const MESSAGE_FORMAT: &str = "--message-format=json-render-diagnostics";
 /// The scenario binary's argument naming one verdict library's dep-info.
@@ -125,15 +125,15 @@ mod tests {
     #[test]
     fn the_verdict_dep_info_sits_beside_each_library() {
         let messages = concat!(
-            r#"{"reason":"compiler-artifact","target":{"name":"oer_vendor_scenario_engine","kind":["lib"]},"filenames":["/t/deps/liboer_vendor_scenario_engine-1.rlib","/t/deps/liboer_vendor_scenario_engine-1.rmeta"]}"#,
+            r#"{"reason":"compiler-artifact","target":{"name":"oer_vendor_scenario","kind":["lib"]},"filenames":["/t/deps/liboer_vendor_scenario-1.rlib","/t/deps/liboer_vendor_scenario-1.rmeta"]}"#,
             "\n",
             r#"{"reason":"compiler-artifact","target":{"name":"oer_vendor_scenario_report","kind":["lib"]},"filenames":["/t/deps/liboer_vendor_scenario_report-2.rlib"]}"#,
             "\n",
             r#"{"reason":"build-finished","success":true}"#,
         );
         assert_eq!(
-            verdict_dep_info(messages.as_bytes(), &["oer-vendor-scenario-engine"]).unwrap(),
-            [PathBuf::from("/t/deps/liboer_vendor_scenario_engine-1.d")]
+            verdict_dep_info(messages.as_bytes(), &["oer-vendor-scenario"]).unwrap(),
+            [PathBuf::from("/t/deps/liboer_vendor_scenario-1.d")]
         );
         assert!(verdict_dep_info(messages.as_bytes(), &["oer-absent"]).is_err());
     }

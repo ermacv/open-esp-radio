@@ -15,7 +15,7 @@ It depends only on `toml`, `serde` and the foundation crates, so the host
 IEEE 802.15.4 stand's build script and the Blobray workspace's vendor
 scenarios read the pins through it too.
 
-`cargo verification fetch` and the other `cargo verification` commands
+`cargo pins fetch` and the other `cargo vendor-check` commands
 read the pins through it, and so does the HIL
 stand's pinned ESP-IDF build in [`oer-tool-hil`](../../hil/host/cli/README.md),
 which checks out the pinned IDF and its pinned submodules.
