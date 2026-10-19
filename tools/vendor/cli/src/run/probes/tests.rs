@@ -135,8 +135,7 @@ fn a_chip_builds_only_its_own_probes() {
     .unwrap();
     assert_eq!(seen, ["oer-firmware-probes-chip-b-radio"]);
     assert!(
-        elf(&context, "oer-firmware-probes-chip-b-radio")
-            .unwrap()
+        output(&context, &probes(&context.root, "chip-b").unwrap()[0])
             .ends_with("target/verification/chip-b/oer-firmware-probes-chip-b-radio")
     );
 }

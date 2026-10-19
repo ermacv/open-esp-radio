@@ -42,7 +42,7 @@ chips/      everything about Espressif hardware
                 platform/   chip profile, partitions, ROM functions, stack budgets
                 registers/  the reviewed register model and its publications
                 notes/      recovered facts and research notes
-                vendor/     the vendor pins, coverage and generated facts
+                vendor/     the vendor pins and generated facts
 firmware/   images for a chip: apps/ bootstrap/ hil/ probes/, ESP-IDF peers/ and vendor/
 tools/      everything that runs on the developer's machine, by domain:
   os/ test/ analysis/ chip/ pins/ regulatory/ registers/ probe/ image/ lab/ hil/ vendor/

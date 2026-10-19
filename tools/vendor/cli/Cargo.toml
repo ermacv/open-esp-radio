@@ -6,9 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "`cargo vendor-check`: vendor pins fetched, vendor diffs, provenance, typed scenarios, evidence shards, comparison probes, host stands, symbol lineage and the PHY archive audit"
+description = "`cargo vendor-check`: vendor pins fetched, vendor diffs, provenance, typed scenarios, comparison probes, host stands, symbol lineage and the PHY archive audit"
 
 [dependencies]
+oer-image-build = { path = "../../image/build" }
+oer-probe-codegen = { path = "../../probe/codegen" }
 oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
 oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
 oer-chip-profile = { path = "../../chip/profile" }
@@ -20,7 +22,6 @@ oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 oer-os-process = { path = "../../os/process" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-tool-pins = { path = "../../pins" }
-oer-vendor-evidence = { path = "../evidence", features = ["producers"] }
 oer-vendor-lineage = { path = "../lineage" }
 oer-vendor-phy = { path = "../phy" }
 oer-vendor-provenance = { path = "../provenance" }
@@ -29,6 +30,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 
 [dev-dependencies]
+tempfile = "=3.27.0"
 object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }
 
 [lints]

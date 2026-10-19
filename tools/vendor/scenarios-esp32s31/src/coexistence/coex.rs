@@ -176,7 +176,6 @@ pub struct CoexOptions {
     pub linker: PathBuf,
     pub output: PathBuf,
     pub budget: crate::harness::Budget,
-    pub patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
 }
 
 pub struct Coex {
@@ -219,7 +218,6 @@ impl Coex {
             options.budget,
             &inputs,
             "coexistence schedule comparison",
-            &options.patches,
         )?;
         let link = LinkRequest {
             companions: vec![],

@@ -12,7 +12,6 @@ use oer_analysis_blobray_linker::ElfLinker;
 use oer_analysis_riscv_model::{
     ArtifactId, CallAbi, ErrorCode, ObjectId, SymbolId, SymbolTableKind,
 };
-use oer_vendor_evidence::shard::LocationKind;
 use std::{
     collections::BTreeMap,
     fs,
@@ -35,34 +34,23 @@ pub struct Artifact {
     pub observed: oer_analysis_blobray_application::in_process::ObservedInstructions,
 }
 
-/// One claimed pair: `symbol` of vendor `source` at `vendor`, compared with
+/// One claimed pair: vendor `symbol` at `vendor`, compared with
 /// the production probe `entry` at `production`.
 struct Claimed<'a> {
-    source: &'a str,
     symbol: &'a str,
     vendor: u32,
     entry: &'a str,
     production: u32,
 }
 
-/// Evidence entries of one scenario and its untriaged uncovered locations.
+/// Observation and state collected by the claims of one scenario.
 #[derive(Default)]
 pub struct Claims {
-    pub entries: Vec<oer_vendor_evidence::shard::Entry>,
-    pub untriaged: std::collections::BTreeSet<oer_vendor_evidence::shard::Location>,
-    /// Closure and uncovered locations of every claim.
-    pub closures: Vec<crate::coverage::Closure>,
     /// Production PHY lines the claims' executions executed and observed.
     pub lines: crate::observation::Lines,
     /// Vendor bytes a claim's cases write without comparing them, with the
     /// claim's vendor root and production entry.
     pub unprojected: std::collections::BTreeSet<(String, String, crate::state::Byte)>,
-    /// SHA-256 of every captured input a fetched pin identifies, by session
-    /// input index: compiled production and firmware outputs are built on
-    /// the host, and their recipes are the shard's sources instead.
-    pub inputs: BTreeMap<String, String>,
-    /// What the claims' executions depend on in the production probe.
-    pub dependencies: crate::dependencies::Dependencies,
 }
 
 /// Production PHY lines of the claims of one scenario.
@@ -106,8 +94,6 @@ pub struct Session {
     projections: Vec<LayoutProjection>,
     /// Guest instructions executed in process, and the time spent executing.
     pub executed: std::cell::Cell<(u64, f64)>,
-    /// Point mutants of the loaded production image.
-    patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
 }
 
 /// A linked image and its resolved roots, including the entry.
@@ -154,13 +140,7 @@ impl Session {
 
     /// Create a fresh `run-*` directory, authenticate the inputs and read
     /// their inventory and the probe catalog of the compiled production input.
-    pub fn start(
-        output: &Path,
-        budget: Budget,
-        inputs: &[Input<'_>],
-        scope: &str,
-        patches: &[oer_analysis_blobray_application::in_process::ImagePatch],
-    ) -> Result<Self> {
+    pub fn start(output: &Path, budget: Budget, inputs: &[Input<'_>], scope: &str) -> Result<Self> {
         let run = start_run(output)?;
         let (identities, contents) = crate::harness::authenticate(inputs)?;
         let roles: Vec<_> = inputs.iter().map(|i| i.role).collect();
@@ -196,7 +176,6 @@ impl Session {
             reviewed: vec![],
             projections: vec![],
             executed: Default::default(),
-            patches: patches.to_vec(),
         })
     }
 
@@ -255,55 +234,46 @@ impl Session {
         Ok(selection)
     }
 
-    /// Digest of the reviewed content of the selected contract: its rules,
-    /// classification, claim ceiling, applicability and reason. The call
-    /// endpoints name the linked images by content, which changes with any
-    /// linked input, so they stay out and the digest changes only with the
-    /// reviewed content.
-    fn review_digest(&self, selected: &oer_analysis_riscv_model::ArtifactId) -> Result<String> {
-        for contract in &self.effects {
-            let id = oer_analysis_blobray_application::in_process::effect_contract_id(contract)?;
-            if &id == selected {
-                let reviewed = serde_json::json!({
-                    "rules": contract.rules,
-                    "unclassified": contract.unclassified,
-                    "claim-ceiling": contract.claim_ceiling,
-                    "applicability": contract.applicability,
-                    "reason": contract.reason,
-                });
-                return Ok(oer_os_durable::sha256_bytes(&serde_json::to_vec(
-                    &reviewed,
-                )?));
+    /// Every relation must select a contract or projection reviewed by this session.
+    fn check_reviews(&self, case: &oer_analysis_blobray_domain::ExecutionCase) -> Result<()> {
+        let Some(relation) = &case.relation else {
+            return Ok(());
+        };
+        if let Some(selected) = &relation.effects {
+            let mut reviewed = false;
+            for contract in &self.effects {
+                if oer_analysis_blobray_application::in_process::effect_contract_id(contract)?
+                    == *selected
+                {
+                    reviewed = true;
+                    break;
+                }
+            }
+            if !reviewed {
+                return Err(invalid(format!(
+                    "no reviewed contract has identity {}",
+                    selected.as_str()
+                )));
             }
         }
-        Err(invalid(format!(
-            "no reviewed contract has identity {}",
-            selected.as_str()
-        )))
-    }
-
-    /// Digest of the reviewed content of the selected projection: its fields,
-    /// branches, applicability and reason, without the endpoints that name
-    /// the linked images by content.
-    fn projection_digest(&self, selected: &oer_analysis_riscv_model::ArtifactId) -> Result<String> {
-        for projection in &self.projections {
-            let id = oer_analysis_blobray_application::in_process::projection_id(projection)?;
-            if &id == selected {
-                let reviewed = serde_json::json!({
-                    "fields": projection.fields,
-                    "branches": projection.branches,
-                    "applicability": projection.applicability,
-                    "reason": projection.reason,
-                });
-                return Ok(oer_os_durable::sha256_bytes(&serde_json::to_vec(
-                    &reviewed,
-                )?));
+        if let Some(selected) = &relation.projection {
+            let mut reviewed = false;
+            for projection in &self.projections {
+                if oer_analysis_blobray_application::in_process::projection_id(projection)?
+                    == *selected
+                {
+                    reviewed = true;
+                    break;
+                }
+            }
+            if !reviewed {
+                return Err(invalid(format!(
+                    "no reviewed projection has identity {}",
+                    selected.as_str()
+                )));
             }
         }
-        Err(invalid(format!(
-            "no reviewed projection has identity {}",
-            selected.as_str()
-        )))
+        Ok(())
     }
 
     /// Select `projection` by content, as `review_effects` does for contracts.
@@ -362,7 +332,7 @@ impl Session {
                 projections: &self.projections,
                 vendor_results: None,
                 dependence: Some(&oer_analysis_riscv_lift::RiscvDecoder),
-                patches: &self.patches,
+                patches: &[],
             },
             crate::chip().isa.executor(),
             &memory,
@@ -622,20 +592,12 @@ impl Session {
         Ok(self.artifacts.last().unwrap())
     }
 
-    /// The evidence entry of one claim: `symbol` of vendor `source` at
+    /// Validate one claim: vendor `symbol` at
     /// `vendor` compared with production `entry` at `production`. Only
     /// executions whose every case of that pair is MATCH count; a claim
     /// without one such execution fails.
-    fn claim(
-        &self,
-        suite: &str,
-        claimed: Claimed<'_>,
-        decisions: &[crate::coverage::Decision],
-        observed: &mut crate::coverage::Observed,
-        lines: &mut ClaimLines,
-    ) -> Result<oer_vendor_evidence::shard::Entry> {
+    fn claim(&self, suite: &str, claimed: Claimed<'_>, lines: &mut ClaimLines) -> Result<()> {
         let Claimed {
-            source,
             symbol,
             vendor,
             entry,
@@ -643,10 +605,6 @@ impl Session {
         } = claimed;
         let mut cases = 0;
         let mut executions = vec![];
-        // Executions whose request differs where the scenario expected it
-        // to: they cover the vendor code they ran, but carry no verdict.
-        let mut differing = vec![];
-        let mut reviews = std::collections::BTreeSet::new();
         for artifact in &self.artifacts {
             let selected: Vec<_> = artifact
                 .compared
@@ -660,40 +618,18 @@ impl Session {
                 .iter()
                 .any(|c| c.verdict != Some(oer_analysis_blobray_domain::ComparisonVerdict::Match))
             {
-                // `submit` rejects a verdict other than the expected one.
-                if artifact.verdict == Some(oer_analysis_blobray_domain::ComparisonVerdict::Diff)
-                    && selected.iter().all(|c| {
-                        matches!(
-                            c.verdict,
-                            Some(
-                                oer_analysis_blobray_domain::ComparisonVerdict::Match
-                                    | oer_analysis_blobray_domain::ComparisonVerdict::Diff
-                            )
-                        )
-                    })
-                {
-                    differing.push(artifact.identity.as_str().to_owned());
-                }
                 continue;
             }
             cases += selected.len() as u64;
             executions.push(artifact.identity.as_str().to_owned());
             // Contracts and projections the pair's comparisons selected.
             for case in &artifact.request.cases {
-                let Some(relation) = &case.relation else {
-                    continue;
-                };
                 if case.vendor.entry != vendor
                     || case.replacement.as_ref().map(|r| r.entry) != Some(production)
                 {
                     continue;
                 }
-                if let Some(contract) = &relation.effects {
-                    reviews.insert(self.review_digest(contract)?);
-                }
-                if let Some(projection) = &relation.projection {
-                    reviews.insert(self.projection_digest(projection)?);
-                }
+                self.check_reviews(case)?;
             }
         }
         if executions.is_empty() {
@@ -706,156 +642,6 @@ impl Session {
             .iter()
             .filter(|a| executions.contains(&a.identity.as_str().to_owned()))
             .collect();
-        let pairs: Vec<(ArtifactId, &ExecutionRequest, &[ExecutionEvidence])> = self
-            .artifacts
-            .iter()
-            .filter(|a| {
-                let identity = a.identity.as_str().to_owned();
-                executions.contains(&identity)
-                    || (differing.contains(&identity)
-                        && a.request.vendor == selected[0].request.vendor)
-            })
-            .map(|a| (a.identity.clone(), &a.request, a.records.as_slice()))
-            .collect();
-        let executables = self.target_executables(&selected[0].request.vendor);
-        let memory = self.budget.memory()?;
-        let report = oer_analysis_blobray_application::in_process::coverage(
-            &pairs,
-            &executables,
-            &oer_analysis_riscv_lift::RiscvDecoder,
-            &memory,
-            &mut self.budget.control(),
-        )
-        .map_err(|e| invalid(format!("{suite} {symbol} coverage: {e:?}")))?;
-        let root = report
-            .roots
-            .iter()
-            .find(|r| r.entry == vendor)
-            .ok_or_else(|| invalid(format!("{suite}: {symbol} is not a coverage root")))?;
-        // Uncovered locations by absolute address and kind: a block shared by
-        // several closure functions is named once, by the lowest entry.
-        let mut located = BTreeMap::new();
-        let mut functions = std::collections::BTreeSet::new();
-        for function in report
-            .functions
-            .iter()
-            .filter(|f| root.functions.contains(&f.entry))
-        {
-            let name = function
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("{:#x}", function.entry));
-            observed.functions.insert(name.clone());
-            functions.insert(name.clone());
-            let mut add = |address: u32, kind: LocationKind| {
-                located.entry((address, kind)).or_insert_with(|| {
-                    crate::coverage::location(&name, function.entry, address, kind)
-                });
-            };
-            for block in &function.uncovered_blocks {
-                add(*block, LocationKind::Block);
-            }
-            for site in &function.followed {
-                add(*site, LocationKind::Followed);
-            }
-            for site in &function.unresolved {
-                add(*site, LocationKind::Unresolved);
-            }
-            for direction in &function.uncovered_directions {
-                add(
-                    direction.site,
-                    if direction.taken {
-                        LocationKind::Taken
-                    } else {
-                        LocationKind::Fallthrough
-                    },
-                );
-            }
-        }
-        let locations: std::collections::BTreeSet<_> = located.into_values().collect();
-        // Closure functions only excluded code reaches share its exclusion.
-        let closure_functions: Vec<_> = report
-            .functions
-            .iter()
-            .filter(|f| root.functions.contains(&f.entry))
-            .collect();
-        let named = |entry: u32| {
-            closure_functions
-                .iter()
-                .find(|f| f.entry == entry)
-                .map(|f| f.name.clone().unwrap_or_else(|| format!("{entry:#x}")))
-        };
-        let graph: BTreeMap<String, crate::coverage::CallNode> = closure_functions
-            .iter()
-            .map(|f| {
-                (
-                    f.name.clone().unwrap_or_else(|| format!("{:#x}", f.entry)),
-                    crate::coverage::CallNode {
-                        entered: f.blocks.reached > 0,
-                        callees: f.callees.iter().filter_map(|c| named(*c)).collect(),
-                    },
-                )
-            })
-            .collect();
-        let root_name = named(vendor).unwrap_or_else(|| format!("{vendor:#x}"));
-        let consequences = crate::coverage::consequences(decisions, &root_name, &graph);
-        let consequential: std::collections::BTreeSet<_> = locations
-            .iter()
-            .filter(|l| consequences.contains(&l.function))
-            .cloned()
-            .collect();
-        let (excluded, untriaged) = crate::coverage::Observed::classify(decisions, &locations);
-        let (excluded, untriaged): (std::collections::BTreeSet<_>, std::collections::BTreeSet<_>) = (
-            excluded
-                .into_iter()
-                .chain(
-                    untriaged
-                        .iter()
-                        .filter(|l| consequential.contains(*l))
-                        .cloned(),
-                )
-                .collect(),
-            untriaged
-                .into_iter()
-                .filter(|l| !consequential.contains(l))
-                .collect(),
-        );
-        let count =
-            |c: &oer_analysis_blobray_domain::CoverageCount| oer_vendor_evidence::shard::Count {
-                reached: c.reached,
-                total: c.total,
-            };
-        let open = locations
-            .iter()
-            .filter(|l| matches!(l.kind, LocationKind::Followed | LocationKind::Unresolved))
-            .count() as u64;
-        let coverage = oer_vendor_evidence::shard::Coverage {
-            blocks: count(&root.blocks),
-            directions: count(&root.directions),
-            open,
-            excluded: excluded.len() as u64,
-            untriaged: untriaged.len() as u64,
-        };
-        observed.uncovered.extend(locations.iter().cloned());
-        let mut per_function = BTreeMap::<String, usize>::new();
-        for location in &untriaged {
-            *per_function.entry(location.function.clone()).or_default() += 1;
-        }
-        const GATEWAYS: usize = 5;
-        for gateway in crate::coverage::gateways(&root_name, &graph, &per_function)
-            .into_iter()
-            .take(GATEWAYS)
-        {
-            observed.gateways.push(format!(
-                "{symbol} -> {entry}: {} leads alone to {} untriaged locations in {} functions",
-                gateway.function, gateway.locations, gateway.functions
-            ));
-        }
-        observed.closures.push(crate::coverage::Closure {
-            functions,
-            uncovered: locations,
-            consequential,
-        });
         let mut instructions =
             oer_analysis_blobray_application::in_process::ObservedInstructions::default();
         for artifact in &selected {
@@ -869,12 +655,10 @@ impl Session {
         let sections = std::fs::read_to_string(self.run.join("image").join(crate::state::LINK_MAP))
             .map(|map| crate::state::link_map_sections(&map))
             .unwrap_or_default();
+        let executables = self.target_executables(&selected[0].request.vendor);
         let vendor_bytes: Vec<&[u8]> = executables.iter().map(Executable::bytes).collect();
         let symbols = crate::state::Symbols::of(&vendor_bytes)?.with_sections(&sections);
-        let (mut written, mut unprojected) = (
-            std::collections::BTreeSet::new(),
-            std::collections::BTreeSet::new(),
-        );
+        let mut unprojected = std::collections::BTreeSet::new();
         for artifact in &selected {
             let cases: std::collections::BTreeSet<u32> = artifact
                 .request
@@ -888,61 +672,30 @@ impl Session {
                 })
                 .map(|(i, _)| i as u32)
                 .collect();
-            let (w, u) = crate::state::written(
+            let (_, u) = crate::state::written(
                 &artifact.request.cases,
                 &cases,
                 &artifact.records,
                 &self.projections,
             )?;
-            written.extend(w.into_iter().map(|a| symbols.name(a)));
             unprojected.extend(u.into_iter().map(|a| symbols.name(a)));
         }
-        let compared = written.len() - unprojected.len();
-        let (reviewed_state, untriaged_state) =
-            crate::state::classify(crate::chip().state, (symbol, entry), &unprojected);
-        let state = oer_vendor_evidence::shard::State {
-            written: written.len() as u64,
-            compared: compared as u64,
-            reviewed: reviewed_state.len() as u64,
-            untriaged: untriaged_state.len() as u64,
-        };
         lines.unprojected.extend(
             unprojected
                 .into_iter()
                 .map(|b| (symbol.to_owned(), entry.to_owned(), b)),
         );
         let claim_lines = lines.map.lines(&instructions);
-        let (reviewed, untriaged) = lines.sources.classify(
+        lines.sources.classify(
             &lines.root,
             crate::chip().observation,
             &claim_lines.unobserved(),
         )?;
-        let observation = oer_vendor_evidence::shard::Observation {
-            executed: claim_lines.executed.len() as u64,
-            observed: claim_lines.observed.len() as u64,
-            reviewed: reviewed.len() as u64,
-            untriaged: untriaged.len() as u64,
-        };
         lines.lines.extend(&claim_lines);
-        Ok(oer_vendor_evidence::shard::Entry {
-            suite: suite.into(),
-            source: source.into(),
-            symbol: symbol.into(),
-            production: entry.into(),
-            verdict: oer_vendor_evidence::shard::MATCH.into(),
-            cases,
-            reviews: reviews.into_iter().collect(),
-            coverage: Some(coverage),
-            observation: Some(observation),
-            state: Some(state),
-        })
+        println!("{suite} {symbol} -> {entry}: MATCH ({cases} cases)");
+        Ok(())
     }
 
-    /// Evidence entries of `list` (vendor source, root symbol, production
-    /// probe): archive roots resolve in `roots`, ROM roots in the ROM input.
-    /// Coverage of every claimed root closure is classified under
-    /// `decisions`; the complete run checks that each still excludes
-    /// something in some scenario.
     /// Addresses of each defined function symbol of the linked image, by
     /// name: several for a name that static functions share.
     fn image_functions(&self) -> Result<BTreeMap<String, Vec<u32>>> {
@@ -968,26 +721,14 @@ impl Session {
         suite: &str,
         roots: &BTreeMap<String, u32>,
         list: &[(&str, &str, &str)],
-        decisions: &[crate::coverage::Decision],
         report: &dyn crate::findings::RunReport,
     ) -> Result<Claims> {
-        let mut observed = crate::coverage::Observed::default();
         let executed: std::collections::BTreeSet<u32> = self
             .artifacts
             .iter()
             .flat_map(|a| a.observed.executed.iter().copied())
             .collect();
-        let reads: std::collections::BTreeSet<(u32, u8)> = self
-            .artifacts
-            .iter()
-            .flat_map(|a| a.observed.reads.iter().copied())
-            .collect();
-        for line in crate::mutant::report(&self.patches, &executed) {
-            println!("{suite} {line}");
-        }
         let root = oer_os_process::built_root();
-        let dependencies =
-            crate::dependencies::of(self.inputs[PROBE_INPUT].bytes(), &executed, &reads, &root)?;
         let mut lines = ClaimLines {
             map: crate::observation::LineMap::new(
                 self.inputs[PROBE_INPUT].bytes(),
@@ -1003,52 +744,45 @@ impl Session {
         // The (vendor, production) addresses of every claim: a compared pair
         // is matched by address, so an unnamed ROM function is claimed too.
         let mut claimed = std::collections::BTreeSet::new();
-        let entries = list
-            .iter()
-            .map(|(source, symbol, production)| {
-                let vendor = match *source {
-                    // A static function the cases enter at its linked address
-                    // is claimed there too.
-                    "archive" => match roots.get(*symbol) {
-                        Some(address) => *address,
-                        None => match functions.get(*symbol).map(Vec::as_slice) {
-                            Some([address]) => *address,
-                            _ => {
-                                return Err(invalid(format!(
-                                    "{symbol} is neither a linked root nor one function of the image"
-                                )));
-                            }
-                        },
+        list.iter().try_for_each(|(source, symbol, production)| {
+            let vendor = match *source {
+                // A static function the cases enter at its linked address
+                // is claimed there too.
+                "archive" => match roots.get(*symbol) {
+                    Some(address) => *address,
+                    None => match functions.get(*symbol).map(Vec::as_slice) {
+                        Some([address]) => *address,
+                        _ => {
+                            return Err(invalid(format!(
+                                "{symbol} is neither a linked root nor one function of the image"
+                            )));
+                        }
                     },
-                    "rom" => u32::try_from(
-                        crate::harness::symbol(
-                            &self.inventory,
-                            crate::chip().rom_input as usize,
-                            symbol,
-                        )?
-                        .value,
-                    )?,
-                    other => return Err(invalid(format!("unknown vendor source {other}"))),
-                };
-                let address = self.probes.entry(production)?;
-                claimed.insert((vendor, address));
-                self.claim(
-                    suite,
-                    Claimed {
-                        source,
+                },
+                "rom" => u32::try_from(
+                    crate::harness::symbol(
+                        &self.inventory,
+                        crate::chip().rom_input as usize,
                         symbol,
-                        vendor,
-                        entry: production,
-                        production: address,
-                    },
-                    decisions,
-                    &mut observed,
-                    &mut lines,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        // Every pair a case compares is a claim; a pair no claim names has
-        // its coverage and verdicts dropped from the evidence.
+                    )?
+                    .value,
+                )?,
+                other => return Err(invalid(format!("unknown vendor source {other}"))),
+            };
+            let address = self.probes.entry(production)?;
+            claimed.insert((vendor, address));
+            self.claim(
+                suite,
+                Claimed {
+                    symbol,
+                    vendor,
+                    entry: production,
+                    production: address,
+                },
+                &mut lines,
+            )
+        })?;
+        // A compared pair no claim names remains visible in the run report.
         let names: BTreeMap<u32, &str> = functions
             .iter()
             .flat_map(|(name, addresses)| addresses.iter().map(|a| (*a, name.as_str())))
@@ -1086,52 +820,15 @@ impl Session {
             "{suite} interpreter {steps} guest instructions in {seconds:.2} s ({:.1} M/s)",
             steps as f64 / seconds.max(f64::EPSILON) / 1e6
         );
-        let (_, untriaged) = crate::coverage::Observed::classify(decisions, &observed.uncovered);
-        let image = std::fs::read(self.run.join("image/image.elf")).unwrap_or_default();
-        let rom = self
-            .inputs
-            .get(crate::chip().rom_input as usize)
-            .map_or(&[][..], Executable::bytes);
-        let listed = crate::coverage::uncovered_everywhere(&observed.closures, untriaged.clone());
-        let consequential: std::collections::BTreeSet<_> = observed
-            .closures
-            .iter()
-            .flat_map(|closure| closure.consequential.iter().cloned())
-            .collect();
-        let untriaged_findings = if untriaged.is_empty() {
-            None
-        } else {
-            Some(crate::findings::Untriaged {
-                images: [&image, rom],
-                decisions,
-                listed: &listed,
-                uncovered: &observed.uncovered,
-                consequential: &consequential,
-            })
-        };
         report.report(&crate::findings::Findings {
             suite,
-            directory: &self.run,
             unclaimed: &unclaimed,
-            gateways: &observed.gateways,
-            untriaged: untriaged_findings,
         })?;
         let rules = crate::rule_use::check(&self.run, suite, &self.reviewed)?;
         println!("{suite} effect rule selections: {}", rules.display());
         Ok(Claims {
-            entries,
-            untriaged,
-            closures: observed.closures,
             lines: lines.lines,
             unprojected: lines.unprojected,
-            inputs: self
-                .inputs
-                .iter()
-                .enumerate()
-                .map(|(index, input)| (format!("input-{index}"), input.id().as_str().to_owned()))
-                .filter(|(_, digest)| crate::artifacts::is_fetched_pin(digest))
-                .collect(),
-            dependencies,
         })
     }
 

@@ -5,6 +5,4 @@ pub mod contracts;
 pub mod harness_edges;
 pub mod layout;
 
-pub use oer_vendor_scenario::{
-    artifacts, coverage, evidence, harness, observation, session, state,
-};
+pub use oer_vendor_scenario::{artifacts, evidence, harness, observation, session, state};

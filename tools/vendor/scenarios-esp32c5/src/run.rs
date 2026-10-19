@@ -1,24 +1,13 @@
 //! Run one authenticated ESP32-C5 vendor-comparison scenario: the scenario
-//! set, its inputs and the dispatch that decides its verdicts and evidence
-//! shard. The binary adds the reviewer commands.
-use crate::{LIBRARY, PROBES_DIRECTORY, PROBES_PACKAGE, ROM, decisions, phy_i2c};
+//! set, its inputs and the dispatch that decides its verdicts. The binary adds the reviewer commands.
+use crate::{LIBRARY, ROM, decisions, phy_i2c};
 use clap::Subcommand;
 use oer_vendor_scenario::findings::RunReport;
 use oer_vendor_scenario::harness::{Budget, Result};
 use oer_vendor_scenario::leaf::{self, LeafOptions};
-use oer_vendor_scenario::shard::{self, ProbeImages};
 use oer_vendor_scenario::{artifacts, observation, session, state};
 use std::path::PathBuf;
 use std::process::ExitCode;
-
-/// Target triple of the ESP32-C5 probe images.
-const PROBES_TARGET: &str = "riscv32imac-unknown-none-elf";
-/// The probe images of the ESP32-C5 scenarios.
-const PROBES: ProbeImages = ProbeImages {
-    directory: PROBES_DIRECTORY,
-    packages: &[PROBES_PACKAGE],
-    target: PROBES_TARGET,
-};
 
 /// One vendor-comparison scenario and its inputs.
 #[derive(Subcommand)]
@@ -54,13 +43,6 @@ pub struct Common {
     output: PathBuf,
     #[command(flatten)]
     budget: Budget,
-    /// Write each scenario's shard of the evidence index into this directory.
-    #[arg(long)]
-    index: Option<PathBuf>,
-    /// Dep-info files of the libraries that decide the verdicts, from the
-    /// binary's `--verdict-dep-info`.
-    #[arg(skip)]
-    verdict: Vec<PathBuf>,
 }
 
 /// The transport suite: every leaf must MATCH and meet its expectation.
@@ -74,38 +56,17 @@ fn phy_i2c(common: &Common, report: &dyn RunReport) -> Result<session::Claims> {
         linker: common.linker.clone(),
         output: common.output.clone(),
         budget: common.budget,
-        patches: vec![],
     };
     let mut run = leaf::LeafRun::new(&options)?;
     leaf::exercise(&mut run)?;
-    let claims = run.session.claims(
-        phy_i2c::PHY_I2C.id,
-        &run.roots,
-        &leaf::claims(&run),
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims =
+        run.session
+            .claims(phy_i2c::PHY_I2C.id, &run.roots, &leaf::claims(&run), report)?;
     println!(
         "authenticated PHY I2C transport leaves passed {}",
         run.run.display()
     );
     Ok(claims)
-}
-
-/// Write `scenario`'s shard when an index directory was given.
-fn record(common: &Common, scenario: &str, claims: &session::Claims) -> Result<()> {
-    if let Some(directory) = &common.index {
-        let index = shard::shard(
-            scenario,
-            &common.production,
-            claims,
-            &PROBES,
-            env!("CARGO_PKG_NAME"),
-            &common.verdict,
-        )?;
-        shard::record(directory, &index)?;
-    }
-    Ok(())
 }
 
 /// Every scenario; each reviewed decision must still review something.
@@ -127,22 +88,14 @@ fn all(common: &Common, report: &dyn RunReport) -> Result<()> {
     for line in &untriaged {
         println!("  untriaged line {}:{}", line.0.display(), line.1);
     }
-    oer_vendor_scenario::coverage::Observed::of(&claims.closures)
-        .check("all", oer_vendor_scenario::coverage::decisions()?)?;
     state::check(decisions::state::DECISIONS, &claims.unprojected)?;
-    record(common, "phy-i2c", &claims)
+    Ok(())
 }
 
-/// Run `scenario`, handing each suite's findings to `report`; `verdict`
-/// names the dep-info files of the libraries that decide its verdicts.
-pub fn run(mut scenario: Scenario, report: &dyn RunReport, verdict: Vec<PathBuf>) -> ExitCode {
-    match &mut scenario {
-        Scenario::PhyI2c { common } | Scenario::All { common } => common.verdict = verdict,
-    }
+/// Run `scenario`, handing each suite's findings to `report`.
+pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
     let result = match scenario {
-        Scenario::PhyI2c { common } => {
-            phy_i2c(&common, report).and_then(|claims| record(&common, "phy-i2c", &claims))
-        }
+        Scenario::PhyI2c { common } => phy_i2c(&common, report).map(|_| ()),
         Scenario::All { common } => all(&common, report),
     };
     match result {
@@ -151,5 +104,35 @@ pub fn run(mut scenario: Scenario, report: &dyn RunReport, verdict: Vec<PathBuf>
             eprintln!("error: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn scenarios_accept_their_inputs_and_reject_an_index() {
+        #[derive(clap::Parser)]
+        struct Cli {
+            #[command(subcommand)]
+            scenario: Scenario,
+        }
+        use clap::Parser as _;
+        crate::install();
+        let args = [
+            "scenario",
+            "phy-i2c",
+            "--production",
+            "probe.elf",
+            "--linker",
+            "ld.lld",
+            "--output",
+            "runs",
+        ];
+        assert!(Cli::try_parse_from(args).is_ok());
+        let error = Cli::try_parse_from([&args[..], &["--index", "index"]].concat())
+            .err()
+            .expect("index rejected");
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 }

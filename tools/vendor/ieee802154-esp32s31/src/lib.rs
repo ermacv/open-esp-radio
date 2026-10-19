@@ -30,10 +30,6 @@ pub use compare::{Verdict, compare};
 pub use record::{Argument, Inputs, Record};
 pub use scenario::{Scenario, Step};
 
-/// The stand's package directory: its shard records this package's path
-/// closure, and the program, a report package, stays out of it.
-pub const DIRECTORY: &str = env!("CARGO_MANIFEST_DIR");
-
 static CLAIMED: AtomicBool = AtomicBool::new(false);
 
 /// Run `scenario` as the only scenario of this process.

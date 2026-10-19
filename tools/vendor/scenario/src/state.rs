@@ -5,7 +5,7 @@
 //! compared when the case's relation selects it through a projection field,
 //! a memory pair or the write timeline. Every byte a case writes without
 //! comparing it is either reviewed by a decision below, with its reason, or
-//! reported as unprojected in the evidence index. A decision that matches no
+//! reported as unprojected in the run. A decision that matches no
 //! unprojected byte fails the run.
 use crate::harness::{Result, invalid};
 use oer_analysis_blobray_domain::{

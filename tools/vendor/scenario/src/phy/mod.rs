@@ -79,8 +79,6 @@ pub struct PhyOptions {
     pub linker: PathBuf,
     pub output: PathBuf,
     pub budget: Budget,
-    /// Point mutants applied to the loaded production image of every comparison.
-    pub patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
 }
 
 /// Start a session over the authenticated archive (input 0), ROM (input 1),
@@ -104,13 +102,7 @@ pub fn start_session(options: &PhyOptions, extra: &[Input<'_>], purpose: &str) -
         },
     ];
     inputs.extend_from_slice(extra);
-    Session::start(
-        &options.output,
-        options.budget,
-        &inputs,
-        purpose,
-        &options.patches,
-    )
+    Session::start(&options.output, options.budget, &inputs, purpose)
 }
 
 /// Requested-delay ABI at `address`: every call returns zero and records its

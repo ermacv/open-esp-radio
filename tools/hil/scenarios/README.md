@@ -94,7 +94,7 @@ scenarios of each image in catalog order. Folder traversal order cannot change
 physical execution order. Each TOML document owns its image features,
 workload criteria and repetition count.
 
-Synthetic serialized compatibility inputs live in `hil/tests/fixtures/catalog`.
+Synthetic serialized compatibility inputs live in `tools/hil/run/tests-fixtures/fixtures/catalog`.
 Both readers' tests use them; they are not part of this catalog.
 
 ## Program-counter profile

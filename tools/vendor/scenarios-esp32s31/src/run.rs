@@ -1,9 +1,8 @@
 //! Run one authenticated ESP32-S31 vendor-comparison scenario: the
-//! scenario set, its inputs and the dispatch that decides its verdicts and
-//! evidence shard. The binary adds the reviewer commands.
+//! scenario set, its inputs and the dispatch that prints its verdicts.
+//! The binary adds the reviewer commands.
 use crate::{
-    ampdu_resort, ble, calibration_leaves, calibration_prefix, channel, coex, coex_hw, coverage,
-    decisions,
+    ampdu_resort, ble, calibration_leaves, calibration_prefix, channel, coex, coex_hw, decisions,
     gain::{Gain, Options},
     gain_state::{self, Unmet},
     harness::{Budget, Result},
@@ -12,12 +11,8 @@ use crate::{
     retry, rfpll, rx_append, rx_gain, session, state, tracking, tx_dc,
 };
 use clap::Subcommand;
-use oer_vendor_evidence::shard::Index;
 use oer_vendor_scenario::findings::RunReport;
-use std::{
-    path::{Path, PathBuf},
-    process::ExitCode,
-};
+use std::{path::PathBuf, process::ExitCode};
 
 /// One vendor-comparison scenario and its inputs.
 #[derive(Subcommand)]
@@ -170,86 +165,13 @@ pub struct Common {
     output: PathBuf,
     #[command(flatten)]
     budget: Budget,
-    /// Point mutant of the loaded radio probe image in every comparison that
-    /// loads it, `TARGET[:ORIGINAL]:REPLACEMENT`: TARGET a hexadecimal
-    /// address or `symbol+OFFSET`, ORIGINAL the bytes there (the instruction
-    /// the probe holds when omitted), REPLACEMENT hexadecimal bytes, `nop` or
-    /// `ret`; repeat for several. The probe is not rebuilt; a failing
-    /// scenario kills the mutant, and a passing one reports whether it ran.
-    #[arg(long = "patch", value_parser = oer_vendor_scenario::mutant::parse)]
-    mutants: Vec<oer_vendor_scenario::mutant::Spec>,
-    /// Point mutant of the Bluetooth production probe image, in the same
-    /// form: the Bluetooth comparisons load that image instead of the radio
-    /// probe, so they take only these.
-    #[arg(long = "bluetooth-patch", value_parser = oer_vendor_scenario::mutant::parse)]
-    bluetooth_mutants: Vec<oer_vendor_scenario::mutant::Spec>,
-    /// The resolved radio and Bluetooth mutants.
-    #[arg(skip)]
-    patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
-    #[arg(skip)]
-    bluetooth_patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
-    /// Write the scenario's shard of the native evidence index qualification
-    /// reads into this directory; `all` writes every scenario's shard.
-    #[arg(long)]
-    index: Option<PathBuf>,
-    /// Dep-info files of the libraries that decide the verdicts, from the
-    /// binary's `--verdict-dep-info`.
-    #[arg(skip)]
-    verdict: Vec<PathBuf>,
 }
 
-/// Resolve `common`'s mutants against the radio probe and, for the
-/// comparisons that load it, the Bluetooth probe.
-fn resolve_mutants(common: &mut Common, bluetooth: Option<&Path>) -> Result<()> {
-    use oer_vendor_scenario::mutant::resolve;
-    if !common.mutants.is_empty() {
-        common.patches = resolve(&std::fs::read(&common.production)?, &common.mutants)?;
-    }
-    if !common.bluetooth_mutants.is_empty() {
-        let production =
-            bluetooth.ok_or("only the Bluetooth comparisons take Bluetooth mutants")?;
-        common.bluetooth_patches = resolve(&std::fs::read(production)?, &common.bluetooth_mutants)?;
-    }
-    Ok(())
+fn single(outcome: Result<Outcome>) -> Result<ExitCode> {
+    outcome.map(|(code, _)| code)
 }
 
-/// Exit code of one scenario.
-/// Where one scenario's evidence shard goes: its name, the index directory
-/// if one was requested, and the production probe image it compared.
-struct Shard {
-    scenario: &'static str,
-    index: Option<PathBuf>,
-    production: PathBuf,
-    verdict: Vec<PathBuf>,
-}
-
-impl Shard {
-    fn of(scenario: &'static str, common: &Common) -> Self {
-        Self {
-            scenario,
-            index: common.index.clone(),
-            production: common.production.clone(),
-            verdict: common.verdict.clone(),
-        }
-    }
-}
-
-/// Run one scenario and, when it passed and an index directory was given,
-/// write its shard.
-fn single(shard: Shard, outcome: Result<Outcome>) -> Result<ExitCode> {
-    let (code, claims) = outcome?;
-    if let Some(directory) = &shard.index {
-        if code != ExitCode::SUCCESS {
-            return Ok(code);
-        }
-        let index = evidence::shard(shard.scenario, &shard.production, &claims, &shard.verdict)?;
-        oer_vendor_scenario::shard::record(directory, &index)?;
-    }
-    Ok(code)
-}
-
-/// Evidence entries and untriaged coverage of one scenario, alongside its
-/// exit code.
+/// Exit code, observation and state collected by one scenario.
 type Outcome = (ExitCode, session::Claims);
 
 /// Vendor roots each scenario claims against its compiled production entry.
@@ -417,7 +339,6 @@ fn gain(common: Common, rftest: Option<PathBuf>, report: &dyn RunReport) -> Resu
         output: common.output,
         budget: common.budget,
         rftest,
-        patches: common.patches,
     };
     let mut g = Gain::new(&options)?;
     let unmet = gain_state::exercise(&mut g, options.rftest.is_some())?;
@@ -429,13 +350,7 @@ fn gain(common: Common, rftest: Option<PathBuf>, report: &dyn RunReport) -> Resu
     g.bluetooth()?;
     g.additive()?;
     g.negative()?;
-    let claims = g.session.claims(
-        "gain",
-        &g.roots,
-        &GAIN_CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = g.session.claims("gain", &g.roots, &GAIN_CLAIMS, report)?;
     Ok((
         finish(
             &unmet,
@@ -461,7 +376,6 @@ fn i2c(
         budget: common.budget,
         sdk,
         phy_sdk,
-        patches: common.patches,
     };
     let mut ctx = i2c::I2c::new(&options)?;
     let unmet = i2c::unmet(options.sdk.is_some(), options.phy_sdk.is_some());
@@ -487,13 +401,7 @@ fn i2c(
     if options.phy_sdk.is_some() {
         list.extend(I2C_RFPLL_CLAIMS);
     }
-    let claims = ctx.session.claims(
-        "i2c",
-        &ctx.roots,
-        &list,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx.session.claims("i2c", &ctx.roots, &list, report)?;
     Ok((
         finish(&unmet, "authenticated PHY comparisons passed", &ctx.run),
         claims,
@@ -509,7 +417,6 @@ impl Common {
             linker: self.linker,
             output: self.output,
             budget: self.budget,
-            patches: self.patches,
         }
     }
 }
@@ -518,13 +425,9 @@ fn channel(common: Common, report: &dyn RunReport) -> Result<Outcome> {
     let options = common.phy();
     let mut ctx = channel::Channel::new(&options)?;
     channel::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "channel",
-        &ctx.roots,
-        &CHANNEL_CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("channel", &ctx.roots, &CHANNEL_CLAIMS, report)?;
     Ok((
         finish(
             &[],
@@ -558,7 +461,6 @@ fn wifi_mac(
         linker: common.linker,
         output: common.output,
         budget: common.budget,
-        patches: common.patches,
     };
     let mut ctx = mac::Mac::new(&options)?;
     mac::exercise(&mut ctx)?;
@@ -566,13 +468,9 @@ fn wifi_mac(
     rx_append::exercise(&mut ctx)?;
     ampdu_resort::exercise(&mut ctx)?;
     ampdu_resort::exercise_timeouts(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "wifi-mac",
-        &ctx.roots,
-        &mac::claims(&ctx),
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("wifi-mac", &ctx.roots, &mac::claims(&ctx), report)?;
     Ok((
         finish(&[], "authenticated Wi-Fi MAC HAL leaves passed", &ctx.run),
         claims,
@@ -598,17 +496,12 @@ fn bluetooth(
         linker: common.linker,
         output: common.output,
         budget: common.budget,
-        patches: common.bluetooth_patches,
     };
     let mut ctx = mac::Mac::new(&options)?;
     mac::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "bluetooth",
-        &ctx.roots,
-        &mac::claims(&ctx),
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("bluetooth", &ctx.roots, &mac::claims(&ctx), report)?;
     Ok((
         finish(
             &[],
@@ -633,17 +526,12 @@ fn coex_hw(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<O
         linker: common.linker,
         output: common.output,
         budget: common.budget,
-        patches: common.patches,
     };
     let mut ctx = mac::Mac::new(&options)?;
     mac::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "coex-hw",
-        &ctx.roots,
-        &mac::claims(&ctx),
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("coex-hw", &ctx.roots, &mac::claims(&ctx), report)?;
     Ok((
         finish(
             &[],
@@ -662,17 +550,12 @@ fn coex(common: Common, libcoexist: PathBuf, report: &dyn RunReport) -> Result<O
         linker: common.linker,
         output: common.output,
         budget: common.budget,
-        patches: common.patches,
     };
     let mut ctx = coex::Coex::new(&options)?;
     coex::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "coex",
-        &ctx.roots,
-        coex::CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("coex", &ctx.roots, coex::CLAIMS, report)?;
     Ok((
         finish(&[], "authenticated coexistence schedule passed", &ctx.run),
         claims,
@@ -682,13 +565,9 @@ fn coex(common: Common, libcoexist: PathBuf, report: &dyn RunReport) -> Result<O
 fn rx_gain(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
     let mut ctx = rx_gain::RxGain::new(&common.phy(), &phy_sdk)?;
     rx_gain::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "rx-gain",
-        &ctx.roots,
-        &RX_GAIN_CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("rx-gain", &ctx.roots, &RX_GAIN_CLAIMS, report)?;
     Ok((
         finish(
             &[],
@@ -702,13 +581,9 @@ fn rx_gain(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<O
 fn tx_dc(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
     let mut ctx = tx_dc::TxDc::new(&common.phy(), &phy_sdk)?;
     tx_dc::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "tx-dc",
-        &ctx.roots,
-        &TX_DC_CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("tx-dc", &ctx.roots, &TX_DC_CLAIMS, report)?;
     Ok((
         finish(
             &[],
@@ -722,13 +597,9 @@ fn tx_dc(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Out
 fn tracking(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<Outcome> {
     let mut ctx = tracking::Tracking::new(&common.phy(), &phy_sdk)?;
     tracking::exercise(&mut ctx)?;
-    let claims = ctx.session.claims(
-        "tracking",
-        &ctx.roots,
-        &TRACKING_CLAIMS,
-        oer_vendor_scenario::coverage::decisions()?,
-        report,
-    )?;
+    let claims = ctx
+        .session
+        .claims("tracking", &ctx.roots, &TRACKING_CLAIMS, report)?;
     Ok((
         finish(
             &[],
@@ -737,37 +608,6 @@ fn tracking(common: Common, phy_sdk: PathBuf, report: &dyn RunReport) -> Result<
         ),
         claims,
     ))
-}
-
-/// Evidence index builders over the repository sources the verdicts depend on.
-mod evidence {
-    use super::*;
-
-    use crate::{BLUETOOTH_PROBES_PACKAGE, PROBES_DIRECTORY, PROBES_PACKAGE, PROBES_TARGET};
-    use oer_vendor_scenario::shard::ProbeImages;
-
-    /// The probe images of the ESP32-S31 scenarios.
-    const PROBES: ProbeImages = ProbeImages {
-        directory: PROBES_DIRECTORY,
-        packages: &[PROBES_PACKAGE, BLUETOOTH_PROBES_PACKAGE],
-        target: PROBES_TARGET,
-    };
-
-    pub fn shard(
-        scenario: &str,
-        production: &Path,
-        claims: &session::Claims,
-        verdict: &[PathBuf],
-    ) -> Result<Index> {
-        oer_vendor_scenario::shard::shard(
-            scenario,
-            production,
-            claims,
-            &PROBES,
-            env!("CARGO_PKG_NAME"),
-            verdict,
-        )
-    }
 }
 
 /// Every vendor input and extra production image `all` requires.
@@ -792,16 +632,6 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
         bluetooth_production,
         libcoexist,
     } = inputs;
-    if !common.patches.is_empty() || !common.bluetooth_patches.is_empty() {
-        if common.index.is_some() {
-            return Err("a point-mutant run writes no evidence index".into());
-        }
-        println!(
-            "{} point-mutant patches applied to every radio comparison, {} to every Bluetooth comparison",
-            common.patches.len(),
-            common.bluetooth_patches.len()
-        );
-    }
     let within = |name: &str| Common {
         output: common.output.join(name),
         ..common.clone()
@@ -895,25 +725,13 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
             .collect()
     });
     let (elapsed, passed, failed) = split(outcomes);
-    let write = |directory: &Path, name: &str, claims: &session::Claims| -> Result<()> {
-        let production = if name == "bluetooth" {
-            &bluetooth_production
-        } else {
-            &common.production
-        };
-        oer_vendor_scenario::shard::record(
-            directory,
-            &evidence::shard(name, production, claims, &common.verdict)?,
-        )
-    };
-    if let Some(failed) = conclude_failed(failed, common.index.as_deref(), &passed, write) {
+    if let Some(failed) = failed {
+        println!("cross-scenario decision checks skipped: a scenario did not pass");
         return failed;
     }
-    let mut closures = vec![];
     let mut lines = observation::Lines::default();
     let mut unprojected = std::collections::BTreeSet::new();
     for (_, claims) in &passed {
-        closures.extend(claims.closures.iter().cloned());
         lines.extend(&claims.lines);
         unprojected.extend(claims.unprojected.iter().cloned());
     }
@@ -955,9 +773,6 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
     for (name, seconds) in &elapsed {
         println!("{name} {seconds:.1}s");
     }
-    // Decisions are shared by every scenario, so one is stale only when no
-    // scenario's closures leave a location it excludes uncovered.
-    coverage::Observed::of(&closures).check("all", oer_vendor_scenario::coverage::decisions()?)?;
     // A state decision is stale when no claim writes a byte it reviews
     // without comparing it.
     state::check(decisions::state::DECISIONS, &unprojected)?;
@@ -991,7 +806,6 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
             claims.join(", ")
         );
     }
-    record_passed(common.index.as_deref(), &passed, write)?;
     println!("all PHY comparison scenarios passed");
     Ok(ExitCode::SUCCESS)
 }
@@ -1027,142 +841,27 @@ fn split<T>(outcomes: Outcomes<'_, T>) -> Split<'_, T> {
     (elapsed, passed, failed)
 }
 
-/// Write the shard of every passed scenario into `index`, when one is given.
-fn record_passed<T>(
-    index: Option<&Path>,
-    passed: &[(&str, T)],
-    mut write: impl FnMut(&Path, &str, &T) -> Result<()>,
-) -> Result<()> {
-    let Some(index) = index else {
-        return Ok(());
-    };
-    for (name, claims) in passed {
-        write(index, name, claims)?;
-    }
-    Ok(())
-}
-
-/// What `all` ends with when a scenario failed: each passed scenario's shard
-/// rests on its own claims alone, so it is still written and one DIFF
-/// withholds only its own scenario's evidence; then the failure. The decision
-/// checks that judge every scenario's closures, lines and state together
-/// cannot run on a partial set and are skipped. `None` when every scenario
-/// passed.
-fn conclude_failed<T>(
-    failed: Option<Result<ExitCode>>,
-    index: Option<&Path>,
-    passed: &[(&str, T)],
-    write: impl FnMut(&Path, &str, &T) -> Result<()>,
-) -> Option<Result<ExitCode>> {
-    let failed = failed?;
-    println!("cross-scenario decision checks skipped: a scenario did not pass");
-    Some(record_passed(index, passed, write).and(failed))
-}
-
-impl Scenario {
-    /// The inputs every comparison scenario shares.
-    fn common_mut(&mut self) -> &mut Common {
-        match self {
-            Scenario::Gain { common, .. }
-            | Scenario::Channel { common }
-            | Scenario::RxGain { common, .. }
-            | Scenario::TxDc { common, .. }
-            | Scenario::CoexHw { common, .. }
-            | Scenario::Coex { common, .. }
-            | Scenario::WifiMac { common, .. }
-            | Scenario::Tracking { common, .. }
-            | Scenario::I2c { common, .. }
-            | Scenario::Bluetooth { common, .. }
-            | Scenario::All { common, .. } => common,
-        }
-    }
-
-    /// Resolve the mutants of the scenario's inputs against their probes.
-    fn resolve_mutants(&mut self) -> Result<()> {
-        match self {
-            Scenario::Bluetooth {
-                common,
-                bluetooth_production,
-                ..
-            }
-            | Scenario::All {
-                common,
-                bluetooth_production,
-                ..
-            } => resolve_mutants(common, Some(bluetooth_production)),
-            Scenario::Gain { common, .. }
-            | Scenario::Channel { common }
-            | Scenario::RxGain { common, .. }
-            | Scenario::TxDc { common, .. }
-            | Scenario::CoexHw { common, .. }
-            | Scenario::Coex { common, .. }
-            | Scenario::WifiMac { common, .. }
-            | Scenario::Tracking { common, .. }
-            | Scenario::I2c { common, .. } => resolve_mutants(common, None),
-        }
-    }
-}
-
-/// Run `scenario`, handing each suite's findings to `report`; `verdict`
-/// names the dep-info files of the libraries that decide its verdicts.
-pub fn run(mut scenario: Scenario, report: &dyn RunReport, verdict: Vec<PathBuf>) -> ExitCode {
-    scenario.common_mut().verdict = verdict;
-    if let Err(error) = scenario.resolve_mutants() {
-        eprintln!("error: {error}");
-        return ExitCode::FAILURE;
-    }
+/// Run `scenario`, handing each suite's findings to `report`.
+pub fn run(scenario: Scenario, report: &dyn RunReport) -> ExitCode {
     let result = match scenario {
-        Scenario::Gain { common, rftest } => {
-            let shard = Shard::of("gain", &common);
-            single(shard, gain(common, Some(rftest), report))
-        }
-        Scenario::Channel { common } => {
-            let shard = Shard::of("channel", &common);
-            single(shard, channel(common, report))
-        }
-        Scenario::Coex { common, libcoexist } => {
-            let shard = Shard::of("coex", &common);
-            single(shard, coex(common, libcoexist, report))
-        }
-        Scenario::RxGain { common, phy_sdk } => {
-            let shard = Shard::of("rx-gain", &common);
-            single(shard, rx_gain(common, phy_sdk, report))
-        }
-        Scenario::TxDc { common, phy_sdk } => {
-            let shard = Shard::of("tx-dc", &common);
-            single(shard, tx_dc(common, phy_sdk, report))
-        }
-        Scenario::Tracking { common, phy_sdk } => {
-            let shard = Shard::of("tracking", &common);
-            single(shard, tracking(common, phy_sdk, report))
-        }
+        Scenario::Gain { common, rftest } => single(gain(common, Some(rftest), report)),
+        Scenario::Channel { common } => single(channel(common, report)),
+        Scenario::Coex { common, libcoexist } => single(coex(common, libcoexist, report)),
+        Scenario::RxGain { common, phy_sdk } => single(rx_gain(common, phy_sdk, report)),
+        Scenario::TxDc { common, phy_sdk } => single(tx_dc(common, phy_sdk, report)),
+        Scenario::Tracking { common, phy_sdk } => single(tracking(common, phy_sdk, report)),
         Scenario::WifiMac {
             common,
             libpp,
             libnet80211,
             phy_sdk,
-        } => {
-            let shard = Shard::of("wifi-mac", &common);
-            single(shard, wifi_mac(common, libpp, libnet80211, phy_sdk, report))
-        }
+        } => single(wifi_mac(common, libpp, libnet80211, phy_sdk, report)),
         Scenario::Bluetooth {
             common,
             bluetooth_production,
             phy_sdk,
-        } => {
-            let shard = Shard {
-                production: bluetooth_production.clone(),
-                ..Shard::of("bluetooth", &common)
-            };
-            single(
-                shard,
-                bluetooth(common, bluetooth_production, phy_sdk, report),
-            )
-        }
-        Scenario::CoexHw { common, phy_sdk } => {
-            let shard = Shard::of("coex-hw", &common);
-            single(shard, coex_hw(common, phy_sdk, report))
-        }
+        } => single(bluetooth(common, bluetooth_production, phy_sdk, report)),
+        Scenario::CoexHw { common, phy_sdk } => single(coex_hw(common, phy_sdk, report)),
         Scenario::All {
             common,
             sdk,
@@ -1189,10 +888,7 @@ pub fn run(mut scenario: Scenario, report: &dyn RunReport, verdict: Vec<PathBuf>
             common,
             sdk,
             phy_sdk,
-        } => {
-            let shard = Shard::of("i2c", &common);
-            single(shard, i2c(common, Some(sdk), Some(phy_sdk), report))
-        }
+        } => single(i2c(common, Some(sdk), Some(phy_sdk), report)),
     };
     result.unwrap_or_else(|error| {
         eprintln!("error: {error}");
@@ -1203,47 +899,62 @@ pub fn run(mut scenario: Scenario, report: &dyn RunReport, verdict: Vec<PathBuf>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scenarios_accept_their_inputs_and_reject_index_and_mutant_options() {
+        #[derive(clap::Parser)]
+        struct Cli {
+            #[command(subcommand)]
+            scenario: Scenario,
+        }
+        use clap::Parser as _;
+        crate::install();
+        let args = [
+            "scenario",
+            "i2c",
+            "--production",
+            "probe.elf",
+            "--linker",
+            "ld.lld",
+            "--output",
+            "runs",
+        ];
+        assert!(Cli::try_parse_from(args).is_ok());
+        for flag in ["--index", "--patch", "--bluetooth-patch"] {
+            let error = Cli::try_parse_from([&args[..], &[flag, "value"]].concat())
+                .err()
+                .expect("removed option rejected");
+            assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+        }
+    }
 
-    fn outcomes() -> Outcomes<'static, u8> {
-        vec![
+    #[test]
+    fn every_outcome_is_collected_and_the_first_error_is_returned() {
+        let (elapsed, passed, failed) = split(vec![
             ("gain", 1.0, Ok((ExitCode::SUCCESS, 1))),
             ("channel", 2.0, Err("scenario channel panicked".into())),
             ("wifi-mac", 3.0, Ok((ExitCode::FAILURE, 3))),
             ("bluetooth", 4.0, Ok((ExitCode::SUCCESS, 4))),
-        ]
-    }
-
-    #[test]
-    fn a_failed_scenario_still_records_every_passed_scenario_and_fails() {
-        let (elapsed, passed, failed) = split(outcomes());
+        ]);
         assert_eq!(elapsed.len(), 4);
         assert_eq!(passed, [("gain", 1), ("bluetooth", 4)]);
-        let mut written = vec![];
-        let result = conclude_failed(failed, Some(Path::new("index")), &passed, |_, name, _| {
-            written.push(name.to_owned());
-            Ok(())
-        });
-        assert_eq!(written, ["gain", "bluetooth"]);
-        // The first failure is the result.
-        let error = result.unwrap().unwrap_err().to_string();
-        assert!(error.contains("channel"), "{error}");
+        assert!(
+            failed
+                .expect("a scenario failed")
+                .expect_err("the first failure is an error")
+                .to_string()
+                .contains("channel")
+        );
     }
-
     #[test]
-    fn without_an_index_or_a_failure_nothing_is_written_early() {
-        let (_, passed, failed) = split(outcomes());
-        let mut written = 0;
-        let result = conclude_failed(failed, None, &passed, |_, _, _| {
-            written += 1;
-            Ok(())
-        });
-        assert!(result.is_some() && written == 0);
-        let (_, passed, failed) = split(vec![("gain", 1.0, Ok((ExitCode::SUCCESS, 1u8)))]);
-        let result = conclude_failed(failed, Some(Path::new("index")), &passed, |_, _, _| {
-            written += 1;
-            Ok(())
-        });
-        // Every scenario passed: the decision checks run first, recording after.
-        assert!(result.is_none() && written == 0);
+    fn an_incomplete_scenario_keeps_its_exit_code() {
+        let (_, passed, failed) = split(vec![("gain", 1.0, Ok((ExitCode::from(2), 1)))]);
+        assert!(passed.is_empty());
+        assert_eq!(
+            failed.expect("a scenario failed").expect("an exit code"),
+            ExitCode::from(2)
+        );
+        let (_, passed, failed) = split(vec![("gain", 1.0, Ok((ExitCode::SUCCESS, 1)))]);
+        assert_eq!(passed, [("gain", 1)]);
+        assert!(failed.is_none());
     }
 }

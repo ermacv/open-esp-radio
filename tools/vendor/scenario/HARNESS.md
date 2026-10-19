@@ -4,11 +4,15 @@ The harness holds the chip-neutral parts of vendor verification:
 
 | Package | Path | Owns |
 | --- | --- | --- |
-| `oer-probe-codegen` | `codegen/` | Rust declaration grammar, image catalog, linker roots and post-link validation |
-| `oer-probe-macros` | `macros/` | Procedural-macro frontend of the declarations |
-| `oer-vendor-scenario` | `scenarios/` | Scenario engine: authenticated artifacts, Blobray sessions, the comparison harness, coverage, point mutants and evidence shards |
-| `oer-vendor-scenario-report` | `report/` | Reviewer reports: untriaged locations, function view, closure gateways, unclaimed compared pairs and the `xref`, `show`, `fields` and `prints` inspection of pinned vendor code |
-| `oer-vendor-scenario-report` | `tools/vendor/scenario-report/` | The one scenario command line, `vendor-scenarios <chip> <command>`, which each chip's entry package `oer-tool-cli-vendor-scenarios-<chip>` (`tools/cli/vendor-scenarios-<chip>`) runs: the chip installs its verdict library (never a dependent of this report package), the command is one of its scenarios or a reviewer command; `cargo vendor-check scenario <chip>` builds and runs it |
+| `oer-probe-codegen` | `tools/probe/codegen/` | Rust declaration grammar, image catalog, linker roots and post-link validation |
+| `oer-probe-macros` | `tools/probe/macros/` | Procedural-macro frontend of the declarations |
+| `oer-vendor-scenario` | `tools/vendor/scenario/` | Scenario engine: authenticated artifacts, Blobray sessions, comparison harness, observation and state analysis |
+| `oer-vendor-scenario-report` | `tools/vendor/scenario-report/` | Unclaimed compared pairs, the shared scenario command line and the `xref`, `show`, `fields` and `prints` inspection commands |
+
+Each chip's entry package `oer-tool-vendor-scenarios-<chip>`
+(`tools/vendor/scenarios-<chip>-cli`) installs its scenario library and runs
+one scenario or inspection command. `cargo vendor-check scenario --chip <chip>`
+builds and runs that entry package.
 
 Observation decisions name the file and trimmed source text ending at the
 reviewed line. Include preceding lines when an identical statement occurs in
@@ -19,17 +23,14 @@ identical statement in another context remains unobserved.
 The probe compiler is a host build tool; it owns no production behavior and
 does not depend on Blobray's executor. The
 [ESP32-S31](../../../firmware/probes/esp32s31.md) and
-[ESP32-C5](../../../firmware/probes/esp32c5.md) probe workspaces consume it. A chip's
+[ESP32-C5](../../../firmware/probes/esp32c5.md) probe packages consume it. A chip's
 scenario crate installs its `Chip` description into the engine and keeps its
 addresses, pins and reviewed decisions; the
-[ESP32-S31 project](../../hil/acceptance/esp32s31/README.md) describes the scenario command
-line the engine provides.
+[ESP32-S31 probes](../../../firmware/probes/esp32s31.md) describe the inputs.
 
-The engine decides every verdict and recorded set; it hands each claimed
-suite's `Findings` to a `RunReport` the scenario binary passes in, and the
-report crate implements it. Pins come from `oer-tool-pins`, the one
-reader of `artifacts.toml`, and a shard's path closure from `oer-repo`. Dependencies run from the report crate to the
-engine only, so editing a report changes no scenario's verdict sources.
+The engine decides every verdict and hands each claimed suite's `Findings`
+to a `RunReport` supplied by the scenario binary. The report crate depends
+on the engine. Pins come from `oer-tool-pins`, the reader of `artifacts.toml`.
 
 ## Declare an entry
 
@@ -75,11 +76,11 @@ boundary types and expression/body adapter kind. Rust type spelling describes
 the boundary; it does not establish the layout of a private production type.
 Addresses are resolved from the final ELF, not predicted during compilation.
 
-`cargo vendor-check probes --chip esp32s31` builds all three release images
+`cargo vendor-check probes --chip esp32s31` builds every declared probe image
 and validates every catalog against defined executable symbols. Missing,
 ambiguous, non-code, malformed or wrong-image entries fail the build command.
 Link-time code folding may give different entry names the same address.
-Plain Cargo compilation produces an image; the xtask command additionally
+Plain Cargo compilation produces an image; the vendor-check command additionally
 establishes its catalog/entry consistency before it is used as verification input.
 
 Generated Rust, catalogs and inspection outputs stay in ignored build storage.
@@ -91,11 +92,10 @@ or sidecar file.
 ```console
 cargo test -p oer-probe-codegen -p oer-probe-macros
 cargo test -p oer-probe-codegen --test linking -- --ignored
-cargo test --manifest-path tools/analysis/cli/Cargo.toml -p oer-vendor-scenario
+cargo test -p oer-vendor-scenario
 ```
 
-The scenario engine depends on Blobray, so it belongs to the Blobray
-workspace. The second command requires the repository's RV32 target. It tests archive
+The second command requires the repository's RV32 target. It tests archive
 extraction with fat LTO and section GC, then adds an entry and relocates the
 source directory. Ordinary host tests cover adapters, collection errors and
 malformed/missing/non-executable ELF entries.

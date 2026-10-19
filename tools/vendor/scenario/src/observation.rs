@@ -7,7 +7,7 @@
 //! inlined frames: a line is
 //! observed when any of its executed instructions is. Every executed but
 //! unobserved line is either reviewed by a decision below, with its reason, or
-//! reported as untriaged in the evidence index. A decision that matches no
+//! reported as untriaged in the run. A decision that matches no
 //! unobserved line fails the run, so the table cannot outlive the code it
 //! describes.
 use crate::harness::{Result, invalid};

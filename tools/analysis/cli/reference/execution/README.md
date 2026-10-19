@@ -565,8 +565,8 @@ in neither set changes nothing that outlives its phase.
 image in every replacement session: `(address, original bytes, replacement
 bytes)`, at most 64 bytes each, within executable image code. A patch whose
 original bytes differ from the loaded ones, or that leaves executable image
-code, is invalid. No binary is rebuilt, so a patched instruction is a point
-mutant: a comparison whose verdict changes kills it. The vendor side and its
+code, is invalid. The dependence regression tests use `ImagePatch` to check
+which changed instructions affect a comparison. The vendor side and its
 reuse key are unaffected.
 
 ### ISA conformance

@@ -91,7 +91,6 @@ pub struct LeafOptions {
     pub linker: PathBuf,
     pub output: PathBuf,
     pub budget: crate::harness::Budget,
-    pub patches: Vec<oer_analysis_blobray_application::in_process::ImagePatch>,
 }
 
 /// Whether every device and call model of `case` on `side` completed.
@@ -596,13 +595,7 @@ impl LeafRun {
         let archive_inputs: Vec<u64> = (0..suite.archives.len())
             .map(|index| suite.archive_input(index))
             .collect();
-        let session = Session::start(
-            &options.output,
-            options.budget,
-            &inputs,
-            suite.title,
-            &options.patches,
-        )?;
+        let session = Session::start(&options.output, options.budget, &inputs, suite.title)?;
         // The first leaf is the link entry; the others are further roots,
         // each selected in the archive that defines it.
         let leaves = suite.leaves;

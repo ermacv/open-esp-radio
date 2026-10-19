@@ -39,17 +39,6 @@ fn probes(root: &std::path::Path, chip: &str) -> Result<Vec<Probe>> {
         .collect())
 }
 
-/// The built comparison ELF of the probe `package`: copied out of the
-/// shared compile cache into the repository's `target/verification/<chip>/`,
-/// one file per probe package.
-pub fn elf(context: &Checkout, package: &str) -> Result<std::path::PathBuf> {
-    let probe = all(&context.root)?
-        .into_iter()
-        .find(|p| p.probe.package == package)
-        .ok_or_else(|| format!("no vendor probe package {package}"))?;
-    Ok(output(context, &probe))
-}
-
 /// Where `probe`'s ELF is kept once built.
 fn output(context: &Checkout, probe: &Probe) -> std::path::PathBuf {
     context
@@ -82,10 +71,6 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
             let elf = output(context, probe);
             std::fs::create_dir_all(elf.parent().ok_or("probe output has no parent")?)?;
             std::fs::copy(&built, &elf)?;
-            // A shard's sources start from the image's dep-info beside it.
-            let mut dep_info = elf.clone().into_os_string();
-            dep_info.push(".d");
-            std::fs::copy(built.with_extension("d"), dep_info)?;
             let catalog = oer_probe_codegen::validate_elf(&std::fs::read(&elf)?, package)?;
             eprintln!(
                 "Validated {} executable probe entries in {}",
