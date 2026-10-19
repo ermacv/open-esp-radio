@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 //! Stage-two entry, relocation and interrupt-stack ownership of the
 //! Espressif staged boot.
 //!
@@ -9,12 +10,22 @@
 //! bootstrap's PSRAM mapping through its board ([`Handoff::adopt`]) and
 //! enables interrupts ([`Adopted::enable_interrupts`]). A chip feature selects the chip of esp-hal; `two-harts` adds the
 //! second hart's interrupt stack.
+#[allow(unsafe_code, reason = "the stage-two reset entry is assembly")]
 mod entry;
 pub mod interrupts;
 pub mod layout;
+#[allow(
+    unsafe_code,
+    reason = "the panic record lives in a fixed SRAM section the next boot reads"
+)]
 pub mod panic;
 pub mod placement;
+#[allow(
+    unsafe_code,
+    reason = "per-hart interrupt stacks and the vector table switching onto them"
+)]
 pub mod stacks;
+#[allow(unsafe_code, reason = "trap entry and machine CSRs")]
 pub mod trap;
 
 #[doc(hidden)]
@@ -40,6 +51,7 @@ impl Handoff {
     #[doc(hidden)]
     /// # Safety
     /// Only [`entry!`]'s `runtime_main` calls it, once, before anything else.
+    #[allow(unsafe_code, reason = "forwards the stage-two handoff proof")]
     pub const unsafe fn __new() -> Self {
         Self {
             // SAFETY: forwarded unchanged from this function's contract,
@@ -57,6 +69,10 @@ impl Handoff {
     /// `interrupt_table` is the image's `INTERRUPT_TABLE` ([`interrupt_table!`]):
     /// every hart installs and checks it. Installing it silences every source
     /// it lists, so from here a source is routed only by its token's owner.
+    #[allow(
+        unsafe_code,
+        reason = "installs vectoring, the interrupt stack and the stack watchpoint"
+    )]
     pub fn adopt<B: AdoptsBootstrapMapping>(
         self,
         interrupt_table: &'static InterruptTable,
@@ -102,6 +118,7 @@ impl Adopted {
     /// When a hardware-vector slot of the hart's active MTVT is not the
     /// runtime's stack-switching entry, or the interrupt matrix disagrees with
     /// the image's interrupt table ([`interrupts`]).
+    #[allow(unsafe_code, reason = "sets mstatus.MIE")]
     pub fn enable_interrupts(self) {
         stacks::verify_current_hart_vectors();
         oer_espressif_esp_hal_irq::verify_current_hart();
@@ -113,6 +130,7 @@ impl Adopted {
 
 /// Wait for interrupts forever: the rest of an image that has nothing left
 /// to do on this hart.
+#[allow(unsafe_code, reason = "the wfi instruction")]
 pub fn idle() -> ! {
     loop {
         // SAFETY: `wfi` touches no memory and only parks the hart until an
@@ -145,6 +163,10 @@ macro_rules! entry {
 /// The stack-protector guard that `esp_hal::init` arms its watchpoint on.
 /// esp-hal's `linkall.x` defines it; stage two links its own scripts, so the
 /// runtime owns it, in SRAM critical data.
+#[allow(
+    unsafe_code,
+    reason = "the stack-protector guard symbol esp-hal links against"
+)]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".critical.data.stack_guard")]
 static mut __stack_chk_guard: u32 = 0xDEED_BAAD;

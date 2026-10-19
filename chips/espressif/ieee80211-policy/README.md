@@ -19,7 +19,6 @@ depend on it, and portable code never does.
 | `lmac` | Short and long retry limits (32), ACK-timeout accounting, the RTS threshold (2346 octets), the A-MPDU MSDU lifetime and aging margin, the A-MPDU retry policy and the default contention per access category | `libpp.a[lmac.o]::{lmacInit, lmacInitAc, lmacProcessAckTimeout, lmacMSDUAged}`, `libpp.a[pp.o]::ppResortTxAMPDU` |
 | `he_txop` | The HE TXOP duration RTS byte budget (`EspressifHeTxopRtsBudget`, a portable `HeTxopRtsBudget`) and the peer packet-padding code | `libpp.a[if_hwctrl.o]::ic_set_he_rts_threshold_bytes_tab` |
 | `ccmp` | The CCMP transmit packet-number step of three | `libnet80211.a[ieee80211_crypto_ccmp.o]::ccmp_encap` |
-| `station_link` | The station's inactive time of 6 s and its five access-point probes 500 ms apart, three addressed and two broadcast, as a portable `StaLinkProbePolicy` | `libnet80211.a[wl_cnx.o]::sta_reset_beacon_timeout`, `libnet80211.a[wl_cnx.o]::send_ap_probe`, `libnet80211.a[wl_cnx.o]::mgd_probe_send_timeout_process` |
 | `connection_coex` | The coexistence events (45, 46) and priorities a reconnecting station's Probe Request, Authentication, Association and EAPOL frames request, and the `ConnectionFrameCoex` port a chip implements | `libpp.a[pp.o]::pp_coex_tx_request`, `libpp.a[pm_coex.o]::pm_coex_reconnect_policy` |
 
 The values were recovered from the ESP32-S31 libraries pinned in
@@ -95,8 +94,5 @@ The crate uses the canonical strict lint block.
 ## Known defects
 
 - **`rate_control.rs::ScheduleSelection::Invalid` keeps the current
-  schedule** (code review, 2026-10-16; record outside this repository): `update_tx_per`
-  installs a schedule only on `Selected`, so an invalid selection leaves a
-  possibly too-fast rate in use. The decided rule is to clamp toward the
-  slowest schedule (a precomputed slowest `RateScheduleRef`) and delete
-  `Invalid`.
+  schedule:** `update_tx_per` installs a schedule only on `Selected`, so an
+  invalid selection leaves a possibly too-fast rate in use.

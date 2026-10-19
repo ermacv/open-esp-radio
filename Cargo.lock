@@ -2554,7 +2554,6 @@ dependencies = [
 name = "oer-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
- "bt-hci",
  "oer-bluetooth-le-ll",
  "oer-bluetooth-le-radio",
 ]
@@ -2864,7 +2863,6 @@ dependencies = [
 name = "oer-espressif-esp-hal-soc"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "bytemuck",
  "critical-section",
  "esp-hal",
@@ -2910,8 +2908,6 @@ version = "0.1.0"
 dependencies = [
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
- "oer-ieee80211-softmac",
- "oer-ieee80211-sta",
  "oer-ieee80211-upper-mac",
  "oer-test-ui-cases",
  "oer-time",
@@ -3489,17 +3485,6 @@ dependencies = [
  "sha2 0.10.9",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "oer-ieee80211-rsn-service"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-ieee80211-mac",
- "oer-ieee80211-rsn",
- "oer-time",
- "oer-time-virtual",
 ]
 
 [[package]]

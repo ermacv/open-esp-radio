@@ -10,11 +10,6 @@
 //! test planner. It has no HCI, MMIO, DMA, interrupt, executor, allocator,
 //! ESP32-S31, vendor-archive or ROM-ABI dependency. A Controller schedules
 //! roles and composes these pieces.
-//!
-//! [`connection::maintenance`] admits provisional budgeted event omissions on
-//! the same connection owner, retaining initial acknowledgement, Instant and
-//! post-maintenance recovery obligations. This protocol decision grants no
-//! hardware access or timing budget; both remain with the lower radio owner.
 
 #[cfg(test)]
 extern crate std;

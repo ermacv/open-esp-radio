@@ -1,3 +1,5 @@
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+
 //! An open serial port's descriptor, as an `OwnedFd`.
 //!
 //! `serialport` hands a port's descriptor over only as a raw number. This
@@ -8,6 +10,10 @@
 use std::os::fd::{FromRawFd as _, IntoRawFd as _, OwnedFd};
 
 /// The descriptor of `port`, which closes when the result drops.
+#[allow(
+    unsafe_code,
+    reason = "adopts the port descriptor serialport hands over"
+)]
 pub fn owned_descriptor(port: serialport::TTYPort) -> OwnedFd {
     // SAFETY: `TTYPort::into_raw_fd` forgets the port and returns its open
     // descriptor, transferring sole ownership, which the `OwnedFd` takes once.

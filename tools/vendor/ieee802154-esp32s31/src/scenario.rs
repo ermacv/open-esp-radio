@@ -184,7 +184,7 @@ fn returned(name: &str, value: i32) {
 }
 
 fn run_step(step: Step, last_rx: &mut Option<usize>) {
-    // SAFETY (all calls below): the compiled vendor driver is linked into this
+    // SAFETY: for every call below, the compiled vendor driver is linked into this
     // process, the claim guard serialises it, and every pointer argument
     // outlives the call. Transmitted frames are leaked because the driver
     // keeps the frame pointer until its terminal callback.

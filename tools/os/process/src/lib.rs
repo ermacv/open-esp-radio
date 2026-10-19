@@ -1,26 +1,41 @@
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+
 //! Direct subprocess arguments and owned command lifetimes, without a shell;
 //! the repository checkout a tool acts on, Git, live-process facts and the
 //! one advisory file lock ([`lock::FileLock`]).
 
+#[allow(
+    unsafe_code,
+    reason = "pre-exec child setup calls async-signal-safe libc"
+)]
 pub mod child_setup;
 pub mod context;
 pub mod git;
+#[allow(
+    unsafe_code,
+    reason = "adopts the inherited lease descriptor and clears its variable"
+)]
 pub mod launch_handoff;
 #[cfg(all(target_os = "linux", feature = "linux-socket"))]
 pub mod linux_socket;
 pub use context::{Context, command};
 #[cfg(unix)]
+#[allow(unsafe_code, reason = "polls and closes raw descriptors")]
 mod io_lifetime;
 #[cfg(unix)]
+#[allow(unsafe_code, reason = "socketpair and descriptor flags through libc")]
 mod socket;
 #[cfg(unix)]
 pub use io_lifetime::IoLifetime;
 #[cfg(unix)]
+#[allow(unsafe_code, reason = "forks the guardian process over a pipe")]
 mod guardian;
 #[cfg(unix)]
 pub mod lock;
+#[allow(unsafe_code, reason = "signals the owned process group")]
 pub mod owned;
 #[cfg(unix)]
+#[allow(unsafe_code, reason = "pidfd_open and poll through libc")]
 pub mod proc;
 mod repository;
 pub use repository::{Checkout, built_root, checkout_of};

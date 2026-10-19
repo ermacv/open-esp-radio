@@ -60,10 +60,39 @@ License:   Apache-2.0 (each repository's LICENSE)
 
 Recovered tables and coefficients (coexistence schemes and PTI, PHY gain and
 power, Wi-Fi) in production source; the SOURCE line beside each names the
-library, object and symbol.
+library, object and symbol. The same pins for both chips (ESP32-S31 and
+ESP32-C5).
+
+Translated and modified by Vladislav Ermachenkov; each function names the
+vendor function it follows:
+
+- chips/esp32s31/phy and the PHY modules of chips/esp32s31/hal,
+  chips/esp32s31/pac, chips/esp32c5/hal and chips/esp32c5/pac: libphy.a
+  calibration, tracking and analog-bus algorithms
+- protocols/ieee80211/sta/src/modem_sleep.rs: libpp.a [pm.o] and
+  [pm_coex.o], the station power manager
+- chips/espressif/ieee80211-policy: libpp.a and libnet80211.a rate
+  schedules, rate control, retry ladder and LMAC limits
+- chips/espressif/coex: libcoexist.a coexistence schedule and event
+  requests
 
 
-4. esp32s31-bt-lib
+4. ESP ROM ELF files (esp-rom-elfs)
+-----------------------------------
+
+Source:    https://github.com/espressif/esp-rom-elfs, release 20260528
+           (esp32s31_rev0_rom.elf)
+Copyright: Espressif Systems (Shanghai) Co. Ltd.
+License:   Apache-2.0 (the repository's LICENSE, which its README applies
+           to the ELF files)
+
+Translated and modified by Vladislav Ermachenkov: the ROM's PHY functions
+(`phy_linear_to_db`, `phy_chan_to_freq`, `phy_rxdc_est_min`,
+`phy_rxiq_cover_mg_mp` and others) in chips/esp32s31/phy and the PHY modules
+of chips/esp32s31/hal; each names the ROM function it follows.
+
+
+5. esp32s31-bt-lib
 ------------------
 
 Source:    https://github.com/espressif/esp32s31-bt-lib at 10c50778
@@ -76,7 +105,7 @@ under chips/esp32s31/vendor/facts/names). It records neither code nor
 verbatim data blocks.
 
 
-5. OpenThread
+6. OpenThread
 -------------
 
 Source:    https://github.com/openthread/openthread at
@@ -93,7 +122,7 @@ Ported and modified:
 
 
 
-6. hostap (wpa_supplicant and hostapd)
+7. hostap (wpa_supplicant and hostapd)
 --------------------------------------
 
 Source:    https://w1.fi/hostap, as vendored in ESP-IDF 7b9cc1ac
@@ -114,7 +143,7 @@ Partly ported and modified:
   src/rsn_supp/wpa.c
 
 
-7. esp-hal
+8. esp-hal
 ----------
 
 Source:    https://github.com/esp-rs/esp-hal, ld/riscv/hal-defaults.x

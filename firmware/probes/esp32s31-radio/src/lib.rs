@@ -1192,14 +1192,14 @@ oer_probe_macros::probe! {
     ) {
         use oer_esp32s31_ieee80211_mac::tx::{
             HtChannelWidth, TxPhyRate,
-            runtime::{OrdinaryRetryCounters, select_ordinary_retry_rate},
+            runtime::{RetryCounters, select_ordinary_retry_rate},
         };
 
         let descriptor = descriptor_address as *mut u8;
         // SAFETY: every comparison case supplies a writable descriptor object
         // covering the vendor counter and selected-rate bytes.
         let counters = unsafe {
-            OrdinaryRetryCounters {
+            RetryCounters {
                 mpdu: descriptor.add(5).read(),
                 short: descriptor.add(6).read(),
                 long: descriptor.add(7).read(),
@@ -1230,7 +1230,7 @@ oer_probe_macros::probe! {
             rx::HeGuardIntervalAndLtf,
             tx::{
                 HtChannelWidth, TxPhyRate,
-                runtime::{OrdinaryRetryCounters, select_ordinary_retry_rate},
+                runtime::{RetryCounters, select_ordinary_retry_rate},
             },
         };
 
@@ -1238,7 +1238,7 @@ oer_probe_macros::probe! {
         // SAFETY: every comparison case supplies a writable descriptor object
         // covering the vendor counter and selected-rate bytes.
         let counters = unsafe {
-            OrdinaryRetryCounters {
+            RetryCounters {
                 mpdu: descriptor.add(5).read(),
                 short: descriptor.add(6).read(),
                 long: descriptor.add(7).read(),
@@ -1295,7 +1295,7 @@ oer_probe_macros::probe! {
     pub fn open_libpp_tx_retry_trace_reset(queue: u32, mpdu_retry_limit: u32, long_frame: u32) -> u32 {
         use oer_esp32s31_ieee80211_mac::tx::{
             LegacyRate, LegacyTxQueue, TxPhyRate,
-            runtime::{OrdinaryFrameClass, OrdinaryMpduRetryState, WifiTxRuntimePolicy},
+            runtime::{FrameClass, OrdinaryMpduRetryState, WifiTxRuntimePolicy},
         };
         let queue = match queue {
             0 => LegacyTxQueue::Voice,
@@ -1309,9 +1309,9 @@ oer_probe_macros::probe! {
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             mpdu_retry_limit as u8,
             if long_frame != 0 {
-                OrdinaryFrameClass::Long
+                FrameClass::Long
             } else {
-                OrdinaryFrameClass::Short
+                FrameClass::Short
             },
         )
         .expect("verification retry limit is nonzero");

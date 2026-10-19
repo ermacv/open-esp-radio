@@ -148,8 +148,6 @@ does not depend on missed beacons. If no future slot fits the clock range,
 
 ## Known defects
 
-Found in a code review of 2026-10-16 (record outside this repository).
-
 - **An absence returns to the home channel, not to the primary lease's.**
   `lib.rs::Arbiter::lease_cycle` uses `Granted.returns: bool` and
   `self.home`; after a CSA follow the station comes back to the old channel.

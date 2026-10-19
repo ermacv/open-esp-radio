@@ -99,7 +99,7 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
                     power_alternate: 6,
                 });
                 assert_eq!(hardware.tx_control, expected);
-                assert_eq!(slot.state(), TxSlotState::HardwareOwned);
+                assert_eq!(slot.state(), TxDmaState::HardwareOwned);
                 hardware.set_tx_completion(
                     queue.hardware_index(),
                     MacTxCompletionObservation::new_model(0, 0),
@@ -111,7 +111,7 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
                 slot.as_mut()
                     .detach_completed(&mut hardware, cookie)
                     .unwrap();
-                assert_eq!(slot.state(), TxSlotState::Free);
+                assert_eq!(slot.state(), TxDmaState::Free);
             }
         }
     }
@@ -153,7 +153,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
                 slot.as_mut().detach_completed(&mut hardware, stale),
                 Err(TxError::Stale)
             );
-            assert_eq!(slot.state(), TxSlotState::Completed);
+            assert_eq!(slot.state(), TxDmaState::Completed);
         }
         slot.as_mut()
             .detach_completed(&mut hardware, cookie)
@@ -181,7 +181,7 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
         slot.as_mut().detach_completed(&mut hardware, cookie),
         Err(TxError::DetachFailed)
     );
-    assert_eq!(slot.state(), TxSlotState::ResetRequired);
+    assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
     hardware.tx_detach_fails[0] = false;
     assert_eq!(
@@ -202,7 +202,7 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
     assert_eq!(slot.descriptor_word0().size(), 512);
     assert_eq!(slot.descriptor_word0().length(), 100);
-    assert_eq!(slot.state(), TxSlotState::Reserved);
+    assert_eq!(slot.state(), TxDmaState::Reserved);
     let mut mmio = MockMmio::default();
     assert_eq!(
         slot.as_mut()
@@ -230,11 +230,11 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     assert_eq!(completion.status(), 0);
     assert!(completion.is_trigger_flow());
     assert!(!completion.used_alternate_record());
-    assert_eq!(slot.state(), TxSlotState::Completed);
+    assert_eq!(slot.state(), TxDmaState::Completed);
 
     mmio.set_tx_queue_attached(0, true);
     slot.as_mut().detach_completed(&mut mmio, cookie).unwrap();
-    assert_eq!(slot.state(), TxSlotState::Free);
+    assert_eq!(slot.state(), TxDmaState::Free);
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
     let cookie = slot.as_mut().reserve(512, 100).unwrap();
 
     assert_eq!(slot.as_mut().cancel_reservation(cookie), Ok(()));
-    assert_eq!(slot.state(), TxSlotState::Free);
+    assert_eq!(slot.state(), TxDmaState::Free);
     assert_eq!(
         slot.descriptor_word0(),
         oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl::ZERO
@@ -265,7 +265,7 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
         .unwrap();
 
     assert_eq!(slot.as_mut().require_reset(cookie), Ok(()));
-    assert_eq!(slot.state(), TxSlotState::ResetRequired);
+    assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
     assert_eq!(slot.as_mut().require_reset(cookie), Err(TxError::Stale));
     drop(slot);
@@ -323,7 +323,7 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
         .finish_timeout_abort(&mut mmio, cookie)
         .unwrap();
 
-    assert_eq!(slot.state(), TxSlotState::Free);
+    assert_eq!(slot.state(), TxDmaState::Free);
     assert!(!mmio.tx_queue_attached[0]);
     assert!(!mmio.tx_timeout_pending[0]);
 
@@ -361,7 +361,7 @@ fn tx_slot_disables_before_acknowledging_one_collision_queue() {
     mmio.set_tx_queue_attached(0, true);
 
     assert_eq!(slot.as_mut().abort_collision(&mut mmio, cookie), Ok(true));
-    assert_eq!(slot.state(), TxSlotState::Free);
+    assert_eq!(slot.state(), TxDmaState::Free);
     assert!(!mmio.tx_queue_attached[0]);
     assert!(!mmio.tx_collision_pending[0]);
 
@@ -394,7 +394,7 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
         slot.as_mut().acknowledge_completion(&mut hardware),
         Ok(Some(CompletionObservation::NoEffect))
     );
-    assert_eq!(slot.state(), TxSlotState::HardwareOwned);
+    assert_eq!(slot.state(), TxDmaState::HardwareOwned);
     assert_eq!(
         slot.as_mut().detach_completed(&mut hardware, cookie),
         Err(TxError::Stale)
@@ -405,6 +405,6 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
         slot.as_mut().acknowledge_completion(&mut hardware),
         Err(TxError::Completion(CompletionFault::SecurityKeyError))
     );
-    assert_eq!(slot.state(), TxSlotState::ResetRequired);
+    assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(matches!(slot.as_mut().buffer_mut(), Err(TxError::Busy)));
 }

@@ -14,10 +14,10 @@
 //! | `CommandError::Busy` (the caller's own operation runs) | the operation permit ([`Ieee802154Client::operation`], awaited in arrival order across the interfaces): a submission moves it into the backend's [`OperationPermits`], which gives it back when it takes the operation's terminal |
 //! | `CommandError::Busy` (receive or sleep while an operation runs) | a client's receive or sleep is its interface's wish, which the radio resumes when the operation ends |
 //! | `CommandError::EventQueueFull` | the operation permit: the backend reserves its terminal's slot with it; a scheduled receive window is a wish and owes no terminal ([`Ieee802154Client::scheduled_receive`]) |
-//! | `CommandError::UnknownInterface`, `SettingError::UnknownInterface` | a client per configured interface ([`ConfiguredInterface`]), of an index the capabilities state |
+//! | `CommandError::UnknownInterface` | a client per configured interface ([`ConfiguredInterface`]), of an index the capabilities state |
 //! | `CommandError::PendingTableFull` | a pending-table [`Slot`] of the interface's own kind, which the install's resources give once and the caller counts itself |
-//! | `CommandError::Unsupported`, `CommandError::TransmitPower`, `SettingError::TransmitPower`, `SettingError::CcaThreshold`, `SettingError::Unsupported`, `SettingError::HeaderIesTooLong` | the validated values [`SupportedTransmit`], [`SupportedEnergyScan`], [`SupportedCca`], [`SupportedScheduledReceive`], [`SupportedPower`], [`SupportedCcaThreshold`], [`SupportedHeaderIes`] and the feature witness [`Has`] |
-//! | `SettingError::EnhancedAckDisabled` | header IEs and probing initiators are kept while the generator is off and go out once it is on |
+//! | `CommandError::Unsupported`, `CommandError::TransmitPower`, a refused power, CCA threshold or header IEs | the validated values [`SupportedTransmit`], [`SupportedEnergyScan`], [`SupportedCca`], [`SupportedScheduledReceive`], [`SupportedPower`], [`SupportedCcaThreshold`], [`SupportedHeaderIes`] and the feature witness [`Has`] |
+//! | enhanced-ACK settings while the generator is off | header IEs and probing initiators are kept while the generator is off and go out once it is on |
 //! | duplicate request identifiers | the backend mints the [`Work`] of each submission |
 //!
 //! These stay the world's outcomes: [`Poisoned`] (a radio fault poisons

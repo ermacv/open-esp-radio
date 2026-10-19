@@ -114,7 +114,11 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
             .enumerate()
             .find(|(_, byte)| *byte != DMA_OVERRUN_GUARD_BYTE)
         {
-            let prefix = u64::from_le_bytes(guard[..8].try_into().unwrap());
+            let prefix = u64::from_le_bytes(
+                guard[..8]
+                    .try_into()
+                    .expect("the guard prefix is eight bytes"),
+            );
             panic!(
                 "pinned TX DMA crossed its backing boundary; slot={index} offset={offset} value={byte} guard_prefix={prefix:#018x}"
             );
@@ -143,7 +147,11 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     fn dma_boundary_prefix(&self) -> u64 {
         // SAFETY: see `assert_dma_boundary`; this is an observation-only read.
         let guard = unsafe { &*self.dma_overrun_guard.get() };
-        u64::from_le_bytes(guard[..8].try_into().unwrap())
+        u64::from_le_bytes(
+            guard[..8]
+                .try_into()
+                .expect("the guard prefix is eight bytes"),
+        )
     }
 
     fn publish_ready(&self, index: u8, length: usize) {

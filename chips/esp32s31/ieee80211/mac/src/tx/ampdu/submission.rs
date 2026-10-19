@@ -6,7 +6,7 @@ use oer_esp32s31_hal::types::{
 };
 
 use super::{HtAmpduLength, HtAmpduTxError, HtAmpduTxStorage};
-use crate::tx::{HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxSlotState};
+use crate::tx::{HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxDmaState};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct PreparedHeTrigger {
@@ -33,7 +33,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
         config: HtAmpduTxConfig,
     ) -> Result<PreparedHtSubmission, HtAmpduTxError> {
-        if self.state != TxSlotState::Reserved || self.active != cookie {
+        if self.state != TxDmaState::Reserved || self.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         if self.count == 0 {
@@ -55,7 +55,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         queue: LegacyTxQueue,
         config: HeAmpduTxConfig,
     ) -> Result<PreparedHeSubmission, HtAmpduTxError> {
-        if self.state != TxSlotState::Reserved || self.active != cookie {
+        if self.state != TxDmaState::Reserved || self.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         if self.count == 0 {

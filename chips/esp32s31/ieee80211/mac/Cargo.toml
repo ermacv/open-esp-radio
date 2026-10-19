@@ -11,8 +11,6 @@ description = "Allocation-free source-owned ESP32-S31 Wi-Fi MAC primitives"
 # Synthetic Wi-Fi observations and DMA bindings for explicit test builds.
 test-support = ["oer-esp32s31-hal/test-support", "oer-esp32s31-hal/test-support"]
 default = []
-large-rx-pool-48 = []
-rx-ba-window-8 = []
 
 [dependencies]
 atomic-waker = "1.1.2"

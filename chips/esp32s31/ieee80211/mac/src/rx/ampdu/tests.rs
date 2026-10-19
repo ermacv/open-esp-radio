@@ -1,4 +1,5 @@
 use super::*;
+use oer_ieee80211_mac::block_ack::RxReorderMpdu;
 
 macro_rules! rx_request {
     ($interface:expr, $peer:expr, $token:expr, $tid:expr, $immediate:expr, $window:expr, $timeout:expr, $start:expr) => {
@@ -20,8 +21,8 @@ macro_rules! rx_request {
 const QUARTER_WINDOW: u16 = RX_BLOCK_ACK_MAX_WINDOW / 4;
 const HALF_WINDOW: u16 = RX_BLOCK_ACK_MAX_WINDOW / 2;
 
-fn frame(sequence: u16, slot: u8) -> RxAmpduMpdu {
-    RxAmpduMpdu {
+fn frame(sequence: u16, slot: u8) -> RxReorderMpdu {
+    RxReorderMpdu {
         sequence: SequenceNumber::new(sequence).unwrap(),
         slot,
     }
@@ -166,7 +167,6 @@ fn gap_is_buffered_and_then_released_in_sequence_order() {
 }
 
 #[test]
-#[cfg(not(feature = "rx-ba-window-8"))]
 fn window_advance_releases_owned_frames_and_counts_missing_without_long_loop() {
     let mut reorder =
         RxBlockAckReorder::new(SequenceNumber::new(0).unwrap(), RX_BLOCK_ACK_MAX_WINDOW).unwrap();
@@ -231,7 +231,7 @@ fn retention_prediction_matches_window_advance_and_duplicate_edges() {
     reorder.ingest(frame(20, 0)).unwrap();
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(20).unwrap()),
-        Err(RxAmpduError::DuplicateSequence(
+        Err(RxReorderError::DuplicateSequence(
             SequenceNumber::new(20).unwrap()
         ))
     );
@@ -251,7 +251,7 @@ fn a_slot_index_cannot_be_owned_twice() {
     reorder.ingest(frame(2, 4)).unwrap();
     assert_eq!(
         reorder.ingest(frame(3, 4)),
-        Err(RxAmpduError::SlotAlreadyOwned(4))
+        Err(RxReorderError::SlotAlreadyOwned(4))
     );
 }
 
@@ -271,7 +271,7 @@ fn esf_slot_id_is_independent_of_reorder_window_index() {
     );
     assert_eq!(
         reorder.ingest(frame(2, first_invalid)),
-        Err(RxAmpduError::InvalidSlot(first_invalid))
+        Err(RxReorderError::InvalidSlot(first_invalid))
     );
 }
 
@@ -289,7 +289,7 @@ fn integration_can_bind_the_reorder_to_its_exact_slot_domain() {
     );
     assert_eq!(
         reorder.ingest(frame(2, 40)),
-        Err(RxAmpduError::InvalidSlot(40))
+        Err(RxReorderError::InvalidSlot(40))
     );
 }
 
@@ -300,7 +300,7 @@ fn window_cannot_exceed_the_owned_reorder_slot_pool() {
     );
     assert!(matches!(
         RxBlockAckReorder::new(SequenceNumber::new(0).unwrap(), RX_BLOCK_ACK_MAX_WINDOW + 1),
-        Err(RxAmpduError::InvalidWindow(_))
+        Err(RxReorderError::InvalidWindow(_))
     ));
 }
 

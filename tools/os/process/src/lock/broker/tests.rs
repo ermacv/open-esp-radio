@@ -330,10 +330,8 @@ fn persistent_poll_errors_back_off_and_still_drain_operations() {
     let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
     // SAFETY: broker.pid is this fixture's live, unreaped child, and wait4
     // writes only the valid local rusage. No reaper starts until broker drops.
-    assert_eq!(
-        unsafe { libc::wait4(broker.pid, std::ptr::null_mut(), 0, &mut usage) },
-        broker.pid
-    );
+    let reaped = unsafe { libc::wait4(broker.pid, std::ptr::null_mut(), 0, &mut usage) };
+    assert_eq!(reaped, broker.pid);
     let cpu_micros = (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1_000_000
         + usage.ru_utime.tv_usec
         + usage.ru_stime.tv_usec;

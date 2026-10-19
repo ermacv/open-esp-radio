@@ -31,7 +31,6 @@ mod kdf;
 pub mod keys;
 pub mod management_ccmp;
 pub mod retry;
-pub mod runner;
 pub mod sae;
 pub mod state;
 pub mod supplicant;

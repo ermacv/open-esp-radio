@@ -802,8 +802,6 @@ pub struct NormalizedRxFrame<'frame> {
     pub stamp: Option<u32>,
 }
 
-pub type RxManagementFrame = RxMpduFrame;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RxDataFrame {
     pub mpdu: RxMpduFrame,
@@ -919,7 +917,10 @@ fn extract_mpdu_allowing_consumed_trailer(
             return Err(RxError::Chain);
         }
     }
-    if !segments.last().unwrap().descriptor_word0.rx_done() {
+    if segments
+        .last()
+        .is_none_or(|segment| !segment.descriptor_word0.rx_done())
+    {
         return Err(RxError::Chain);
     }
 
@@ -1000,7 +1001,7 @@ pub fn extract_protected_management(
     segments: &[RxSegment<'_>],
     config: RxIngressConfig,
     output: &mut [u8],
-) -> Result<RxManagementFrame, RxError> {
+) -> Result<RxMpduFrame, RxError> {
     let frame = extract_mpdu(segments, config, output)?;
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);
@@ -1020,7 +1021,7 @@ pub fn extract_management(
     segments: &[RxSegment<'_>],
     config: RxIngressConfig,
     output: &mut [u8],
-) -> Result<RxManagementFrame, RxError> {
+) -> Result<RxMpduFrame, RxError> {
     let frame = extract_mpdu(segments, config, output)?;
     if frame.length < MLME_HEADER_SIZE {
         return Err(RxError::Bounds);

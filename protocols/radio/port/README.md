@@ -222,12 +222,3 @@ returns `FailStopped`, which `Ended::fail_stopped(proof, output)` consumes.
 `PortBody::Output`. The generic phase, separate event/terminal types,
 consuming owner transitions, `Failed::{Refused, Poisoned}` and `PoisonedOwner`
 are part of the contract.
-
-## Known defects
-
-- **Contract: the lifecycle still has quiesce.** `work.rs::LifecycleCommand::Quiesce`
-  and `LifecycleEvent::Quiesced` stop admission while work in flight
-  completes, and `Enable` resumes it. The radio ports have no pause or
-  quiesce (`docs/decisions.md`, port contract; the port's contract check
-  criteria). To be removed together with every backend and caller in the
-  port-contract work.

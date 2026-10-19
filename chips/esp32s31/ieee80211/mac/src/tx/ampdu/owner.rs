@@ -20,7 +20,7 @@ use oer_esp32s31_hal::types::{
 use oer_ieee80211_upper_mac::ampdu::set_retry_bit;
 
 use crate::tx::{
-    CompletionObservation, HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxSlotState,
+    CompletionObservation, HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxDmaState,
 };
 
 use super::{
@@ -46,7 +46,7 @@ impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
         metadata: Pin<&'storage mut HtAmpduTxStorage<SLOTS>>,
         dma: PinnedAmpduDmaStorage<SLOTS, 0>,
     ) -> Result<Self, HtAmpduTxError> {
-        if metadata.state() != TxSlotState::Free {
+        if metadata.state() != TxDmaState::Free {
             return Err(HtAmpduTxError::NotFree(metadata.state()));
         }
         if dma.state() != AmpduDmaState::Free {
@@ -97,7 +97,7 @@ impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
 /// Unlike a bare [`HtAmpduTxStorage`], this value cannot return or drop a
 /// network allocation while hardware can still follow its descriptor. Safe
 /// callers append owned [`PlacedBacking`] leases; release is admitted only
-/// after the underlying storage has returned to [`TxSlotState::Free`].
+/// after the underlying storage has returned to [`TxDmaState::Free`].
 pub struct RetainedDmaAmpduTx<'storage, B: 'storage, const SLOTS: usize> {
     storage: Option<Pin<&'storage mut HtAmpduTxStorage<SLOTS>>>,
     dma: Option<RetainedAmpduDma<'storage, B, SLOTS, 0>>,
@@ -164,7 +164,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
     /// prove that a partially prepared or quarantined descriptor arena can be
     /// republished into a later radio epoch.
     pub fn is_fully_free(&self) -> bool {
-        self.state() == TxSlotState::Free
+        self.state() == TxDmaState::Free
             && self
                 .dma
                 .as_ref()
@@ -181,7 +181,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
 
     /// Confirm that every lease has already crossed a safe release edge.
     pub fn release_free_backings(&mut self) -> Result<(), HtAmpduTxError> {
-        if self.state() != TxSlotState::Free
+        if self.state() != TxDmaState::Free
             || self.dma_mut().state() != AmpduDmaState::Free
             || self.held_backing_count() != 0
         {
@@ -206,7 +206,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
         ),
         Self,
     > {
-        if self.state() != TxSlotState::Free || self.held_backing_count() != 0 {
+        if self.state() != TxDmaState::Free || self.held_backing_count() != 0 {
             return Err(self);
         }
         let dma_owner = self
@@ -258,7 +258,7 @@ impl<'storage, B: 'storage, const SLOTS: usize> RetainedDmaAmpduTx<'storage, B, 
 
     fn quarantine(&mut self) {
         if let Some(storage) = self.storage.as_mut() {
-            *storage.as_mut().project().state = TxSlotState::ResetRequired;
+            *storage.as_mut().project().state = TxDmaState::ResetRequired;
         }
         if let Some(dma) = self.dma.as_mut() {
             dma.quarantine();
@@ -454,7 +454,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             (TX_AMPDU_METADATA_SIZE as u32) + u32::from(metadata.psdu_lengths[metadata_index]),
         );
         if let Err(error) = descriptor_result {
-            *storage.as_mut().project().state = TxSlotState::ResetRequired;
+            *storage.as_mut().project().state = TxDmaState::ResetRequired;
             dma.quarantine();
             return Err(error.into());
         }
@@ -502,7 +502,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             (TX_AMPDU_METADATA_SIZE as u32) + u32::from(metadata.psdu_lengths[metadata_index]),
         );
         if let Err(error) = descriptor_result {
-            *storage.as_mut().project().state = TxSlotState::ResetRequired;
+            *storage.as_mut().project().state = TxDmaState::ResetRequired;
             dma.quarantine();
             return Err(error.into());
         }
@@ -544,7 +544,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         *metadata.queue = queue;
         *metadata.aggregate_length = prepared.aggregate.bytes;
         *metadata.detached = false;
-        *metadata.state = TxSlotState::HardwareOwned;
+        *metadata.state = TxDmaState::HardwareOwned;
         publication.commit(|dma| hardware.start_bound_ht_tx(dma, queue_index));
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
@@ -610,7 +610,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         *metadata.queue = queue;
         *metadata.aggregate_length = prepared.aggregate.bytes;
         *metadata.detached = false;
-        *metadata.state = TxSlotState::HardwareOwned;
+        *metadata.state = TxDmaState::HardwareOwned;
         publication.commit(|dma| hardware.start_bound_he_tx(dma, queue_index));
         storage.as_mut().project().work.record_publication(
             prepared.aggregate.bytes,
@@ -655,7 +655,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     ) -> Result<bool, HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
-            if storage.state != TxSlotState::HardwareOwned || storage.active != cookie {
+            if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.index()
@@ -692,7 +692,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     ) -> Result<(), HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
-            if storage.state != TxSlotState::HardwareOwned || storage.active != cookie {
+            if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.index()
@@ -729,7 +729,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     ) -> Result<(), HtAmpduTxError> {
         let queue = {
             let storage = self.as_ref().get_ref();
-            if storage.state != TxSlotState::Completed || storage.active != cookie {
+            if storage.state != TxDmaState::Completed || storage.active != cookie {
                 return Err(HtAmpduTxError::Stale);
             }
             storage.queue.index()
@@ -761,7 +761,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     pub fn release_completed(&mut self, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
         {
             let storage = self.as_ref().get_ref();
-            if storage.state != TxSlotState::Completed
+            if storage.state != TxDmaState::Completed
                 || storage.active != cookie
                 || !storage.detached
             {
@@ -799,12 +799,12 @@ impl<B, const SLOTS: usize> Drop for RetainedDmaAmpduTx<'_, B, SLOTS> {
         let metadata_state = self.state();
         let dma_state = self.dma_mut().state();
         let released = match (metadata_state, dma_state) {
-            (TxSlotState::Free, AmpduDmaState::Free) => true,
-            (TxSlotState::Reserved, AmpduDmaState::Reserved) => {
+            (TxDmaState::Free, AmpduDmaState::Free) => true,
+            (TxDmaState::Reserved, AmpduDmaState::Reserved) => {
                 let cookie = self.active;
                 self.metadata_mut().cancel(cookie).is_ok() && self.dma_mut().cancel().is_ok()
             }
-            (TxSlotState::Completed, AmpduDmaState::Detached) if self.detached => {
+            (TxDmaState::Completed, AmpduDmaState::Detached) if self.detached => {
                 let cookie = self.active;
                 self.dma_mut().release_detached().is_ok()
                     && self.metadata_mut().release_completed(cookie).is_ok()

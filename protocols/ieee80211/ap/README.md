@@ -6,8 +6,6 @@ tests.
 
 ## Known defects
 
-Found in a code review of 2026-10-16 (record outside this repository).
-
 **Security**
 
 - **M1/M3 retries reuse the replay counter.**

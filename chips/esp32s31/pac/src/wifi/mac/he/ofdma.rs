@@ -435,8 +435,12 @@ impl WifiRadioRegisters {
         timer.modify(|_, w| w.enable().set_bit());
 
         let write_link = |position: u8, length: u16| {
-            let index = reservation.index(position).unwrap();
-            let next = reservation.next(position).unwrap();
+            let index = reservation
+                .index(position)
+                .expect("each linked position lies inside the reservation");
+            let next = reservation
+                .next(position)
+                .expect("each linked position lies inside the reservation");
             suffix
                 .he_scratch(usize::from(index))
                 .modify(|_, w| w.mpdu_length().set(length).next_link().set(next));

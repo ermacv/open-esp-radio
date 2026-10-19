@@ -4,7 +4,7 @@ use super::{
     AmpduFrameSize, HeAmpduPolicy, HtAmpduLengthError, HtAmpduTxError, HtAmpduTxStorage,
     TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
 };
-use crate::tx::{HtRate, TxCookie, TxSlotState};
+use crate::tx::{HtRate, TxCookie, TxDmaState};
 
 impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Check a frame against a separately owned DMA allocation.
@@ -97,7 +97,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         hardware_he_control: bool,
         buffer_capacity: usize,
     ) -> Result<bool, HtAmpduTxError> {
-        if self.state != TxSlotState::Reserved || self.active != cookie {
+        if self.state != TxDmaState::Reserved || self.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         if usize::from(self.count) >= SLOTS {

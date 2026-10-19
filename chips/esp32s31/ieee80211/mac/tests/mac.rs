@@ -47,7 +47,7 @@ use oer_esp32s31_ieee80211_mac::{
         HtDuplicateTxQualificationGaps, HtDuplicateTxRejection, HtDuplicateTxSelection,
         HtDuplicateTxUnavailable, HtGuardInterval, HtMcs, HtPeerAmpduParameters,
         HtProtectionSpacing, HtRate, LegacyRate, LegacyTxConfig, LegacyTxQueue, TxCompletion,
-        TxError, TxHardware, TxPhyRate, TxSlot, TxSlotState, select_esp32s31_ht_duplicate_tx,
+        TxDmaState, TxError, TxHardware, TxPhyRate, TxSlot, select_esp32s31_ht_duplicate_tx,
     },
 };
 use oer_ieee80211_mac::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};

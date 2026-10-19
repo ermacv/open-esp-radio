@@ -144,5 +144,4 @@ fn a_ladder_without_a_step_keeps_the_previous_rate() {
     }
     let previous = PhyRate::Legacy(LegacyRate::Ofdm6M);
     assert_eq!(state.rate(&StepDown, OFDM54, previous), previous);
-    assert_eq!(state.rate(&FixedRate, OFDM54, previous), OFDM54);
 }

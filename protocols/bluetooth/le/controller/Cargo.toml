@@ -5,10 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Pure Bluetooth LE Controller pieces: event geometry, authenticated PDU receive and the diagnostic MIC-fault command"
+description = "Pure Bluetooth LE Controller pieces: event geometry and authenticated PDU receive"
 
 [dependencies]
-bt-hci = "=0.10.1"
 oer-bluetooth-le-ll = { path = "../ll" }
 oer-bluetooth-le-radio = { path = "../radio" }
 

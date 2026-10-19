@@ -17,8 +17,6 @@ changes while armed are unsupported. Reserve TIMG1 exclusively, including
 independently constructible HAL Wdt handles. Expiry needs no task or ISR.
 These are engineering limits, not measured worst-case reset/RF-off bounds.
 
-- `cache/maintenance.rs`: validates the borrowed PSRAM range and delegates
-  writeback to HAL before a DMA reader observes memory.
 - `cache/performance.rs`: cache counter snapshots and the retained CACHE witness.
 - `flash/mmu.rs`: flash MMU operations with the retained SPI0 witness.
 - `reset.rs`: a diverging system-reset request through HAL. The caller
@@ -41,43 +39,14 @@ These are engineering limits, not measured worst-case reset/RF-off bounds.
   it at startup with ESP-IDF's `rng_ll_enable` and keeps it running after a
   `TrngSource` drops, because `Rng` (MAC sequence numbers, backoff) reads the
   same generator.
-- `dma/mem2mem/descriptor.rs`: descriptor images, burst sizing, chain construction,
-  and descriptor validation; its host tests live in `descriptor/tests.rs`.
-- `dma/mem2mem/registers.rs`: typed upstream AXI-GDMA register operations,
-  interrupt source controls, and DMA visibility fences.
-- `dma/mem2mem/transfer.rs`: the DMA channel witness and prepared/active transfer
-  owners retaining exclusive payload and descriptor borrows, including cleanup.
-- `dma/mem2mem/completion.rs`: the channel-zero interrupt handler, static waker,
-  and Future polling with its completion recheck.
 
-The transfer owner binds both channel interrupts when constructed. Register
-operations and completion share only the private mem2mem module boundary;
-callers use the public root types. Preparation is safe; `PreparedOwner::start`
-is unsafe because asynchronous publication borrows its payloads and descriptors.
-The caller must keep them stable and exclusively retained until completion or
-cleanup, including cancellation and forgotten futures. `Drop` alone cannot
-prove that contract. A diagnostic caller must use dedicated static storage
-and consume the sole channel; it must complete or drop each transfer before
-reuse.
-This borrowed diagnostic API is not the safe owned-buffer Wi-Fi materializer.
-
-`axi-gdma-mem2mem` enables the hardware transfer path and implies `esp32s31`.
-`psram-dma-diagnostic` additionally enables the existing blocking comparison
-path. The descriptor sizing tests run on the host without those features.
-
-HAL owns the cache sync engine and serializes writeback with its DMA and
-executable-PSRAM cache operations. The adapter does not maintain a second
-register sequence or lock for that engine.
-
-CACHE maintenance and performance counters have distinct contracts:
-writeback takes the affected mutable memory range, while performance
-counters retain the CACHE witness. There is no shared CACHE lease or
-coordinator between those APIs; the adapter does not establish that simultaneous use is safe.
+Performance counters retain the CACHE witness. Cache sync and writeback stay
+with HAL, which serializes them with its DMA and executable-PSRAM cache
+operations.
 
 Focused checks from the repository root:
 
 ```console
 cargo test --locked --offline -p oer-espressif-esp-hal-soc
-cargo check --locked --offline -p oer-espressif-esp-hal-soc --target riscv32imafc-unknown-none-elf --features axi-gdma-mem2mem
-cargo check --locked --offline -p oer-espressif-esp-hal-soc --target riscv32imafc-unknown-none-elf --features psram-dma-diagnostic
+cargo check --locked --offline -p oer-espressif-esp-hal-soc --target riscv32imafc-unknown-none-elf --features esp32s31
 ```

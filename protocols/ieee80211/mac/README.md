@@ -5,14 +5,12 @@ machines.
 
 ## Known defects
 
-Found in a code review of 2026-10-16 (record outside this repository).
-
 - **Channel 14 is admitted regardless of the regulatory domain and the PHY.**
   `channel.rs::WifiChannel::new_2_4_ghz` accepts channel 14 at 20 MHz, while
   the ESP32-S31 PHY rejects it (`PhyChipChannelRequest::validate`). A caller
   gets a channel the radio cannot tune and that most countries forbid.
   Channel 14 is legal only where the regulatory domain allows it and the PHY
-  supports it. (Found in the port's coverage review.)
+  supports it.
 - **Fragment PNs only have to increase.**
   `fragmentation/reassembly.rs::append_fragment` refuses only
   `observed <= previous`; IEEE 802.11-2020 §12.5.3.4.4 and Linux require

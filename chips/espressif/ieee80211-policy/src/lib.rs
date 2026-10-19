@@ -55,8 +55,6 @@
 //!   station's connection frames under the reconnect policy;
 //! - [`block_ack`]: the TIDs the station negotiates TX Block Ack for and
 //!   its Dialog Token sequence.
-//! - [`station_link`]: the station's beacon window and the probes it sends
-//!   a silent access point.
 //!
 //! Where an algorithm is inseparable from the vendor bytes it walks (the
 //! schedule walk and the retry ladder), it lives here beside them.
@@ -71,7 +69,6 @@ pub mod rate_control;
 pub mod rate_schedule;
 pub mod rate_selection;
 pub mod retry_ladder;
-pub mod station_link;
 
 pub use he_txop::EspressifHeTxopRtsBudget;
 pub use retry_ladder::EspressifRetryLadder;

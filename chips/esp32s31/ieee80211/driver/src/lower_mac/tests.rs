@@ -1147,7 +1147,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         assert_eq!(queued(&core, BE).slot().buffer_address(), address);
         assert_eq!(
             queued(&core, BE).slot().state(),
-            oer_esp32s31_ieee80211_mac::tx::TxSlotState::HardwareOwned
+            oer_esp32s31_ieee80211_mac::tx::TxDmaState::HardwareOwned
         );
         assert_eq!(core.next_deadline(), deadline);
         hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));

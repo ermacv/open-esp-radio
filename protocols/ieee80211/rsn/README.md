@@ -3,10 +3,7 @@
 `oer-ieee80211-rsn` holds the allocation-free, hardware-independent RSN (IEEE 802.11
 robust security network) protocol shared by WPA2 and WPA3 suites. It is
 sans-IO and owns no executor, timer, key slot or transmit path: chip role
-crates execute its typed key-data unwrap, transmit and key-install requests,
-and the handshake runners of
-[`oer-ieee80211-rsn-service`](../rsn-service/README.md)
-wait on its ports.
+crates execute its typed key-data unwrap, transmit and key-install requests.
 
 | Module | Responsibility |
 | --- | --- |
@@ -21,7 +18,6 @@ wait on its ports.
 | `aes` | RFC 3394 key wrap and unwrap and the asynchronous unwrap port |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines |
-| `runner` | Ports and values of the handshake and key-install runners |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
 A `Ptk` records the suite that derived it, so MIC generation and verification
@@ -95,8 +91,6 @@ replacing indexing with `.get()` or suppressing the lint. The crate root does
 not enable the policy.
 
 ## Known defects
-
-Found in a code review of 2026-10-16 (record outside this repository).
 
 - **The authenticator reuses the replay counter on M1/M3 retries.**
   `state/authenticator.rs::RsnApState::retry_transmit` resends the stored

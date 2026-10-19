@@ -5,9 +5,8 @@
 //! one controller for its access point, an access point one per associated
 //! station; each asks its controller for the rate of a single MPDU and of an
 //! A-MPDU and reports every exchange's outcome to it. The controller is an
-//! integrator's policy: [`FixedRateControl`] keeps one rate; the Espressif
-//! controller of `oer-espressif-ieee80211-policy::rate_control` adapts as the
-//! vendor does.
+//! integrator's policy: the Espressif controller of
+//! `oer-espressif-ieee80211-policy::rate_control` adapts as the vendor does.
 
 use core::num::NonZeroU16;
 
@@ -178,71 +177,9 @@ pub trait RateControl: Sized {
     ) -> Result<(), AmpduUnavailable>;
 }
 
-/// Every data frame at one configured rate, whatever its exchanges show.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FixedRateControl(PhyRate);
-
-impl RateControl for FixedRateControl {
-    type Config = PhyRate;
-
-    fn for_peer(rate: PhyRate, _peer: &RatePeer, _link_metric: LinkMetric) -> Self {
-        Self(rate)
-    }
-
-    fn mpdu_rate(&self) -> PhyRate {
-        self.0
-    }
-
-    fn ampdu_rate(&self) -> PhyRate {
-        self.0
-    }
-
-    fn observe_mpdu(
-        &mut self,
-        _attempts: NonZeroU16,
-        _outcome: MpduOutcome,
-        _ack_snr_db: Option<i8>,
-    ) {
-    }
-
-    fn observe_ampdu<B: BlockAckSnr>(
-        &mut self,
-        _now: Instant,
-        _tally: BlockAckTally,
-        _ack: &B,
-    ) -> Result<(), AmpduUnavailable> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_mac::phy::LegacyRate;
-
     use super::*;
-
-    #[test]
-    fn a_fixed_controller_keeps_its_rate() {
-        let rate = PhyRate::Legacy(LegacyRate::Ofdm24M);
-        let peer = RatePeer {
-            phy: PhyMode::Legacy,
-            legacy_rates: NegotiatedLegacyRates::from_rate_elements(
-                &[2, 4, 11, 22, 12, 18, 24, 36],
-                &[48, 72, 96, 108],
-            )
-            .unwrap(),
-            ht_capabilities: None,
-            he_capabilities: None,
-            he_peer_state: None,
-        };
-        let mut control = FixedRateControl::for_peer(rate, &peer, LinkMetric::new(-40, -50));
-        control.observe_mpdu(
-            NonZeroU16::new(7).unwrap(),
-            MpduOutcome::Unacknowledged,
-            None,
-        );
-        assert_eq!((control.mpdu_rate(), control.ampdu_rate()), (rate, rate));
-    }
 
     #[test]
     fn block_ack_counts_are_checked_before_the_controller_observes_them() {

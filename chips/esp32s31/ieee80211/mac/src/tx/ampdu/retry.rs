@@ -3,7 +3,7 @@
 use core::pin::Pin;
 
 use super::{
-    HtAmpduLength, HtAmpduTxError, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE, TxCookie, TxSlotState,
+    HtAmpduLength, HtAmpduTxError, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE, TxCookie, TxDmaState,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,7 +29,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
         index: u8,
     ) -> Result<CompletedFrameLayout, HtAmpduTxError> {
-        if self.state != TxSlotState::Completed || self.active != cookie || !self.detached {
+        if self.state != TxDmaState::Completed || self.active != cookie || !self.detached {
             return Err(HtAmpduTxError::Stale);
         }
         let slot = usize::from(index);
@@ -64,8 +64,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         republication: super::AmpduRepublication,
     ) -> Result<[Option<RetryFrameLocation>; SLOTS], HtAmpduTxError> {
         let storage = self.get_ref();
-        if storage.state != TxSlotState::Completed || storage.active != cookie || !storage.detached
-        {
+        if storage.state != TxDmaState::Completed || storage.active != cookie || !storage.detached {
             return Err(HtAmpduTxError::Stale);
         }
         let old_count = usize::from(storage.count);
@@ -139,7 +138,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         *storage.trigger_reservation = None;
         *storage.trigger_publication_snapshot = None;
         *storage.detached = false;
-        *storage.state = TxSlotState::Reserved;
+        *storage.state = TxDmaState::Reserved;
         self.recalculate_prepared_length()
     }
 }

@@ -6,7 +6,7 @@ use super::{
     AmpduFrameLayout, HeAmpduFrameRequest, HtAmpduFrameRequest, HtAmpduTxError, HtAmpduTxStorage,
     TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
 };
-use crate::tx::{TxCookie, TxSlotState};
+use crate::tx::{TxCookie, TxDmaState};
 
 impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Commit an MPDU already encoded in a separately pinned allocation.
@@ -33,7 +33,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         let frame_length = layout.mpdu_length();
         let hardware_mic_length = layout.hardware_mic_length();
         let storage = self.as_ref().get_ref();
-        if storage.state != TxSlotState::Reserved || storage.active != cookie {
+        if storage.state != TxDmaState::Reserved || storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         if !storage.can_commit_referenced_frame(

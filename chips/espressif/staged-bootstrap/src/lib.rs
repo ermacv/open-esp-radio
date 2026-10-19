@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 //! The chip-neutral steps of the staged-boot bootstrap.
 //!
 //! Each chip's bootstrap (`platform/<chip>/bootstrap`) is a Flash-resident
@@ -21,6 +22,7 @@ use oer_espressif_staged_layout::{
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
 
+#[allow(unsafe_code, reason = "the ROM console and the stack guard symbol")]
 unsafe extern "C" {
     fn ets_install_usb_printf();
     fn ets_printf(format: *const core::ffi::c_char, ...);
@@ -35,6 +37,7 @@ fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
 
 /// Route the ROM's `ets_printf` to the USB Serial/JTAG console and report the
 /// bootstrap's start. Call first.
+#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
 pub fn start() {
     // SAFETY: the ROM function only selects the console of its own printf.
     unsafe { ets_install_usb_printf() };
@@ -80,6 +83,10 @@ impl Staged {
 /// pointer in use aliases any byte of it, and nothing else reads or writes
 /// it until the runtime this hands off to owns it. The mapping must stay in
 /// place, unchanged, until [`hand_off`] entered the runtime.
+#[allow(
+    unsafe_code,
+    reason = "copies the payload into the caller-owned PSRAM region"
+)]
 pub unsafe fn stage(
     layout: &Layout,
     payload: &'static [u8],
@@ -148,6 +155,7 @@ pub unsafe fn stage(
 /// Publish the staged code to instruction fetch, report
 /// `PASS handoff=stage2`, release the bootstrap's stack watchpoint and enter
 /// stage two with interrupts disabled. Never returns.
+#[allow(unsafe_code, reason = "publishes and enters the stage-two image")]
 pub fn hand_off(staged: Staged) -> ! {
     // SAFETY: the bytes are the checked stage-two image, which nothing
     // modifies or executes until the jump below; the other hart, if any,
@@ -174,6 +182,7 @@ struct ValidatedLayout {
     expected_crc32: u32,
 }
 
+#[allow(unsafe_code, reason = "an unaligned header read from the payload")]
 fn read_header(payload: &[u8]) -> RuntimeHeader {
     if payload.len() < size_of::<RuntimeHeader>() {
         fail(c"OER_BOOT bootstrap=FAIL reason=short-header\r\n");
@@ -232,6 +241,7 @@ fn validate_header(
 ///
 /// `base` is the start of a `u32`-aligned region that [`stage`]'s
 /// `# Safety` contract covers, at least `0x108` bytes long.
+#[allow(unsafe_code, reason = "volatile access to the PSRAM probe page")]
 unsafe fn verify_psram_probe(base: *mut u8) {
     // SAFETY: the probe page is the first page of the region the caller's
     // `# Safety` contract covers, which stage two never occupies.
@@ -246,6 +256,7 @@ unsafe fn verify_psram_probe(base: *mut u8) {
     }
 }
 
+#[allow(unsafe_code, reason = "volatile reads of a mapped range")]
 fn payload_crc32(address: *const u8, len: usize) -> u32 {
     let mut crc = PayloadCrc::new();
     for index in 0..len {
@@ -260,6 +271,7 @@ fn payload_crc32(address: *const u8, len: usize) -> u32 {
 ///
 /// # Safety
 /// Only before leaving the bootstrap's stack for good.
+#[allow(unsafe_code, reason = "debug trigger CSRs")]
 unsafe fn release_bootstrap_stack_watchpoint() {
     let expected_tdata2 = core::ptr::addr_of!(__stack_chk_guard) as usize | 1;
     let observed_tdata2: usize;
@@ -287,6 +299,7 @@ unsafe fn release_bootstrap_stack_watchpoint() {
 
 /// # Safety
 /// `entry` must be the checked entry of a published stage-two image.
+#[allow(unsafe_code, reason = "the jump into stage two")]
 unsafe fn jump_to_runtime(entry: usize) -> ! {
     // SAFETY: the caller's contract; interrupts stay disabled across the jump.
     unsafe {
@@ -302,11 +315,13 @@ unsafe fn jump_to_runtime(entry: usize) -> ! {
 }
 
 /// Print one `OER_BOOT` line through the ROM.
+#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
 pub fn print(message: &'static CStr) {
     // SAFETY: a NUL-terminated format without arguments.
     unsafe { ets_printf(message.as_ptr()) };
 }
 
+#[allow(unsafe_code, reason = "the ROM console is a C ABI")]
 fn print_crc_failure(reason: &'static CStr, expected: u32, observed: u32) -> ! {
     // SAFETY: the format consumes one string and two words.
     unsafe {
@@ -326,6 +341,7 @@ pub fn fail(message: &'static CStr) -> ! {
     halt()
 }
 
+#[allow(unsafe_code, reason = "the wfi instruction")]
 fn halt() -> ! {
     loop {
         // SAFETY: `wfi` stalls the hart until an interrupt; it touches no memory.

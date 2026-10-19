@@ -10,13 +10,10 @@ description = "ESP32-S31 SoC cache, flash and DMA services backed by esp-hal"
 [features]
 default = []
 esp32s31 = ["dep:esp-hal", "dep:oer-espressif-esp-hal-irq"]
-axi-gdma-mem2mem = ["esp32s31", "dep:atomic-waker"]
-psram-dma-diagnostic = ["axi-gdma-mem2mem"]
 
 [dependencies]
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 oer-memory = { path = "../../../../portable/memory" }
-atomic-waker = { version = "1.1.2", optional = true }
 critical-section = "1.2.0"
 oer-time = { path = "../../../../portable/time" }
 esp-hal = { git = "https://github.com/ermacv/esp-hal", rev = "4fd4ba9b78aa9f96e54115c3d784491c1e12df02", default-features = false, features = ["esp32s31", "static-interrupts", "unstable"], optional = true }

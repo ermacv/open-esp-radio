@@ -34,10 +34,7 @@ mod test_support;
 
 mod controller;
 
-pub use controller::random::{
-    LeRandCommand, LeRandCommandCompleteEvent, LeRandomSource, LeRandomSourceAlreadyConfigured,
-    LeRandomUnavailable,
-};
+pub use controller::random::{LeRandCommand, LeRandCommandCompleteEvent};
 mod transport;
 mod wire;
 

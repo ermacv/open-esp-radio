@@ -4,6 +4,7 @@
 use core::ops::Range;
 use core::ptr::addr_of;
 
+#[allow(unsafe_code, reason = "the linker script symbols")]
 unsafe extern "C" {
     static __runtime_image_start: u8;
     static __runtime_payload_end: u8;

@@ -1,6 +1,6 @@
 # w0
 
-The radio system's first run on the ESP32-S31 (W0.4). The radio system's
+The radio system's first run on the ESP32-S31. The radio system's
 actor (`oer-esp32s31-radio-system`) runs on the radio executor (P2), polled
 in the handler of `FROM_CPU` line 2; the Wi-Fi client
 (`oer-esp32s31-ieee80211-driver::startup`) runs on the thread-mode application

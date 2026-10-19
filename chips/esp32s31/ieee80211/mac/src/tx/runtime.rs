@@ -404,13 +404,7 @@ pub enum OrdinaryCollisionDecision {
     Retry,
 }
 
-/// Vendor short/long classification used by the separate retry counters:
-/// the portable retry state's frame class.
-pub use oer_ieee80211_upper_mac::FrameClass as OrdinaryFrameClass;
-
-/// Descriptor retry bytes consumed by `rcGetRate`, `rcReachRetryLimit` and
-/// the LMAC short/long retry-limit checks: the portable retry counters.
-pub use oer_ieee80211_upper_mac::RetryCounters as OrdinaryRetryCounters;
+pub use oer_ieee80211_upper_mac::{FrameClass, RetryCounters};
 
 /// One bounded ordinary-MPDU retry transaction for the normal schedule path.
 ///
@@ -432,7 +426,7 @@ impl OrdinaryMpduRetryState {
         queue: LegacyTxQueue,
         initial_rate: TxPhyRate,
         mpdu_retry_limit: u8,
-        frame_class: OrdinaryFrameClass,
+        frame_class: FrameClass,
     ) -> Result<Self, OrdinaryRetryError> {
         let retry = match MpduRetryState::new(lmac::RETRY_LIMITS, mpdu_retry_limit, frame_class) {
             Ok(retry) => retry,
@@ -457,7 +451,7 @@ impl OrdinaryMpduRetryState {
         initial_rate: TxPhyRate,
         rate_policy: OrdinaryRetryRatePolicy,
         mpdu_retry_limit: u8,
-        frame_class: OrdinaryFrameClass,
+        frame_class: FrameClass,
     ) -> Result<Self, OrdinaryRetryError> {
         let mut state = Self::new(queue, initial_rate, mpdu_retry_limit, frame_class)?;
         match rate_policy {
@@ -509,7 +503,7 @@ impl OrdinaryMpduRetryState {
         self.retry.attempts()
     }
 
-    pub const fn counters(&self) -> OrdinaryRetryCounters {
+    pub const fn counters(&self) -> RetryCounters {
         self.retry.counters()
     }
 
@@ -532,7 +526,7 @@ impl OrdinaryMpduRetryState {
         match self.rate_policy {
             OrdinaryRetryRatePolicy::Normal => select_ordinary_retry_rate(
                 self.initial_rate,
-                OrdinaryRetryCounters {
+                RetryCounters {
                     mpdu: failed_attempts,
                     short: failed_attempts,
                     long: 0,
@@ -608,7 +602,7 @@ impl OrdinaryMpduRetryState {
 #[inline(never)]
 pub fn select_ordinary_retry_rate(
     initial_rate: TxPhyRate,
-    counters: OrdinaryRetryCounters,
+    counters: RetryCounters,
 ) -> Result<TxPhyRate, OrdinaryRetryError> {
     let retry_index = counters.mpdu.max(counters.short);
     match initial_rate {

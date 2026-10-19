@@ -2,7 +2,7 @@
 
 The ESP32-S31 radio system: one actor future, tied to no executor, that owns
 the shared RF front-end and serves its clients' cells
-(`oer-esp32s31-radio-client`). R0 serves Wi-Fi.
+(`oer-esp32s31-radio-client`). It serves Wi-Fi.
 
 - `join`: prepare the PHY domain (register it, or wake closed RF), mint a new
   RF epoch when RF opened, enter the client. A first member that fails
@@ -25,6 +25,5 @@ orders it with the client's power as the hardware requires.
 `Esp32s31Radio` (chip only, `src/esp32s31.rs`) is the ESP32-S31 backend over
 the radio domain; its module documentation lists each request's steps. Its
 `retune` and `modem_sleep` modules hold the domain halves of the channel
-retune (R1) and of modem sleep (with doze, R3), compiled but not yet part of
-the client contract. The `registration-diagnostics` feature carries the PHY
+retune and of modem sleep, which no client request reaches yet. The `registration-diagnostics` feature carries the PHY
 registration's diagnostics to the client.
