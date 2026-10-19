@@ -127,6 +127,18 @@ phases = [{ name = "arm", writer = "cpu" }, { name = "complete", writer = "hardw
 The generated documentation records these phases; the HAL enforces their
 order and handover. A single-writer field does not declare phases.
 
+A fixed array declares `[layout.array]` with `element = "<LAYOUT>"` and
+`count`. Its element is a shared word layout; the array's size, alignment
+and placement must match those of its elements. The generated type exposes
+checked `entry(index)` access to the individual layouts.
+
+A BLE link declares `points-to = "<LAYOUT>"` and
+`encoding = "ble-compressed"` on a 20-bit field. Its nonzero value is a
+word index: the CPU address is `0x2f000000 | (index << 2)`. Zero is no link.
+The builder takes `Option<DmaRef<Layout>>`, checks the encoding and preserves
+the surrounding bits. A getter decodes an address without creating a
+reference; hardware-written links still need validation against their arena.
+
 Every field gets a `[[review]]` like a register field: naming, sources,
 provenance, accuracy, completeness. A fact measured on the stand is evidence
 of a new class, `stand`, citing the chip's `notes/` and the runs; vendor

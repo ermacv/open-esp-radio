@@ -26,7 +26,10 @@ pub use descriptions::{description_directories, descriptions};
 pub use draft::{ModelDraft, ModelInit, PeripheralInit};
 mod model_validation;
 pub use geometry::{FieldGeometry, PeripheralRegion, RegisterGeometry, svd_geometry, svd_regions};
-pub use layouts::{LayoutAccess, LayoutField, LayoutKind, LayoutUnit, LayoutWriter, MemoryLayout};
+pub use layouts::{
+    LayoutAccess, LayoutArray, LayoutField, LayoutKind, LayoutPhase, LayoutUnit, LayoutWriter,
+    MemoryLayout, PointerEncoding,
+};
 mod pac_api;
 mod pac_api_render;
 mod pac_api_svd;
