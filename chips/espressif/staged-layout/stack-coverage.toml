@@ -1,7 +1,7 @@
 # The review of every function the staged images of the Espressif chips link
 # without a compiler frame record: the staged runtime's assembly and the
 # pinned esp-hal and riscv-rt entries. Each chip's stack policy
-# (`platform/<chip>/stack.toml`) names this file; an entry for a symbol an
+# (`chips/<chip>/platform/stack.toml`) names this file; an entry for a symbol an
 # image does not link (the second hart's entries on a one-hart chip) reviews
 # nothing there.
 schema = 1

@@ -103,9 +103,6 @@ pub struct Profile {
     /// The chip's packages as the repository policies classify them.
     #[serde(default)]
     pub packages: Packages,
-    /// What the repository gate builds and audits for the chip.
-    #[serde(default)]
-    pub gate: Gate,
     /// The Rust probe images of the chip's vendor comparison, in build
     /// order (`verification/<id>/probes`).
     #[serde(default)]
@@ -455,88 +452,6 @@ pub struct Packages {
     /// The chip's Bluetooth packages.
     #[serde(default)]
     pub bluetooth: Vec<String>,
-}
-
-/// The `[gate]` table: what the repository gate builds and audits for the
-/// chip, beyond what every chip gets.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Gate {
-    /// Chip-target doctests.
-    #[serde(default)]
-    pub doctests: Vec<Doctest>,
-    /// Firmware package directories whose library tests run on the host.
-    #[serde(default)]
-    pub host_tests: Vec<PathBuf>,
-    /// Firmware workspaces built in release for the chip.
-    #[serde(default)]
-    pub release_builds: Vec<PathBuf>,
-    /// Root-workspace packages built for the chip target.
-    #[serde(default)]
-    pub target_builds: Vec<String>,
-    /// Whether Clippy checks the chip's HIL agent for each of its feature
-    /// profiles.
-    #[serde(default)]
-    pub agent_clippy: bool,
-    /// Whether the register tool's shared-word check runs against the
-    /// esp-hal and PAC sources the chip's HIL agent workspace resolves.
-    #[serde(default)]
-    pub shared_words: bool,
-    /// Whether every package that builds esp-hal for the chip must enable
-    /// `static-interrupts`, leaving the routes to the image's table.
-    #[serde(default)]
-    pub static_interrupts: bool,
-    /// The production PHY library the PHY audit builds.
-    #[serde(default)]
-    pub phy: Option<PhyLibrary>,
-    /// The facade's chip feature profiles.
-    #[serde(default)]
-    pub facade: Vec<FacadeProfile>,
-    /// The network boundary profiles of the chip's packages.
-    #[serde(default)]
-    pub network: Vec<NetworkProfile>,
-}
-
-/// A chip-target doctest: a package with its features.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Doctest {
-    pub package: String,
-    pub features: String,
-}
-
-/// The production PHY library and the chip's packages its build may
-/// compile beside the shared ones the audit reviews.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct PhyLibrary {
-    pub package: String,
-    pub packages: Vec<String>,
-}
-
-/// One facade feature profile: the packages it must and must not bring;
-/// `forbidden` names groups (`wifi`, `bluetooth`, `ieee802154`, `backends`).
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct FacadeProfile {
-    pub features: String,
-    pub required: Vec<String>,
-    pub forbidden: Vec<String>,
-    /// Whether the profile is a Bluetooth consumer that must reach no Wi-Fi
-    /// package.
-    #[serde(default)]
-    pub bluetooth_only: bool,
-}
-
-/// One network boundary profile: a manifest, its boundary and the Cargo
-/// feature flags it resolves with.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct NetworkProfile {
-    pub boundary: String,
-    pub manifest: PathBuf,
-    #[serde(default)]
-    pub features: Vec<String>,
 }
 
 /// One Rust probe image of the vendor comparison: the artifact role it

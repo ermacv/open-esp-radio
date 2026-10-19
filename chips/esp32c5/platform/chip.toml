@@ -179,11 +179,6 @@ generated = ["oer-esp32c5-pac-raw"]
 closed-pac = ["oer-esp32c5-pac"]
 pac-consumers = ["oer-esp32c5-pac-raw", "oer-esp32c5-pac", "oer-esp32c5-hal"]
 
-# What the repository gate builds and audits for the chip (`cargo xtask`).
-[gate]
-target-builds = ["oer-esp32c5-pac", "oer-esp32c5-hal"]
-agent-clippy = true
-
 # The Rust probe images of the vendor comparison (firmware/probes).
 [[probe]]
 role = "rust-artifact"
