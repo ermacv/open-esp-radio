@@ -24,12 +24,12 @@ bounds) live in the code that applies them.
   modification notices.
 - **Sources** ([source policy](source-policy.md)). From a source without a
   license only facts. The exception is the Bluetooth LE hardware engine (the
-  S31 driver, controller memory, the PAC's Bluetooth initialization and the
-  HAL's scheduler locks), kept as it is, including what it takes from
-  `esp32s31-bt-lib`. Inside it the controller memory lends the interrupt
+  S31 driver, the controller memory and its HAL engine, the PAC's Bluetooth
+  initialization and the HAL's scheduler locks), which keeps what it takes
+  from `esp32s31-bt-lib`. Inside it the controller memory lends the interrupt
   owner to a task, serialized with the interrupt service: a known exception
-  to the shared-lock rule until the Bluetooth LE block replaces it with
-  lock-free queues between the interrupt and task halves.
+  to the shared-lock rule until the Bluetooth LE block splits the engine into
+  interrupt and task halves that meet through static typed signals.
 - **Vendor libraries in local and CI work.** Pinned vendor static libraries
   and ROMs, licensed or not, may be used in any form locally and in CI:
   analysed, executed in emulation, linked into comparison images. They are
@@ -60,7 +60,9 @@ bounds) live in the code that applies them.
   descriptor words, BLE exchange memory) is described in the register model
   as memory layouts with generated PAC accessors. Pointer fields name their
   layout and take typed references; placement is proved by the linker, not
-  checked at run time; the handover protocol is the block's HAL engine.
+  checked at run time; the handover protocol is the block's HAL engine. A
+  field the CPU writes in one phase and the hardware in another lists its
+  phases with their writers.
 - **`unsafe`** stays in the PAC, the placement constructor and the protocol
   core of the HAL; crates above the HAL forbid it.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`
@@ -228,6 +230,13 @@ bounds) live in the code that applies them.
   wins; HCI is the world boundary; an internal backend inconsistency is a
   radio fault that poisons the port; Host backpressure withholds
   acknowledgement instead of dropping the link.
+- **Controller memory** is generated layouts: every word the controller
+  shares is in the register model, a word or bits of unknown meaning as
+  `_OPAQUE` fields, and the exact role images are constants of the generated
+  types. Its handover engine is a HAL module that owns the controller's
+  registers and its placed arena; role knowledge (images, list routing,
+  priorities) lives in the driver; no controller address reaches the driver
+  or above.
 
 ## IEEE 802.15.4
 
