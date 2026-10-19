@@ -10,7 +10,7 @@ coverage_policy = "../../espressif/staged-layout/stack-coverage.toml"
 max_move_bytes = 4096
 
 # Each stack is bounded from the function that runs on it from its top, as
-# platform/esp32s31/stack.toml states.
+# chips/esp32s31/platform/stack.toml states.
 
 # `_runtime_start` switches to the top of this stack (`_runtime_stack_bootstrap`)
 # and tail-calls `runtime_main`, which runs the executor for good.

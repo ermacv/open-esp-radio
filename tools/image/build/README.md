@@ -96,7 +96,7 @@ for the runtime ELF (`audit_runtime_stacks`) and one for the bootstrap ELF
 (`audit_bootstrap_stack`). Each analyses its ELF once with `oer-analysis-riscv-stack`,
 the pinned ROM and its summaries, and resolves indirect sites with the same
 facts (waker vtables, IPC posts, function-pointer field types). The policy is
-a chip's `platform/<chip>/stack.toml` (schema 5), extended by the HIL
+a chip's `chips/<chip>/platform/stack.toml` (schema 5), extended by the HIL
 target's policy. Every image runs its tasks on CPU0; none starts the second
 S31 core, and C5 has one hart. Each stack names the function that runs on
 it from its top (its root, by symbol), its storage (a sized symbol, or a

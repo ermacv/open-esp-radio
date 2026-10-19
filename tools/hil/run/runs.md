@@ -292,6 +292,9 @@ build, which `git bisect run` takes for a bad revision: check that
 `cargo hil bisect --help` runs before starting. As for an A/B arm, the revision's tree must have the packages this
 checkout's runner builds from it.
 
+A/B arms and bisect revisions before `f9cf2585` ("refactor: five roots by what
+the code is about", #118) do not build with the current runner.
+
 ## A/B comparison
 
 ```console
@@ -316,8 +319,7 @@ checked out in a worktree below `target/hil/ab/<id>/`, which this checkout's
 runner builds the arm's images from (`run --source`) and runs, so both
 revisions must have this checkout's `messages.lock`. An arm builds everything
 from its own tree, the image linker included, so an arm's tree must have the
-packages this checkout's runner builds from it (`oer-tool-image-linker`): no
-revision before `f37256c` builds as an arm. For
+packages this checkout's runner builds from it (`oer-tool-image-linker`). For
 every layout seed `1..=K` the preparation round (round 0) runs A, then B,
 building their images and warming the stand up, each run under a lease of
 its own; it is recorded with the `preparation` phase and never paired. The
