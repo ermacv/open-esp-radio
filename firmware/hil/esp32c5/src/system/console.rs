@@ -1,9 +1,10 @@
 //! The radio-free SoC image's HIL console: the target core's console over
-//! this chip's USB Serial/JTAG endpoint, serving the SoC deadline watchdog.
+//! this chip's USB Serial/JTAG endpoint, serving the SoC deadline watchdog
+//! and an intentional panic through the HIL panic hook.
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use oer_adapters_esp_hal_soc_esp32c5::watchdog::{DeadlineBudget, DeadlineWatchdog};
-use oer_hil_agent::base::{Intake, Platform, WatchdogRequest};
+use oer_hil_agent::base::{Either, Intake, PanicRequest, Platform, WatchdogRequest};
 use oer_hil_agent::console::Console as HilConsole;
 use oer_hil_image_keys::{ImageKeys, image_keys};
 use oer_hil_protocol::RequestIdentity;
@@ -83,21 +84,25 @@ pub(crate) async fn run(console: Console) {
         tx,
         intake,
         &Chip,
-        |request, WatchdogRequest::Test(WatchdogTest(mode))| {
-            if TESTS.try_send((request, mode)).is_err() {
-                CONSOLE.publish(
-                    request.session_id,
-                    request.request_id,
-                    &Rejected(RejectReason::Busy),
-                );
+        |request, decoded: Either<WatchdogRequest, PanicRequest>| match decoded {
+            Either::First(WatchdogRequest::Test(WatchdogTest(mode))) => {
+                if TESTS.try_send((request, mode)).is_err() {
+                    CONSOLE.publish(
+                        request.session_id,
+                        request.request_id,
+                        &Rejected(RejectReason::Busy),
+                    );
+                }
             }
+            Either::Second(PanicRequest::Inject(_)) => super::panic::queue(request),
         },
     );
     // Keep the large console future in its final storage; joining pinned
     // references avoids moving it into another future on the task stack.
     let serving = core::pin::pin!(serving);
     let testing = core::pin::pin!(test_watchdog(console.service));
-    embassy_futures::join::join(serving, testing).await;
+    let panicking = core::pin::pin!(super::panic::panic_on_request());
+    embassy_futures::join::join3(serving, testing, panicking).await;
 }
 
 /// Arms the SoC deadline watchdog for each test and misbehaves as asked.

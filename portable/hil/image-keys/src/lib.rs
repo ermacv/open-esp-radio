@@ -52,6 +52,8 @@ pub fn image_keys(enabled: &dyn Fn(&str) -> bool) -> ImageKeys {
         add(system::WatchdogArmed::KEY, true);
         add(system::DisableUsb::KEY, enabled("usb-jtag-off"));
         add(system::UsbDisabled::KEY, enabled("usb-jtag-off"));
+        add(system::InjectPanic::KEY, true);
+        add(system::PanicInjected::KEY, true);
         return sorted(keys);
     }
     if enabled("system-panic-reset") {
@@ -88,6 +90,10 @@ mod tests {
     fn the_family_follows_the_image_s_features() {
         let watchdog = with(&["system-watchdog"]);
         assert!(has::<system::WatchdogTest>(&watchdog) && !has::<network::Udp>(&watchdog));
+        assert!(
+            has::<system::InjectPanic>(&watchdog),
+            "the watchdog image's panic hook"
+        );
         let panic = with(&["system-panic-reset"]);
         assert!(has::<system::InjectPanic>(&panic) && !has::<system::WatchdogTest>(&panic));
         assert!(!has::<system::DisableUsb>(&watchdog));
