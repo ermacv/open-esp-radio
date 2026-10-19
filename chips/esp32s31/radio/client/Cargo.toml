@@ -15,7 +15,7 @@ test-support = []
 registration-diagnostics = ["oer-esp32s31-phy/registration-diagnostics"]
 
 [dependencies]
-atomic-waker = "1.1.2"
+oer-base-memory = { path = "../../../../portable/base/memory" }
 oer-base-time = { path = "../../../../portable/base/time" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }
