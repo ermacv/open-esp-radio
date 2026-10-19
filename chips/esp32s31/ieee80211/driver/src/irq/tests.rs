@@ -302,3 +302,29 @@ fn the_chip_line_can_live_in_a_static_cell() {
     fn sync<T: Sync>() {}
     sync::<HandlerCell<WifiIrqLine<ActiveEpoch<Moderated>>>>();
 }
+
+#[test]
+fn a_masked_line_returns_its_epoch_and_accepts_it_once_before_restart() {
+    let mut fixture = fixture();
+    assert!(fixture.line.take_epoch().is_none());
+    fixture
+        .requests
+        .ring(WifiIrqRequest::MaskAll, &Rings::default());
+    service_doorbell_line(&mut fixture.line);
+    let epoch = fixture.line.take_epoch().expect("masked epoch");
+    assert!(fixture.line.take_epoch().is_none());
+    // A late software doorbell on a detached line cannot touch its old banks.
+    fixture
+        .requests
+        .ring(WifiIrqRequest::UnmaskRx, &Rings::default());
+    service_doorbell_line(&mut fixture.line);
+    service_mac_line(&mut fixture.line);
+    service_power_line(&mut fixture.line);
+    assert!(fixture.line.put_epoch(epoch).is_ok());
+    assert!(!fixture.line.masked());
+    assert!(!fixture.requests.is_pending());
+    assert!(fixture.line.put_epoch(host_epoch()).is_err());
+    mac_mut(&mut fixture.line).latch(rx_success());
+    service_mac_line(&mut fixture.line);
+    assert_eq!(fixture.counters.report().mac_irqs, 1);
+}

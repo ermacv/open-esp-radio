@@ -151,6 +151,7 @@ members = [
     "firmware/apps/radio-root",
     "firmware/apps/w0",
     "firmware/apps/w1",
+    "firmware/apps/w2",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 default-members = [

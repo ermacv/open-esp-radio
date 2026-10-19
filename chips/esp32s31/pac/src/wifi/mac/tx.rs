@@ -34,6 +34,8 @@ pub struct MacOrdinaryTxQueueSnapshot {
     pub aifsn: u8,
     pub contention_window: u16,
     pub scheduler_priority: u8,
+    /// Signed calibrated data primary/alternate and RTS primary/alternate codes.
+    pub power_codes: [i8; 4],
     pub cca_force: u8,
     pub cca_aux_force: u8,
     /// Shared MAC activity encoding sampled after the queue configuration.
@@ -864,6 +866,12 @@ impl WifiRadioRegisters {
             .wifi_mac_tx_queue_vector
             .plcp1(bank)
             .read();
+        let power = self
+            .peripherals
+            .wifi_mac
+            .wifi_mac_tx_queue_vector
+            .power(bank)
+            .read();
         let common = &self.peripherals.wifi_mac.wifi_mac_tx_common;
         let cca = common.cca_control().read();
         let rx = &self.peripherals.wifi_mac.wifi_mac_rx_statistics;
@@ -879,6 +887,12 @@ impl WifiRadioRegisters {
             aifsn: config.aifsn().bits(),
             contention_window: config.contention_window().bits(),
             scheduler_priority: config.scheduler_priority().bits(),
+            power_codes: [
+                power.data_primary().bits() as i8,
+                power.data_alternate().bits() as i8,
+                power.rts_primary().bits() as i8,
+                power.rts_alternate().bits() as i8,
+            ],
             cca_force: cca.force().bits(),
             cca_aux_force: cca.phy_aux_force().bits(),
             mac_active_state: self.mac_channel_active_state(),

@@ -19,3 +19,6 @@ pub mod upper;
 pub(crate) mod test_ring;
 
 pub mod transaction;
+
+/// A receive epoch that returns stopped register/IRQ ownership for retune.
+pub mod session;

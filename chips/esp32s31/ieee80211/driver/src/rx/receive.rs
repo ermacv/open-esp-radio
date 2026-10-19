@@ -164,32 +164,34 @@ where
     let WifiRxParts {
         rx,
         stage,
-        irq,
-        power,
+        mut irq,
+        mut power,
         requests,
         counters,
-        control,
+        mut control,
         line,
         // The upper layer holds its copy of the return notifier.
         returns: _,
     } = parts;
+    let mut totals = [0; 3];
+    let mut full_since = None;
     let mut receiver = Receiver {
         hardware,
         rx_dma,
         rx: rx.storage(),
         stage,
-        irq,
-        power,
+        irq: &mut irq,
+        power: &mut power,
         requests,
         counters,
-        control,
+        control: &mut control,
         routes,
         doorbell,
         timer,
         publisher,
         admission,
-        totals: [0; 3],
-        full_since: None,
+        totals: &mut totals,
+        full_since: &mut full_since,
     };
 
     let mut frontier = match ReceiveFrontier::<COUNT, BUFFER>::prepare_initial(receiver.rx_dma, rx)
@@ -240,7 +242,7 @@ where
 }
 
 /// The owners of a running epoch, except its frontier.
-struct Receiver<
+pub(super) struct Receiver<
     'r,
     H,
     W,
@@ -255,26 +257,26 @@ struct Receiver<
     const STAGE_SLOTS: usize,
     S: DmaSpace,
 > {
-    hardware: &'r mut H,
-    rx_dma: &'r mut W,
-    rx: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
-    stage: &'static RxStagePool<STAGE_SLOTS, BUFFER>,
-    irq: IrqConsumer<'static>,
-    power: PowerIrqConsumer<'static>,
-    requests: &'static WifiIrqRequests,
-    counters: &'static WifiRxCounters,
-    control: ReceiveRunnerControl<'static>,
-    routes: &'r mut R,
-    doorbell: &'r D,
-    timer: &'r T,
-    publisher: &'r E,
-    admission: &'r M,
+    pub(super) hardware: &'r mut H,
+    pub(super) rx_dma: &'r mut W,
+    pub(super) rx: &'static RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
+    pub(super) stage: &'static RxStagePool<STAGE_SLOTS, BUFFER>,
+    pub(super) irq: &'r mut IrqConsumer<'static>,
+    pub(super) power: &'r mut PowerIrqConsumer<'static>,
+    pub(super) requests: &'static WifiIrqRequests,
+    pub(super) counters: &'static WifiRxCounters,
+    pub(super) control: &'r mut ReceiveRunnerControl<'static>,
+    pub(super) routes: &'r mut R,
+    pub(super) doorbell: &'r D,
+    pub(super) timer: &'r T,
+    pub(super) publisher: &'r E,
+    pub(super) admission: &'r M,
     /// The service's cumulative descriptors, units and bytes.
-    totals: [u64; 3],
+    pub(super) totals: &'r mut [u64; 3],
     /// Since when the drains ended with every staging slot claimed or every
     /// buffer detached, and the hash of every descriptor word then; until
     /// the next wake that carries a returned lease.
-    full_since: Option<(Instant, u32)>,
+    pub(super) full_since: &'r mut Option<(Instant, u32)>,
 }
 
 impl<
@@ -344,7 +346,7 @@ where
                 .is_ok_and(|claimed| claimed == STAGE_SLOTS)
                 || self.rx.detached_buffer_count() == COUNT
             {
-                self.full_since = Some(full_since.unwrap_or_else(|| {
+                *self.full_since = Some(full_since.unwrap_or_else(|| {
                     (
                         self.timer.now(),
                         descriptor_words_hash(self.rx.descriptors()),
@@ -358,7 +360,7 @@ where
     /// masked meanwhile; unmask through the doorbell only once drained.
     /// `snapshot`, the exhaustion snapshot of a capacity drain, is completed
     /// with what the first pass's reload read and recorded after that pass.
-    async fn drain(
+    pub(super) async fn drain(
         &mut self,
         ring: &mut RxRingLive<'static, COUNT>,
         mut snapshot: Option<WifiRxExhaustion>,
@@ -499,7 +501,7 @@ where
         ring: &mut RxRingLive<'static, COUNT>,
     ) -> Result<DatapathRxProgress, WifiRxCause> {
         self.counters.service_pass();
-        let [descriptors, units, bytes] = &mut self.totals;
+        let [descriptors, units, bytes] = &mut *self.totals;
         let result = service(
             ring,
             self.rx,
@@ -540,7 +542,7 @@ where
         }
     }
 
-    async fn teardown(
+    pub(super) async fn teardown(
         &mut self,
         frontier: &mut ReceiveFrontier<'static, COUNT, BUFFER>,
         cause: WifiRxCause,

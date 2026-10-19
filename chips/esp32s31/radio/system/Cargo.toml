@@ -8,6 +8,8 @@ repository.workspace = true
 description = "The ESP32-S31 radio system: one actor that owns the shared RF front-end"
 
 [dependencies]
+oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-ieee80211-lower-mac = { path = "../../../../protocols/ieee80211/lower-mac" }
 embassy-futures = "0.1.2"
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }

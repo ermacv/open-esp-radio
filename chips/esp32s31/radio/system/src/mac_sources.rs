@@ -60,3 +60,20 @@ impl MacTxPowerSource for MacSources {
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn probe_priority(
+    table: oer_espressif_coex::CoexPtiTable,
+) -> oer_esp32s31_radio_client::wifi::ProbePriority {
+    use oer_espressif_coex::{wifi_event, wifi_events};
+    use oer_ieee80211_lower_mac::{ConnectionFrame, Operation, TxOperation};
+    let event = wifi_event(Operation::Transmit(TxOperation::Connection(
+        ConnectionFrame::ProbeRequest,
+    )))
+    .expect("the probe operation has a coexistence event");
+    let packet = table.pti(event).value();
+    let scheduler = packet.min(table.pti(wifi_events::SLICE).value());
+    oer_esp32s31_radio_client::wifi::ProbePriority {
+        packet: MacCoexPti::new(packet).expect("the table has four-bit PTI"),
+        scheduler: MacCoexPti::new(scheduler).expect("the table has four-bit PTI"),
+    }
+}

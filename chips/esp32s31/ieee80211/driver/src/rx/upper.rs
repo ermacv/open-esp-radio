@@ -162,6 +162,15 @@ pub struct FrameReceiver<'a, const SLOTS: usize, const BUFFER: usize> {
 }
 
 impl<'a, const SLOTS: usize, const BUFFER: usize> FrameReceiver<'a, SLOTS, BUFFER> {
+    /// Take an already staged frame without waiting, retaining the same
+    /// affine lease as `next`. A finite dwell drains this queue before stop.
+    pub fn try_next(&mut self) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER>> {
+        self.frames
+            .try_receive()
+            .ok()
+            .map(|frame| self.returns.hold(frame))
+    }
+
     /// The next staged frame, in reception order. Dropping it returns the
     /// lease and wakes the runner.
     pub async fn next(&mut self) -> HeldRxFrame<'a, 'a, SLOTS, BUFFER> {
