@@ -1,4 +1,4 @@
-//! The published binding index (`registers/<chip>/published/*.bindings.toml`):
+//! The published binding index (`chips/<chip>/registers/published/*.bindings.toml`):
 //! every register address of a publication with its fields and the svd2rust
 //! path that reaches it. A publication that generates no PAC, such as a
 //! chip's platform registers read by the host, omits the crate name; the

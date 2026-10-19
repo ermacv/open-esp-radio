@@ -100,7 +100,7 @@ with `DrainTimeout`.
   compile-fail test, or a stated run-time check).
 - DMA-reachable storage is permanent and is released only after a proof that
   DMA stopped; otherwise it is quarantined until reset
-  ([rules](../knowledge/esp32s31/wifi/dma-execution.md)).
+  ([rules](../chips/esp32s31/notes/wifi/dma-execution.md)).
 
 ## Hardware ownership
 
@@ -108,7 +108,7 @@ Two roots, split by phase. esp-hal (the owner's fork) owns the SoC and
 everything before the radio handoff: boot, clocks, interrupts, PSRAM, flash,
 console, time. Our HAL owns the radio blocks after the handoff. Each word both
 sides can write has one runtime writer, listed and reviewed in
-`registers/esp32s31/shared-words.toml` and checked by
+`chips/esp32s31/registers/shared-words.toml` and checked by
 `cargo registers check shared-words`.
 
 Structures the hardware reads and writes in RAM (DMA descriptors, the RX

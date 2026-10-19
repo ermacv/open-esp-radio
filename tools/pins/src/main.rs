@@ -1,5 +1,5 @@
 //! `cargo pins`: fetch and verify a chip's pinned vendor artifacts
-//! (`knowledge/<chip>/vendor/artifacts.toml`) into the host-wide store that
+//! (`chips/<chip>/vendor/artifacts.toml`) into the host-wide store that
 //! every checkout's `target/vendor` links to. This binary parses the command
 //! line and calls `oer-vendor-artifacts`.
 
@@ -84,7 +84,7 @@ mod tests {
         assert!(
             root()
                 .unwrap()
-                .join("knowledge/esp32s31/vendor/artifacts.toml")
+                .join("chips/esp32s31/vendor/artifacts.toml")
                 .is_file()
         );
     }

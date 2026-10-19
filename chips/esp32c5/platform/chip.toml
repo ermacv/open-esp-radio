@@ -103,7 +103,7 @@ contexts = [
 ]
 
 # The mask ROM the stack analyses read: the pinned ROM ELF of the revision
-# the profile describes (knowledge/esp32c5/vendor/artifacts.toml) and the
+# the profile describes (chips/esp32c5/vendor/artifacts.toml) and the
 # reviewed function summaries of the ROM the images link
 # (chips/esp32c5/layout/linker/rom/esp32c5-eco2.x).
 [rom]
@@ -191,7 +191,7 @@ package = "oer-firmware-probes-esp32c5-radio"
 
 # Why the core last reset, which the stand reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
-# the platform publication's (registers/esp32c5/publication/platform.toml), with
+# the platform publication's (chips/esp32c5/registers/publication/platform.toml), with
 # its evidence; cause 1 is the power-on reset of ESP-IDF 4d59230d's
 # `components/soc/esp32c5/register/soc/lp_clkrst_reg.h`.
 [reset-cause]

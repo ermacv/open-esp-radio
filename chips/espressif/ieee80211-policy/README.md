@@ -23,7 +23,7 @@ depend on it, and portable code never does.
 | `connection_coex` | The coexistence events (45, 46) and priorities a reconnecting station's Probe Request, Authentication, Association and EAPOL frames request, and the `ConnectionFrameCoex` port a chip implements | `libpp.a[pp.o]::pp_coex_tx_request`, `libpp.a[pm_coex.o]::pm_coex_reconnect_policy` |
 
 The values were recovered from the ESP32-S31 libraries pinned in
-`knowledge/esp32s31/vendor/artifacts.toml`; each item's `SOURCE` comment names
+`chips/esp32s31/vendor/artifacts.toml`; each item's `SOURCE` comment names
 the vendor function it was read from. A chip of the family whose pinned
 libraries differ needs its own reviewed values before it uses them.
 

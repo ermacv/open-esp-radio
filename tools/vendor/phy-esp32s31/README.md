@@ -22,7 +22,7 @@ table's `boots` rounds the workload takes these steps:
 1. Flash the [vendor calibration firmware](../../../../verification/esp32s31/hil-vendor/README.md),
    reset the board and keep the boot's `phy_param` report. Then request
    every readable register of the published radio-PHY ownership partition
-   (`RadioPhyPeripherals` of `registers/esp32s31/policy/api.toml`,
+   (`RadioPhyPeripherals` of `chips/esp32s31/registers/policy/api.toml`,
    registers from the published SVD). A read that resets the chip, such as
    a register whose clock domain the Wi-Fi calibration leaves off, is
    recorded as unreadable and the reads continue after the new boot. Then

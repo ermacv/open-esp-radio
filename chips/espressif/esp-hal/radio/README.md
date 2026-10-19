@@ -13,7 +13,7 @@ clocks on esp-hal.
   ownership, which the consumed `I2C_ANA_MST` makes true.
 - Blocks where the radio owns only single words (PMU, HP_SYS_CLKRST,
   LP_AON_CLK_RST, LP_PERICLKRST, the interrupt matrix) stay esp-hal's; their
-  shared words are reviewed in `registers/esp32s31/shared-words.toml`.
+  shared words are reviewed in `chips/esp32s31/registers/shared-words.toml`.
 - `PlatformClocks<EspHal>` implements the HAL's `PlatformClockProvider`: the
   `MODEM_LPCON.CLK_CONF` gates through `clock::ll`'s counted acquire and
   release, MPLL and the 160 MHz PLL output through the clock tree's request

@@ -47,8 +47,8 @@ it; the HAL says in which order and who owns it.
 ### 1. Layout: the register model and the generated PAC
 
 A new kind of model entry, a **memory layout**, beside peripherals:
-`registers/<chip>/model/layouts/<name>.toml` (and in a register library when
-several chips share it, as `registers/ieee80211/` does for MAC blocks).
+`chips/<chip>/registers/model/layouts/<name>.toml` (and in a register library when
+several chips share it, as `chips/espressif/registers/ieee80211/` does for MAC blocks).
 
 ```toml
 [layout]

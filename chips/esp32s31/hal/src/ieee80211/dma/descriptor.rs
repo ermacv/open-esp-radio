@@ -1,5 +1,5 @@
 //! ESP32-S31 Wi-Fi DMA descriptors: the generated RX and TX layouts
-//! (`registers/esp32s31/model/layouts/`) and the words this crate publishes
+//! (`chips/esp32s31/registers/model/layouts/`) and the words this crate publishes
 //! in them.
 
 #![forbid(unsafe_code)]

@@ -2,14 +2,14 @@
 //!
 //! The supported chips are those with a profile
 //! ([`oer_chip_profile::Profile`]); a chip has a vendor verification project
-//! when its pins `knowledge/<chip>/vendor/artifacts.toml` also exist. Its verification
+//! when its pins `chips/<chip>/vendor/artifacts.toml` also exist. Its verification
 //! files live at fixed paths below that directory, so no task keeps its own
 //! list of chips.
 use crate::artifacts::Result;
 use std::path::Path;
 
-/// Directory of every chip's knowledge, relative to the root.
-const KNOWLEDGE: &str = "knowledge";
+/// Directory of every chip, relative to the root.
+const CHIPS: &str = "chips";
 /// Directory of the vendor packages, relative to the root.
 const VENDOR: &str = "tools/vendor";
 
@@ -86,12 +86,12 @@ impl Project {
     /// whose comparisons it narrowed, which a comparison with an earlier
     /// index accepts as intended rather than lost evidence.
     pub fn accepted_losses(&self) -> String {
-        format!("{KNOWLEDGE}/{}/vendor/accepted-losses.toml", self.0)
+        format!("{CHIPS}/{}/vendor/accepted-losses.toml", self.0)
     }
 
     /// The chip's reviewed coverage decisions.
     pub fn coverage(&self) -> String {
-        format!("{KNOWLEDGE}/{}/vendor/coverage.toml", self.0)
+        format!("{CHIPS}/{}/vendor/coverage.toml", self.0)
     }
 
     /// Directory of the chip's typed vendor scenario library.
@@ -106,7 +106,7 @@ impl Project {
 
     /// The chip's registry of reviewed vendor-function fingerprints.
     pub fn provenance_registry(&self) -> String {
-        format!("{KNOWLEDGE}/{}/vendor/facts/provenance.toml", self.0)
+        format!("{CHIPS}/{}/vendor/facts/provenance.toml", self.0)
     }
 
     /// The package of the chip's typed vendor scenarios.
@@ -162,7 +162,7 @@ mod tests {
             }
             assert_eq!(
                 chip.artifacts(),
-                format!("knowledge/{name}/vendor/artifacts.toml")
+                format!("chips/{name}/vendor/artifacts.toml")
             );
             assert_eq!(
                 chip.evidence_shards(),
@@ -170,7 +170,7 @@ mod tests {
             );
             assert_eq!(
                 chip.accepted_losses(),
-                format!("knowledge/{name}/vendor/accepted-losses.toml")
+                format!("chips/{name}/vendor/accepted-losses.toml")
             );
             assert_eq!(
                 chip.scenarios_directory(),

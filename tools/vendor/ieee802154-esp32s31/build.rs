@@ -31,7 +31,7 @@ const INCLUDE_DIRS: &[&str] = &[
 
 /// The repository's pinned-artifact manifest and the source whose artifacts
 /// this stand compiles.
-const ARTIFACTS: &str = "../../../knowledge/esp32s31/vendor/artifacts.toml";
+const ARTIFACTS: &str = "../../../chips/esp32s31/vendor/artifacts.toml";
 const IDF_SOURCE: &str = "esp-idf";
 /// The repository root, relative to this package.
 const REPOSITORY: &str = "../../..";

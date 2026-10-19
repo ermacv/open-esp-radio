@@ -407,7 +407,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
     }
     let unbuilt_images = oer_tool_pins::artifacts::unbuilt_firmware(root, chip)?;
     let memory_map = oer_registers_model::memory::Memory::load(
-        &root.join(format!("registers/{chip}/model/memory.toml")),
+        &root.join(format!("chips/{chip}/registers/model/memory.toml")),
     )?;
     let windows = memory_map
         .mmio_regions()

@@ -9,7 +9,7 @@ use oer_ieee80211_mac::ccmp::CcmpPacketNumberStep;
 /// `crypto.rs`) records that the pinned `libnet80211.a` implementation
 /// advances by three, so a newly installed key emits PN 3 first; the vendor
 /// encapsulation is `libnet80211.a[ieee80211_crypto_ccmp.o]::ccmp_encap`
-/// (`knowledge/esp32s31/vendor/facts/provenance.toml`). IEEE Std 802.11-2020
+/// (`chips/esp32s31/vendor/facts/provenance.toml`). IEEE Std 802.11-2020
 /// requires only a PN that increases per key, so the step is Espressif
 /// behaviour, not an IEEE rule; the tree does not record why the vendor
 /// steps by three. A backend that follows the vendor numbering supplies it

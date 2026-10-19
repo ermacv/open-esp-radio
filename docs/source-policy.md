@@ -34,9 +34,9 @@ names the pinned artifact (library and member, or ROM), the symbol, and the
 chips whose pinned artifacts the facts describe, in parentheses after the
 marker: `SOURCE(esp32s31):`. A block under a chip's own directory may omit the
 list. The pinned artifacts are listed in
-`knowledge/<chip>/vendor/artifacts.toml` (`esp32s31`, `esp32c5`); reviewed
+`chips/<chip>/vendor/artifacts.toml` (`esp32s31`, `esp32c5`); reviewed
 function fingerprints and recovered names are in
-`knowledge/<chip>/vendor/facts/`. State unknown
+`chips/<chip>/vendor/facts/`. State unknown
 physical units explicitly. Retain exact numerical behaviour; do not assert
 equivalence by comparing a table with a duplicate fixture.
 

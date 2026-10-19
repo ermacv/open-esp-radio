@@ -6,7 +6,7 @@
 //! the Rust target, the boot flow, the chip name `espflash` uses, the silicon revisions and
 //! the chip's properties (radio bands, Bluetooth modes, cores).
 //! Everything else follows the id by convention
-//! (`firmware/probes/<id>-<name>`, `registers/<id>`), and a capability exists
+//! (`firmware/probes/<id>-<name>`, `chips/<id>/registers`), and a capability exists
 //! where its directory does.
 //! Host tools resolve a chip through [`Profile::load`] instead of matching
 //! chip names, so an unknown chip is refused with the supported ones.
@@ -120,7 +120,7 @@ pub struct Profile {
 }
 
 /// The `[reset-cause]` table: the field of the chip's platform publication
-/// (`registers/<id>/published/platform.bindings.toml`) that holds why the
+/// (`chips/<id>/registers/published/platform.bindings.toml`) that holds why the
 /// core last left reset, which the stand reads through JTAG after a power
 /// cycle, and the code of a power-on reset.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -699,7 +699,7 @@ impl Profile {
 
     /// `<root>/<directory>/<id>`, such as `verification/<id>`.
     pub fn directory(&self, root: &Path, directory: &str) -> PathBuf {
-        root.join(directory).join(&self.id)
+        root.join(CHIPS).join(&self.id).join(directory)
     }
 
     /// The bootstrap package the staged boot builds into every image beside
@@ -813,7 +813,7 @@ mod tests {
             }
             assert_eq!(
                 chip.directory(&root, "registers"),
-                root.join("registers").join(&chip.id)
+                root.join("chips").join(&chip.id).join("registers")
             );
             if let Some(memory) = &chip.memory {
                 assert!(memory.task_stack_region().is_some(), "{}", chip.id);

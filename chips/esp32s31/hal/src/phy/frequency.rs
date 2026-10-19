@@ -3,7 +3,7 @@
 //! The generated radio PAC owns every custom MMIO leaf in this module. This
 //! HAL layer retains only semantic sequencing and coordination with the
 //! official platform PAC. Register identities and field provenance live in
-//! `registers/esp32s31/published/radio.svd`.
+//! `chips/esp32s31/registers/published/radio.svd`.
 
 #[cfg(target_arch = "riscv32")]
 use crate::{

@@ -16,4 +16,4 @@ Cross-cutting documents. A component's own details live beside it, in its
 - [Hardware errata](hardware-errata.md): hardware and ROM behaviour seen on the
   boards.
 
-Recovered hardware facts and research notes are in [knowledge](../knowledge/).
+Recovered hardware facts and research notes are in each chip's `notes/` and `vendor/` below [chips](../chips/).

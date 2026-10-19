@@ -142,7 +142,7 @@ physical fields or safe hardware RMW. Finite alternatives are may-addresses;
 unresolved values are never discarded. The summary does not promise complete
 hardware coverage or absence of register accesses.
 
-The independent [register tool](../../../../../registers/README.md) owns
+The independent [register tool](../../../../../chips/espressif/registers/README.md) owns
 source-model initialization, SVD import, reviewed source applicability and
 four-output publication. A Blobray observation is research evidence, not an
 automatic hardware-source promotion.

@@ -45,8 +45,8 @@ These operations create source models only; applicability, review/evidence packs
 and publication policy are supplied explicitly through the following manifest.
 
 ```console
-cargo registers validate --manifest registers/esp32s31/publication/registers.toml
-cargo registers generate --manifest registers/esp32s31/publication/registers.toml --check
+cargo registers validate --manifest chips/esp32s31/registers/publication/registers.toml
+cargo registers generate --manifest chips/esp32s31/registers/publication/registers.toml --check
 ```
 
 Omit `--check` to publish an intentional reviewed source change. `--check` is
@@ -66,7 +66,7 @@ each peripheral alias the bare `RegisterBlock` and appends the library API's
 transactions. It writes the raw crate and API bridges, but no SVD or binding
 index, since a library has no addresses. A chip that places a library layout
 re-exports the library's module from its raw PAC and may not define
-transactions on that peripheral. See [`registers/ieee80211`](../../../registers/ieee80211/README.md).
+transactions on that peripheral. See [`chips/espressif/registers/ieee80211`](../../../chips/espressif/registers/ieee80211/README.md).
 
 ## Memory layouts
 
@@ -156,7 +156,7 @@ own copy:
   `cargo registers check pac-transactions <directory>` runs it.
 - `shared_words::check`: every MMIO word a write transaction of the radio
   PAC (`policy/api.toml`, through the published SVD) and pinned esp-hal both
-  store to has a reviewed entry in `registers/<chip>/shared-words.toml`, and
+  store to has a reviewed entry in `chips/<chip>/registers/shared-words.toml`, and
   no reviewed word is no longer shared. `cargo registers check shared-words
   --chip <chip> --esp-hal-src <dir> --pac-src <dir>` runs it on the given
   esp-hal and PAC sources.

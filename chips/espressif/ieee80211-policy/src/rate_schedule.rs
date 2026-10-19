@@ -8,7 +8,7 @@
 //! `(rate code, attempt count)` pairs in the `wifi_phy_rate_t` code space
 //! ([`crate::rate_code`]); [`schedule_rate_after_failures`] is the vendor's
 //! walk of them. The bytes were recovered from the pinned ESP32-S31 `libpp.a`
-//! (`knowledge/esp32s31/vendor/artifacts.toml`); a chip whose pinned library
+//! (`chips/esp32s31/vendor/artifacts.toml`); a chip whose pinned library
 //! carries other arenas needs its own reviewed copy.
 
 pub const RATE_SCHEDULE_RECORD_SIZE: usize = 12;

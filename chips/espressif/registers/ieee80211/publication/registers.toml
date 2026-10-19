@@ -1,0 +1,14 @@
+# Publication of the shared Wi-Fi MAC register blocks and their transactions.
+schema = 1
+library = "../model/library.toml"
+api = "../policy/api.toml"
+evidence = [
+    "../../../../esp32s31/registers/evidence/vendor-libpp.toml",
+    "../../../../esp32c5/registers/evidence/vendor-wifi-libraries.toml",
+]
+
+[outputs]
+pac-raw = "../../../ieee80211-pac-raw/src/lib.rs"
+pac-api = "../../../ieee80211-pac/src/generated.rs"
+target = "none"
+edition = "2024"

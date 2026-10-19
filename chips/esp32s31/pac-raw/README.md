@@ -18,7 +18,7 @@ Regenerate it from the reviewed source-only publication manifest:
 
 ```console
 cargo registers generate \
-  --manifest registers/esp32s31/publication/registers.toml
+  --manifest chips/esp32s31/registers/publication/registers.toml
 ```
 
 Use `--check` to validate reproducibility without overwriting the output.

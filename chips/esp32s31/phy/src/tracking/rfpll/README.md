@@ -3,7 +3,7 @@
 This component owns the finite measured capacitor search and conditional
 frequency-memory update. Its source reference is `phy_rfpll_cap_init_cal_track`
 and `phy_rfpll_cap_correct_track` of the pinned esp-phy-lib `libphy.a`
-(`knowledge/esp32s31/vendor/artifacts.toml`).
+(`chips/esp32s31/vendor/artifacts.toml`).
 
 `search::Search` issues helper operations and accepts their completions. It
 keeps requested capacitor values separate from the helper's programmed value:

@@ -1,5 +1,5 @@
 //! The pins of a chip's vendor artifacts: the one reader of its tracked
-//! `knowledge/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
+//! `chips/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-vendor-artifacts`.
 
@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Directory of every chip's knowledge, relative to the root.
-const KNOWLEDGE: &str = "knowledge";
+/// Directory of every chip, relative to the root.
+const CHIPS: &str = "chips";
 
 /// Cache of fetched artifacts, relative to the repository root; a link to
 /// the host-wide store.
@@ -22,7 +22,7 @@ pub const CACHE: &str = "target/vendor";
 /// The pin of `chip`'s vendor artifacts, relative to the repository root,
 /// whether or not the chip has one.
 pub fn manifest(chip: &str) -> String {
-    format!("{KNOWLEDGE}/{chip}/vendor/artifacts.toml")
+    format!("{CHIPS}/{chip}/vendor/artifacts.toml")
 }
 
 /// Tracked manifest of `chip`, relative to the repository root: an error

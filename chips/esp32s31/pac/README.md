@@ -28,19 +28,19 @@ package.
 
 ## Sources and generated outputs
 
-The [source-only publication configuration](../../../registers/esp32s31/publication/registers.toml)
+The [source-only publication configuration](../registers/publication/registers.toml)
 declares the outputs below. Generation belongs to the host-side
 [`cargo registers` publisher](../../../tools/registers/generate/README.md), with shared schemas
 and invariants in `tools/registers/model`. Reviewed model, ownership policy and provenance live together under
-[`registers/esp32s31`](../../../registers/esp32s31/README.md). There is no runtime
+[`chips/esp32s31/registers`](../registers/README.md). There is no runtime
 `pac-gen` dependency or additional generator crate in the production dependency graph.
 
 | Artifact | Source and responsibility |
 | --- | --- |
-| [Radio SVD](../../../registers/esp32s31/published/radio.svd) | Published from the reviewed chip register model and project policy |
+| [Radio SVD](../registers/published/radio.svd) | Published from the reviewed chip register model and project policy |
 | [raw/src/lib.rs](../pac-raw/src/lib.rs) | Generated svd2rust register accessors from that SVD |
-| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../../../registers/esp32s31/policy/api.toml), and the `layouts` module of the model's memory layouts (`registers/esp32s31/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts` |
-| [Radio bindings](../../../registers/esp32s31/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
+| [src/generated.rs](src/generated.rs) | Generated semantic capability catalog selected by [PAC API policy](../registers/policy/api.toml), and the `layouts` module of the model's memory layouts (`chips/esp32s31/registers/model/layouts/`), re-exported as `oer_esp32s31_pac::layouts` |
+| [Radio bindings](../registers/published/radio.bindings.toml) | Published register-to-raw-PAC binding metadata |
 | [src/ownership.rs](src/ownership.rs) and domain modules | Handwritten authority, register-local operations and restricted access |
 
 Both Rust generated outputs are regenerated through the publisher. Do not
@@ -68,7 +68,7 @@ and the radio holds another while powered, so ESP-HAL never powers MPLL down
 through `PMU.HP_ACTIVE_HP_CK_POWER` while the radio writes it. The
 remaining shared words rely on ESP-HAL writing them only inside
 `esp_hal::init`, before any radio exists. The
-[shared-word list](../../../registers/esp32s31/README.md#words-shared-with-esp-hal)
+[shared-word list](../registers/README.md#words-shared-with-esp-hal)
 names each word and its guarantee.
 
 ## Validation

@@ -16,7 +16,7 @@ pub const COEX_EVENT_COUNT: usize = 49;
 /// `.dram1.2`, 49 bytes. The bytes are equal in the pinned
 /// `esp32s31/libcoexist.a` sha256
 /// `13b1e1d2a1550400ddb2622648933288aee6a285d3aad454978314c4af685147`
-/// (`knowledge/esp32s31/vendor/artifacts.toml`) and the ESP32-C5
+/// (`chips/esp32s31/vendor/artifacts.toml`) and the ESP32-C5
 /// `esp32c5/libcoexist.a` sha256
 /// `de883d649e4e2e9407a6ab0dc28d5d2aa4cd8d30d0071abfe5a9183348ceb627`.
 /// Index is the event number.

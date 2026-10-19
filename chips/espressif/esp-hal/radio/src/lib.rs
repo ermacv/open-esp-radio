@@ -10,7 +10,7 @@
 //! whole ([`RadioSingletons`]) and returns the HAL's [`RadioHardware`] root.
 //! It also requires the adopted [`Psram`]: PSRAM adoption takes esp-hal's
 //! never-released MPLL reference, so the radio's own MPLL requests never
-//! cross zero (`registers/esp32s31/shared-words.toml`).
+//! cross zero (`chips/esp32s31/registers/shared-words.toml`).
 //!
 //! Blocks where the radio owns only single words (PMU, HP_SYS_CLKRST,
 //! LP_AON_CLK_RST, LP_PERICLKRST, the interrupt matrix) stay esp-hal's; each

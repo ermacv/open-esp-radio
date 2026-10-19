@@ -1,6 +1,6 @@
 //! Memory layouts: structures in RAM whose format the hardware defines and
 //! which the CPU and the hardware hand to each other
-//! (`registers/<chip>/model/layouts/<name>.toml`, see
+//! (`chips/<chip>/registers/model/layouts/<name>.toml`, see
 //! `docs/hardware-memory.md`).
 //!
 //! A layout has no address. An owner places it in a RAM region of the memory
