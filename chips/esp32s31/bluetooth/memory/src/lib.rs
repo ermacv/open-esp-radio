@@ -13,9 +13,15 @@
 //! authorize the reviewed cleanup. RX-success additionally validates the
 //! exact two-header private chain and performs its bounded volatile swap/re-arm
 //! rotation before CPU ownership returns.
+//!
+//! The controller walks this memory and writes into it, so this crate is the
+//! core of the controller-SRAM protocol, with narrow unsafe code: its
+//! [`scheduler`] owns the hardware-list protocol whose order, and whose
+//! resolution of every address to a submitted item in `'static` pool storage,
+//! are the proofs the HAL's list publications need.
 
 #![no_std]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 #[cfg(test)]
 extern crate std;
@@ -42,6 +48,7 @@ mod legacy_scanning_event_image;
 mod link_state_event;
 mod peripheral_connection;
 mod rx_memory_list;
+pub mod scheduler;
 mod scheduler_context;
 mod scheduler_item;
 mod scheduler_pool;

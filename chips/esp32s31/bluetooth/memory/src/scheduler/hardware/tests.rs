@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_esp32s31_bluetooth_memory::ControllerSramLinkAddress;
+use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,

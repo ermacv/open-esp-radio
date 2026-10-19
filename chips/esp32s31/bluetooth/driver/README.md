@@ -24,7 +24,7 @@ limitations.
 | `phy` | Entry into and exit from the shared PHY domain and BTBB |
 | `interrupt` | Chip interrupt state and hardware handling |
 | `modem_timer` | Controller modem low-power timer task over the published timer owner |
-| `scheduler` | Event executor (idle and live insertion, cancellation, list deletion, completion, stopped state), ordered hardware-list mirror, raw windows, timing policy, list-zero hardware execution and finished lists |
+| `scheduler` | The scheduler core over controller time and the finished-list worker; the hardware-list protocol (executor, list mirror, raw windows, timing policy, list-zero hardware execution) is the memory crate's `scheduler` |
 | `timed_preparation` | Controller-time preparation shared by timed scheduler admissions |
 | `resources` | Task and inactive interrupt owners split from the clocked client |
 | `runtime_resources` | Interrupt-shared event cells reused by every epoch, and the workers and list-zero publications of one powered epoch; the powered task endpoint performs executor steps, starts the idle scheduler, stops it, publishes the global receive chains and retires its task owner |
@@ -48,7 +48,7 @@ exception is `ControllerPoweredTaskRuntime::publish_scan_start`, an `unsafe
 fn`: its caller must have reset the scanner graph and published the receive
 chains, which the removed radio role did.
 
-The separate [`memory`](memory/) crate retains controller-SRAM codecs.
+The separate [`memory`](../memory/) crate retains the controller-SRAM codecs and the scheduler's hardware-list protocol.
 
 ## Controller time
 

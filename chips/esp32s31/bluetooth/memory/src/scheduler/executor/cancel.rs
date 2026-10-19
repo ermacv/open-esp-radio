@@ -19,7 +19,7 @@
 //! List deletion clears the list head. A running scheduler first grants
 //! execution modify in its list-deletion mode.
 
-use oer_esp32s31_bluetooth_memory::ControllerSramLinkAddress;
+use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerSkipDisposition,

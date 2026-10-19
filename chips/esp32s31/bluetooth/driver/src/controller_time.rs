@@ -676,7 +676,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_start(
         self,
-        window: crate::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.start())
     }
@@ -684,7 +684,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_end(
         self,
-        window: crate::scheduler::SchedulerRawWindow,
+        window: oer_esp32s31_bluetooth_memory::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.end())
     }

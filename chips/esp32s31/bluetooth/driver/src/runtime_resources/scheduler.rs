@@ -16,14 +16,11 @@ use oer_esp32s31_hal::bluetooth::{
 };
 
 use super::ControllerPoweredTaskRuntime;
-use crate::{
-    interrupt::SchedulerWakeBatch,
-    scheduler::{
-        SchedulerAction, SchedulerFinishedListCaptureError, SchedulerHardwareError,
-        SchedulerHardwareView, SchedulerIdleInsertion, SchedulerObservation,
-        SchedulerRunInterruptStorage, SchedulerStartError, SchedulerStep, SchedulerStopError,
-        SchedulerTransactionFault, SchedulerWait, hardware::live::LiveSchedulerBackend,
-    },
+use crate::{interrupt::SchedulerWakeBatch, scheduler::SchedulerFinishedListCaptureError};
+use oer_esp32s31_bluetooth_memory::scheduler::{
+    SchedulerHardwareError, SchedulerHardwareView, SchedulerIdleInsertion, SchedulerObservation,
+    SchedulerRunInterruptStorage, SchedulerStartError, SchedulerStep, SchedulerStopError,
+    SchedulerTransactionFault, SchedulerWait,
 };
 
 /// Why the global receive chains were not published.
@@ -46,24 +43,10 @@ impl ControllerPoweredTaskRuntime<'_> {
         items: &SchedulerItemSpace<'_>,
         step: &SchedulerStep<I, CAPACITY>,
     ) -> Result<(), SchedulerHardwareError> {
-        for action in step.actions() {
-            let link = match action {
-                SchedulerAction::PublishExecutionLock(link)
-                | SchedulerAction::PublishLockModify(link)
-                | SchedulerAction::PublishHead(Some(link))
-                | SchedulerAction::PublishSkip(link) => link,
-                _ => continue,
-            };
-            if items.listed_item(link).is_none() {
-                return Err(SchedulerHardwareError::ForeignItem(link));
-            }
-        }
         let mut controller = self.task.controller();
-        let mut backend = LiveSchedulerBackend {
-            controller: &mut controller,
-            storage,
-        };
-        self.runtime.scheduler_hardware.perform(&mut backend, step)
+        self.runtime
+            .scheduler_hardware
+            .perform_live(&mut controller, storage, items, step)
     }
 
     /// Take one fresh observation of the awaited publication.
@@ -73,11 +56,9 @@ impl ControllerPoweredTaskRuntime<'_> {
         wait: SchedulerWait,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let mut controller = self.task.controller();
-        let mut backend = LiveSchedulerBackend {
-            controller: &mut controller,
-            storage,
-        };
-        self.runtime.scheduler_hardware.observe(&mut backend, wait)
+        self.runtime
+            .scheduler_hardware
+            .observe_live(&mut controller, storage, wait)
     }
 
     /// Clear what a faulted list transaction left published.
@@ -87,11 +68,9 @@ impl ControllerPoweredTaskRuntime<'_> {
         fault: SchedulerTransactionFault,
     ) {
         let mut controller = self.task.controller();
-        let mut backend = LiveSchedulerBackend {
-            controller: &mut controller,
-            storage,
-        };
-        self.runtime.scheduler_hardware.recover(&mut backend, fault);
+        self.runtime
+            .scheduler_hardware
+            .recover_live(&mut controller, storage, fault);
     }
 
     /// Publish the idle insertion's head and start the scheduler with RUN.
@@ -101,17 +80,10 @@ impl ControllerPoweredTaskRuntime<'_> {
         items: &SchedulerItemSpace<'_>,
         insertion: SchedulerIdleInsertion,
     ) -> Result<(), SchedulerStartError<S::Error>> {
-        if items.listed_item(insertion.head).is_none() {
-            return Err(SchedulerStartError::ForeignItem(insertion.head));
-        }
         let mut controller = self.task.controller();
-        let mut backend = LiveSchedulerBackend {
-            controller: &mut controller,
-            storage,
-        };
         self.runtime
             .scheduler_hardware
-            .start(&mut backend, insertion)
+            .start_live(&mut controller, storage, items, insertion)
     }
 
     /// Sample scheduler BUSY, then the head of list zero.
@@ -121,7 +93,9 @@ impl ControllerPoweredTaskRuntime<'_> {
     ) -> Result<SchedulerHardwareView, SchedulerHardwareError> {
         let busy = storage
             .with_interrupt_registers((), |interrupts, ()| {
-                interrupts.capture_scheduler_busy(crate::scheduler::DIAGNOSTIC_READ_BUDGET)
+                interrupts.capture_scheduler_busy(
+                    oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
+                )
             })
             .map_err(|()| SchedulerHardwareError::InterruptOwnerUnavailable)?
             .map_err(|_| SchedulerHardwareError::DiagnosticUnsettled)?;
@@ -169,7 +143,7 @@ impl ControllerPoweredTaskRuntime<'_> {
                 controller.step_scheduler_stop(
                     interrupts,
                     stop,
-                    crate::scheduler::DIAGNOSTIC_READ_BUDGET,
+                    oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
                 )
             })
             .map_err(|_| SchedulerStopError::InterruptOwnerUnavailable)?

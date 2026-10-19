@@ -28,7 +28,7 @@ pub enum PrimaryInterruptStep {
     /// A reviewed baseline fault preempted ordinary scheduler work.
     Fault(PrimaryControllerFault),
     /// The reference-gate BUSY sample never settled within
-    /// [`DIAGNOSTIC_READ_BUDGET`](crate::scheduler::DIAGNOSTIC_READ_BUDGET).
+    /// [`DIAGNOSTIC_READ_BUDGET`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET).
     /// The reference is preserved and no work is published.
     DiagnosticUnsettled(PrimaryInterruptClassification),
     /// The epoch contained no reviewed dynamic scheduler source.
@@ -123,7 +123,9 @@ impl PrimaryInterruptBackend for InterruptRegistersOwner {
     fn capture_scheduler_reference_gate(
         &mut self,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled> {
-        self.capture_scheduler_reference_gate(crate::scheduler::DIAGNOSTIC_READ_BUDGET)
+        self.capture_scheduler_reference_gate(
+            oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET,
+        )
     }
 
     fn clear_scheduler_reference(&mut self) {
@@ -170,7 +172,7 @@ fn execute_primary_interrupt_step(
 ///
 /// This function is finite. It performs at most the PAC acknowledgement
 /// transaction, one reference-gate sample of at most
-/// [`DIAGNOSTIC_READ_BUDGET`](crate::scheduler::DIAGNOSTIC_READ_BUDGET)
+/// [`DIAGNOSTIC_READ_BUDGET`](oer_esp32s31_bluetooth_memory::scheduler::DIAGNOSTIC_READ_BUDGET)
 /// attempts and one later work read. It never
 /// invokes a callback, waits for hardware, allocates or wakes an executor.
 pub fn step_primary_interrupt(interrupts: &mut InterruptRegistersOwner) -> PrimaryInterruptStep {

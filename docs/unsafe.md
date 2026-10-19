@@ -52,6 +52,7 @@ packages. Prefixes below omit `oer-` only to keep the mapping readable.
 | `memory` | `base/memory/` |
 | `embassy-net-owned` | `adapters/embassy/net/` |
 | `esp32s31-hal` | `esp32s31/hal/` |
+| `esp32s31-bluetooth-memory` | `esp32s31/bluetooth/memory/` |
 | `esp32s31-pac` | `esp32s31/pac/` |
 | `esp32s31-soc-esp-hal` | `adapters/esp-hal/soc/` |
 | `esp32s31-phy` | `esp32s31/phy/` |
@@ -69,6 +70,14 @@ and `adopt`) and returns the slot through `release_adopted` when the packet
 drops. A slot is adopted again only after that release returned, because the
 radio must first claim the slot the release freed. Preserve the proof at the
 smallest operation; a safe state machine in an audited crate remains safe.
+
+`esp32s31-bluetooth-memory` is the core of the controller-SRAM protocol:
+the controller walks and writes that memory, so, like the HAL's DMA modules,
+the crate whose codecs and scheduler lists encode every address the
+controller follows holds the narrow unsafe calls that publish them. Its one
+unsafe module, `scheduler::hardware::live`, publishes list-zero items only
+after resolving each address to a submitted item of the `'static` scheduler
+pools, in the executor's order.
 
 `esp32s31-hal` has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and

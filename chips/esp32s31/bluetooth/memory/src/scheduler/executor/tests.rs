@@ -1,7 +1,7 @@
 use core::num::NonZeroU32;
 use std::vec::Vec;
 
-use oer_esp32s31_bluetooth_memory::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+use crate::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
 use oer_esp32s31_hal::bluetooth::BluetoothSchedulerBusyObservation;
 
 use super::{SchedulerExecutor, SchedulerItemAccess, SchedulerSubmitError};
@@ -396,7 +396,7 @@ mod live {
 mod cancel {
     use std::vec::Vec;
 
-    use oer_esp32s31_bluetooth_memory::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
+    use crate::{ControllerSramLinkAddress, SchedulerItemCompletionStatus};
     use oer_esp32s31_hal::bluetooth::{
         BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition as Hold,
         BluetoothSchedulerExecutionModifyDisposition as Modify,
@@ -745,7 +745,7 @@ mod cancel {
 mod pools {
     use std::{boxed::Box, vec::Vec};
 
-    use oer_esp32s31_bluetooth_memory::{
+    use crate::{
         LegacyAdvertisingPool, LegacyAdvertisingPrimaryChannelPlan, LegacyAdvertisingStorage,
         SchedulerAllocationConfig, SchedulerItemId, SchedulerItemSpace, SchedulerPoolModelAddress,
         SchedulerRolePoolStorage,
@@ -775,7 +775,7 @@ mod pools {
             .unwrap();
         pool.reset_link_state(
             &instance,
-            oer_esp32s31_bluetooth_memory::LeTxPower::from_dbm(0).expect("provider level"),
+            crate::LeTxPower::from_dbm(0).expect("provider level"),
         )
         .unwrap();
         let event = pool
@@ -784,11 +784,8 @@ mod pools {
                 LegacyAdvertisingPrimaryChannelPlan::new(true, true, true).unwrap(),
                 1_000,
                 100,
-                oer_esp32s31_bluetooth_memory::AdvertisingCoexistencePriorities {
-                    lanes: [oer_esp32s31_bluetooth_memory::SchedulerItemCoexistencePriority::new(
-                        15,
-                    )
-                    .unwrap(); 4],
+                crate::AdvertisingCoexistencePriorities {
+                    lanes: [crate::SchedulerItemCoexistencePriority::new(15).unwrap(); 4],
                 },
             )
             .unwrap();

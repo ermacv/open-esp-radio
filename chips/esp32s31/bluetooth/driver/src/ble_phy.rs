@@ -49,7 +49,7 @@ pub struct BlePhyInitializationReport;
 #[must_use = "the always-awake timing observation must be consumed by DTM scheduling"]
 #[cfg(target_arch = "riscv32")]
 pub struct AlwaysAwakeTimingReady {
-    scheduler_instant: crate::SchedulerInstant,
+    scheduler_instant: oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -59,14 +59,17 @@ impl AlwaysAwakeTimingReady {
         sample: crate::ControllerTimeSample,
     ) -> Self {
         Self {
-            scheduler_instant: crate::SchedulerInstant::from_image(
-                epoch.project_without_reanchor(&sample),
-            ),
+            scheduler_instant:
+                oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant::from_image(
+                    epoch.project_without_reanchor(&sample),
+                ),
         }
     }
 
     /// Consume the post-enable timing proof into its microsecond-domain instant.
-    pub const fn into_scheduler_instant(self) -> crate::SchedulerInstant {
+    pub const fn into_scheduler_instant(
+        self,
+    ) -> oer_esp32s31_bluetooth_memory::scheduler::time::SchedulerInstant {
         self.scheduler_instant
     }
 }

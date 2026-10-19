@@ -1,7 +1,7 @@
 //! List-zero publications through the task HAL owner and the stable
 //! interrupt owner.
 
-use oer_esp32s31_bluetooth_memory::ControllerSramLinkAddress;
+use crate::ControllerSramLinkAddress;
 use oer_esp32s31_hal::bluetooth::{
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
     BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
@@ -13,14 +13,19 @@ use oer_esp32s31_hal::bluetooth::{
 };
 
 use super::{
-    SchedulerHardwareBackend, SchedulerHardwareError, SchedulerPublications, SchedulerStartError,
+    SchedulerHardware, SchedulerHardwareBackend, SchedulerHardwareError, SchedulerPublications,
+    SchedulerStartError,
 };
-use crate::scheduler::{SchedulerObservation, SchedulerRunInterruptStorage, SchedulerWait};
+use crate::SchedulerItemSpace;
+use crate::scheduler::{
+    SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerRunInterruptStorage,
+    SchedulerStep, SchedulerTransactionFault, SchedulerWait,
+};
 
 const LIST: BluetoothSchedulerHardwareListIndex = BluetoothSchedulerHardwareListIndex::ZERO;
 
 /// The HAL proofs of the list-zero publications.
-pub(crate) enum HalPublications {}
+pub enum HalPublications {}
 
 impl SchedulerPublications for HalPublications {
     type Lock = BluetoothSchedulerExecutionLock;
@@ -38,9 +43,9 @@ impl SchedulerPublications for HalPublications {
 /// Every address it publishes was resolved against the scheduler item space
 /// by the powered task runtime: it names a submitted item of a pool whose
 /// storage is bound for `'static`.
-pub(crate) struct LiveSchedulerBackend<'call, 'registers, S> {
-    pub(crate) controller: &'call mut ControllerHal<'registers>,
-    pub(crate) storage: &'call S,
+struct LiveSchedulerBackend<'call, 'registers, S> {
+    controller: &'call mut ControllerHal<'registers>,
+    storage: &'call S,
 }
 
 fn head(at: ControllerSramLinkAddress) -> BluetoothSchedulerHardwareListHead {
@@ -261,5 +266,87 @@ impl<S: SchedulerRunInterruptStorage> SchedulerHardwareBackend for LiveScheduler
         Ok(self
             .controller
             .publish_scheduler_hardware_run_command(event))
+    }
+}
+
+/// The live list-zero operations: each resolves every address a step names
+/// to a submitted item of `items`, whose pools bind their storage for
+/// `'static`, before any register changes, then performs it through the task
+/// HAL owner and the interrupt-owner storage.
+impl SchedulerHardware<HalPublications> {
+    /// Perform the actions of one executor step on list zero, in order.
+    ///
+    /// Every named item must be submitted in `items`; otherwise nothing is
+    /// performed.
+    pub fn perform_live<I: Copy, const CAPACITY: usize>(
+        &mut self,
+        controller: &mut ControllerHal<'_>,
+        storage: &impl SchedulerRunInterruptStorage,
+        items: &SchedulerItemSpace<'_>,
+        step: &SchedulerStep<I, CAPACITY>,
+    ) -> Result<(), SchedulerHardwareError> {
+        for action in step.actions() {
+            let link = match action {
+                SchedulerAction::PublishExecutionLock(link)
+                | SchedulerAction::PublishLockModify(link)
+                | SchedulerAction::PublishHead(Some(link))
+                | SchedulerAction::PublishSkip(link) => link,
+                _ => continue,
+            };
+            if items.listed_item(link).is_none() {
+                return Err(SchedulerHardwareError::ForeignItem(link));
+            }
+        }
+        let mut backend = LiveSchedulerBackend {
+            controller,
+            storage,
+        };
+        self.perform(&mut backend, step)
+    }
+
+    /// Take one fresh observation of the awaited publication.
+    pub fn observe_live(
+        &mut self,
+        controller: &mut ControllerHal<'_>,
+        storage: &impl SchedulerRunInterruptStorage,
+        wait: SchedulerWait,
+    ) -> Result<SchedulerObservation, SchedulerHardwareError> {
+        let mut backend = LiveSchedulerBackend {
+            controller,
+            storage,
+        };
+        self.observe(&mut backend, wait)
+    }
+
+    /// Clear what a faulted list transaction left published.
+    pub fn recover_live(
+        &mut self,
+        controller: &mut ControllerHal<'_>,
+        storage: &impl SchedulerRunInterruptStorage,
+        fault: SchedulerTransactionFault,
+    ) {
+        let mut backend = LiveSchedulerBackend {
+            controller,
+            storage,
+        };
+        self.recover(&mut backend, fault);
+    }
+
+    /// Publish the idle insertion's head and start the scheduler with RUN.
+    pub fn start_live<S: SchedulerRunInterruptStorage>(
+        &mut self,
+        controller: &mut ControllerHal<'_>,
+        storage: &S,
+        items: &SchedulerItemSpace<'_>,
+        insertion: SchedulerIdleInsertion,
+    ) -> Result<(), SchedulerStartError<S::Error>> {
+        if items.listed_item(insertion.head).is_none() {
+            return Err(SchedulerStartError::ForeignItem(insertion.head));
+        }
+        let mut backend = LiveSchedulerBackend {
+            controller,
+            storage,
+        };
+        self.start(&mut backend, insertion)
     }
 }

@@ -35,15 +35,15 @@ impl SchedulerTimingPolicy {
         }
     }
 
-    /// Whether one fresh sample still precedes the guarded item start.
+    /// Whether one fresh sample's raw ticks still precede the guarded item
+    /// start.
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn initial_deadline_is_open(
         self,
-        sample: &crate::ControllerTimeSample,
+        sample_raw_ticks: u32,
         raw_item_start: u32,
     ) -> bool {
-        (sample
-            .raw_ticks()
+        (sample_raw_ticks
             .wrapping_add(self.late_start_guard_raw_delta)
             .wrapping_sub(raw_item_start) as i32)
             < 0
@@ -60,7 +60,7 @@ mod tests {
     use oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
 
     use super::SchedulerTimingPolicy;
-    use crate::{ControllerTimeSample, scheduler::SchedulerSoftwareConfig};
+    use crate::scheduler::SchedulerSoftwareConfig;
 
     #[test]
     fn insertion_policy_uses_one_initialized_scheduler_epoch_scale() {
@@ -70,7 +70,7 @@ mod tests {
         );
 
         assert_eq!(policy.sequence_lead_raw_delta(), 92);
-        assert!(policy.initial_deadline_is_open(&ControllerTimeSample::for_host_test(22), 103));
-        assert!(!policy.initial_deadline_is_open(&ControllerTimeSample::for_host_test(23), 103));
+        assert!(policy.initial_deadline_is_open(22, 103));
+        assert!(!policy.initial_deadline_is_open(23, 103));
     }
 }

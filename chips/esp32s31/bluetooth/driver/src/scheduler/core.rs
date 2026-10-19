@@ -1,6 +1,6 @@
 //! Fact-bounded scheduler initialization after the controller HAL component.
 
-use crate::scheduler::SchedulerSoftwareConfig;
+use oer_esp32s31_bluetooth_memory::scheduler::SchedulerSoftwareConfig;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothControllerTimeScale, BluetoothSchedulerHardwareListsCleared,
