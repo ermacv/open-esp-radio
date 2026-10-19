@@ -195,6 +195,7 @@ fn msdu(priority: u8) -> Msdu<'static> {
         ether_type: 0x0800,
         priority: WmmUserPriority::new(priority).unwrap(),
         payload: &[0xab; 100],
+        admitted: oer_time::Instant::from_micros(1_000 + u64::from(priority)),
     }
 }
 
@@ -347,6 +348,11 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
         let operation = transmit(&mut data);
         assert_eq!(operation.ticket, ticket);
         assert_eq!(operation.context.tid.value(), tid);
+        // A returned MSDU keeps the age it was admitted with.
+        assert_eq!(
+            operation.context.admitted(),
+            oer_time::Instant::from_micros(1_000 + u64::from(tid))
+        );
         assert_eq!(
             operation.context.frame.frame().len().get(),
             26 + 8 + 8 + 100

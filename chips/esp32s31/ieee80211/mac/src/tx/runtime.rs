@@ -13,7 +13,6 @@ use oer_ieee80211_mac::qos::{
 use oer_ieee80211_mac::sequence::SequenceNumber;
 
 use oer_espressif_ieee80211_policy::lmac;
-use oer_ieee80211_lower_mac::{Ieee80211ClockGeneration, Ieee80211Duration, Ieee80211Stamp};
 use oer_ieee80211_upper_mac::{
     AmpduAttemptResult, AmpduRetryDecision as UpperAmpduRetryDecision,
     AmpduRetryError as UpperAmpduRetryError, AmpduRetryState as UpperAmpduRetryState,
@@ -690,9 +689,9 @@ pub const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MIC
 /// MSDU lifetime bounds the retries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduRetryPolicy {
-    /// Time from the aggregate's commit after which its MSDUs are aged and
+    /// Time from an MSDU's admission after which its MPDU is aged and
     /// discarded instead of retried.
-    pub lifetime: Ieee80211Duration,
+    pub lifetime: oer_time::Duration,
     /// Keep one missing MPDU in the aggregate owner.
     ///
     /// The recovered HE path requires this because converting a one-member
@@ -706,11 +705,9 @@ pub struct AmpduRetryPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduRetryError {
     ZeroLifetime,
-    AgingThresholdOutsideEpoch,
-    /// The radio relation changed while this aggregate was retained.
-    ClockGenerationChanged {
-        expected: Ieee80211ClockGeneration,
-        observed: Ieee80211ClockGeneration,
+    /// The caller has no admission instant for this original MPDU.
+    UnknownSubframe {
+        index: u8,
     },
     EmptyAggregate,
     CapacityExceedsHardwareWindow {
@@ -761,6 +758,17 @@ pub enum AmpduRetryDecision {
     /// through `libpp[pp_he.o]::ppHEAMPDU2Normal`. A single missing HT
     /// MPDU takes the same ordinary path.
     Unaggregate { retry_mask: u32 },
+    /// Missing MPDUs aged under an operational Block Ack agreement: compact
+    /// the aggregate to the selected MPDUs, discard those of `aged_mask` and
+    /// send a BlockAckReq at `starting_sequence`, whose BlockAck drives the
+    /// resort ([`AmpduRetryState::observe_block_ack_request`]). Every MPDU
+    /// ages from its MSDU's admission, not from the aggregate's commit as in
+    /// `libpp[lmac.o]::lmacMSDUAged` (`docs/decisions.md`, MSDU age).
+    DiscardAged {
+        retry_mask: u32,
+        aged_mask: u32,
+        starting_sequence: SequenceNumber,
+    },
     /// End aggregate ownership. The selected MPDUs were not acknowledged
     /// and are discarded.
     Finish { retry_mask: u32 },
@@ -777,6 +785,7 @@ impl AmpduRetryDecision {
             Self::RetainAggregate { retry_mask }
             | Self::RepublishUnchanged { retry_mask }
             | Self::RequestBlockAck { retry_mask, .. }
+            | Self::DiscardAged { retry_mask, .. }
             | Self::Unaggregate { retry_mask }
             | Self::Finish { retry_mask } => retry_mask,
             Self::FinishTriggerFlow => 0,
@@ -804,19 +813,16 @@ impl AmpduRetryDecision {
 /// PHY rate.
 pub struct AmpduRetryState<const CAPACITY: usize> {
     state: UpperAmpduRetryState,
-    generation: Ieee80211ClockGeneration,
 }
 
 impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
     /// Start at the first Sequence Control value already consumed by the
-    /// encoded aggregate, whose MSDUs were committed at
-    /// `committed_at`. Every later sample must belong to the same MAC clock
-    /// generation; the monotonic timer only owns executor waits.
+    /// encoded aggregate. Each MPDU ages from its MSDU's admission on the
+    /// monotonic clock, which the caller gives with every completion.
     pub fn new(
         first_sequence: SequenceNumber,
         subframes: u8,
         policy: AmpduRetryPolicy,
-        committed_at: Ieee80211Stamp,
     ) -> Result<Self, AmpduRetryError> {
         if policy.lifetime.as_micros() == 0 {
             return Err(AmpduRetryError::ZeroLifetime);
@@ -837,19 +843,16 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
             first_sequence,
             subframes,
             lmac::ampdu_retry_policy(policy.lifetime, policy.retain_single_mpdu),
-            committed_at.at,
         )
-        .map(|state| Self {
-            state,
-            generation: committed_at.generation,
-        })
+        .map(|state| Self { state })
         .map_err(Self::error)
     }
 
     /// Apply one completion after the hardware queue has been detached.
     ///
-    /// A missing MPDU stays in the aggregate until it is aged at
-    /// `now`; aged MPDUs end the aggregate and are discarded. Once
+    /// A missing MPDU stays in the aggregate until it is aged at monotonic
+    /// `now`, `admitted` giving its MSDU's admission; aged MPDUs are
+    /// discarded, behind a BlockAckReq under the agreement. Once
     /// the TID's BlockAck agreement is no longer `block_ack_operational`,
     /// the live missing MPDUs leave the aggregate for individual retry.
     ///
@@ -867,10 +870,10 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
         &mut self,
         completion: HtAmpduTxCompletion,
         observed_subframes: u8,
-        now: Ieee80211Stamp,
+        now: oer_time::Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
-        self.validate_stamp(now)?;
         let result = if completion.tx.completes_vendor_trigger_flow() {
             AmpduAttemptResult::TriggerFlowEnd
         } else if completion.tx.tx_status() == TxStatus::CtsTimeout {
@@ -885,7 +888,13 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
             )
         };
         self.state
-            .observe(result, observed_subframes, now.at, block_ack_operational)
+            .observe(
+                result,
+                observed_subframes,
+                now,
+                block_ack_operational,
+                admitted,
+            )
             .map(Self::decision)
             .map_err(Self::error)
     }
@@ -899,27 +908,19 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
     pub fn observe_block_ack_request(
         &mut self,
         block_ack: Option<HtBlockAckObservation>,
-        now: Ieee80211Stamp,
+        now: oer_time::Instant,
         block_ack_operational: bool,
+        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
-        self.validate_stamp(now)?;
-        Ok(Self::decision(self.state.observe_block_ack_request(
-            block_ack.map(|observation| observation.block_ack.report()),
-            now.at,
-            block_ack_operational,
-        )))
-    }
-
-    /// Validate the radio relation before detaching hardware or changing retry state.
-    pub fn validate_stamp(&self, now: Ieee80211Stamp) -> Result<(), AmpduRetryError> {
-        if now.generation == self.generation {
-            Ok(())
-        } else {
-            Err(AmpduRetryError::ClockGenerationChanged {
-                expected: self.generation,
-                observed: now.generation,
-            })
-        }
+        self.state
+            .observe_block_ack_request(
+                block_ack.map(|observation| observation.block_ack.report()),
+                now,
+                block_ack_operational,
+                admitted,
+            )
+            .map(Self::decision)
+            .map_err(Self::error)
     }
 
     const fn decision(decision: UpperAmpduRetryDecision) -> AmpduRetryDecision {
@@ -943,6 +944,15 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
                 retry_mask: retry_mask as u32,
                 starting_sequence,
             },
+            UpperAmpduRetryDecision::DiscardAged {
+                retry_mask,
+                aged_mask,
+                starting_sequence,
+            } => AmpduRetryDecision::DiscardAged {
+                retry_mask: retry_mask as u32,
+                aged_mask: aged_mask as u32,
+                starting_sequence,
+            },
             UpperAmpduRetryDecision::Unaggregate { retry_mask } => {
                 AmpduRetryDecision::Unaggregate {
                     retry_mask: retry_mask as u32,
@@ -957,8 +967,8 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
 
     const fn error(error: UpperAmpduRetryError) -> AmpduRetryError {
         match error {
-            UpperAmpduRetryError::AgingThresholdOutsideEpoch => {
-                AmpduRetryError::AgingThresholdOutsideEpoch
+            UpperAmpduRetryError::UnknownSubframe { index } => {
+                AmpduRetryError::UnknownSubframe { index }
             }
             UpperAmpduRetryError::ZeroLifetime => AmpduRetryError::ZeroLifetime,
             UpperAmpduRetryError::EmptyAggregate => AmpduRetryError::EmptyAggregate,
@@ -978,11 +988,21 @@ impl<const CAPACITY: usize> AmpduRetryState<CAPACITY> {
         self.state.current_subframes()
     }
 
-    /// Whether the aggregate's MSDUs are aged at `now`: less than
+    /// Whether an MSDU admitted at `admitted` is aged at `now`: less than
     /// one lifetime unit remains.
-    pub fn aged(&self, now: Ieee80211Stamp) -> Result<bool, AmpduRetryError> {
-        self.validate_stamp(now)?;
-        Ok(self.state.aged(now.at))
+    pub fn aged(&self, admitted: oer_time::Instant, now: oer_time::Instant) -> bool {
+        self.state.aged(admitted, now)
+    }
+
+    /// Where the BlockAckReq of the last `RequestBlockAck` or
+    /// `DiscardAged` decision starts.
+    pub const fn block_ack_request_start(&self) -> SequenceNumber {
+        self.state.block_ack_request_start()
+    }
+
+    /// Original aggregate positions discarded as aged.
+    pub const fn discarded_original_indices(&self) -> u32 {
+        self.state.discarded_original_indices() as u32
     }
 
     pub const fn current_first_sequence(&self) -> SequenceNumber {

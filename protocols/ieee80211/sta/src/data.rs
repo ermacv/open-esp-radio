@@ -68,6 +68,9 @@ pub struct Msdu<'a> {
     pub priority: WmmUserPriority,
     /// Its payload.
     pub payload: &'a [u8],
+    /// When the radio's software admitted it, on the monotonic clock: its
+    /// age starts here and stays with each of its attempts.
+    pub admitted: oer_time::Instant,
 }
 
 /// An MSDU and the station link on which it is submitted.
@@ -252,6 +255,7 @@ pub struct DataTxContext<'id, K, C, A = AcPermit, Path: PoolPath = Root> {
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
     order: u32,
+    admitted: oer_time::Instant,
 }
 
 /// One non-cloneable permission for a data attempt in an access category.
@@ -304,6 +308,12 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
         self.access_category
     }
 
+    /// When the radio's software admitted the MSDU: its age starts here,
+    /// through every retransmission.
+    pub const fn admitted(&self) -> oer_time::Instant {
+        self.admitted
+    }
+
     /// Borrow the matching link's protection for this operation. A stale link
     /// or a changed protection mode refuses before the port sees the frame.
     /// In particular, a CCMP encoding never falls through to open submission.
@@ -328,6 +338,7 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
                 access_category: self.access_category,
                 protection: self.protection,
                 order: self.order,
+                admitted: self.admitted,
             },
             self.admission,
         )
@@ -671,6 +682,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, c
             return Err(DataRefusal::NoTokens);
         };
         let tid = msdu.priority;
+        let admitted = msdu.admitted;
         let qos = matches!(link.mode, LinkMode::Qos(_));
         // A non-QoS link has one queue, best effort.
         let (slot, access_category) = if qos {
@@ -712,6 +724,7 @@ impl<'id, D: StaDataTokens, K: oer_ieee80211_lower_mac::Ieee80211Capabilities, c
                     access_category,
                     protection,
                     order,
+                    admitted,
                 };
                 let owed = DataTransmit {
                     context,

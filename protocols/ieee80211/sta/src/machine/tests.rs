@@ -2168,6 +2168,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                 ether_type: 0x0800,
                 priority: WmmUserPriority::new(priority).unwrap(),
                 payload: &[0xab; 20],
+                admitted: Instant::from_micros(0),
             };
             data.input(DataInput {
                 msdu,

@@ -170,16 +170,17 @@ const ORDINARY_RETRY: &str = "both sides hand the missing MPDUs to ordinary tran
     retry owner sets it on the copy it republishes, so the aggregate backing keeps the bit \
     clear (reviewed with the Wi-Fi owner)";
 /// Reviewed difference: where an MSDU's lifetime starts.
-const LIFETIME_ORIGIN: &str = "production starts an MSDU's lifetime when its aggregate is \
-    committed, the vendor at the pp queue enqueue timestamp: a head queued long before the rest \
-    of its aggregate expires on the vendor side only, which discards it without the Retry bit \
-    while production retries it (reviewed with the Wi-Fi owner)";
-/// Known gap: production sends no BlockAckReq.
+const LIFETIME_ORIGIN: &str = "production ages each MSDU from its admission; this comparison \
+    admits every MSDU of the aggregate at its commit, the vendor at the pp queue enqueue \
+    timestamp: a head queued long before the rest of its aggregate expires on the vendor side \
+    only, which discards it without the Retry bit while production retries it (reviewed with \
+    the Wi-Fi owner)";
+/// Known gap: the comparison reads no production BlockAckReq.
 const BAR_GAP: &str = "the vendor sends a BlockAckReq (ppFillAMPDUBar, ppReSendBar) with the \
     starting sequence after the aggregate head when a resort discards that head as aged, or \
     acknowledges it while the station has a request pending for the TID (set when rate control \
-    resumes aggregation); production sends none, so the recipient's window advances only by \
-    its own timeout (known gap, reviewed with the Wi-Fi owner)";
+    resumes aggregation); production sends one when it discards aged MPDUs under the agreement \
+    (DiscardAged), which this comparison does not read yet (known gap)";
 /// The vendor BlockAckReq builder: its TID and starting sequence arguments.
 const FILL_BAR: &str = "ppFillAMPDUBar";
 const FILL_BAR_TID: u16 = 0;
@@ -935,6 +936,12 @@ const DECISION_TRIGGER: u32 = 4;
 /// The production decision that hands the missing MPDUs to ordinary
 /// transmission.
 const DECISION_UNAGGREGATE: u32 = 5;
+/// The production decision that discards aged MPDUs behind a BlockAckReq
+/// and keeps the rest, if any, in the aggregate.
+const DECISION_DISCARD_AGED: u32 = 7;
+/// The byte offset of the production output word of the decision's
+/// selected MPDUs.
+const OUTPUT_MASK_OFFSET: u32 = 4;
 
 fn read_word(bytes: &[u8], offset: u32) -> Result<u32> {
     let offset = offset as usize;
@@ -960,14 +967,16 @@ fn dispositions(
         (0, _) => Disposition::Ordinary,
         _ => Disposition::Aggregate,
     };
-    let decision = read_word(
-        &crate::evidence::selection(records, case, true, count as u16),
-        0,
-    )?;
+    let output = crate::evidence::selection(records, case, true, count as u16);
+    let decision = read_word(&output, 0)?;
     let production = match decision {
         STEP_RETAIN => Disposition::Aggregate,
         STEP_FINISH | DECISION_TRIGGER => Disposition::Finished,
         DECISION_UNAGGREGATE => Disposition::Ordinary,
+        DECISION_DISCARD_AGED if read_word(&output, OUTPUT_MASK_OFFSET)? == 0 => {
+            Disposition::Finished
+        }
+        DECISION_DISCARD_AGED => Disposition::Aggregate,
         other => return Err(invalid(format!("production decided {other}"))),
     };
     Ok((vendor, production))
