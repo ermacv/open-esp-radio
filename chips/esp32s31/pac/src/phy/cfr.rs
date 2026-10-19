@@ -10,6 +10,7 @@ use crate::RadioPhyRegisters;
 pub use crate::generated::CfrValue;
 use crate::generated::{CfrEnableState, CfrForceMode, IccfrGateState};
 
+#[cfg(oer_probe)]
 fn vendor_register_argument(input: u32) -> crate::generated::PhyVendorRegisterArgument {
     crate::generated::PhyVendorRegisterArgument::new(input)
         .expect("every u32 fits the complete generated vendor-argument domain")
@@ -51,6 +52,7 @@ impl RadioPhyRegisters {
     ///
     /// The generated PAC owns both register-field projections; callers never
     /// construct a register mask or field image.
+    #[cfg(oer_probe)]
     pub fn configure_hccfr_from_vendor_arguments(&mut self, enabled: u32, value: u32) {
         let bb = &self.peripherals.phy_baseband_config_oracle;
         crate::generated::configure_hccfr_enable_from_vendor_argument(
@@ -87,6 +89,7 @@ impl RadioPhyRegisters {
     ///
     /// Register-field truncation remains generated. Parity decodes the two
     /// vendor boolean arguments without exposing a register image.
+    #[cfg(oer_probe)]
     pub fn configure_forced_iccfr_from_vendor_arguments(
         &mut self,
         mode: u32,

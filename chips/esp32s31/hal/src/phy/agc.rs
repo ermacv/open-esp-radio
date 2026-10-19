@@ -6,10 +6,12 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{owner::SharedPhyAccess, phy_pac, phy_pac_mut, types::PhyFtmEnableVendorArgument};
+use crate::{owner::SharedPhyAccess, phy_pac, phy_pac_mut};
 
 #[cfg(target_arch = "riscv32")]
 use crate::types::ForcedRxGain;
+#[cfg(oer_probe)]
+use crate::types::PhyFtmEnableVendorArgument;
 
 /// Affine obligation to restore the FTM enable field to its exact prior bit.
 #[must_use = "the exact prior FTM enable bit must be restored"]
@@ -94,6 +96,7 @@ pub fn configure_antenna(registers: &mut impl SharedPhyAccess) {
 
 /// Apply complete rev0 ROM `phy_ant_dft_cfg`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_antenna_diversity(registers: &mut impl SharedPhyAccess, enabled: bool) {
     let registers = phy_pac_mut(registers);
     registers.configure_antenna_diversity(enabled);
@@ -112,6 +115,7 @@ pub fn configure_forced_rx_gain(
 
 /// Apply complete rev0 ROM `phy_force_rx_gain` from its unmodified vendor ABI.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_forced_rx_gain_from_vendor_arguments(
     registers: &mut impl SharedPhyAccess,
     enabled: u32,
@@ -149,6 +153,7 @@ pub fn set_ftm_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
 }
 
 /// Apply complete `phy_set_ftm_en` semantics to one raw vendor ABI argument.
+#[cfg(oer_probe)]
 pub fn set_ftm_enabled_from_vendor_argument(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_ftm_enabled_from_vendor_argument(PhyFtmEnableVendorArgument::new(input));

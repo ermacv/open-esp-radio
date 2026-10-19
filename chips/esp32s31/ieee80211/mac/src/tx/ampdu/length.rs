@@ -242,6 +242,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
             .map_err(|_| HtAmpduTxError::Length(HtAmpduLengthError::AggregateTooLong(next)))
     }
 
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub(super) fn recalculate_prepared_length(
         self: Pin<&mut Self>,
     ) -> Result<HtAmpduLength, HtAmpduTxError> {

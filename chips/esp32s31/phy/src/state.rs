@@ -701,6 +701,7 @@ impl PhyState {
         &self.config
     }
 
+    #[cfg(any(test, oer_probe))]
     pub fn set_tx_power_tracking_slow(&mut self, value: u8) {
         self.wifi.tx_power_tracking_slow = value;
     }
@@ -723,6 +724,7 @@ impl PhyState {
     /// Owned 802.11p configuration. Channel selection has no 802.11p step:
     /// complete `phy_chip_set_chan` passes these bytes to `phy_11p_set`,
     /// whose body only writes them back to the same `phy_param` bytes.
+    #[cfg(any(test, oer_probe))]
     pub fn set_dot11p_configuration(&mut self, enabled: u8, configuration: u8) {
         self.wifi.dot11p_enabled = enabled;
         self.wifi.dot11p_configuration = configuration;
@@ -735,6 +737,7 @@ impl PhyState {
         }
     }
 
+    #[cfg(any(test, oer_probe))]
     pub fn set_current_level(&mut self, value: u8) {
         self.wifi.current_level = value;
     }
@@ -743,6 +746,7 @@ impl PhyState {
         self.wifi.current_level
     }
 
+    #[cfg(any(test, oer_probe))]
     pub fn set_bt_power_tracking(&mut self, value: u8) {
         self.bluetooth.power_tracking = value;
     }
@@ -919,14 +923,17 @@ impl PhyState {
         self.apply_bluetooth_tx_power_outcome(outcome.tx_power);
     }
 
+    #[cfg(any(test, oer_probe))]
     pub fn set_ble_channel_base(&mut self, value: u8) {
         self.bluetooth.channel_base = value;
     }
 
+    #[cfg(any(test, oer_probe))]
     pub const fn ble_channel_base(&self) -> u8 {
         self.bluetooth.channel_base
     }
 
+    #[cfg(any(test, oer_probe))]
     pub fn set_initialization_parameter(&mut self, value: u32) {
         self.common.initialization_parameter = value & 1 != 0;
     }
@@ -1658,6 +1665,7 @@ impl PhyState {
     /// The calibration this state retains, as persistence would capture it,
     /// under an all-zero identity: what a vendor comparison or a hardware
     /// cross-check reads the committed fields from.
+    #[cfg(any(test, oer_probe))]
     pub const fn retained_calibration_snapshot(&self) -> PhyCalibrationSnapshot {
         self.calibration_snapshot(crate::calibration::registration::PhyCalibrationIdentity {
             rf_cal_version: 0,

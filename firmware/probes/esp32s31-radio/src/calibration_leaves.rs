@@ -7,16 +7,16 @@ oer_probe_macros::probe! {
     /// Unknown profiles return 0x10003 without touching hardware.
     pub fn open_phy_calibration_leaf(profile: u32, a: u32, b: u32, c: u32) -> u32 {
         if profile == 2 {
-            return super::open_phy_calibration_trace_temperature_to_power(a, b, c) as u32;
+            return super::temperature_to_power(a, b, c) as u32;
         }
         if profile > 3 {
             return 0x10003;
         }
         super::with_phy(|registers| {
             match profile {
-                0 => super::open_phy_calibration_trace_restore_tx_gain_compensation(a, registers),
-                1 => super::open_phy_calibration_trace_force_digital_gain(a, b, c, registers),
-                3 => super::open_phy_calibration_trace_post_init_agc(registers),
+                0 => super::restore_tx_gain_compensation(a, registers),
+                1 => super::force_digital_gain(a, b, c, registers),
+                3 => super::post_init_agc(registers),
                 _ => unreachable!(),
             }
             0

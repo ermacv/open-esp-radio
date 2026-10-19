@@ -4,24 +4,6 @@
 //! module contains only the hardware-operation graph and its bound external
 //! completions.
 
-/// Return the exact pinned ESP32-S31 RF-data record size in bytes.
-///
-/// The compiled vendor archive's `phy_get_rfdata_num` returns this value
-/// verbatim: a 12-byte header, the 492-byte parameter object and a 4-byte
-/// trailer.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_get_rfdata_num() -> u32 {
-    0x1fc
-}
-
-/// Required pinned `libphy.a::phy_internal_delay` vendor-ABI no-op leaf.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn phy_internal_delay() -> u32 {
-    0
-}
-
 use crate::{
     analog::{
         crystal_duty::{

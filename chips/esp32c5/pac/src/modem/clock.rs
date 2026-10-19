@@ -85,6 +85,7 @@ impl ModemClockRegisters {
 
     /// Whether every gate of one device is enabled, as the vendor
     /// `modem_clock_*_check_enable` action reports it.
+    #[cfg(oer_probe)]
     pub fn modem_clock_device_enabled(&self, device: ModemClockDevice) -> bool {
         let syscon = &self.peripherals.modem_syscon_radio;
         let (etm, zb_apb, zbmac, security_apb) =
@@ -114,6 +115,7 @@ impl ModemClockRegisters {
 
     /// Whether the analog register I2C master clock is enabled. The platform
     /// owns that gate and its reference count.
+    #[cfg(oer_probe)]
     pub fn analog_i2c_master_clock_enabled(&self) -> bool {
         svd::field_read::observe_analog_i2c_master_clock(&self.peripherals.modem_lpcon_shared_clock)
     }

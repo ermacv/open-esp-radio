@@ -2458,6 +2458,7 @@ impl TxPhyRate {
     /// [`Self::from_rate_control_code`]. Legacy and HT bytes are their queue
     /// codes; an HE byte carries the guard interval, `0x10 + MCS` for
     /// 1600 ns and `0x1a + MCS` for 800 ns, and 3200 ns has none.
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub const fn rate_control_code(self) -> Option<u8> {
         match self {
             Self::Legacy(rate) => Some(rate.code()),

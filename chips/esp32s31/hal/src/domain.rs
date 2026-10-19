@@ -30,9 +30,10 @@ pub use crate::clock::{
     BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
     RadioClient, RadioClientKind, WifiClient,
 };
+#[cfg(any(test, oer_probe))]
+use crate::coex::PhyGrantProtectError;
 use crate::coex::{
     CoexEventId, CoexPti, CoexPtiTable, CoexTimerBank, PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
-    PhyGrantProtectError,
 };
 use crate::coex_participation::CoexParticipants;
 pub use crate::coex_participation::{CoexAbsent, Coexisting, ExternalCoexistence};
@@ -1026,6 +1027,7 @@ impl<T> RadioDomain<T> {
     }
 
     /// Borrow the PHY grant-protect request for one maintenance operation.
+    #[cfg(any(test, oer_probe))]
     pub fn phy_grant_protect(&mut self) -> PhyGrantProtect<'_> {
         let state = self.state_mut();
         let pti = state.coex_pti.pti(PHY_GRANT_PROTECT_EVENT);
@@ -1041,6 +1043,7 @@ impl<T> RadioDomain<T> {
     /// # Errors
     ///
     /// The request is already programmed; nothing is written.
+    #[cfg(any(test, oer_probe))]
     pub fn acquire_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().acquire()
     }
@@ -1050,6 +1053,7 @@ impl<T> RadioDomain<T> {
     /// # Errors
     ///
     /// No request is programmed; nothing is written.
+    #[cfg(any(test, oer_probe))]
     pub fn release_phy_grant_protect(&mut self) -> Result<(), PhyGrantProtectError> {
         self.phy_grant_protect().release()
     }

@@ -1388,10 +1388,3 @@ impl PhyBbInitStep {
 
 #[cfg(test)]
 mod tests;
-
-/// Required pinned `libphy.a` vendor-ABI no-op leaf.
-///
-/// The ESP32-S31 `set_bb_wdg` body is exactly one `ret` instruction.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn set_bb_wdg() {}

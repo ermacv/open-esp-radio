@@ -25,6 +25,7 @@ pub struct PhyI2cBlock {
 
 impl PhyI2cBlock {
     /// Convert the raw block byte accepted by the vendor ABI.
+    #[cfg(oer_probe)]
     pub const fn from_vendor_abi(code: u8) -> Option<Self> {
         if code >= 0x61 && code <= 0x6d {
             Some(Self { code })
@@ -365,6 +366,7 @@ pub enum PhyAdcRate {
 
 impl PhyAdcRate {
     /// Decode the low selector bit accepted by the complete vendor leaf.
+    #[cfg(oer_probe)]
     pub const fn from_vendor_rate(rate: u32) -> Self {
         if rate & 1 == 0 { Self::Low } else { Self::High }
     }

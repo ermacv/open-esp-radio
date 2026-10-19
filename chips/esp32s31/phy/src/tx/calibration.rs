@@ -1844,21 +1844,6 @@ impl PhyTxCapExternalBinding {
 #[cfg(test)]
 mod tests;
 
-/// Complete pinned debug helper; this ESP32-S31 archive always returns zero.
-#[inline]
-#[cfg(oer_probe)]
-pub const fn get_bias_ref_code() -> u32 {
-    0
-}
-
-/// Apply complete pinned `phy_tx_atten_comp` wrapping byte arithmetic.
-#[inline]
-#[cfg(oer_probe)]
-pub fn phy_tx_atten_comp(values: &mut [u8; 3]) {
-    values[1] = values[1].wrapping_add(3);
-    values[2] = values[2].wrapping_add(4);
-}
-
 #[cfg(oer_probe)]
 impl PhyTxCalibrationEnvironmentMmioBinding {
     pub const fn action(&self) -> PhyTxCalibrationEnvironmentAction {

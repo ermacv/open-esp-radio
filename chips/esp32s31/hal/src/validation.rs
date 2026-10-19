@@ -141,13 +141,6 @@ pub fn hal_mac_txq_disable(queue: u32) -> u32 {
         .validation_disable_mac_tx_queue(queue)
 }
 
-/// The production cold-init CTS reset of every ordinary queue.
-pub fn initialize_mac_software_cts() {
-    runtime_owner()
-        .pac_mut()
-        .validation_initialize_mac_software_cts();
-}
-
 /// The recovered RTS request and optional HE byte-threshold publication,
 /// without DMA.
 pub fn configure_mac_tx_rts(queue: u32, enabled: bool, threshold_bytes: Option<u16>) {
@@ -217,16 +210,6 @@ pub fn hal_mac_tx_set_he_ppdu(queue: u8, program: MacHeTxProgram) -> u32 {
 
 pub fn hal_mac_tx_get_blockack(queue: u8) -> Option<TxBlockAckPayload> {
     runtime_owner().pac().read_tx_block_ack_payload(queue)
-}
-
-/// Complete rev0 ROM `phy_enable_cca` (`enabled`) or `phy_disable_cca`.
-pub fn set_cca_enabled(enabled: bool) {
-    runtime_owner().pac_mut().set_phy_wifi_cca_enabled(enabled);
-}
-
-/// Complete rev0 ROM `phy_sifs_reg_init`.
-pub fn initialize_sifs() {
-    runtime_owner().pac_mut().initialize_phy_wifi_sifs();
 }
 
 /// Compiled leaves of `hal_external_coexist.o` on the probe image's shared

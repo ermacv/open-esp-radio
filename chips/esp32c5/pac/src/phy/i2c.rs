@@ -16,6 +16,7 @@ use crate::svd;
 
 /// One of the two analog-register command hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub enum PhyI2cHost {
     Host0,
     Host1,
@@ -23,15 +24,19 @@ pub enum PhyI2cHost {
 
 /// Validated identity of one analog block the libphy leaves accept.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cBlock {
     code: u8,
 }
 
 /// First and last block with a read-mask entry in `phy_get_i2c_read_mask_`.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 const FIRST_BLOCK: u8 = 0x61;
+#[cfg(any(test, feature = "test-support", oer_probe))]
 const LAST_BLOCK: u8 = 0x6f;
 
 /// `CSWTCH.81`: the one-hot read-mask quarter of blocks 0x61 to 0x6F.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 const READ_MASK_QUARTERS: [u16; 15] = [
     0x0040, 0x0000, 0x0004, 0x0000, 0x0400, 0x0020, 0x0001, 0x0008, 0x0080, 0x0010, 0x0002, 0x0800,
     0x0100, 0x0200, 0x1000,
@@ -39,8 +44,10 @@ const READ_MASK_QUARTERS: [u16; 15] = [
 
 /// Blocks 0x63 to 0x6E that `phy_get_i2c_hostid_` assigns to host 1, as bit
 /// `block - 0x63`.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 const HOST1_BLOCKS: u16 = 0x09ad;
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cBlock {
     /// Convert the raw block byte of the vendor ABI.
     pub const fn from_vendor_abi(code: u8) -> Option<Self> {
@@ -81,11 +88,13 @@ impl PhyI2cBlock {
 
 /// Validated address of one analog byte register.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cAddress {
     block: PhyI2cBlock,
     register: u8,
 }
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cAddress {
     pub const fn new(block: PhyI2cBlock, register: u8) -> Self {
         Self { block, register }
@@ -103,11 +112,13 @@ impl PhyI2cAddress {
 /// One command of each host in a parallel write, as `phy_i2c_paral_write`
 /// publishes them: host 0 first, then host 1, without the start bit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cParallelWrite {
     first: (u8, u8, u8),
     second: (u8, u8, u8),
 }
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cParallelWrite {
     /// The (block, register, data) commands of host 0 and host 1.
     pub const fn new(first: (u8, u8, u8), second: (u8, u8, u8)) -> Self {
@@ -124,6 +135,7 @@ impl PhyI2cParallelWrite {
 }
 
 /// `phy_get_data_sat(value, high, low)`.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 const fn clamp(value: u8, low: u8, high: u8) -> u8 {
     if high < value {
         high
@@ -136,6 +148,7 @@ const fn clamp(value: u8, low: u8, high: u8) -> u8 {
 
 /// The `phy_param` fields `phy_i2c_init1` reads, named by their offset.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cInitializationInputs {
     pub parameter_f5: u8,
     pub parameter_f6: u8,
@@ -154,8 +167,10 @@ pub struct PhyI2cInitializationInputs {
 }
 
 /// Pairs of the parallel sequence of `phy_i2c_init1`.
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub const PHY_I2C_INITIALIZATION_PAIR_COUNT: usize = 44;
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cInitializationInputs {
     /// Pair `index` of the 44-pair parallel sequence `phy_i2c_init1` issues.
     ///
@@ -223,6 +238,7 @@ impl PhyI2cInitializationInputs {
 
 /// One command of an analog configuration leaf, in the vendor order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub enum PhyI2cConfigurationCommand {
     /// `phy_i2c_writeReg`: write a whole byte.
     Write(PhyI2cAddress, u8),
@@ -242,6 +258,7 @@ pub enum PhyI2cConfigurationCommand {
 /// `C5_BLOB_LIBPHY_RF_INIT_LEAVES_3` (`libphy[phy_i2c.o]::phy_i2c_rc_cal_set`,
 /// `libphy[phy_i2c.o]::phy_filter_dcap_set`, `libphy[phy_i2c.o]::phy_i2c_pkdet_set`, `libphy[phy_i2c.o]::phy_i2c_sar2_init_code`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub enum PhyI2cConfiguration {
     /// `phy_band_i2c_set`.
     Band,
@@ -267,12 +284,14 @@ pub enum PhyI2cConfiguration {
 /// block 0x6B register 0x11 bits 5:4, register 0x0F bits 7:3 and register
 /// 0x13 bits 5:2.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cRcCalibration {
     first: u8,
     second: u8,
     third: u8,
 }
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cRcCalibration {
     pub const fn new(first: u8, second: u8, third: u8) -> Option<Self> {
         if first <= 3 && second <= 31 && third <= 15 {
@@ -290,8 +309,10 @@ impl PhyI2cRcCalibration {
 /// Argument of `phy_i2c_sar2_init_code`: bits 11:8 go to block 0x69
 /// register 4 bits 3:0 and bits 7:0 to register 3.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cSar2Code(u16);
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cSar2Code {
     pub const fn new(code: u16) -> Option<Self> {
         if code <= 0xfff {
@@ -302,6 +323,7 @@ impl PhyI2cSar2Code {
     }
 }
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cConfiguration {
     /// Command `index`, or `None` after the last.
     pub const fn command(self, index: usize) -> Option<PhyI2cConfigurationCommand> {
@@ -379,8 +401,10 @@ impl PhyI2cConfiguration {
 /// Bus clock selection of `phy_i2c_clk_sel(n)`, for `n` within the SDA
 /// side-guard field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub struct PhyI2cClockSelection(u8);
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
 impl PhyI2cClockSelection {
     pub const fn new(selection: u8) -> Option<Self> {
         if selection <= 31 {
@@ -393,12 +417,20 @@ impl PhyI2cClockSelection {
 
 /// A command is still owned by its host.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(any(test, feature = "test-support", oer_probe))]
 pub enum PhyI2cAccessError {
     Busy,
 }
 
 /// Unique owner of the analog register I2C master.
 #[must_use = "dropping the analog I2C owner loses its register authority"]
+#[cfg_attr(
+    not(any(test, feature = "test-support", oer_probe)),
+    expect(
+        dead_code,
+        reason = "the product capability reserves the analog I2C registers; only probes drive them"
+    )
+)]
 pub struct PhyI2cRegisters {
     peripherals: svd::peripheral_ownership::PhyI2cPeripherals,
     /// The host map was rewritten for a command that has not started yet
@@ -414,7 +446,10 @@ impl PhyI2cRegisters {
             host_map_pending: false,
         }
     }
+}
 
+#[cfg(any(test, feature = "test-support", oer_probe))]
+impl PhyI2cRegisters {
     /// Rewrite the host map once per command and return the block's host.
     fn select_host_once(&mut self, block: PhyI2cBlock) -> PhyI2cHost {
         if self.host_map_pending {
@@ -472,6 +507,7 @@ impl PhyI2cRegisters {
     /// `phy_i2c_clk_sel(n)`: in the host-0, host-1 and hardware-host timing
     /// words, the SDA side guard becomes `n` and then the SCL pulse duration
     /// `n == 0 ? 1 : 2n`.
+    #[cfg(oer_probe)]
     pub fn select_clock(&mut self, selection: PhyI2cClockSelection) {
         use crate::generated::{PhyI2cSclPulseDuration, PhyI2cSdaSideGuard};
         let n = u32::from(selection.0);
@@ -490,6 +526,7 @@ impl PhyI2cRegisters {
     /// register access in the master control word.
     ///
     /// SOURCE: reviewed evidence `C5_BLOB_LIBPHY_RF_INIT_LEAVES_2`.
+    #[cfg(oer_probe)]
     pub fn initialize_master_registers(&mut self) {
         crate::generated::set_phy_i2c_master_register_mode(self.master());
         crate::generated::enable_phy_i2c_master_registers(self.master());
@@ -511,6 +548,7 @@ impl PhyI2cRegisters {
 
     /// `phy_bbpll_recal`: mode two, one read of the master control word, then
     /// `phy_bbpll_cal(0)`.
+    #[cfg(oer_probe)]
     pub fn recalibrate_bbpll(&mut self) {
         self.calibrate_bbpll(true);
         let _ = svd::field_read::observe_phy_i2c_bbpll_calibration_mode(self.master());

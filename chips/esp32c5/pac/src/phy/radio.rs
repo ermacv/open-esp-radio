@@ -14,17 +14,23 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{
-    generated::{
-        self, PhyDacScale, PhyPowerDetectorMode, PhyRateBit, PhyRxEvmEnable, PhyRxEvmParameter,
-        PhyRxIqScale, PhySar2PowerDetectorCapacitor,
-    },
-    svd,
+#[cfg(oer_probe)]
+use crate::generated::{
+    self, PhyDacScale, PhyPowerDetectorMode, PhyRateBit, PhyRxEvmEnable, PhyRxEvmParameter,
+    PhyRxIqScale, PhySar2PowerDetectorCapacitor,
 };
+use crate::svd;
 
 /// Unique owner of the PHY's PMU fields and baseband configuration words.
 #[must_use = "dropping the PHY radio owner loses its register authority"]
 pub struct PhyRadioRegisters {
+    #[cfg_attr(
+        not(oer_probe),
+        expect(
+            dead_code,
+            reason = "the product capability reserves the PHY registers; only probes drive them"
+        )
+    )]
     peripherals: svd::peripheral_ownership::PhyRadioPeripherals,
 }
 
@@ -32,7 +38,10 @@ impl PhyRadioRegisters {
     pub(crate) const fn new(peripherals: svd::peripheral_ownership::PhyRadioPeripherals) -> Self {
         Self { peripherals }
     }
+}
 
+#[cfg(oer_probe)]
+impl PhyRadioRegisters {
     fn pmu(&self) -> &svd::PmuRadio {
         &self.peripherals.pmu_radio
     }

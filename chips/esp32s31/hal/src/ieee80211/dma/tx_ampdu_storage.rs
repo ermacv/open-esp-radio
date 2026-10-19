@@ -633,6 +633,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// All leases stay retained. The new descriptor chain may reference a
     /// compacted subset of them, while acknowledged frames remain owned until
     /// the retry reaches its final detach/release edge.
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub fn begin_retry(&mut self) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut()
             .transition(AmpduDmaState::Detached, AmpduDmaState::Reserved)
@@ -1055,6 +1056,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 
     /// Reorder logical MPDUs after a detached selective BlockAck result.
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub fn compact_active_backings(
         &mut self,
         source_indices: &[u8],

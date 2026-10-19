@@ -304,6 +304,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         self.state
     }
 
+    #[cfg(any(test, feature = "test-support", oer_probe))]
     pub const fn frame_count(&self) -> u8 {
         self.count
     }

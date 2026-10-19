@@ -59,6 +59,7 @@ pub fn configure_hccfr(registers: &mut impl SharedPhyAccess, enabled: bool, valu
 
 /// Apply complete pinned `phy_config_hccfr` from its unmodified vendor ABI.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_hccfr_from_vendor_arguments(
     registers: &mut impl SharedPhyAccess,
     enabled: u32,
@@ -89,6 +90,7 @@ pub fn configure_forced_iccfr(
 
 /// Apply complete pinned `phy_force_iccfr` from its unmodified vendor ABI.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_forced_iccfr_from_vendor_arguments(
     registers: &mut impl SharedPhyAccess,
     mode: u32,
@@ -101,6 +103,7 @@ pub fn configure_forced_iccfr_from_vendor_arguments(
 
 /// Apply complete rev0 ROM `phy_btbb_wifi_bb_cfg2`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_bt_wifi_baseband(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.configure_bt_wifi_baseband();
@@ -108,6 +111,7 @@ pub fn configure_bt_wifi_baseband(registers: &mut impl SharedPhyAccess) {
 
 /// Apply complete rev0 ROM `phy_chan_dump_cfg`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_channel_dump(
     registers: &mut impl SharedPhyAccess,
     value: u32,
@@ -120,6 +124,7 @@ pub fn configure_channel_dump(
 
 /// Apply complete rev0 ROM `phy_dac_rate_set`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_dac_rate(
     registers: &mut impl SharedPhyAccess,
     rate: oer_esp32s31_pac::PhyAdcRate,
@@ -158,6 +163,7 @@ pub fn update_front_end(registers: &mut impl SharedPhyAccess) {
 /// This leaf intentionally does not restore the two DAC-scale fields owned by
 /// the longer ROM `phy_stop_tx_tone(1)` operation.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn stop_tx_tone(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.stop_calibration_tone_paths();
@@ -193,6 +199,7 @@ pub fn configure_watchdog(registers: &mut impl SharedPhyAccess) {
 
 /// Apply complete ROM `phy_vht_support`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn set_vht_support(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_vht_support(input);
@@ -200,6 +207,7 @@ pub fn set_vht_support(registers: &mut impl SharedPhyAccess, input: u32) {
 
 /// Apply complete ROM `phy_csidump_force_lltf_cfg`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn set_csi_dump_force_lltf(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_csi_dump_force_lltf(input);
@@ -207,6 +215,7 @@ pub fn set_csi_dump_force_lltf(registers: &mut impl SharedPhyAccess, input: u32)
 
 /// Apply complete ROM `phy_hemu_ru26_good_res`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_he_ru26_good_response(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.configure_he_ru26_good_response();
@@ -214,6 +223,7 @@ pub fn configure_he_ru26_good_response(registers: &mut impl SharedPhyAccess) {
 
 /// Apply complete ROM `phy_freq_band_reg_set`, including its VHT tail.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn set_frequency_band(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_frequency_band(input);
@@ -221,6 +231,7 @@ pub fn set_frequency_band(registers: &mut impl SharedPhyAccess, input: u32) {
 
 /// Apply complete ROM `phy_bbtx_outfilter`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_tx_output_filter(
     registers: &mut impl SharedPhyAccess,
     input_0: u32,
@@ -233,6 +244,7 @@ pub fn configure_tx_output_filter(
 
 /// Apply complete ROM `phy_bb_wdt_rst_enable`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn set_watchdog_reset_enabled(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_baseband_watchdog_reset_enabled(input);
@@ -240,6 +252,7 @@ pub fn set_watchdog_reset_enabled(registers: &mut impl SharedPhyAccess, input: u
 
 /// Apply complete ROM `phy_bb_wdt_int_enable`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn set_watchdog_interrupt_enabled(registers: &mut impl SharedPhyAccess, input: u32) {
     let registers = phy_pac_mut(registers);
     registers.set_baseband_watchdog_interrupt_enabled(input);
@@ -247,6 +260,7 @@ pub fn set_watchdog_interrupt_enabled(registers: &mut impl SharedPhyAccess, inpu
 
 /// Apply complete ROM `phy_bb_wdt_timeout_clear`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn clear_watchdog_timeout(registers: &mut impl SharedPhyAccess) {
     let registers = phy_pac_mut(registers);
     registers.clear_baseband_watchdog_timeout();
@@ -254,6 +268,7 @@ pub fn clear_watchdog_timeout(registers: &mut impl SharedPhyAccess) {
 
 /// Apply complete ROM `phy_bb_wdt_get_status`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn watchdog_status(registers: &mut impl SharedPhyAccess) -> u32 {
     let registers = phy_pac_mut(registers);
     registers.baseband_watchdog_status()
@@ -261,6 +276,7 @@ pub fn watchdog_status(registers: &mut impl SharedPhyAccess) -> u32 {
 
 /// Apply complete ROM `phy_lltf_mask_en`.
 #[cfg(target_arch = "riscv32")]
+#[cfg(oer_probe)]
 pub fn configure_lltf_mask(registers: &mut impl SharedPhyAccess, input_0: u32, input_1: u32) {
     let registers = phy_pac_mut(registers);
     registers.configure_lltf_mask(input_0, input_1);

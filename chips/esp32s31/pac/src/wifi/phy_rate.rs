@@ -7,7 +7,9 @@
 #![forbid(unsafe_code)]
 
 use crate::WifiRadioRegisters;
-use crate::generated::{PhyLowRateState, PhyRx11bLowRateArgument};
+use crate::generated::PhyLowRateState;
+#[cfg(oer_probe)]
+use crate::generated::PhyRx11bLowRateArgument;
 
 const fn phy_low_rate_state(enabled: bool) -> PhyLowRateState {
     if enabled {
@@ -40,6 +42,7 @@ impl WifiRadioRegisters {
 
     /// Apply complete rev0 ROM `phy_rx11blr_cfg` without widening the caller
     /// low-bit contract into a boolean ABI.
+    #[cfg(oer_probe)]
     pub fn configure_rx_11b_low_rate(&mut self, input: u32) {
         let input = PhyRx11bLowRateArgument::new(input)
             .expect("every u32 is a complete phy_rx11blr_cfg argument");
