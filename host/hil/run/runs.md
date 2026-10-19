@@ -289,8 +289,8 @@ working copy, and with it `cargo hil` itself, at the current revision. A
 plain `git bisect start` would check every tested revision out and run that
 revision's `cargo hil`. `cargo` itself exits 101 when `cargo hil` does not
 build, which `git bisect run` takes for a bad revision: check that
-`cargo hil bisect --help` runs before starting. As for an A/B arm, a revision older than the commit
-that completes the repository layout move does not build.
+`cargo hil bisect --help` runs before starting. As for an A/B arm, the revision's tree must have the packages this
+checkout's runner builds from it.
 
 ## A/B comparison
 
