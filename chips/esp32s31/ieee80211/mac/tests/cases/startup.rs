@@ -93,7 +93,7 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
             Operation::InitializeCryptoBypass,
             Operation::InitializeMacAntenna,
             Operation::InitializeHalTail(
-                MacInterruptMask::COLD_RX,
+                MacInterruptMask::STATION,
                 MacSlowClockCalibration::Unavailable,
             ),
         ]
@@ -105,7 +105,7 @@ fn cold_mac_init_orders_semantic_hardware_transactions() {
     assert_eq!(
         &mmio.operations()[19..],
         [
-            Operation::EnableMacInterrupts(MacInterruptMask::COLD_RX),
+            Operation::EnableMacInterrupts(MacInterruptMask::STATION),
             Operation::ProgramInterfaceAddress(MacInterface::Station, station),
             Operation::ProgramInterfaceAddress(MacInterface::AccessPoint, access_point),
             Operation::ConfigureOpenPromiscuousReceive,

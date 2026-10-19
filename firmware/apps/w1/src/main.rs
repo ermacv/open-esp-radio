@@ -51,7 +51,7 @@ use oer_esp32s31_ieee80211_driver::{
 };
 use oer_esp32s31_ieee80211_mac::{
     init::{
-        MAC_COLD_HANDSHAKE_DEADLINE, MAC_COLD_RX_INTERRUPT_MASK, MacDelayEntropy,
+        MAC_COLD_HANDSHAKE_DEADLINE, MAC_STATION_INTERRUPT_MASK, MacDelayEntropy,
         MacSlowClockCalibration, MacSlowClockCalibrationSource,
     },
     portable::rx_meta,
@@ -820,7 +820,7 @@ async fn run(
         console,
         " tracking_us={:?} cold_mask={cold_mask:?} expected_mask={:#010x}\r\n",
         start_report.track.tracking_micros,
-        MAC_COLD_RX_INTERRUPT_MASK.bits()
+        MAC_STATION_INTERRUPT_MASK.bits()
     );
     let _ = write!(
         console,

@@ -583,7 +583,7 @@ where
     B: PlacedBacking,
     H: HtAmpduHardware,
 {
-    use oer_esp32s31_ieee80211_mac::irq::{EVENT_COLLISION, EVENT_TX_TIMEOUT};
+    use oer_esp32s31_ieee80211_mac::irq::EVENT_TX_TIMEOUT;
     let cookie = published.cookie;
     if published.settling {
         if now < published.deadline {
@@ -606,7 +606,7 @@ where
         WifiTxWake::Interrupt { events } => events,
         WifiTxWake::Deadline => 0,
     };
-    if events & EVENT_COLLISION != 0 && published.owner.abort_collision(hardware, cookie)? {
+    if published.owner.abort_collision(hardware, cookie)? {
         return Ok(Some(AmpduOutcome::Collision));
     }
     let expired = now >= published.deadline;

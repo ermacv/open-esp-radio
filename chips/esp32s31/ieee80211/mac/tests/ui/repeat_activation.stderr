@@ -3,10 +3,10 @@ error[E0382]: use of moved value: `inactive`
   |
 4 | pub fn activate(inactive: InactiveEpoch) {
   |                 -------- move occurs because `inactive` has type `InactiveEpoch`, which does not implement the `Copy` trait
-5 |     let active = inactive.activate_rx_moderated(MacInterruptMask::COLD_RX);
+5 |     let active = inactive.activate_rx_moderated(MacInterruptMask::STATION);
   |                           ------------------------------------------------ `inactive` moved due to this method call
 6 |     #[cfg(all())]
-7 |     let _second = inactive.activate_rx_moderated(MacInterruptMask::COLD_RX); // ui-error: E0382
+7 |     let _second = inactive.activate_rx_moderated(MacInterruptMask::STATION); // ui-error: E0382
   |                   ^^^^^^^^ value used here after move
   |
 note: `InactiveEpoch::activate_rx_moderated` takes ownership of the receiver `self`, which moves `inactive`

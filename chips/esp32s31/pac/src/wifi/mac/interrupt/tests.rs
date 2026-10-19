@@ -53,7 +53,7 @@ impl MacInterruptActivationBackend for Backend {
 fn activation_clears_stale_events_before_publishing_runtime_masks() {
     let mut backend = Backend::default();
 
-    activate_mac_interrupt_epoch(&mut backend, MacInterruptMask::COLD_RX);
+    activate_mac_interrupt_epoch(&mut backend, MacInterruptMask::STATION);
 
     assert_eq!(
         backend.events,
@@ -63,7 +63,7 @@ fn activation_clears_stale_events_before_publishing_runtime_masks() {
             Event::ClearMac,
             Event::ClearPower,
             Event::Fence,
-            Event::PublishMac(MacInterruptMask::COLD_RX),
+            Event::PublishMac(MacInterruptMask::STATION),
             Event::PublishPower,
             Event::Fence,
         ]

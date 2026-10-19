@@ -72,6 +72,52 @@ fn spurious_mac_does_not_mask_acknowledge_or_publish() {
     assert!(!snapshot.had_status);
 }
 
+#[test]
+fn bss_color_only_interrupt_posts_an_independent_event() {
+    let mut interrupt = Interrupt {
+        observation: MacInterruptObservation::from_semantic_events(
+            MacInterruptEvents::BSS_COLOR_COLLISION,
+            false,
+            false,
+        ),
+        ..Default::default()
+    };
+    let (disposition, snapshot) = handle_mac_irq::<Moderated, _>(&mut interrupt);
+    assert_eq!(interrupt.operations, ["read", "ack"]);
+    assert_eq!(disposition, IrqDisposition::Posted);
+    assert_eq!(snapshot.posted_events, EVENT_BSS_COLOR_COLLISION);
+    assert_eq!(
+        next_irq_work(snapshot.posted_events),
+        Some(IrqWork::BssColorCollision)
+    );
+}
+
+#[test]
+fn station_mask_keeps_bss_color_latched_without_asserting_the_line() {
+    let color = MacInterruptObservation::from_semantic_events(
+        MacInterruptEvents::BSS_COLOR_COLLISION,
+        false,
+        false,
+    );
+    let mut interrupt = MacInterruptModel::new();
+    interrupt.latch(color);
+    assert!(!interrupt.line_asserted());
+    let (disposition, _) = handle_mac_irq::<Moderated, _>(&mut interrupt);
+    assert_eq!(disposition, IrqDisposition::Spurious);
+    assert_eq!(interrupt.latched(), color);
+
+    interrupt.latch(MacInterruptObservation::from_semantic_events(
+        MacInterruptEvents::RX_SUCCESS,
+        false,
+        false,
+    ));
+    let (_, snapshot) = handle_mac_irq::<Moderated, _>(&mut interrupt);
+    assert_eq!(snapshot.posted_events, EVENT_RX_SUCCESS);
+    interrupt.unmask_rx_delivery();
+    assert!(!interrupt.line_asserted());
+    assert_eq!(interrupt.latched(), color);
+}
+
 struct Power {
     observation: MacPowerInterruptObservation,
     acks: usize,

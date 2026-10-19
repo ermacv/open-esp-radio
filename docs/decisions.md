@@ -199,6 +199,9 @@ bounds) live in the code that applies them.
 - **Driver core.** The driver owns all four EDCA queues and executes each
   attempt's retry plan; a protected MPDU is numbered at its first launch; DMA
   access only through its owner type, never alongside a quiescence proof.
+- **BSS-color collision** is an HE event, independent of TX queue collisions.
+  The station masks it until its HE consumer exists; only a queue's
+  `collision_pending` qualifies a TX collision detach.
 - **MAC ownership.** The channel switch writes only the MAC control word and
   the REGDMA link select; TBTT events from the power interrupt are lossy, so
   the driver times its own TBTT wakes; coexistence values reach the driver by

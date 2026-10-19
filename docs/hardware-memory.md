@@ -20,10 +20,13 @@ describes how the register model, the PAC and the HAL describe them.
 
 The Wi-Fi DMA descriptor, RX control prefix, TX metadata head and the known
 flags, priority and security fields of the ordinary TX descriptor prefix are
-generated from the register model. The unassigned TX fields, A-MPDU
-descriptors, BLE exchange memory and 802.15.4 frame buffers retain their
-existing descriptions, with fields named by offset where their meaning is
-unknown. The PHY's RFPLL codes, frequency-memory records and analog-I2C
+generated from the register model. Both internally buffered and externally
+backed A-MPDUs use the same generated TX DMA descriptor; their HAL entry
+types describe software inputs, not separate hardware layouts. Per-queue
+PLCP1, length-control, power and PTI words use generated register fields.
+The unassigned TX fields, BLE exchange memory and 802.15.4 frame buffers
+retain their existing descriptions, with fields named by offset where their
+meaning is unknown. The PHY's RFPLL codes, frequency-memory records and analog-I2C
 command words also have generated value accessors. Register-specific
 composed domains preserve overlapping ROM publications, including the
 signed capacitor correction's spill into the frequency-memory mode byte.

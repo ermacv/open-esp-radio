@@ -9,7 +9,7 @@ use oer_esp32s31_hal::types::{
     MacTxQueueDetached,
 };
 use oer_esp32s31_ieee80211_mac::{
-    irq::{EVENT_COLLISION, EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT},
+    irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT},
     rx::RxPhyInfo,
     tx::{
         HardwareOwnedTxDma, PreparedTxDma, TxDmaState, TxError, TxHardware,
@@ -946,6 +946,18 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
     let OrdinaryTxAccess::Active(active) = owner.access() else {
         panic!("a published transaction lends only its active phase");
     };
+    let color = oer_esp32s31_ieee80211_mac::irq::event_mask(
+        oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
+    );
+    assert_eq!(
+        active.service(&mut hardware, interrupt(color)).unwrap(),
+        WifiTxProgress::Pending
+    );
+    assert_eq!(owner.slot_state(), TxDmaState::HardwareOwned);
+    assert_eq!(hardware.publications(), 1);
+    let OrdinaryTxAccess::Active(active) = owner.access() else {
+        panic!("a published transaction lends only its active phase");
+    };
     hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
     assert_eq!(
         active
@@ -1386,6 +1398,39 @@ fn an_invalid_retry_header_returns_its_slot_without_publishing_or_rewriting() {
 }
 
 #[test]
+fn bss_color_only_interrupt_never_detaches_a_published_queue() {
+    installed(|pools| {
+        use WmmAccessCategory::{Background, BestEffort, Video, Voice};
+        use oer_esp32s31_hal::types::MacInterruptEvents;
+        use oer_esp32s31_ieee80211_mac::irq::event_mask;
+
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        for category in [Voice, Video, BestEffort, Background] {
+            submit(&mut core, &mut hardware, values_on(category)).unwrap();
+        }
+        let events = event_mask(MacInterruptEvents::BSS_COLOR_COLLISION);
+        assert!(service(&mut core, &mut hardware, interrupt(events)).is_empty());
+        assert!(core.queues.iter().all(Option::is_some));
+        assert_eq!(hardware.publications(), 4);
+
+        // A simultaneous completion still belongs only to its own queue.
+        hardware.completion[queue_of(Voice)] = Some(MacTxCompletionObservation::new_model(0, 0));
+        assert_eq!(
+            service(
+                &mut core,
+                &mut hardware,
+                interrupt(events | EVENT_TX_COMPLETE)
+            ),
+            [Voice]
+        );
+        for category in [Video, BestEffort, Background] {
+            assert!(core.queues[queue_of(category)].is_some());
+        }
+    });
+}
+
+#[test]
 fn a_collision_detach_ends_the_attempt_without_a_transmission() {
     installed(|pools| {
         let mut hardware = Hardware::default();
@@ -1396,7 +1441,7 @@ fn a_collision_detach_ends_the_attempt_without_a_transmission() {
         submit(&mut core, &mut hardware, request).unwrap();
         hardware.collision_pending[BE] = true;
         let mut events = Events::default();
-        core.service(&mut hardware, interrupt(EVENT_COLLISION), &mut events)
+        core.service(&mut hardware, interrupt(0), &mut events)
             .unwrap();
         assert_eq!(events.completions, [PublicationEnd::Collision]);
         assert_eq!(hardware.publications(), 1);
@@ -2326,7 +2371,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
 
         hardware.collision_pending[queue_of(BestEffort)] = true;
         assert_eq!(
-            service(&mut core, &mut hardware, interrupt(EVENT_COLLISION)),
+            service(&mut core, &mut hardware, interrupt(0)),
             [BestEffort]
         );
         assert!(core.queues[queue_of(Voice)].is_some());
@@ -2933,6 +2978,43 @@ fn an_aggregate_is_planned_published_once_and_reports_its_block_ack() {
         // One publication per aggregate, never a retained retry.
         assert_eq!(hardware.ht.len(), 5);
         assert_eq!(source.free(), BACKINGS);
+    });
+}
+
+#[test]
+fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let source = backings();
+        let buffer = aggregate_of(source, 3, 26);
+        let published =
+            publish_ampdu(&mut core, &mut hardware, buffer, ampdu_values(ht_rate(7))).unwrap();
+        let color = oer_esp32s31_ieee80211_mac::irq::event_mask(
+            oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
+        );
+        let published =
+            match ampdu::service(&mut hardware, published, interrupt(color), true, core.now())
+                .unwrap()
+            {
+                AmpduProgress::Pending(published) => published,
+                AmpduProgress::Complete(_) => panic!("BSS color never detaches the aggregate"),
+            };
+        assert_eq!(source.free(), BACKINGS - 3);
+        hardware.collision_pending[BE] = true;
+        match ampdu::service(&mut hardware, published, interrupt(0), true, core.now()).unwrap() {
+            AmpduProgress::Complete(completed) => {
+                let mut events = Events::default();
+                let _owner = core
+                    .complete_ampdu(&mut hardware, completed, &mut events)
+                    .unwrap();
+                core.reclaim(&mut events);
+                assert_eq!(events.completions, [PublicationEnd::Collision]);
+            }
+            AmpduProgress::Pending(_) => panic!("the queue collision detaches the aggregate"),
+        }
+        assert_eq!(source.free(), BACKINGS);
+        assert_eq!(hardware.ht.len(), 1);
     });
 }
 

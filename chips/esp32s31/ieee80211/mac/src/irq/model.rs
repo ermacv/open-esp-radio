@@ -10,7 +10,7 @@
 //!
 //! The MAC model groups its sources as the epoch does: the RX delivery group
 //! (RX success and the two RX-associated auxiliary sources) and every other
-//! source of the runtime mask (TX completion, TX timeout, collision and the
+//! source of the runtime mask (TX completion, TX timeout, BSS-color collision and the
 //! still-unidentified sources). The WDEVPWR model enables only the station
 //! TBTT, as epoch activation does.
 
@@ -105,7 +105,7 @@ const fn events_without(
 ) -> MacInterruptEvents {
     MacInterruptEvents::from_causes(
         events.tx_complete() && !removed.tx_complete(),
-        events.collision() && !removed.collision(),
+        events.bss_color_collision() && !removed.bss_color_collision(),
         events.rx_success() && !removed.rx_success(),
         events.tx_timeout() && !removed.tx_timeout(),
     )
@@ -121,8 +121,8 @@ pub struct MacInterruptModel {
 }
 
 impl MacInterruptModel {
-    /// The bank as epoch activation leaves it: every runtime source enabled,
-    /// nothing latched.
+    /// The bank as station epoch activation leaves it: RX and TX enabled,
+    /// the HE BSS-color source masked, nothing latched.
     pub const fn new() -> Self {
         Self {
             latched: MacInterruptObservation::from_semantic_events(
@@ -158,7 +158,7 @@ impl MacInterruptModel {
         MacInterruptObservation::from_semantic_events(
             MacInterruptEvents::from_causes(
                 other && latched.tx_complete(),
-                other && latched.collision(),
+                false, // The station mask excludes the HE color source.
                 rx && latched.rx_success(),
                 other && latched.tx_timeout(),
             ),

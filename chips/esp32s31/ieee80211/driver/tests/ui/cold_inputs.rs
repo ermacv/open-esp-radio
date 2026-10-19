@@ -11,10 +11,10 @@ pub fn cold_inputs(hardware: &mut WifiMacColdHal<'_>, random: u32, calibration: 
     hardware.initialize_txrx_callbacks(MacDelaySlot::from_random(random));
 
     #[cfg(ui_reject)]
-    hardware.initialize_hal_tail(MacInterruptMask::COLD_RX, calibration); // ui-error: E0308
+    hardware.initialize_hal_tail(MacInterruptMask::STATION, calibration); // ui-error: E0308
     #[cfg(not(ui_reject))]
     hardware.initialize_hal_tail(
-        MacInterruptMask::COLD_RX,
+        MacInterruptMask::STATION,
         MacRtcCalibration::from_osi_value(calibration),
     );
 }
