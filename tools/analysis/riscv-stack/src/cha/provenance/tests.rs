@@ -231,3 +231,88 @@ fn reading_locations_respects_the_work_budget() {
     })
     .unwrap();
 }
+
+#[test]
+fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
+    let source = PROGRAM.replace(
+        "black_box(&OTHER);",
+        "black_box(&OTHER); black_box(different as *const () as usize);",
+    );
+    let mut elf = compiled(&source);
+    let at = {
+        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let different = file
+            .symbols()
+            .find(|symbol| symbol.demangled().ends_with("::different"))
+            .unwrap();
+        let section = file
+            .sections()
+            .find(|section| {
+                section.executable
+                    && file.relocations(section.index).unwrap().any(|relocation| {
+                        relocation.target == oer_analysis_elf::Target::Symbol(different.index)
+                            && relocation.r_type == oer_analysis_elf::rv32::R_RISCV_HI20
+                    })
+            })
+            .unwrap();
+        let rela = file
+            .sections()
+            .find(|rela| {
+                rela.kind == oer_analysis_elf::SectionKind::Rela
+                    && rela.relocates == Some(section.index)
+            })
+            .unwrap();
+        let index = rela
+            .data
+            .chunks_exact(12)
+            .position(|entry| {
+                u32::from_le_bytes(entry[4..8].try_into().unwrap())
+                    == ((different.index as u32) << 8 | oer_analysis_elf::rv32::R_RISCV_HI20)
+            })
+            .unwrap();
+        rela.file_offset as usize + index * 12 + 4
+    };
+    // Keep the symbol identity and addend, but make the role unfamiliar.
+    elf[at] = 0xff;
+    let (_, types) = debug(&elf);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let different = named(&analysis, "different");
+        assert!(image.address_uses().iter().any(|use_| {
+            use_.role == Role::Other
+                && use_
+                    .function
+                    .nearest
+                    .is_some_and(|relation| relation.entry == different)
+        }));
+        let resolutions = typed_function_pointer_resolutions(
+            image,
+            &analysis,
+            &types,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let transfer = analysis.functions[&named(&analysis, "_start")]
+            .transfers
+            .iter()
+            .find(|transfer| transfer.target.is_none())
+            .unwrap();
+        assert!(
+            resolutions
+                .get(transfer.site)
+                .unwrap()
+                .targets
+                .contains(&different)
+        );
+        Ok(())
+    })
+    .unwrap();
+}

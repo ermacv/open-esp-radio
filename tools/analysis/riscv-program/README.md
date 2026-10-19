@@ -18,6 +18,24 @@ link kept (each checked against the word it relocates) and the compiler's
 section. Lookups never parse again. The stack analyzer reads images through
 it.
 
+`ImageFacts::address_uses` indexes every non-transfer, non-hint relocation
+of allocated code and data, classified by `oer-analysis-elf::rv32`. It keeps
+the original site, section, relocation type, target identity, addend and
+REL/RELA form, the original symbol (including aliases), the numerical target
+and its relationship to this ELF's functions. Exact entries, odd and interior
+addresses, overlapping function extents and differing symbol/target
+relationships remain distinguishable. Undefined symbols and unsupported
+targets are explicit; unknown relocation roles remain indexed. All storage
+is admitted in `WorkingMemory` and collection charges `RunControl`.
+
+An address use is a structural observation. It proves neither preservation
+of a function-pointer type nor completeness of callback provenance. Stack
+analysis projects it according to each consumer's rules for symbol kinds,
+section targets, materialization, field types and executor ownership. Each
+index belongs to its own ELF; companion section indexes are never looked
+up through the main image. The separately checked relocated-word index
+continues to supply table contents.
+
 `ProgramView` lays an image's memory out by its sections, as a firmware
 packer such as esptool loads it: every allocated section with file contents.
 A section's own flags say whether it is code or writable data, whatever the

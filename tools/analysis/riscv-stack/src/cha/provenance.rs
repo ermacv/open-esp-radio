@@ -5,7 +5,7 @@ use super::{Field, TypeFacts};
 use crate::dwarf::{Reader, dwarf_error, invalid, reference};
 use crate::{Analysis, Fact, Resolutions, TransferKind};
 use oer_analysis_elf::dwarf::{DebugSections, gimli};
-use oer_analysis_elf::rv32::{self, Role};
+use oer_analysis_elf::rv32::Role;
 use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
 use oer_analysis_riscv_model::*;
 use oer_analysis_riscv_program::facts::ImageFacts;
@@ -647,61 +647,30 @@ fn address_uses(
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<BTreeMap<u32, Uses>> {
-    let mut symbols = BTreeMap::new();
-    for symbol in image.file().symbols() {
-        if let Ok(address) = u32::try_from(symbol.address)
-            && analysis.functions.contains_key(&address)
-        {
-            keep.insert(&mut symbols, symbol.index, address, control)?;
-        }
-    }
     let mut uses: BTreeMap<u32, Vec<AddressUse>> = BTreeMap::new();
-    for section in image.file().sections().filter(|section| section.allocated) {
-        for relocation in image
-            .file()
-            .relocations(section.index)
-            .map_err(|error| invalid(error.to_string()))?
-        {
-            control.checkpoint(1)?;
-            let role = rv32::kind(relocation.r_type).role;
-            if role == Role::Hint || rv32::transfers(relocation.r_type) {
-                continue;
-            }
-            let target = image
-                .file()
-                .target_address(&relocation)
-                .map_err(|error| invalid(error.to_string()))?;
-            let Ok(target) = u32::try_from(target) else {
-                continue;
-            };
-            let mut function = match relocation.target {
-                oer_analysis_elf::Target::Symbol(symbol) => {
-                    symbols.get(&symbol).copied().unwrap_or(target & !1)
-                }
-                _ => target & !1,
-            };
-            if !analysis.functions.contains_key(&function)
-                && let Some((&entry, owner)) = analysis.functions.range(..=target).next_back()
-                && u64::from(target) < u64::from(entry) + u64::from(owner.function.size)
-            {
-                // A section/local label or arithmetic addend may name the
-                // middle of code. It still prevents excluding the function.
-                function = entry;
-            }
-            if !analysis.functions.contains_key(&function) {
-                continue;
-            }
-            let entries = keep.entry(&mut uses, function, Vec::new, control)?;
-            keep.push(
-                entries,
-                AddressUse {
-                    site: relocation.at as u32,
-                    role,
-                    exact: target == function,
-                },
-                control,
-            )?;
-        }
+    for address_use in image.address_uses() {
+        control.checkpoint(1)?;
+        let Some(projected) = crate::relocations::function_use(
+            address_use,
+            analysis,
+            crate::relocations::FunctionUsePolicy::TypedStorage,
+        )?
+        else {
+            continue;
+        };
+        let Some(function) = projected.function else {
+            continue;
+        };
+        let entries = keep.entry(&mut uses, function, Vec::new, control)?;
+        keep.push(
+            entries,
+            AddressUse {
+                site: address_use.relocation.at as u32,
+                role: address_use.role,
+                exact: projected.exact,
+            },
+            control,
+        )?;
     }
     let mut out = BTreeMap::new();
     for (function, mut entries) in uses {

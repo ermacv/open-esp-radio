@@ -3088,3 +3088,126 @@ fn an_unknown_caller_path_does_not_supply_constant_spawn_arguments() {
         "{candidates:?}"
     );
 }
+
+#[test]
+fn source_symbol_kinds_preserve_the_two_address_audits_distinct_policies() {
+    use crate::relocations::{FunctionUsePolicy, function_use};
+    use oer_analysis_elf::{Elf, SectionKind};
+    let f = Symbol {
+        name: "f",
+        words: vec![RET],
+        frame: Some(0),
+    };
+    let g = Symbol {
+        name: "g",
+        words: vec![RET],
+        frame: Some(0),
+    };
+    let original = labelled(&[f, g], &[TEXT + 4]);
+    let (info_at, symbol_at, symbol_index) = {
+        let file = Elf::parse(&original).unwrap();
+        let relocation = file
+            .sections()
+            .find(|section| section.kind == SectionKind::Rela)
+            .unwrap();
+        let symbols = file.section(file.symbol_table_section().unwrap()).unwrap();
+        let f = file.symbol("f").unwrap();
+        (
+            relocation.file_offset as usize + 4,
+            symbols.file_offset as usize + f.index * 16,
+            f.index,
+        )
+    };
+    for text_symbol in [true, false] {
+        let mut bytes = original.clone();
+        let info = (symbol_index as u32) << 8 | object::elf::R_RISCV_32;
+        bytes[info_at..info_at + 4].copy_from_slice(&info.to_le_bytes());
+        bytes[info_at + 4..info_at + 8].copy_from_slice(&4_i32.to_le_bytes());
+        if !text_symbol {
+            // A global untyped code entry remains a function, but only the
+            // typed-storage audit prefers this source identity over f+4.
+            bytes[symbol_at + 12] = 0x10;
+        }
+        let analysis = analyze(&bytes, &[], &[]).unwrap();
+        with_facts(&bytes, |image| {
+            let use_ = &image.address_uses()[0];
+            let task = function_use(use_, &analysis, FunctionUsePolicy::TaskPoll)?.unwrap();
+            let typed = function_use(use_, &analysis, FunctionUsePolicy::TypedStorage)?.unwrap();
+            assert_eq!(typed.function, Some(TEXT));
+            assert!(!typed.exact);
+            assert_eq!(
+                task.function,
+                Some(if text_symbol { TEXT } else { TEXT + 4 })
+            );
+            assert_eq!(task.exact, !text_symbol);
+            assert_eq!(
+                crate::taken_addresses(image, &mut ledger(), &mut || Ok(()))?,
+                BTreeSet::from([TEXT + 4])
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+}
+
+#[test]
+fn main_and_companion_address_uses_keep_independent_elf_identities() {
+    let main = labelled(&[leaf(Some(32))], &[TEXT + 2]);
+    let companion_base = 0x8000;
+    let mut companion = placed(
+        companion_base,
+        &[leaf(Some(32))],
+        &[companion_base + 1],
+        false,
+        true,
+    );
+    // Give the companion's code a different section identity by swapping
+    // .text and .stack_sizes headers and updating the symbols/RELA metadata.
+    let shoff = u32::from_le_bytes(companion[32..36].try_into().unwrap()) as usize;
+    let old_text = companion[shoff + 40..shoff + 80].to_vec();
+    let old_sizes = companion[shoff + 80..shoff + 120].to_vec();
+    companion[shoff + 40..shoff + 80].copy_from_slice(&old_sizes);
+    companion[shoff + 80..shoff + 120].copy_from_slice(&old_text);
+    let symtab = oer_analysis_elf::Elf::parse(&companion)
+        .unwrap()
+        .section(3)
+        .unwrap()
+        .file_offset as usize;
+    companion[symtab + 16 + 14..symtab + 16 + 16].copy_from_slice(&2_u16.to_le_bytes());
+    let analysis = analyze(&main, &[&companion], &[]).unwrap();
+    with_facts(&main, |main| {
+        with_facts(&companion, |companion| {
+            use crate::relocations::{FunctionUsePolicy, function_use};
+            assert_ne!(
+                main.functions()[0].section,
+                companion.functions()[0].section
+            );
+            let a = &main.address_uses()[0];
+            let b = &companion.address_uses()[0];
+            assert_eq!(a.function.nearest.unwrap().entry, TEXT);
+            assert_eq!(b.function.nearest.unwrap().entry, companion_base);
+            assert_eq!(
+                function_use(a, &analysis, FunctionUsePolicy::TaskPoll)?
+                    .unwrap()
+                    .function,
+                Some(TEXT)
+            );
+            assert_eq!(
+                function_use(b, &analysis, FunctionUsePolicy::TaskPoll)?
+                    .unwrap()
+                    .function,
+                Some(companion_base)
+            );
+            assert_eq!(
+                crate::taken_addresses(main, &mut ledger(), &mut || Ok(()))?,
+                BTreeSet::from([TEXT + 2])
+            );
+            assert_eq!(
+                crate::taken_addresses(companion, &mut ledger(), &mut || Ok(()))?,
+                BTreeSet::from([companion_base])
+            );
+            Ok(())
+        })
+    })
+    .unwrap();
+}
