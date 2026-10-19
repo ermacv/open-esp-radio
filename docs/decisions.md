@@ -65,9 +65,9 @@ bounds) live in the code that applies them.
   core of the HAL; crates above the HAL forbid it.
 - **Probe hooks** compile under `cfg(oer_probe)`, which only `cargo fw probe`
   sets, for a probe image, in its own target directory; no crate has a
-  probe feature. A probe uses the public API where it can. Production stays
-  clean by proof: a change that adds or moves hooks shows the S31 images
-  unchanged.
+  probe feature. A probe uses the public API where it can; production has no
+  item that only a probe uses. CI on main builds the probe images and shows
+  the S31 product images unchanged by the hooks.
 - **Every package builds**; the workspace has no `exclude` list.
 
 ## Execution
@@ -268,7 +268,10 @@ bounds) live in the code that applies them.
   view, RV32 decoding, lifting, control-flow and value analysis, the program
   model, concrete execution) with applications on top: MMIO research, the
   stack analyzer, vendor comparison, provenance and copy checks, image checks.
-- **Vendor comparison** is a tool used by hand.
+- **Vendor comparison** is a tool used by hand for register sequences taken
+  from the vendor: a scenario prints its verdict and keeps nothing. There are
+  no point mutants, no evidence index and no coverage decisions; probe entries
+  exist only for a scenario that selects them.
 - **ELF** is read through `object`: convenient reading in
   `tools/analysis/elf`, bounded reading of untrusted vendor input in
   `tools/analysis/blobray-artifacts`; there is no other ELF parser.
