@@ -993,6 +993,122 @@ fn reserved_descriptor_never_lends_classic_idle_authority() {
     let _ = cookie;
 }
 
+/// Drive the production management owner through modeled completions,
+/// inspecting semantic HAL publications rather than register images.
+fn check_management_transmissions(
+    receiver: MacAddress,
+    management: oer_ieee80211_lower_mac::ManagementTxPlan,
+    completions: &[(u8, u8)],
+) {
+    use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface};
+    use oer_esp32s31_ieee80211_mac::tx::LegacyRate as ChipLegacyRate;
+
+    let mut owner = OrdinaryTxOwner::new(WifiTxResources {
+        slot: slot(),
+        policy: WifiTxRuntimePolicy::vendor_defaults(),
+        power: Power,
+        entropy: entropy as fn() -> u32,
+        timer: Timer::default(),
+    });
+    let mut frame = [0; 24];
+    frame[0] = 0x40; // Probe Request.
+    frame[4..10].copy_from_slice(&receiver);
+    frame[10..16].copy_from_slice(&STATION);
+    frame[16..22].copy_from_slice(&BSSID);
+    let plan = OrdinaryTxPlan {
+        frame_length: frame.len(),
+        descriptor_capacity: None,
+        exchange: MacTxPlan {
+            access_category: WmmAccessCategory::BestEffort,
+            // The management plan must replace both caller values.
+            initial_rate: TxPhyRate::Legacy(ChipLegacyRate::Ofdm54M),
+            publication_limit: 32,
+            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+        },
+        hardware_mic_length: 0,
+        hardware_key_selector: 0,
+        interface: OrdinaryTxInterface::Station,
+        scheduler_priority: 1,
+        packet_priority: 1,
+        priority_count: 1,
+    };
+    let mut hardware = Hardware::default();
+    let OrdinaryTxAccess::Idle(mut idle) = owner.access() else {
+        panic!("a fresh transmitter is idle");
+    };
+    idle.buffer_mut()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()].copy_from_slice(&frame);
+    assert_eq!(
+        idle.start_management(&mut hardware, plan, management)
+            .unwrap(),
+        WifiTxProgress::Pending
+    );
+    let rate = ChipLegacyRate::from_phy_rate(management.rate());
+    for (index, &(status, detail)) in completions.iter().enumerate() {
+        let snapshot = owner.active_snapshot().unwrap().unwrap();
+        assert_eq!(snapshot.current_rate, TxPhyRate::Legacy(rate));
+        assert_eq!(usize::from(snapshot.publications), index + 1);
+        assert_eq!(hardware.publications(), index + 1);
+        let program = hardware.legacy.last().unwrap().1;
+        assert_eq!(program.rate(), rate.pac_rate());
+        assert_eq!(
+            program.response(),
+            if receiver[0] & 1 == 0 {
+                MacLegacyTxResponse::Ack
+            } else {
+                MacLegacyTxResponse::None
+            }
+        );
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(status, detail));
+        let OrdinaryTxAccess::Active(active) = owner.access() else {
+            panic!("the management frame is still active");
+        };
+        assert_eq!(
+            active
+                .service(&mut hardware, interrupt(EVENT_TX_COMPLETE))
+                .unwrap(),
+            if index + 1 == completions.len() {
+                WifiTxProgress::Complete
+            } else {
+                WifiTxProgress::Pending
+            }
+        );
+    }
+    let report = owner.take_last_outcome().unwrap().report();
+    assert_eq!(usize::from(report.status.attempts), completions.len());
+    assert_eq!(report.status.final_rate, TxPhyRate::Legacy(rate));
+    assert_eq!(owner.slot_state(), TxDmaState::Free);
+    assert_eq!(hardware.publications(), completions.len());
+}
+
+#[test]
+fn management_unicast_keeps_its_rate_for_seven_attempts() {
+    use oer_ieee80211_lower_mac::ManagementTxPlan;
+    for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
+        // Both pure ACK failures and mixed failures consume seven attempts.
+        for failures in [
+            [(5, 0); 7],
+            [(2, 0), (4, 1), (5, 0), (2, 0), (4, 1), (5, 0), (5, 0)],
+        ] {
+            check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &failures);
+        }
+        check_management_transmissions(PEER, ManagementTxPlan::unicast(rate), &[(0, 0)]);
+    }
+}
+
+#[test]
+fn management_broadcast_never_retries() {
+    use oer_ieee80211_lower_mac::ManagementTxPlan;
+    for rate in [LegacyRate::Ofdm6M, LegacyRate::Ofdm12M] {
+        for completion in [(0, 0), (5, 0), (2, 0), (4, 1)] {
+            check_management_transmissions(
+                [0xff; 6],
+                ManagementTxPlan::broadcast(rate),
+                &[completion],
+            );
+        }
+    }
+}
+
 /// The station's best-effort attempt of `frame` at 24 Mb/s, in its own
 /// slot, acknowledged unless `no_ack`.
 fn values(frame: &[u8], no_ack: bool) -> Request {

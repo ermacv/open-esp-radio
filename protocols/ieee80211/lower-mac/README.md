@@ -118,6 +118,11 @@ back; its operations are synchronous and never wait:
   admitted aggregate from an empty builder. Sent subframes retain their
   bodies; each fresh subframe returns its own body. `renew` returns memory
   and body explicitly.
+- **Management plans.** `ManagementTxPlan` carries a legacy rate derived
+  above the driver and a constructor-owned budget: `unicast(rate)` admits
+  at most seven attempts (dot11ShortRetryLimit), `broadcast(rate)` one.
+  Every attempt keeps the selected rate. The S31 direct W2 path consumes
+  this contract without parsing a BSS or using vendor control schedules.
 - **Retry plans.** An individual frame carries its `RetryPlan`, a sequence
   of rates with their transmissions and protection, as mac80211's rate
   table. The first stage is mandatory; the tail is a fixed array of

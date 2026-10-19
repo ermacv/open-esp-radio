@@ -44,12 +44,12 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
                 // Unprotected PPDUs publish the vendor rate of their data rate.
                 let unprotected_rate = match phy {
                     0 => {
-                        let mut config = LegacyTxConfig::management_1m(100);
+                        let mut config = LegacyTxConfig::management(LegacyRate::Ofdm6M, 100);
                         config.control = control;
                         slot.as_mut()
                             .submit_legacy(&mut hardware, cookie, queue, config)
                             .unwrap();
-                        MacLegacyRate::Dsss1MLong
+                        MacLegacyRate::Ofdm6M
                     }
                     1 => {
                         let mut config = HtTxConfig::single_mpdu(
@@ -126,7 +126,11 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
         free_slot(slot.as_mut()).into_buffer()[0] = payload;
         let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
         slot.as_mut()
-            .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+            .submit_legacy_q0(
+                &mut hardware,
+                cookie,
+                LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+            )
             .unwrap();
         assert!(
             slot.as_mut()
@@ -175,7 +179,11 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
     let mut hardware = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut hardware,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(0, 0));
     slot.as_mut()
@@ -217,13 +225,19 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     assert_eq!(slot.state(), TxDmaState::Reserved);
     let mut mmio = MockMmio::default();
     assert_eq!(
-        slot.as_mut()
-            .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100)),
+        slot.as_mut().submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100)
+        ),
         Ok(())
     );
     assert_eq!(
-        slot.as_mut()
-            .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100)),
+        slot.as_mut().submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100)
+        ),
         Err(TxError::Stale)
     );
 
@@ -276,7 +290,11 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
     let mut hardware = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut hardware,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
 
     assert_eq!(slot.as_mut().require_reset(cookie), Ok(()));
@@ -295,7 +313,11 @@ fn tx_completion_decodes_the_blob_ack_snr_byte() {
     let mut mmio = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
 
     // Encoded 0x8b plus the pinned 0x60 offset narrows to signed -21.
@@ -327,7 +349,11 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
     let mut mmio = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
 
     mmio.set_tx_timeout_pending(0, true);
@@ -372,7 +398,11 @@ fn tx_slot_disables_before_acknowledging_one_collision_queue() {
     let mut mmio = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut mmio, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
 
     mmio.set_tx_collision_pending(0, true);
@@ -405,7 +435,11 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     let mut hardware = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     slot.as_mut()
-        .submit_legacy_q0(&mut hardware, cookie, LegacyTxConfig::management_1m(100))
+        .submit_legacy_q0(
+            &mut hardware,
+            cookie,
+            LegacyTxConfig::management(LegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(1, 2));
     assert_eq!(

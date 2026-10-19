@@ -31,7 +31,7 @@ use oer_esp32s31_ieee80211_mac::{
         TxHardware, TxPhyRate, TxSlot, TxSlotAccess, TxSlotFree,
     },
 };
-use oer_ieee80211_lower_mac::VifRole;
+use oer_ieee80211_lower_mac::{ManagementTxPlan, VifRole};
 use oer_ieee80211_mac::frame::FrameControl;
 use oer_ieee80211_softmac::{MacTxPlan, MacTxQueueState, MacTxResult, MacTxStatus};
 
@@ -564,6 +564,29 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize>
         plan: OrdinaryTxPlan,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
         self.owner.start_idle(hardware, plan)
+    }
+
+    /// Send management at the rate and budget selected above the driver.
+    ///
+    /// `management` replaces the exchange's initial rate and publication
+    /// limit. All attempts keep that rate; no vendor ladder or control
+    /// schedule participates. The caller supplies the plan for the encoded
+    /// receiver: unicast or broadcast.
+    pub fn start_management<H: TxHardware>(
+        self,
+        hardware: &mut H,
+        mut plan: OrdinaryTxPlan,
+        management: ManagementTxPlan,
+    ) -> Result<WifiTxProgress, OrdinaryTxError> {
+        plan.exchange.initial_rate = TxPhyRate::Legacy(
+            oer_esp32s31_ieee80211_mac::tx::LegacyRate::from_phy_rate(management.rate()),
+        );
+        plan.exchange.publication_limit = management.attempts();
+        self.owner.start_idle_with_retry_rate_policy(
+            hardware,
+            plan,
+            OrdinaryRetryRatePolicy::Management,
+        )
     }
 
     pub fn start_with_retry_rate_policy<H: TxHardware>(
@@ -1656,8 +1679,7 @@ where
                     TxPhyRate::Legacy(rate),
                     psdu_length.into(),
                 );
-                let mut config = LegacyTxConfig::management_1m(psdu_length);
-                config.rate = rate;
+                let mut config = LegacyTxConfig::management(rate, psdu_length);
                 config.control = self.control_frame(TxPhyRate::Legacy(rate), decision, ceiling);
                 config.data_power =
                     capped_power(self.power.power_pair(rate.code()), ceiling).primary as u8;
