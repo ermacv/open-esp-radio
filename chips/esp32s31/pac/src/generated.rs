@@ -681,6 +681,29 @@ impl BluetoothDeviceTableEntryCount {
     }
 }
 
+/// The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MacSlowClockCalibrationValue(u32);
+
+impl MacSlowClockCalibrationValue {
+    pub const MIN: u32 = 0x00000000;
+    pub const MAX: u32 = 0x0003ffff;
+
+    /// Construct a value only when it lies in the reviewed inclusive range.
+    pub const fn new(value: u32) -> Option<Self> {
+        if value <= 0x0003ffff {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Return the checked numeric value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// One four-bit external coexistence priority or grant field image.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexNibble(u32);
@@ -3617,6 +3640,15 @@ pub(crate) fn publish_mac_rx_beacon_pti(registers: &crate::svd::WifiMacCoexRunti
 #[inline]
 pub(crate) fn publish_mac_shared_rx_pti(registers: &crate::svd::WifiMacCoexRuntime, value: MacPti) {
     crate::svd::field_replace_modify::publish_mac_shared_rx_pti(registers, value.get());
+}
+
+/// Typed bridge for the reviewed `set_mac_slow_clock_calibration` field-replacement transaction.
+#[inline]
+pub(crate) fn set_mac_slow_clock_calibration(
+    registers: &crate::svd::WifiMacRtcTimerUpdate,
+    value: MacSlowClockCalibrationValue,
+) {
+    crate::svd::field_replace_modify::set_mac_slow_clock_calibration(registers, value.get());
 }
 
 /// Typed bridge for the reviewed `set_coex_external_priority_0` field-replacement transaction.

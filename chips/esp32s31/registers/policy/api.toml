@@ -335,6 +335,13 @@ max = 255
 sources = ["BLOB_LIBBLE_DEVICE_TABLE"]
 
 [[bounded-domains]]
+name = "MacSlowClockCalibrationValue"
+description = "The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes."
+min = 0
+max = 0x3ffff
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+
+[[bounded-domains]]
 name = "ExternalCoexNibble"
 description = "One four-bit external coexistence priority or grant field image."
 min = 0
@@ -3405,6 +3412,15 @@ input-mask = 0x000000ff
 set-mask = 0x00000000
 exposure = "facade"
 sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME"]
+
+[[field-replace-modifies]]
+name = "set_mac_slow_clock_calibration"
+peripheral = "WIFI_MAC_RTC_TIMER_UPDATE"
+register = "SLOW_CLOCK_CALIBRATION"
+fields = [{ field = "VALUE", source-bit-offset = 0 }]
+domain = "MacSlowClockCalibrationValue"
+exposure = "facade"
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
 
 [[field-replace-modifies]]
 name = "set_coex_external_priority_0"

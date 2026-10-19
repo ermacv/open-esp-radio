@@ -67476,6 +67476,16 @@ pub mod field_replace_modify {
         });
     }
 
+    /// Replace WIFI_MAC_RTC_TIMER_UPDATE.SLOW_CLOCK_CALIBRATION fields `[VALUE]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn set_mac_slow_clock_calibration(registers: &crate::WifiMacRtcTimerUpdate, input: u32) {
+        registers.slow_clock_calibration().modify(|_, writer| {
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe { writer.value().bits(input & 0x0003ffff) }
+        });
+    }
+
     /// Replace COEX_EXTERNAL.PTI fields `[PRIORITY_0]` from one reviewed logical image while preserving every other bit.
     #[inline]
     pub fn set_coex_external_priority_0(registers: &crate::CoexExternal, input: u32) {
