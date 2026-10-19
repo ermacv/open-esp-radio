@@ -56,10 +56,10 @@ packages. Prefixes below omit `oer-` only to keep the mapping readable.
 | `esp32s31-soc-esp-hal` | `adapters/esp-hal/soc/` |
 | `esp32s31-phy` | `esp32s31/phy/` |
 | `espressif-ieee802154-engine` | `espressif/ieee802154-engine/` |
-| `esp32s31-radio-client` | `esp32s31/radio/client/` |
 | `espressif-executor-embassy` | `exec/executor/` |
 | `espressif-interrupt-table-esp-hal` | `exec/esp-hal-irq/` |
 | `interrupt-table` | `exec/interrupt-table/` |
+| `platform-staged-layout` | `platform/staged-layout/` |
 
 These exceptions cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,
@@ -84,12 +84,6 @@ Its `dma_static` module holds the placement constructor:
 whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
-
-`esp32s31-radio-client` has one unsafe module, `cell`: the one-request slot
-between a radio-system client and the actor. Its state (`IDLE`, `POSTED`,
-`WORKING`, `ANSWERED`) admits exactly one accessor to each payload place, a
-Release store hands the place over and the other side's Acquire CAS takes it;
-the client posts only with the slot's token, which the answer returns.
 
 The Wi-Fi DMA storage, `esp32s31-hal`'s `ieee80211::dma` module, has one
 unsafe site that exists only under `test-support`: the host model of the DMA
@@ -122,6 +116,22 @@ non-empty custody store is the quarantine path only: `Quarantine` is an
 unsafe trait whose method erases key material in place and releases, moves
 and awaits nothing, so DMA leases stay reserved until reset.
 
+`RequestSlot` carries one request at a time from a client to a server and
+its answer back. Its state (`IDLE`, `POSTED`, `WORKING`, `ANSWERED`) admits
+exactly one accessor to each payload place, a Release store hands the place
+over and the other side's Acquire CAS takes it; the client posts only with
+the slot's one `Poster`, which the answer returns. The radio-system client
+uses it and has no unsafe code of its own.
+
+`retained` holds records in memory that survives a reset. A
+`RetainedCell<T: bytemuck::AnyBitPattern>` reads what the previous boot left
+as a `T`, so every bit pattern must be a value; `try_lock` hands the record
+to one holder at a time without waiting, and its claim lives in a section
+every boot zeroes, so a reset never leaves the record claimed. The cell is
+defined only by `__retained_static!`, whose two statics are its own; the
+staged runtime's `retained_static!` names the sections. `read_volatile`
+reads a value behind a shared borrow with a volatile load.
+
 `HandlerCell` hands one `&'static mut T` from the context that installs it
 to an interrupt handler. Its state (`EMPTY`, `INSTALLING`, `READY`, `BUSY`)
 admits one reference at a time: `install` consumes the reference and
@@ -131,6 +141,37 @@ the state to `READY` once that borrow ended. A call that does not find
 `READY` gets `None` without waiting, so the cell is not a lock and a nested
 call cannot alias. It is `Sync` only for `T: Send` and never reclaims its
 value.
+
+`platform-staged-layout` declares the stage-two handoff contract: the unsafe
+trait `AdoptsBootstrapMapping`, a board's promise that its adoption of the
+bootstrap's PSRAM mapping neither resets nor remaps PSRAM, and the
+`StageTwoHandoff` proof only the staged runtime's entry mints. It holds no
+other unsafe code.
+
+## Firmware and platform code below the boundary
+
+The platform crates (`chips/platform/*`), the bootstrap images
+(`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the
+target ABI and placement, so they hold unsafe code that no crate above them
+needs:
+
+- The staged runtime defines the image entry (`entry!`, the `Handoff` and
+  `Adopted::enable_interrupts`), the sections the linker script maps
+  (`placed_static!`, `sram_fn!`, `retained_static!`), the panic hook and
+  exception handler symbols (`panic_hook!`, `exception_handler!`), the trap
+  CSRs (`trap`) and the linked sections (`layout`). Images and HIL agents
+  reach these through safe APIs and forbid unsafe code.
+- Each board implements `AdoptsBootstrapMapping` for its PSRAM and wraps the
+  mask ROM's console output (`rom`), a C variadic.
+- The bootstrap places the packed stage two and the flash tuning reference in
+  its own read-only flash sections.
+- A probe image is entered by the Blobray verifier through the exported
+  symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
+  entries), with that code's C signatures, and keeps its fixtures in statics
+  the verifier's serial calls reach one at a time.
+
+The bootstrap and probe crates deny `clippy::undocumented_unsafe_blocks`, and
+each unsafe attribute in them carries its `// SAFETY:` comment as well.
 
 ## PAC dependency authority
 

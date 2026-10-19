@@ -1,5 +1,6 @@
 #![no_main]
 #![no_std]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 //! The ESP32-C5 bootstrap: the staged boot's chip-neutral steps
 //! (`oer-platform-staged-bootstrap`) around the module's PSRAM. The chip's
@@ -30,6 +31,8 @@ use oer_platform_staged_bootstrap::{self as staged, print};
 
 // This is the load image, not its runtime placement: the bootstrap copies
 // and verifies it into PSRAM.
+// SAFETY: `.psram.runtime.payload` is the bootstrap linker script's
+// read-only flash input section for the packed stage two; nothing writes it.
 #[used]
 #[unsafe(link_section = ".psram.runtime.payload")]
 static RUNTIME_PAYLOAD: [u8; include_bytes!(env!("PSRAM_RUNTIME_BIN")).len()] =

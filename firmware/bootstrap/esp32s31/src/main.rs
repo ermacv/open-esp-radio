@@ -1,5 +1,6 @@
 #![no_main]
 #![no_std]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 //! The ESP32-S31 bootstrap: the staged boot's chip-neutral steps
 //! (`oer-platform-staged-bootstrap`) around this board's PSRAM and its
@@ -32,6 +33,8 @@ const FLASH_TUNING_REFERENCE_WORDS: usize =
 // This is the load image, not its runtime placement. The bootstrap copies and
 // verifies it at the bootloader's qualified 80 MHz setting before changing
 // the Flash timing. The tuning sweep uses a separate, still-cold XIP span.
+// SAFETY: `.psram.runtime.payload` is the bootstrap linker script's
+// read-only flash input section for the packed stage two; nothing writes it.
 #[used]
 #[unsafe(link_section = ".psram.runtime.payload")]
 static RUNTIME_PAYLOAD: [u8; include_bytes!(env!("PSRAM_RUNTIME_BIN")).len()] =
@@ -43,6 +46,8 @@ static RUNTIME_PAYLOAD: [u8; include_bytes!(env!("PSRAM_RUNTIME_BIN")).len()] =
 //
 // SOURCE: pinned esp-hal fork, `esp-hal/src/flash.rs::Flash::tune_120mhz`,
 // which requires at least fifteen distinct 4-KiB XIP pages.
+// SAFETY: `.flash.tuning.reference` is the bootstrap linker script's
+// read-only flash section of its own XIP pages; only the tuning reads it.
 #[used]
 #[unsafe(link_section = ".flash.tuning.reference")]
 static FLASH_TUNING_REFERENCE: [u32; FLASH_TUNING_REFERENCE_WORDS] = flash_tuning_reference();

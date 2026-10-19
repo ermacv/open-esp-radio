@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 //! Small, low-level probes kept independent from AP/STA runtime adapters.
 //!

@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 //! Link-time probes for compiled vendor/Rust MMIO comparison.
 //!
@@ -100,6 +101,8 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 }
 
 /// Harness-only delay edge intercepted by the Blobray verifier before this body runs.
+// SAFETY: the probe image links no ROM, so this is the one `ets_delay_us`,
+// with the ROM function's C signature the vendor code calls.
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn ets_delay_us(micros: u32) {
@@ -110,6 +113,8 @@ oer_probe_macros::probe! {
     /// Harness delay adapter preserving integer inputs around the explicit event edge.
     /// The guest body executes these saves/restores; the inner model supplies only
     /// requested-time observation, never production completion or register values.
+    // SAFETY: the body is assembly alone: it saves and restores every register
+    // it uses on its own stack frame and returns through the saved `ra`.
     #[unsafe(naked)]
     pub fn open_phy_trace_preserving_delay(_micros: u32) {
         core::arch::naked_asm!(
