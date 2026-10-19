@@ -766,6 +766,8 @@ mod tests {
             source: Some(FrameSource::Observed),
             observed: Some(0),
             complete: true,
+            terminal_recursive_callees: false,
+            target_loads: BTreeMap::new(),
             transfers: callee
                 .map(|target| Transfer {
                     site: address,

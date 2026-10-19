@@ -29,10 +29,13 @@ mod contexts;
 mod dwarf;
 mod image;
 mod interrupts;
+mod producers;
+mod recursion;
 mod relocations;
 mod resolutions;
 mod summaries;
 mod sweep;
+mod task_spawns;
 mod tasks;
 mod trap;
 mod wakers;
@@ -44,7 +47,7 @@ use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub use cha::{TypeFacts, function_pointer_resolutions};
+pub use cha::{TypeFacts, function_pointer_resolutions, typed_function_pointer_resolutions};
 pub use contexts::{HartStack, LevelStack, Stacks, interrupt_stacks};
 pub use dwarf::{Dwarf, read as read_debug};
 pub use image::{Function, stack_sizes};
@@ -84,8 +87,14 @@ pub struct FunctionFacts {
     pub observed: Option<u64>,
     /// Whether the control-flow graph covered the function without gaps.
     pub complete: bool,
+    /// Every direct self-call constructs inputs that execute no further
+    /// direct self-call, proved from instructions and stack payload bytes.
+    pub terminal_recursive_callees: bool,
     /// Direct calls and out-of-function jumps, by site.
     pub transfers: Vec<Transfer>,
+    /// Every reaching word-load definition of each unresolved transfer's
+    /// target, only when the local graph and every incoming path prove it.
+    pub target_loads: BTreeMap<u32, Vec<Load>>,
     /// Bytes below the entry `sp` at each transfer the value analysis
     /// reached; a transfer it did not reach is taken at the whole frame.
     pub site_depths: BTreeMap<u32, u64>,
@@ -428,6 +437,16 @@ fn function_facts(
     };
     let observation = observe(&function, &jumps, &tables, work, control)?;
     let mut transfers = swept.transfers;
+    for transfer in &mut transfers {
+        if let Some(load) = &mut transfer.load {
+            load.exclusive_producer = observation.closed_graph
+                && observation
+                    .predecessors
+                    .get(&transfer.site)
+                    .is_some_and(|incoming| incoming.as_slice() == [load.site]);
+        }
+    }
+    let target_loads = producers::loads(elf, &function, &transfers, &observation, work, control)?;
     let mut table_bases = BTreeMap::new();
     let mut unresolved_registers = BTreeMap::new();
     for t in transfers.iter().filter(|t| t.target.is_none()) {
@@ -535,6 +554,8 @@ fn function_facts(
         (None, Some(depth)) if observation.complete => (Some(depth), Some(FrameSource::Observed)),
         (None, _) => (None, None),
     };
+    let terminal_recursive_callees =
+        recursion::terminal_callees(elf, &function, &transfers, &swept.jumps, work, control)?;
     Ok(FunctionFacts {
         function,
         frame,
@@ -544,6 +565,8 @@ fn function_facts(
         table_bases,
         unresolved_registers,
         complete: observation.complete,
+        terminal_recursive_callees,
+        target_loads,
         transfers,
         site_depths: observation.site_depths,
         level_drops: swept.level_drops,
@@ -559,6 +582,12 @@ impl FunctionFacts {
         names.capacity() * size_of::<String>()
             + names.iter().map(String::capacity).sum::<usize>()
             + self.transfers.capacity() * size_of::<Transfer>()
+            + self.target_loads.len() * size_of::<(u32, Vec<Load>)>()
+            + self
+                .target_loads
+                .values()
+                .map(|loads| loads.capacity() * size_of::<Load>())
+                .sum::<usize>()
             + self.site_depths.len() * size_of::<(u32, u64)>()
             + self.call_arguments.len() * size_of::<(u32, [Option<u32>; 8])>()
             + self.table_bases.len() * size_of::<(u32, u32)>()
@@ -592,10 +621,11 @@ impl Analysis {
             assumptions: BTreeSet::new(),
         };
         let (bytes, path) = walk.visit(root);
-        // Every function the walk entered has its memo entry.
-        let level_drops = walk
-            .memo
-            .keys()
+        // An unfolded recursive function has both ordinary and terminal
+        // memo entries; code checks need each reached function only once.
+        let reached: BTreeSet<_> = walk.memo.keys().map(|(address, _)| *address).collect();
+        let level_drops = reached
+            .iter()
             .flat_map(|function| self.functions[function].level_drops.iter().copied())
             .collect();
         Ok(Bound {
@@ -606,7 +636,7 @@ impl Analysis {
             path,
             level_drops,
             assumptions: walk.assumptions,
-            reached: walk.memo.keys().copied().collect(),
+            reached,
         })
     }
 
@@ -647,11 +677,16 @@ impl Analysis {
     }
 }
 
+type DepthPath = (u64, Vec<(u32, u64)>);
+
 struct Walk<'a> {
     analysis: &'a Analysis,
     resolutions: &'a Resolutions,
-    memo: BTreeMap<u32, (u64, Vec<(u32, u64)>)>,
-    stack: Vec<u32>,
+    // A terminal recursive callee still has its full frame and nonrecursive
+    // callees, but its direct self-edges are infeasible. Never reuse that
+    // summary for an ordinary invocation of the same address.
+    memo: BTreeMap<(u32, bool), DepthPath>,
+    stack: Vec<(u32, bool)>,
     unresolved: BTreeSet<(u32, Reason)>,
     assumptions: BTreeSet<Assumption>,
 }
@@ -660,22 +695,37 @@ impl Walk<'_> {
     /// The deepest bytes below `address`'s entry `sp` over what is resolved,
     /// with its path. Unknown frames count as zero; they are reported.
     fn visit(&mut self, address: u32) -> (u64, Vec<(u32, u64)>) {
-        if let Some(known) = self.memo.get(&address) {
-            return known.clone();
-        }
-        if self.stack.contains(&address) {
+        self.visit_context(address, false)
+    }
+
+    fn visit_context(&mut self, address: u32, terminal: bool) -> (u64, Vec<(u32, u64)>) {
+        let key = (address, terminal);
+        // Only the deliberately unfolded direct self-call may reenter the
+        // same address. An indirect or mutual cycle remains unresolved.
+        if self.stack.iter().any(|&(at, _)| at == address)
+            && !(terminal && self.stack.last() == Some(&(address, false)))
+        {
             self.unresolved.insert((address, Reason::Recursion));
             return (0, Vec::new());
+        }
+        if let Some(known) = self.memo.get(&key) {
+            return known.clone();
         }
         let facts = &self.analysis.functions[&address];
         let frame = facts.frame.unwrap_or_else(|| {
             self.unresolved.insert((address, Reason::Unframed));
             0
         });
-        self.stack.push(address);
+        self.stack.push(key);
         // The deepest point of this function alone is its frame.
         let mut deepest = (frame, Vec::new());
         for transfer in &facts.transfers {
+            let direct_self = transfer.kind == TransferKind::Call
+                && transfer.target == Some(address)
+                && facts.terminal_recursive_callees;
+            if terminal && direct_self {
+                continue;
+            }
             let targets: Vec<u32> = match (transfer.target, self.resolutions.get(transfer.site)) {
                 (Some(target), _) => vec![target],
                 (None, Some(resolved)) if resolved.resolves() => {
@@ -715,7 +765,11 @@ impl Walk<'_> {
                     self.unresolved.insert((transfer.site, reason));
                     continue;
                 }
-                let below = self.visit(target);
+                let below = if direct_self {
+                    self.visit_context(target, true)
+                } else {
+                    self.visit(target)
+                };
                 if at + below.0 > deepest.0 {
                     deepest = (at + below.0, below.1);
                 }
@@ -725,7 +779,7 @@ impl Walk<'_> {
         let mut path = vec![(address, frame)];
         path.extend(deepest.1);
         let result = (deepest.0, path);
-        self.memo.insert(address, result.clone());
+        self.memo.insert(key, result.clone());
         result
     }
 }

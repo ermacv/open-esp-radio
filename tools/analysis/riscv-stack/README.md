@@ -139,12 +139,29 @@ set of found facts (waker vtables, field types) is a hole,
   `const` or `static` builds is found; one built at run time in writable
   memory (a leaked allocation) is not. `waker_resolutions` sends an
   unresolved call inside `Waker::wake`, `wake_by_ref`, `drop` or `clone` to
-  that slot of every vtable.
+  that slot of every vtable. When the inline scope ends before the call,
+  every reaching target load in a closed local control-flow graph must
+  identify a method and its matching slot. A merge of methods keeps the
+  union of their slots; an unknown producer leaves the call unresolved.
 - `Analysis::constant_arguments` reads an argument register's exact value at
   every direct call of a function, complete when `taken_addresses` holds no
   relocation that takes the function's address other than a transfer: how
   the ESP32-S31 image reads every function `Ipc::call_function` posts, the
   targets of the IPC dispatch.
+
+`task_poll_resolutions` narrows each executor's poll targets when all uses
+of a task's poll address prove its storage initialization and executor
+assignment. The executor's publication must dominate the initialization.
+Unknown spawn paths keep the task among every executor's candidates, and
+the completed-task poll remains a candidate for all executors. These facts
+retain the executor invariant assumption described below.
+
+A direct recursive function can be unfolded once when path-sensitive
+instruction facts prove that every self-call passes a payload for which
+another self-call is unreachable. The terminal invocation still includes
+the function's full frame and every nonrecursive callee. Unknown control
+flow, unsupported operations, loops and exhausted analysis budgets prevent
+the proof; indirect and mutual recursion remain unresolved.
 
 `TypeFacts` reads the image's types, global variables and function
 signatures from its DWARF, and `function_pointer_resolutions` sends a call
@@ -175,6 +192,14 @@ method state, and which differs from the field's. A unit's `partial + ?`
 interrupt stack then names such a function's site as a hole. A site whose
 address or field is unknown stays unresolved; a function put into the field
 through a transmute is not seen.
+
+`typed_function_pointer_resolutions` is a separate conservative API for
+local typed fields, DWARF register and aggregate-piece locations, and
+reaching target loads. It excludes a function by type only after auditing
+all relocated uses of its address as type-preserving. An unknown use keeps
+the function as a candidate even when its declaration has an incompatible
+signature. This API is not used by the firmware stack gate: its current
+address-use coverage leaves candidate sets too broad for useful bounds.
 
 `interrupt_stacks` bounds each hart's interrupt stack (`Stacks`): one
 interrupt per level the hart takes (its table entries' levels and the levels

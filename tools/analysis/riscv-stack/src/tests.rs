@@ -1,10 +1,19 @@
 use super::*;
 
+#[path = "waker_scope_tests.rs"]
+mod waker_scopes;
+
+#[path = "recursion_tests.rs"]
+mod recursion;
+
 /// Working memory of a test's analysis: no test comes near it.
 const TEST_MEMORY: u64 = 1 << 32;
 
 /// Run `body` over the facts of `elf`, read without a work budget.
-fn with_facts<R>(elf: &[u8], body: impl FnOnce(&ImageFacts<'_>) -> Result<R>) -> Result<R> {
+pub(crate) fn with_facts<R>(
+    elf: &[u8],
+    body: impl FnOnce(&ImageFacts<'_>) -> Result<R>,
+) -> Result<R> {
     let memory = WorkingMemory::new(TEST_MEMORY)?;
     let facts = ImageFacts::new(elf, &[], &memory, &mut || Ok(()))?;
     body(&facts)
@@ -16,13 +25,13 @@ fn kept(memory: &WorkingMemory) -> Ledger<'_> {
 }
 
 /// A ledger in an unbounded test memory, for what a test keeps.
-fn ledger() -> Ledger<'static> {
+pub(crate) fn ledger() -> Ledger<'static> {
     let memory = Box::leak(Box::new(WorkingMemory::new(TEST_MEMORY).unwrap()));
     Ledger::new(memory, &mut || Ok(())).unwrap()
 }
 
 /// [`crate::read_debug`] of `elf` without a work budget.
-fn debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
+pub(crate) fn debug(elf: &[u8]) -> (Dwarf, TypeFacts) {
     crate::read_debug(&std::rc::Rc::from(elf), &mut ledger(), &mut || Ok(())).unwrap()
 }
 
@@ -1338,7 +1347,7 @@ fn build_directory(kind: &str) -> std::path::PathBuf {
     ))
 }
 
-fn compiled(source: &str) -> Vec<u8> {
+pub(crate) fn compiled(source: &str) -> Vec<u8> {
     compiled_linking(source, &[])
 }
 
@@ -1385,6 +1394,16 @@ fn compiled_linking(source: &str, link: &[&str]) -> Vec<u8> {
 /// `program` linked against the library crate `shared` built from `library`
 /// at `library_debuginfo`, with several codegen units each, as images are.
 fn compiled_with_library(library: &str, library_debuginfo: &str, program: &str) -> Vec<u8> {
+    compiled_named_library(library, library_debuginfo, program, "shared", "main")
+}
+
+fn compiled_named_library(
+    library: &str,
+    library_debuginfo: &str,
+    program: &str,
+    library_name: &str,
+    program_name: &str,
+) -> Vec<u8> {
     let directory = build_directory("library");
     std::fs::create_dir_all(&directory).unwrap();
     let rustc = |debuginfo: &str, arguments: &[&std::ffi::OsStr]| {
@@ -1413,20 +1432,22 @@ fn compiled_with_library(library: &str, library_debuginfo: &str, program: &str) 
             "--crate-type".as_ref(),
             "rlib".as_ref(),
             "--crate-name".as_ref(),
-            "shared".as_ref(),
+            library_name.as_ref(),
             "--out-dir".as_ref(),
             directory.as_os_str(),
             library_source.as_os_str(),
         ],
     );
-    let rlib = directory.join("libshared.rlib");
-    let mut extern_shared = std::ffi::OsString::from("shared=");
+    let rlib = directory.join(format!("lib{library_name}.rlib"));
+    let mut extern_shared = std::ffi::OsString::from(format!("{library_name}="));
     extern_shared.push(&rlib);
     rustc(
         "2",
         &[
             "--crate-type".as_ref(),
             "bin".as_ref(),
+            "--crate-name".as_ref(),
+            program_name.as_ref(),
             "--extern".as_ref(),
             extern_shared.as_os_str(),
             "-C".as_ref(),
@@ -2513,5 +2534,521 @@ fn a_compressed_debug_section_is_an_error_not_a_read() {
     assert!(
         error.to_string().contains("compressed debug section"),
         "{error}"
+    );
+}
+
+// A linked RV32 image with two independent queues and monomorphized task
+// headers. The API and dequeue closure mirror Embassy's erased poll slot;
+// the executor publishes its identity just as the platform runtime does.
+const EXECUTOR_LIBRARY: &str = r#"
+#![no_std]
+pub mod raw {
+    use core::{cell::UnsafeCell, sync::atomic::{AtomicPtr, Ordering}};
+    pub struct TaskHeader {
+        pub executor: UnsafeCell<*const SyncExecutor>,
+        pub poll_fn: UnsafeCell<Option<unsafe fn(*const TaskHeader)>>,
+    }
+    pub mod util {
+        use core::{cell::UnsafeCell, marker::PhantomData};
+        pub struct UninitCell<F> { data: UnsafeCell<u8>, future: PhantomData<F> }
+        unsafe impl<F> Sync for UninitCell<F> {}
+        impl<F> UninitCell<F> {
+            pub const fn new() -> Self { Self { data: UnsafeCell::new(0), future: PhantomData } }
+            #[inline(never)]
+            pub fn write_in_place(&self) { unsafe { self.data.get().write_volatile(1) }; }
+        }
+    }
+    pub struct TaskStorage<F> { pub raw: TaskHeader, future: util::UninitCell<F> }
+    unsafe impl<F> Sync for TaskStorage<F> {}
+    pub trait Future { fn poll(); }
+    impl<F: Future> TaskStorage<F> {
+        pub const fn new() -> Self { Self { raw: TaskHeader { executor: UnsafeCell::new(core::ptr::null()), poll_fn: UnsafeCell::new(None) }, future: util::UninitCell::new() } }
+        #[inline(always)]
+        pub unsafe fn initialize(&self) -> *const TaskHeader {
+            unsafe { *self.raw.poll_fn.get() = Some(Self::poll); }
+            self.future.write_in_place();
+            &self.raw
+        }
+        #[inline(never)]
+        pub unsafe fn poll(_: *const TaskHeader) { F::poll(); }
+    }
+    pub struct SyncExecutor { queue: AtomicPtr<TaskHeader> }
+    impl SyncExecutor {
+        pub const fn new() -> Self { Self { queue: AtomicPtr::new(core::ptr::null_mut()) } }
+        #[inline(always)]
+        pub unsafe fn spawn(&self, task: *const TaskHeader) {
+            unsafe { *(*task).executor.get() = self; }
+            self.queue.store(task.cast_mut(), Ordering::Relaxed);
+        }
+        #[inline(always)]
+        pub unsafe fn poll(&self) {
+            let visit = |task: *mut TaskHeader| unsafe { (*(*task).poll_fn.get()).unwrap_unchecked()(task) };
+            let task = self.queue.swap(core::ptr::null_mut(), Ordering::Relaxed);
+            if !task.is_null() { visit(task); }
+        }
+    }
+}
+"#;
+const EXECUTOR_PROGRAM: &str = r#"
+#![no_std]
+#![no_main]
+use embassy_executor::raw::{Future, SyncExecutor, TaskStorage};
+pub mod executor {
+    use super::*;
+    use core::sync::atomic::{AtomicPtr, Ordering};
+    pub static EMBASSY_EXECUTORS: [AtomicPtr<SyncExecutor>; 4] = [const { AtomicPtr::new(core::ptr::null_mut()) }; 4];
+    pub struct Executor<const SWI: u8> { inner: SyncExecutor }
+    impl<const SWI: u8> Executor<SWI> {
+        pub const fn new() -> Self { Self { inner: SyncExecutor::new() } }
+        #[inline(never)]
+        pub unsafe fn run<F: Future>(&'static self, task: &'static TaskStorage<F>) {
+            EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed);
+            core::hint::black_box(&EMBASSY_EXECUTORS);
+            let task = unsafe { task.initialize() };
+            unsafe { self.inner.spawn(task); self.inner.poll(); }
+        }
+    }
+}
+struct First;
+struct Second;
+impl Future for First { #[inline(never)] fn poll() { core::hint::black_box([1u8; 256]); } }
+impl Future for Second { #[inline(never)] fn poll() { core::hint::black_box([2u8; 32]); } }
+static FIRST: TaskStorage<First> = TaskStorage::new();
+static SECOND: TaskStorage<Second> = TaskStorage::new();
+static E0: executor::Executor<0> = executor::Executor::new();
+static E1: executor::Executor<1> = executor::Executor::new();
+#[unsafe(no_mangle)] pub unsafe extern "C" fn _start() -> ! {
+    unsafe { E0.run(&FIRST); E1.run(&SECOND); }
+    loop {}
+}
+#[panic_handler] fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
+"#;
+
+fn executor_image(program: &str) -> Vec<u8> {
+    compiled_named_library(
+        EXECUTOR_LIBRARY,
+        "2",
+        program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    )
+}
+
+#[test]
+fn each_executor_polls_only_its_own_proven_tasks() {
+    let elf = executor_image(EXECUTOR_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names.iter().map(|(a, n)| (*a, n.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(resolutions.len(), 2, "{resolutions:?}");
+        for (site, resolution) in resolutions.iter() {
+            assert_eq!(resolution.targets.len(), 1, "{site:#x}: {resolution:?}");
+            let chain = dwarf.inline_chain(site)?;
+            let line = chain
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            let target = *resolution.targets.first().unwrap();
+            let name = names.iter().find(|(a, _)| *a == target).unwrap().1.as_str();
+            assert!(
+                name.contains(if line == 0 { "First" } else { "Second" }),
+                "{name}"
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn an_extra_erased_poll_address_keeps_the_task_on_every_executor() {
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub static keep: unsafe fn(*const embassy_executor::raw::TaskHeader) = TaskStorage::<First>::poll;\n"
+    );
+    let elf = executor_image(&program);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names.iter().map(|(a, n)| (*a, n.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        assert_eq!(resolutions.len(), 2);
+        for (site, resolution) in resolutions.iter() {
+            let chain = dwarf.inline_chain(site)?;
+            let line = chain
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            assert_eq!(
+                resolution.targets.len(),
+                if line == 0 { 1 } else { 2 },
+                "{resolution:?}"
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+/// The candidate names at each fixture executor's dequeue site.
+fn executor_candidates(elf: &[u8]) -> BTreeMap<u8, BTreeSet<String>> {
+    let analysis = analyze(elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(elf);
+    with_facts(elf, |facts| {
+        let names: BTreeMap<_, _> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let resolutions = task_poll_resolutions(
+            facts,
+            &analysis,
+            &dwarf,
+            &types,
+            names
+                .iter()
+                .map(|(address, name)| (*address, name.as_str())),
+            &mut ledger(),
+            &mut || Ok(()),
+        )?;
+        let mut result = BTreeMap::new();
+        for (site, resolution) in resolutions.iter() {
+            let line = dwarf
+                .inline_chain(site)?
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name))
+                .unwrap();
+            result.insert(
+                line,
+                resolution
+                    .targets
+                    .iter()
+                    .map(|address| names[address].clone())
+                    .collect(),
+            );
+        }
+        assert_eq!(result.len(), 2);
+        Ok(result)
+    })
+    .unwrap()
+}
+
+#[test]
+fn an_unknown_spawn_receiver_keeps_tasks_on_every_executor() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "self.inner.spawn(task); self.inner.poll();",
+        "core::hint::black_box(&self.inner).spawn(task); self.inner.poll();",
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_arithmetic_poll_address_keeps_the_task_on_every_executor() {
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub fn keep() {{ core::hint::black_box((TaskStorage::<First>::poll as *const () as usize).wrapping_add(1)); }}"
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert_eq!(candidates[&0].len(), 1, "{candidates:?}");
+    assert_eq!(candidates[&1].len(), 2, "{candidates:?}");
+}
+
+#[test]
+fn erasing_an_initialized_poll_to_an_integer_keeps_it_on_every_executor() {
+    let library = EXECUTOR_LIBRARY.replace(
+        "self.future.write_in_place();",
+        "core::hint::black_box(Self::poll as *const () as usize); self.future.write_in_place();",
+    );
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        EXECUTOR_PROGRAM,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unknown_local_jump_does_not_make_partial_values_a_spawn_proof() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "let task = unsafe { task.initialize() };",
+        r#"if core::hint::black_box(false) {
+            unsafe { core::arch::asm!("jr {target}", target = in(reg) core::hint::black_box(0usize), options(noreturn)); }
+        }
+        let task = unsafe { task.initialize() };"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unsupported_non_control_after_spawn_keeps_the_closed_graph_proof() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "self.inner.spawn(task); self.inner.poll();",
+        r#"self.inner.spawn(task); self.inner.poll(); core::arch::asm!("wfi", options(nomem, nostack));"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 1),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn another_initializer_cannot_stand_in_for_the_task_future() {
+    let library = EXECUTOR_LIBRARY
+        .replace(
+            "write_volatile(1)",
+            "write_volatile(core::mem::size_of::<F>() as u8)",
+        )
+        .replace(
+            "self.future.write_in_place();",
+            "util::UninitCell::<[u8; 3]>::new().write_in_place(); self.future.write_in_place();",
+        );
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        EXECUTOR_PROGRAM,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn a_section_symbol_addend_and_low_bit_cannot_hide_an_erased_poll() {
+    use oer_analysis_elf::{Elf, SectionKind, SymbolKind};
+    let program = format!(
+        "{EXECUTOR_PROGRAM}\n#[unsafe(no_mangle)] pub static keep: unsafe fn(*const embassy_executor::raw::TaskHeader) = TaskStorage::<First>::poll;\n"
+    );
+    let mut elf = executor_image(&program);
+    let (at, info, addend, value_at, value) = {
+        let file = Elf::parse(&elf).unwrap();
+        let keep = file.symbols().find(|symbol| symbol.name == "keep").unwrap();
+        let poll = file
+            .symbols()
+            .find(|symbol| {
+                symbol.kind == SymbolKind::Text
+                    && symbol
+                        .demangled()
+                        .contains("TaskStorage<oer_espressif_executor::First>")
+                    && symbol.demangled().ends_with(">::poll")
+            })
+            .unwrap();
+        let section = file
+            .symbols()
+            .find(|symbol| symbol.kind == SymbolKind::Section && symbol.section == poll.section)
+            .unwrap();
+        let relocation_section = file
+            .sections()
+            .find(|section| section.kind == SectionKind::Rela && section.relocates == keep.section)
+            .unwrap();
+        let index = relocation_section
+            .data
+            .chunks_exact(12)
+            .position(|entry| {
+                u32::from_le_bytes(entry[..4].try_into().unwrap()) == keep.address as u32
+            })
+            .unwrap();
+        let keep_section = file
+            .sections()
+            .find(|section| Some(section.index) == keep.section)
+            .unwrap();
+        (
+            relocation_section.file_offset as usize + 12 * index,
+            ((section.index as u32) << 8) | object::elf::R_RISCV_32,
+            (poll.address - section.address + 1) as i32,
+            (keep_section.file_offset + keep.address - keep_section.address) as usize,
+            (poll.address + 1) as u32,
+        )
+    };
+    elf[at + 4..at + 8].copy_from_slice(&info.to_le_bytes());
+    elf[at + 8..at + 12].copy_from_slice(&addend.to_le_bytes());
+    elf[value_at..value_at + 4].copy_from_slice(&value.to_le_bytes());
+    let candidates = executor_candidates(&elf);
+    assert_eq!(candidates[&0].len(), 1, "{candidates:?}");
+    assert_eq!(candidates[&1].len(), 2, "{candidates:?}");
+}
+
+/// A pool whose erased storage has the macro's shape, including a header
+/// that need not start at byte zero of `TaskStorage`.
+fn erased_executor_pool(holder: &str) -> (String, String) {
+    let library = EXECUTOR_LIBRARY
+        .replace(
+            "pub struct TaskStorage<F> { pub raw: TaskHeader",
+            "#[repr(C)] pub struct TaskStorage<F> { prefix: u32, pub raw: TaskHeader",
+        )
+        .replace(
+            "Self { raw: TaskHeader",
+            "Self { prefix: 0, raw: TaskHeader",
+        );
+    let program = EXECUTOR_PROGRAM
+        .replace("static FIRST: TaskStorage<First> = TaskStorage::new();", &format!(r#"
+            #[repr(C, align(4))]
+            struct {holder}<const N: usize> {{ data: core::cell::UnsafeCell<[u8; N]> }}
+            unsafe impl<const N: usize> Sync for {holder}<N> {{}}
+            static FIRST: {holder}<{{ core::mem::size_of::<TaskStorage<First>>() }}> = {holder} {{ data: core::cell::UnsafeCell::new([0; core::mem::size_of::<TaskStorage<First>>()]) }};
+        "#))
+        .replace("static SECOND: TaskStorage<Second> = TaskStorage::new();", &format!("static SECOND: {holder}<{{ core::mem::size_of::<TaskStorage<Second>>() }}> = {holder} {{ data: core::cell::UnsafeCell::new([0; core::mem::size_of::<TaskStorage<Second>>()]) }};"))
+        .replace("E0.run(&FIRST); E1.run(&SECOND);", "E0.run(&*FIRST.data.get().cast::<TaskStorage<First>>()); E1.run(&*SECOND.data.get().cast::<TaskStorage<Second>>());");
+    (library, program)
+}
+
+#[test]
+fn an_erased_pool_uses_the_images_actual_header_offset() {
+    let (library, program) = erased_executor_pool("TaskPoolHolder");
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        &program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 1),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn arbitrary_byte_storage_does_not_prove_a_task_pool_layout() {
+    let (library, program) = erased_executor_pool("ByteStorage");
+    let elf = compiled_named_library(
+        &library,
+        "2",
+        &program,
+        "embassy_executor",
+        "oer_espressif_executor",
+    );
+    let candidates = executor_candidates(&elf);
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn task_owner_proofs_obey_work_and_memory_limits() {
+    let limited = |error: Error| assert_eq!(error.code, ErrorCode::ResourceLimited, "{error:?}");
+    let elf = executor_image(EXECUTOR_PROGRAM);
+    let analysis = analyze(&elf, &[], &[]).unwrap();
+    let (dwarf, types) = debug(&elf);
+    with_facts(&elf, |facts| {
+        let names: Vec<_> = facts
+            .functions()
+            .iter()
+            .map(|f| (f.address, oer_analysis_elf::demangle(&f.names[0])))
+            .collect();
+        let tiny = WorkingMemory::new(1).unwrap();
+        limited(
+            task_poll_resolutions(
+                facts,
+                &analysis,
+                &dwarf,
+                &types,
+                names
+                    .iter()
+                    .map(|(address, name)| (*address, name.as_str())),
+                &mut ledger(),
+                &mut Units(0),
+            )
+            .unwrap_err(),
+        );
+        limited(
+            task_poll_resolutions(
+                facts,
+                &analysis,
+                &dwarf,
+                &types,
+                names
+                    .iter()
+                    .map(|(address, name)| (*address, name.as_str())),
+                &mut kept(&tiny),
+                &mut || Ok(()),
+            )
+            .unwrap_err(),
+        );
+        limited(
+            types
+                .member_offset("TaskHeader", "poll_fn", &mut Units(0))
+                .unwrap_err(),
+        );
+        limited(
+            types
+                .task_poll_field(0, "unused", &mut Units(0))
+                .unwrap_err(),
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_bypassed_registry_publication_does_not_identify_the_receiver() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed);",
+        "if core::hint::black_box(true) { EMBASSY_EXECUTORS[SWI as usize].store((&self.inner as *const SyncExecutor).cast_mut(), Ordering::Relaxed); }",
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
+    );
+}
+
+#[test]
+fn an_unknown_caller_path_does_not_supply_constant_spawn_arguments() {
+    let program = EXECUTOR_PROGRAM.replace(
+        "unsafe { E0.run(&FIRST); E1.run(&SECOND); }",
+        r#"if core::hint::black_box(false) {
+            unsafe { core::arch::asm!("jr {target}", target = in(reg) core::hint::black_box(0usize), options(noreturn)); }
+        }
+        unsafe { E0.run(&FIRST); E1.run(&SECOND); }"#,
+    );
+    let candidates = executor_candidates(&executor_image(&program));
+    assert!(
+        candidates.values().all(|targets| targets.len() == 2),
+        "{candidates:?}"
     );
 }

@@ -156,6 +156,8 @@ pub(crate) struct Observation {
     pub site_depths: BTreeMap<u32, u64>,
     /// The exact integer registers at each transfer the analysis reached.
     pub site_registers: BTreeMap<u32, [Option<u32>; 32]>,
+    pub predecessors: BTreeMap<u32, Vec<u32>>,
+    pub closed_graph: bool,
 }
 
 /// The value analysis's records of one function, read into what the stack
@@ -168,11 +170,43 @@ struct Observer<'l, 'm> {
     site_depths: BTreeMap<u32, u64>,
     site_registers: BTreeMap<u32, [Option<u32>; 32]>,
     transfers: Vec<(u32, u32, TransferKind)>,
+    predecessors: BTreeMap<u32, Vec<u32>>,
+    closed_graph: bool,
 }
 
 impl FunctionSink for Observer<'_, '_> {
     fn record(&mut self, record: &FunctionRecord, control: &mut dyn RunControl) -> Result<()> {
         match record {
+            FunctionRecord::Gap { reason, .. } if *reason != GapReason::Unvisited => {
+                self.closed_graph = false;
+            }
+            FunctionRecord::Edge {
+                from,
+                target,
+                relation,
+                external,
+            } => {
+                if matches!(
+                    relation,
+                    EdgeKind::Indirect | EdgeKind::Conflict | EdgeKind::Stop
+                ) || (target.is_none() && !matches!(relation, EdgeKind::Call | EdgeKind::Return))
+                {
+                    self.closed_graph = false;
+                }
+                if let Some(target) = target
+                    && !external
+                {
+                    let incoming = self.ledger.entry(
+                        &mut self.predecessors,
+                        *target as u32,
+                        Vec::new,
+                        control,
+                    )?;
+                    if !incoming.contains(&(*from as u32)) {
+                        self.ledger.push(incoming, *from as u32, control)?;
+                    }
+                }
+            }
             FunctionRecord::Value {
                 register: SP,
                 value,
@@ -301,6 +335,8 @@ pub(crate) fn observing<R>(
             site_depths: BTreeMap::new(),
             site_registers: BTreeMap::new(),
             transfers: Vec::new(),
+            predecessors: BTreeMap::new(),
+            closed_graph: true,
         };
         let (summary, followed) = research_following_tables(
             FunctionInput {
@@ -342,6 +378,8 @@ pub(crate) fn observing<R>(
             local_jumps,
             site_depths: observer.site_depths,
             site_registers: observer.site_registers,
+            predecessors: observer.predecessors,
+            closed_graph: observer.closed_graph,
         })
     };
     body(&mut observe, control)

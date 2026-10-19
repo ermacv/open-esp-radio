@@ -1,14 +1,18 @@
 //! Executor task polls. Embassy's executor runs a task through the
 //! `poll_fn` its header holds: the call it leaves unresolved where the DWARF
-//! says `SyncExecutor::poll`'s dequeue closure is inlined reaches every
-//! task's `TaskStorage<F>::poll` of the image, and `poll_exited`, the
+//! says `SyncExecutor::poll`'s dequeue closure is inlined reaches each
+//! candidate task's `TaskStorage<F>::poll`, and `poll_exited`, the
 //! `poll_fn` of a task that has returned. A `poll_fn` is set only by its
 //! task's spawn, so this is every function the site can reach under the
 //! executor invariant. An executor running on an interrupt stack (the radio
-//! executor) thereby bounds its tasks' polls on that stack.
+//! executor) thereby bounds its tasks' polls on that stack. A task leaves
+//! another executor's candidates only after every address-taking relocation
+//! proves an immediate spawn on an identified executor. Missing provenance
+//! leaves it in every candidate set.
 use crate::dwarf::Dwarf;
-use crate::{Analysis, Fact, Resolutions, TransferKind};
+use crate::{Analysis, Fact, Resolutions, TransferKind, TypeFacts};
 use oer_analysis_riscv_model::{Ledger, Result, RunControl};
+use oer_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeSet;
 
 /// The closure of `SyncExecutor::poll` that calls each dequeued task's
@@ -24,21 +28,27 @@ fn is_task_poll(name: &str) -> bool {
 /// The targets of every unresolved call inside the executor's dequeue
 /// closure: each task poll among `functions` (address, demangled name).
 pub fn task_poll_resolutions<'a>(
+    image: &ImageFacts<'_>,
     analysis: &Analysis,
     dwarf: &Dwarf,
+    types: &TypeFacts,
     functions: impl IntoIterator<Item = (u32, &'a str)>,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<Resolutions> {
-    let polls: BTreeSet<u32> = functions
-        .into_iter()
-        .filter(|(address, name)| is_task_poll(name) && analysis.functions.contains_key(address))
-        .map(|(address, _)| address)
-        .collect();
+    let mut scratch = Ledger::new(keep.memory(), control)?;
+    let mut polls = BTreeSet::new();
+    for (address, name) in functions {
+        control.checkpoint(1)?;
+        if is_task_poll(name) && analysis.functions.contains_key(&address) {
+            scratch.add(&mut polls, address, control)?;
+        }
+    }
     let mut resolutions = Resolutions::new();
     if polls.is_empty() {
         return Ok(resolutions);
     }
+    let owners = crate::task_spawns::owners(image, analysis, types, &polls, &mut scratch, control)?;
     for facts in analysis.functions.values() {
         for transfer in &facts.transfers {
             if transfer.target.is_some()
@@ -51,8 +61,19 @@ pub fn task_poll_resolutions<'a>(
             if chain.first().map(String::as_str) != Some(DEQUEUE) {
                 continue;
             }
+            let executor = chain
+                .iter()
+                .find_map(|name| crate::task_spawns::poll_executor(name));
+            let candidates =
+                polls
+                    .iter()
+                    .copied()
+                    .filter(|poll| match (executor, owners.get(poll)) {
+                        (Some(executor), Some(owners)) => owners.contains(&executor),
+                        _ => true,
+                    });
             keep.admit(Resolutions::admission(polls.len()), control)?;
-            resolutions.add(transfer.site, Fact::TaskPolls, polls.iter().copied());
+            resolutions.add(transfer.site, Fact::TaskPolls, candidates);
         }
     }
     Ok(resolutions)

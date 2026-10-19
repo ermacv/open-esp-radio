@@ -27,6 +27,9 @@ use oer_analysis_elf::dwarf::gimli;
 use oer_analysis_riscv_model::{Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod provenance;
+pub use provenance::typed_function_pointer_resolutions;
+
 /// One type's name and layout.
 #[derive(Debug)]
 struct Type {
@@ -35,6 +38,7 @@ struct Type {
     size: Option<u64>,
     /// Members (variants' members included) by offset, and their types.
     members: Vec<(u64, usize)>,
+    named_members: BTreeMap<String, u64>,
     /// The type a typedef, qualifier or pointer refers to.
     target: Option<usize>,
 }
@@ -287,6 +291,7 @@ impl TypeWalk {
                         name,
                         size,
                         members: Vec::new(),
+                        named_members: BTreeMap::new(),
                         target: type_of,
                     },
                     control,
@@ -323,6 +328,10 @@ impl TypeWalk {
                 ) && let Some(owner) = facts.types.get_mut(&owner)
                 {
                     keep.push(&mut owner.members, (location, member), control)?;
+                    if let Some(name) = name {
+                        let name = keep.string(&name, control)?;
+                        keep.insert(&mut owner.named_members, name, location, control)?;
+                    }
                 }
             }
             gimli::DW_TAG_variable => {
@@ -330,12 +339,27 @@ impl TypeWalk {
                     .owners
                     .iter()
                     .any(|(_, _, tag)| *tag == gimli::DW_TAG_subprogram);
-                if let (false, Some(gimli::AttributeValue::Exprloc(expression)), Some(ty)) = (
-                    inside_function,
-                    entry.attr_value(gimli::DW_AT_location),
-                    type_of,
-                ) {
-                    facts.add_global(&expression, unit.encoding(), ty, keep, control)?;
+                if let (Some(gimli::AttributeValue::Exprloc(expression)), Some(ty)) =
+                    (entry.attr_value(gimli::DW_AT_location), type_of)
+                {
+                    // A function-local static (Embassy's task pools) is still
+                    // a typed global. A local pointer or stack value is not.
+                    let mut operations = expression.operations(unit.encoding());
+                    let mut static_location = true;
+                    while let Some(operation) =
+                        operations.next().map_err(crate::dwarf::dwarf_error)?
+                    {
+                        control.checkpoint(1)?;
+                        static_location &= matches!(
+                            operation,
+                            gimli::Operation::Address { .. }
+                                | gimli::Operation::PlusConstant { .. }
+                                | gimli::Operation::Piece { .. }
+                        );
+                    }
+                    if !inside_function || static_location {
+                        facts.add_global(&expression, unit.encoding(), ty, keep, control)?;
+                    }
                 }
             }
             gimli::DW_TAG_subprogram => {
@@ -453,6 +477,206 @@ impl TypeWalk {
 }
 
 impl TypeFacts {
+    /// A named layout member, only when every copy of the type agrees.
+    pub(crate) fn member_offset(
+        &self,
+        name: &str,
+        member: &str,
+        control: &mut dyn RunControl,
+    ) -> Result<Option<u32>> {
+        let mut found = None;
+        for ty in self.types.values() {
+            control.checkpoint(1)?;
+            if ty.name.as_deref() != Some(name) {
+                continue;
+            }
+            let Some(offset) = ty
+                .named_members
+                .get(member)
+                .and_then(|at| u32::try_from(*at).ok())
+            else {
+                return Ok(None);
+            };
+            if found.is_some_and(|previous| previous != offset) {
+                return Ok(None);
+            }
+            found = Some(offset);
+        }
+        Ok(found)
+    }
+
+    /// Whether a complete word is a named member of a statically typed
+    /// object. Arrays retain their element type; pointers are never traversed.
+    pub(crate) fn named_field_at(
+        &self,
+        address: u32,
+        name: &str,
+        member: &str,
+        control: &mut dyn RunControl,
+    ) -> Result<bool> {
+        fn visit(
+            facts: &TypeFacts,
+            id: usize,
+            at: u64,
+            name: &str,
+            member: &str,
+            depth: usize,
+            control: &mut dyn RunControl,
+        ) -> Result<bool> {
+            control.checkpoint(1)?;
+            if depth > 32 {
+                return Ok(false);
+            }
+            let Some((_, ty)) = facts.resolve(id) else {
+                return Ok(false);
+            };
+            if ty.name.as_deref() == Some(name) && ty.named_members.get(member) == Some(&at) {
+                return Ok(true);
+            }
+            if ty.tag == gimli::DW_TAG_array_type
+                && let Some(element) = ty.target
+                && let Some(size) = facts.size(element).filter(|size| *size != 0)
+            {
+                return visit(facts, element, at % size, name, member, depth + 1, control);
+            }
+            for &(offset, child) in &ty.members {
+                control.checkpoint(1)?;
+                if let Some(at) = at.checked_sub(offset)
+                    && facts.size(child).is_some_and(|size| at < size)
+                    && visit(facts, child, at, name, member, depth + 1, control)?
+                {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+        for &(start, bytes, offset, ty) in &self.globals {
+            control.checkpoint(1)?;
+            if let Some(at) = address.checked_sub(start)
+                && bytes
+                    .or_else(|| self.size(ty))
+                    .is_some_and(|bytes| u64::from(at) + 4 <= bytes)
+                && let Some(at) = offset.checked_add(u64::from(at))
+                && visit(self, ty, at, name, member, 0, control)?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Embassy macros erase a task pool to a `TaskPoolHolder` whose size
+    /// and alignment come from `TaskPool<F, N>` at compile time. Recovering
+    /// that erased layout rests on the executor invariant. The image must
+    /// still state the storage's stride, its actual header offset and the
+    /// holder's complete extent; an arbitrary byte buffer is not a pool.
+    pub(crate) fn task_poll_field(
+        &self,
+        address: u32,
+        poll: &str,
+        control: &mut dyn RunControl,
+    ) -> Result<bool> {
+        if self.named_field_at(address, "TaskHeader", "poll_fn", control)? {
+            return Ok(true);
+        }
+        let Some(storage) = poll
+            .strip_prefix("<embassy_executor::raw::")
+            .and_then(|name| name.strip_suffix(">::poll"))
+        else {
+            return Ok(false);
+        };
+        // LLVM's DWARF names an async future `async_fn_env`, while the
+        // linkage name describes the same future as a closure. Compare the
+        // two spellings without allocating a copy of every type name.
+        fn same_storage(debug: &str, linkage: &str) -> bool {
+            match debug.split_once("{async_fn_env#0}") {
+                Some((before, after)) => {
+                    linkage
+                        .strip_prefix(before)
+                        .and_then(|rest| rest.strip_prefix("{closure#0}"))
+                        == Some(after)
+                }
+                None => debug == linkage,
+            }
+        }
+        let mut layout = None;
+        for ty in self.types.values() {
+            control.checkpoint(1)?;
+            if !ty
+                .name
+                .as_deref()
+                .is_some_and(|name| same_storage(name, storage))
+            {
+                continue;
+            }
+            let (Some(size), Some(&raw)) = (
+                ty.size.filter(|size| *size != 0),
+                ty.named_members.get("raw"),
+            ) else {
+                return Ok(false);
+            };
+            let mut header = false;
+            for &(offset, member) in &ty.members {
+                control.checkpoint(1)?;
+                header |= offset == raw
+                    && self.resolve(member).is_some_and(|(_, member)| {
+                        member.name.as_deref() == Some("TaskHeader")
+                            && member.size.is_some_and(|bytes| {
+                                raw.checked_add(bytes).is_some_and(|end| end <= size)
+                            })
+                    });
+            }
+            if !header
+                || layout
+                    .replace((size, raw))
+                    .is_some_and(|previous| previous != (size, raw))
+            {
+                return Ok(false);
+            }
+        }
+        let (Some((stride, raw)), Some(field)) = (
+            layout,
+            self.member_offset("TaskHeader", "poll_fn", control)?,
+        ) else {
+            return Ok(false);
+        };
+        let Some(field) = raw.checked_add(u64::from(field)) else {
+            return Ok(false);
+        };
+        for &(start, bytes, offset, ty) in &self.globals {
+            control.checkpoint(1)?;
+            let Some((_, record)) = self.resolve(ty) else {
+                continue;
+            };
+            if !record
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("TaskPoolHolder<"))
+                || record.named_members.get("data") != Some(&0)
+            {
+                continue;
+            }
+            let Some(size) = record.size else {
+                continue;
+            };
+            // A piece of a holder does not prove the whole pool's extent.
+            if offset != 0 || bytes.is_some_and(|bytes| bytes != size) {
+                continue;
+            }
+            let Some(at) = address
+                .checked_sub(start)
+                .map(u64::from)
+                .and_then(|at| at.checked_sub(field))
+            else {
+                continue;
+            };
+            if at.is_multiple_of(stride) && at.checked_add(stride).is_some_and(|end| end <= size) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Record a global variable's location: an address, perhaps plus an
     /// offset into a block LLVM merged globals into, perhaps in pieces.
     fn add_global(
