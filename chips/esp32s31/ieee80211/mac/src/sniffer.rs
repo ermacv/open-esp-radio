@@ -2,7 +2,7 @@
 
 use oer_esp32s31_hal::{
     ieee80211::mac::{WifiMacColdHal, WifiMacHal},
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
 };
 
 pub trait MacSnifferHardware {
@@ -30,7 +30,7 @@ impl MacSnifferHardware for WifiMacHal<'_> {
     }
 }
 
-impl MacSnifferHardware for RadioRuntimeOwner {
+impl MacSnifferHardware for RadioAccess {
     fn configure_open_promiscuous_receive(&mut self) {
         self.wifi_mac_hal().configure_open_promiscuous_receive();
     }

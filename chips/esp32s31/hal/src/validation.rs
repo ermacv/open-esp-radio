@@ -11,9 +11,7 @@
 
 use crate::{
     ieee80211::{dma::rx_dma::RxDma, station_wake::StationWakeState},
-    owner::{
-        MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters, RadioRuntimeOwner,
-    },
+    owner::{MacInterruptRegisters, MacInterruptSetup, MacPowerInterruptRegisters, RadioAccess},
     types::{
         MacHeTxProgram, MacHtTxProgram, MacInterface, MacInterruptSnapshot, MacLegacyTxProgram,
         MacPowerInterruptSnapshot, TxBlockAckPayload,
@@ -22,8 +20,8 @@ use crate::{
 
 /// The running Wi-Fi register owner of a probe image, clocked and
 /// initialized as far as the image's own sequence brought it.
-pub fn runtime_owner() -> RadioRuntimeOwner {
-    RadioRuntimeOwner::from_clocked(
+pub fn runtime_owner() -> RadioAccess {
+    RadioAccess::from_clocked(
         oer_esp32s31_pac::validation::wifi_radio_registers(),
         oer_esp32s31_pac::validation::wifi_rx_dma_registers(),
         StationWakeState::default(),

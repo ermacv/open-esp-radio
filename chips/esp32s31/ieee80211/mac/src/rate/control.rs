@@ -17,7 +17,7 @@ use crate::{
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     types::{
         MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeErSuAckRateProfile,
     },
@@ -45,7 +45,7 @@ impl BeamformingReportHardware for WifiMacHal<'_> {
     }
 }
 
-impl BeamformingReportHardware for RadioRuntimeOwner {
+impl BeamformingReportHardware for RadioAccess {
     fn set_he_beamforming_report_profile(&mut self, profile: MacHeBeamformingReportProfile) {
         BeamformingReportHardware::set_he_beamforming_report_profile(
             &mut self.wifi_mac_hal(),

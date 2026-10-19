@@ -1,8 +1,6 @@
 //! Hardware boundary for switching from scan to associated STA RX policy.
 
-use oer_esp32s31_hal::{
-    ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner, types::MacStaPolicyMode,
-};
+use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess, types::MacStaPolicyMode};
 
 pub trait StaLinkRxPolicyHardware {
     fn apply_sta_link_policy(&mut self, bssid: [u8; 6]);
@@ -41,21 +39,21 @@ impl StaNoiseFloorHardware for WifiMacHal<'_> {
     }
 }
 
-impl StaLinkRxPolicyHardware for RadioRuntimeOwner {
+impl StaLinkRxPolicyHardware for RadioAccess {
     fn apply_sta_link_policy(&mut self, bssid: [u8; 6]) {
         self.wifi_mac_hal().configure_station_receive_policy(bssid);
     }
 }
 
-impl StaEspNowRxPolicyHardware for RadioRuntimeOwner {
+impl StaEspNowRxPolicyHardware for RadioAccess {
     fn apply_sta_esp_now_policy(&mut self, bssid: [u8; 6]) {
         self.wifi_mac_hal().apply_sta_esp_now_policy(bssid);
     }
 }
 
-impl StaNoiseFloorHardware for RadioRuntimeOwner {
+impl StaNoiseFloorHardware for RadioAccess {
     fn read_noise_floor_dbm(&self) -> i8 {
-        RadioRuntimeOwner::read_noise_floor_dbm(self)
+        RadioAccess::read_noise_floor_dbm(self)
     }
 }
 

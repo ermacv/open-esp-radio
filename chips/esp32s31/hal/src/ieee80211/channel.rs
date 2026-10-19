@@ -1,8 +1,6 @@
 //! Narrow register capability for one PHY channel transaction.
 
-use core::cell::RefMut;
-
-use crate::{ieee80211::MacBorrow, owner::SharedPhyAccess, phy::restore::PhyRouteState};
+use crate::{owner::SharedPhyAccess, phy::restore::PhyRouteState};
 
 use oer_esp32s31_pac::{RadioPhyRegisters, WifiRadioRegisters};
 
@@ -13,7 +11,7 @@ use oer_esp32s31_pac::{RadioPhyRegisters, WifiRadioRegisters};
 /// accessor is exposed.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 struct ChannelRegisters<'radio> {
-    mac: MacBorrow<'radio>,
+    mac: &'radio mut WifiRadioRegisters,
     phy: &'radio mut RadioPhyRegisters,
     restore: &'radio mut PhyRouteState,
 }
@@ -53,27 +51,7 @@ impl<'radio, P> RadioChannelHal<'radio, P> {
     ) -> Self {
         Self {
             platform,
-            registers: ChannelRegisters {
-                mac: MacBorrow::Owned(mac),
-                phy,
-                restore,
-            },
-        }
-    }
-
-    pub(crate) fn from_published(
-        platform: &'radio mut P,
-        mac: RefMut<'radio, WifiRadioRegisters>,
-        phy: &'radio mut RadioPhyRegisters,
-        restore: &'radio mut PhyRouteState,
-    ) -> Self {
-        Self {
-            platform,
-            registers: ChannelRegisters {
-                mac: MacBorrow::Published(mac),
-                phy,
-                restore,
-            },
+            registers: ChannelRegisters { mac, phy, restore },
         }
     }
 }

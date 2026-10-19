@@ -4,10 +4,6 @@
 //! physical registers belong to the 802.11 MAC and are not reusable by
 //! Bluetooth, BLE or IEEE 802.15.4 PHY paths.
 
-use core::cell::RefMut;
-
-use crate::ieee80211::MacBorrow;
-
 pub use crate::types::{
     ExtraSoftApRxBlockAckEntrySnapshot, MacApReceivePolicySnapshot, MacCoexPrioritySnapshot,
     MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti, MacRoleReceivePolicy,
@@ -253,20 +249,12 @@ impl WifiMacColdHal<'_> {
 /// `Deref`. LMAC code can request only the finite operations defined here;
 /// shared radio registers are reached through the radio domain instead.
 pub struct WifiMacHal<'registers> {
-    registers: MacBorrow<'registers>,
+    registers: &'registers mut WifiRadioRegisters,
 }
 
 impl<'registers> WifiMacHal<'registers> {
     pub(crate) fn from_mac(registers: &'registers mut WifiRadioRegisters) -> Self {
-        Self {
-            registers: MacBorrow::Owned(registers),
-        }
-    }
-
-    pub(crate) fn from_published(registers: RefMut<'registers, WifiRadioRegisters>) -> Self {
-        Self {
-            registers: MacBorrow::Published(registers),
-        }
+        Self { registers }
     }
 
     fn pac(&self) -> &WifiRadioRegisters {
@@ -658,7 +646,7 @@ impl<'registers> WifiMacHal<'registers> {
 
     /// Replace the station TSF, as the vendor does from an access point's
     /// timestamp. Outside the HAL only the unique register owner writes it
-    /// ([`PublishedRadioOwner::set_station_tsf`](crate::ieee80211::arena::PublishedRadioOwner::set_station_tsf)).
+    /// ([`RadioAccess::set_station_tsf`](crate::owner::RadioAccess::set_station_tsf)).
     pub(crate) fn set_station_tsf(&mut self, value: u64) {
         self.pac_mut().set_station_tsf(value);
     }

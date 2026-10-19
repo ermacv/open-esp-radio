@@ -2,7 +2,7 @@
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     types::{
         MacAssociationId, MacHe20PeerConfig, MacHe20PeerError, MacHeBssColor,
         MacHeDefaultPacketExtensionDuration, MacHePacketPaddingDuration,
@@ -67,7 +67,7 @@ impl He20PeerHardware for WifiMacHal<'_> {
     }
 }
 
-impl He20PeerHardware for RadioRuntimeOwner {
+impl He20PeerHardware for RadioAccess {
     fn program_he20_peer(
         &mut self,
         config: MacHe20PeerConfig,

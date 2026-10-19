@@ -98,9 +98,9 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 
 /// Run one receive epoch over `parts`; publish its exit and park.
 ///
-/// `hardware` is the task's MAC (the `WifiMacHal` of `RadioRuntimeOwner` on
+/// `hardware` is the task's MAC (the `WifiMacHal` of `RadioAccess` on
 /// the chip) and `rx_dma` its RX DMA engine (`WifiRxDmaEngine`), the two
-/// halves `RadioRuntimeOwner::split_rx_dma` lends.
+/// halves `RadioAccess::split_rx_dma` lends.
 /// `activate` activates the moderated interrupt epoch (on the chip
 /// `InactiveEpoch::activate_rx_moderated` with the image's mask); it runs
 /// while the routes are silent. `cell` is the image's static cell its MAC,

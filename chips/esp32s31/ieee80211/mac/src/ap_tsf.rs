@@ -15,7 +15,7 @@
 //! A snapshot neither changes this owner's generation nor proves hardware
 //! insertion of a beacon/probe-response timestamp on air.
 
-use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioRuntimeOwner};
+use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 use oer_ieee80211_lower_mac::{TsfGeneration, TsfRelation};
 use oer_ieee80211_mac::tsf::TsfInstant;
 
@@ -56,7 +56,7 @@ impl ApTsfSnapshotHardware for WifiMacHal<'_> {
     }
 }
 
-impl ApTsfSnapshotHardware for RadioRuntimeOwner {
+impl ApTsfSnapshotHardware for RadioAccess {
     fn access_point_tsf(&mut self) -> u64 {
         self.wifi_mac_hal().access_point_tsf()
     }
@@ -72,7 +72,7 @@ impl ApTsfHardware for WifiMacHal<'_> {
     }
 }
 
-impl ApTsfHardware for RadioRuntimeOwner {
+impl ApTsfHardware for RadioAccess {
     fn reset_and_start_access_point_tsf(&mut self, _: AccessPointTsfWrite) {
         self.wifi_mac_hal().reset_and_start_access_point_tsf();
     }

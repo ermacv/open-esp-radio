@@ -4,7 +4,7 @@ use crate::tx::TxHardware;
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     types::{
         MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
         MacHeTriggerTxQueueSnapshot,
@@ -74,7 +74,7 @@ impl HtAmpduHardware for WifiMacHal<'_> {
     }
 }
 
-impl HtAmpduHardware for RadioRuntimeOwner {
+impl HtAmpduHardware for RadioAccess {
     fn prepare_he_trigger_based_queue(
         &mut self,
         policy: MacHeTbTidLimit,
@@ -101,7 +101,7 @@ impl HtAmpduHardware for RadioRuntimeOwner {
         &self,
         reservation: MacHeTbLinkReservation,
     ) -> Option<MacHeTriggerTxQueueSnapshot> {
-        Some(RadioRuntimeOwner::he_trigger_based_queue_snapshot(
+        Some(RadioAccess::he_trigger_based_queue_snapshot(
             self,
             reservation,
         ))

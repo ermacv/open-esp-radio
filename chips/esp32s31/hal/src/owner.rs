@@ -385,16 +385,36 @@ pub(crate) fn phy_parts_mut(
 /// ([`WifiClocked::into_running`](crate::ieee80211::client::WifiClocked::into_running)). It holds the Wi-Fi MAC registers only:
 /// the Wi-Fi hot path needs no radio domain, and every operation that
 /// touches shared radio registers borrows them from the radio domain. It can move
-/// between lifecycle owners and the runtime arena, but exposes no PAC owner,
+/// between lifecycle owners and the driver, but exposes no PAC owner,
 /// dereference operation, or generic register callback.
-pub struct RadioRuntimeOwner {
+///
+/// Moving the owner transfers its authority rather than copying access:
+///
+/// ```compile_fail,E0382
+/// use oer_esp32s31_hal::owner::RadioAccess;
+/// fn duplicate(owner: RadioAccess) -> (RadioAccess, RadioAccess) {
+///     (owner, owner)
+/// }
+/// ```
+///
+/// A live MAC transaction excludes a second mutable transaction:
+///
+/// ```compile_fail,E0499
+/// use oer_esp32s31_hal::owner::RadioAccess;
+/// fn overlap(owner: &mut RadioAccess) {
+///     let first = owner.wifi_mac_hal();
+///     let second = owner.wifi_mac_hal();
+///     drop((first, second));
+/// }
+/// ```
+pub struct RadioAccess {
     pub(crate) registers: WifiRadioRegisters,
     rx_dma: WifiRxDmaEngine,
     station_wake: StationWakeState,
     initialized: bool,
 }
 
-impl RadioRuntimeOwner {
+impl RadioAccess {
     /// Construct the running register owner inside an isolated validation
     /// image without exposing the underlying PAC owner.
     #[cfg(test)]
@@ -439,6 +459,12 @@ impl RadioRuntimeOwner {
 
     pub fn wifi_mac_hal(&mut self) -> wifi_mac::WifiMacHal<'_> {
         wifi_mac::WifiMacHal::from_mac(&mut self.registers)
+    }
+
+    /// Replace the station TSF through this unique owner. A live HAL borrow
+    /// prevents this transaction at compile time.
+    pub fn set_station_tsf(&mut self, value: u64) {
+        self.wifi_mac_hal().set_station_tsf(value);
     }
 
     /// The RX DMA engine, the only owner of the RX descriptor walker.
@@ -565,6 +591,9 @@ impl RadioRuntimeOwner {
     }
 }
 
+#[cfg(test)]
+mod access_tests;
+
 /// Task-side setup authority for one finite MAC interrupt epoch.
 pub struct MacInterruptSetup {
     pub(crate) inner: PacMacInterruptSetup,
@@ -632,21 +661,11 @@ impl MacPowerInterruptRegisters {
 impl MacInterruptSetup {
     pub fn prepare_connected_sta_without_power_save(
         &mut self,
-        radio: &mut RadioRuntimeOwner,
+        radio: &mut RadioAccess,
     ) -> ConnectedStaInterruptPrepared {
         let _ = self
             .inner
             .prepare_connected_sta_without_power_save(&mut radio.registers);
-        ConnectedStaInterruptPrepared { _private: () }
-    }
-
-    pub(crate) fn prepare_connected_sta_with_pac(
-        &mut self,
-        registers: &mut WifiRadioRegisters,
-    ) -> ConnectedStaInterruptPrepared {
-        let _ = self
-            .inner
-            .prepare_connected_sta_without_power_save(registers);
         ConnectedStaInterruptPrepared { _private: () }
     }
 

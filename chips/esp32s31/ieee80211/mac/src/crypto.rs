@@ -7,7 +7,7 @@
 
 use oer_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
-    owner::RadioRuntimeOwner,
+    owner::RadioAccess,
     types::{MacCcmpKeyIdentity, MacKeyInstallOutcome},
 };
 
@@ -120,7 +120,7 @@ impl CcmpKeyHardware for WifiMacHal<'_> {
     }
 }
 
-impl CcmpKeyHardware for RadioRuntimeOwner {
+impl CcmpKeyHardware for RadioAccess {
     fn configure_ccmp_association(
         &mut self,
         interface: oer_esp32s31_hal::types::MacInterface,

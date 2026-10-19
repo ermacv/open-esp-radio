@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use esp_hal::interrupt::software::SoftwareInterrupt;
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::ieee80211::dma::rx_storage::{RxDmaStorage, RxDmaStorageError};
-use oer_esp32s31_hal::owner::{MacInterruptSetup, RadioRuntimeOwner};
+use oer_esp32s31_hal::owner::{MacInterruptSetup, RadioAccess};
 use oer_esp32s31_ieee80211_driver::{
     irq::{
         RadioDoorbell, WifiIrqLine, WifiIrqRoutes, run_doorbell, service_mac_line,
@@ -212,7 +212,7 @@ static CLOCK: EmbassyClock = EmbassyClock;
 /// application its ends, then receive until the stop and park.
 #[embassy_executor::task]
 pub async fn rx_task(
-    mut registers: RadioRuntimeOwner,
+    mut registers: RadioAccess,
     interrupt_setup: MacInterruptSetup,
     mut routes: ImageRoutes,
     doorbell: ImageDoorbell,
