@@ -1,0 +1,60 @@
+{
+  "schema": 4,
+  "data": [
+    "host/hil/schema/scenario-v5-defaults.json"
+  ],
+  "dependencies": {
+    "common": [
+      "oer-hil-workload",
+      "oer-lab-devices",
+      "oer-lab-device-lock",
+      "oer-lab-stand-journal",
+      "oer-lab-stand-owners",
+      "oer-lab-stand-board",
+      "oer-image-bundle",
+      "oer-hil-image-class",
+      "oer-os-durable",
+      "oer-hil-source-snapshot",
+      "oer-hil-scenario",
+      "oer-hil-scenario-catalog",
+      "oer-hil-run-bundle",
+      "oer-hil-run-bundle-format",
+      "oer-hil-schema",
+      "oer-hil-analysis",
+      "oer-hil-image",
+      "oer-image-build",
+      "oer-image-check-interrupts",
+      "oer-image-chip-profile",
+      "oer-hil-link",
+      "oer-hil-lab",
+      "oer-hil-flash",
+      "oer-lab-stand-arbiter",
+      "rustix",
+      "oer-os-process",
+      "oer-image-toolchain",
+      "oer-os-command-tree",
+      "oer-lab-stand-fixture-install",
+      "clap",
+      "tempfile",
+      "oer-hil-protocol",
+      "serde",
+      "serde_json",
+      "oer-hil-observer",
+      "sha2",
+      "toml_edit",
+      "oer-hil-family-ieee80211-fixture"
+    ],
+    "system": [
+      "oer-hil-family-system"
+    ]
+  },
+  "timing": {
+    "system/boot-smoke": false,
+    "system/watchdog": true,
+    "system/panic-reset": true,
+    "system/stand-recovery": true
+  },
+  "build": {
+    "profile": "debug"
+  }
+}

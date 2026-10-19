@@ -1,0 +1,36 @@
+[package]
+name = "oer-hil-link"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL host/target link: one session with the board under test (UART capture, generic exchange, readiness, reboots) and the reference peers' line console"
+
+[features]
+# The capture fixtures of other packages' tests; the fake target reports the
+# correctness image's keys.
+test-support = ["dep:oer-hil-image-class"]
+
+[dependencies]
+oer-lab-device-peer-line = { path = "../../lab/device-peer-line" }
+oer-hil-schema = { path = "../schema" }
+oer-os-durable = { path = "../../os/durable" }
+oer-hil-image-class = { path = "../image-class", optional = true }
+oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
+oer-os-process = { path = "../../os/process" }
+mio = { version = "=1.2.2", features = ["os-poll", "os-ext"] }
+postcard = { version = "1.1.3", default-features = false }
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zeroize = "1.8.1"
+
+[dev-dependencies]
+oer-hil-image-class = { path = "../image-class" }
+postcard-schema = { version = "0.2.5", features = ["derive"] }
+
+[lints]
+workspace = true
+

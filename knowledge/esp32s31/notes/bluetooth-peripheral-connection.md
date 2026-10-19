@@ -7,7 +7,7 @@ codecs, executor and portable pieces still follow them.
 
 This reference describes reviewed hardware-facing facts consumed by the Rust
 driver. Vendor Controller architecture does not define the open ownership model.
-Portable Link Layer policy remains in `crates/bluetooth/le/ll`; this document
+Portable Link Layer policy remains in `portable/bluetooth/le/ll`; this document
 identifies the S31 controller-SRAM fields and event edges that a chip backend
 must lower.
 
@@ -286,7 +286,7 @@ RUN: the scanning chain with the initialization policy, then the non-scanning
 chain with the software-connection policy, which stays in force for every
 later event. Whether the policy affects non-connection receptions, and whether
 shared-PHY maintenance clears it so that it must be republished on resume,
-are open hardware questions. The [HAL transaction](../../../crates/esp32s31/hal/src/bluetooth.rs)
+are open hardware questions. The [HAL transaction](../../../chips/esp32s31/hal/src/bluetooth.rs)
 owns that sequencing; cold BLE PHY initialization retains its reviewed vendor
 images. Neither raw register images nor private vendor flags cross into the
 portable Link Layer.

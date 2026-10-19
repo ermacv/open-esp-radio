@@ -1,8 +1,8 @@
 # Register publication outputs (`cargo registers generate`): never edited by
 # hand. The raw PACs and binding indexes are derived from the SVD, which stays
 # diffable; `git diff --text` shows them when needed.
-crates/*/*pac-raw/src/lib.rs linguist-generated=true -diff
-crates/*/*pac/src/generated.rs linguist-generated=true
+chips/*/*pac-raw/src/lib.rs linguist-generated=true -diff
+chips/*/*pac/src/generated.rs linguist-generated=true
 registers/*/published/*.svd linguist-generated=true
 registers/*/published/*.bindings.toml linguist-generated=true -diff
 # Machine-written vendor fact registries: function fingerprints and recovered

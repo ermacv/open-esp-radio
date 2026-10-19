@@ -29,8 +29,8 @@ class Edits(unittest.TestCase):
 
     def test_generated_files_are_regenerated_not_edited(self):
         for tool, path, command in [
-            ("Edit", "/w/crates/esp32s31/pac/src/generated.rs", "cargo registers generate"),
-            ("Write", "crates/espressif/ieee80211-pac-raw/src/lib.rs", "cargo registers generate"),
+            ("Edit", "/w/chips/esp32s31/pac/src/generated.rs", "cargo registers generate"),
+            ("Write", "chips/espressif/ieee80211-pac-raw/src/lib.rs", "cargo registers generate"),
             ("Edit", "/w/registers/esp32s31/published/radio.svd", "cargo registers generate"),
             ("Edit", "registers/esp32s31/published/platform.bindings.toml", "cargo registers generate"),
             ("Edit", "/w/knowledge/esp32s31/vendor/facts/provenance.toml", "re-deriving"),
@@ -41,7 +41,7 @@ class Edits(unittest.TestCase):
 
     def test_handwritten_neighbours_stay_editable(self):
         for path in [
-            "/w/crates/esp32s31/pac/src/lib.rs",
+            "/w/chips/esp32s31/pac/src/lib.rs",
             "/w/registers/esp32s31/model/device.toml",
             "/w/knowledge/esp32s31/vendor/facts/names/README.md",
             "/w/knowledge/esp32s31/vendor/artifacts.toml",
@@ -53,13 +53,13 @@ class Edits(unittest.TestCase):
 
 class Reads(unittest.TestCase):
     def test_a_generated_file_is_never_read_whole(self):
-        status, stderr = run("Read", file_path="/w/crates/esp32s31/pac/src/generated.rs")
+        status, stderr = run("Read", file_path="/w/chips/esp32s31/pac/src/generated.rs")
         self.assertEqual(status, 2)
         self.assertIn("grep it with an explicit path", stderr)
         for command in [
             "head -n 50 registers/esp32s31/published/radio.svd",
             "cd x && cat knowledge/esp32s31/vendor/facts/provenance.toml",
-            "git show HEAD:crates/esp32s31/pac-raw/src/lib.rs",
+            "git show HEAD:chips/esp32s31/pac-raw/src/lib.rs",
         ]:
             status, stderr = run("Bash", command=command)
             self.assertEqual(status, 2, command)

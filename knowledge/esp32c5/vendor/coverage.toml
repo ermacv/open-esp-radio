@@ -35,8 +35,8 @@ covers on a busy port, while the preceding read of `phy_i2c_writeReg_Mask` \
 polled the same host idle before this write"""
 port_status = "partial"
 port = [
-    "crates/espressif/analog/src/lib.rs AnalogRegisterBus",
-    "crates/espressif/analog/src/lib.rs FieldWrite",
+    "portable/espressif/analog/src/lib.rs AnalogRegisterBus",
+    "portable/espressif/analog/src/lib.rs FieldWrite",
 ]
 review = """
 the chip-independent field write, which observes each command's completion \

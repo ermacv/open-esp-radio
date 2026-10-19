@@ -25,8 +25,8 @@ svd = "../published/radio.svd"
 bindings = "../published/radio.bindings.toml"
 
 [outputs.pac]
-raw = "../../../crates/esp32c5/pac-raw/src/lib.rs"
-api = "../../../crates/esp32c5/pac/src/generated.rs"
+raw = "../../../chips/esp32c5/pac-raw/src/lib.rs"
+api = "../../../chips/esp32c5/pac/src/generated.rs"
 crate-name = "oer_esp32c5_pac_raw"
 target = "none"
 edition = "2024"

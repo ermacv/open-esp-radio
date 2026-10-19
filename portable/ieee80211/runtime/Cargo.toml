@@ -1,0 +1,57 @@
+[package]
+name = "oer-ieee80211-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable Wi-Fi execution primitives: monitor handoffs, task shutdown, station network ownership and poll boundaries"
+
+[features]
+default = []
+# The in-memory lower-MAC backend on the owner shape (`lower_mac_owner::model`),
+# for host tests of the code that drives it.
+test-support = ["dep:oer-ieee80211-rsn", "oer-ieee80211-sta/test-support"]
+
+[dependencies]
+atomic-waker = "1.1.2"
+heapless = "0.9.3"
+embassy-futures = "0.1.2"
+embassy-sync = "0.8.0"
+oer-base-memory = { path = "../../base/memory" }
+oer-ieee80211-lower-mac = { path = "../lower-mac" }
+oer-ieee80211-mac = { path = "../mac" }
+oer-radio-port = { path = "../../radio/port" }
+oer-ieee80211-softmac = { path = "../softmac" }
+oer-base-time = { path = "../../base/time" }
+oer-ieee80211-arbiter = { path = "../arbiter" }
+oer-ieee80211-sta = { path = "../sta" }
+oer-ieee80211-upper-mac = { path = "../upper-mac" }
+
+oer-ieee80211-rsn = { path = "../rsn", optional = true }
+
+[dev-dependencies]
+oer-ieee80211-sta = { path = "../sta", features = ["test-support"] }
+# The deterministic received-byte inputs of the survey's never-panics test.
+oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }
+critical-section = { version = "1.2.0", features = ["std"] }
+oer-base-time-virtual = { path = "../../base/time-virtual" }
+# The model of `lower_mac_owner` and its tests.
+oer-ieee80211-lower-mac = { path = "../lower-mac" }
+oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
+oer-espressif-ieee80211-policy = { path = "../../espressif/ieee80211-policy" }
+oer-ieee80211-rsn = { path = "../rsn" }
+oer-test-ui-cases = { path = "../../../host/test/ui-cases" }
+
+# The cases build against the in-memory backend (`lower_mac_owner::model`).
+[[test]]
+name = "ui"
+required-features = ["test-support"]
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "runtime"
+platform = "portable"
+test-feature-sets = ["test-support"]

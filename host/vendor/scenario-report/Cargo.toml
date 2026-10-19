@@ -1,0 +1,23 @@
+[package]
+name = "oer-vendor-scenario-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Reviewer reports of the typed vendor-comparison scenarios: untriaged locations, closure gateways and standalone inspection of pinned vendor code"
+
+[dependencies]
+oer-analysis-elf = { path = "../../analysis/elf" }
+oer-os-process = { path = "../../os/process" }
+oer-vendor-evidence-shard = { path = "../evidence-shard" }
+oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-vendor-scenario-engine = { path = "../scenario-engine" }
+clap = { version = "=4.5.48", features = ["derive"] }
+sha2 = "=0.10.9"
+
+[lints]
+workspace = true
+

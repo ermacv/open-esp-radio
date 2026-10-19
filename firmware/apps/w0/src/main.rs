@@ -35,13 +35,13 @@ use oer_esp32s31_phy::{
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
 use oer_exec_executor::{Executor, InterruptExecutor, LevelOrder};
-use oer_firmware_platform_esp32s31_board as board;
-use oer_firmware_platform_espressif_staged_runtime::panic;
 use oer_ieee80211_mac::channel::{WifiChannel, WifiChannelWidth};
 use oer_ieee80211_softmac::WifiMacAddress;
+use oer_platform_esp32s31_board as board;
+use oer_platform_staged_runtime::panic;
 use static_cell::StaticCell;
 
-oer_firmware_platform_espressif_staged_runtime::interrupt_table! {
+oer_platform_staged_runtime::interrupt_table! {
     /// The application executor's wake (thread mode).
     wake: WakeToken = FROM_CPU_INTR0 => oer_exec_executor::wake_handler::<0>, Priority1, ProCpu;
     /// The radio executor (P2), polled in its handler.
@@ -86,7 +86,7 @@ extern "C" fn runtime_main() -> ! {
     // nothing has reset or remapped; interrupts stay disabled until the
     // executor and time driver are bound below.
     let psram = unsafe {
-        oer_firmware_platform_espressif_staged_runtime::adopt(INTERRUPT_TABLE, || {
+        oer_platform_staged_runtime::adopt(INTERRUPT_TABLE, || {
             board::adopt_psram_mapping(peripherals.PSRAM)
         })
     };
@@ -174,7 +174,7 @@ extern "C" fn runtime_main() -> ! {
     // executor and, from `run`, the application executor's wake are bound;
     // the interrupt table routes only their four sources, and interrupts were
     // disabled since the handoff.
-    unsafe { oer_firmware_platform_espressif_staged_runtime::enable_interrupts_after_handoff() };
+    unsafe { oer_platform_staged_runtime::enable_interrupts_after_handoff() };
     let boot = Boot {
         console,
         cell: cells.wifi,

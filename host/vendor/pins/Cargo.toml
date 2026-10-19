@@ -1,0 +1,18 @@
+[package]
+name = "oer-vendor-pins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The pins of a chip's vendor artifacts: the one reader of artifacts.toml and where a pinned artifact lies in a checkout"
+
+[dependencies]
+oer-image-chip-profile = { path = "../../image/chip-profile" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.4"
+
+[lints]
+workspace = true
+

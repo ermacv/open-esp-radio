@@ -1,0 +1,28 @@
+[package]
+name = "oer-espressif-ieee80211-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Espressif IEEE 802.11 transmit policy data recovered from the vendor stack: rate schedules, retry ladder, limits and estimates"
+readme = "README.md"
+
+[dependencies]
+oer-ieee80211-lower-mac = { path = "../../ieee80211/lower-mac" }
+oer-ieee80211-mac = { path = "../../ieee80211/mac" }
+oer-ieee80211-softmac = { path = "../../ieee80211/softmac" }
+oer-ieee80211-sta = { path = "../../ieee80211/sta" }
+oer-ieee80211-upper-mac = { path = "../../ieee80211/upper-mac" }
+oer-base-time = { path = "../../base/time" }
+
+[dev-dependencies]
+oer-test-ui-cases = { path = "../../../host/test/ui-cases" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "protocol"
+platform = "family"
+family = "espressif"

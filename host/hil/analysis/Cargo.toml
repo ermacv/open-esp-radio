@@ -1,0 +1,30 @@
+[package]
+name = "oer-hil-analysis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Analysis of HIL run bundles: measurement samples, statistics and comparison, run queries, performance baselines and the sealed views"
+
+[dependencies]
+oer-os-process = { path = "../../os/process" }
+oer-hil-run-bundle-format = { path = "../run-bundle-format" }
+oer-analysis-elf = { path = "../../analysis/elf" }
+oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
+oer-os-durable = { path = "../../os/durable" }
+oer-hil-run-bundle = { path = "../run-bundle" }
+oer-hil-schema = { path = "../schema" }
+oer-hil-stats = { path = "../stats" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+oer-hil-run-bundle = { path = "../run-bundle", features = ["test-support"] }
+roxmltree = "0.20"
+tempfile = "3"
+
+[lints]
+workspace = true
+

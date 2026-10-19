@@ -18,7 +18,7 @@ proposes how the register model, the PAC and the HAL describe them.
 | Wi-Fi TX descriptor words (flags, security, HE control, rate context) | `ieee80211/mac/src/tx/policy.rs`: shifts and fields named by offset (`byte_0x38`, `byte_0x2f_bit_2`) | CPU writes, hardware reads at transmission |
 | A-MPDU internal and external descriptors | `hal/src/ieee80211/dma/tx_ampdu_storage.rs` | CPU builds, hardware walks |
 | BLE controller exchange memory (packet headers, scheduler lists, CTE ring) | evidence descriptions and `knowledge/esp32s31/bluetooth/` only | CPU and controller both, by protocol |
-| IEEE 802.15.4 frame buffers (length byte, PSDU) | `crates/espressif/ieee802154-engine` | CPU and engine |
+| IEEE 802.15.4 frame buffers (length byte, PSDU) | `portable/espressif/ieee802154-engine` | CPU and engine |
 | The DMA-capable window `0x2f00_0000..0x2f08_0000` | three hand-written copies (`dma/src/descriptor.rs`, `hal/src/ieee802154.rs`, the esp-hal adapter's mem2mem) | placement rule |
 
 None of these pass through the register model, so none have its review,

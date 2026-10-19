@@ -1,6 +1,6 @@
 /* Physical address spaces used by the independently linked runtime image.
    Addresses and sizes are the chip layout's symbols
-   (`oer-firmware-platform-espressif-staged-layout` `build`). */
+   (`oer-platform-staged-layout` `build`). */
 MEMORY
 {
   /* All application-owned internal SRAM is one arena. Section placement is

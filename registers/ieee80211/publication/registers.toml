@@ -8,7 +8,7 @@ evidence = [
 ]
 
 [outputs]
-pac-raw = "../../../crates/espressif/ieee80211-pac-raw/src/lib.rs"
-pac-api = "../../../crates/espressif/ieee80211-pac/src/generated.rs"
+pac-raw = "../../../chips/espressif/ieee80211-pac-raw/src/lib.rs"
+pac-api = "../../../chips/espressif/ieee80211-pac/src/generated.rs"
 target = "none"
 edition = "2024"

@@ -1,0 +1,28 @@
+[package]
+name = "oer-lab-fixtures-bluetooth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The Linux Bluetooth fixture over BlueZ: DTM peer check, discovery, ATT parameters and the secure GATT agent"
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
+oer-hil-protocol = { path = "../../../portable/hil/protocol" }
+oer-hil-run-bundle-format = { path = "../../hil/run-bundle-format" }
+oer-hil-fixture = { path = "../../hil/fixture" }
+oer-hil-lab = { path = "../../hil/lab" }
+async-channel = "2.5"
+async-io = "2.6"
+futures-lite = "2.6"
+rustix = { version = "1.1.4", features = ["event", "fs", "net", "process", "stdio"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3"
+zbus = "=5.19.0"
+
+[lints]
+workspace = true

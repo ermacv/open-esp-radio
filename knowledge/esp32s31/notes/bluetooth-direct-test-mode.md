@@ -9,10 +9,10 @@ This reference describes the DTM descriptor, scheduler, timing and ownership
 contracts of the pinned vendor Controller and how the open implementation
 follows them. DTM is a Lower Link Layer role; its implementation does not
 require the vendor allocator, callback registry or RTOS. The portable
-[DTM session](../../../crates/bluetooth/le/ll/src/dtm.rs) plans the
+[DTM session](../../../portable/bluetooth/le/ll/src/dtm.rs) plans the
 test events, the removed radio role lowered each event into the controller-memory
 graph, and supported HCI commands belong to the portable
-[HCI crate](../../../crates/bluetooth/hci/).
+[HCI crate](../../../portable/bluetooth/hci/).
 
 ## Pinned public inputs
 

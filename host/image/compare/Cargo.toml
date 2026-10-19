@@ -1,0 +1,19 @@
+[package]
+name = "oer-image-compare"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Two linked RISC-V images compared function by function modulo placement"
+
+[dependencies]
+oer-analysis-elf = { path = "../../analysis/elf" }
+oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true
+

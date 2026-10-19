@@ -1,0 +1,23 @@
+[package]
+name = "oer-lab-stand-resource-lock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The lock file of a shared stand fixture resource, held under the arbiter's grant"
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
+oer-lab-model = { path = "../model" }
+
+[dev-dependencies]
+libc = "0.2"
+rustix = { version = "1.1.4", features = ["process"] }
+tempfile = "3"
+
+[lints]
+workspace = true
+

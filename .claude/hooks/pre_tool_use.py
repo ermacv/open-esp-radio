@@ -20,8 +20,8 @@ import sys
 
 GENERATED = re.compile(
     r"(?:^|/)(?:"
-    r"crates/[^/]+/[^/]*pac-raw/src/lib\.rs"
-    r"|crates/[^/]+/[^/]*pac/src/generated\.rs"
+    r"chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
+    r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
     r"|registers/[^/]+/published/[^/]+\.(?:svd|bindings\.toml)"
     r"|knowledge/[^/]+/vendor/facts/provenance\.toml"
     r"|knowledge/[^/]+/vendor/facts/names/[^/]+\.toml"
@@ -34,8 +34,8 @@ GENERATED_HINT = (
 
 # Generated files and the command that writes each; never edited by hand.
 REGENERATED = [
-    (re.compile(r"(?:^|/)(?:crates/[^/]+/[^/]*pac-raw/src/lib\.rs"
-                r"|crates/[^/]+/[^/]*pac/src/generated\.rs"
+    (re.compile(r"(?:^|/)(?:chips/[^/]+/[^/]*pac-raw/src/lib\.rs"
+                r"|chips/[^/]+/[^/]*pac/src/generated\.rs"
                 r"|registers/[^/]+/published/[^/]+\.(?:svd|bindings\.toml))$"),
      "`cargo registers generate --manifest registers/<chip>/publication/<publication>.toml` "
      "after editing the register model or policy"),

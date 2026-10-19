@@ -1,7 +1,7 @@
 # Clocks, stamps and alarms
 
 How time is represented across the stack. The vocabulary is in `oer-base-time`
-(`crates/base/time`) and `oer-radio-port` (`crates/radio/port`); measured
+(`portable/base/time`) and `oer-radio-port` (`portable/radio/port`); measured
 facts about the Wi-Fi stamp are in
 [rx-stamp](../knowledge/esp32s31/wifi/rx-stamp.md).
 
@@ -64,7 +64,7 @@ sample of another generation does not convert (`StaleSample`).
   reception. A consumer that needs the reception time converts the stamp.
 - Hardware counters and alarms belong to their driver and reach the layers
   above as read-only capabilities (`MacLocalTime`) or port operations.
-- Only adapters, the executor binding (`crates/exec/executor`, the time
+- Only adapters, the executor binding (`chips/exec/executor`, the time
   driver) and the firmware depend on `embassy-time`, dev dependencies
   included; every lower layer reads and waits through the `oer-base-time` ports,
   takes its timer from its owner or caller, and is tested with

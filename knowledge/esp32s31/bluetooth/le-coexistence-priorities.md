@@ -15,7 +15,7 @@ table `sym_coexAdv_H8ZFnQsVsYzrsw6Rv2Wu`), `coexConn.c.o_1.o`
 (`r_sym_coexScan_FGUQNnreeyQiPkw2qTYu`, `r_sym_coexScan_s7w1EV32meG8f6y0sPBq`,
 `r_sym_coexScan_wNFqQvVjWMhmRY8ZGk4o`) and `ble_2.o`
 (`r_sym_ble_2eLkvpKuoaxT83Mj406p`); extracted from
-the predecessor repository's `crates/bluetooth/le/controller/src/coexistence.rs`.
+the predecessor repository's `portable/bluetooth/le/controller/src/coexistence.rs`.
 
 Facts and decision structure only. Every threshold, period, count and lane
 value is to be measured on hardware.

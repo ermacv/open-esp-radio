@@ -1,0 +1,16 @@
+[package]
+name = "oer-analysis-riscv-analysis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Bounded control-flow and value analysis of one function over the RV32 program model"
+
+[dependencies]
+oer-analysis-riscv-model = { path = "../riscv-model" }
+
+[lints]
+workspace = true
+

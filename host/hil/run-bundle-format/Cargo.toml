@@ -1,0 +1,26 @@
+[package]
+name = "oer-hil-run-bundle-format"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL run bundle format: its typed documents, their validation, the integrity and scenario seals, the observer identity, the fixture records and the one reader"
+
+[dependencies]
+oer-os-durable = { path = "../../os/durable" }
+flate2 = "1.1.9"
+sha2 = "0.10"
+oer-hil-scenario-catalog = { path = "../scenario-catalog" }
+oer-hil-schema = { path = "../schema" }
+oer-os-process = { path = "../../os/process" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+

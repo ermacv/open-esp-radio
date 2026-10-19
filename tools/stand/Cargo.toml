@@ -1,0 +1,46 @@
+[package]
+name = "oer-tool-stand"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "cargo stand: the shared stand's queue, leases, boards, owners, host setup and fixture software"
+
+[[bin]]
+name = "stand"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "=4.5.48", features = ["derive"] }
+oer-image-chip-profile = { path = "../../host/image/chip-profile" }
+oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
+oer-lab-devices = { path = "../../host/lab/devices", features = ["image"] }
+oer-lab-device-lock = { path = "../../host/lab/device-lock" }
+oer-lab-device-peer-line = { path = "../../host/lab/device-peer-line" }
+oer-os-durable = { path = "../../host/os/durable" }
+oer-os-process = { path = "../../host/os/process" }
+oer-lab-stand-arbiter = { path = "../../host/lab/stand-arbiter" }
+oer-lab-stand-board = { path = "../../host/lab/stand-board" }
+oer-lab-stand-claims = { path = "../../host/lab/stand-claims" }
+oer-lab-stand-discover = { path = "../../host/lab/stand-discover" }
+oer-lab-stand-doctor = { path = "../../host/lab/stand-doctor" }
+oer-lab-model = { path = "../../host/lab/model" }
+oer-lab-stand-fixture-install = { path = "../../host/lab/stand-fixture-install" }
+oer-lab-stand-fixtures = { path = "../../host/lab/stand-fixtures" }
+oer-lab-stand-hostapd = { path = "../../host/lab/stand-hostapd" }
+oer-lab-stand-journal = { path = "../../host/lab/stand-journal" }
+oer-lab-stand-owners = { path = "../../host/lab/stand-owners" }
+oer-lab-stand-power = { path = "../../host/lab/stand-power" }
+oer-image-toolchain = { path = "../../host/image/toolchain" }
+rustix = { version = "=1.1.4", features = ["process"] }
+serde_json = "=1.0.151"
+
+[dev-dependencies]
+libc = "0.2"
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+

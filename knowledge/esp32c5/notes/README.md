@@ -40,4 +40,4 @@ From predecessor HIL runs on one v1.0 board, 2026-09-27 (register evidence
   `CLK_CONF_POWER_ST.CLK_I2C_MST_ST_MAP`, and a USB Serial/JTAG reset then
   enters ROM download mode.
 - The stand's handling of a wedged ESP32-C5 USB console is in
-  [`tools/lib/service/lab`](../../../tools/lib/service/lab/README.md).
+  [`host/lab/router`](../../../host/lab/router/README.md).

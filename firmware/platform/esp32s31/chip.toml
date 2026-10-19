@@ -5,7 +5,7 @@ id = "esp32s31"
 # The family whose shared code the chip uses (`platform = "family"` packages).
 family = "espressif"
 rust-target = "riscv32imafc-unknown-none-elf"
-# The ROM loads the ESP-IDF bootloader, which loads firmware/platform/esp32s31/bootstrap;
+# The ROM loads the ESP-IDF bootloader, which loads firmware/bootstrap/esp32s31;
 # the bootstrap stages the runtime into PSRAM.
 boot = "staged"
 espflash-chip = "esp32s31"
@@ -39,7 +39,7 @@ bootloader-mode = "dio"
 start = "reset"
 
 # The staged-boot address map as host tools check images against it: the
-# firmware's own copy is firmware/platform/esp32s31/layout (LAYOUT), which the linker
+# firmware's own copy is portable/platform/esp32s31-layout (LAYOUT), which the linker
 # scripts read. Sizes describe the fitted memories.
 [memory]
 # Application-owned internal SRAM (ESP-IDF's SRAM_START..SRAM_SEG_END).
@@ -54,8 +54,8 @@ runtime-psram = { origin = 0x50010000, length = 0x00ff0000 }
 task-stacks = "psram"
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
-# (firmware/platform/espressif/staged-runtime) installs these vectors and stacks; the
-# chip-neutral symbols are firmware/platform/espressif/staged-layout (interrupts.rs).
+# (chips/platform/staged-runtime) installs these vectors and stacks; the
+# chip-neutral symbols are portable/platform/staged-layout (interrupts.rs).
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
 # `Binding<Interrupt, Priority, Cpu>`: source u16 at 0, level u8 at 2, core
@@ -142,7 +142,7 @@ stack-swap = [
 ]
 
 # The staged boot's host contract: the stage-two header the image build
-# packs (firmware/platform/espressif/staged-layout stage_two.rs) and the input sections
+# packs (portable/platform/staged-layout stage_two.rs) and the input sections
 # the runtime linker script zeroes (zeroed.rs); that none of them carries
 # initialized bytes is to be checked by `cargo fw` after the link (planned).
 [staged]
@@ -166,16 +166,16 @@ abi-version-offset = 4
 header-size-offset = 28
 crc-offset = 40
 
-# The Rust probe images of the vendor comparison (firmware/verification/esp32s31),
+# The Rust probe images of the vendor comparison (firmware/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
 # with its hooks (knowledge/esp32s31/open-questions.md).
 [[probe]]
 role = "rust-artifact"
-package = "oer-firmware-verification-esp32s31-probe-radio-elf"
+package = "oer-firmware-probes-esp32s31-radio-elf"
 
 [[probe]]
 role = "rust-artifact:wifi-registers"
-package = "oer-firmware-verification-esp32s31-probe-register-elf"
+package = "oer-firmware-probes-esp32s31-register-elf"
 
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is

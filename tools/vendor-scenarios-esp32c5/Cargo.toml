@@ -1,0 +1,17 @@
+[package]
+name = "oer-tool-vendor-scenarios-esp32c5"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The ESP32-C5 vendor-scenario binary: the chip's verdict library behind the shared scenario command line"
+
+[dependencies]
+oer-vendor-scenarios-esp32c5 = { path = "../../host/vendor/scenarios-esp32c5" }
+oer-vendor-scenario-command = { path = "../../host/vendor/scenario-command" }
+
+[lints]
+workspace = true
+

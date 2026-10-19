@@ -1,0 +1,21 @@
+[package]
+name = "oer-hil-trace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL platform trace events a board records and the host decodes"
+
+[features]
+# The host's decoding of a drained trace: the event sets an image's trace
+# holds and the snapshots a domain knows.
+describe = []
+
+[dependencies]
+oer-base-trace = { path = "../../base/trace" }
+
+[lints]
+workspace = true
+

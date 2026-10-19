@@ -259,7 +259,7 @@ on-air capability.
 
 ## Implementation boundary
 
-The [MAC engine](../../../crates/espressif/ieee802154-engine/src/engine.rs)
+The [MAC engine](../../../portable/espressif/ieee802154-engine/src/engine.rs)
 owns the vendor state machine, `next_operation` and its DMA buffers; the PAC
 owns register authority. This repository has no runtime that serializes the
 engine with the MAC owners and routes source 132.

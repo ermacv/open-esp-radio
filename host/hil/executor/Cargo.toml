@@ -1,0 +1,34 @@
+[package]
+name = "oer-hil-executor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Execution of typed HIL scenarios: one scenario run by the host model or, under a granted stand lease, the stand; what a run measures; and the tier plan with its budget, image segments and lease limits"
+
+[features]
+# `StandSession::for_tests`: a stand session without a lease, for the tests
+# of stand drivers. No runner enables it.
+test-support = []
+
+[dependencies]
+oer-hil-model = { path = "../model" }
+oer-lab-stand-arbiter = { path = "../../lab/stand-arbiter" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+embassy-futures = "0.1.2"
+oer-hil-trace-header = { path = "../../../portable/hil/trace-header", features = ["wire"] }
+oer-base-time = { path = "../../../portable/base/time", features = ["schema"] }
+# The executor's own tests and doctests use `StandSession::for_tests`.
+oer-hil-executor = { path = ".", features = ["test-support"] }
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+postcard-schema = { version = "0.2.5", features = ["derive", "use-std"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.docs.rs]

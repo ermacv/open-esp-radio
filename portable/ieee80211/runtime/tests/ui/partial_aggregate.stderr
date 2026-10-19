@@ -1,0 +1,10 @@
+error[E0624]: associated function `admit` is private
+  --> tests/ui/partial_aggregate.rs:23:39
+   |
+23 |         TxCompleted::Single(InFlight::admit(parts.context, parts.ticket, one).complete(_single)) // ui-error: E0624
+   |                                       ^^^^^ private associated function
+   |
+  ::: $WORKSPACE/portable/ieee80211/lower-mac/src/in_flight.rs
+   |
+   |     pub(crate) const fn admit(context: C, ticket: T, payload: M) -> Self {
+   |     -------------------------------------------------------------------- private associated function defined here

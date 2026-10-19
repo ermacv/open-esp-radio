@@ -1,0 +1,23 @@
+[package]
+name = "oer-hil-image-class"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "HIL image classes: build feature recipes and the keys each class reports"
+
+[dependencies]
+oer-hil-schema = { path = "../schema" }
+oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-hil-image-keys = { path = "../../../portable/hil/image-keys" }
+oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
+toml = "1.1"
+
+[build-dependencies]
+oer-image-chip-profile = { path = "../../image/chip-profile" }
+
+[lints]
+workspace = true
+

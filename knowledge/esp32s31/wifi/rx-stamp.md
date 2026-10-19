@@ -7,7 +7,7 @@ with the stand AP alone. SOURCE[HIL_W1_RX_STAMP_2026_10_18]. Facts only.
 
 The RX prefix of each received unit carries a 32-bit MAC local time at
 prefix offset 0x0c (`decode_rx_local_timestamp`,
-`crates/esp32s31/ieee80211/mac/src/rx/prefix.rs`).
+`chips/esp32s31/ieee80211/mac/src/rx/prefix.rs`).
 
 - **Unit: microseconds, on the SYSTIMER rate.** Over a 10 s window the span
   of the stamps of one BSS equals the span of their P2 handoff times

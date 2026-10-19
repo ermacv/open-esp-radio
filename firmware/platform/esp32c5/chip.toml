@@ -6,7 +6,7 @@ id = "esp32c5"
 # The family whose shared code the chip uses (`platform = "family"` packages).
 family = "espressif"
 rust-target = "riscv32imac-unknown-none-elf"
-# The ROM loads the ESP-IDF bootloader, which loads firmware/platform/esp32c5/bootstrap;
+# The ROM loads the ESP-IDF bootloader, which loads firmware/bootstrap/esp32c5;
 # the bootstrap stages the runtime into PSRAM.
 boot = "staged"
 espflash-chip = "esp32c5"
@@ -48,7 +48,7 @@ bootloader-mode = "dio"
 start = "power-on"
 
 # The staged-boot address map as host tools check images against it: the
-# firmware's own copy is firmware/platform/esp32c5/layout (LAYOUT), which the linker
+# firmware's own copy is portable/platform/esp32c5-layout (LAYOUT), which the linker
 # scripts read. One MMU window (0x42000000..0x44000000) serves flash and
 # PSRAM: the bootstrap's flash pages in its lower half, the module's 8-MiB
 # PSRAM at the fixed start of its upper half.
@@ -65,8 +65,8 @@ runtime-psram = { origin = 0x43010000, length = 0x007f0000 }
 task-stacks = "psram"
 
 # The interrupt contract the interrupt-stack check reads: the staged runtime
-# (firmware/platform/espressif/staged-runtime) installs these vectors and the stack;
-# the chip-neutral symbols are firmware/platform/espressif/staged-layout
+# (chips/platform/staged-runtime) installs these vectors and the stack;
+# the chip-neutral symbols are portable/platform/staged-layout
 # (interrupts.rs). One hart, no inter-processor call.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
@@ -137,7 +137,7 @@ stack-swap = [
 ]
 
 # The staged boot's host contract: the stage-two header the image pipeline
-# packs (firmware/platform/espressif/staged-layout stage_two.rs) and the input sections
+# packs (portable/platform/staged-layout stage_two.rs) and the input sections
 # the runtime linker script zeroes (zeroed.rs), which the image linker refuses
 # initialized bytes in.
 [staged]
@@ -180,10 +180,10 @@ release-builds = ["verification/esp32c5/hardware/register-probe"]
 target-builds = ["oer-esp32c5-pac", "oer-esp32c5-hal"]
 agent-clippy = true
 
-# The Rust probe images of the vendor comparison (firmware/verification/esp32c5).
+# The Rust probe images of the vendor comparison (firmware/probes).
 [[probe]]
 role = "rust-artifact"
-package = "oer-firmware-verification-esp32c5-probe-radio-elf"
+package = "oer-firmware-probes-esp32c5-radio-elf"
 
 # Why the core last reset, which the stand reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is
