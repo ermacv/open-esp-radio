@@ -1,10 +1,10 @@
 //! A/B experiments: two variants of the firmware on the same scenarios,
 //! with enough repetitions to tell an effect from noise.
 //!
-//! A variant is a repository revision plus local checkouts that replace its
-//! pinned dependencies (the `ESP_HAL_ROOT` root). Each arm's revision is checked out in the
-//! experiment's worktree below `target/hil/ab/<id>/` and captured with its
-//! overrides into a source snapshot, which the experiment's runner builds:
+//! A variant is a repository revision and a feature delta. Each arm's
+//! revision is checked out in the experiment's worktree below
+//! `target/hil/ab/<id>/` and captured into a source snapshot, which the
+//! experiment's runner builds:
 //! both arms therefore need the checkout's HIL protocol version.
 //!
 //! The experiment runs in rounds: both arms on one layout seed. For every
@@ -46,13 +46,11 @@ use oer_hil_analysis::{
 use oer_hil_run_bundle::RunId;
 use oer_hil_run_bundle::RunStore;
 use oer_hil_run_bundle_format::experiment::Arm;
-use oer_hil_run_bundle_format::experiment::DependencyOverride;
 use oer_hil_run_bundle_format::experiment::Experiment;
 use oer_hil_run_bundle_format::experiment::Order;
 use oer_hil_run_bundle_format::experiment::Phase;
 use oer_hil_run_bundle_format::experiment::Round;
 use oer_hil_run_bundle_format::experiment::Variant;
-use oer_hil_schema::dependency::Dependency;
 use oer_hil_schema::image::FeatureDelta;
 use oer_hil_schema::run::Outcome;
 use oer_os_process::git::Worktree;
@@ -66,12 +64,11 @@ use crate::{
 
 const REPORT_SCHEMA: u16 = 3;
 
-/// A variant as written on the command line, before its revision and
-/// checkouts are resolved.
+/// A variant as written on the command line, before its revision is
+/// resolved.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariantSpec {
     pub revision: String,
-    pub overrides: Vec<(Dependency, PathBuf)>,
     /// Runtime features added to or removed from each image class's own.
     pub features: FeatureDelta,
 }
@@ -81,7 +78,6 @@ impl std::str::FromStr for VariantSpec {
 
     fn from_str(text: &str) -> std::result::Result<Self, Self::Err> {
         let mut revision = None;
-        let mut overrides = Vec::new();
         let mut features = None;
         for part in text
             .split(';')
@@ -92,29 +88,18 @@ impl std::str::FromStr for VariantSpec {
                 if revision.replace(value.to_owned()).is_some() {
                     return Err(format!("`{text}` names two revisions"));
                 }
-            } else if let Some(value) = part.strip_prefix("override:") {
-                let (dependency, path) = value
-                    .split_once('=')
-                    .ok_or_else(|| format!("`{part}` is not override:<dependency>=<path>"))?;
-                let dependency: Dependency = dependency.parse()?;
-                if overrides.iter().any(|(known, _)| *known == dependency) {
-                    return Err(format!("`{text}` overrides {} twice", dependency.id()));
-                }
-                overrides.push((dependency, PathBuf::from(path)));
             } else if let Some(value) = part.strip_prefix("features=") {
                 if features.replace(value.parse::<FeatureDelta>()?).is_some() {
                     return Err(format!("`{text}` names features twice"));
                 }
             } else {
                 return Err(format!(
-                    "`{part}` is neither rev=<revision>, override:<dependency>=<path> nor \
-                     features=+f,-g"
+                    "`{part}` is neither rev=<revision> nor features=+f,-g"
                 ));
             }
         }
         Ok(Self {
             revision: revision.unwrap_or_else(|| String::from("HEAD")),
-            overrides,
             features: features.unwrap_or_default(),
         })
     }
@@ -395,8 +380,7 @@ struct PreparedArm {
     snapshot: PathBuf,
 }
 
-/// Check the arm's revision out, resolve its overrides and capture its
-/// sources.
+/// Check the arm's revision out and capture its sources.
 fn prepare(
     checkout: &Path,
     directory: &Path,
@@ -415,30 +399,10 @@ fn prepare(
         )
         .into());
     }
-    let mut overrides = Vec::new();
-    for (dependency, path) in &spec.overrides {
-        let path = path.canonicalize().map_err(|error| {
-            format!(
-                "override {} at {}: {error}",
-                dependency.id(),
-                path.display()
-            )
-        })?;
-        overrides.push(DependencyOverride {
-            dependency: *dependency,
-            commit: oer_os_process::git::text(&path, ["rev-parse", "HEAD"])?,
-            dirty: !oer_os_process::git::text(&path, ["status", "--porcelain"])?.is_empty(),
-            path,
-        });
-    }
-    let snapshot = oer_hil_source_snapshot::capture_with_overrides(
+    let snapshot = oer_hil_source_snapshot::capture(
         worktree.path(),
         &[],
         false,
-        &overrides
-            .iter()
-            .map(|entry| (entry.dependency, entry.path.clone()))
-            .collect::<Vec<_>>(),
         &oer_hil_image::source_snapshot_store()?,
         &oer_hil_image::source_objects()?,
     )?;
@@ -446,7 +410,6 @@ fn prepare(
         arm,
         variant: Variant {
             commit,
-            overrides,
             features: spec.features.clone(),
         },
         worktree,
@@ -567,16 +530,7 @@ pub fn summary(report: &Report) -> String {
 }
 
 fn describe(variant: &Variant) -> String {
-    let mut text = variant.commit[..12.min(variant.commit.len())].to_owned();
-    for entry in &variant.overrides {
-        text.push_str(&format!(
-            " +{}@{}{}",
-            entry.dependency.id(),
-            &entry.commit[..12.min(entry.commit.len())],
-            if entry.dirty { "+" } else { "" }
-        ));
-    }
-    text
+    variant.commit[..12.min(variant.commit.len())].to_owned()
 }
 
 fn write_report(path: &Path, report: &Report) -> Result<()> {

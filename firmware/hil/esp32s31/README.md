@@ -46,34 +46,3 @@ may be in unavailable PSRAM; the hook receives the platform's safe
 `PanicDetails`. The hook's code and diagnostic stage stay in SRAM, its
 records stay in RTC memory, and its fault CRC uses no cached lookup table.
 
-## Local dependency overrides
-
-A git-pinned dependency of the firmware can be replaced by a local checkout
-for one build or run. The variable names the checkout's root:
-
-| Variable | Checkout | Packages patched |
-| --- | --- | --- |
-| `ESP_HAL_ROOT` | esp-hal | `esp-hal`, `esp-sync`, `esp-bootloader-esp-idf` |
-
-The runtime build patches them in and resolves a private copy of its lock
-file; the bootstrap takes only the esp-hal override, the one dependency it has.
-A run's source snapshot archives each override checkout as its own source
-role, so an untracked file there is named as `--source-include esp-hal:<path>`.
-An override build binds evidence only when the checkout's commit is the pinned
-revision in `hil/targets/esp32s31/Cargo.toml`; otherwise it is an experiment.
-
-To find the dependency commit that changed a scenario's outcome, bisect in the
-dependency's clone and build this checkout against each step. A build failure
-skips the step (exit 125) instead of marking it bad:
-
-```console
-git clone https://github.com/ermacv/esp-hal.git ~/dev/esp-hal
-cd ~/dev/esp-hal
-git bisect start <bad-rev> <good-rev>
-git bisect run sh -c 'cd ~/dev/<checkout> &&
-  ESP_HAL_ROOT=~/dev/esp-hal cargo hil image build system-watchdog || exit 125;
-  ESP_HAL_ROOT=~/dev/esp-hal cargo hil run <scenario>'
-git bisect reset
-```
-
-Each step takes its own lease.

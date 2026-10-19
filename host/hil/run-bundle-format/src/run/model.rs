@@ -10,7 +10,7 @@ use oer_hil_schema::image::ImageClass;
 /// lies deflate-compressed at `firmware/<image>/runtime.elf.deflate`; what
 /// the manifest and build provenance record of it (path, size, digest) is
 /// the uncompressed file's ([`crate::archived`]).
-pub const RUN_SCHEMA: u16 = 9;
+pub const RUN_SCHEMA: u16 = 10;
 
 pub use oer_hil_schema::run::{
     Better, Comparison, FailureKind, MeasurementUnit, MeasurementVerdict, Outcome, RunEventKind,

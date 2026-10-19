@@ -35,9 +35,9 @@ pub struct Context<'a> {
 /// it; the runner reflashes the scenario's image before its next scenario.
 pub trait BoardImages: Sync {
     /// The scenario's own image, as the run built, archived and flashed it.
-    fn scenario_image(&self) -> &oer_image_bundle::ImageBundle;
+    fn scenario_image(&self) -> &oer_image_build::bundle::ImageBundle;
     /// Write `bundle`, which the board journal names `name`, and start it.
-    fn flash(&self, bundle: &oer_image_bundle::ImageBundle, name: &str) -> Result<()>;
+    fn flash(&self, bundle: &oer_image_build::bundle::ImageBundle, name: &str) -> Result<()>;
     /// Write the scenario's own image back and start it.
     fn restore(&self) -> Result<()>;
 }

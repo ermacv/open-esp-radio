@@ -20,7 +20,7 @@ pub fn record(
     session: &mut RunSession,
     image: ImageClass,
     artifacts: &Artifacts,
-) -> Result<oer_image_bundle::ImageBundle> {
+) -> Result<oer_image_build::bundle::ImageBundle> {
     let context = session.firmware_archive(image)?;
     let flash = context
         .target_directory
@@ -58,11 +58,9 @@ pub(super) fn archive(
     let (application_path, application) = archive(&bundle.application(), "application.bin")?;
     let archived_application = context.directory.join(&application_path);
     let (runtime_elf_path, runtime_elf) = archive(&bundle.runtime_elf(), "runtime.elf")?;
-    // The agent resolves against the workspace's one lock.
+    // Every image resolves against the workspace's one lock.
     let embedded_lock = std::path::Path::new("Cargo.lock");
-    let effective_embedded_lock = bundle
-        .lock(embedded_lock)
-        .ok_or("the bundle has no effective lock of its agent workspace")?;
+    let effective_embedded_lock = context.source_root.join(embedded_lock);
     let subject = |role, (path, archived): &(PathBuf, build::ArchivedFile)| BuildSubject {
         role,
         path: path.clone(),

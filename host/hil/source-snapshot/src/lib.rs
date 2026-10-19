@@ -368,35 +368,18 @@ pub fn capture(
     store: &Path,
     objects: &Path,
 ) -> Result<Snapshot> {
-    let overrides = Dependency::ALL
-        .into_iter()
-        .filter_map(|dependency| {
-            std::env::var_os(dependency.root_env()).map(|path| (dependency, PathBuf::from(path)))
-        })
-        .collect::<Vec<_>>();
-    capture_with_overrides(root, include, include_untracked, &overrides, store, objects)
-}
-
-/// [`capture`] with the local dependency checkouts named by `overrides`
-/// instead of the environment's.
-pub fn capture_with_overrides(
-    root: &Path,
-    include: &[String],
-    include_untracked: bool,
-    overrides: &[(Dependency, PathBuf)],
-    store: &Path,
-    objects: &Path,
-) -> Result<Snapshot> {
     let scopes = if include_untracked {
         untracked_scopes(image_packages(root)?)
     } else {
         Vec::new()
     };
-    let mut roots = vec![("repository".to_owned(), root.canonicalize()?)];
-    for (dependency, path) in overrides {
-        roots.push((dependency.id().into(), path.canonicalize()?));
-    }
-    capture_roots(&roots, include, &scopes, store, objects)
+    capture_roots(
+        &[("repository".to_owned(), root.canonicalize()?)],
+        include,
+        &scopes,
+        store,
+        objects,
+    )
 }
 
 /// The repository directories whose untracked files `--include-untracked`
@@ -767,7 +750,6 @@ pub use tests::{test_snapshot, test_snapshot_into};
 mod materialize;
 #[cfg(test)]
 use materialize::materialize;
-use oer_hil_schema::dependency::Dependency;
 
 #[cfg(any(test, feature = "test-support"))]
 pub fn test_capture(root: &Path) -> Snapshot {

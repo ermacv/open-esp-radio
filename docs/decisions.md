@@ -83,7 +83,7 @@ tree is a selection of a predecessor repository, without its history.
   per pull request, on the owner's request, findings in the pull request; a
   branch and draft pull request per task, merged by the owner; one plain,
   non-blocking CI workflow; English in the repository.
-- **Staged boot stays** (code and stacks in PSRAM). `host/image/firmware` builds, flashes
+- **Staged boot stays** (code and stacks in PSRAM). `host/image/build` builds, flashes
   and runs images with a minimal SRAM-placement check reported as warnings.
 - **Execution-level DMA rules** are kept as facts and are the W1 checklist
   (`knowledge/esp32s31/wifi/dma-execution.md`).

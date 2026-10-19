@@ -12,7 +12,8 @@ use oer_lab_router::{router, ssh};
 
 use oer_lab_device_lock::{DeviceAccess, DeviceId};
 
-use crate::{Result, flash, image, port, power, w1};
+use super::{flash, image, port, power, w1};
+use crate::Result;
 
 /// The chips whose boards this tool resets and writes. Another chip's board
 /// is only listed: its reset lines may mean something else (an ESP32-C5's
@@ -83,24 +84,26 @@ fn router_lock_directory() -> Result<std::path::PathBuf> {
 }
 
 fn write_image(root: &Path, image: &str, board: &stand::Board, after: flash::After) -> Result<()> {
-    let (manifest, segments) = image::segments(root, image)?;
-    if manifest.chip != board.chip {
+    let snapshot = image::bundle(root, image)?.snapshot()?;
+    if snapshot.chip != board.chip {
         return Err(format!(
             "image {image} is for {}, board {} is an {}",
-            manifest.chip, board.id, board.chip
+            snapshot.chip, board.id, board.chip
         )
         .into());
     }
+    let profile = oer_image_profile::Profile::load(root, &snapshot.chip)?;
+    let chip = crate::encode::chip(&profile.espflash_chip)?;
     let tty = tty(board)?;
     eprintln!(
         "fw: writing {image} to {} through {}",
         board.id,
         tty.display()
     );
-    for written in flash::write(&tty, &board.mac, &board.chip, &segments, after)? {
+    for written in flash::write(&tty, &board.mac, chip, &snapshot.segments, after)? {
         eprintln!(
             "fw:   {:<16} {:#08x} {:>8} bytes {}",
-            written.name,
+            written.description,
             written.offset,
             written.bytes,
             if written.skipped {
@@ -395,14 +398,16 @@ pub fn power_cycle(selector: &str) -> Result<()> {
 
 /// `cargo fw build IMAGE`.
 pub fn build(root: &Path, image_name: &str) -> Result<()> {
-    let (manifest, _) = image::build(root, image_name, None)?;
-    for segment in &manifest.segments {
+    let bundle = image::build(root, image_name, None)?;
+    for segment in bundle.segments() {
         eprintln!(
             "fw:   {:<16} {:#08x} {}",
-            segment.name, segment.offset, segment.file
+            segment.description,
+            segment.offset,
+            segment.file.display()
         );
     }
-    eprintln!("fw: built {}", image::output(root, image_name).display());
+    eprintln!("fw: built {}", bundle.directory.display());
     Ok(())
 }
 
@@ -456,7 +461,7 @@ mod tests {
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
-                "command::tests::hold_the_board_for_the_parent",
+                "fw::command::tests::hold_the_board_for_the_parent",
                 "--nocapture",
             ])
             .env(HOLDER_DIRECTORY, directory.path())
@@ -591,13 +596,11 @@ client_address = "192.168.77.2/24"
         assert_eq!(
             image::runtime_env("w1", Some(&config)),
             [
-                (w1::ENV_CHANNEL, Some("6".to_owned())),
-                (w1::ENV_BSSID, Some("02:5E:C0:DE:F6:D0".to_owned())),
-                (
-                    w1::ENV_SSID,
-                    Some("4d616465205570204c6162204e6574".to_owned())
-                ),
+                (w1::ENV_CHANNEL, "6"),
+                (w1::ENV_BSSID, "02:5E:C0:DE:F6:D0"),
+                (w1::ENV_SSID, "4d616465205570204c6162204e6574"),
             ]
+            .map(|(name, value)| (name.to_owned(), Some(value.to_owned())))
         );
         // An AP on another channel than the profile's is refused; so is an
         // unreachable router, without its name.

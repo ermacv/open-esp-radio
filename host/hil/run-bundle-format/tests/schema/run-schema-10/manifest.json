@@ -1,5 +1,5 @@
 {
-  "schema": 9,
+  "schema": 10,
   "run_id": "1791582140859-002c088b",
   "target": "esp32s31",
   "state": "completed",
@@ -98,14 +98,6 @@
     "arm": "b",
     "variant": {
       "commit": "0123456789abcdef0123456789abcdef01234567",
-      "overrides": [
-        {
-          "dependency": "esp-hal",
-          "path": "../esp-hal",
-          "commit": "3333333333333333333333333333333333333333",
-          "dirty": false
-        }
-      ],
       "features": {
         "add": [
           "probe"

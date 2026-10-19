@@ -38,8 +38,6 @@ fn build_inputs(root: &Path) -> Artifacts {
         ("bootloader.bin", b"bootloader".as_slice()),
         ("partitions.bin", b"partitions".as_slice()),
         ("otadata.bin", b"otadata".as_slice()),
-        ("runtime-Cargo.lock", b"lock".as_slice()),
-        ("bootstrap-Cargo.lock", b"lock".as_slice()),
         (
             "source-inputs.json",
             br#"{"schema":2,"files":[]}"#.as_slice(),
@@ -50,20 +48,11 @@ fn build_inputs(root: &Path) -> Artifacts {
     let profile: oer_image_profile::Profile =
         toml::from_str(oer_hil_run_bundle::run::test_support::TEST_CHIP_PROFILE).unwrap();
     let mut bundle =
-        oer_image_bundle::ImageBundle::new(&build, &profile, profile.flash.clone().unwrap());
-    bundle.staged = Some(oer_image_bundle::Staged {
+        oer_image_build::bundle::ImageBundle::new(&build, &profile, profile.flash.clone().unwrap());
+    bundle.staged = Some(oer_image_build::bundle::Staged {
         bootstrap_package: "oer-chip-a-platform-bootstrap".into(),
     });
     bundle.otadata = true;
-    for (committed, file) in [
-        ("Cargo.lock", "runtime-Cargo.lock"),
-        ("Cargo.lock", "bootstrap-Cargo.lock"),
-    ] {
-        bundle.locks.push(oer_image_bundle::Lock {
-            committed: committed.into(),
-            file: file.into(),
-        });
-    }
     Artifacts {
         bundle,
         features: oer_hil_schema::image::FeatureDelta::default(),

@@ -21,7 +21,7 @@ pub const PROBE_CFG: &str = "oer_probe";
 pub const PROBE_PACKAGE_PREFIX: &str = "oer-firmware-probes-";
 /// The target directory of probe builds, below the checkout's `target/`.
 pub const TARGET_SUBDIRECTORY: &str = "fw-probe";
-const PROFILE: &str = "release";
+const PROFILE: &str = crate::FIRMWARE_PROFILE;
 
 /// The chip of the probe package `package`
 /// (`oer-firmware-probes-<chip>-<name>`), one of `chips`.
@@ -117,7 +117,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         .collect();
     let chip = chip_of(package, &chips)?;
     let profile = oer_image_profile::Profile::load(root, chip)?;
-    let policy = crate::gates::policy(root, &profile)?;
+    let policy = oer_image_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
     let target = profile.rust_target.as_str();
     // The image compiler of the chip, as every image build of it applies it.
     let mut cargo = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));

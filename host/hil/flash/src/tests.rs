@@ -78,7 +78,7 @@ fn bundle(directory: &Path) -> ImageBundle {
         })
         .unwrap();
     let output = directory.join("bundle");
-    let staging = oer_image_bundle::staging_directory(&output).unwrap();
+    let staging = oer_image_build::bundle::staging_directory(&output).unwrap();
     std::fs::create_dir_all(&staging).unwrap();
     let bundle = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
     for segment in bundle.segments() {

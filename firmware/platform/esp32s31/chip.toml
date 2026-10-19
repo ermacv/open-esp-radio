@@ -115,7 +115,8 @@ forbidden = [
 
 # The staged runtime's placement contract (firmware/platform/espressif/linker/runtime
 # script): code, data and the CPU0 task stack in PSRAM; interrupt entries,
-# vector tables, interrupt stacks, critical and DMA data in SRAM.
+# vector tables, interrupt stacks, critical code and data, DMA data and the
+# panic entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
 [placement]
 name = "psram-code-psram-data-psram-stack"
 image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
@@ -135,7 +136,12 @@ symbol = [
     { name = "_runtime_psram_mtvt_source", bytes = 192, region = "sram" },
     { name = "_mtvt_table", bytes = 192, region = "sram" },
     { name = "_mtvt_table2", bytes = 192, region = "sram" },
+    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
+    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
 ]
+# Code reachable from an interrupt runs from SRAM or the mask ROM.
+interrupt-handlers = ["sram", "rom"]
+section = [{ prefix = ".critical", region = "sram" }]
 stack-swap = [
     { name = "_start_trap" },
     { name = "_runtime_psram_irq_entry_{n}", numbers = [1, 47] },

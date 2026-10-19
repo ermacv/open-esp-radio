@@ -84,7 +84,7 @@ fn every_document_of_the_current_schema_reads_and_writes_back() {
     );
     assert!(manifest.firmware[0].replayed_from.is_some());
     let variant = &manifest.experiment.as_ref().unwrap().variant;
-    assert!(!variant.overrides.is_empty() && !variant.features.is_empty());
+    assert!(!variant.features.is_empty());
     let plan: RunPlan = read("plan.json");
     assert_eq!(plan.schema, RUN_SCHEMA);
     assert!(matches!(

@@ -18,7 +18,6 @@ oer-analysis-riscv-decode = { path = "../../analysis/riscv-decode" }
 oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
 oer-analysis-riscv-program = { path = "../../analysis/riscv-program" }
 oer-analysis-riscv-stack = { path = "../../analysis/riscv-stack" }
-oer-image-build = { path = "../build" }
 oer-image-profile = { path = "../profile" }
 oer-os-process = { path = "../../os/process" }
 oer-vendor-artifacts = { path = "../../vendor/artifacts" }

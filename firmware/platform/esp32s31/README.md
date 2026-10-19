@@ -29,7 +29,7 @@ their metadata because their code and stack already require the live mapping.
 The hook and all state it reads must stay in SRAM or retained memory and take
 no locks.
 
-Images are built, written and run by [`cargo fw`](../../../host/image/firmware/README.md);
+Images are built, written and run by [`cargo fw`](../../../host/image/build/FW.md);
 no `.cargo/config.toml` adds Rust flags.
 
 The boot sequence is ROM → ESP-IDF bootloader → Flash bootstrap → application.
@@ -163,11 +163,13 @@ for the bounded SRAM scan and restores their prior enable state. It rejects
 sampling from the IRQ stack or before initialization. Measurements describe
 observed writes, not the maximum possible depth or unwritten stack reservations.
 
-Each image build leaves its parts in `target/fw/<image>/`: `bootloader.bin`,
-`partition-table.bin`, `application.bin`, `otadata.bin` (listed in write order
-by `segments.toml`), the packed `runtime.bin`, `runtime.elf`, `bootstrap.elf`
-and `placement.txt`. The minimal SRAM placement check runs in `cargo fw` and
-only warns: interrupt-table handlers, the panic entry and hook, and the
-`.dma.*` and `.critical.*` sections outside internal SRAM.
+Each image build leaves its bundle in `target/fw/<image>/`, described by its
+`bundle.json` (`host/image/build`): `bootloader.bin`, `partitions.bin`,
+`application.bin`, `otadata.bin`, the packed `runtime.bin`, `runtime.elf`,
+`bootstrap.elf` and the check reports. The placement check reads the
+`[placement]` contract of `chip.toml`: among its rules, the interrupt-table
+handlers lie in SRAM or ROM, and the panic entry and hook and the
+`.critical.*` sections in internal SRAM; `cargo fw` reports a violation, a
+HIL image fails on it.
 
 Source or image checks alone do not establish RF behavior on hardware.

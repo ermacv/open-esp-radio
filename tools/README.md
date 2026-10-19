@@ -26,7 +26,7 @@ carry no layer metadata. `cargo test -p oer-test-layers` runs it.
 
 A package is named after its folder, with no `[lib] name` override, and the
 layer test checks it: a library is `oer-` and its path below its root
-(`host/image/firmware` is `oer-image-firmware`), a program keeps its root
+(`host/image/build` is `oer-image-build`), a program keeps its root
 (`tools/fw` is `oer-tool-fw`), and so does an image (`firmware/apps/w1` is
 `oer-firmware-apps-w1`). Code uses the same name with underscores.
 

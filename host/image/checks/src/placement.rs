@@ -1,24 +1,33 @@
 //! The placement check: where an image's linked symbols lie in the chip's
 //! `[memory]` map, as the chip profile's `[placement]` contract names them.
 //! Every rule is data: the flattened image's span and origin, the entry
-//! point's text, symbol ranges and symbols with the region each lies in,
-//! and the entries that must swap to their own stack first.
+//! point's text, symbol ranges, symbols and sections with the region each
+//! lies in, the regions the interrupt table's handlers lie in, and the
+//! entries that must swap to their own stack first.
 
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_image_profile::{Memory, Placement, Region, Symbols};
+use oer_image_profile::{InterruptContract, Memory, Placement, Region, Symbols};
 use std::{collections::BTreeMap, fs, path::Path};
 
+/// The region name of the mask ROM's code in an interrupt handler rule.
+pub const ROM: &str = "rom";
+
+/// What the placement check reads besides the image.
+pub struct Contract<'a> {
+    pub memory: &'a Memory,
+    pub placement: &'a Placement,
+    /// The interrupt table's layout, which handler rules need.
+    pub interrupts: Option<&'a InterruptContract>,
+    /// The mask ROM's code, which [`ROM`] names.
+    pub rom: &'a [Region],
+}
+
 /// Audit the ELF `elf` and, when the contract names a flattened image, its
-/// flattened `binary` against `placement` in `memory`; returns the
-/// placement report.
-pub fn audit(
-    memory: &Memory,
-    placement: &Placement,
-    elf: &Path,
-    binary: Option<&Path>,
-) -> Result<String> {
+/// flattened `binary` against `contract`; returns the placement report.
+pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Result<String> {
+    let (memory, placement) = (contract.memory, contract.placement);
     let bytes = fs::read(elf)?;
     let elf = oer_analysis_elf::Elf::executable(&bytes)?;
     let symbols = elf.addresses();
@@ -87,11 +96,58 @@ pub fn audit(
     for rule in &placement.symbol {
         let within = region(&rule.region)?;
         for name in rule.symbols().names() {
-            let at = symbol(&name)?;
+            let found = symbols
+                .get(name.as_str())
+                .copied()
+                .or_else(|| by_demangled_name(&elf, &name));
+            let Some(at) = found else {
+                if rule.optional {
+                    continue;
+                }
+                return Err(format!("the ELF lacks `{name}`").into());
+            };
             if !within.contains_range(at, at + rule.bytes) {
                 violations.push(format!("`{name}` ({at:#010x}) is not in {}", rule.region));
             }
         }
+    }
+    for rule in &placement.section {
+        let within = region(&rule.region)?;
+        violations.extend(section_violations(
+            elf.sections()
+                .filter(|section| section.allocated)
+                .map(|section| (section.name, section.address, section.size)),
+            &rule.prefix,
+            (within, &rule.region),
+        ));
+    }
+    if !placement.interrupt_handlers.is_empty() {
+        let interrupts = contract.interrupts.ok_or(
+            "the placement contract names interrupt handler regions, the chip names no [interrupts] table",
+        )?;
+        let mut regions = Vec::new();
+        for name in &placement.interrupt_handlers {
+            if name == ROM {
+                if contract.rom.is_empty() {
+                    return Err(
+                        "the placement contract names the ROM, the chip names no [rom] ELF".into(),
+                    );
+                }
+                regions.extend_from_slice(contract.rom);
+            } else {
+                regions.push(region(name)?);
+            }
+        }
+        let handlers = interrupt_handlers(&elf, symbol(&interrupts.table_symbol)?, interrupts)?;
+        violations.extend(handler_violations(
+            &handlers,
+            &regions,
+            &placement.interrupt_handlers,
+        ));
+        report.push_str(&format!(
+            "interrupt-handlers={}\n",
+            placement.interrupt_handlers.join(",")
+        ));
     }
     if !violations.is_empty() {
         return Err(format!(
@@ -104,6 +160,84 @@ pub fn audit(
     audit_stack_swap_entries(&elf, &symbols, &placement.stack_swap)?;
     report.push_str("result=PASS\n");
     Ok(report)
+}
+
+/// The allocated `sections` (name, address, bytes) whose name starts with
+/// `prefix` and that do not lie wholly in `region`.
+fn section_violations<'a>(
+    sections: impl Iterator<Item = (&'a str, u64, u64)>,
+    prefix: &str,
+    (region, name): (Region, &str),
+) -> Vec<String> {
+    sections
+        .filter(|(section, address, size)| {
+            *size > 0
+                && section.starts_with(prefix)
+                && !region.contains_range(*address, address + size)
+        })
+        .map(|(section, address, size)| {
+            format!("section `{section}` ({address:#010x}+{size:#x}) is not in {name}")
+        })
+        .collect()
+}
+
+/// The interrupt table `handlers` (entry index, address) outside every one
+/// of `regions`, which `names` name.
+fn handler_violations(
+    handlers: &[(u32, u64)],
+    regions: &[Region],
+    names: &[String],
+) -> Vec<String> {
+    handlers
+        .iter()
+        .filter(|(_, handler)| {
+            !regions
+                .iter()
+                .any(|region| region.contains_range(*handler, handler + 4))
+        })
+        .map(|(index, handler)| {
+            format!(
+                "interrupt table entry {index}'s handler {handler:#010x} is not in {}",
+                names.join(" or ")
+            )
+        })
+        .collect()
+}
+
+/// The address of the defined symbol whose demangled name is `name`: a
+/// mangled Rust symbol, whose hash differs between builds.
+fn by_demangled_name(elf: &oer_analysis_elf::Elf<'_>, name: &str) -> Option<u64> {
+    elf.symbols()
+        .find(|symbol| symbol.defined && symbol.demangled() == name)
+        .map(|symbol| symbol.address)
+}
+
+/// The handlers of the interrupt table at `table` (its entries' pointer and
+/// count) by entry index; an empty entry has none.
+fn interrupt_handlers(
+    elf: &oer_analysis_elf::Elf<'_>,
+    table: u64,
+    interrupts: &InterruptContract,
+) -> Result<Vec<(u32, u64)>> {
+    let word = |address: u64| -> Result<u32> {
+        elf.sections()
+            .filter(|section| section.allocated && !section.nobits)
+            .find_map(|section| section.word(address))
+            .ok_or_else(|| format!("{address:#010x} holds no initialized word").into())
+    };
+    let entries = u64::from(word(table)?);
+    let count = word(table + 4)?;
+    let mut handlers = Vec::new();
+    for index in 0..count {
+        let at = entries
+            + u64::from(index) * u64::from(interrupts.table_entry_bytes)
+            + u64::from(interrupts.table_handler);
+        match word(at)? {
+            0 => {}
+            handler => handlers.push((index, u64::from(handler))),
+        }
+    }
+    Ok(handlers)
 }
 
 /// Each named entry's first instruction swaps `sp` with `mscratch`

@@ -158,7 +158,7 @@ pub fn bundle(
     entry: &Entry,
     build: &idf::Build,
     output: &Path,
-) -> Result<oer_image_bundle::ImageBundle> {
+) -> Result<crate::bundle::ImageBundle> {
     let directory = idf::output(root, &entry.project(root)).join("build");
     only_boot_files(&directory)?;
     let flash = crate::profile(root, &entry.chip)?

@@ -24,7 +24,7 @@ pub mod stage_two;
 /// The flash settings an [`Encoding`] names.
 pub use espflash::flasher::{FlashFrequency, FlashMode, FlashSize};
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use crate::Result;
 
 /// Size of the OTA data partition's image.
 pub const OTA_DATA_SIZE: usize = 0x2000;

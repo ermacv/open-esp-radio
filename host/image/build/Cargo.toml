@@ -9,19 +9,27 @@ publish = false
 description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the flash contents encoded at build time and the checks a caller requests"
 
 [dependencies]
+oer-analysis-elf = { path = "../../analysis/elf" }
+oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
-oer-image-encode = { path = "../encode" }
 oer-image-profile = { path = "../profile" }
-oer-os-durable = { path = "../../os/durable" }
-oer-image-bundle = { path = "../bundle" }
-oer-os-process = { path = "../../os/process" }
 oer-image-toolchain = { path = "../toolchain" }
+oer-lab-device-lock = { path = "../../lab/device-lock" }
+oer-lab-model = { path = "../../lab/model" }
+oer-lab-router = { path = "../../lab/router" }
+oer-os-durable = { path = "../../os/durable" }
+oer-os-process = { path = "../../os/process" }
+espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
+esp-idf-part = "=0.6.0"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "1.0"
+serialport = { version = "4.7", default-features = false }
+sha2 = "0.10"
 tempfile = "=3.27.0"
 toml = "1.1"
 
 [dev-dependencies]
+object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }
 
 [lints]
 workspace = true

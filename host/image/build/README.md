@@ -1,21 +1,24 @@
 # Image pipeline
 
 `oer-image-build` is the one image pipeline of the repository: `build(ImageSpec)
--> ImageBundle`. HIL image classes (`oer-hil-image`, through `cargo hil
-image build`, the runner and `cargo hil images check`) build every image
-here; nothing else
-compiles, gates or encodes one.
+-> ImageBundle`. `cargo fw` ([FW.md](FW.md), module `fw`) and the HIL image
+classes (`oer-hil-image`, through `cargo hil image build`, the runner and
+`cargo hil images check`) build every image here; nothing else compiles,
+checks or encodes one. Every image builds with the `firmware` profile against
+the workspace's one `Cargo.lock` (`--locked`).
 
 ## Contract
 
 An `ImageSpec` names the tree (`root`: a checkout or a source snapshot), the
-chip, the application crate (workspace, package, binary, features), the
-stack policy, what the interrupt-stack gate requires (`Required::Proven`, or
-`Partial` for diagnostic images), the layout seed, local dependency
-`Overrides` (`ESP_HAL_ROOT`), the
-caller's builder packages and extra policy files, the bundle directory
-(every build compiles in the host's one `compile_cache()`) and an optional audit of the runtime ELF (HIL's observer
-placement).
+chip, the application crate (package, binary, features), the stack
+policy, the layout seed, the variables the runtime's build sets or removes
+(`cargo fw`'s stand identity of `w1`), the caller's builder packages and
+extra policy files, the bundle directory (every build compiles in the host's
+one `compile_cache()`) and the checks (`Gates` of `oer-image-checks`): which
+run, what the interrupt-stack check requires (`Required::Proven`, or
+`Partial` for diagnostic images), an optional audit of the runtime ELF (HIL's
+observer placement), and whether a check that does not pass fails the build
+(`enforced`: HIL) or is reported (`cargo fw`).
 
 The chip profile's boot kind selects the pipeline:
 
@@ -33,7 +36,6 @@ An `ImageBundle` is one directory with a `bundle.json`:
 | `bootloader.bin`, `partitions.bin` | The second-stage bootloader and the binary partition table |
 | `otadata.bin` | The OTA selection of the first slot (staged only) |
 | `runtime.bin`, `bootstrap.elf` | The packed runtime and the bootstrap (staged only) |
-| `runtime-Cargo.lock`, `bootstrap-Cargo.lock` | The effective lock files |
 | `placement.txt`, `runtime-stack.txt`, `interrupt-stack.txt`, `bootstrap-stack.txt` | Gate reports |
 | `source-inputs.json` | Every repository file the build read |
 | `build.log` | Every step's standard error |
@@ -198,7 +200,7 @@ Build exclusion has one mechanism, the foundation's file lock
 (`oer_os_process::lock::FileLock`, shared or exclusive): one build at a
 time in the shared compile cache (`exclusion::compile_cache`, `<cache>/build.lock`,
 waiting, held from the Cargo run until the ELF is copied out), one
-build per private lock copy (`BuildLock`, refusing), the host's image build
+build per output (`exclusion::Staging`, refusing), the host's image build
 slots (`exclusion::slot` under `host_build_root()/tokens`: half the cores, at
 2 GB each), and the ESP-IDF cache (exclusive while its tree and tools change,
 then converted to shared for the builds).

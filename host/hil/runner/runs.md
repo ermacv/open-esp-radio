@@ -343,9 +343,7 @@ cargo hil ab --a 'rev=main' --b 'rev=main;override:esp-hal=~/src/esp-hal' \
 seed is recorded in the report and every run's manifest.
 
 `ab` compares two variants of the firmware on the same scenarios. A variant
-is a repository revision (`rev=`, HEAD when omitted) and, after `;`, local
-checkouts that replace pinned dependencies (`override:esp-hal=`, the
-checkout `ESP_HAL_ROOT` names). A variant may also add or remove
+is a repository revision (`rev=`, HEAD when omitted). After `;`, a variant may add or remove
 runtime features of every image class it builds, `features=+usb-jtag-off,-panic-hook`:
 its runs build with `cargo hil run --features`, which only an experiment
 accepts, the build record keeps the delta, the preflight accepts the flashed

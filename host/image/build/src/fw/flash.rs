@@ -11,7 +11,8 @@ use espflash::{
     target::ProgressCallbacks,
 };
 
-use crate::{Result, encode, port};
+use super::port;
+use crate::{Result, bundle::SnapshotSegment};
 
 /// Where the writer leaves the chip after the last segment.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,7 +27,7 @@ pub enum After {
 /// What happened to one segment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Written {
-    pub name: &'static str,
+    pub description: &'static str,
     pub offset: u32,
     pub bytes: usize,
     pub skipped: bool,
@@ -48,15 +49,15 @@ impl ProgressCallbacks for Progress {
     }
 }
 
-/// Write `segments` into the flash of the board `mac` at `tty`.
+/// Write `segments` into the flash of the board `mac`, an espflash `chip`,
+/// at `tty`.
 pub fn write(
     tty: &Path,
     mac: &str,
-    chip: &str,
-    segments: &[encode::Segment],
+    chip: espflash::target::Chip,
+    segments: &[SnapshotSegment],
     after: After,
 ) -> Result<Vec<Written>> {
-    let chip = encode::espflash_chip(chip)?;
     // espflash's handshake needs a bounded read before it sets its own.
     let serial = port::open_kept(tty, Duration::from_secs(3))?;
     let usb = serialport::UsbPortInfo {
@@ -101,7 +102,7 @@ pub fn write(
                 .chain(std::iter::repeat(false)),
         )
         .map(|(segment, skipped)| Written {
-            name: segment.name,
+            description: segment.description,
             offset: segment.offset,
             bytes: segment.data.len(),
             skipped,

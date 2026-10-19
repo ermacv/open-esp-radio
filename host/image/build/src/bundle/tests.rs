@@ -1,204 +1,105 @@
 use super::*;
-use std::path::PathBuf;
 
-fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+/// A chip with a flash map, whose bundles hold an OTA selection.
+fn profile() -> oer_image_profile::Profile {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    oer_image_profile::Profile::all(&root)
+        .unwrap()
+        .into_iter()
+        .find(|profile| profile.flash.is_some())
+        .unwrap()
 }
 
-/// This checkout's first chip; a catalog image of it boots through its own
-/// ESP-IDF bootloader.
-fn application_chip() -> String {
-    oer_image_profile::Profile::all(&repository()).unwrap()[0]
-        .id
-        .clone()
-}
-
-/// Boot files of [`application_chip`] as a catalog build gives them: an ESP
-/// image header of the chip standing in for its bootloader, and the binary
-/// form of the chip's partition table.
-fn boot_files(root: &Path) -> (Vec<u8>, Vec<u8>) {
-    let profile = oer_image_profile::Profile::load(root, &application_chip()).unwrap();
-    let chip = oer_image_encode::chip(&profile.espflash_chip).unwrap();
-    let mut bootloader = vec![0; 24];
-    bootloader[0] = 0xe9;
-    bootloader[1] = 1;
-    bootloader[12..14].copy_from_slice(&chip.id().to_le_bytes());
-    let table =
-        oer_image_encode::partition_table(&root.join(profile.flash.unwrap().partitions)).unwrap();
-    (bootloader, table)
-}
-
-#[test]
-fn boot_files_of_another_chip_or_no_boot_files_are_refused() {
-    let root = repository();
-    let directory = tempfile::tempdir().unwrap();
-    let file = |name: &str, bytes: &[u8]| {
-        let path = directory.path().join(name);
-        std::fs::write(&path, bytes).unwrap();
-        path
-    };
-    let application = file("app.bin", b"application");
-    let (mut bootloader, table) = boot_files(&root);
-    bootloader[12] ^= 0x40;
-    let foreign = file("foreign.bin", &bootloader);
-    let table = file("table.bin", &table);
-    let output = directory.path().join("bundle");
-    let error = around(
-        &root,
-        &application_chip(),
-        &application,
-        BootFiles::Given {
-            bootloader: &foreign,
-            partition_table: &table,
-        },
-        &output,
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(error.contains("chip id"), "{error}");
-    // Nothing was staged or published.
-    assert!(!output.exists());
-    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 3);
+/// A bundle staged for `output` whose application holds `application`.
+fn staged(output: &Path, application: &[u8]) -> ImageBundle {
+    let profile = profile();
+    let staging = staging_directory(output).unwrap();
+    remove_directory(&staging).unwrap();
+    std::fs::create_dir_all(&staging).unwrap();
+    let mut bundle = ImageBundle::new(&staging, &profile, profile.flash.clone().unwrap());
+    bundle.otadata = true;
+    for (file, bytes) in [
+        (bundle.bootloader(), &b"boot"[..]),
+        (bundle.partitions(), b"table"),
+        (bundle.application(), application),
+        (bundle.otadata().unwrap(), b"select"),
+    ] {
+        std::fs::write(file, bytes).unwrap();
+    }
+    bundle
 }
 
 #[test]
-fn an_esp_idf_bundle_takes_its_catalog_boot_files_and_has_no_ota_selection() {
-    let root = repository();
+fn a_snapshot_holds_the_published_bytes_in_write_order() {
     let directory = tempfile::tempdir().unwrap();
-    let file = |name: &str, bytes: &[u8]| {
-        let path = directory.path().join(name);
-        std::fs::write(&path, bytes).unwrap();
-        path
-    };
-    let application = file("app.bin", b"application");
-    let (bootloader_bytes, table_bytes) = boot_files(&root);
-    let bootloader = file("bootloader.bin", &bootloader_bytes);
-    let table = file("partition-table.bin", &table_bytes);
     let output = directory.path().join("bundle");
-    let bundle = around(
-        &root,
-        &application_chip(),
-        &application,
-        BootFiles::Given {
-            bootloader: &bootloader,
-            partition_table: &table,
-        },
-        &output,
-    )
-    .unwrap();
-    assert_eq!(bundle.boot, Boot::EspIdfBootloader);
-    assert_eq!(bundle.otadata(), None);
-    let segments = bundle.segments();
+    let bundle = staged(&output, b"app").publish(&output).unwrap();
+    let snapshot = ImageBundle::load(&output).unwrap().snapshot().unwrap();
+    assert_eq!(bundle.directory, output);
     assert_eq!(
-        segments
+        snapshot
+            .segments
             .iter()
-            .map(|segment| (segment.offset, std::fs::read(&segment.file).unwrap()))
+            .map(|segment| segment.description)
             .collect::<Vec<_>>(),
         [
-            (0x2000, bootloader_bytes),
-            (0x8000, table_bytes),
-            (0x1_0000, b"application".to_vec()),
+            "bootloader",
+            "partition table",
+            "application",
+            "OTA selection"
         ]
     );
-    // A loaded bundle is the written one; one without its files is refused.
-    assert_eq!(ImageBundle::load(&output).unwrap(), bundle);
-    std::fs::remove_file(bundle.partitions()).unwrap();
-    let error = ImageBundle::load(&output).unwrap_err().to_string();
-    assert!(error.contains("partition table"), "{error}");
-    let elf = file("app.elf", b"");
-    assert!(
-        around(
-            &root,
-            &application_chip(),
-            &application,
-            BootFiles::Encode { elf: &elf },
-            &directory.path().join("other"),
-        )
-        .is_err()
-    );
-}
-
-#[test]
-fn a_run_flashes_a_copy_holding_exactly_its_archived_application() {
-    let root = repository();
-    let directory = tempfile::tempdir().unwrap();
-    let file = |name: &str, bytes: &[u8]| {
-        let path = directory.path().join(name);
-        std::fs::write(&path, bytes).unwrap();
-        path
-    };
-    let application = file("app.bin", b"application");
-    let (bootloader_bytes, table_bytes) = boot_files(&root);
-    let bootloader = file("bootloader.bin", &bootloader_bytes);
-    let table = file("table.bin", &table_bytes);
-    let built = around(
-        &root,
-        &application_chip(),
-        &application,
-        BootFiles::Given {
-            bootloader: &bootloader,
-            partition_table: &table,
-        },
-        &directory.path().join("built"),
-    )
-    .unwrap();
-    let archived = file("archived.bin", b"application");
-    let copy = built
-        .with_application(&archived, &directory.path().join("run"))
-        .unwrap();
-    assert_eq!(std::fs::read(copy.application()).unwrap(), b"application");
-    assert_eq!(std::fs::read(copy.bootloader()).unwrap(), bootloader_bytes);
-    assert_eq!(ImageBundle::load(&copy.directory).unwrap(), copy);
-    let other = file("other.bin", b"other");
-    assert!(
-        built
-            .with_application(&other, &directory.path().join("refused"))
-            .is_err()
-    );
-}
-
-#[test]
-fn a_failed_rebuild_leaves_the_published_bundle_untouched() {
-    let root = repository();
-    let directory = tempfile::tempdir().unwrap();
-    let file = |name: &str, bytes: &[u8]| {
-        let path = directory.path().join(name);
-        std::fs::write(&path, bytes).unwrap();
-        path
-    };
-    let application = file("app.bin", b"application");
-    let (bootloader_bytes, table_bytes) = boot_files(&root);
-    let bootloader = file("bootloader.bin", &bootloader_bytes);
-    let table = file("table.bin", &table_bytes);
-    let output = directory.path().join("bundle");
-    let published = around(
-        &root,
-        &application_chip(),
-        &application,
-        BootFiles::Given {
-            bootloader: &bootloader,
-            partition_table: &table,
-        },
-        &output,
-    )
-    .unwrap();
-    // The rebuild copies its new application, then fails encoding the boot
-    // files of an empty ELF.
-    let replacement = file("new.bin", b"replacement");
-    let elf = file("app.elf", b"");
-    assert!(
-        around(
-            &root,
-            &application_chip(),
-            &replacement,
-            BootFiles::Encode { elf: &elf },
-            &output,
-        )
-        .is_err()
-    );
-    assert_eq!(ImageBundle::load(&output).unwrap(), published);
+    assert_eq!(snapshot.segments[2].data, b"app");
     assert_eq!(
-        std::fs::read(published.application()).unwrap(),
-        b"application"
+        snapshot.segments[2].sha256,
+        oer_os_durable::sha256_bytes(b"app")
     );
+}
+
+#[test]
+fn a_flash_file_changed_after_publication_is_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    let bundle = staged(&output, b"app").publish(&output).unwrap();
+    std::fs::write(bundle.application(), b"other").unwrap();
+    assert!(ImageBundle::load(&output).is_err());
+    assert!(bundle.snapshot().is_err());
+}
+
+#[test]
+fn a_publication_replaces_the_bundle_whole() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    staged(&output, b"first").publish(&output).unwrap();
+    // A build that fails leaves its staging directory unpublished.
+    drop(staged(&output, b"half"));
+    let snapshot = ImageBundle::load(&output).unwrap().snapshot().unwrap();
+    assert_eq!(snapshot.segments[2].data, b"first");
+    staged(&output, b"second").publish(&output).unwrap();
+    let snapshot = ImageBundle::load(&output).unwrap().snapshot().unwrap();
+    assert_eq!(snapshot.segments[2].data, b"second");
+    assert!(!staging_directory(&output).unwrap().exists());
+}
+
+#[test]
+fn only_its_own_staging_directory_publishes() {
+    let directory = tempfile::tempdir().unwrap();
+    let bundle = staged(&directory.path().join("bundle"), b"app");
+    assert!(bundle.publish(&directory.path().join("elsewhere")).is_err());
+}
+
+#[test]
+fn a_snapshot_materializes_each_segment_as_a_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    let snapshot = staged(&output, b"app")
+        .publish(&output)
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let files = snapshot.materialize(private.path()).unwrap();
+    assert_eq!(files.len(), 4);
+    assert_eq!(std::fs::read(&files[2].1).unwrap(), b"app");
+    assert_eq!(files[2].0, snapshot.segments[2].offset);
 }

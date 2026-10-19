@@ -76,7 +76,6 @@ fn run(runs: &Path, id: &str, place: In, throughput: &[u64], counter: u64) -> Ru
                 arm: place.arm,
                 variant: Variant {
                     commit: place.commit.into(),
-                    overrides: Vec::new(),
                     features: Default::default(),
                 },
                 round: Round {
