@@ -29,10 +29,7 @@ pub const FLASH_SIZE_BYTES: usize = 16 * 1024 * 1024;
 pub const FLASH_MMU_PAGE_SIZE_BYTES: u32 = 64 * 1024;
 pub const FLASH_DATA_LINES: u8 = 4;
 
-/// What bounds Wi-Fi transmit power besides the regulatory domain: the
-/// board's antenna gain, the chip's maximum (`chip_maximum_mbm`, the PHY's
-/// largest calibrated target power) and an owner cap, a setting of the
-/// installation (the stand's laboratory limit), not a board fact.
+/// Antenna gain used by this board profile, in mBm.
 ///
 /// The antenna gain is 2.33 dBi: the gain of the antenna on which the
 /// ESP32-S31-WROOM-3U was certified, not a measured gain of this board's PCB
@@ -41,7 +38,9 @@ pub const FLASH_DATA_LINES: u8 = 4;
 /// section 10.
 pub const WIFI_ANTENNA_GAIN_MBM: i32 = 233;
 
-/// Conducted power limits for this board and installation.
+/// Conducted power limits: board antenna gain, chip maximum (the PHY
+/// calibration ceiling), and an optional installation cap. The stand cap
+/// is an installation setting, not a board fact.
 pub const fn wifi_power_limits(
     chip_maximum_mbm: i32,
     owner_cap_mbm: Option<i32>,
