@@ -2730,91 +2730,278 @@ pub mod ieee802154_mac {
         pub type R = crate::R<RxAbortEnableSpec>;
         #[doc = "Register `RX_ABORT_ENABLE` writer"]
         pub type W = crate::W<RxAbortEnableSpec>;
-        #[doc = "Project-assigned name."]
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        #[repr(u32)]
-        pub enum Events {
-            #[doc = "0: Mask every receive-abort reason."]
-            None = 0,
-            #[doc = "163840: Reviewed receive-abort baseline used by the runtime ISR."]
-            RuntimeBaseline = 163840,
-            #[doc = "58720256: Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation."]
-            EdOperationReasons = 58720256,
-        }
-        impl From<Events> for u32 {
-            #[inline(always)]
-            fn from(variant: Events) -> Self {
-                variant as _
-            }
-        }
-        impl crate::FieldSpec for Events {
-            type Ux = u32;
-        }
-        impl crate::IsEnum for Events {}
-        #[doc = "Field `EVENTS` reader - Project-assigned name."]
-        pub type EventsR = crate::FieldReader<Events>;
-        impl EventsR {
-            #[doc = "Get enumerated values variant"]
-            #[inline(always)]
-            pub const fn variant(&self) -> Option<Events> {
-                match self.bits {
-                    0 => Some(Events::None),
-                    163840 => Some(Events::RuntimeBaseline),
-                    58720256 => Some(Events::EdOperationReasons),
-                    _ => None,
-                }
-            }
-            #[doc = "Mask every receive-abort reason."]
-            #[inline(always)]
-            pub fn is_none(&self) -> bool {
-                *self == Events::None
-            }
-            #[doc = "Reviewed receive-abort baseline used by the runtime ISR."]
-            #[inline(always)]
-            pub fn is_runtime_baseline(&self) -> bool {
-                *self == Events::RuntimeBaseline
-            }
-            #[doc = "Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation."]
-            #[inline(always)]
-            pub fn is_ed_operation_reasons(&self) -> bool {
-                *self == Events::EdOperationReasons
-            }
-        }
-        #[doc = "Field `EVENTS` writer - Project-assigned name."]
-        pub type EventsW<'a, REG> = crate::FieldWriter<'a, REG, 31, Events, crate::Safe>;
-        impl<'a, REG> EventsW<'a, REG>
-        where
-            REG: crate::Writable + crate::RegisterSpec,
-            REG::Ux: From<u32>,
-        {
-            #[doc = "Mask every receive-abort reason."]
-            #[inline(always)]
-            pub fn none(self) -> &'a mut crate::W<REG> {
-                self.variant(Events::None)
-            }
-            #[doc = "Reviewed receive-abort baseline used by the runtime ISR."]
-            #[inline(always)]
-            pub fn runtime_baseline(self) -> &'a mut crate::W<REG> {
-                self.variant(Events::RuntimeBaseline)
-            }
-            #[doc = "Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation."]
-            #[inline(always)]
-            pub fn ed_operation_reasons(self) -> &'a mut crate::W<REG> {
-                self.variant(Events::EdOperationReasons)
-            }
-        }
+        #[doc = "Field `RX_STOP` reader - Project-assigned name. Enable bit of abort reason 1 (rx stop)."]
+        pub type RxStopR = crate::BitReader;
+        #[doc = "Field `RX_STOP` writer - Project-assigned name. Enable bit of abort reason 1 (rx stop)."]
+        pub type RxStopW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `SFD_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 2 (sfd timeout)."]
+        pub type SfdTimeoutR = crate::BitReader;
+        #[doc = "Field `SFD_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 2 (sfd timeout)."]
+        pub type SfdTimeoutW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `CRC_ERROR` reader - Project-assigned name. Enable bit of abort reason 3 (crc error)."]
+        pub type CrcErrorR = crate::BitReader;
+        #[doc = "Field `CRC_ERROR` writer - Project-assigned name. Enable bit of abort reason 3 (crc error)."]
+        pub type CrcErrorW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `INVALID_LENGTH` reader - Project-assigned name. Enable bit of abort reason 4 (invalid length)."]
+        pub type InvalidLengthR = crate::BitReader;
+        #[doc = "Field `INVALID_LENGTH` writer - Project-assigned name. Enable bit of abort reason 4 (invalid length)."]
+        pub type InvalidLengthW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `FILTER_FAIL` reader - Project-assigned name. Enable bit of abort reason 5 (filter fail)."]
+        pub type FilterFailR = crate::BitReader;
+        #[doc = "Field `FILTER_FAIL` writer - Project-assigned name. Enable bit of abort reason 5 (filter fail)."]
+        pub type FilterFailW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `NO_RSS` reader - Project-assigned name. Enable bit of abort reason 6 (no rss)."]
+        pub type NoRssR = crate::BitReader;
+        #[doc = "Field `NO_RSS` writer - Project-assigned name. Enable bit of abort reason 6 (no rss)."]
+        pub type NoRssW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `COEXISTENCE_BREAK` reader - Project-assigned name. Enable bit of abort reason 7 (coexistence break)."]
+        pub type CoexistenceBreakR = crate::BitReader;
+        #[doc = "Field `COEXISTENCE_BREAK` writer - Project-assigned name. Enable bit of abort reason 7 (coexistence break)."]
+        pub type CoexistenceBreakW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `UNEXPECTED_ACK` reader - Project-assigned name. Enable bit of abort reason 8 (unexpected ack)."]
+        pub type UnexpectedAckR = crate::BitReader;
+        #[doc = "Field `UNEXPECTED_ACK` writer - Project-assigned name. Enable bit of abort reason 8 (unexpected ack)."]
+        pub type UnexpectedAckW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_RESTART` reader - Project-assigned name. Enable bit of abort reason 9 (rx restart)."]
+        pub type RxRestartR = crate::BitReader;
+        #[doc = "Field `RX_RESTART` writer - Project-assigned name. Enable bit of abort reason 9 (rx restart)."]
+        pub type RxRestartW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_9_14_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits9_14OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_9_14_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits9_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
+        #[doc = "Field `TX_ACK_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
+        pub type TxAckTimeoutR = crate::BitReader;
+        #[doc = "Field `TX_ACK_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
+        pub type TxAckTimeoutW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `TX_ACK_STOP` reader - Project-assigned name. Enable bit of abort reason 17 (tx ack stop)."]
+        pub type TxAckStopR = crate::BitReader;
+        #[doc = "Field `TX_ACK_STOP` writer - Project-assigned name. Enable bit of abort reason 17 (tx ack stop)."]
+        pub type TxAckStopW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `TX_ACK_COEXISTENCE_BREAK` reader - Project-assigned name. Enable bit of abort reason 18 (tx ack coexistence break)."]
+        pub type TxAckCoexistenceBreakR = crate::BitReader;
+        #[doc = "Field `TX_ACK_COEXISTENCE_BREAK` writer - Project-assigned name. Enable bit of abort reason 18 (tx ack coexistence break)."]
+        pub type TxAckCoexistenceBreakW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `ENHANCED_ACK_SECURITY_ERROR` reader - Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error)."]
+        pub type EnhancedAckSecurityErrorR = crate::BitReader;
+        #[doc = "Field `ENHANCED_ACK_SECURITY_ERROR` writer - Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error)."]
+        pub type EnhancedAckSecurityErrorW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_19_22_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits19_22OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_19_22_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits19_22OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
+        #[doc = "Field `ED_ABORT` reader - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
+        pub type EdAbortR = crate::BitReader;
+        #[doc = "Field `ED_ABORT` writer - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
+        pub type EdAbortW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `ED_STOP` reader - Project-assigned name. Enable bit of abort reason 25 (ed stop)."]
+        pub type EdStopR = crate::BitReader;
+        #[doc = "Field `ED_STOP` writer - Project-assigned name. Enable bit of abort reason 25 (ed stop)."]
+        pub type EdStopW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `ED_COEXISTENCE_REJECT` reader - Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject)."]
+        pub type EdCoexistenceRejectR = crate::BitReader;
+        #[doc = "Field `ED_COEXISTENCE_REJECT` writer - Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject)."]
+        pub type EdCoexistenceRejectW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_26_30_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits26_30OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_26_30_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits26_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 5, u8, crate::Safe>;
         impl R {
-            #[doc = "Bits 0:30 - Project-assigned name."]
+            #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx stop)."]
             #[inline(always)]
-            pub fn events(&self) -> EventsR {
-                EventsR::new(self.bits & 0x7fff_ffff)
+            pub fn rx_stop(&self) -> RxStopR {
+                RxStopR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name. Enable bit of abort reason 2 (sfd timeout)."]
+            #[inline(always)]
+            pub fn sfd_timeout(&self) -> SfdTimeoutR {
+                SfdTimeoutR::new(((self.bits >> 1) & 1) != 0)
+            }
+            #[doc = "Bit 2 - Project-assigned name. Enable bit of abort reason 3 (crc error)."]
+            #[inline(always)]
+            pub fn crc_error(&self) -> CrcErrorR {
+                CrcErrorR::new(((self.bits >> 2) & 1) != 0)
+            }
+            #[doc = "Bit 3 - Project-assigned name. Enable bit of abort reason 4 (invalid length)."]
+            #[inline(always)]
+            pub fn invalid_length(&self) -> InvalidLengthR {
+                InvalidLengthR::new(((self.bits >> 3) & 1) != 0)
+            }
+            #[doc = "Bit 4 - Project-assigned name. Enable bit of abort reason 5 (filter fail)."]
+            #[inline(always)]
+            pub fn filter_fail(&self) -> FilterFailR {
+                FilterFailR::new(((self.bits >> 4) & 1) != 0)
+            }
+            #[doc = "Bit 5 - Project-assigned name. Enable bit of abort reason 6 (no rss)."]
+            #[inline(always)]
+            pub fn no_rss(&self) -> NoRssR {
+                NoRssR::new(((self.bits >> 5) & 1) != 0)
+            }
+            #[doc = "Bit 6 - Project-assigned name. Enable bit of abort reason 7 (coexistence break)."]
+            #[inline(always)]
+            pub fn coexistence_break(&self) -> CoexistenceBreakR {
+                CoexistenceBreakR::new(((self.bits >> 6) & 1) != 0)
+            }
+            #[doc = "Bit 7 - Project-assigned name. Enable bit of abort reason 8 (unexpected ack)."]
+            #[inline(always)]
+            pub fn unexpected_ack(&self) -> UnexpectedAckR {
+                UnexpectedAckR::new(((self.bits >> 7) & 1) != 0)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Enable bit of abort reason 9 (rx restart)."]
+            #[inline(always)]
+            pub fn rx_restart(&self) -> RxRestartR {
+                RxRestartR::new(((self.bits >> 8) & 1) != 0)
+            }
+            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_9_14_opaque(&self) -> Bits9_14OpaqueR {
+                Bits9_14OpaqueR::new(((self.bits >> 9) & 0x3f) as u8)
+            }
+            #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
+            #[inline(always)]
+            pub fn tx_ack_timeout(&self) -> TxAckTimeoutR {
+                TxAckTimeoutR::new(((self.bits >> 15) & 1) != 0)
+            }
+            #[doc = "Bit 16 - Project-assigned name. Enable bit of abort reason 17 (tx ack stop)."]
+            #[inline(always)]
+            pub fn tx_ack_stop(&self) -> TxAckStopR {
+                TxAckStopR::new(((self.bits >> 16) & 1) != 0)
+            }
+            #[doc = "Bit 17 - Project-assigned name. Enable bit of abort reason 18 (tx ack coexistence break)."]
+            #[inline(always)]
+            pub fn tx_ack_coexistence_break(&self) -> TxAckCoexistenceBreakR {
+                TxAckCoexistenceBreakR::new(((self.bits >> 17) & 1) != 0)
+            }
+            #[doc = "Bit 18 - Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error)."]
+            #[inline(always)]
+            pub fn enhanced_ack_security_error(&self) -> EnhancedAckSecurityErrorR {
+                EnhancedAckSecurityErrorR::new(((self.bits >> 18) & 1) != 0)
+            }
+            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_19_22_opaque(&self) -> Bits19_22OpaqueR {
+                Bits19_22OpaqueR::new(((self.bits >> 19) & 0x0f) as u8)
+            }
+            #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
+            #[inline(always)]
+            pub fn ed_abort(&self) -> EdAbortR {
+                EdAbortR::new(((self.bits >> 23) & 1) != 0)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Enable bit of abort reason 25 (ed stop)."]
+            #[inline(always)]
+            pub fn ed_stop(&self) -> EdStopR {
+                EdStopR::new(((self.bits >> 24) & 1) != 0)
+            }
+            #[doc = "Bit 25 - Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject)."]
+            #[inline(always)]
+            pub fn ed_coexistence_reject(&self) -> EdCoexistenceRejectR {
+                EdCoexistenceRejectR::new(((self.bits >> 25) & 1) != 0)
+            }
+            #[doc = "Bits 26:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_26_30_opaque(&self) -> Bits26_30OpaqueR {
+                Bits26_30OpaqueR::new(((self.bits >> 26) & 0x1f) as u8)
             }
         }
         impl W {
-            #[doc = "Bits 0:30 - Project-assigned name."]
+            #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx stop)."]
             #[inline(always)]
-            pub fn events(&mut self) -> EventsW<'_, RxAbortEnableSpec> {
-                EventsW::new(self, 0)
+            pub fn rx_stop(&mut self) -> RxStopW<'_, RxAbortEnableSpec> {
+                RxStopW::new(self, 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name. Enable bit of abort reason 2 (sfd timeout)."]
+            #[inline(always)]
+            pub fn sfd_timeout(&mut self) -> SfdTimeoutW<'_, RxAbortEnableSpec> {
+                SfdTimeoutW::new(self, 1)
+            }
+            #[doc = "Bit 2 - Project-assigned name. Enable bit of abort reason 3 (crc error)."]
+            #[inline(always)]
+            pub fn crc_error(&mut self) -> CrcErrorW<'_, RxAbortEnableSpec> {
+                CrcErrorW::new(self, 2)
+            }
+            #[doc = "Bit 3 - Project-assigned name. Enable bit of abort reason 4 (invalid length)."]
+            #[inline(always)]
+            pub fn invalid_length(&mut self) -> InvalidLengthW<'_, RxAbortEnableSpec> {
+                InvalidLengthW::new(self, 3)
+            }
+            #[doc = "Bit 4 - Project-assigned name. Enable bit of abort reason 5 (filter fail)."]
+            #[inline(always)]
+            pub fn filter_fail(&mut self) -> FilterFailW<'_, RxAbortEnableSpec> {
+                FilterFailW::new(self, 4)
+            }
+            #[doc = "Bit 5 - Project-assigned name. Enable bit of abort reason 6 (no rss)."]
+            #[inline(always)]
+            pub fn no_rss(&mut self) -> NoRssW<'_, RxAbortEnableSpec> {
+                NoRssW::new(self, 5)
+            }
+            #[doc = "Bit 6 - Project-assigned name. Enable bit of abort reason 7 (coexistence break)."]
+            #[inline(always)]
+            pub fn coexistence_break(&mut self) -> CoexistenceBreakW<'_, RxAbortEnableSpec> {
+                CoexistenceBreakW::new(self, 6)
+            }
+            #[doc = "Bit 7 - Project-assigned name. Enable bit of abort reason 8 (unexpected ack)."]
+            #[inline(always)]
+            pub fn unexpected_ack(&mut self) -> UnexpectedAckW<'_, RxAbortEnableSpec> {
+                UnexpectedAckW::new(self, 7)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Enable bit of abort reason 9 (rx restart)."]
+            #[inline(always)]
+            pub fn rx_restart(&mut self) -> RxRestartW<'_, RxAbortEnableSpec> {
+                RxRestartW::new(self, 8)
+            }
+            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_9_14_opaque(&mut self) -> Bits9_14OpaqueW<'_, RxAbortEnableSpec> {
+                Bits9_14OpaqueW::new(self, 9)
+            }
+            #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (tx ack timeout)."]
+            #[inline(always)]
+            pub fn tx_ack_timeout(&mut self) -> TxAckTimeoutW<'_, RxAbortEnableSpec> {
+                TxAckTimeoutW::new(self, 15)
+            }
+            #[doc = "Bit 16 - Project-assigned name. Enable bit of abort reason 17 (tx ack stop)."]
+            #[inline(always)]
+            pub fn tx_ack_stop(&mut self) -> TxAckStopW<'_, RxAbortEnableSpec> {
+                TxAckStopW::new(self, 16)
+            }
+            #[doc = "Bit 17 - Project-assigned name. Enable bit of abort reason 18 (tx ack coexistence break)."]
+            #[inline(always)]
+            pub fn tx_ack_coexistence_break(
+                &mut self,
+            ) -> TxAckCoexistenceBreakW<'_, RxAbortEnableSpec> {
+                TxAckCoexistenceBreakW::new(self, 17)
+            }
+            #[doc = "Bit 18 - Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error)."]
+            #[inline(always)]
+            pub fn enhanced_ack_security_error(
+                &mut self,
+            ) -> EnhancedAckSecurityErrorW<'_, RxAbortEnableSpec> {
+                EnhancedAckSecurityErrorW::new(self, 18)
+            }
+            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_19_22_opaque(&mut self) -> Bits19_22OpaqueW<'_, RxAbortEnableSpec> {
+                Bits19_22OpaqueW::new(self, 19)
+            }
+            #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (ed abort)."]
+            #[inline(always)]
+            pub fn ed_abort(&mut self) -> EdAbortW<'_, RxAbortEnableSpec> {
+                EdAbortW::new(self, 23)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Enable bit of abort reason 25 (ed stop)."]
+            #[inline(always)]
+            pub fn ed_stop(&mut self) -> EdStopW<'_, RxAbortEnableSpec> {
+                EdStopW::new(self, 24)
+            }
+            #[doc = "Bit 25 - Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject)."]
+            #[inline(always)]
+            pub fn ed_coexistence_reject(&mut self) -> EdCoexistenceRejectW<'_, RxAbortEnableSpec> {
+                EdCoexistenceRejectW::new(self, 25)
+            }
+            #[doc = "Bits 26:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_26_30_opaque(&mut self) -> Bits26_30OpaqueW<'_, RxAbortEnableSpec> {
+                Bits26_30OpaqueW::new(self, 26)
             }
         }
         #[doc = "Project-assigned name. Low thirty-one receive-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.\n\nYou can [`read`](crate::Reg::read) this register and get [`rx_abort_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`rx_abort_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -2930,78 +3117,262 @@ pub mod ieee802154_mac {
         pub type R = crate::R<TxAbortEnableSpec>;
         #[doc = "Register `TX_ABORT_ENABLE` writer"]
         pub type W = crate::W<TxAbortEnableSpec>;
-        #[doc = "Project-assigned name."]
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        #[repr(u32)]
-        pub enum Events {
-            #[doc = "0: Mask every transmit-abort reason."]
-            None = 0,
-            #[doc = "25591808: Reviewed transmit-abort baseline used by the runtime ISR."]
-            RuntimeBaseline = 25591808,
-        }
-        impl From<Events> for u32 {
-            #[inline(always)]
-            fn from(variant: Events) -> Self {
-                variant as _
-            }
-        }
-        impl crate::FieldSpec for Events {
-            type Ux = u32;
-        }
-        impl crate::IsEnum for Events {}
-        #[doc = "Field `EVENTS` reader - Project-assigned name."]
-        pub type EventsR = crate::FieldReader<Events>;
-        impl EventsR {
-            #[doc = "Get enumerated values variant"]
-            #[inline(always)]
-            pub const fn variant(&self) -> Option<Events> {
-                match self.bits {
-                    0 => Some(Events::None),
-                    25591808 => Some(Events::RuntimeBaseline),
-                    _ => None,
-                }
-            }
-            #[doc = "Mask every transmit-abort reason."]
-            #[inline(always)]
-            pub fn is_none(&self) -> bool {
-                *self == Events::None
-            }
-            #[doc = "Reviewed transmit-abort baseline used by the runtime ISR."]
-            #[inline(always)]
-            pub fn is_runtime_baseline(&self) -> bool {
-                *self == Events::RuntimeBaseline
-            }
-        }
-        #[doc = "Field `EVENTS` writer - Project-assigned name."]
-        pub type EventsW<'a, REG> = crate::FieldWriter<'a, REG, 31, Events, crate::Safe>;
-        impl<'a, REG> EventsW<'a, REG>
-        where
-            REG: crate::Writable + crate::RegisterSpec,
-            REG::Ux: From<u32>,
-        {
-            #[doc = "Mask every transmit-abort reason."]
-            #[inline(always)]
-            pub fn none(self) -> &'a mut crate::W<REG> {
-                self.variant(Events::None)
-            }
-            #[doc = "Reviewed transmit-abort baseline used by the runtime ISR."]
-            #[inline(always)]
-            pub fn runtime_baseline(self) -> &'a mut crate::W<REG> {
-                self.variant(Events::RuntimeBaseline)
-            }
-        }
+        #[doc = "Field `RX_ACK_STOP` reader - Project-assigned name. Enable bit of abort reason 1 (rx ack stop)."]
+        pub type RxAckStopR = crate::BitReader;
+        #[doc = "Field `RX_ACK_STOP` writer - Project-assigned name. Enable bit of abort reason 1 (rx ack stop)."]
+        pub type RxAckStopW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_SFD_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 2 (rx ack sfd timeout)."]
+        pub type RxAckSfdTimeoutR = crate::BitReader;
+        #[doc = "Field `RX_ACK_SFD_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 2 (rx ack sfd timeout)."]
+        pub type RxAckSfdTimeoutW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_CRC_ERROR` reader - Project-assigned name. Enable bit of abort reason 3 (rx ack crc error)."]
+        pub type RxAckCrcErrorR = crate::BitReader;
+        #[doc = "Field `RX_ACK_CRC_ERROR` writer - Project-assigned name. Enable bit of abort reason 3 (rx ack crc error)."]
+        pub type RxAckCrcErrorW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_INVALID_LENGTH` reader - Project-assigned name. Enable bit of abort reason 4 (rx ack invalid length)."]
+        pub type RxAckInvalidLengthR = crate::BitReader;
+        #[doc = "Field `RX_ACK_INVALID_LENGTH` writer - Project-assigned name. Enable bit of abort reason 4 (rx ack invalid length)."]
+        pub type RxAckInvalidLengthW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_FILTER_FAIL` reader - Project-assigned name. Enable bit of abort reason 5 (rx ack filter fail)."]
+        pub type RxAckFilterFailR = crate::BitReader;
+        #[doc = "Field `RX_ACK_FILTER_FAIL` writer - Project-assigned name. Enable bit of abort reason 5 (rx ack filter fail)."]
+        pub type RxAckFilterFailW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_NO_RSS` reader - Project-assigned name. Enable bit of abort reason 6 (rx ack no rss)."]
+        pub type RxAckNoRssR = crate::BitReader;
+        #[doc = "Field `RX_ACK_NO_RSS` writer - Project-assigned name. Enable bit of abort reason 6 (rx ack no rss)."]
+        pub type RxAckNoRssW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_COEXISTENCE_BREAK` reader - Project-assigned name. Enable bit of abort reason 7 (rx ack coexistence break)."]
+        pub type RxAckCoexistenceBreakR = crate::BitReader;
+        #[doc = "Field `RX_ACK_COEXISTENCE_BREAK` writer - Project-assigned name. Enable bit of abort reason 7 (rx ack coexistence break)."]
+        pub type RxAckCoexistenceBreakW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_TYPE_NOT_ACK` reader - Project-assigned name. Enable bit of abort reason 8 (rx ack type not ack)."]
+        pub type RxAckTypeNotAckR = crate::BitReader;
+        #[doc = "Field `RX_ACK_TYPE_NOT_ACK` writer - Project-assigned name. Enable bit of abort reason 8 (rx ack type not ack)."]
+        pub type RxAckTypeNotAckW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `RX_ACK_RESTART` reader - Project-assigned name. Enable bit of abort reason 9 (rx ack restart)."]
+        pub type RxAckRestartR = crate::BitReader;
+        #[doc = "Field `RX_ACK_RESTART` writer - Project-assigned name. Enable bit of abort reason 9 (rx ack restart)."]
+        pub type RxAckRestartW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_9_14_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits9_14OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_9_14_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits9_14OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
+        #[doc = "Field `RX_ACK_TIMEOUT` reader - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
+        pub type RxAckTimeoutR = crate::BitReader;
+        #[doc = "Field `RX_ACK_TIMEOUT` writer - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
+        pub type RxAckTimeoutW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `TX_STOP` reader - Project-assigned name. Enable bit of abort reason 17 (tx stop)."]
+        pub type TxStopR = crate::BitReader;
+        #[doc = "Field `TX_STOP` writer - Project-assigned name. Enable bit of abort reason 17 (tx stop)."]
+        pub type TxStopW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `TX_COEXISTENCE_BREAK` reader - Project-assigned name. Enable bit of abort reason 18 (tx coexistence break)."]
+        pub type TxCoexistenceBreakR = crate::BitReader;
+        #[doc = "Field `TX_COEXISTENCE_BREAK` writer - Project-assigned name. Enable bit of abort reason 18 (tx coexistence break)."]
+        pub type TxCoexistenceBreakW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `TX_SECURITY_ERROR` reader - Project-assigned name. Enable bit of abort reason 19 (tx security error)."]
+        pub type TxSecurityErrorR = crate::BitReader;
+        #[doc = "Field `TX_SECURITY_ERROR` writer - Project-assigned name. Enable bit of abort reason 19 (tx security error)."]
+        pub type TxSecurityErrorW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_19_22_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits19_22OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_19_22_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits19_22OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 4, u8, crate::Safe>;
+        #[doc = "Field `CCA_FAILED` reader - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
+        pub type CcaFailedR = crate::BitReader;
+        #[doc = "Field `CCA_FAILED` writer - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
+        pub type CcaFailedW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `CCA_BUSY` reader - Project-assigned name. Enable bit of abort reason 25 (cca busy)."]
+        pub type CcaBusyR = crate::BitReader;
+        #[doc = "Field `CCA_BUSY` writer - Project-assigned name. Enable bit of abort reason 25 (cca busy)."]
+        pub type CcaBusyW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_25_30_OPAQUE` reader - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits25_30OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_25_30_OPAQUE` writer - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+        pub type Bits25_30OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 6, u8, crate::Safe>;
         impl R {
-            #[doc = "Bits 0:30 - Project-assigned name."]
+            #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx ack stop)."]
             #[inline(always)]
-            pub fn events(&self) -> EventsR {
-                EventsR::new(self.bits & 0x7fff_ffff)
+            pub fn rx_ack_stop(&self) -> RxAckStopR {
+                RxAckStopR::new((self.bits & 1) != 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name. Enable bit of abort reason 2 (rx ack sfd timeout)."]
+            #[inline(always)]
+            pub fn rx_ack_sfd_timeout(&self) -> RxAckSfdTimeoutR {
+                RxAckSfdTimeoutR::new(((self.bits >> 1) & 1) != 0)
+            }
+            #[doc = "Bit 2 - Project-assigned name. Enable bit of abort reason 3 (rx ack crc error)."]
+            #[inline(always)]
+            pub fn rx_ack_crc_error(&self) -> RxAckCrcErrorR {
+                RxAckCrcErrorR::new(((self.bits >> 2) & 1) != 0)
+            }
+            #[doc = "Bit 3 - Project-assigned name. Enable bit of abort reason 4 (rx ack invalid length)."]
+            #[inline(always)]
+            pub fn rx_ack_invalid_length(&self) -> RxAckInvalidLengthR {
+                RxAckInvalidLengthR::new(((self.bits >> 3) & 1) != 0)
+            }
+            #[doc = "Bit 4 - Project-assigned name. Enable bit of abort reason 5 (rx ack filter fail)."]
+            #[inline(always)]
+            pub fn rx_ack_filter_fail(&self) -> RxAckFilterFailR {
+                RxAckFilterFailR::new(((self.bits >> 4) & 1) != 0)
+            }
+            #[doc = "Bit 5 - Project-assigned name. Enable bit of abort reason 6 (rx ack no rss)."]
+            #[inline(always)]
+            pub fn rx_ack_no_rss(&self) -> RxAckNoRssR {
+                RxAckNoRssR::new(((self.bits >> 5) & 1) != 0)
+            }
+            #[doc = "Bit 6 - Project-assigned name. Enable bit of abort reason 7 (rx ack coexistence break)."]
+            #[inline(always)]
+            pub fn rx_ack_coexistence_break(&self) -> RxAckCoexistenceBreakR {
+                RxAckCoexistenceBreakR::new(((self.bits >> 6) & 1) != 0)
+            }
+            #[doc = "Bit 7 - Project-assigned name. Enable bit of abort reason 8 (rx ack type not ack)."]
+            #[inline(always)]
+            pub fn rx_ack_type_not_ack(&self) -> RxAckTypeNotAckR {
+                RxAckTypeNotAckR::new(((self.bits >> 7) & 1) != 0)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Enable bit of abort reason 9 (rx ack restart)."]
+            #[inline(always)]
+            pub fn rx_ack_restart(&self) -> RxAckRestartR {
+                RxAckRestartR::new(((self.bits >> 8) & 1) != 0)
+            }
+            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_9_14_opaque(&self) -> Bits9_14OpaqueR {
+                Bits9_14OpaqueR::new(((self.bits >> 9) & 0x3f) as u8)
+            }
+            #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
+            #[inline(always)]
+            pub fn rx_ack_timeout(&self) -> RxAckTimeoutR {
+                RxAckTimeoutR::new(((self.bits >> 15) & 1) != 0)
+            }
+            #[doc = "Bit 16 - Project-assigned name. Enable bit of abort reason 17 (tx stop)."]
+            #[inline(always)]
+            pub fn tx_stop(&self) -> TxStopR {
+                TxStopR::new(((self.bits >> 16) & 1) != 0)
+            }
+            #[doc = "Bit 17 - Project-assigned name. Enable bit of abort reason 18 (tx coexistence break)."]
+            #[inline(always)]
+            pub fn tx_coexistence_break(&self) -> TxCoexistenceBreakR {
+                TxCoexistenceBreakR::new(((self.bits >> 17) & 1) != 0)
+            }
+            #[doc = "Bit 18 - Project-assigned name. Enable bit of abort reason 19 (tx security error)."]
+            #[inline(always)]
+            pub fn tx_security_error(&self) -> TxSecurityErrorR {
+                TxSecurityErrorR::new(((self.bits >> 18) & 1) != 0)
+            }
+            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_19_22_opaque(&self) -> Bits19_22OpaqueR {
+                Bits19_22OpaqueR::new(((self.bits >> 19) & 0x0f) as u8)
+            }
+            #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
+            #[inline(always)]
+            pub fn cca_failed(&self) -> CcaFailedR {
+                CcaFailedR::new(((self.bits >> 23) & 1) != 0)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Enable bit of abort reason 25 (cca busy)."]
+            #[inline(always)]
+            pub fn cca_busy(&self) -> CcaBusyR {
+                CcaBusyR::new(((self.bits >> 24) & 1) != 0)
+            }
+            #[doc = "Bits 25:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_25_30_opaque(&self) -> Bits25_30OpaqueR {
+                Bits25_30OpaqueR::new(((self.bits >> 25) & 0x3f) as u8)
             }
         }
         impl W {
-            #[doc = "Bits 0:30 - Project-assigned name."]
+            #[doc = "Bit 0 - Project-assigned name. Enable bit of abort reason 1 (rx ack stop)."]
             #[inline(always)]
-            pub fn events(&mut self) -> EventsW<'_, TxAbortEnableSpec> {
-                EventsW::new(self, 0)
+            pub fn rx_ack_stop(&mut self) -> RxAckStopW<'_, TxAbortEnableSpec> {
+                RxAckStopW::new(self, 0)
+            }
+            #[doc = "Bit 1 - Project-assigned name. Enable bit of abort reason 2 (rx ack sfd timeout)."]
+            #[inline(always)]
+            pub fn rx_ack_sfd_timeout(&mut self) -> RxAckSfdTimeoutW<'_, TxAbortEnableSpec> {
+                RxAckSfdTimeoutW::new(self, 1)
+            }
+            #[doc = "Bit 2 - Project-assigned name. Enable bit of abort reason 3 (rx ack crc error)."]
+            #[inline(always)]
+            pub fn rx_ack_crc_error(&mut self) -> RxAckCrcErrorW<'_, TxAbortEnableSpec> {
+                RxAckCrcErrorW::new(self, 2)
+            }
+            #[doc = "Bit 3 - Project-assigned name. Enable bit of abort reason 4 (rx ack invalid length)."]
+            #[inline(always)]
+            pub fn rx_ack_invalid_length(&mut self) -> RxAckInvalidLengthW<'_, TxAbortEnableSpec> {
+                RxAckInvalidLengthW::new(self, 3)
+            }
+            #[doc = "Bit 4 - Project-assigned name. Enable bit of abort reason 5 (rx ack filter fail)."]
+            #[inline(always)]
+            pub fn rx_ack_filter_fail(&mut self) -> RxAckFilterFailW<'_, TxAbortEnableSpec> {
+                RxAckFilterFailW::new(self, 4)
+            }
+            #[doc = "Bit 5 - Project-assigned name. Enable bit of abort reason 6 (rx ack no rss)."]
+            #[inline(always)]
+            pub fn rx_ack_no_rss(&mut self) -> RxAckNoRssW<'_, TxAbortEnableSpec> {
+                RxAckNoRssW::new(self, 5)
+            }
+            #[doc = "Bit 6 - Project-assigned name. Enable bit of abort reason 7 (rx ack coexistence break)."]
+            #[inline(always)]
+            pub fn rx_ack_coexistence_break(
+                &mut self,
+            ) -> RxAckCoexistenceBreakW<'_, TxAbortEnableSpec> {
+                RxAckCoexistenceBreakW::new(self, 6)
+            }
+            #[doc = "Bit 7 - Project-assigned name. Enable bit of abort reason 8 (rx ack type not ack)."]
+            #[inline(always)]
+            pub fn rx_ack_type_not_ack(&mut self) -> RxAckTypeNotAckW<'_, TxAbortEnableSpec> {
+                RxAckTypeNotAckW::new(self, 7)
+            }
+            #[doc = "Bit 8 - Project-assigned name. Enable bit of abort reason 9 (rx ack restart)."]
+            #[inline(always)]
+            pub fn rx_ack_restart(&mut self) -> RxAckRestartW<'_, TxAbortEnableSpec> {
+                RxAckRestartW::new(self, 8)
+            }
+            #[doc = "Bits 9:14 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_9_14_opaque(&mut self) -> Bits9_14OpaqueW<'_, TxAbortEnableSpec> {
+                Bits9_14OpaqueW::new(self, 9)
+            }
+            #[doc = "Bit 15 - Project-assigned name. Enable bit of abort reason 16 (rx ack timeout)."]
+            #[inline(always)]
+            pub fn rx_ack_timeout(&mut self) -> RxAckTimeoutW<'_, TxAbortEnableSpec> {
+                RxAckTimeoutW::new(self, 15)
+            }
+            #[doc = "Bit 16 - Project-assigned name. Enable bit of abort reason 17 (tx stop)."]
+            #[inline(always)]
+            pub fn tx_stop(&mut self) -> TxStopW<'_, TxAbortEnableSpec> {
+                TxStopW::new(self, 16)
+            }
+            #[doc = "Bit 17 - Project-assigned name. Enable bit of abort reason 18 (tx coexistence break)."]
+            #[inline(always)]
+            pub fn tx_coexistence_break(&mut self) -> TxCoexistenceBreakW<'_, TxAbortEnableSpec> {
+                TxCoexistenceBreakW::new(self, 17)
+            }
+            #[doc = "Bit 18 - Project-assigned name. Enable bit of abort reason 19 (tx security error)."]
+            #[inline(always)]
+            pub fn tx_security_error(&mut self) -> TxSecurityErrorW<'_, TxAbortEnableSpec> {
+                TxSecurityErrorW::new(self, 18)
+            }
+            #[doc = "Bits 19:22 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_19_22_opaque(&mut self) -> Bits19_22OpaqueW<'_, TxAbortEnableSpec> {
+                Bits19_22OpaqueW::new(self, 19)
+            }
+            #[doc = "Bit 23 - Project-assigned name. Enable bit of abort reason 24 (cca failed)."]
+            #[inline(always)]
+            pub fn cca_failed(&mut self) -> CcaFailedW<'_, TxAbortEnableSpec> {
+                CcaFailedW::new(self, 23)
+            }
+            #[doc = "Bit 24 - Project-assigned name. Enable bit of abort reason 25 (cca busy)."]
+            #[inline(always)]
+            pub fn cca_busy(&mut self) -> CcaBusyW<'_, TxAbortEnableSpec> {
+                CcaBusyW::new(self, 24)
+            }
+            #[doc = "Bits 25:30 - Opaque: meaning not established. Abort-reason enable bits without a public vendor reason."]
+            #[inline(always)]
+            pub fn bits_25_30_opaque(&mut self) -> Bits25_30OpaqueW<'_, TxAbortEnableSpec> {
+                Bits25_30OpaqueW::new(self, 25)
             }
         }
         #[doc = "Project-assigned name. Low thirty-one transmit-abort enable bits mutated by public LL accessors. Only the finite abort-reason values named by the LL are semantically classified.\n\nYou can [`read`](crate::Reg::read) this register and get [`tx_abort_enable::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`tx_abort_enable::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
@@ -12172,7 +12543,7 @@ pub mod masked_register_modify {
 /// Safe, SVD-declared field-local OR read-modify-write transactions.
 pub mod field_or_modify {
 
-    /// OR one reviewed logical image into MODEM_ETM.CHANNEL_ENABLE_SET fields `[CH0]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in MODEM_ETM.CHANNEL_ENABLE_SET fields `[CH0]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_ieee802154_etm_channel0(registers: &crate::ModemEtm) {
         registers.channel_enable_set().modify(|reader, writer| {
@@ -12185,7 +12556,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into MODEM_ETM.CHANNEL_ENABLE_SET fields `[CH1]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in MODEM_ETM.CHANNEL_ENABLE_SET fields `[CH1]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_ieee802154_etm_channel1(registers: &crate::ModemEtm) {
         registers.channel_enable_set().modify(|reader, writer| {
@@ -12198,7 +12569,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into MODEM_ETM.CHANNEL_ENABLE_CLEAR fields `[CH0]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in MODEM_ETM.CHANNEL_ENABLE_CLEAR fields `[CH0]` while preserving the fresh register observation.
     #[inline]
     pub fn disable_ieee802154_etm_channel0(registers: &crate::ModemEtm) {
         registers.channel_enable_clear().modify(|reader, writer| {
@@ -12211,7 +12582,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into MODEM_ETM.CHANNEL_ENABLE_CLEAR fields `[CH1]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in MODEM_ETM.CHANNEL_ENABLE_CLEAR fields `[CH1]` while preserving the fresh register observation.
     #[inline]
     pub fn disable_ieee802154_etm_channel1(registers: &crate::ModemEtm) {
         registers.channel_enable_clear().modify(|reader, writer| {
@@ -12224,7 +12595,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PMU_RADIO.RF_PWC fields `[XPD_TC5G_I2C, XPD_RX5G_I2C, XPD_TXRF_I2C, XPD_RFRX_PBUS, XPD_CKGEN_I2C, XPD_PLL_I2C]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PMU_RADIO.RF_PWC fields `[XPD_TC5G_I2C, XPD_RX5G_I2C, XPD_TXRF_I2C, XPD_RFRX_PBUS, XPD_CKGEN_I2C, XPD_PLL_I2C]` while preserving the fresh register observation.
     #[inline]
     pub fn power_rf_analog_i2c(registers: &crate::PmuRadio) {
         registers.rf_pwc().modify(|reader, writer| {
@@ -12247,7 +12618,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PMU_RADIO.IMM_HP_CK_POWER fields `[TIE_HIGH_XPD_BB_I2C]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PMU_RADIO.IMM_HP_CK_POWER fields `[TIE_HIGH_XPD_BB_I2C]` while preserving the fresh register observation.
     #[inline]
     pub fn tie_high_bb_analog_i2c_power(registers: &crate::PmuRadio) {
         registers.imm_hp_ck_power().modify(|reader, writer| {
@@ -12260,7 +12631,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PMU_RADIO.RF_PWC fields `[XPD_PERIF_I2C]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PMU_RADIO.RF_PWC fields `[XPD_PERIF_I2C]` while preserving the fresh register observation.
     #[inline]
     pub fn power_peripheral_analog_i2c(registers: &crate::PmuRadio) {
         registers.rf_pwc().modify(|reader, writer| {
@@ -12273,7 +12644,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PMU_RADIO.RF_PWC fields `[PERIF_I2C_RSTB]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PMU_RADIO.RF_PWC fields `[PERIF_I2C_RSTB]` while preserving the fresh register observation.
     #[inline]
     pub fn release_peripheral_analog_i2c_reset(registers: &crate::PmuRadio) {
         registers.rf_pwc().modify(|reader, writer| {
@@ -12286,7 +12657,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PMU_RADIO.RF_PWC fields `[XPD_CKGEN5G]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PMU_RADIO.RF_PWC fields `[XPD_CKGEN5G]` while preserving the fresh register observation.
     #[inline]
     pub fn power_5g_clock_generator(registers: &crate::PmuRadio) {
         registers.rf_pwc().modify(|reader, writer| {
@@ -12299,7 +12670,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL fields `[BITS_0_1_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.FE_BB_CLOCK_CONTROL fields `[BITS_0_1_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn open_phy_fe_bb_clock(registers: &crate::PhyBasebandConfig) {
         registers.fe_bb_clock_control().modify(|reader, writer| {
@@ -12314,7 +12685,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into I2C_ANA_MST.ANA_CONF0 fields `[PHY_REGISTER_ENABLE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in I2C_ANA_MST.ANA_CONF0 fields `[PHY_REGISTER_ENABLE]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_phy_i2c_master_registers(registers: &crate::I2cAnaMst) {
         registers.ana_conf0().modify(|reader, writer| {
@@ -12327,7 +12698,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE fields `[BIT_25_OPAQUE, BIT_26_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.WORD_0C08_OPAQUE fields `[BIT_25_OPAQUE, BIT_26_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn set_phy_front_end_init_0c08(registers: &crate::PhyBasebandConfig) {
         registers.word_0c08_opaque().modify(|reader, writer| {
@@ -12342,7 +12713,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE fields `[BIT_22_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.WORD_0894_OPAQUE fields `[BIT_22_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_phy_front_end_0894(registers: &crate::PhyBasebandConfig) {
         registers.word_0894_opaque().modify(|reader, writer| {
@@ -12355,7 +12726,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL fields `[BIT_2_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.FRONT_END_AND_TONE_STOP_CONTROL fields `[BIT_2_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_phy_front_end_init(registers: &crate::PhyBasebandConfig) {
         registers
@@ -12370,7 +12741,7 @@ pub mod field_or_modify {
             });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL fields `[RX_IQ_CORRECTION_MODE_LOW, RX_IQ_CORRECTION_MODE_HIGH, BIT_31_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.IQ_CORRECTION_CONTROL fields `[RX_IQ_CORRECTION_MODE_LOW, RX_IQ_CORRECTION_MODE_HIGH, BIT_31_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn set_phy_rx_iq_correction_modes(registers: &crate::PhyBasebandConfig) {
         registers.iq_correction_control().modify(|reader, writer| {
@@ -12387,7 +12758,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX fields `[TX_IQ_CORRECTION_MODE_LOW, TX_IQ_CORRECTION_MODE_HIGH]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.IQ_CORRECTION_AUX fields `[TX_IQ_CORRECTION_MODE_LOW, TX_IQ_CORRECTION_MODE_HIGH]` while preserving the fresh register observation.
     #[inline]
     pub fn set_phy_tx_iq_correction_modes(registers: &crate::PhyBasebandConfig) {
         registers.iq_correction_aux().modify(|reader, writer| {
@@ -12402,7 +12773,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE fields `[BIT_29_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.WORD_0888_OPAQUE fields `[BIT_29_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn set_phy_front_end_iq_swap(registers: &crate::PhyBasebandConfig) {
         registers.word_0888_opaque().modify(|reader, writer| {
@@ -12415,7 +12786,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into APB_SARADC_RADIO.CTRL fields `[SARADC2_PWDET_DRV]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in APB_SARADC_RADIO.CTRL fields `[SARADC2_PWDET_DRV]` while preserving the fresh register observation.
     #[inline]
     pub fn drive_saradc2_from_power_detector(registers: &crate::ApbSaradcRadio) {
         registers.ctrl().modify(|reader, writer| {
@@ -12428,7 +12799,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS fields `[BITS_12_13_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.POWER_DETECTOR_SAR_CONTROL_STATUS fields `[BITS_12_13_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn set_phy_power_detector_sar_mode(registers: &crate::PhyBasebandConfig) {
         registers
@@ -12445,7 +12816,7 @@ pub mod field_or_modify {
             });
     }
 
-    /// OR one reviewed logical image into PCR_RADIO.SARADC_CONF fields `[SARADC_REG_CLK_EN]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PCR_RADIO.SARADC_CONF fields `[SARADC_REG_CLK_EN]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_saradc_register_clock(registers: &crate::PcrRadio) {
         registers.saradc_conf().modify(|reader, writer| {
@@ -12458,7 +12829,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PCR_RADIO.SARADC_CONF fields `[SARADC_CLK_EN, SARADC_REG_CLK_EN]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PCR_RADIO.SARADC_CONF fields `[SARADC_CLK_EN, SARADC_REG_CLK_EN]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_saradc_clocks(registers: &crate::PcrRadio) {
         registers.saradc_conf().modify(|reader, writer| {
@@ -12473,7 +12844,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PCR_RADIO.TSENS_CLK_CONF fields `[TSENS_CLK_SEL, TSENS_CLK_EN]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PCR_RADIO.TSENS_CLK_CONF fields `[TSENS_CLK_SEL, TSENS_CLK_EN]` while preserving the fresh register observation.
     #[inline]
     pub fn enable_tsens_clock(registers: &crate::PcrRadio) {
         registers.tsens_clk_conf().modify(|reader, writer| {
@@ -12488,7 +12859,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into APB_SARADC_RADIO.TSENS_CTRL2 fields `[TSENS_CLK_SEL]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in APB_SARADC_RADIO.TSENS_CTRL2 fields `[TSENS_CLK_SEL]` while preserving the fresh register observation.
     #[inline]
     pub fn select_tsens_clock(registers: &crate::ApbSaradcRadio) {
         registers.tsens_ctrl2().modify(|reader, writer| {
@@ -12501,7 +12872,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.RX_EVM_CONTROL fields `[BIT_1_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.RX_EVM_CONTROL fields `[BIT_1_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn assert_phy_rx_evm_memory_reset(registers: &crate::PhyBasebandConfig) {
         registers.rx_evm_control().modify(|reader, writer| {
@@ -12514,7 +12885,7 @@ pub mod field_or_modify {
         });
     }
 
-    /// OR one reviewed logical image into PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET fields `[BIT_8_OPAQUE]` while preserving the fresh register observation.
+    /// OR one reviewed logical image in PHY_BASEBAND_CONFIG.RX_EVM_MEMORY_RESET fields `[BIT_8_OPAQUE]` while preserving the fresh register observation.
     #[inline]
     pub fn assert_phy_rx_evm_memory_reset_2(registers: &crate::PhyBasebandConfig) {
         registers.rx_evm_memory_reset().modify(|reader, writer| {
@@ -12524,6 +12895,298 @@ pub mod field_or_modify {
             writer
                 .bit_8_opaque()
                 .bit(reader.bit_8_opaque().bit() || (input & 0x00000001) != 0)
+        });
+    }
+
+    /// OR one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[TX_ACK_TIMEOUT, TX_ACK_COEXISTENCE_BREAK]` while preserving the fresh register observation.
+    #[inline]
+    pub fn enable_ieee802154_rx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|reader, writer| {
+            let input = 0x00028000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer
+                .tx_ack_timeout()
+                .bit(reader.tx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
+                .tx_ack_coexistence_break()
+                .bit(reader.tx_ack_coexistence_break().bit() || ((input >> 17) & 0x00000001) != 0)
+        });
+    }
+
+    /// OR one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` while preserving the fresh register observation.
+    #[inline]
+    pub fn enable_ieee802154_rx_abort_all(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|reader, writer| {
+            let input = 0x7fffffff_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_stop()
+                    .bit(reader.rx_stop().bit() || (input & 0x00000001) != 0)
+                    .sfd_timeout()
+                    .bit(reader.sfd_timeout().bit() || ((input >> 1) & 0x00000001) != 0)
+                    .crc_error()
+                    .bit(reader.crc_error().bit() || ((input >> 2) & 0x00000001) != 0)
+                    .invalid_length()
+                    .bit(reader.invalid_length().bit() || ((input >> 3) & 0x00000001) != 0)
+                    .filter_fail()
+                    .bit(reader.filter_fail().bit() || ((input >> 4) & 0x00000001) != 0)
+                    .no_rss()
+                    .bit(reader.no_rss().bit() || ((input >> 5) & 0x00000001) != 0)
+                    .coexistence_break()
+                    .bit(reader.coexistence_break().bit() || ((input >> 6) & 0x00000001) != 0)
+                    .unexpected_ack()
+                    .bit(reader.unexpected_ack().bit() || ((input >> 7) & 0x00000001) != 0)
+                    .rx_restart()
+                    .bit(reader.rx_restart().bit() || ((input >> 8) & 0x00000001) != 0)
+                    .bits_9_14_opaque()
+                    .bits(reader.bits_9_14_opaque().bits() | ((input >> 9) & 0x0000003f) as u8)
+                    .tx_ack_timeout()
+                    .bit(reader.tx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
+                    .tx_ack_stop()
+                    .bit(reader.tx_ack_stop().bit() || ((input >> 16) & 0x00000001) != 0)
+                    .tx_ack_coexistence_break()
+                    .bit(
+                        reader.tx_ack_coexistence_break().bit()
+                            || ((input >> 17) & 0x00000001) != 0,
+                    )
+                    .enhanced_ack_security_error()
+                    .bit(
+                        reader.enhanced_ack_security_error().bit()
+                            || ((input >> 18) & 0x00000001) != 0,
+                    )
+                    .bits_19_22_opaque()
+                    .bits(reader.bits_19_22_opaque().bits() | ((input >> 19) & 0x0000000f) as u8)
+                    .ed_abort()
+                    .bit(reader.ed_abort().bit() || ((input >> 23) & 0x00000001) != 0)
+                    .ed_stop()
+                    .bit(reader.ed_stop().bit() || ((input >> 24) & 0x00000001) != 0)
+                    .ed_coexistence_reject()
+                    .bit(reader.ed_coexistence_reject().bit() || ((input >> 25) & 0x00000001) != 0)
+                    .bits_26_30_opaque()
+                    .bits(reader.bits_26_30_opaque().bits() | ((input >> 26) & 0x0000001f) as u8)
+            }
+        });
+    }
+
+    /// OR one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_TIMEOUT, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, CCA_FAILED, CCA_BUSY]` while preserving the fresh register observation.
+    #[inline]
+    pub fn enable_ieee802154_tx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.tx_abort_enable().modify(|reader, writer| {
+            let input = 0x01868000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer
+                .rx_ack_timeout()
+                .bit(reader.rx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
+                .tx_coexistence_break()
+                .bit(reader.tx_coexistence_break().bit() || ((input >> 17) & 0x00000001) != 0)
+                .tx_security_error()
+                .bit(reader.tx_security_error().bit() || ((input >> 18) & 0x00000001) != 0)
+                .cca_failed()
+                .bit(reader.cca_failed().bit() || ((input >> 23) & 0x00000001) != 0)
+                .cca_busy()
+                .bit(reader.cca_busy().bit() || ((input >> 24) & 0x00000001) != 0)
+        });
+    }
+
+    /// OR one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` while preserving the fresh register observation.
+    #[inline]
+    pub fn enable_ieee802154_tx_abort_all(registers: &crate::Ieee802154Mac) {
+        registers.tx_abort_enable().modify(|reader, writer| {
+            let input = 0x7fffffff_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_ack_stop()
+                    .bit(reader.rx_ack_stop().bit() || (input & 0x00000001) != 0)
+                    .rx_ack_sfd_timeout()
+                    .bit(reader.rx_ack_sfd_timeout().bit() || ((input >> 1) & 0x00000001) != 0)
+                    .rx_ack_crc_error()
+                    .bit(reader.rx_ack_crc_error().bit() || ((input >> 2) & 0x00000001) != 0)
+                    .rx_ack_invalid_length()
+                    .bit(reader.rx_ack_invalid_length().bit() || ((input >> 3) & 0x00000001) != 0)
+                    .rx_ack_filter_fail()
+                    .bit(reader.rx_ack_filter_fail().bit() || ((input >> 4) & 0x00000001) != 0)
+                    .rx_ack_no_rss()
+                    .bit(reader.rx_ack_no_rss().bit() || ((input >> 5) & 0x00000001) != 0)
+                    .rx_ack_coexistence_break()
+                    .bit(
+                        reader.rx_ack_coexistence_break().bit() || ((input >> 6) & 0x00000001) != 0,
+                    )
+                    .rx_ack_type_not_ack()
+                    .bit(reader.rx_ack_type_not_ack().bit() || ((input >> 7) & 0x00000001) != 0)
+                    .rx_ack_restart()
+                    .bit(reader.rx_ack_restart().bit() || ((input >> 8) & 0x00000001) != 0)
+                    .bits_9_14_opaque()
+                    .bits(reader.bits_9_14_opaque().bits() | ((input >> 9) & 0x0000003f) as u8)
+                    .rx_ack_timeout()
+                    .bit(reader.rx_ack_timeout().bit() || ((input >> 15) & 0x00000001) != 0)
+                    .tx_stop()
+                    .bit(reader.tx_stop().bit() || ((input >> 16) & 0x00000001) != 0)
+                    .tx_coexistence_break()
+                    .bit(reader.tx_coexistence_break().bit() || ((input >> 17) & 0x00000001) != 0)
+                    .tx_security_error()
+                    .bit(reader.tx_security_error().bit() || ((input >> 18) & 0x00000001) != 0)
+                    .bits_19_22_opaque()
+                    .bits(reader.bits_19_22_opaque().bits() | ((input >> 19) & 0x0000000f) as u8)
+                    .cca_failed()
+                    .bit(reader.cca_failed().bit() || ((input >> 23) & 0x00000001) != 0)
+                    .cca_busy()
+                    .bit(reader.cca_busy().bit() || ((input >> 24) & 0x00000001) != 0)
+                    .bits_25_30_opaque()
+                    .bits(reader.bits_25_30_opaque().bits() | ((input >> 25) & 0x0000003f) as u8)
+            }
+        });
+    }
+}
+
+/// Safe, SVD-declared field-local AND-NOT read-modify-write transactions.
+pub mod field_clear_modify {
+
+    /// Clear one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[TX_ACK_TIMEOUT, TX_ACK_COEXISTENCE_BREAK]` while preserving the fresh register observation.
+    #[inline]
+    pub fn disable_ieee802154_rx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|reader, writer| {
+            let input = 0x00028000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer
+                .tx_ack_timeout()
+                .bit(reader.tx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
+                .tx_ack_coexistence_break()
+                .bit(reader.tx_ack_coexistence_break().bit() && ((input >> 17) & 0x00000001) == 0)
+        });
+    }
+
+    /// Clear one reviewed logical image in IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` while preserving the fresh register observation.
+    #[inline]
+    pub fn disable_ieee802154_rx_abort_all(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|reader, writer| {
+            let input = 0x7fffffff_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_stop()
+                    .bit(reader.rx_stop().bit() && (input & 0x00000001) == 0)
+                    .sfd_timeout()
+                    .bit(reader.sfd_timeout().bit() && ((input >> 1) & 0x00000001) == 0)
+                    .crc_error()
+                    .bit(reader.crc_error().bit() && ((input >> 2) & 0x00000001) == 0)
+                    .invalid_length()
+                    .bit(reader.invalid_length().bit() && ((input >> 3) & 0x00000001) == 0)
+                    .filter_fail()
+                    .bit(reader.filter_fail().bit() && ((input >> 4) & 0x00000001) == 0)
+                    .no_rss()
+                    .bit(reader.no_rss().bit() && ((input >> 5) & 0x00000001) == 0)
+                    .coexistence_break()
+                    .bit(reader.coexistence_break().bit() && ((input >> 6) & 0x00000001) == 0)
+                    .unexpected_ack()
+                    .bit(reader.unexpected_ack().bit() && ((input >> 7) & 0x00000001) == 0)
+                    .rx_restart()
+                    .bit(reader.rx_restart().bit() && ((input >> 8) & 0x00000001) == 0)
+                    .bits_9_14_opaque()
+                    .bits(reader.bits_9_14_opaque().bits() & !((input >> 9) & 0x0000003f) as u8)
+                    .tx_ack_timeout()
+                    .bit(reader.tx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
+                    .tx_ack_stop()
+                    .bit(reader.tx_ack_stop().bit() && ((input >> 16) & 0x00000001) == 0)
+                    .tx_ack_coexistence_break()
+                    .bit(
+                        reader.tx_ack_coexistence_break().bit()
+                            && ((input >> 17) & 0x00000001) == 0,
+                    )
+                    .enhanced_ack_security_error()
+                    .bit(
+                        reader.enhanced_ack_security_error().bit()
+                            && ((input >> 18) & 0x00000001) == 0,
+                    )
+                    .bits_19_22_opaque()
+                    .bits(reader.bits_19_22_opaque().bits() & !((input >> 19) & 0x0000000f) as u8)
+                    .ed_abort()
+                    .bit(reader.ed_abort().bit() && ((input >> 23) & 0x00000001) == 0)
+                    .ed_stop()
+                    .bit(reader.ed_stop().bit() && ((input >> 24) & 0x00000001) == 0)
+                    .ed_coexistence_reject()
+                    .bit(reader.ed_coexistence_reject().bit() && ((input >> 25) & 0x00000001) == 0)
+                    .bits_26_30_opaque()
+                    .bits(reader.bits_26_30_opaque().bits() & !((input >> 26) & 0x0000001f) as u8)
+            }
+        });
+    }
+
+    /// Clear one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_TIMEOUT, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, CCA_FAILED, CCA_BUSY]` while preserving the fresh register observation.
+    #[inline]
+    pub fn disable_ieee802154_tx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.tx_abort_enable().modify(|reader, writer| {
+            let input = 0x01868000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            writer
+                .rx_ack_timeout()
+                .bit(reader.rx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
+                .tx_coexistence_break()
+                .bit(reader.tx_coexistence_break().bit() && ((input >> 17) & 0x00000001) == 0)
+                .tx_security_error()
+                .bit(reader.tx_security_error().bit() && ((input >> 18) & 0x00000001) == 0)
+                .cca_failed()
+                .bit(reader.cca_failed().bit() && ((input >> 23) & 0x00000001) == 0)
+                .cca_busy()
+                .bit(reader.cca_busy().bit() && ((input >> 24) & 0x00000001) == 0)
+        });
+    }
+
+    /// Clear one reviewed logical image in IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` while preserving the fresh register observation.
+    #[inline]
+    pub fn disable_ieee802154_tx_abort_all(registers: &crate::Ieee802154Mac) {
+        registers.tx_abort_enable().modify(|reader, writer| {
+            let input = 0x7fffffff_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_ack_stop()
+                    .bit(reader.rx_ack_stop().bit() && (input & 0x00000001) == 0)
+                    .rx_ack_sfd_timeout()
+                    .bit(reader.rx_ack_sfd_timeout().bit() && ((input >> 1) & 0x00000001) == 0)
+                    .rx_ack_crc_error()
+                    .bit(reader.rx_ack_crc_error().bit() && ((input >> 2) & 0x00000001) == 0)
+                    .rx_ack_invalid_length()
+                    .bit(reader.rx_ack_invalid_length().bit() && ((input >> 3) & 0x00000001) == 0)
+                    .rx_ack_filter_fail()
+                    .bit(reader.rx_ack_filter_fail().bit() && ((input >> 4) & 0x00000001) == 0)
+                    .rx_ack_no_rss()
+                    .bit(reader.rx_ack_no_rss().bit() && ((input >> 5) & 0x00000001) == 0)
+                    .rx_ack_coexistence_break()
+                    .bit(
+                        reader.rx_ack_coexistence_break().bit() && ((input >> 6) & 0x00000001) == 0,
+                    )
+                    .rx_ack_type_not_ack()
+                    .bit(reader.rx_ack_type_not_ack().bit() && ((input >> 7) & 0x00000001) == 0)
+                    .rx_ack_restart()
+                    .bit(reader.rx_ack_restart().bit() && ((input >> 8) & 0x00000001) == 0)
+                    .bits_9_14_opaque()
+                    .bits(reader.bits_9_14_opaque().bits() & !((input >> 9) & 0x0000003f) as u8)
+                    .rx_ack_timeout()
+                    .bit(reader.rx_ack_timeout().bit() && ((input >> 15) & 0x00000001) == 0)
+                    .tx_stop()
+                    .bit(reader.tx_stop().bit() && ((input >> 16) & 0x00000001) == 0)
+                    .tx_coexistence_break()
+                    .bit(reader.tx_coexistence_break().bit() && ((input >> 17) & 0x00000001) == 0)
+                    .tx_security_error()
+                    .bit(reader.tx_security_error().bit() && ((input >> 18) & 0x00000001) == 0)
+                    .bits_19_22_opaque()
+                    .bits(reader.bits_19_22_opaque().bits() & !((input >> 19) & 0x0000000f) as u8)
+                    .cca_failed()
+                    .bit(reader.cca_failed().bit() && ((input >> 23) & 0x00000001) == 0)
+                    .cca_busy()
+                    .bit(reader.cca_busy().bit() && ((input >> 24) & 0x00000001) == 0)
+                    .bits_25_30_opaque()
+                    .bits(reader.bits_25_30_opaque().bits() & !((input >> 25) & 0x0000003f) as u8)
+            }
         });
     }
 }
@@ -13058,6 +13721,157 @@ pub mod field_replace_modify {
             // SAFETY: generator validation proves every logical input projection
             // fits its named SVD field; no whole-register image crosses this API.
             writer.bit_8_opaque().bit((input & 0x00000001) != 0)
+        });
+    }
+
+    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn replace_ieee802154_rx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|_, writer| {
+            let input = 0x00028000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_stop()
+                    .bit((input & 0x00000001) != 0)
+                    .sfd_timeout()
+                    .bit(((input >> 1) & 0x00000001) != 0)
+                    .crc_error()
+                    .bit(((input >> 2) & 0x00000001) != 0)
+                    .invalid_length()
+                    .bit(((input >> 3) & 0x00000001) != 0)
+                    .filter_fail()
+                    .bit(((input >> 4) & 0x00000001) != 0)
+                    .no_rss()
+                    .bit(((input >> 5) & 0x00000001) != 0)
+                    .coexistence_break()
+                    .bit(((input >> 6) & 0x00000001) != 0)
+                    .unexpected_ack()
+                    .bit(((input >> 7) & 0x00000001) != 0)
+                    .rx_restart()
+                    .bit(((input >> 8) & 0x00000001) != 0)
+                    .bits_9_14_opaque()
+                    .bits(((input >> 9) & 0x0000003f) as u8)
+                    .tx_ack_timeout()
+                    .bit(((input >> 15) & 0x00000001) != 0)
+                    .tx_ack_stop()
+                    .bit(((input >> 16) & 0x00000001) != 0)
+                    .tx_ack_coexistence_break()
+                    .bit(((input >> 17) & 0x00000001) != 0)
+                    .enhanced_ack_security_error()
+                    .bit(((input >> 18) & 0x00000001) != 0)
+                    .bits_19_22_opaque()
+                    .bits(((input >> 19) & 0x0000000f) as u8)
+                    .ed_abort()
+                    .bit(((input >> 23) & 0x00000001) != 0)
+                    .ed_stop()
+                    .bit(((input >> 24) & 0x00000001) != 0)
+                    .ed_coexistence_reject()
+                    .bit(((input >> 25) & 0x00000001) != 0)
+                    .bits_26_30_opaque()
+                    .bits(((input >> 26) & 0x0000001f) as u8)
+            }
+        });
+    }
+
+    /// Replace IEEE802154_MAC.RX_ABORT_ENABLE fields `[RX_STOP, SFD_TIMEOUT, CRC_ERROR, INVALID_LENGTH, FILTER_FAIL, NO_RSS, COEXISTENCE_BREAK, UNEXPECTED_ACK, RX_RESTART, BITS_9_14_OPAQUE, TX_ACK_TIMEOUT, TX_ACK_STOP, TX_ACK_COEXISTENCE_BREAK, ENHANCED_ACK_SECURITY_ERROR, BITS_19_22_OPAQUE, ED_ABORT, ED_STOP, ED_COEXISTENCE_REJECT, BITS_26_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::Ieee802154Mac) {
+        registers.rx_abort_enable().modify(|_, writer| {
+            let input = 0x03800000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_stop()
+                    .bit((input & 0x00000001) != 0)
+                    .sfd_timeout()
+                    .bit(((input >> 1) & 0x00000001) != 0)
+                    .crc_error()
+                    .bit(((input >> 2) & 0x00000001) != 0)
+                    .invalid_length()
+                    .bit(((input >> 3) & 0x00000001) != 0)
+                    .filter_fail()
+                    .bit(((input >> 4) & 0x00000001) != 0)
+                    .no_rss()
+                    .bit(((input >> 5) & 0x00000001) != 0)
+                    .coexistence_break()
+                    .bit(((input >> 6) & 0x00000001) != 0)
+                    .unexpected_ack()
+                    .bit(((input >> 7) & 0x00000001) != 0)
+                    .rx_restart()
+                    .bit(((input >> 8) & 0x00000001) != 0)
+                    .bits_9_14_opaque()
+                    .bits(((input >> 9) & 0x0000003f) as u8)
+                    .tx_ack_timeout()
+                    .bit(((input >> 15) & 0x00000001) != 0)
+                    .tx_ack_stop()
+                    .bit(((input >> 16) & 0x00000001) != 0)
+                    .tx_ack_coexistence_break()
+                    .bit(((input >> 17) & 0x00000001) != 0)
+                    .enhanced_ack_security_error()
+                    .bit(((input >> 18) & 0x00000001) != 0)
+                    .bits_19_22_opaque()
+                    .bits(((input >> 19) & 0x0000000f) as u8)
+                    .ed_abort()
+                    .bit(((input >> 23) & 0x00000001) != 0)
+                    .ed_stop()
+                    .bit(((input >> 24) & 0x00000001) != 0)
+                    .ed_coexistence_reject()
+                    .bit(((input >> 25) & 0x00000001) != 0)
+                    .bits_26_30_opaque()
+                    .bits(((input >> 26) & 0x0000001f) as u8)
+            }
+        });
+    }
+
+    /// Replace IEEE802154_MAC.TX_ABORT_ENABLE fields `[RX_ACK_STOP, RX_ACK_SFD_TIMEOUT, RX_ACK_CRC_ERROR, RX_ACK_INVALID_LENGTH, RX_ACK_FILTER_FAIL, RX_ACK_NO_RSS, RX_ACK_COEXISTENCE_BREAK, RX_ACK_TYPE_NOT_ACK, RX_ACK_RESTART, BITS_9_14_OPAQUE, RX_ACK_TIMEOUT, TX_STOP, TX_COEXISTENCE_BREAK, TX_SECURITY_ERROR, BITS_19_22_OPAQUE, CCA_FAILED, CCA_BUSY, BITS_25_30_OPAQUE]` from one reviewed logical image while preserving every other bit.
+    #[inline]
+    pub fn replace_ieee802154_tx_abort_baseline(registers: &crate::Ieee802154Mac) {
+        registers.tx_abort_enable().modify(|_, writer| {
+            let input = 0x01868000_u32;
+            // SAFETY: generator validation proves every logical input projection
+            // fits its named SVD field; no whole-register image crosses this API.
+            unsafe {
+                writer
+                    .rx_ack_stop()
+                    .bit((input & 0x00000001) != 0)
+                    .rx_ack_sfd_timeout()
+                    .bit(((input >> 1) & 0x00000001) != 0)
+                    .rx_ack_crc_error()
+                    .bit(((input >> 2) & 0x00000001) != 0)
+                    .rx_ack_invalid_length()
+                    .bit(((input >> 3) & 0x00000001) != 0)
+                    .rx_ack_filter_fail()
+                    .bit(((input >> 4) & 0x00000001) != 0)
+                    .rx_ack_no_rss()
+                    .bit(((input >> 5) & 0x00000001) != 0)
+                    .rx_ack_coexistence_break()
+                    .bit(((input >> 6) & 0x00000001) != 0)
+                    .rx_ack_type_not_ack()
+                    .bit(((input >> 7) & 0x00000001) != 0)
+                    .rx_ack_restart()
+                    .bit(((input >> 8) & 0x00000001) != 0)
+                    .bits_9_14_opaque()
+                    .bits(((input >> 9) & 0x0000003f) as u8)
+                    .rx_ack_timeout()
+                    .bit(((input >> 15) & 0x00000001) != 0)
+                    .tx_stop()
+                    .bit(((input >> 16) & 0x00000001) != 0)
+                    .tx_coexistence_break()
+                    .bit(((input >> 17) & 0x00000001) != 0)
+                    .tx_security_error()
+                    .bit(((input >> 18) & 0x00000001) != 0)
+                    .bits_19_22_opaque()
+                    .bits(((input >> 19) & 0x0000000f) as u8)
+                    .cca_failed()
+                    .bit(((input >> 23) & 0x00000001) != 0)
+                    .cca_busy()
+                    .bit(((input >> 24) & 0x00000001) != 0)
+                    .bits_25_30_opaque()
+                    .bits(((input >> 25) & 0x0000003f) as u8)
+            }
         });
     }
 }

@@ -11164,3 +11164,102 @@ name = "radio_phy_register_image"
 partition = "RadioPhyPeripherals"
 exposure = "facade"
 sources = ["HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27"]
+
+[[field-or-modifies]]
+name = "enable_ieee802154_rx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }]
+value = 0x00028000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-or-modifies]]
+name = "enable_ieee802154_rx_abort_all"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "RX_STOP", source-bit-offset = 0 }, { field = "SFD_TIMEOUT", source-bit-offset = 1 }, { field = "CRC_ERROR", source-bit-offset = 2 }, { field = "INVALID_LENGTH", source-bit-offset = 3 }, { field = "FILTER_FAIL", source-bit-offset = 4 }, { field = "NO_RSS", source-bit-offset = 5 }, { field = "COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "RX_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_STOP", source-bit-offset = 16 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "ED_ABORT", source-bit-offset = 23 }, { field = "ED_STOP", source-bit-offset = 24 }, { field = "ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "BITS_26_30_OPAQUE", source-bit-offset = 26 }]
+value = 0x7fffffff
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-clear-modifies]]
+name = "disable_ieee802154_rx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }]
+value = 0x00028000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-clear-modifies]]
+name = "disable_ieee802154_rx_abort_all"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "RX_STOP", source-bit-offset = 0 }, { field = "SFD_TIMEOUT", source-bit-offset = 1 }, { field = "CRC_ERROR", source-bit-offset = 2 }, { field = "INVALID_LENGTH", source-bit-offset = 3 }, { field = "FILTER_FAIL", source-bit-offset = 4 }, { field = "NO_RSS", source-bit-offset = 5 }, { field = "COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "RX_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_STOP", source-bit-offset = 16 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "ED_ABORT", source-bit-offset = 23 }, { field = "ED_STOP", source-bit-offset = 24 }, { field = "ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "BITS_26_30_OPAQUE", source-bit-offset = 26 }]
+value = 0x7fffffff
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-replace-modifies]]
+name = "replace_ieee802154_rx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "RX_STOP", source-bit-offset = 0 }, { field = "SFD_TIMEOUT", source-bit-offset = 1 }, { field = "CRC_ERROR", source-bit-offset = 2 }, { field = "INVALID_LENGTH", source-bit-offset = 3 }, { field = "FILTER_FAIL", source-bit-offset = 4 }, { field = "NO_RSS", source-bit-offset = 5 }, { field = "COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "RX_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_STOP", source-bit-offset = 16 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "ED_ABORT", source-bit-offset = 23 }, { field = "ED_STOP", source-bit-offset = 24 }, { field = "ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "BITS_26_30_OPAQUE", source-bit-offset = 26 }]
+value = 0x00028000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-replace-modifies]]
+name = "replace_ieee802154_rx_abort_ed_operation"
+peripheral = "IEEE802154_MAC"
+register = "RX_ABORT_ENABLE"
+fields = [{ field = "RX_STOP", source-bit-offset = 0 }, { field = "SFD_TIMEOUT", source-bit-offset = 1 }, { field = "CRC_ERROR", source-bit-offset = 2 }, { field = "INVALID_LENGTH", source-bit-offset = 3 }, { field = "FILTER_FAIL", source-bit-offset = 4 }, { field = "NO_RSS", source-bit-offset = 5 }, { field = "COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "UNEXPECTED_ACK", source-bit-offset = 7 }, { field = "RX_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "TX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_ACK_STOP", source-bit-offset = 16 }, { field = "TX_ACK_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "ENHANCED_ACK_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "ED_ABORT", source-bit-offset = 23 }, { field = "ED_STOP", source-bit-offset = 24 }, { field = "ED_COEXISTENCE_REJECT", source-bit-offset = 25 }, { field = "BITS_26_30_OPAQUE", source-bit-offset = 26 }]
+value = 0x03800000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-or-modifies]]
+name = "enable_ieee802154_tx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "TX_ABORT_ENABLE"
+fields = [{ field = "RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "CCA_FAILED", source-bit-offset = 23 }, { field = "CCA_BUSY", source-bit-offset = 24 }]
+value = 0x01868000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-or-modifies]]
+name = "enable_ieee802154_tx_abort_all"
+peripheral = "IEEE802154_MAC"
+register = "TX_ABORT_ENABLE"
+fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "RX_ACK_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_STOP", source-bit-offset = 16 }, { field = "TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "CCA_FAILED", source-bit-offset = 23 }, { field = "CCA_BUSY", source-bit-offset = 24 }, { field = "BITS_25_30_OPAQUE", source-bit-offset = 25 }]
+value = 0x7fffffff
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-clear-modifies]]
+name = "disable_ieee802154_tx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "TX_ABORT_ENABLE"
+fields = [{ field = "RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "CCA_FAILED", source-bit-offset = 23 }, { field = "CCA_BUSY", source-bit-offset = 24 }]
+value = 0x01868000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-clear-modifies]]
+name = "disable_ieee802154_tx_abort_all"
+peripheral = "IEEE802154_MAC"
+register = "TX_ABORT_ENABLE"
+fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "RX_ACK_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_STOP", source-bit-offset = 16 }, { field = "TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "CCA_FAILED", source-bit-offset = 23 }, { field = "CCA_BUSY", source-bit-offset = 24 }, { field = "BITS_25_30_OPAQUE", source-bit-offset = 25 }]
+value = 0x7fffffff
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]
+
+[[field-replace-modifies]]
+name = "replace_ieee802154_tx_abort_baseline"
+peripheral = "IEEE802154_MAC"
+register = "TX_ABORT_ENABLE"
+fields = [{ field = "RX_ACK_STOP", source-bit-offset = 0 }, { field = "RX_ACK_SFD_TIMEOUT", source-bit-offset = 1 }, { field = "RX_ACK_CRC_ERROR", source-bit-offset = 2 }, { field = "RX_ACK_INVALID_LENGTH", source-bit-offset = 3 }, { field = "RX_ACK_FILTER_FAIL", source-bit-offset = 4 }, { field = "RX_ACK_NO_RSS", source-bit-offset = 5 }, { field = "RX_ACK_COEXISTENCE_BREAK", source-bit-offset = 6 }, { field = "RX_ACK_TYPE_NOT_ACK", source-bit-offset = 7 }, { field = "RX_ACK_RESTART", source-bit-offset = 8 }, { field = "BITS_9_14_OPAQUE", source-bit-offset = 9 }, { field = "RX_ACK_TIMEOUT", source-bit-offset = 15 }, { field = "TX_STOP", source-bit-offset = 16 }, { field = "TX_COEXISTENCE_BREAK", source-bit-offset = 17 }, { field = "TX_SECURITY_ERROR", source-bit-offset = 18 }, { field = "BITS_19_22_OPAQUE", source-bit-offset = 19 }, { field = "CCA_FAILED", source-bit-offset = 23 }, { field = "CCA_BUSY", source-bit-offset = 24 }, { field = "BITS_25_30_OPAQUE", source-bit-offset = 25 }]
+value = 0x01868000
+exposure = "facade"
+sources = ["esp-idf-7b9cc1ac-ieee802154-common-ll"]

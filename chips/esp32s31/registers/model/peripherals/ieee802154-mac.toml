@@ -573,31 +573,130 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "EVENTS"
+name = "RX_STOP"
+description = "Enable bit of abort reason 1 (rx stop)."
 bitOffset = 0
-bitWidth = 31
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "SFD_TIMEOUT"
+description = "Enable bit of abort reason 2 (sfd timeout)."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CRC_ERROR"
+description = "Enable bit of abort reason 3 (crc error)."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "INVALID_LENGTH"
+description = "Enable bit of abort reason 4 (invalid length)."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "FILTER_FAIL"
+description = "Enable bit of abort reason 5 (filter fail)."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "NO_RSS"
+description = "Enable bit of abort reason 6 (no rss)."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "COEXISTENCE_BREAK"
+description = "Enable bit of abort reason 7 (coexistence break)."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "UNEXPECTED_ACK"
+description = "Enable bit of abort reason 8 (unexpected ack)."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_RESTART"
+description = "Enable bit of abort reason 9 (rx restart)."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_14_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 9
+bitWidth = 6
 
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
-maximum = 0x7fffffff
+maximum = 0x3f
 
-[[peripherals.registers.register.fields.enumeratedValues]]
-usage = "write"
+[[peripherals.registers.register.fields]]
+name = "TX_ACK_TIMEOUT"
+description = "Enable bit of abort reason 16 (tx ack timeout)."
+bitOffset = 15
+bitWidth = 1
 
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "NONE"
-description = "Mask every receive-abort reason."
-value = 0x00000000
+[[peripherals.registers.register.fields]]
+name = "TX_ACK_STOP"
+description = "Enable bit of abort reason 17 (tx ack stop)."
+bitOffset = 16
+bitWidth = 1
 
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "RUNTIME_BASELINE"
-description = "Reviewed receive-abort baseline used by the runtime ISR."
-value = 0x00028000
+[[peripherals.registers.register.fields]]
+name = "TX_ACK_COEXISTENCE_BREAK"
+description = "Enable bit of abort reason 18 (tx ack coexistence break)."
+bitOffset = 17
+bitWidth = 1
 
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "ED_OPERATION_REASONS"
-description = "Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation."
-value = 0x03800000
+[[peripherals.registers.register.fields]]
+name = "ENHANCED_ACK_SECURITY_ERROR"
+description = "Enable bit of abort reason 19 (enhanced ack security error)."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_22_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 19
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xf
+
+[[peripherals.registers.register.fields]]
+name = "ED_ABORT"
+description = "Enable bit of abort reason 24 (ed abort)."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ED_STOP"
+description = "Enable bit of abort reason 25 (ed stop)."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "ED_COEXISTENCE_REJECT"
+description = "Enable bit of abort reason 26 (ed coexistence reject)."
+bitOffset = 25
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_26_30_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 26
+bitWidth = 5
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x1f
 
 [[peripherals.registers]]
 
@@ -650,26 +749,124 @@ size = 32
 access = "read-write"
 
 [[peripherals.registers.register.fields]]
-name = "EVENTS"
+name = "RX_ACK_STOP"
+description = "Enable bit of abort reason 1 (rx ack stop)."
 bitOffset = 0
-bitWidth = 31
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_SFD_TIMEOUT"
+description = "Enable bit of abort reason 2 (rx ack sfd timeout)."
+bitOffset = 1
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_CRC_ERROR"
+description = "Enable bit of abort reason 3 (rx ack crc error)."
+bitOffset = 2
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_INVALID_LENGTH"
+description = "Enable bit of abort reason 4 (rx ack invalid length)."
+bitOffset = 3
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_FILTER_FAIL"
+description = "Enable bit of abort reason 5 (rx ack filter fail)."
+bitOffset = 4
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_NO_RSS"
+description = "Enable bit of abort reason 6 (rx ack no rss)."
+bitOffset = 5
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_COEXISTENCE_BREAK"
+description = "Enable bit of abort reason 7 (rx ack coexistence break)."
+bitOffset = 6
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_TYPE_NOT_ACK"
+description = "Enable bit of abort reason 8 (rx ack type not ack)."
+bitOffset = 7
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_RESTART"
+description = "Enable bit of abort reason 9 (rx ack restart)."
+bitOffset = 8
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_9_14_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 9
+bitWidth = 6
 
 [peripherals.registers.register.fields.writeConstraint.range]
 minimum = 0
-maximum = 0x7fffffff
+maximum = 0x3f
 
-[[peripherals.registers.register.fields.enumeratedValues]]
-usage = "write"
+[[peripherals.registers.register.fields]]
+name = "RX_ACK_TIMEOUT"
+description = "Enable bit of abort reason 16 (rx ack timeout)."
+bitOffset = 15
+bitWidth = 1
 
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "NONE"
-description = "Mask every transmit-abort reason."
-value = 0x00000000
+[[peripherals.registers.register.fields]]
+name = "TX_STOP"
+description = "Enable bit of abort reason 17 (tx stop)."
+bitOffset = 16
+bitWidth = 1
 
-[[peripherals.registers.register.fields.enumeratedValues.values]]
-name = "RUNTIME_BASELINE"
-description = "Reviewed transmit-abort baseline used by the runtime ISR."
-value = 0x01868000
+[[peripherals.registers.register.fields]]
+name = "TX_COEXISTENCE_BREAK"
+description = "Enable bit of abort reason 18 (tx coexistence break)."
+bitOffset = 17
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "TX_SECURITY_ERROR"
+description = "Enable bit of abort reason 19 (tx security error)."
+bitOffset = 18
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_19_22_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 19
+bitWidth = 4
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0xf
+
+[[peripherals.registers.register.fields]]
+name = "CCA_FAILED"
+description = "Enable bit of abort reason 24 (cca failed)."
+bitOffset = 23
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "CCA_BUSY"
+description = "Enable bit of abort reason 25 (cca busy)."
+bitOffset = 24
+bitWidth = 1
+
+[[peripherals.registers.register.fields]]
+name = "BITS_25_30_OPAQUE"
+description = "Abort-reason enable bits without a public vendor reason."
+bitOffset = 25
+bitWidth = 6
+
+[peripherals.registers.register.fields.writeConstraint.range]
+minimum = 0
+maximum = 0x3f
 
 [[peripherals.registers]]
 
@@ -2382,8 +2579,80 @@ entity = "IEEE802154_MAC.WORD_064_BASE.BIT_13_OPAQUE"
 naming = "opaque"
 
 [[review]]
-entity = "IEEE802154_MAC.RX_ABORT_ENABLE.EVENTS"
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.RX_STOP"
 naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.SFD_TIMEOUT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.CRC_ERROR"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.INVALID_LENGTH"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.FILTER_FAIL"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.NO_RSS"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.COEXISTENCE_BREAK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.UNEXPECTED_ACK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.RX_RESTART"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_9_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.TX_ACK_TIMEOUT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.TX_ACK_STOP"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.TX_ACK_COEXISTENCE_BREAK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.ENHANCED_ACK_SECURITY_ERROR"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_19_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.ED_ABORT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.ED_STOP"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.ED_COEXISTENCE_REJECT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.RX_ABORT_ENABLE.BITS_26_30_OPAQUE"
+naming = "opaque"
 
 [[review]]
 entity = "IEEE802154_MAC.PENDING_CONFIG.FRAME_PENDING"
@@ -2398,8 +2667,76 @@ entity = "IEEE802154_MAC.COEX_PTI.ACK_PTI"
 naming = "descriptive"
 
 [[review]]
-entity = "IEEE802154_MAC.TX_ABORT_ENABLE.EVENTS"
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_STOP"
 naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_SFD_TIMEOUT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_CRC_ERROR"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_INVALID_LENGTH"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_FILTER_FAIL"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_NO_RSS"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_COEXISTENCE_BREAK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_TYPE_NOT_ACK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_RESTART"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_9_14_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.RX_ACK_TIMEOUT"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.TX_STOP"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.TX_COEXISTENCE_BREAK"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.TX_SECURITY_ERROR"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_19_22_OPAQUE"
+naming = "opaque"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.CCA_FAILED"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.CCA_BUSY"
+naming = "descriptive"
+
+[[review]]
+entity = "IEEE802154_MAC.TX_ABORT_ENABLE.BITS_25_30_OPAQUE"
+naming = "opaque"
 
 [[review]]
 entity = "IEEE802154_MAC.RX_STATUS.FILTER_FAIL_REASON"

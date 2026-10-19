@@ -255,22 +255,42 @@ impl Ieee802154RegisterLease<'_> {
 
     /// `ieee802154_ll_enable_rx_abort_events`.
     pub fn enable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
-        self.registers.update_rx_abort_enable(set.mask(), true);
+        match set {
+            Ieee802154RxAbortEnableSet::RuntimeBaseline => {
+                self.registers.enable_rx_abort_baseline()
+            }
+            Ieee802154RxAbortEnableSet::All => self.registers.enable_rx_abort_all(),
+        }
     }
 
     /// `ieee802154_ll_disable_rx_abort_events`.
     pub fn disable_rx_aborts(&mut self, set: Ieee802154RxAbortEnableSet) {
-        self.registers.update_rx_abort_enable(set.mask(), false);
+        match set {
+            Ieee802154RxAbortEnableSet::RuntimeBaseline => {
+                self.registers.disable_rx_abort_baseline()
+            }
+            Ieee802154RxAbortEnableSet::All => self.registers.disable_rx_abort_all(),
+        }
     }
 
     /// `ieee802154_ll_enable_tx_abort_events`.
     pub fn enable_tx_aborts(&mut self, set: Ieee802154TxAbortEnableSet) {
-        self.registers.update_tx_abort_enable(set.mask(), true);
+        match set {
+            Ieee802154TxAbortEnableSet::RuntimeBaseline => {
+                self.registers.enable_tx_abort_baseline()
+            }
+            Ieee802154TxAbortEnableSet::All => self.registers.enable_tx_abort_all(),
+        }
     }
 
     /// `ieee802154_ll_disable_tx_abort_events`.
     pub fn disable_tx_aborts(&mut self, set: Ieee802154TxAbortEnableSet) {
-        self.registers.update_tx_abort_enable(set.mask(), false);
+        match set {
+            Ieee802154TxAbortEnableSet::RuntimeBaseline => {
+                self.registers.disable_tx_abort_baseline()
+            }
+            Ieee802154TxAbortEnableSet::All => self.registers.disable_tx_abort_all(),
+        }
     }
 
     /// `ieee802154_ll_get_rx_status`.

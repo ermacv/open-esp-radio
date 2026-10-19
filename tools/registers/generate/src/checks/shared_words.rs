@@ -115,6 +115,7 @@ pub fn radio_registers(svd: &str) -> Result<BTreeMap<(String, String), Vec<u32>>
 /// API policy tables whose transactions store to their registers.
 const WRITE_TRANSACTIONS: &[&str] = &[
     "field-argument-modifies",
+    "field-clear-modifies",
     "field-or-modifies",
     "field-replace-modifies",
     "fixed-register-images",

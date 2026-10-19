@@ -10275,10 +10275,136 @@ scope = []
 register-method = "rx_abort_enable"
 
 [[registers.fields]]
-svd-name = "EVENTS"
-method = "events"
+svd-name = "RX_STOP"
+method = "rx_stop"
 bit-offset = 0
-bit-width = 31
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "SFD_TIMEOUT"
+method = "sfd_timeout"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CRC_ERROR"
+method = "crc_error"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "INVALID_LENGTH"
+method = "invalid_length"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "FILTER_FAIL"
+method = "filter_fail"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "NO_RSS"
+method = "no_rss"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "COEXISTENCE_BREAK"
+method = "coexistence_break"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "UNEXPECTED_ACK"
+method = "unexpected_ack"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_RESTART"
+method = "rx_restart"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_14_OPAQUE"
+method = "bits_9_14_opaque"
+bit-offset = 9
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_TIMEOUT"
+method = "tx_ack_timeout"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_STOP"
+method = "tx_ack_stop"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_ACK_COEXISTENCE_BREAK"
+method = "tx_ack_coexistence_break"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ENHANCED_ACK_SECURITY_ERROR"
+method = "enhanced_ack_security_error"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_19_22_OPAQUE"
+method = "bits_19_22_opaque"
+bit-offset = 19
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_ABORT"
+method = "ed_abort"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_STOP"
+method = "ed_stop"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "ED_COEXISTENCE_REJECT"
+method = "ed_coexistence_reject"
+bit-offset = 25
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_26_30_OPAQUE"
+method = "bits_26_30_opaque"
+bit-offset = 26
+bit-width = 5
 access = "read-write"
 
 [[registers]]
@@ -10336,10 +10462,129 @@ scope = []
 register-method = "tx_abort_enable"
 
 [[registers.fields]]
-svd-name = "EVENTS"
-method = "events"
+svd-name = "RX_ACK_STOP"
+method = "rx_ack_stop"
 bit-offset = 0
-bit-width = 31
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_SFD_TIMEOUT"
+method = "rx_ack_sfd_timeout"
+bit-offset = 1
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_CRC_ERROR"
+method = "rx_ack_crc_error"
+bit-offset = 2
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_INVALID_LENGTH"
+method = "rx_ack_invalid_length"
+bit-offset = 3
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_FILTER_FAIL"
+method = "rx_ack_filter_fail"
+bit-offset = 4
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_NO_RSS"
+method = "rx_ack_no_rss"
+bit-offset = 5
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_COEXISTENCE_BREAK"
+method = "rx_ack_coexistence_break"
+bit-offset = 6
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_TYPE_NOT_ACK"
+method = "rx_ack_type_not_ack"
+bit-offset = 7
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_RESTART"
+method = "rx_ack_restart"
+bit-offset = 8
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_9_14_OPAQUE"
+method = "bits_9_14_opaque"
+bit-offset = 9
+bit-width = 6
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "RX_ACK_TIMEOUT"
+method = "rx_ack_timeout"
+bit-offset = 15
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_STOP"
+method = "tx_stop"
+bit-offset = 16
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_COEXISTENCE_BREAK"
+method = "tx_coexistence_break"
+bit-offset = 17
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "TX_SECURITY_ERROR"
+method = "tx_security_error"
+bit-offset = 18
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_19_22_OPAQUE"
+method = "bits_19_22_opaque"
+bit-offset = 19
+bit-width = 4
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CCA_FAILED"
+method = "cca_failed"
+bit-offset = 23
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "CCA_BUSY"
+method = "cca_busy"
+bit-offset = 24
+bit-width = 1
+access = "read-write"
+
+[[registers.fields]]
+svd-name = "BITS_25_30_OPAQUE"
+method = "bits_25_30_opaque"
+bit-offset = 25
+bit-width = 6
 access = "read-write"
 
 [[registers]]

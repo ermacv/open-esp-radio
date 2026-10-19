@@ -25445,34 +25445,136 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
           <access>read-write</access>
           <fields>
             <field>
-              <name>EVENTS</name>
-              <description>Project-assigned name.</description>
+              <name>RX_STOP</name>
+              <description>Project-assigned name. Enable bit of abort reason 1 (rx stop).</description>
               <bitOffset>0</bitOffset>
-              <bitWidth>31</bitWidth>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>SFD_TIMEOUT</name>
+              <description>Project-assigned name. Enable bit of abort reason 2 (sfd timeout).</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CRC_ERROR</name>
+              <description>Project-assigned name. Enable bit of abort reason 3 (crc error).</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>INVALID_LENGTH</name>
+              <description>Project-assigned name. Enable bit of abort reason 4 (invalid length).</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>FILTER_FAIL</name>
+              <description>Project-assigned name. Enable bit of abort reason 5 (filter fail).</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>NO_RSS</name>
+              <description>Project-assigned name. Enable bit of abort reason 6 (no rss).</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>COEXISTENCE_BREAK</name>
+              <description>Project-assigned name. Enable bit of abort reason 7 (coexistence break).</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>UNEXPECTED_ACK</name>
+              <description>Project-assigned name. Enable bit of abort reason 8 (unexpected ack).</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_RESTART</name>
+              <description>Project-assigned name. Enable bit of abort reason 9 (rx restart).</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_9_14_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>6</bitWidth>
               <writeConstraint>
                 <range>
                   <minimum>0</minimum>
-                  <maximum>2147483647</maximum>
+                  <maximum>63</maximum>
                 </range>
               </writeConstraint>
-              <enumeratedValues>
-                <usage>write</usage>
-                <enumeratedValue>
-                  <name>NONE</name>
-                  <description>Mask every receive-abort reason.</description>
-                  <value>0</value>
-                </enumeratedValue>
-                <enumeratedValue>
-                  <name>RUNTIME_BASELINE</name>
-                  <description>Reviewed receive-abort baseline used by the runtime ISR.</description>
-                  <value>163840</value>
-                </enumeratedValue>
-                <enumeratedValue>
-                  <name>ED_OPERATION_REASONS</name>
-                  <description>Enable ED abort, ED stop, and ED coexistence rejection for one finite ED or CCA operation.</description>
-                  <value>58720256</value>
-                </enumeratedValue>
-              </enumeratedValues>
+            </field>
+            <field>
+              <name>TX_ACK_TIMEOUT</name>
+              <description>Project-assigned name. Enable bit of abort reason 16 (tx ack timeout).</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_ACK_STOP</name>
+              <description>Project-assigned name. Enable bit of abort reason 17 (tx ack stop).</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_ACK_COEXISTENCE_BREAK</name>
+              <description>Project-assigned name. Enable bit of abort reason 18 (tx ack coexistence break).</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ENHANCED_ACK_SECURITY_ERROR</name>
+              <description>Project-assigned name. Enable bit of abort reason 19 (enhanced ack security error).</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_19_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>15</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>ED_ABORT</name>
+              <description>Project-assigned name. Enable bit of abort reason 24 (ed abort).</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ED_STOP</name>
+              <description>Project-assigned name. Enable bit of abort reason 25 (ed stop).</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>ED_COEXISTENCE_REJECT</name>
+              <description>Project-assigned name. Enable bit of abort reason 26 (ed coexistence reject).</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_26_30_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>5</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>31</maximum>
+                </range>
+              </writeConstraint>
             </field>
           </fields>
         </register>
@@ -25532,29 +25634,130 @@ Bluetooth or assign a wider ZBBB protocol meaning.</description>
           <access>read-write</access>
           <fields>
             <field>
-              <name>EVENTS</name>
-              <description>Project-assigned name.</description>
+              <name>RX_ACK_STOP</name>
+              <description>Project-assigned name. Enable bit of abort reason 1 (rx ack stop).</description>
               <bitOffset>0</bitOffset>
-              <bitWidth>31</bitWidth>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_SFD_TIMEOUT</name>
+              <description>Project-assigned name. Enable bit of abort reason 2 (rx ack sfd timeout).</description>
+              <bitOffset>1</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_CRC_ERROR</name>
+              <description>Project-assigned name. Enable bit of abort reason 3 (rx ack crc error).</description>
+              <bitOffset>2</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_INVALID_LENGTH</name>
+              <description>Project-assigned name. Enable bit of abort reason 4 (rx ack invalid length).</description>
+              <bitOffset>3</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_FILTER_FAIL</name>
+              <description>Project-assigned name. Enable bit of abort reason 5 (rx ack filter fail).</description>
+              <bitOffset>4</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_NO_RSS</name>
+              <description>Project-assigned name. Enable bit of abort reason 6 (rx ack no rss).</description>
+              <bitOffset>5</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_COEXISTENCE_BREAK</name>
+              <description>Project-assigned name. Enable bit of abort reason 7 (rx ack coexistence break).</description>
+              <bitOffset>6</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_TYPE_NOT_ACK</name>
+              <description>Project-assigned name. Enable bit of abort reason 8 (rx ack type not ack).</description>
+              <bitOffset>7</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>RX_ACK_RESTART</name>
+              <description>Project-assigned name. Enable bit of abort reason 9 (rx ack restart).</description>
+              <bitOffset>8</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_9_14_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>9</bitOffset>
+              <bitWidth>6</bitWidth>
               <writeConstraint>
                 <range>
                   <minimum>0</minimum>
-                  <maximum>2147483647</maximum>
+                  <maximum>63</maximum>
                 </range>
               </writeConstraint>
-              <enumeratedValues>
-                <usage>write</usage>
-                <enumeratedValue>
-                  <name>NONE</name>
-                  <description>Mask every transmit-abort reason.</description>
-                  <value>0</value>
-                </enumeratedValue>
-                <enumeratedValue>
-                  <name>RUNTIME_BASELINE</name>
-                  <description>Reviewed transmit-abort baseline used by the runtime ISR.</description>
-                  <value>25591808</value>
-                </enumeratedValue>
-              </enumeratedValues>
+            </field>
+            <field>
+              <name>RX_ACK_TIMEOUT</name>
+              <description>Project-assigned name. Enable bit of abort reason 16 (rx ack timeout).</description>
+              <bitOffset>15</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_STOP</name>
+              <description>Project-assigned name. Enable bit of abort reason 17 (tx stop).</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_COEXISTENCE_BREAK</name>
+              <description>Project-assigned name. Enable bit of abort reason 18 (tx coexistence break).</description>
+              <bitOffset>17</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>TX_SECURITY_ERROR</name>
+              <description>Project-assigned name. Enable bit of abort reason 19 (tx security error).</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_19_22_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>19</bitOffset>
+              <bitWidth>4</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>15</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>CCA_FAILED</name>
+              <description>Project-assigned name. Enable bit of abort reason 24 (cca failed).</description>
+              <bitOffset>23</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>CCA_BUSY</name>
+              <description>Project-assigned name. Enable bit of abort reason 25 (cca busy).</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>1</bitWidth>
+            </field>
+            <field>
+              <name>BITS_25_30_OPAQUE</name>
+              <description>Opaque: meaning not established. Abort-reason enable bits without a public vendor reason.</description>
+              <bitOffset>25</bitOffset>
+              <bitWidth>6</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>63</maximum>
+                </range>
+              </writeConstraint>
             </field>
           </fields>
         </register>

@@ -3462,6 +3462,54 @@ pub(crate) fn preserve_bluetooth_memory_list_2_initial_control(
     crate::svd::field_or_modify::preserve_bluetooth_memory_list_2_initial_control(registers);
 }
 
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_rx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_baseline` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `enable_ieee802154_tx_abort_all` fixed field-OR transaction.
+#[inline]
+pub(crate) fn enable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_or_modify::enable_ieee802154_tx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_rx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_rx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_rx_abort_all(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_baseline` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `disable_ieee802154_tx_abort_all` fixed field-clear transaction.
+#[inline]
+pub(crate) fn disable_ieee802154_tx_abort_all(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_clear_modify::disable_ieee802154_tx_abort_all(registers);
+}
+
 /// Typed bridge for the reviewed `configure_bluetooth_cte_six_buffer_limit` fixed field-replacement transaction.
 #[inline]
 pub(crate) fn configure_bluetooth_cte_six_buffer_limit(
@@ -8397,6 +8445,24 @@ pub(crate) fn clear_bluetooth_scheduler_cancellation_control(
     registers: &crate::svd::BluetoothControllerCore,
 ) {
     crate::svd::field_replace_modify::clear_bluetooth_scheduler_cancellation_control(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_baseline(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_rx_abort_ed_operation` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_rx_abort_ed_operation(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_rx_abort_ed_operation(registers);
+}
+
+/// Typed bridge for the reviewed `replace_ieee802154_tx_abort_baseline` fixed field-replacement transaction.
+#[inline]
+pub(crate) fn replace_ieee802154_tx_abort_baseline(registers: &crate::svd::Ieee802154Mac) {
+    crate::svd::field_replace_modify::replace_ieee802154_tx_abort_baseline(registers);
 }
 
 /// Typed bridge for the reviewed `restore_modem_source_clocks` multi-argument field-replacement transaction.

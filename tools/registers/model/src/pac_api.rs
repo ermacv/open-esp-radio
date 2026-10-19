@@ -60,6 +60,9 @@ pub struct PacApiPack {
     pub masked_register_modifies: Vec<MaskedRegisterModify>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_or_modifies: Vec<FieldOrModify>,
+    /// Field-local AND-NOT, the inverse of `field_or_modifies`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_clear_modifies: Vec<FieldOrModify>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_replace_modifies: Vec<FieldReplaceModify>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -609,6 +612,7 @@ impl PacApiPack {
         validate_operations("zero-register-write", &self.zero_register_writes)?;
         validate_operations("masked-register-modify", &self.masked_register_modifies)?;
         validate_operations("field-or-modify", &self.field_or_modifies)?;
+        validate_operations("field-clear-modify", &self.field_clear_modifies)?;
         validate_operations("field-replace-modify", &self.field_replace_modifies)?;
         validate_operations("field-argument-modify", &self.field_argument_modifies)?;
         validate_operations("indexed-bit-set-modify", &self.indexed_bit_set_modifies)?;
@@ -625,10 +629,10 @@ impl PacApiPack {
             }
         }
 
-        for operation in &self.field_or_modifies {
+        for (kind, operation) in self.field_bit_modifies() {
             if operation.fields.is_empty() {
                 return Err(Error::message(format!(
-                    "PAC API field-or-modify {:?} requires at least one field projection",
+                    "PAC API {kind} {:?} requires at least one field projection",
                     operation.name
                 )));
             }
@@ -637,20 +641,20 @@ impl PacApiPack {
                 validate_component("field", &operation.name, &projection.field)?;
                 if !fields.insert(projection.field.as_str()) {
                     return Err(Error::message(format!(
-                        "PAC API field-or-modify {:?} repeats field {:?}",
+                        "PAC API {kind} {:?} repeats field {:?}",
                         operation.name, projection.field
                     )));
                 }
             }
             if operation.domain.is_some() == operation.value.is_some() {
                 return Err(Error::message(format!(
-                    "PAC API field-or-modify {:?} requires exactly one of domain or value",
+                    "PAC API {kind} {:?} requires exactly one of domain or value",
                     operation.name
                 )));
             }
             if !operation.exposure.exposes_facade() && operation.value.is_some() {
                 return Err(Error::message(format!(
-                    "PAC API fixed field-or-modify {:?} must expose its argument-free facade",
+                    "PAC API fixed {kind} {:?} must expose its argument-free facade",
                     operation.name
                 )));
             }
@@ -849,10 +853,10 @@ impl PacApiPack {
                 &domain_names,
             )?;
         }
-        for operation in &self.field_or_modifies {
+        for (kind, operation) in self.field_bit_modifies() {
             if let Some(domain_name) = &operation.domain {
                 self.validate_operation_domain(
-                    "field-or-modify",
+                    kind,
                     &operation.name,
                     &operation.peripheral,
                     &operation.register,
@@ -866,7 +870,7 @@ impl PacApiPack {
                 {
                     if domain.min != 0 {
                         return Err(Error::message(format!(
-                            "PAC API field-or-modify {:?} bounded domain must start at zero",
+                            "PAC API {kind} {:?} bounded domain must start at zero",
                             operation.name
                         )));
                     }
@@ -876,7 +880,7 @@ impl PacApiPack {
                     .any(|candidate| candidate.name == *domain_name)
                 {
                     return Err(Error::message(format!(
-                        "PAC API field-or-modify {:?} requires a bounded or enum domain",
+                        "PAC API {kind} {:?} requires a bounded or enum domain",
                         operation.name
                     )));
                 }
@@ -1192,6 +1196,7 @@ impl PacApiPack {
             + self.zero_register_writes.len()
             + self.masked_register_modifies.len()
             + self.field_or_modifies.len()
+            + self.field_clear_modifies.len()
             + self.field_replace_modifies.len()
             + self.field_argument_modifies.len()
             + self.indexed_bit_set_modifies.len()
@@ -1272,6 +1277,7 @@ impl PacApiPack {
                     .chain(self.zero_register_writes.iter().map(Operation::sources))
                     .chain(self.masked_register_modifies.iter().map(Operation::sources))
                     .chain(self.field_or_modifies.iter().map(Operation::sources))
+                    .chain(self.field_clear_modifies.iter().map(Operation::sources))
                     .chain(self.field_replace_modifies.iter().map(Operation::sources))
                     .chain(self.field_argument_modifies.iter().map(Operation::sources))
                     .chain(self.indexed_bit_set_modifies.iter().map(Operation::sources))
@@ -1309,11 +1315,26 @@ impl PacApiPack {
             zero_register_writes,
             masked_register_modifies,
             field_or_modifies,
+            field_clear_modifies,
             field_replace_modifies,
             field_argument_modifies,
             indexed_bit_set_modifies,
         );
         peripherals
+    }
+
+    /// The OR and AND-NOT field transactions, which share one shape.
+    pub(crate) fn field_bit_modifies(
+        &self,
+    ) -> impl Iterator<Item = (&'static str, &FieldOrModify)> {
+        self.field_or_modifies
+            .iter()
+            .map(|operation| ("field-or-modify", operation))
+            .chain(
+                self.field_clear_modifies
+                    .iter()
+                    .map(|operation| ("field-clear-modify", operation)),
+            )
     }
 
     fn validate_domains(&self) -> Result<()> {
@@ -1856,6 +1877,7 @@ pub(crate) mod tests {
             zero_register_writes: Vec::new(),
             masked_register_modifies: Vec::new(),
             field_or_modifies: Vec::new(),
+            field_clear_modifies: Vec::new(),
             field_replace_modifies: Vec::new(),
             field_argument_modifies: Vec::new(),
             indexed_bit_set_modifies: Vec::new(),
@@ -2040,6 +2062,41 @@ pub(crate) mod tests {
 
         assert!(pack.validate().is_ok());
         pack.bounded_domains[0].min = 1;
+        assert!(pack.validate().is_err());
+    }
+
+    #[test]
+    fn field_clear_modify_shares_the_field_or_modify_rules() {
+        let mut pack = empty_pack();
+        pack.bounded_domains.push(BoundedDomain {
+            name: "FieldInput".to_owned(),
+            description: "Reviewed field-local clear input.".to_owned(),
+            min: 0,
+            max: 0xf,
+            sources: vec!["REVIEW".to_owned()],
+        });
+        pack.field_clear_modifies.push(FieldOrModify {
+            name: "clear_flags".to_owned(),
+            peripheral: "RADIO".to_owned(),
+            register: "FLAGS".to_owned(),
+            fields: vec![FieldOrProjection {
+                field: "FLAGS".to_owned(),
+                source_bit_offset: 0,
+            }],
+            domain: Some("FieldInput".to_owned()),
+            value: None,
+            exposure: PacApiExposure::Facade,
+            sources: vec!["REVIEW".to_owned()],
+        });
+
+        assert!(pack.validate().is_ok());
+        pack.field_clear_modifies[0].value = Some(1);
+        assert!(pack.validate().is_err());
+        pack.field_clear_modifies[0].value = None;
+        pack.bounded_domains[0].min = 1;
+        assert!(pack.validate().is_err());
+        pack.bounded_domains[0].min = 0;
+        pack.field_clear_modifies[0].fields.clear();
         assert!(pack.validate().is_err());
     }
 

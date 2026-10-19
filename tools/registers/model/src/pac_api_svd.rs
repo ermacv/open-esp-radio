@@ -446,7 +446,7 @@ impl PacApiPack {
             require_size_access(&operation.name, binding, Access::ReadWrite, "read-write")?;
             require_ordinary(&operation.name, binding.info)?;
         }
-        for operation in &self.field_or_modifies {
+        for (kind, operation) in self.field_bit_modifies() {
             let binding = writable_register(
                 &device,
                 &operation.name,
@@ -463,7 +463,7 @@ impl PacApiPack {
                     || u32::from(projection.source_bit_offset) + width > 32
                 {
                     return Err(Error::message(format!(
-                        "PAC API field-or-modify {:?} field {:?} has invalid {}-bit projection at source offset {}",
+                        "PAC API {kind} {:?} field {:?} has invalid {}-bit projection at source offset {}",
                         operation.name, projection.field, width, projection.source_bit_offset,
                     )));
                 }
@@ -493,7 +493,7 @@ impl PacApiPack {
             });
             if maximum_input & !source_mask != 0 {
                 return Err(Error::message(format!(
-                    "PAC API field-or-modify {:?} input 0x{maximum_input:08x} exceeds its projected source mask 0x{source_mask:08x}",
+                    "PAC API {kind} {:?} input 0x{maximum_input:08x} exceeds its projected source mask 0x{source_mask:08x}",
                     operation.name,
                 )));
             }

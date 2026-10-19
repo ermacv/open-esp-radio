@@ -275,7 +275,8 @@ impl PacApiPack {
                 value,
             ));
         }
-        for operation in &self.field_or_modifies {
+        for (kind, operation) in self.field_bit_modifies() {
+            let (verb, module) = field_bit_verb(kind);
             if !operation.exposure.exposes_facade() {
                 continue;
             }
@@ -287,7 +288,7 @@ impl PacApiPack {
             if let Some(domain) = &operation.domain {
                 let value = domain_value_expression(domain, &flag_or_enum_domains);
                 output.push_str(&format!(
-                    "/// Typed bridge for the reviewed `{}` field-OR transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, {index_parameter}value: {}) {{\n    crate::svd::field_or_modify::{}(registers, {index_argument}{value});\n}}\n\n",
+                    "/// Typed bridge for the reviewed `{}` {verb} transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, {index_parameter}value: {}) {{\n    crate::svd::{module}::{}(registers, {index_argument}{value});\n}}\n\n",
                     operation.name,
                     operation.name,
                     type_binding_name(&operation.peripheral),
@@ -296,7 +297,7 @@ impl PacApiPack {
                 ));
             } else {
                 output.push_str(&format!(
-                    "/// Typed bridge for the reviewed `{}` fixed field-OR transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, {index_parameter}) {{\n    crate::svd::field_or_modify::{}(registers, {index_argument});\n}}\n\n",
+                    "/// Typed bridge for the reviewed `{}` fixed {verb} transaction.\n#[inline]\npub(crate) fn {}(registers: &crate::svd::{}, {index_parameter}) {{\n    crate::svd::{module}::{}(registers, {index_argument});\n}}\n\n",
                     operation.name,
                     operation.name,
                     type_binding_name(&operation.peripheral),
@@ -523,7 +524,8 @@ impl PacApiPack {
         output.push_str(&self.render_sampled_bit_zero_writes());
         output.push_str(&self.render_zero_register_writes(&device)?);
         output.push_str(&self.render_masked_register_modifies(&device)?);
-        output.push_str(&self.render_field_or_modifies(&device)?);
+        output.push_str(&self.render_field_bit_modifies(&device, "field_or_modify")?);
+        output.push_str(&self.render_field_bit_modifies(&device, "field_clear_modify")?);
         output.push_str(&self.render_field_replace_modifies(&device)?);
         output.push_str(&self.render_field_argument_modifies(&device)?);
         output.push_str(&self.render_indexed_bit_set_modifies(&device)?);
@@ -1437,15 +1439,26 @@ impl PacApiPack {
         Ok(output)
     }
 
-    fn render_field_or_modifies(&self, device: &Device) -> Result<String> {
-        if self.field_or_modifies.is_empty() {
+    fn render_field_bit_modifies(&self, device: &Device, module: &str) -> Result<String> {
+        let clear = module == "field_clear_modify";
+        let bindings = if clear {
+            &self.field_clear_modifies
+        } else {
+            &self.field_or_modifies
+        };
+        if bindings.is_empty() {
             return Ok(String::new());
         }
-        let mut output = String::from(
-            "\n/// Safe, SVD-declared field-local OR read-modify-write transactions.\n\
-             pub mod field_or_modify {\n",
+        let (summary, action) = if clear {
+            ("AND-NOT", "Clear")
+        } else {
+            ("OR", "OR")
+        };
+        let mut output = format!(
+            "\n/// Safe, SVD-declared field-local {summary} read-modify-write transactions.\n\
+             pub mod {module} {{\n",
         );
-        for binding in &self.field_or_modifies {
+        for binding in bindings {
             let peripheral_type = type_binding_name(&binding.peripheral);
             let register = member_binding_name(&binding.register);
             let register_binding = pac_api_svd::register(
@@ -1490,8 +1503,13 @@ impl PacApiPack {
                     format!("(input >> {}) & 0x{mask:08x}", projection.source_bit_offset)
                 };
                 if width == 1 {
+                    let bit = if clear {
+                        format!("reader.{field}().bit() && ({projected}) == 0")
+                    } else {
+                        format!("reader.{field}().bit() || ({projected}) != 0")
+                    };
                     update.push_str(&format!(
-                        "\n                             .{field}().bit(reader.{field}().bit() || ({projected}) != 0)"
+                        "\n                             .{field}().bit({bit})"
                     ));
                 } else {
                     requires_unsafe = true;
@@ -1501,8 +1519,13 @@ impl PacApiPack {
                         17..=32 => projected,
                         _ => unreachable!("SVD validation rejects invalid field widths"),
                     };
+                    let bits = if clear {
+                        format!("reader.{field}().bits() & !{projected}")
+                    } else {
+                        format!("reader.{field}().bits() | {projected}")
+                    };
                     update.push_str(&format!(
-                        "\n                             .{field}().bits(reader.{field}().bits() | {projected})"
+                        "\n                             .{field}().bits({bits})"
                     ));
                 }
             }
@@ -1518,7 +1541,7 @@ impl PacApiPack {
                 .collect::<Vec<_>>()
                 .join(", ");
             output.push_str(&format!(
-                "\n    /// OR one reviewed logical image into {}.{} fields `[{}]` while preserving the fresh register observation.\n\
+                "\n    /// {action} one reviewed logical image in {}.{} fields `[{}]` while preserving the fresh register observation.\n\
                  #[inline]\n\
                  pub fn {}(registers: &crate::{peripheral_type}, {index_parameter}{input_parameter}) {{\n\
                      registers.{register}({index_argument}).modify(|reader, writer| {{\n\
@@ -1854,6 +1877,14 @@ fn remove_dimension_placeholder(value: &str) -> String {
 
 pub(crate) fn member_binding_name(value: &str) -> String {
     remove_dimension_placeholder(value).to_ascii_lowercase()
+}
+
+fn field_bit_verb(kind: &str) -> (&'static str, &'static str) {
+    if kind == "field-clear-modify" {
+        ("field-clear", "field_clear_modify")
+    } else {
+        ("field-OR", "field_or_modify")
+    }
 }
 
 fn type_binding_name(value: &str) -> String {
