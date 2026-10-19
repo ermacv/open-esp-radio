@@ -351,7 +351,10 @@ without an instrument reports fewer keys than its class), and `report
 verify` checks the image's features against it. Each arm's revision is
 checked out in a worktree below `target/hil/ab/<id>/`, which this checkout's
 runner builds the arm's images from (`run --source`) and runs, so both
-revisions must have this checkout's `messages.lock`. For
+revisions must have this checkout's `messages.lock`. An arm builds everything
+from its own tree, the image linker included, so arms older than the commit
+that completes the repository layout move (stage two of
+[docs/repository-layout.md](../../../docs/repository-layout.md)) do not build. For
 every layout seed `1..=K` the preparation round (round 0) runs A, then B,
 building their images and warming the stand up, each run under a lease of
 its own; it is recorded with the `preparation` phase and never paired. The
