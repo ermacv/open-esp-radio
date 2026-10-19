@@ -7,6 +7,7 @@
 use crate::dma_address;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
+use oer_time::{Clock, Duration};
 
 use crate::ieee80211::dma::ring_index::RingIndex;
 
@@ -97,12 +98,62 @@ pub const fn rx_ring_outspans_any_unit(count: usize, buffer: usize) -> bool {
         (None, _) => false,
     }
 }
-/// Exact maximum number of `APPEND_DESCRIPTOR_RELOAD` observations recovered
-/// from `wDev_AppendRxBlocks`.
+/// The longest a reload doorbell may be observed for: a named busy-wait of
+/// known length, at most [`Self::MAX`], that counts against its context's step
+/// bound.
 ///
-/// The source-owned driver exposes each observation separately so an Embassy
-/// integration can yield between them instead of reproducing the ROM spin.
-pub const RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT: u32 = 0x0001_86a1;
+/// The ROM `wDev_AppendRxBlocks` observes the doorbell up to 100 001 times
+/// without a clock. The doorbell clears on the first observation in practice
+/// (the w1 report's `max_attempts`), so this bounds the wait in time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RxReloadSettleLimit(Duration);
+
+impl RxReloadSettleLimit {
+    /// The longest busy-wait a driver may make.
+    pub const MAX: Duration = Duration::from_micros(20);
+
+    /// Reject a zero limit, and one beyond [`Self::MAX`].
+    pub const fn new(limit: Duration) -> Option<Self> {
+        if limit.as_micros() == 0 || limit.as_micros() > Self::MAX.as_micros() {
+            None
+        } else {
+            Some(Self(limit))
+        }
+    }
+
+    /// The limit.
+    pub const fn limit(self) -> Duration {
+        self.0
+    }
+}
+
+/// One reload settle: its limit and the clock that measures it.
+#[derive(Clone, Copy)]
+pub struct RxReloadSettle<'clock> {
+    limit: RxReloadSettleLimit,
+    clock: &'clock dyn Clock,
+}
+
+impl<'clock> RxReloadSettle<'clock> {
+    /// Settle within `limit` as `clock` measures it.
+    pub const fn new(limit: RxReloadSettleLimit, clock: &'clock dyn Clock) -> Self {
+        Self { limit, clock }
+    }
+
+    /// The settle's limit.
+    pub const fn limit(&self) -> RxReloadSettleLimit {
+        self.limit
+    }
+}
+
+impl core::fmt::Debug for RxReloadSettle<'_> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("RxReloadSettle")
+            .field("limit", &self.limit)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct RxSegment<'a> {
@@ -179,9 +230,8 @@ pub struct RxRingTopologySnapshot {
 pub struct RxReloadEvidence {
     /// The most `APPEND_DESCRIPTOR_RELOAD` observations one
     /// [`RxRingLive::complete_pending_reload`] made in this epoch, the one
-    /// which saw the doorbell clear included. It equals
-    /// [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`] once a reload exhausted the
-    /// limit.
+    /// which saw the doorbell clear included. A reload which exhausted its
+    /// [`RxReloadSettle`] counts the observations it made.
     pub max_reload_attempts: u32,
     pub observations: u32,
     pub unknown_upper_with_zero_address: u32,
@@ -2412,28 +2462,32 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// conditional `LAST`, without returning to its scheduler. Yielding after
     /// a pending sample lets a later RX completion replace that cursor epoch.
     ///
-    /// Each doorbell is observed at most [`RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT`]
-    /// times. When it is still pending after the last one, the reload stays
+    /// The doorbells are observed until they clear or `settle`'s limit has
+    /// passed on its clock, counted from the call; the first observation
+    /// always runs. When a doorbell is still pending then, the reload stays
     /// pending in this owner and the call returns `Busy`. Each wait records
     /// its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so
     /// this waits for at most two doorbells.
-    pub fn complete_pending_reload<M: RxDma>(&mut self, mmio: &mut M) -> Result<(), RxRingError> {
+    pub fn complete_pending_reload<M: RxDma>(
+        &mut self,
+        mmio: &mut M,
+        settle: RxReloadSettle<'_>,
+    ) -> Result<(), RxRingError> {
+        let start = settle.clock.now();
         while self.pending_tail().is_some() {
-            let mut settled = false;
-            for attempt in 1..=RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT {
+            let mut attempts = 0_u32;
+            loop {
+                attempts = attempts.saturating_add(1);
                 if mmio.try_with_reload_settled(|_settled| ()).is_some() {
-                    record_maximum(&self.arena.max_reload_attempts, attempt);
-                    settled = true;
+                    record_maximum(&self.arena.max_reload_attempts, attempts);
                     break;
                 }
-            }
-            if !settled {
-                record_maximum(
-                    &self.arena.max_reload_attempts,
-                    RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT,
-                );
-                return Err(RxRingError::Busy);
+                let elapsed = settle.clock.now().saturating_duration_since(start);
+                if elapsed >= settle.limit.limit() {
+                    record_maximum(&self.arena.max_reload_attempts, attempts);
+                    return Err(RxRingError::Busy);
+                }
             }
             self.settle_reload(mmio)?;
         }

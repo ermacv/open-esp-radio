@@ -1,6 +1,6 @@
 use super::*;
 use crate::datapath::DatapathRxProgress;
-use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+use oer_esp32s31_hal::ieee80211::dma::{rx_ring::RxReloadSettle, rx_storage::RxDmaStorage};
 use oer_esp32s31_ieee80211_mac::{
     rx::pool::{RxDmaDeferredStageUnitOutcome, RxStagePool, RxStageTransactionError},
     rx::{PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxDma, RxRingError, RxRingLive},
@@ -41,6 +41,7 @@ pub fn service<
     counters: Counters<'_>,
     hardware: &mut H,
     buffer_full: &mut C,
+    reload_settle: RxReloadSettle<'_>,
     mut hooks: O,
 ) -> Result<DatapathRxProgress, RxStageTransactionError>
 where
@@ -92,7 +93,7 @@ where
     }
     if let Some(append) = released_append {
         recycled_descriptors = append.descriptor_count;
-        if let Err(error) = ring.complete_pending_reload(hardware) {
+        if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
             if O::LOG_ERRORS {
                 hooks.log_busy("entry-reload", error, 0, 0, 0, 0);
             }
@@ -139,7 +140,7 @@ where
         };
         recycled_descriptors = recycled_descriptors.saturating_add(append.descriptor_count);
         deferred_recycled = deferred_recycled.saturating_add(append.descriptor_count);
-        if let Err(error) = ring.complete_pending_reload(hardware) {
+        if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
             if O::LOG_ERRORS {
                 hooks.log_busy("deferred-discard-reload", error, 0, 0, 0, 0);
             }
@@ -440,7 +441,7 @@ where
             // append.
             let reload_started = hooks.now_micros();
             hooks.phase(Phase::Reload);
-            if let Err(error) = ring.complete_pending_reload(hardware) {
+            if let Err(error) = ring.complete_pending_reload(hardware, reload_settle) {
                 if O::LOG_ERRORS {
                     hooks.log_busy("discard-reload", error, 0, 0, 0, 0);
                 }

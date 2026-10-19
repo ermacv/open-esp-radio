@@ -13,8 +13,10 @@
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_completed_word,
     rx_dma::model::RxWalkerModel,
+    rx_ring::{RxReloadSettle, RxReloadSettleLimit},
     rx_storage::{PlacedRxDma, RxDmaStorage},
 };
+use oer_time::{Clock, Duration, Instant};
 
 /// Descriptors of the compared ring.
 const RX_APPEND_COUNT: usize = 4;
@@ -34,6 +36,18 @@ const RECYCLE_FAILED: u32 = 5;
 const NOT_APPENDED: u32 = 6;
 const RELOAD_FAILED: u32 = 7;
 const INVALID_UNIT: u32 = 8;
+
+/// The reload settle's clock: this image has no timer, so each read is one
+/// microsecond later, which bounds the settle at its limit's observations.
+struct OneMicrosecondPerRead(core::cell::Cell<u64>);
+
+impl Clock for OneMicrosecondPerRead {
+    fn now(&self) -> Instant {
+        let now = self.0.get();
+        self.0.set(now.saturating_add(1));
+        Instant::from_micros(now)
+    }
+}
 
 oer_esp32s31_hal::dma_static! {
     static STORAGE: RxDmaStorage<RX_APPEND_COUNT, RX_APPEND_CAPACITY, RX_APPEND_STORAGE> =
@@ -136,9 +150,16 @@ oer_probe_macros::probe! {
             Ok(None) => NO_UNIT,
             Err(_) => UNIT_FAILED,
         };
+        let clock = OneMicrosecondPerRead(core::cell::Cell::new(0));
+        let Some(settle_limit) = RxReloadSettleLimit::new(Duration::from_micros(20)) else {
+            return RELOAD_FAILED;
+        };
         let result = if recycled != 0 {
             recycled
-        } else if ring.complete_pending_reload(engine).is_ok() {
+        } else if ring
+            .complete_pending_reload(engine, RxReloadSettle::new(settle_limit, &clock))
+            .is_ok()
+        {
             0
         } else {
             RELOAD_FAILED

@@ -6,10 +6,10 @@ pub use oer_esp32s31_hal::ieee80211::dma::{
         RxDmaWalkerEnabled, RxDmaWalkerStopped,
     },
     rx_ring::{
-        RX_BUFFER_SENTINEL, RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT, RxCompletedDescriptor,
-        RxCompletedDescriptorFrontier, RxCompletedUnit, RxCompletedUnitFrontier,
-        RxDescriptorSnapshot, RxDmaArenaState, RxDmaBufferAddresses, RxFrozenCursor, RxLiveAppend,
-        RxObservedMask, RxReloadObservation, RxRingError, RxRingHalted, RxRingLive, RxRingStopped,
+        RX_BUFFER_SENTINEL, RxCompletedDescriptor, RxCompletedDescriptorFrontier, RxCompletedUnit,
+        RxCompletedUnitFrontier, RxDescriptorSnapshot, RxDmaArenaState, RxDmaBufferAddresses,
+        RxFrozenCursor, RxLiveAppend, RxObservedMask, RxReloadObservation, RxReloadSettle,
+        RxReloadSettleLimit, RxRingError, RxRingHalted, RxRingLive, RxRingStopped,
         RxRingTopologySnapshot, RxSegment, prepare_recycled_buffer,
     },
 };

@@ -9,10 +9,10 @@
 
 use core::fmt::{self, Write};
 
-use oer_esp32s31_hal::ieee80211::dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
 use oer_esp32s31_ieee80211_driver::rx::{
     control::{WifiRxCause, WifiRxEnd, WifiRxExit, WifiRxQuarantine},
     counters::{WifiRxExhaustion, WifiRxReport},
+    receive::RELOAD_SETTLE_LIMIT,
 };
 use oer_esp32s31_ieee80211_mac::init::MAC_COLD_RX_INTERRUPT_MASK;
 use oer_espressif_executor::poll_timing::CycleHistogram;
@@ -807,8 +807,9 @@ fn block_lines<W: Write>(block: &mut Block<'_, W>, run: &Run<'_>) -> fmt::Result
     ))?;
     let reload = &rx.reload;
     block.line(format_args!(
-        "w1.reload max_attempts={} limit={RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={} walker_on_detached={}",
+        "w1.reload max_attempts={} limit_us={} observations={} reload_rerings={} rering_failures={} base_writes={} reserved_landings={} reserved_late_landings={} walker_on_detached={}",
         reload.max_reload_attempts,
+        RELOAD_SETTLE_LIMIT.limit().as_micros(),
         reload.observations,
         reload.reload_rerings,
         reload.rering_failures,

@@ -2,6 +2,24 @@ extern crate std;
 
 use self::std::boxed::Box;
 use super::*;
+use crate::ieee80211::dma::rx_ring::{RxReloadSettle, RxReloadSettleLimit};
+use oer_time::{Clock, Duration, Instant};
+
+/// A clock which never moves: a reload that settles is never cut short.
+struct Frozen;
+
+impl Clock for Frozen {
+    fn now(&self) -> Instant {
+        Instant::from_micros(0)
+    }
+}
+
+fn frozen_settle() -> RxReloadSettle<'static> {
+    RxReloadSettle::new(
+        RxReloadSettleLimit::new(Duration::from_micros(20)).unwrap(),
+        &Frozen,
+    )
+}
 use crate::ieee80211::dma::{rx_dma::RxDmaBinding, space::HostDma};
 
 /// Place a host storage as a placed static would be.
@@ -913,7 +931,7 @@ fn ring_after_exhausted_reload_rering() -> (
     // It then exhausted the old tail before it followed the new link.
     mmio.clear_operations();
     mmio.set_cursor(base, 1, None);
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("the re-rung doorbell resumes the walker");
     (storage, live, mmio, base)
 }
@@ -985,7 +1003,7 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
     unit.recycle(&mut mmio)
         .expect("live append")
         .expect("returned descriptor");
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("doorbell resumes the walker");
     assert_eq!(mmio.next_descriptor_low, base & ADDRESS_LOW_MASK);
     assert_eq!(live.recycle_start().get(), 1);
@@ -1021,7 +1039,7 @@ fn exhausted_list_reclaims_untouched_prefix_before_terminal_payload() {
         .expect("unit republished");
     assert_eq!(append.head_index.get(), 1);
     assert_eq!(append.descriptor_count, COUNT - 1);
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("doorbell resumes the walker");
     assert_eq!(
         mmio.next_descriptor_low,
@@ -1111,7 +1129,7 @@ fn frozen_last_releases_the_descriptor_equal_to_last() {
     assert_eq!(append.descriptor_count, 1);
     assert!(!storage.descriptors()[0].word0().rx_done());
     assert!(live.observed_mask().is_empty());
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("vendor reload suffix");
     assert_eq!(live.accepted_tail().get(), 0);
     assert!(live.topology_snapshot().valid);
@@ -1259,7 +1277,8 @@ fn a_cursor_of_an_earlier_generation_takes_nothing() {
         .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, stale, 1)
         .unwrap()
         .expect("LAST releases descriptor zero");
-    live.complete_pending_reload(&mut mmio).unwrap();
+    live.complete_pending_reload(&mut mmio, frozen_settle())
+        .unwrap();
     // The append changed the generation. The walker has moved on to one.
     mmio.last_descriptor_low = mmio.next_descriptor_low;
     mmio.next_descriptor_low = 0;
@@ -1360,7 +1379,7 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
         storage.descriptors()[1].word0().rx_done(),
         "the following complete unit must remain a distinct vendor chain"
     );
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("first vendor reload suffix");
 
     let frozen = live.freeze_cursor(&mut mmio).unwrap();
@@ -1381,7 +1400,7 @@ fn frozen_last_unit_reclaim_returns_only_one_vendor_chain() {
         .recycle_completed_unit_through_frozen_last(&mut live, &mut mmio, refreshed, 1)
         .expect("refreshed cursor check")
         .expect("refreshed LAST releases the second vendor unit");
-    live.complete_pending_reload(&mut mmio)
+    live.complete_pending_reload(&mut mmio, frozen_settle())
         .expect("second vendor reload suffix");
     assert!(live.topology_snapshot().valid);
     assert!(live.try_stop(&mut mmio).is_ok());
@@ -1803,7 +1822,8 @@ fn a_chain_longer_than_the_length_field_is_owned_and_recycled() {
         .expect("the frozen LAST releases the chain");
     assert_eq!(append.head_index.get(), 0);
     assert_eq!(append.descriptor_count, 3);
-    live.complete_pending_reload(&mut mmio).unwrap();
+    live.complete_pending_reload(&mut mmio, frozen_settle())
+        .unwrap();
     assert!(live.observed_mask().is_empty());
     for index in 0..3 {
         assert_eq!(
@@ -1858,33 +1878,57 @@ fn ring_with_pending_reload(
 #[test]
 fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
     use crate::ieee80211::dma::rx_dma::model::{RxWalkerModel, RxWalkerOperation};
-    use crate::ieee80211::dma::rx_ring::RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT;
+    use core::cell::Cell;
+
+    /// Each read is one microsecond later.
+    struct Stepping(Cell<u64>);
+
+    impl Clock for Stepping {
+        fn now(&self) -> Instant {
+            let now = self.0.get();
+            self.0.set(now + 1);
+            Instant::from_micros(now)
+        }
+    }
+
     let mut mmio = RxWalkerModel::new();
     let (storage, mut live) = ring_with_pending_reload(&mut mmio);
     mmio.reload_stuck = true;
     mmio.clear_operations();
 
+    let clock = Stepping(Cell::new(100));
+    let settle = RxReloadSettle::new(
+        RxReloadSettleLimit::new(Duration::from_micros(5)).unwrap(),
+        &clock,
+    );
     assert_eq!(
-        live.complete_pending_reload(&mut mmio),
+        live.complete_pending_reload(&mut mmio, settle),
         Err(RxRingError::Busy)
     );
-    assert!(mmio.overflowed(), "every attempt observed the doorbell");
-    assert_eq!(
-        live.reload_evidence().max_reload_attempts,
-        RX_DESCRIPTOR_RELOAD_ATTEMPT_LIMIT
-    );
+    // The start read is 100; the checks read 101..=105, and 105 ends it.
+    assert_eq!(live.reload_evidence().max_reload_attempts, 5);
     assert!(live.reload_pending(), "the append stays pending");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 
     mmio.reload_stuck = false;
     mmio.clear_operations();
-    assert_eq!(live.complete_pending_reload(&mut mmio), Ok(()));
+    assert_eq!(
+        live.complete_pending_reload(&mut mmio, frozen_settle()),
+        Ok(())
+    );
     assert_eq!(
         mmio.operation_count(RxWalkerOperation::ObserveReloadPending),
         1
     );
     assert!(!live.reload_pending());
     assert!(live.try_stop(&mut mmio).is_ok());
+}
+
+#[test]
+fn a_settle_limit_is_nonzero_and_at_most_twenty_microseconds() {
+    assert_eq!(RxReloadSettleLimit::new(Duration::from_micros(0)), None);
+    assert_eq!(RxReloadSettleLimit::new(Duration::from_micros(21)), None);
+    assert!(RxReloadSettleLimit::new(Duration::from_micros(20)).is_some());
 }
 
 #[test]
@@ -1895,7 +1939,8 @@ fn reload_attempts_record_the_largest_observation_count() {
     let (storage, mut live) = ring_with_pending_reload(&mut mmio);
     assert_eq!(live.reload_evidence().max_reload_attempts, 0);
 
-    live.complete_pending_reload(&mut mmio).unwrap();
+    live.complete_pending_reload(&mut mmio, frozen_settle())
+        .unwrap();
     assert_eq!(live.reload_evidence().max_reload_attempts, 4);
     assert!(!live.reload_pending());
 
@@ -1919,7 +1964,8 @@ fn reload_attempts_record_the_largest_observation_count() {
         .unwrap()
         .expect("the frozen LAST releases descriptor one");
     assert!(live.reload_pending());
-    live.complete_pending_reload(&mut mmio).unwrap();
+    live.complete_pending_reload(&mut mmio, frozen_settle())
+        .unwrap();
     assert!(!live.reload_pending());
     assert_eq!(live.reload_evidence().max_reload_attempts, 4);
     assert!(live.try_stop(&mut mmio).is_ok());
@@ -2043,7 +2089,9 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
             .unwrap()
             .expect("all but the walker's LAST append");
         assert_eq!(append.descriptor_count, COUNT - 1, "round {round}");
-        ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+        ring.live
+            .complete_pending_reload(&mut ring.walker, frozen_settle())
+            .unwrap();
         // The doorbell resumed the walker at the old tail's new link.
         assert_eq!(
             ring.walker.next_descriptor_low,
@@ -2285,7 +2333,9 @@ fn exhausted_with_head_returned(lost: u32) -> Walked<4> {
 fn a_lost_doorbell_is_rerung_once_and_counted() {
     use crate::ieee80211::dma::rx_dma::model::RxWalkerOperation;
     let mut ring = exhausted_with_head_returned(1);
-    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    ring.live
+        .complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
     assert_eq!(
         ring.walker
             .operation_count(RxWalkerOperation::RequestReload),
@@ -2304,7 +2354,9 @@ fn a_lost_doorbell_is_rerung_once_and_counted() {
 
     // Without a lost doorbell nothing is re-rung.
     let mut ring = exhausted_with_head_returned(0);
-    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    ring.live
+        .complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
     assert_eq!(
         ring.walker
             .operation_count(RxWalkerOperation::RequestReload),
@@ -2319,7 +2371,8 @@ fn doorbells_that_never_resume_the_walker_fail_closed_after_one_rering() {
     use crate::ieee80211::dma::rx_dma::model::RxWalkerOperation;
     let mut ring = exhausted_with_head_returned(u32::MAX);
     assert_eq!(
-        ring.live.complete_pending_reload(&mut ring.walker),
+        ring.live
+            .complete_pending_reload(&mut ring.walker, frozen_settle()),
         Err(RxRingError::Corrupt)
     );
     assert_eq!(
@@ -2483,7 +2536,9 @@ fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
     }
     assert!(!ring.storage.descriptors()[COUNT - 1].word0().owner());
     // H1: the doorbell follows LAST.next without checking LAST's owner bit.
-    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    ring.live
+        .complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
     assert_eq!(ring.walker.next_descriptor_low, ring.low(0));
     assert_eq!(
         ring.walker
@@ -2542,7 +2597,8 @@ fn a_settled_doorbell_leaving_next_on_a_detached_descriptor_fails_closed() {
     // descriptor.
     ring.walker.next_descriptor_low = ring.low(COUNT - 1);
     assert_eq!(
-        ring.live.complete_pending_reload(&mut ring.walker),
+        ring.live
+            .complete_pending_reload(&mut ring.walker, frozen_settle()),
         Err(RxRingError::Corrupt)
     );
     let evidence = ring.live.reload_evidence();
@@ -2630,7 +2686,9 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
         .unwrap()
         .expect("LAST past descriptor 0 releases its link");
     assert_eq!(append.descriptor_count, 1);
-    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    ring.live
+        .complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
     assert_eq!(ring.walker.next_descriptor_low, ring.low(2));
     assert!(!ring.live.reload_pending());
     assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
@@ -2666,7 +2724,9 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
         .recycle_released_prefix::<COUNT, _>(&mut ring.live, &mut ring.walker)
         .unwrap()
         .expect("all but LAST append");
-    ring.live.complete_pending_reload(&mut ring.walker).unwrap();
+    ring.live
+        .complete_pending_reload(&mut ring.walker, frozen_settle())
+        .unwrap();
     assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
     assert_eq!(ring.live.reload_evidence().walker_on_detached, 0);
     assert_eq!(ring.storage.lifecycle_state(), RxDmaArenaState::Live);
