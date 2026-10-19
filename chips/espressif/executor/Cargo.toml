@@ -9,14 +9,6 @@ description = "Scheduler-free Embassy executor and time driver for Espressif sta
 
 [features]
 default = []
-timer-observation = ["chip"]
-# Count each executor's cycles in its idle wait (`idle_accounting`), from which
-# a per-core CPU load follows. No image enables it and nothing reports the
-# load yet.
-idle-accounting = ["chip"]
-# Histograms of the cycles of each poll of a future or run of a handler
-# (`poll_timing`), read from `mcycle` on the chip.
-poll-timing = ["chip"]
 # The chip of esp-hal; an image selects exactly one.
 esp32s31 = [
     "chip",
@@ -72,7 +64,4 @@ platform = "family"
 family = "espressif"
 # An image selects exactly one chip of esp-hal; each profile builds for its
 # chip's target only.
-supported-feature-profiles = [
-    "esp32s31,timer-observation,idle-accounting,poll-timing",
-    "esp32c5,timer-observation,idle-accounting,poll-timing",
-]
+supported-feature-profiles = ["esp32s31", "esp32c5"]

@@ -19,6 +19,12 @@
 //! `OER-RESULT: fail w1 unconfigured`. No SSID, unmasked BSSID or base MAC is
 //! printed.
 
+// The image declares the profile class in its manifest; `cargo fw` sets the cfg.
+#[cfg(not(oer_profile))]
+compile_error!(
+    "w1 declares the profile class: build it with `cargo fw build w1`, check it with RUSTFLAGS=\"--cfg oer_profile\""
+);
+
 mod irq;
 mod measure;
 mod own;

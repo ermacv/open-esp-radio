@@ -483,16 +483,16 @@ static EMBASSY_EXECUTORS_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
 fn wait_for_work<const SWI: u8>() {
     riscv::interrupt::free(|| {
         if !EMBASSY_WORK_PENDING.0[SWI as usize].load(Ordering::Acquire) {
-            #[cfg(feature = "idle-accounting")]
+            #[cfg(oer_profile)]
             crate::idle_accounting::add_wait(SWI as usize);
-            #[cfg(not(feature = "idle-accounting"))]
+            #[cfg(not(oer_profile))]
             esp_hal::interrupt::wait_for_interrupt();
         }
     });
 }
 
 /// The core executor `executor` runs on, once it runs.
-#[cfg(feature = "idle-accounting")]
+#[cfg(oer_profile)]
 pub(crate) fn executor_core(executor: usize) -> Option<usize> {
     let core = EMBASSY_EXECUTOR_CORE[executor].load(Ordering::Acquire);
     (core != UNASSIGNED_CORE).then_some(core)
@@ -500,7 +500,7 @@ pub(crate) fn executor_core(executor: usize) -> Option<usize> {
 
 /// Raise the software interrupt of the running executor `executor`, waking
 /// its core from its wait.
-#[cfg(feature = "idle-accounting")]
+#[cfg(oer_profile)]
 pub(crate) fn raise(executor: usize) {
     if executor_core(executor).is_some() {
         software_interrupt(executor as u8, true);

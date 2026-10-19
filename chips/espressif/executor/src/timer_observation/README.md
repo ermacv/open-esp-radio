@@ -1,6 +1,6 @@
 # Shared timer observations
 
-The `timer-observation` feature exposes `timer_observation::Window::begin()`.
+Under `cfg(oer_profile)` the crate exposes `timer_observation::Window::begin()`.
 It returns an exclusive local guard, or `None` if the timer is uninitialized or
 another window is active. `finish()` returns aggregate observations; dropping
 the guard disables recording, including cancellation. Neither operation changes

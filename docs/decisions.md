@@ -70,6 +70,16 @@ bounds) live in the code that applies them.
   probe feature. A probe uses the public API where it can; production has no
   item that only a probe uses. CI on main builds the probe images and shows
   the S31 product images unchanged by the hooks.
+- **Instrumentation** is no probe, and its classes share no logic: `trace`
+  (what happened: values and events), `profile` (what execution costs:
+  time, cycles, load) and `debug-control` (knobs that force execution
+  paths). Each compiles under its own cfg (`oer_trace`, `oer_profile`,
+  `oer_debug_control`), which only `cargo fw` sets, for an image that
+  declares the class in its manifest, in a target directory of its own; the
+  classes have no Cargo features (`oer-trace` records under `oer_trace`).
+  Main CI runs the host tests once per class cfg, of the packages whose
+  sources hold code under it, found by search, each cfg in its own target
+  directory. A further mechanism, such as a profiler, is discussed first.
 - **Every package builds**; the workspace has no `exclude` list.
 
 ## Execution

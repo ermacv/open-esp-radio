@@ -241,9 +241,9 @@ fn calibration_clock_invariant_error_restores_the_exact_prelude_phase() {
 fn complete_without_the_registered_marker_rejects_model_extraction() {
     let mut transition = PhyRegisterTransition::with_production_config();
     transition.phase = Some(super::Phase::Complete(PhyRegisterOutcome {
-        #[cfg(feature = "registration-diagnostics")]
+        #[cfg(oer_trace)]
         rf_calibration: None,
-        #[cfg(feature = "registration-diagnostics")]
+        #[cfg(oer_trace)]
         ready_waits: super::ReadyWaitDiagnostics::default(),
         full_calibration_performed: true,
         calibration_path: PhyCalibrationPath::FullUncached,
@@ -564,12 +564,12 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
 fn success_tail_marks_owned_state_before_releasing_radio() {
     let mut transition =
         PhyRegisterTransition::with_production_config_and_calibration(CALIBRATION_IDENTITY, None);
-    #[cfg(feature = "registration-diagnostics")]
+    #[cfg(oer_trace)]
     let diagnostics = Some(super::RfCalibrationDiagnostics {
         charge_pump_locked: false,
         frequency: None,
     });
-    #[cfg(feature = "registration-diagnostics")]
+    #[cfg(oer_trace)]
     {
         transition.rf_calibration = diagnostics;
     }
@@ -635,9 +635,9 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     assert_eq!(
         transition.step_local().unwrap(),
         PhyRegisterLocalStep::Complete(PhyRegisterOutcome {
-            #[cfg(feature = "registration-diagnostics")]
+            #[cfg(oer_trace)]
             rf_calibration: diagnostics,
-            #[cfg(feature = "registration-diagnostics")]
+            #[cfg(oer_trace)]
             ready_waits: super::ReadyWaitDiagnostics::default(),
             full_calibration_performed: true,
             calibration_path: PhyCalibrationPath::FullForCache,

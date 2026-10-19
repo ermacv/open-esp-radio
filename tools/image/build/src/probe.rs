@@ -129,6 +129,8 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
             rust_target: target,
             max_move_bytes: policy.max_move_bytes,
             runtime_environment: Vec::new(),
+            // A probe compiles the probe hooks alone, never a class.
+            instrumentation: crate::instrumentation::Instrumentation::default(),
         },
     )?;
     cargo.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());

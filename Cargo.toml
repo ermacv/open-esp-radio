@@ -326,8 +326,18 @@ critical-section = "1.2.0"
 unsafe_op_in_unsafe_fn = "deny"
 # `oer_probe` compiles the probe hooks of the HAL, PHY, PACs and BLE driver:
 # `cargo fw` sets it for the images of `firmware/probes/` alone, in
-# their own target directory.
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(oer_probe)"] }
+# their own target directory. `oer_trace` (what happened: values and
+# events), `oer_profile` (what execution costs: time, cycles, load) and
+# `oer_debug_control` (knobs that force execution paths) are set by
+# `cargo fw` for an image that declares the class in its manifest
+# (`[package.metadata.open-radio] instrumentation`), also in a target
+# directory of their own.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    "cfg(oer_probe)",
+    "cfg(oer_trace)",
+    "cfg(oer_profile)",
+    "cfg(oer_debug_control)",
+] }
 
 [workspace.lints.clippy]
 # A mutable call inside `debug_assert!` disappears from optimized firmware.

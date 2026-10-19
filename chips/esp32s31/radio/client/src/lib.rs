@@ -105,7 +105,7 @@ pub enum PhyPreparation {
         calibration_path: oer_esp32s31_phy::PhyCalibrationPath,
         micros: u64,
         /// The registration's complete outcome, with its diagnostics.
-        #[cfg(feature = "registration-diagnostics")]
+        #[cfg(oer_trace)]
         outcome: oer_esp32s31_phy::PhyRegisterOutcome,
     },
 }

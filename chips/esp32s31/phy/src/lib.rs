@@ -102,7 +102,7 @@ pub mod wifi_client;
 pub use analog::rfpll::phy_get_rf_cal_version;
 // Value results of registration children that protocol reports and hardware
 // evidence carry. The transitions that produce them stay crate-private.
-#[cfg(feature = "registration-diagnostics")]
+#[cfg(oer_trace)]
 pub use calibration::registration::{
     FrequencyCalibrationDiagnostics, ReadyWaitDiagnostics, RfCalibrationDiagnostics,
     RfpllCalibrationPoint,

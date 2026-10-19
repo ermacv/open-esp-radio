@@ -1,8 +1,7 @@
 //! Each executor's cycles in its idle wait over an explicit window, from
-//! which a per-core CPU load follows. No image enables it and nothing reports
-//! the load yet.
+//! which a per-core CPU load follows. Nothing reports the load yet.
 //!
-//! With `idle-accounting`, an executor's run loop reads the 64-bit `mcycle`
+//! Under `cfg(oer_profile)`, an executor's run loop reads the 64-bit `mcycle`
 //! of its core before and after its `wfi`, with interrupts masked, and adds
 //! the difference to that executor's idle counter. The interrupt that ends
 //! the wait runs only after the second read, so the counter holds the time
