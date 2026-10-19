@@ -8,7 +8,7 @@
 //!
 //! [`acknowledgement`] owns the data PDU header's SN, NESN and MD fields and
 //! the acknowledgement and flow control of a backend that runs them in
-//! software; [`maintenance`] reads received headers through it.
+//! software.
 
 use core::num::NonZeroU16;
 
@@ -811,7 +811,6 @@ pub struct LePeripheralConnection {
     state: LePeripheralConnectionState,
     pending_channel_map: Option<PendingChannelMapUpdate>,
     pending_connection_update: Option<PendingConnectionUpdate>,
-    maintenance: maintenance::State,
 }
 
 impl LePeripheralConnection {
@@ -847,7 +846,6 @@ impl LePeripheralConnection {
             state: LePeripheralConnectionState::Created,
             pending_channel_map: None,
             pending_connection_update: None,
-            maintenance: maintenance::State::new(),
         }
     }
 
@@ -1213,7 +1211,6 @@ impl LePeripheralConnectionEventCompleted {
             channel_map,
             instant,
         });
-        self.connection.maintenance.instant_received();
         Ok(())
     }
 
@@ -1247,7 +1244,6 @@ impl LePeripheralConnectionEventCompleted {
         }
         self.connection.pending_connection_update =
             Some(PendingConnectionUpdate { timing, instant });
-        self.connection.maintenance.instant_received();
         Ok(())
     }
 
@@ -1301,7 +1297,6 @@ impl LePeripheralConnectionEventCompleted {
             },
             connection_timing_transition,
             connection_timing_intervals,
-            maintenance_skip: false,
         }
     }
 
@@ -1322,7 +1317,6 @@ pub struct LePeripheralConnectionRecurringEventProvisional {
     channel_map_update_instant: Option<u16>,
     connection_timing_transition: Option<LeConnectionTimingTransition>,
     connection_timing_intervals: Option<LeConnectionTimingIntervals>,
-    maintenance_skip: bool,
 }
 
 impl LePeripheralConnectionRecurringEventProvisional {
@@ -1383,13 +1377,9 @@ impl LePeripheralConnectionRecurringEventProvisional {
             channel_map_update_instant: _,
             connection_timing_transition: _,
             connection_timing_intervals: _,
-            maintenance_skip,
         } = self;
         let skipped = delta.skipped();
         let mut connection = completed.connection;
-        if maintenance_skip {
-            connection.maintenance.commit_skip();
-        }
         connection.event_counter = event_counter;
         connection.selector = connection.selector.skip(skipped);
         let channel_map_updated = connection.apply_channel_map_for_target(event_counter, skipped);
@@ -1410,4 +1400,3 @@ impl LePeripheralConnectionRecurringEventProvisional {
 mod tests;
 
 pub mod acknowledgement;
-pub mod maintenance;
