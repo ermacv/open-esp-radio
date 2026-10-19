@@ -15,8 +15,8 @@ test-support = []
 [dependencies]
 oer-lab-router = { path = "../../lab/router" }
 oer-lab-board = { path = "../../lab/board" }
-oer-hil-run-bundle-format = { path = "../run-bundle-format" }
-oer-hil-scenario-catalog = { path = "../scenario-catalog" }
+oer-hil-runs = { path = "../runs" }
+oer-hil-model = { path = "../model" }
 oer-analysis-elf = { path = "../../analysis/elf" }
 oer-chip-profile = { path = "../../chip/profile" }
 oer-lab-arbiter = { path = "../../lab/arbiter" }

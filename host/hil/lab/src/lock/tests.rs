@@ -35,7 +35,7 @@ fn a_run_claims_its_boards_fixtures_and_the_air() {
 fn a_run_shares_its_fixture_software_with_other_runs_but_not_an_installation() {
     use oer_lab_arbiter::claims::Claim;
     let lab = crate::config::LabConfig::for_test();
-    let required = oer_hil_scenario_catalog::requirements::Requirements {
+    let required = oer_hil_model::catalog::requirements::Requirements {
         laptop_client: true,
         ..Default::default()
     };

@@ -12,7 +12,7 @@ readme = "README.md"
 [dependencies]
 oer-lab-board = { path = "../../lab/board" }
 oer-vendor-phy-calibration-capture = { path = "../phy-calibration-capture" }
-oer-hil-workload = { path = "../../hil/workload" }
+oer-hil-scenario = { path = "../../hil/scenario" }
 serde_json = "1.0"
 
 [lints]

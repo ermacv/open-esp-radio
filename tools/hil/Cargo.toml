@@ -14,20 +14,17 @@ path = "src/main.rs"
 
 [dependencies]
 oer-image-esp-idf = { path = "../../host/image/esp-idf" }
-oer-hil-run-bundle-format = { path = "../../host/hil/run-bundle-format" }
+oer-hil-runs = { path = "../../host/hil/runs" }
 oer-chip-profile = { path = "../../host/chip/profile" }
 oer-os-command-tree = { path = "../../host/os/command-tree", features = ["clap"] }
 oer-lab-arbiter = { path = "../../host/lab/arbiter" }
 oer-lab-board = { path = "../../host/lab/board" }
-oer-hil-run-bundle = { path = "../../host/hil/run-bundle" }
 oer-hil-analysis = { path = "../../host/hil/analysis" }
-oer-hil-experiment = { path = "../../host/hil/experiment" }
 oer-image-build = { path = "../../host/image/build" }
 oer-image-checks = { path = "../../host/image/checks" }
 oer-image-compare = { path = "../../host/image/compare" }
-oer-hil-image = { path = "../../host/hil/image" }
-oer-hil-image-class = { path = "../../host/hil/image-class" }
-oer-hil-schema = { path = "../../host/hil/schema" }
+oer-hil-run = { path = "../../host/hil/run" }
+oer-hil-model = { path = "../../host/hil/model" }
 oer-hil-observer = { path = "../../host/hil/observer" }
 oer-hil-lab = { path = "../../host/hil/lab" }
 oer-lab-router = { path = "../../host/lab/router" }
@@ -40,9 +37,11 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 tempfile = "=3.27.0"
 toml = "=1.1.4"
+oer-lab-model = { path = "../../host/lab/model" }
 
 [dev-dependencies]
-oer-hil-run-bundle = { path = "../../host/hil/run-bundle", features = ["test-support"] }
+oer-hil-runs = { path = "../../host/hil/runs", features = ["test-support"] }
+tempfile = "3"
 
 [lints]
 workspace = true

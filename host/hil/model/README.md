@@ -3,7 +3,7 @@
 `oer-hil-model` defines what a HIL scenario is, independently of how a run
 executes it ([#761](https://github.com/the predecessor repository/issues/761)).
 It is a `formats` package; execution lives in
-[`oer-hil-executor`](../host/executor/README.md).
+[`oer-hil-run`](../host/executor/README.md).
 
 | Module | Owns |
 | --- | --- |

@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 
-use oer_hil_run_bundle::run::test_support::manifest;
-use oer_hil_run_bundle_format::run::Comparison;
-use oer_hil_run_bundle_format::run::Failure;
-use oer_hil_run_bundle_format::run::FailureKind;
-use oer_hil_run_bundle_format::run::Measurement;
-use oer_hil_run_bundle_format::run::MeasurementUnit;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::RUN_SCHEMA;
-use oer_hil_run_bundle_format::run::RepetitionResult;
-use oer_hil_run_bundle_format::run::ScenarioResult;
-use oer_hil_run_bundle_format::run::SuiteCounts;
-use oer_hil_run_bundle_format::run::SuiteResult;
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
+use oer_hil_runs::format::run::Comparison;
+use oer_hil_runs::format::run::Failure;
+use oer_hil_runs::format::run::FailureKind;
+use oer_hil_runs::format::run::Measurement;
+use oer_hil_runs::format::run::MeasurementUnit;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::RUN_SCHEMA;
+use oer_hil_runs::format::run::RepetitionResult;
+use oer_hil_runs::format::run::ScenarioResult;
+use oer_hil_runs::format::run::SuiteCounts;
+use oer_hil_runs::format::run::SuiteResult;
+use oer_hil_runs::run::test_support::manifest;
 
 use super::{html, junit, views};
 

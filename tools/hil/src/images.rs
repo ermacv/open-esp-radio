@@ -8,7 +8,7 @@
 
 pub mod check;
 
-use oer_hil_schema::image::ImageClass;
+use oer_hil_model::schema::image::ImageClass;
 use oer_os_process::Checkout;
 
 use crate::Result;
@@ -84,7 +84,7 @@ pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::proce
             ..
         } => {
             if vendor_dependencies_absent {
-                oer_hil_image::ensure_vendor_dependencies_absent(&ctx.root)?;
+                oer_hil_run::image::ensure_vendor_dependencies_absent(&ctx.root)?;
             }
             for chip in check::chips(&ctx.root, chip.as_deref(), &classes)? {
                 let classes = if reaching.is_empty() {
@@ -131,8 +131,8 @@ pub fn command(ctx: &Checkout, args: &[std::ffi::OsString]) -> Result<std::proce
                 .iter()
                 .map(|class| class.parse())
                 .collect::<std::result::Result<Vec<ImageClass>, _>>()?;
-            let chip = oer_hil_image::chip_for(&ctx.root, &parsed, chip.as_deref())?;
-            oer_hil_image::compare_images(&ctx.root, &chip, &base, &parsed, &review)?;
+            let chip = oer_hil_run::image::chip_for(&ctx.root, &parsed, chip.as_deref())?;
+            oer_hil_run::image::compare_images(&ctx.root, &chip, &base, &parsed, &review)?;
         }
     }
     Ok(std::process::ExitCode::SUCCESS)

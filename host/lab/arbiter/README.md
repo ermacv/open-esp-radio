@@ -79,7 +79,7 @@ by reflashing and never quarantined.
 The board journal (`journal`) reports board changes but never restores
 board state. Its only writer of a flash is `Arbiter::record_flash(owner, mac,
 ImageIdentity { name, sha256, commit, dirty, origin })`, called by the flash
-operation (`oer-hil-flash`) and by `cargo stand lease --flashed`;
+operation (`oer-hil-run`) and by `cargo stand lease --flashed`;
 `record_board` records every other change and refuses a flash.
 `latest_flash` and `carries(mac, name, sha256)` read it back. A board is
 identified by its MAC, the USB serial number Espressif USB Serial/JTAG ports

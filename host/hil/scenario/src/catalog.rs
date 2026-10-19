@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use oer_hil_scenario_catalog::documents;
+use oer_hil_model::catalog::documents;
 
 use super::{Scenario, ScenarioFamily};
 use crate::Result;

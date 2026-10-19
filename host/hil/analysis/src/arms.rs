@@ -19,8 +19,8 @@
 
 use std::collections::BTreeMap;
 
-use oer_hil_run_bundle_format::experiment::{Arm, Experiment, Order, Phase, Round, Variant};
-use oer_hil_run_bundle_format::run::MetricId;
+use oer_hil_runs::format::experiment::{Arm, Experiment, Order, Phase, Round, Variant};
+use oer_hil_runs::format::run::MetricId;
 use serde::Serialize;
 
 use crate::{

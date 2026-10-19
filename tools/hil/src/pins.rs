@@ -1,7 +1,7 @@
 //! The run store's pins as `cargo hil` keeps them: one hand note per run
 //! (`cargo hil runs pin`), which `cargo hil runs unpin` drops.
 
-use oer_hil_run_bundle::{
+use oer_hil_runs::{
     RunStore,
     store::{Note, Notes, Sidecar},
 };

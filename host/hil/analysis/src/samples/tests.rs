@@ -1,13 +1,13 @@
-use oer_hil_run_bundle::run::test_support::repetition;
-use oer_hil_run_bundle::run::test_support::write_run;
-use oer_hil_run_bundle_format::run::Measurement;
-use oer_hil_run_bundle_format::run::MeasurementUnit;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::RunState;
-use oer_hil_run_bundle_format::run::ScenarioResult;
-use oer_hil_run_bundle_format::run::Threshold;
-use oer_hil_schema::image::ImageClass;
-use oer_hil_schema::run::Comparison;
+use oer_hil_model::schema::image::ImageClass;
+use oer_hil_model::schema::run::Comparison;
+use oer_hil_runs::format::run::Measurement;
+use oer_hil_runs::format::run::MeasurementUnit;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::RunState;
+use oer_hil_runs::format::run::ScenarioResult;
+use oer_hil_runs::format::run::Threshold;
+use oer_hil_runs::run::test_support::repetition;
+use oer_hil_runs::run::test_support::write_run;
 
 use super::*;
 
@@ -49,7 +49,7 @@ pub(crate) fn suite(values: &[u64]) -> SuiteResult {
         )],
         |_| {},
     );
-    oer_hil_run_bundle_format::RunBundle::open(&run)
+    oer_hil_runs::format::RunBundle::open(&run)
         .unwrap()
         .unwrap()
         .suite()
@@ -201,8 +201,8 @@ fn concluded_repetitions_enter_the_statistics_and_the_others_are_counted() {
 
     let measured = |number, outcome, value| {
         let failure = (outcome != Outcome::Passed).then(|| {
-            oer_hil_run_bundle_format::run::Failure::new(
-                oer_hil_run_bundle_format::run::FailureKind::Scenario,
+            oer_hil_runs::format::run::Failure::new(
+                oer_hil_runs::format::run::FailureKind::Scenario,
                 "ended early",
             )
         });
@@ -251,7 +251,7 @@ fn one_name_under_two_identities_or_gates_is_refused() {
 }
 
 /// A suite of one `udp-tx` scenario with `repetitions`.
-fn suite_of(repetitions: Vec<oer_hil_run_bundle_format::run::RepetitionResult>) -> SuiteResult {
+fn suite_of(repetitions: Vec<oer_hil_runs::format::run::RepetitionResult>) -> SuiteResult {
     let directory = tempfile::tempdir().unwrap();
     let run = directory.path().join("1-a");
     let count = repetitions.len() as u8;
@@ -267,7 +267,7 @@ fn suite_of(repetitions: Vec<oer_hil_run_bundle_format::run::RepetitionResult>) 
         )],
         |_| {},
     );
-    oer_hil_run_bundle_format::RunBundle::open(&run)
+    oer_hil_runs::format::RunBundle::open(&run)
         .unwrap()
         .unwrap()
         .suite()

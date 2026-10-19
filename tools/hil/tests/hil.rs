@@ -14,13 +14,13 @@ fn executable(path: &Path, text: &str) {
 fn fixture() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    fs::create_dir_all(root.join("host/hil/schema")).unwrap();
+    fs::create_dir_all(root.join("host/hil/model")).unwrap();
     // The wrapper links every chip's local runs into the shared store; the
     // fixture has no chip profile and keeps the store inside the fixture.
     fs::create_dir_all(root.join("platform")).unwrap();
     fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
     fs::write(
-        root.join("host/hil/schema/observer-inputs.json"),
+        root.join("host/hil/model/observer-inputs.json"),
         r#"{"build":{"profile":"debug"}}"#,
     )
     .unwrap();
@@ -29,7 +29,7 @@ fn fixture() -> tempfile::TempDir {
         r#"#!/bin/sh
 printf '%s\n' "$@" > "$FIXTURE_ROOT/cargo-args"
 printf '%s' "${CARGO_NET_OFFLINE-unset}" > "$FIXTURE_ROOT/offline"
-printf '{"reason":"compiler-artifact","target":{"name":"oer-hil-runner"},"executable":"%s/runner"}\n' "$FIXTURE_ROOT"
+printf '{"reason":"compiler-artifact","target":{"name":"oer-tool-hil-runner"},"executable":"%s/runner"}\n' "$FIXTURE_ROOT"
 "#,
     );
     executable(

@@ -11,28 +11,28 @@ use crate::{
     Result,
     config::{LabConfig, OpenWrtConfig, StationFixtureConfig},
 };
-use oer_hil_run_bundle_format::lab::AccessPointDefinition;
-use oer_hil_run_bundle_format::lab::ChannelWidth;
-use oer_hil_run_bundle_format::lab::FixtureObservation;
-use oer_hil_run_bundle_format::lab::HostInterfaceObservation;
-use oer_hil_run_bundle_format::lab::HostIpv4Route;
-use oer_hil_run_bundle_format::lab::HostObservation;
-use oer_hil_run_bundle_format::lab::HostWirelessLink;
-use oer_hil_run_bundle_format::lab::LAB_PROVENANCE_SCHEMA;
-use oer_hil_run_bundle_format::lab::LabDefinition;
-use oer_hil_run_bundle_format::lab::LabProvenance;
-use oer_hil_run_bundle_format::lab::ObservationScope;
-use oer_hil_run_bundle_format::lab::OpenWrtInterface;
-use oer_hil_run_bundle_format::lab::OpenWrtObservation;
-use oer_hil_run_bundle_format::lab::Phy;
-use oer_hil_run_bundle_format::lab::SensitiveValueDisposition;
-use oer_hil_run_bundle_format::lab::StationFixtureDefinition;
-use oer_hil_run_bundle_format::lab::StationIpv4Definition;
+use oer_hil_runs::format::lab::AccessPointDefinition;
+use oer_hil_runs::format::lab::ChannelWidth;
+use oer_hil_runs::format::lab::FixtureObservation;
+use oer_hil_runs::format::lab::HostInterfaceObservation;
+use oer_hil_runs::format::lab::HostIpv4Route;
+use oer_hil_runs::format::lab::HostObservation;
+use oer_hil_runs::format::lab::HostWirelessLink;
+use oer_hil_runs::format::lab::LAB_PROVENANCE_SCHEMA;
+use oer_hil_runs::format::lab::LabDefinition;
+use oer_hil_runs::format::lab::LabProvenance;
+use oer_hil_runs::format::lab::ObservationScope;
+use oer_hil_runs::format::lab::OpenWrtInterface;
+use oer_hil_runs::format::lab::OpenWrtObservation;
+use oer_hil_runs::format::lab::Phy;
+use oer_hil_runs::format::lab::SensitiveValueDisposition;
+use oer_hil_runs::format::lab::StationFixtureDefinition;
+use oer_hil_runs::format::lab::StationIpv4Definition;
 
 /// Observe the cell of `lab` before a run that needs `required`.
 pub fn capture(
     lab: &LabConfig,
-    required: oer_hil_scenario_catalog::requirements::Requirements,
+    required: oer_hil_model::catalog::requirements::Requirements,
 ) -> Result<LabProvenance> {
     {
         let definition = definition(lab);
@@ -436,8 +436,8 @@ fn os_release() -> Option<String> {
 mod tests;
 
 /// The run bundle's spelling of the PHYs a fixture offers.
-fn recorded_phys(phys: &[oer_hil_scenario_catalog::link::PhyExpectation]) -> Vec<Phy> {
-    use oer_hil_scenario_catalog::link::PhyExpectation;
+fn recorded_phys(phys: &[oer_hil_model::catalog::link::PhyExpectation]) -> Vec<Phy> {
+    use oer_hil_model::catalog::link::PhyExpectation;
     phys.iter()
         .map(|phy| match phy {
             PhyExpectation::Legacy => Phy::Legacy,

@@ -1,6 +1,6 @@
 # Linux Bluetooth fixture
 
-Use the canonical [Linux fixture software installation](../../hil/runner/fixtures.md#linux-fixture-software-installation)
+Use the canonical [Linux fixture software installation](../run/fixtures.md#linux-fixture-software-installation)
 route from the repository root:
 
 ```console

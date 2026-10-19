@@ -4,16 +4,16 @@
 
 use std::fmt::Write as _;
 
-use oer_hil_run_bundle::run::Views;
-use oer_hil_run_bundle_format::run::MeasurementVerdict;
-use oer_hil_run_bundle_format::run::Outcome;
-use oer_hil_run_bundle_format::run::RepetitionResult;
-use oer_hil_run_bundle_format::run::RunManifest;
-use oer_hil_run_bundle_format::run::ScenarioResult;
-use oer_hil_run_bundle_format::run::SuiteResult;
+use oer_hil_runs::format::run::MeasurementVerdict;
+use oer_hil_runs::format::run::Outcome;
+use oer_hil_runs::format::run::RepetitionResult;
+use oer_hil_runs::format::run::RunManifest;
+use oer_hil_runs::format::run::ScenarioResult;
+use oer_hil_runs::format::run::SuiteResult;
+use oer_hil_runs::run::Views;
 
 /// Both views of a finished run; the renderer the runner hands
-/// [`oer_hil_run_bundle::run::RunSession::finish`].
+/// [`oer_hil_runs::run::RunSession::finish`].
 pub fn views(suite: &SuiteResult, manifest: &RunManifest) -> Views {
     Views {
         junit: junit(suite, manifest),

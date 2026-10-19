@@ -4,7 +4,7 @@ use oer_hil_protocol::{
     base::{GetBootStatus, ResetReason},
     system::{WatchdogArmed, WatchdogTest, WatchdogTestMode as Mode},
 };
-use oer_hil_workload::{context::Context, require_keys};
+use oer_hil_scenario::workload::{context::Context, require_keys};
 use std::{path::Path, time::Duration};
 
 pub fn run(output: &Path, context: &Context<'_>) -> Result<()> {

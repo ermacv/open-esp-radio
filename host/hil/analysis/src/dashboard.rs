@@ -1,11 +1,11 @@
 //! The runs part of the stand's live page: the newest runs and where a
 //! running one is.
 
-use oer_hil_run_bundle::RunStore;
-use oer_hil_run_bundle_format::RunBundle;
-use oer_hil_run_bundle_format::run::PlanDisposition;
-use oer_hil_run_bundle_format::run::RunState;
-use oer_hil_schema::run::RunEventKind;
+use oer_hil_model::schema::run::RunEventKind;
+use oer_hil_runs::RunStore;
+use oer_hil_runs::format::RunBundle;
+use oer_hil_runs::format::run::PlanDisposition;
+use oer_hil_runs::format::run::RunState;
 use serde_json::{Value, json};
 
 use crate::run::Run;

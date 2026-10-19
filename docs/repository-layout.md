@@ -110,7 +110,7 @@ no exceptions.
 
 A library's package name is `oer-` and its path below the root:
 `portable/ieee80211/mac` is `oer-ieee80211-mac`, `chips/esp32s31/hal` is
-`oer-esp32s31-hal`, `host/hil/runner` is `oer-hil-runner`. The layer test
+`oer-esp32s31-hal`, `host/hil/run` is `oer-hil-run`. The layer test
 refuses two libraries with the same name below different roots. An
 executable keeps its root: `firmware/apps/w1` is `oer-firmware-apps-w1`,
 `tools/fw` is `oer-tool-fw`. There is no `[lib] name`.
@@ -249,12 +249,12 @@ vendor inputs through `host/analysis/blobray-artifacts`.
 | `host/hil/scenario-catalog` | `host/hil/model` | host |
 | `host/hil/schema` | `host/hil/model` | host |
 | `host/hil/net-traffic` | `host/hil/net-traffic` | host |
-| `host/hil/executor` | `host/hil/runner` | host |
-| `host/hil/flash` | `host/hil/runner` | host |
-| `host/hil/image` | `host/hil/runner` | host |
-| `host/hil/lab` | `host/hil/runner` | host |
-| `host/hil/observer` | `host/hil/runner` | host |
-| `host/hil/runner` | `host/hil/runner` | host |
+| `host/hil/executor` | `host/hil/executor` | host |
+| `host/hil/flash` | `host/hil/run` | host |
+| `host/hil/image` | `host/hil/run` | host |
+| `host/hil/lab` | `host/hil/lab` | host |
+| `host/hil/observer` | `host/hil/observer` | host |
+| `host/hil/runner` | `host/hil/run`, `tools/hil-runner` | host |
 | `host/hil/run-bundle-format` | `host/hil/runs` | host |
 | `host/hil/run-bundle` | `host/hil/runs` | host |
 | `host/hil/scenario` | `host/hil/scenario` | host |

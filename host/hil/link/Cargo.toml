@@ -11,13 +11,12 @@ description = "HIL host/target link: one session with the board under test (UART
 [features]
 # The capture fixtures of other packages' tests; the fake target reports the
 # correctness image's keys.
-test-support = ["dep:oer-hil-image-class"]
+test-support = []
 
 [dependencies]
 oer-lab-board = { path = "../../lab/board" }
-oer-hil-schema = { path = "../schema" }
+oer-hil-model = { path = "../model" }
 oer-os-durable = { path = "../../os/durable" }
-oer-hil-image-class = { path = "../image-class", optional = true }
 oer-hil-protocol = { path = "../../../portable/hil/protocol", features = ["registry"] }
 oer-os-process = { path = "../../os/process" }
 mio = { version = "=1.2.2", features = ["os-poll", "os-ext"] }
@@ -28,7 +27,7 @@ serde_json = "1.0"
 zeroize = "1.8.1"
 
 [dev-dependencies]
-oer-hil-image-class = { path = "../image-class" }
+oer-hil-model = { path = "../model" }
 postcard-schema = { version = "0.2.5", features = ["derive"] }
 
 [lints]

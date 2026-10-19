@@ -3186,12 +3186,9 @@ name = "oer-hil-analysis"
 version = "0.1.0"
 dependencies = [
  "oer-analysis-elf",
- "oer-hil-image-class",
+ "oer-hil-model",
  "oer-hil-protocol",
- "oer-hil-run-bundle",
- "oer-hil-run-bundle-format",
- "oer-hil-schema",
- "oer-hil-stats",
+ "oer-hil-runs",
  "oer-os-durable",
  "oer-os-process",
  "roxmltree",
@@ -3216,33 +3213,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-experiment"
-version = "0.1.0"
-dependencies = [
- "oer-hil-analysis",
- "oer-hil-image",
- "oer-hil-observer",
- "oer-hil-run-bundle",
- "oer-hil-run-bundle-format",
- "oer-hil-schema",
- "oer-hil-stats",
- "oer-lab-arbiter",
- "oer-lab-model",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "oer-hil-family-system"
 version = "0.1.0"
 dependencies = [
+ "oer-hil-model",
  "oer-hil-protocol",
  "oer-hil-scenario",
- "oer-hil-schema",
- "oer-hil-workload",
  "oer-lab-board",
  "oer-os-process",
  "serde",
@@ -3280,7 +3256,7 @@ dependencies = [
  "oer-hil-fixture",
  "oer-hil-lab",
  "oer-hil-protocol",
- "oer-hil-run-bundle-format",
+ "oer-hil-runs",
  "oer-os-durable",
  "oer-os-process",
  "rustix",
@@ -3288,52 +3264,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "zbus",
-]
-
-[[package]]
-name = "oer-hil-flash"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-image-build",
- "oer-lab-arbiter",
- "oer-lab-board",
- "oer-os-durable",
- "oer-os-process",
- "tempfile",
-]
-
-[[package]]
-name = "oer-hil-image"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-hil-image-class",
- "oer-hil-run-bundle",
- "oer-hil-run-bundle-format",
- "oer-hil-scenario",
- "oer-hil-schema",
- "oer-image-build",
- "oer-image-checks",
- "oer-image-compare",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-hil-image-class"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-hil-image-keys",
- "oer-hil-protocol",
- "oer-hil-schema",
- "toml",
 ]
 
 [[package]]
@@ -3352,9 +3282,9 @@ dependencies = [
  "oer-chip-profile",
  "oer-hil-fixture",
  "oer-hil-link",
+ "oer-hil-model",
  "oer-hil-protocol",
- "oer-hil-run-bundle-format",
- "oer-hil-scenario-catalog",
+ "oer-hil-runs",
  "oer-lab-arbiter",
  "oer-lab-board",
  "oer-lab-fixtures",
@@ -3374,9 +3304,8 @@ name = "oer-hil-link"
 version = "0.1.0"
 dependencies = [
  "mio",
- "oer-hil-image-class",
+ "oer-hil-model",
  "oer-hil-protocol",
- "oer-hil-schema",
  "oer-lab-board",
  "oer-os-durable",
  "oer-os-process",
@@ -3393,9 +3322,14 @@ name = "oer-hil-model"
 version = "0.1.0"
 dependencies = [
  "oer-base-time",
+ "oer-chip-profile",
+ "oer-hil-image-keys",
+ "oer-hil-protocol",
+ "oer-os-durable",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "toml",
 ]
 
 [[package]]
@@ -3414,7 +3348,7 @@ dependencies = [
 name = "oer-hil-observer"
 version = "0.1.0"
 dependencies = [
- "oer-hil-run-bundle-format",
+ "oer-hil-runs",
  "oer-os-durable",
  "oer-os-process",
  "oer-os-toolchain",
@@ -3439,62 +3373,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-run-bundle"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "oer-hil-protocol",
- "oer-hil-run-bundle-format",
- "oer-hil-scenario",
- "oer-hil-scenario-catalog",
- "oer-hil-schema",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "oer-hil-run-bundle-format"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "oer-hil-scenario-catalog",
- "oer-hil-schema",
- "oer-os-durable",
- "oer-os-process",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "oer-hil-runner"
+name = "oer-hil-run"
 version = "0.1.0"
 dependencies = [
  "clap",
  "oer-chip-profile",
  "oer-hil-analysis",
  "oer-hil-family-system",
- "oer-hil-flash",
- "oer-hil-image",
- "oer-hil-image-class",
  "oer-hil-lab",
  "oer-hil-link",
- "oer-hil-observer",
+ "oer-hil-model",
  "oer-hil-protocol",
- "oer-hil-run-bundle",
- "oer-hil-run-bundle-format",
+ "oer-hil-runs",
  "oer-hil-scenario",
- "oer-hil-scenario-catalog",
- "oer-hil-schema",
- "oer-hil-workload",
  "oer-image-build",
  "oer-image-checks",
+ "oer-image-compare",
  "oer-lab-arbiter",
  "oer-lab-board",
  "oer-os-command-tree",
@@ -3506,43 +3400,43 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "toml",
- "toml_edit",
+]
+
+[[package]]
+name = "oer-hil-runs"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "oer-hil-model",
+ "oer-hil-protocol",
+ "oer-hil-scenario",
+ "oer-os-durable",
+ "oer-os-process",
+ "oer-os-toolchain",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
 ]
 
 [[package]]
 name = "oer-hil-scenario"
 version = "0.1.0"
 dependencies = [
+ "oer-hil-lab",
+ "oer-hil-link",
+ "oer-hil-model",
  "oer-hil-protocol",
- "oer-hil-scenario-catalog",
- "oer-hil-schema",
+ "oer-hil-runs",
+ "oer-image-build",
+ "oer-lab-board",
  "oer-os-durable",
+ "oer-os-process",
+ "rustix",
  "serde",
  "serde_json",
  "toml",
 ]
-
-[[package]]
-name = "oer-hil-scenario-catalog"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
-name = "oer-hil-schema"
-version = "0.1.0"
-dependencies = [
- "oer-os-durable",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "oer-hil-stats"
-version = "0.1.0"
 
 [[package]]
 name = "oer-hil-trace"
@@ -3558,26 +3452,6 @@ dependencies = [
  "postcard",
  "postcard-schema",
  "serde",
-]
-
-[[package]]
-name = "oer-hil-workload"
-version = "0.1.0"
-dependencies = [
- "oer-hil-lab",
- "oer-hil-link",
- "oer-hil-protocol",
- "oer-hil-run-bundle-format",
- "oer-hil-scenario",
- "oer-hil-scenario-catalog",
- "oer-hil-schema",
- "oer-image-build",
- "oer-lab-board",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4139,20 +4013,18 @@ dependencies = [
  "clap",
  "oer-chip-profile",
  "oer-hil-analysis",
- "oer-hil-experiment",
- "oer-hil-image",
- "oer-hil-image-class",
  "oer-hil-lab",
+ "oer-hil-model",
  "oer-hil-observer",
- "oer-hil-run-bundle",
- "oer-hil-run-bundle-format",
- "oer-hil-schema",
+ "oer-hil-run",
+ "oer-hil-runs",
  "oer-image-build",
  "oer-image-checks",
  "oer-image-compare",
  "oer-image-esp-idf",
  "oer-lab-arbiter",
  "oer-lab-board",
+ "oer-lab-model",
  "oer-lab-router",
  "oer-os-command-tree",
  "oer-os-durable",
@@ -4163,6 +4035,21 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "oer-tool-hil-runner"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-observer",
+ "oer-hil-run",
+ "oer-hil-runs",
+ "oer-os-durable",
+ "oer-os-process",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml_edit",
 ]
 
 [[package]]
@@ -4313,7 +4200,7 @@ version = "0.1.0"
 name = "oer-vendor-phy"
 version = "0.1.0"
 dependencies = [
- "oer-hil-workload",
+ "oer-hil-scenario",
  "oer-lab-board",
  "oer-vendor-phy-calibration-capture",
  "serde_json",

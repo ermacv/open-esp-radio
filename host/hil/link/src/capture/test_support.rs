@@ -229,10 +229,10 @@ pub fn receive<M: oer_hil_protocol::Message>(writes: &mpsc::Receiver<Vec<u8>>) -
 /// The capabilities of the fake target: the Bluetooth GATT image's of the
 /// first chip whose HIL agent builds one.
 pub fn capability_keys() -> Vec<Key> {
-    let capabilities = oer_hil_image_class::agent_chips()
+    let capabilities = oer_hil_model::image_class::agent_chips()
         .find_map(|chip| {
-            oer_hil_image_class::image_keys_on(
-                oer_hil_schema::image::ImageClass::SystemWatchdog,
+            oer_hil_model::image_class::image_keys_on(
+                oer_hil_model::schema::image::ImageClass::SystemWatchdog,
                 chip,
             )
         })

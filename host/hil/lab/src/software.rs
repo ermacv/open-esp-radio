@@ -18,7 +18,7 @@ pub struct SoftwareLease {
 impl SoftwareLease {
     pub fn acquire_for(
         lab: &crate::config::LabConfig,
-        required: oer_hil_scenario_catalog::requirements::Requirements,
+        required: oer_hil_model::catalog::requirements::Requirements,
     ) -> Result<Self> {
         Self::acquire(providers(lab, required))
     }
@@ -54,7 +54,7 @@ impl SoftwareLease {
 /// The fixture software providers `required` runs on.
 pub fn providers(
     lab: &crate::config::LabConfig,
-    required: oer_hil_scenario_catalog::requirements::Requirements,
+    required: oer_hil_model::catalog::requirements::Requirements,
 ) -> Vec<Provider> {
     let mut providers = Vec::new();
     if required.local_radio()

@@ -2,10 +2,10 @@
 
 use std::path::Path;
 
+use oer_hil_model::schema::image::ImageClass;
+use oer_hil_scenario::workload::context::Context;
+use oer_hil_scenario::workload::{family::Workload, fixture::Fixtures};
 use oer_hil_scenario::{AirUse, Plan, ScenarioFamily};
-use oer_hil_schema::image::ImageClass;
-use oer_hil_workload::context::Context;
-use oer_hil_workload::{family::Workload, fixture::Fixtures};
 use serde::{Deserialize, Serialize};
 
 use crate::{Result, workload::system};

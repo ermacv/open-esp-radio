@@ -4,6 +4,8 @@
 //! launch of the runner (`oer-hil-experiment`).
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
+pub mod experiment;
+
 pub mod command;
 pub mod dashboard;
 pub mod experiments;
