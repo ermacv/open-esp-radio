@@ -22,6 +22,8 @@
 //! unresolved. Otherwise [`Bound::reasons`] counts what is, by reason, and
 //! [`Reason`] names the stage that closes it.
 
+#![forbid(unsafe_code)]
+
 mod cha;
 mod contexts;
 mod dwarf;

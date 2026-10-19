@@ -13,6 +13,8 @@
 //! absent is a [`CheckResult::MissingContract`], which fails the build: a
 //! missing table never proves that a property does not apply.
 
+#![forbid(unsafe_code)]
+
 pub mod interrupts;
 pub mod linker;
 pub mod placement;

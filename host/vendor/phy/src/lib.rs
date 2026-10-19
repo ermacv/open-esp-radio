@@ -3,7 +3,7 @@
 //! IEEE 802.15.4 reference firmware ([`reference`](mod@reference)), which reads the vendor
 //! side's register state. The family names no chip: a chip-specific
 //! composition implements the port.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod archive;
 pub mod calibration_capture;

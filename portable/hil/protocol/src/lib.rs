@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 //! Target-neutral control and evidence protocol for hardware-in-the-loop tests.
 //!
 //! The wire types deliberately contain no board paths, expected image hashes,

@@ -1,4 +1,6 @@
 //! Source-only publication from one validated reviewed model. No binary-analysis authority.
+
+#![forbid(unsafe_code)]
 use oer_registers_contracts::ApplicabilityContext;
 use oer_registers_model::{PacApiPack, RegisterEvidenceSet, RegisterLintPack, RegisterModel};
 use serde::Deserialize;

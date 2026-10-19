@@ -1,5 +1,7 @@
 //! Command-line adapter for Blobray operations that run in this process.
 
+#![forbid(unsafe_code)]
+
 use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
 use oer_analysis_blobray_domain::CheckVerdict;

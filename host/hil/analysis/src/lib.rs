@@ -17,7 +17,7 @@
 //!   profile.
 //!
 //! Nothing here decides qualification.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod stats;
 

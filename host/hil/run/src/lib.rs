@@ -1,7 +1,7 @@
 //! The HIL runner: its command line, the run of a scenario set on the
 //! stand and the image, flash and executor work it does; the thin
 //! executable is `tools/hil-runner`.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod flash;
 pub mod image;

@@ -2,6 +2,8 @@
 //! repository tool prints for `__command-tree`: the commands and flags that
 //! exist. With the `clap` feature, [`command_tree`] walks a clap parser.
 
+#![forbid(unsafe_code)]
+
 use serde::{Deserialize, Serialize};
 
 /// One command of a tree: its path from the root, its subcommands and the

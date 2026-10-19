@@ -15,6 +15,8 @@
 //! selection, at the offsets of the chip's [`FlashMap`]. A flash only writes
 //! a bundle's files (`ImageBundle::segments`).
 
+#![forbid(unsafe_code)]
+
 mod around;
 pub mod build_log;
 pub mod bundle;

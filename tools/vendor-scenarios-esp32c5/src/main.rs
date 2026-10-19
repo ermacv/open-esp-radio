@@ -1,6 +1,8 @@
 //! The command line of this chip's typed vendor scenarios and the reviewer
 //! commands.
 
+#![forbid(unsafe_code)]
+
 fn main() -> std::process::ExitCode {
     oer_vendor_scenario_report::command::main(
         env!("CARGO_PKG_NAME"),

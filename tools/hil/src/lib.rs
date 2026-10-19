@@ -2,7 +2,7 @@
 //! libraries (leases, owners, jobs), the ESP-IDF firmware catalog,
 //! the run store's analyses (`oer-hil-analysis`), experiments and the
 //! launch of the runner (`oer-hil-experiment`).
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod experiment;
 

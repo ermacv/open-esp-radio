@@ -11,6 +11,8 @@
 //! Host tools resolve a chip through [`Profile::load`] instead of matching
 //! chip names, so an unknown chip is refused with the supported ones.
 
+#![forbid(unsafe_code)]
+
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -437,9 +439,6 @@ pub struct Packages {
     /// and keep their own lint policy.
     #[serde(default)]
     pub generated: Vec<String>,
-    /// Production libraries whose unsafe code is audited (`docs/unsafe.md`).
-    #[serde(default)]
-    pub audited_unsafe: Vec<String>,
     /// The chip's closed radio PAC.
     #[serde(default)]
     pub closed_pac: Vec<String>,

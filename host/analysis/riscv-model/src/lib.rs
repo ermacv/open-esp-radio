@@ -5,6 +5,8 @@
 //! identities retain archive ordinals and ELF table section/index pairs; names
 //! are lossless metadata, never identity keys.
 
+#![forbid(unsafe_code)]
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fmt, str::FromStr};

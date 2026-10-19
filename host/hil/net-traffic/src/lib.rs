@@ -10,7 +10,7 @@
 //! Every station, access-point and coexistence workload measures its
 //! traffic through this crate; it depends on the link and the protocol, never
 //! on a radio family.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 pub mod icmp;
 pub mod offered_load;

@@ -1,4 +1,6 @@
 //! Comparison of explicitly selected concrete observations; no execution/store authority.
+
+#![forbid(unsafe_code)]
 use oer_analysis_blobray_domain::*;
 use oer_analysis_riscv_model::*;
 mod effects;

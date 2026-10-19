@@ -5,6 +5,8 @@
 //! the comparison harness, coverage, observation and state analysis, and
 //! the evidence shards. Chip addresses, pins and reviewed decisions stay in
 //! the chip's crate.
+
+#![forbid(unsafe_code)]
 pub mod artifacts;
 pub mod chip;
 pub mod coverage;

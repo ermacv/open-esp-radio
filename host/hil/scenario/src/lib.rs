@@ -6,6 +6,8 @@
 //! [`Plan`] projection every family-independent consumer reads: the firmware
 //! image, laboratory requirements, target initialization and named checks.
 
+#![forbid(unsafe_code)]
+
 pub mod workload;
 
 use std::{

@@ -6,5 +6,6 @@
 //! hardware calibration cross-check compares them between the vendor
 //! `phy_param` and a production snapshot captured on the board (both).
 #![no_std]
+#![forbid(unsafe_code)]
 
 pub mod committed;

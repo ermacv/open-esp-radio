@@ -1,28 +1,52 @@
 # Unsafe boundaries
 
 Safe callers must not manufacture register, interrupt, descriptor or DMA
-ownership. The policy lives in standard Rust and Cargo lint settings, so every
-`cargo check`, `cargo build` and `cargo clippy` enforces it:
+ownership. An `unsafe` contract states only memory safety: memory the
+hardware reaches, a raw descriptor's ownership, a symbol's ABI or placement.
+Lifecycle order, power and membership are correctness, which typestate
+holds without `unsafe`. The policy lives in standard Rust and Cargo lint
+settings, so every `cargo check`, `cargo build` and `cargo clippy` enforces
+it:
 
-- Most production crates start with `#![forbid(unsafe_code)]`.
-- Trusted exceptions start with
-  `#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]`, permit unsafe
-  code only through documented item-level allowances and retain
-  `unsafe_op_in_unsafe_fn = "deny"` from `[workspace.lints]`. Membership in
-  the exception list is not blanket permission to add unsafe operations.
+- Every crate above the boundary starts with `#![forbid(unsafe_code)]`. The
+  layer test `every_crate_above_the_unsafe_boundary_forbids_unsafe_code`
+  (`host/test/layers`) checks each library and executable root against the
+  boundary below, which it lists.
+- A crate below the boundary starts with
+  `#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]`, permits unsafe
+  code only through documented item- or module-level allowances and retains
+  `unsafe_op_in_unsafe_fn = "deny"` from `[workspace.lints]`. Being below is
+  not blanket permission to add unsafe operations.
+- A macro another crate expands emits no `allow(unsafe_code)`: `forbid`
+  refuses that attribute even from a foreign macro (E0453), while the lint
+  does not fire on the macro's own unsafe code. A crate that expands its own
+  macro allows the unsafe code at the call site.
 - `[workspace.lints.clippy]` denies `disallowed_methods`; `clippy.toml` lists
   them, and an intentional use carries a local `allow` with a reason.
 
-In audited packages every
-`unsafe` block and `unsafe impl` needs a `// SAFETY:` comment on the lines
-immediately before it, stating why its prerequisites hold. A forwarding
-call inside an `unsafe fn` names the `# Safety` contract it relies on. Put the
-comment below any `#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does
-not accept a comment above an attribute that spans several lines.
+Every `unsafe` block and `unsafe impl` below the boundary needs a
+`// SAFETY:` comment on the lines immediately before it, stating why its
+prerequisites hold. A forwarding call inside an `unsafe fn` names the
+`# Safety` contract it relies on. Put the comment below any
+`#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does not accept a comment
+above an attribute that spans several lines.
 
-`cargo clippy --all-targets` (the default members) applies these lints on the host.
-Generated PAC code has no crate-root unsafe attribute. The table below maps
-package identities to source owners.
+`cargo clippy --all-targets` (the default members) applies these lints on the
+host. Generated PAC code has no crate-root unsafe attribute.
+
+## The boundary
+
+Below it are, by directory (`/` ends a domain):
+
+| Kind | Directories |
+| --- | --- |
+| Generated register access | `chips/esp32c5/pac-raw`, `chips/esp32s31/pac-raw`, `chips/espressif/ieee80211-pac-raw` |
+| Semantic PACs and the HAL | `chips/esp32c5/pac`, `chips/esp32s31/pac`, `chips/esp32s31/hal` |
+| Platform, executor and framework bindings | `chips/platform/`, `chips/exec/`, `chips/adapters/`, `portable/adapters/` |
+| Cores of memory the hardware shares | `portable/base/memory`, `portable/exec/interrupt-table`, `portable/platform/staged-layout`, `chips/esp32s31/bluetooth/memory` |
+| The host's operating-system bindings | `host/os/process`, `host/os/serial` |
+| The C-driver stand | `host/vendor/ieee802154-esp32s31` |
+| Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
 
 ## Generated access and trusted handwritten code
 
@@ -44,32 +68,17 @@ access through upstream `esp-hal`/`esp-pacs` belongs to
 transactions. Its Cargo package is `oer-adapters-esp-hal-soc`; its implementation
 is handwritten code.
 
-The executable policy permits scoped unsafe exceptions in these handwritten
-packages. Prefixes below omit `oer-` only to keep the mapping readable.
-
-| Package suffix | Source path |
-| --- | --- |
-| `memory` | `base/memory/` |
-| `embassy-net-owned` | `adapters/embassy/net/` |
-| `esp32s31-hal` | `esp32s31/hal/` |
-| `esp32s31-bluetooth-memory` | `esp32s31/bluetooth/memory/` |
-| `esp32s31-pac` | `esp32s31/pac/` |
-| `esp32s31-soc-esp-hal` | `adapters/esp-hal/soc/` |
-| `esp32s31-phy` | `esp32s31/phy/` |
-| `espressif-executor-embassy` | `exec/executor/` |
-| `espressif-interrupt-table-esp-hal` | `exec/esp-hal-irq/` |
-| `interrupt-table` | `exec/interrupt-table/` |
-| `platform-staged-layout` | `platform/staged-layout/` |
-
-These exceptions cover distinct obligations: singleton acquisition and MMIO
+The crates below cover distinct obligations: singleton acquisition and MMIO
 serialization, stable addresses and CPU/DMA transfer, target ABI and placement,
-and one-time static resource or interrupt binding. `embassy-net-owned` has one
+and one-time static resource or interrupt binding. The embassy network
+adapter binds Xarxa's external-packet API, which is unsafe by design, in one
 unsafe module, `external_rx`: it adopts a detached RX DMA buffer from an
 `oer-base-memory` handoff slot as a Xarxa `PacketBuf` (`ExternalPacketOrigin::new`
 and `adopt`) and returns the slot through `release_adopted` when the packet
 drops. A slot is adopted again only after that release returned, because the
 radio must first claim the slot the release freed. Preserve the proof at the
-smallest operation; a safe state machine in an audited crate remains safe.
+smallest operation; a safe state machine in a crate below the boundary
+remains safe.
 
 `esp32s31-bluetooth-memory` is the core of the controller-SRAM protocol:
 the controller walks and writes that memory, so, like the HAL's DMA modules,
@@ -174,6 +183,17 @@ trait `AdoptsBootstrapMapping`, a board's promise that its adoption of the
 bootstrap's PSRAM mapping neither resets nor remaps PSRAM, and the
 `StageTwoHandoff` proof only the staged runtime's entry mints. It holds no
 other unsafe code.
+
+## The host's operating-system bindings
+
+`oer-os-process` holds the host's raw system calls that rustix does not
+make safe: `child_setup` for what a child does between fork and exec,
+`launch_handoff` for the descriptor a fixed launcher passes its helper
+across `exec`, and, behind the `linux-socket` feature, `linux_socket` for the
+link-layer, HCI and L2CAP addresses and three socket options. `oer-os-serial`
+takes an open serial port's descriptor; it is its own crate so that the root
+fixture installer, which links `oer-os-process`, does not link `serialport`.
+The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 

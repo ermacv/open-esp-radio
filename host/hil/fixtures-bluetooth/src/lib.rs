@@ -3,7 +3,7 @@
 //! connection-parameter lease and the D-Bus agent and GATT client of the
 //! secure GATT runs. It needs no firmware trace; the workloads that read one
 //! stay on the archive branch until the BLE block.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 /// A fixture operation's result.
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

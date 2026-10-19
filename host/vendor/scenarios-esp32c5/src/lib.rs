@@ -4,6 +4,8 @@
 //! through the chip-neutral scenario engine and checks expectations
 //! independent of both executions. Chip addresses and source identities
 //! belong to this verification owner.
+
+#![forbid(unsafe_code)]
 pub mod decisions;
 pub mod phy_i2c;
 pub mod run;

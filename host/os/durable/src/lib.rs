@@ -2,6 +2,8 @@
 //! content digests (remembered across processes by [`digests`]),
 //! JSON Lines logs ([`jsonl`]), wall-clock timestamps and the user's state directories ([`xdg`]).
 
+#![forbid(unsafe_code)]
+
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read as _, Write as _},

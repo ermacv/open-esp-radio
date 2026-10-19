@@ -3,6 +3,8 @@
 //! engine and print the verdict; or compare every scenario, each in its own
 //! process, and write the stand's evidence shard.
 
+#![forbid(unsafe_code)]
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 

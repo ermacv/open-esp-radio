@@ -1,4 +1,6 @@
 //! Bounded local control-flow exploration. No filesystem, project or ISA implementation.
+
+#![forbid(unsafe_code)]
 use oer_analysis_riscv_model::*;
 mod dispatch;
 mod references;

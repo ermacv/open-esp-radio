@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 //! The keys a HIL image reports, as a function of the Cargo
 //! features it was built with.
 //!

@@ -1,5 +1,7 @@
 //! The JSON wire documents of the `blobray` CLI, and the analyses it derives
 //! from function records.
+
+#![forbid(unsafe_code)]
 pub mod access_groups;
 pub mod call_arguments;
 pub mod field;

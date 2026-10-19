@@ -6,6 +6,8 @@
 //! prints the compared pairs no claim names. [`inspect`] reads pinned vendor
 //! code without running a scenario. The dependency runs from this crate to
 //! the engine only, so an edit here leaves the evidence shards current.
+
+#![forbid(unsafe_code)]
 pub mod command;
 
 pub mod inspect;

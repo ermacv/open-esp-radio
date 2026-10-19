@@ -475,3 +475,117 @@ fn the_name_follows_the_path() {
         assert_eq!(expected_name(path), name);
     }
 }
+
+/// The packages below the unsafe boundary (`docs/unsafe.md`), by directory
+/// or, ending in `/`, by domain: the generated and the semantic PACs, the
+/// HAL, the platform, executor and adapter bindings, the cores of memory the
+/// hardware shares, the host's operating-system bindings, the C-driver
+/// stand, and the bootstrap and probe images. Every other package forbids
+/// unsafe code.
+const BELOW_THE_BOUNDARY: &[&str] = &[
+    "chips/esp32c5/pac-raw",
+    "chips/esp32s31/pac-raw",
+    "chips/espressif/ieee80211-pac-raw",
+    "chips/esp32c5/pac",
+    "chips/esp32s31/pac",
+    "chips/esp32s31/hal",
+    "chips/esp32s31/bluetooth/memory",
+    "chips/platform/",
+    "chips/exec/",
+    "chips/adapters/",
+    "portable/adapters/",
+    "portable/base/memory",
+    "portable/exec/interrupt-table",
+    "portable/platform/staged-layout",
+    "host/os/process",
+    "host/os/serial",
+    "host/vendor/ieee802154-esp32s31",
+    "firmware/bootstrap/",
+    "firmware/probes/",
+];
+
+fn below_the_boundary(package: &str) -> bool {
+    BELOW_THE_BOUNDARY
+        .iter()
+        .any(|entry| match entry.strip_suffix('/') {
+            Some(domain) => package.starts_with(entry) || package == domain,
+            None => package == *entry,
+        })
+}
+
+/// The crate roots of `package`: its library and every executable.
+fn crate_roots(root: &Path, package: &str) -> Vec<PathBuf> {
+    let directory = root.join(package);
+    let manifest = std::fs::read_to_string(directory.join("Cargo.toml")).unwrap();
+    let mut roots = Vec::new();
+    for default in ["src/lib.rs", "src/main.rs"] {
+        if directory.join(default).exists() {
+            roots.push(directory.join(default));
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(directory.join("src/bin")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                roots.push(path.join("main.rs"));
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                roots.push(path);
+            }
+        }
+    }
+    let mut in_bin = false;
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_bin = line == "[[bin]]";
+        } else if in_bin && let Some(path) = line.strip_prefix("path = ") {
+            let path = directory.join(path.trim_matches('"'));
+            if !roots.contains(&path) {
+                roots.push(path);
+            }
+        }
+    }
+    roots
+}
+
+#[test]
+fn every_crate_above_the_unsafe_boundary_forbids_unsafe_code() {
+    let root = root();
+    let missing = all_packages(&root)
+        .into_iter()
+        .filter(|package| !below_the_boundary(package))
+        .flat_map(|package| crate_roots(&root, &package))
+        .filter(|path| {
+            !std::fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .any(|line| line.trim() == "#![forbid(unsafe_code)]")
+        })
+        .map(|path| path.strip_prefix(&root).unwrap().display().to_string())
+        .collect::<Vec<_>>();
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
+}
+
+#[test]
+fn the_boundary_is_named_by_package_or_domain() {
+    for package in [
+        "chips/esp32s31/hal",
+        "chips/platform/staged-runtime",
+        "portable/adapters/embassy/net",
+        "host/os/serial",
+        "firmware/probes/esp32s31-radio",
+    ] {
+        assert!(below_the_boundary(package), "{package}");
+    }
+    for package in [
+        "chips/esp32s31/bluetooth/driver",
+        "chips/esp32s31/phy",
+        "portable/base/trace",
+        "host/os/durable",
+        "host/hil/link",
+        "firmware/apps/w1",
+        "firmware/hil/esp32s31",
+        "tools/fixture-install",
+    ] {
+        assert!(!below_the_boundary(package), "{package}");
+    }
+}

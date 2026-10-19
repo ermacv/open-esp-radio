@@ -1,5 +1,5 @@
 //! `cargo hil`: the alias runs this binary with the command's arguments.
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
