@@ -116,7 +116,7 @@ pub enum PhyTxDcCompletion {
         iteration: u8,
         not_ready_samples: u16,
     },
-    /// [`crate::HARDWARE_EDGE_LIMIT`] consecutive reads were not ready.
+    /// The reads within the settle limit were not ready.
     ReadyDeadlineElapsed {
         gain_index: u8,
         iteration: u8,
@@ -804,17 +804,20 @@ impl PhyTxDcReadyBinding {
     pub fn execute_target(
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        clock: &dyn oer_time::Clock,
     ) -> PhyTxDcCompletion {
-        // The read bound is this crate's, not a recovered value.
-        match crate::executor::wait::poll::counted(|| {
-            crate::hardware::read_phy_tx_dc_ready_status(registers)
+        // The settle limit is this crate's, not a recovered value.
+        let mut reads = 0_u16;
+        match crate::executor::wait::poll::settled(clock, || {
+            reads = reads.saturating_add(1);
+            crate::hardware::read_phy_tx_dc_ready_status(registers).then_some(())
         }) {
-            Some(not_ready_samples) => PhyTxDcCompletion::ReadyObserved {
+            Ok(()) => PhyTxDcCompletion::ReadyObserved {
                 gain_index: self.gain_index,
                 iteration: self.iteration,
-                not_ready_samples,
+                not_ready_samples: reads - 1,
             },
-            None => PhyTxDcCompletion::ReadyDeadlineElapsed {
+            Err(_) => PhyTxDcCompletion::ReadyDeadlineElapsed {
                 gain_index: self.gain_index,
                 iteration: self.iteration,
             },

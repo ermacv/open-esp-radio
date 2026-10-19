@@ -144,7 +144,7 @@ pub enum PhyPwdetCompletion {
         sample_index: u8,
         not_ready_samples: u16,
     },
-    /// [`crate::HARDWARE_EDGE_LIMIT`] consecutive reads were not ready.
+    /// The reads within the settle limit were not ready.
     SarReadyDeadlineElapsed {
         measurement_index: u8,
         sample_index: u8,
@@ -779,17 +779,20 @@ impl PhyPwdetReadyBinding {
     pub fn execute_target(
         self,
         registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        clock: &dyn oer_time::Clock,
     ) -> PhyPwdetCompletion {
-        // The read bound is this crate's, not a recovered value.
-        match crate::executor::wait::poll::counted(|| {
-            oer_esp32s31_hal::phy::power_detector::sample_ready(registers)
+        // The settle limit is this crate's, not a recovered value.
+        let mut reads = 0_u16;
+        match crate::executor::wait::poll::settled(clock, || {
+            reads = reads.saturating_add(1);
+            oer_esp32s31_hal::phy::power_detector::sample_ready(registers).then_some(())
         }) {
-            Some(not_ready_samples) => PhyPwdetCompletion::SarReadyObserved {
+            Ok(()) => PhyPwdetCompletion::SarReadyObserved {
                 measurement_index: self.measurement_index,
                 sample_index: self.sample_index,
-                not_ready_samples,
+                not_ready_samples: reads - 1,
             },
-            None => PhyPwdetCompletion::SarReadyDeadlineElapsed {
+            Err(_) => PhyPwdetCompletion::SarReadyDeadlineElapsed {
                 measurement_index: self.measurement_index,
                 sample_index: self.sample_index,
             },

@@ -37,8 +37,8 @@ use oer_esp32s31_ieee80211_mac::init::{
     MacSlowClockCalibrationSource,
 };
 use oer_esp32s31_phy::{
-    HARDWARE_EDGE_LIMIT, NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig,
-    PhyTxTargetPowerProfile, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyRegisterConfig, PhyTxTargetPowerProfile,
+    concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_esp32s31_radio_client::{LpClock, PhyPreparation, RcSlow, claim};
 use oer_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
@@ -257,7 +257,7 @@ async fn run(
             );
             let _ = write!(
                 console,
-                "OER w0 ready_waits tx_dc_max_not_ready={} pwdet_sar_max_not_ready={} limit={HARDWARE_EDGE_LIMIT}\r\n",
+                "OER w0 ready_waits tx_dc_max_not_ready={} pwdet_sar_max_not_ready={}\r\n",
                 outcome.ready_waits.tx_dc_max_not_ready_samples,
                 outcome.ready_waits.pwdet_sar_max_not_ready_samples
             );
