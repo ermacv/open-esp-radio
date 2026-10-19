@@ -43,3 +43,35 @@ fn malformed_tshark_input_is_an_error() {
     assert!(parse("broken").is_err());
     assert!(parse("1.0\t2472\t1\t0x4\t\tbad\t\t0\t0\t").is_err());
 }
+
+#[test]
+fn tshark_decodes_a_radiotap_probe_and_ack_from_memory() {
+    // A synthetic pcap: radiotap RATE + CHANNEL, an ordinary probe and ACK.
+    let mut pcap = Vec::new();
+    for word in [0xa1b2c3d4u32, 0x00040002, 0, 0, 65535, 127] {
+        pcap.extend_from_slice(&word.to_le_bytes());
+    }
+    let radiotap = [0, 0, 14, 0, 0x0c, 0, 0, 0, 2, 0, 0xa8, 9, 0xa0, 0];
+    let mut probe = radiotap.to_vec();
+    probe.extend_from_slice(&[0x40, 0x08, 0, 0]);
+    probe.extend_from_slice(&AP);
+    probe.extend_from_slice(&TARGET);
+    probe.extend_from_slice(&AP);
+    probe.extend_from_slice(&[0x80, 0, 0, 3, b'L', b'a', b'b']);
+    let mut ack = radiotap.to_vec();
+    ack.extend_from_slice(&[0xd4, 0, 0, 0]);
+    ack.extend_from_slice(&TARGET);
+    for (us, frame) in [(0u32, probe), (600, ack)] {
+        for word in [1, us, frame.len() as u32, frame.len() as u32] {
+            pcap.extend_from_slice(&word.to_le_bytes());
+        }
+        pcap.extend_from_slice(&frame);
+    }
+    let frames = decode(&pcap).expect("tshark decode");
+    assert_eq!(frames.len(), 2);
+    assert_eq!(frames[0].rate_mbps, Some(1.0));
+    assert!(frames[0].retry);
+    assert_eq!(frames[0].source, Some(TARGET));
+    assert_eq!(frames[0].ssid, b"Lab");
+    assert_eq!(acknowledged_probes(&frames, TARGET, AP), 1);
+}

@@ -165,8 +165,12 @@ mod tests {
             w1::ENV_BSSID,
             w1::ENV_SSID,
             w1::ENV_COUNTRY,
-        ].into_iter().chain(w2::ENV).chain([ENV_W0_COUNTRY])
-        .map(|name| (name.to_owned(), None)).collect::<Vec<_>>();
+        ]
+        .into_iter()
+        .chain(w2::ENV)
+        .chain([ENV_W0_COUNTRY])
+        .map(|name| (name.to_owned(), None))
+        .collect::<Vec<_>>();
         // The unconfigured w1 and another image remove them.
         assert_eq!(runtime_env("w1", None), removed);
         assert_eq!(runtime_env("w0", Some(&stand)), removed);

@@ -263,8 +263,8 @@ fn parse(text: &str) -> Result<Vec<Frame>> {
                 bssid: optional(bssid, mac)?,
                 sequence: optional(sequence, |s| Ok(s.parse()?))?,
                 retry: match retry {
-                    "0" => false,
-                    "1" => true,
+                    "0" | "False" => false,
+                    "1" | "True" => true,
                     _ => return Err("invalid retry bit".into()),
                 },
                 ssid: (0..ssid.len())
