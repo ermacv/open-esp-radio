@@ -126,7 +126,11 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize>
     }
 
     /// Whether no scheduler software work entered this epoch.
-    pub fn runtime_is_pristine(&self) -> bool {
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the event cells' executor.
+    pub fn runtime_is_pristine(&self) -> Result<bool, oer_interrupt_table::signal::ForeignContext> {
         self.scheduler.runtime_is_pristine()
     }
 

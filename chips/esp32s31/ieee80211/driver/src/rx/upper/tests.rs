@@ -34,7 +34,8 @@ fn leak<T>(value: T) -> &'static mut T {
 /// The two ends of a leaked queue whose returns post to a leaked fact
 /// storage.
 fn ends(counters: &'static WifiRxCounters) -> RxFrameEnds<'static, SLOTS, BUFFER> {
-    let (publisher, _consumer) = leak(IrqStorage::new()).split();
+    let (publisher, _consumer) =
+        leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
     let publisher: &'static IrqPublisher<'static> = leak(publisher);
     leak(RxFrameQueue::new()).split(counters, RxReturnNotifier::new(publisher))
 }

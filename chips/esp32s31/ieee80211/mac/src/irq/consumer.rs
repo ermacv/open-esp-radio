@@ -1,17 +1,26 @@
-//! Executor-independent publication and exclusive, finite IRQ consumption.
+//! Publication through a static typed signal and exclusive, finite IRQ
+//! consumption.
 //!
-//! Splitting storage lends one affine consumer. Every wait borrows that
-//! consumer exclusively until completion or cancellation. There are no lane
-//! waits competing with a batch for the same facts or waker. The ISR owns only
-//! a publisher; neither polling nor cancelling a wait touches registers.
+//! Each storage raises the image's [`IrqSignal`] of the radio executor: the
+//! ISR ORs its facts in and pends that executor, never a waker; the
+//! executor wakes the consumer in its own context. Splitting storage lends
+//! one affine consumer. Every wait borrows that consumer exclusively until
+//! completion or cancellation. There are no lane waits competing with a
+//! batch for the same facts. The ISR owns only a publisher; neither polling
+//! nor cancelling a wait touches registers.
+//!
+//! A consumer polled outside the signal's executor reports
+//! [`ForeignContext`]: its task can never be woken there.
 
-use atomic_waker::AtomicWaker;
+#[cfg(test)]
+use core::sync::atomic::{AtomicU32, Ordering};
 use core::{
     future::poll_fn,
-    sync::atomic::{AtomicU32, Ordering},
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 use oer_esp32s31_hal::types::MacPowerInterruptObservation;
+pub use oer_interrupt_table::signal::ForeignContext;
+use oer_interrupt_table::signal::{IrqSignal, SignalPend};
 
 use super::{EVENT_KNOWN_MASK, EVENT_RX_SUCCESS, IrqSnapshot, IrqWork, next_irq_work};
 
@@ -54,10 +63,10 @@ impl Iterator for IrqBatch {
     }
 }
 
-/// Storage owned by an installation, independent of its executor.
+/// Storage owned by an installation; its facts travel in the image's
+/// static signal.
 pub struct IrqStorage {
-    pending: AtomicU32,
-    waker: AtomicWaker,
+    signal: &'static IrqSignal,
     #[cfg(test)]
     rx_posts: AtomicU32,
     #[cfg(test)]
@@ -77,10 +86,11 @@ pub struct IrqStorage {
 }
 
 impl IrqStorage {
-    pub const fn new() -> Self {
+    /// The storage of `signal`, the image's MAC signal of the radio
+    /// executor.
+    pub const fn new(signal: &'static IrqSignal) -> Self {
         Self {
-            pending: AtomicU32::new(0),
-            waker: AtomicWaker::new(),
+            signal,
             #[cfg(test)]
             rx_posts: AtomicU32::new(0),
             #[cfg(test)]
@@ -144,21 +154,14 @@ impl IrqStorage {
 
     #[inline(always)]
     fn post(&self, events: u32) -> IrqPublication {
-        let previous = self.pending.fetch_or(events, Ordering::Release);
-        let added = events & !previous;
+        let raised = self.signal.raise_deferred(events);
         IrqPublication {
             #[cfg(test)]
-            added,
+            added: events & !raised.previous,
             #[cfg(test)]
-            previous,
-            wake: if added != 0 { self.waker.take() } else { None },
+            previous: raised.previous,
+            pend: raised.pend,
         }
-    }
-}
-
-impl Default for IrqStorage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -176,7 +179,7 @@ impl IrqPublisher<'_> {
     }
     }
 
-    /// Release the MMIO/register borrow before invoking an arbitrary waker.
+    /// Release the MMIO/register borrow before pending the executor.
     #[inline(always)]
     pub fn publish_deferred(&self, events: u32) -> IrqPublication {
         let events = events & EVENT_KNOWN_MASK;
@@ -342,36 +345,49 @@ pub struct IrqConsumer<'irq> {
 impl IrqConsumer<'_> {
     /// Observe remaining work without removing any fact from its next batch.
     /// An executor uses this Acquire check after arming its event sources.
-    pub fn has_pending(&self) -> bool {
-        self.storage.pending.load(Ordering::Acquire) != 0
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn has_pending(&self) -> Result<bool, ForeignContext> {
+        self.storage.signal.has_pending()
     }
 
-    pub fn take_batch(&mut self) -> IrqBatch {
-        IrqBatch {
-            pending: self.storage.pending.swap(0, Ordering::AcqRel),
-        }
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor; the facts stay.
+    pub fn take_batch(&mut self) -> Result<IrqBatch, ForeignContext> {
+        self.storage
+            .signal
+            .take()
+            .map(|pending| IrqBatch { pending })
     }
 
-    /// Registration precedes the Acquire snapshot, including after cancellation.
-    pub fn poll_batch(&mut self, cx: &mut Context<'_>) -> Poll<IrqBatch> {
-        self.storage.waker.register(cx.waker());
-        let batch = self.take_batch();
-        if batch.is_empty() {
-            Poll::Pending
-        } else {
-            Poll::Ready(batch)
-        }
+    /// Registration precedes the Acquire snapshot, including after
+    /// cancellation.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn poll_batch(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, ForeignContext>> {
+        self.storage
+            .signal
+            .poll_take(cx)
+            .map(|facts| facts.map(|pending| IrqBatch { pending }))
     }
 
-    pub async fn wait(&mut self) -> IrqBatch {
+    /// # Errors
+    ///
+    /// As [`Self::poll_batch`].
+    pub async fn wait(&mut self) -> Result<IrqBatch, ForeignContext> {
         poll_fn(|cx| self.poll_batch(cx)).await
     }
 }
 
-/// Coalesced power facts. Bits are local semantic facts, never register images.
+/// Coalesced power facts in the image's static power signal. Bits are local
+/// semantic facts, never register images.
 pub struct PowerIrqStorage {
-    pending: AtomicU32,
-    waker: AtomicWaker,
+    signal: &'static IrqSignal,
 }
 
 impl PowerIrqStorage {
@@ -382,11 +398,10 @@ impl PowerIrqStorage {
     const TBTT: u32 = 16;
     const UNHANDLED: u32 = 32;
 
-    pub const fn new() -> Self {
-        Self {
-            pending: AtomicU32::new(0),
-            waker: AtomicWaker::new(),
-        }
+    /// The storage of `signal`, the image's power signal of the radio
+    /// executor.
+    pub const fn new(signal: &'static IrqSignal) -> Self {
+        Self { signal }
     }
 
     pub fn split(&mut self) -> (PowerIrqPublisher<'_>, PowerIrqConsumer<'_>) {
@@ -405,12 +420,6 @@ impl PowerIrqStorage {
             events & Self::TBTT != 0,
             events & Self::UNHANDLED != 0,
         )
-    }
-}
-
-impl Default for PowerIrqStorage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -434,36 +443,33 @@ impl PowerIrqPublisher<'_> {
             | (u32::from(observation.tsf_timer_3()) * PowerIrqStorage::TSF3)
             | (u32::from(observation.sta_tbtt()) * PowerIrqStorage::TBTT)
             | (u32::from(observation.has_unhandled_event()) * PowerIrqStorage::UNHANDLED);
-        let previous = self.storage.pending.fetch_or(events, Ordering::Release);
-        let added = events & !previous;
+        let raised = self.storage.signal.raise_deferred(events);
         IrqPublication {
             #[cfg(test)]
-            added,
+            added: events & !raised.previous,
             #[cfg(test)]
-            previous,
-            wake: if added != 0 {
-                self.storage.waker.take()
-            } else {
-                None
-            },
+            previous: raised.previous,
+            pend: raised.pend,
         }
     }
 }
 
-/// Acknowledged publication and its detached executor wake.
-#[must_use = "deliver the wake after ending the register transaction"]
+/// Acknowledged publication and its detached executor pend.
+#[must_use = "pend the executor after ending the register transaction"]
 pub struct IrqPublication {
     #[cfg(test)]
     added: u32,
     #[cfg(test)]
     previous: u32,
-    wake: Option<Waker>,
+    pend: Option<SignalPend>,
 }
 
 impl IrqPublication {
+    /// Pend the radio executor when a fact was new; no waker runs here.
+    #[inline(always)]
     pub fn wake(self) {
-        if let Some(waker) = self.wake {
-            waker.wake();
+        if let Some(pend) = self.pend {
+            pend.pend();
         }
     }
 }
@@ -475,25 +481,38 @@ pub struct PowerIrqConsumer<'irq> {
 
 impl PowerIrqConsumer<'_> {
     /// Observe remaining work without consuming its next power observation.
-    pub fn has_pending(&self) -> bool {
-        self.storage.pending.load(Ordering::Acquire) != 0
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn has_pending(&self) -> Result<bool, ForeignContext> {
+        self.storage.signal.has_pending()
     }
 
-    pub fn take(&mut self) -> MacPowerInterruptObservation {
-        PowerIrqStorage::observation(self.storage.pending.swap(0, Ordering::AcqRel))
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor; the facts stay.
+    pub fn take(&mut self) -> Result<MacPowerInterruptObservation, ForeignContext> {
+        self.storage.signal.take().map(PowerIrqStorage::observation)
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<MacPowerInterruptObservation> {
-        self.storage.waker.register(cx.waker());
-        let observation = self.take();
-        if observation.is_empty() {
-            Poll::Pending
-        } else {
-            Poll::Ready(observation)
-        }
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<MacPowerInterruptObservation, ForeignContext>> {
+        self.storage
+            .signal
+            .poll_take(cx)
+            .map(|facts| facts.map(PowerIrqStorage::observation))
     }
 
-    pub async fn wait(&mut self) -> MacPowerInterruptObservation {
+    /// # Errors
+    ///
+    /// As [`Self::poll`].
+    pub async fn wait(&mut self) -> Result<MacPowerInterruptObservation, ForeignContext> {
         poll_fn(|cx| self.poll(cx)).await
     }
 }

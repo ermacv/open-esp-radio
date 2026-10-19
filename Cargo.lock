@@ -2667,6 +2667,7 @@ dependencies = [
  "oer-esp32s31-bluetooth-memory",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
+ "oer-interrupt-table",
  "oer-time",
 ]
 
@@ -2723,6 +2724,7 @@ dependencies = [
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
  "oer-ieee80211-sta",
+ "oer-interrupt-table",
  "oer-memory",
  "oer-radio-port",
  "oer-test-ui-cases",
@@ -2734,7 +2736,6 @@ dependencies = [
 name = "oer-esp32s31-ieee80211-mac"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
  "bytemuck",
  "oer-esp32s31-hal",
  "oer-espressif-ieee80211-policy",
@@ -2742,6 +2743,7 @@ dependencies = [
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
  "oer-ieee80211-upper-mac",
+ "oer-interrupt-table",
  "oer-memory",
  "oer-test-ui-cases",
  "oer-time",
@@ -3025,6 +3027,7 @@ dependencies = [
  "oer-ieee80211-mac",
  "oer-ieee80211-runtime",
  "oer-ieee80211-softmac",
+ "oer-interrupt-table",
  "oer-memory",
  "oer-time",
  "static_cell",
@@ -3151,6 +3154,7 @@ dependencies = [
  "oer-ieee80211-lower-mac",
  "oer-ieee80211-mac",
  "oer-ieee80211-softmac",
+ "oer-interrupt-table",
  "oer-memory",
  "oer-probe-codegen",
  "oer-probe-macros",

@@ -43,8 +43,11 @@ fn parts() -> (
     IrqConsumer<'static>,
     PowerIrqConsumer<'static>,
 ) {
-    let (mac, irq) = leak(IrqStorage::new()).split();
-    let (power, power_consumer) = leak(PowerIrqStorage::new()).split();
+    let (mac, irq) = leak(IrqStorage::new(oer_interrupt_table::signal::host::signal())).split();
+    let (power, power_consumer) = leak(PowerIrqStorage::new(
+        oer_interrupt_table::signal::host::signal(),
+    ))
+    .split();
     let parts = WifiIrqLineParts {
         mac: leak(mac),
         power,
@@ -126,7 +129,7 @@ fn isr_model_masks_rx_acknowledges_and_wakes_once() {
     mac_mut(&mut fixture.line).latch(rx_success());
     assert!(!mac(&fixture.line).line_asserted());
 
-    let Poll::Ready(mut batch) = fixture.irq.poll_batch(&mut context) else {
+    let Poll::Ready(Ok(mut batch)) = fixture.irq.poll_batch(&mut context) else {
         panic!("the RX fact was published");
     };
     assert_eq!(batch.next(), Some(IrqWork::RxSuccess));
@@ -169,7 +172,7 @@ fn the_power_line_acknowledges_publishes_and_counts() {
         PowerInterruptOperation::Status,
         PowerInterruptOperation::Acknowledge(tbtt),
     ]));
-    assert!(fixture.power.take().sta_tbtt());
+    assert!(fixture.power.take().unwrap().sta_tbtt());
 
     service_power_line(&mut fixture.line);
     let report = fixture.counters.report();
@@ -199,7 +202,7 @@ fn unmask_after_mask_all_is_ignored() {
             .operations()
             .matches(&[PowerInterruptOperation::MaskAll])
     );
-    assert!(fixture.irq.take_batch().masked());
+    assert!(fixture.irq.take_batch().unwrap().masked());
 
     // A later unmask and a repeated mask change nothing.
     fixture.requests.ring(WifiIrqRequest::UnmaskRx, &rings);
@@ -210,7 +213,7 @@ fn unmask_after_mask_all_is_ignored() {
     assert!(!mac(&fixture.line).other_sources_enabled());
     assert_eq!(mac(&fixture.line).operations().len(), 1);
     // The masked fact is published once.
-    assert!(fixture.irq.take_batch().is_empty());
+    assert!(fixture.irq.take_batch().unwrap().is_empty());
     let report = fixture.counters.report();
     assert_eq!((report.doorbell_unmasks, report.ignored_unmasks), (0, 2));
     assert_eq!(rings.0.get(), 4);
@@ -230,7 +233,7 @@ fn doorbell_requests_coalesce_and_none_is_lost() {
         service_mac_line(line);
         mac_mut(line).clear_operations();
     });
-    assert_eq!(irq.take_batch().next(), Some(IrqWork::RxSuccess));
+    assert_eq!(irq.take_batch().unwrap().next(), Some(IrqWork::RxSuccess));
 
     // Two unmask requests before the handler runs are one unmask.
     requests.ring(WifiIrqRequest::UnmaskRx, &rings);
@@ -255,7 +258,7 @@ fn doorbell_requests_coalesce_and_none_is_lost() {
     assert_eq!(order, ["acknowledge"]);
     assert_eq!(cell.with(|line| line.masked()), Some(true));
     assert!(!requests.is_pending());
-    assert!(irq.take_batch().masked());
+    assert!(irq.take_batch().unwrap().masked());
     assert_eq!(rings.0.get(), 3);
 }
 
@@ -276,7 +279,7 @@ fn install_clears_stale_requests() {
         cell.with(|line| mac(line).operations().is_empty()),
         Some(true)
     );
-    assert!(irq.take_batch().is_empty());
+    assert!(irq.take_batch().unwrap().is_empty());
 
     // A second line is refused and handed back.
     let (second, _, _) = parts();

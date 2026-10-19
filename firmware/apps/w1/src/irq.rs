@@ -18,7 +18,7 @@ use oer_esp32s31_ieee80211_driver::{
         service_power_line,
     },
     rx::{
-        arena::{WifiRxArena, WifiRxStatic},
+        arena::{WifiIrqSignals, WifiRxArena, WifiRxStatic},
         control::ReceiveStopHandle,
         counters::WifiRxCounters,
         receive::receive,
@@ -31,9 +31,10 @@ use oer_esp32s31_ieee80211_mac::{
     irq::epoch::{ActiveEpoch, InactiveEpoch, Moderated},
 };
 use oer_espressif_executor::{
-    Doorbell, SameLevel,
+    Doorbell, InterruptExecutor, SameLevel,
     poll_timing::{CycleSource, Mcycle},
 };
+use oer_interrupt_table::signal::IrqSignal;
 use oer_memory::{AffineSpscSender, HandlerCell, zeroed::ZeroedStatic};
 
 use crate::{
@@ -75,6 +76,11 @@ oer_espressif_staged_runtime::placed_static! {
     pub static UNSERVICED_PWR: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
     /// Refused route enables of the MAC and WDEVPWR sources.
     pub static ROUTE_ERRORS: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
+    /// The MAC facts the P3 line raises for the receive runner on the
+    /// radio executor (P2).
+    static MAC_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w1";
+    /// The WDEVPWR facts the P3 line raises for the receive runner.
+    static POWER_SIGNAL: IrqSignal = IrqSignal::new(InterruptExecutor::<2>::SIGNALS), in critical_data "w1";
 }
 
 /// The doorbell shares the MAC interrupt's level and core.
@@ -203,7 +209,13 @@ pub async fn rx_task(
         let _full = bound.try_send(Bound::Claimed);
         return;
     };
-    let (parts, stop, RxFrameEnds { sender, receiver }) = match Arena::bind(arena) {
+    let (parts, stop, RxFrameEnds { sender, receiver }) = match Arena::bind(
+        arena,
+        WifiIrqSignals {
+            mac: &MAC_SIGNAL,
+            power: &POWER_SIGNAL,
+        },
+    ) {
         Ok(parts) => parts,
         Err(error) => {
             let _full = bound.try_send(Bound::Refused(error));

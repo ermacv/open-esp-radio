@@ -111,7 +111,11 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize> SchedulerInitialized<'cells, MOD
     }
 
     /// Whether no software event has entered the initialized epoch.
-    pub fn runtime_is_pristine(&self) -> bool {
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the event cells' executor.
+    pub fn runtime_is_pristine(&self) -> Result<bool, oer_interrupt_table::signal::ForeignContext> {
         self.runtime.is_pristine()
     }
 
@@ -193,9 +197,10 @@ impl ControllerHalInitialized {
     /// Initialize scheduler hardware and bind one static no-RTOS runtime.
     ///
     /// This consumes the completed controller HAL state before the first
-    /// scheduler-table write. The supplied runtime must be pristine and is
-    /// consumed into the same powered ownership epoch; it replaces the vendor
-    /// event, broker-node and task containers instead of emulating their ABI.
+    /// scheduler-table write. The supplied runtime must be pristine, observed
+    /// in its event cells' executor where the caller runs, and is consumed
+    /// into the same powered ownership epoch; it replaces the vendor event,
+    /// broker-node and task containers instead of emulating their ABI.
     #[cfg(target_arch = "riscv32")]
     pub fn initialize_scheduler<'cells, const MODEM_TIMER_CAPACITY: usize>(
         self,
@@ -220,8 +225,9 @@ impl ControllerHalInitialized {
         initialize_hardware: impl FnOnce(&mut TaskResources) -> BluetoothSchedulerHardwareListsCleared,
     ) -> SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY> {
         assert!(
-            runtime.is_pristine(),
-            "only a pristine Controller runtime can initialize a scheduler epoch"
+            runtime.is_pristine() == Ok(true),
+            "only a pristine Controller runtime, observed in its event cells' executor, can \
+             initialize a scheduler epoch"
         );
         let Self {
             mut task,

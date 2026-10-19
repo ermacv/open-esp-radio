@@ -23,6 +23,7 @@ oer-espressif-executor = { path = "../../../chips/espressif/executor", features 
 oer-espressif-esp-hal-radio = { path = "../../../chips/espressif/esp-hal/radio", features = ["esp32s31"] }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }
+oer-interrupt-table = { path = "../../../portable/interrupt-table" }
 oer-memory = { path = "../../../portable/memory" }
 oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }

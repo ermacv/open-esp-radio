@@ -26,9 +26,14 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     let start = core::ptr::from_ref(&*placed).addr();
     let end = start + core::mem::size_of::<HostStatic>();
 
-    let (parts, mut stop, frames) =
-        WifiRxArena::bind(oer_esp32s31_hal::dma_static::Placed::host(placed))
-            .expect("a zeroed static binds");
+    let (parts, mut stop, frames) = WifiRxArena::bind(
+        oer_esp32s31_hal::dma_static::Placed::host(placed),
+        crate::rx::arena::WifiIrqSignals {
+            mac: oer_interrupt_table::signal::host::signal(),
+            power: oer_interrupt_table::signal::host::signal(),
+        },
+    )
+    .expect("a zeroed static binds");
 
     let descriptors = parts.rx().descriptors().as_ptr().addr();
     assert!(descriptors >= start && descriptors < end);
@@ -47,7 +52,10 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     assert_eq!(Publisher::<'_, 1_664, 32>::free_capacity(&sink), 32);
     assert!(stop.try_exit().is_none());
     assert!(!parts.control.stop_requested());
-    assert!(!parts.irq.has_pending() && !parts.power.has_pending());
+    assert_eq!(
+        (parts.irq.has_pending(), parts.power.has_pending()),
+        (Ok(false), Ok(false))
+    );
     // Every buffer address is laid out inside the arena's address space.
     for (index, &address) in parts.rx().buffer_addresses().iter().enumerate() {
         assert_ne!(address, 0, "buffer {index}");

@@ -60,9 +60,12 @@ interrupt; the notice touches no ring state.
 
 One received frame and the owner of its DMA buffer at each step:
 
-1. **P3.** The MAC line handler masks RX delivery, acknowledges and posts
-   the RX fact; the buffer is the DMA engine's.
-2. **P2.** The receive runner (`rx/receive.rs`) wakes on the fact and runs
+1. **P3.** The MAC line handler masks RX delivery, acknowledges and raises
+   the RX fact in the image's static `IrqSignal` of the P2 executor
+   (`oer_interrupt_table::signal`), which pends P2 and touches no waker;
+   the buffer is the DMA engine's.
+2. **P2.** The executor's handler hands the fact to the receive runner
+   (`rx/receive.rs`) and wakes it in P2's own context; the runner runs
    the product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long

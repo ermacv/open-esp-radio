@@ -15,6 +15,7 @@ use crate::{
 use oer_esp32s31_hal::bluetooth::{
     ModemLpTimerInterruptReadyOwner, ModemLpTimerSoftwarePendingOwner,
 };
+use oer_interrupt_table::signal::ForeignContext;
 
 /// Stable-storage boundary for source-127 task ownership.
 ///
@@ -93,17 +94,24 @@ impl ControllerModemTimerReadiness<'_> {
         self.class
     }
 
-    /// Recheck readiness after registering the executor's own waker.
+    /// Recheck readiness after registering the executor's own waker; for
+    /// [`ControllerModemTimerReadinessClass::Interrupt`] the worker wake's
+    /// [`poll_pending`](crate::modem_lp_timer_queue::ModemLpTimerWorkerWakeCell::poll_pending)
+    /// registers it.
     ///
     /// This operation is borrowed and value-only. It neither acquires stable
     /// ownership nor advances queue or register state.
-    pub fn is_ready(&self) -> bool {
-        match self.class {
-            ControllerModemTimerReadinessClass::Interrupt => self.worker_wake.is_pending(),
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the worker wake's executor.
+    pub fn is_ready(&self) -> Result<bool, ForeignContext> {
+        Ok(match self.class {
+            ControllerModemTimerReadinessClass::Interrupt => self.worker_wake.is_pending()?,
             ControllerModemTimerReadinessClass::Step
             | ControllerModemTimerReadinessClass::Rearm => true,
             ControllerModemTimerReadinessClass::EventCapacity => !self.events.is_pending(),
-        }
+        })
     }
 }
 
@@ -118,6 +126,8 @@ pub enum ControllerModemTimerBegin<E> {
     StorageRejected(E),
     /// A software or rearm phase is already retained by this endpoint.
     AlreadyActive,
+    /// The task runs outside its worker wake's executor; nothing changed.
+    ForeignExecutor,
 }
 
 /// Result of one finite source-127 task transition.
@@ -147,6 +157,9 @@ pub enum ControllerModemTimerRearm<E> {
     StorageRejected(E),
     /// No fully rearmed owner is currently retained.
     NotReady,
+    /// The task runs outside its worker wake's executor; the owner stays
+    /// retained.
+    ForeignExecutor,
 }
 
 /// Disjoint task-context source-127 owner for one final Controller runtime.
@@ -200,12 +213,15 @@ where
         if !matches!(self.phase, ControllerModemTimerTaskPhase::Idle) {
             return ControllerModemTimerBegin::AlreadyActive;
         }
-        if !self.runtime.worker_wake().is_pending() {
-            return ControllerModemTimerBegin::NotReady;
+        match self.runtime.worker_wake().is_pending() {
+            Ok(true) => {}
+            Ok(false) => return ControllerModemTimerBegin::NotReady,
+            Err(ForeignContext) => return ControllerModemTimerBegin::ForeignExecutor,
         }
         match self.storage.take_modem_lp_timer_software_pending() {
             Ok(owner) => {
-                self.runtime.worker_wake.take();
+                // The check above ran in this same executor context.
+                let _taken = self.runtime.worker_wake.take();
                 self.phase = ControllerModemTimerTaskPhase::Work(ModemLpTimerSoftwareState::begin(
                     owner,
                     &mut self.runtime.epoch,
@@ -265,7 +281,10 @@ where
             self.phase = phase;
             return ControllerModemTimerRearm::NotReady;
         };
-        self.runtime.worker_wake.take();
+        if let Err(ForeignContext) = self.runtime.worker_wake.take() {
+            self.phase = ControllerModemTimerTaskPhase::Rearm(owner);
+            return ControllerModemTimerRearm::ForeignExecutor;
+        }
         match self.storage.restore_modem_lp_timer_ready(owner) {
             Ok(()) => ControllerModemTimerRearm::Rearmed,
             Err((error, owner)) => {
@@ -343,7 +362,9 @@ impl<'runtime, S: ModemLpTimerRetirementStorage, const CAPACITY: usize>
     /// Observe whether task work has drained before attempting IRQ shutdown.
     ///
     /// This takes no hardware owner. An ISR can publish work after this check;
-    /// `try_retire` must recheck after all routes have been disabled.
+    /// `try_retire` must recheck after all routes have been disabled. Outside
+    /// the worker wake's executor the task is never ready: only that context
+    /// observes the handoff.
     pub fn retirement_ready(&self) -> bool {
         crate::modem_timer_retirement::retire_when_drained(
             matches!(self.phase, ControllerModemTimerTaskPhase::Idle),

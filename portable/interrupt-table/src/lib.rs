@@ -58,6 +58,8 @@ use core::fmt::Debug;
 mod adopted;
 pub use adopted::{Adopted, AlreadyAdopted};
 
+pub mod signal;
+
 /// A chip's interrupt matrix, as an image's interrupt table drives it.
 pub trait Matrix {
     /// A peripheral interrupt source.

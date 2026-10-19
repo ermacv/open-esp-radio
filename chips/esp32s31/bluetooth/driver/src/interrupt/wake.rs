@@ -5,24 +5,31 @@
 //! the worker dequeues the event. This cell preserves exactly that contract
 //! without an RTOS queue, allocation, or a callback-list ABI.
 //!
-//! Waker storage is deliberately outside this type. A platform integration
-//! must register its worker waker before rechecking
-//! [`SchedulerWakeCell::take`] and must deliver every
-//! [`SchedulerWakePublication::WakeWorker`] result.
+//! The facts travel in the image's static [`IrqSignal`] of the worker's
+//! interrupt-mode executor: the handler ORs them in and pends that executor,
+//! never a waker; the executor wakes the worker in its own context. A worker
+//! polled outside that executor reports [`ForeignContext`].
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::{
+    future::poll_fn,
+    task::{Context, Poll},
+};
+
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
 
 use crate::interrupt::SchedulerWorkerWakeClass;
 
-const PENDING: u8 = 1 << 0;
-const MARKED: u8 = 1 << 1;
+const PENDING: u32 = 1 << 0;
+const MARKED: u32 = 1 << 1;
 
 /// Result of publishing one classified scheduler wake from interrupt context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SchedulerWakePublication {
-    /// This publication created a fresh pending epoch; wake the sole worker.
-    WakeWorker,
-    /// A pending epoch already exists and now covers this publication.
+    /// No earlier publication waited for the executor to service it: this
+    /// one pended the worker's executor.
+    Pended,
+    /// An unserviced publication already pended the executor and now
+    /// covers this one.
     Coalesced,
 }
 
@@ -51,31 +58,36 @@ impl SchedulerWakeBatch {
     pub const fn is_marked(&self) -> bool {
         self.marked
     }
+
+    fn from_facts(facts: u32) -> Option<Self> {
+        (facts & PENDING != 0).then_some(Self {
+            marked: facts & MARKED != 0,
+        })
+    }
 }
 
-/// Atomic pending/marker state shared by the hard handler and async worker.
+/// Pending/marker facts shared by the hard handler and async worker.
 ///
 /// There is intentionally no count. The reference worker drains scheduler
 /// state rather than executing once per interrupt, and the public OSAL drops
 /// duplicate insertion of its same static event. The marker is accumulated by
 /// OR, so an ordinary publication can never clear an earlier marked one.
 pub struct SchedulerWakeCell {
-    state: AtomicU8,
+    signal: &'static IrqSignal,
 }
 
 impl SchedulerWakeCell {
-    /// Construct an empty handoff cell.
-    pub const fn new() -> Self {
-        Self {
-            state: AtomicU8::new(0),
-        }
+    /// The empty handoff of `signal`, the image's scheduler signal of the
+    /// worker's executor.
+    pub const fn new(signal: &'static IrqSignal) -> Self {
+        Self { signal }
     }
 
-    /// Publish one scheduler-work classification from the hard handler.
+    /// Publish one scheduler-work classification from the hard handler,
+    /// after its register work.
     ///
-    /// This method is finite, lock-free, allocation-free, and performs no
-    /// MMIO. The caller remains responsible for waking the worker when the
-    /// return value is [`SchedulerWakePublication::WakeWorker`].
+    /// This method is finite, lock-free and allocation-free; its only MMIO
+    /// is the executor's pend when the publication opens a fresh epoch.
     pub fn publish_from_interrupt(
         &self,
         class: SchedulerWorkerWakeClass,
@@ -85,40 +97,72 @@ impl SchedulerWakeCell {
                 SchedulerWorkerWakeClass::Ordinary => 0,
                 SchedulerWorkerWakeClass::Marked => MARKED,
             };
-        let previous = self.state.fetch_or(publication, Ordering::AcqRel);
-
-        if previous & PENDING == 0 {
-            SchedulerWakePublication::WakeWorker
+        let raised = self.signal.raise_deferred(publication);
+        // A marker joining an unserviced epoch pends once more; harmless.
+        if let Some(pend) = raised.pend {
+            pend.pend();
+        }
+        if raised.previous & PENDING == 0 {
+            SchedulerWakePublication::Pended
         } else {
             SchedulerWakePublication::Coalesced
         }
     }
 
-    /// Atomically dequeue the current coalesced batch.
+    /// Dequeue the current coalesced batch.
     ///
-    /// A publication racing after the swap creates a distinct pending epoch
-    /// and returns `WakeWorker`, so it cannot be consumed by this batch without
-    /// an accompanying wake edge.
-    pub fn take(&self) -> Option<SchedulerWakeBatch> {
-        let state = self.state.swap(0, Ordering::AcqRel);
-        if state & PENDING == 0 {
-            None
-        } else {
-            Some(SchedulerWakeBatch {
-                marked: state & MARKED != 0,
-            })
-        }
+    /// A publication racing after the take creates a distinct pending epoch
+    /// and pends the executor, so it cannot be consumed by this batch
+    /// without an accompanying wake edge.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor; the batch stays.
+    pub fn take(&self) -> Result<Option<SchedulerWakeBatch>, ForeignContext> {
+        self.signal.take().map(SchedulerWakeBatch::from_facts)
     }
 
     /// Whether a worker batch is currently pending.
-    pub fn is_pending(&self) -> bool {
-        self.state.load(Ordering::Acquire) & PENDING != 0
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn is_pending(&self) -> Result<bool, ForeignContext> {
+        self.signal.has_pending()
     }
-}
 
-impl Default for SchedulerWakeCell {
-    fn default() -> Self {
-        Self::new()
+    /// Register the worker's waker, then dequeue the pending batch; pending
+    /// while there is none.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn poll_take(
+        &self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<SchedulerWakeBatch, ForeignContext>> {
+        loop {
+            match self.signal.poll_take(cx) {
+                Poll::Ready(Ok(facts)) => {
+                    if let Some(batch) = SchedulerWakeBatch::from_facts(facts) {
+                        return Poll::Ready(Ok(batch));
+                    }
+                    // Every publication carries PENDING; no other fact
+                    // exists, so this word was empty of work.
+                }
+                Poll::Ready(Err(foreign)) => return Poll::Ready(Err(foreign)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+    }
+
+    /// Wait for the next batch.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::poll_take`].
+    pub async fn wait(&self) -> Result<SchedulerWakeBatch, ForeignContext> {
+        poll_fn(|cx| self.poll_take(cx)).await
     }
 }
 

@@ -5,7 +5,12 @@
 //! owner; expiration delivery crosses an atomic one-event backpressure cell.
 //! No operation allocates, polls hardware in a loop or depends on an RTOS.
 
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicUsize, Ordering};
+use core::{
+    sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering},
+    task::{Context, Poll},
+};
+
+use oer_interrupt_table::signal::{ForeignContext, IrqSignal};
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothModemLpTimerCompareDisposition, BluetoothModemLpTimerEpoch,
@@ -22,53 +27,68 @@ const MAX_FORWARD_DELAY: u32 = i32::MAX as u32;
 /// Result of publishing source-127 task readiness from interrupt context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModemLpTimerWorkerWakePublication {
-    /// This entry opened a new wake epoch and must notify the worker.
-    WakeWorker,
-    /// Task readiness was already durable; an additional notification is not required.
+    /// No earlier entry waited for the executor to service it: this one
+    /// pended the worker's executor.
+    Pended,
+    /// An unserviced entry already pended the executor; an additional
+    /// notification is not required.
     Coalesced,
 }
+
+/// The one source-127 readiness fact.
+#[cfg(any(target_arch = "riscv32", test))]
+const WORKER_PENDING: u32 = 1;
 
 /// Durable, coalescing source-127 ISR-to-task readiness cell.
 ///
 /// Stable platform storage retains the affine software-pending timer owner;
 /// this cell independently retains the fact that task context must acquire it.
 /// A worker can therefore register after the interrupt without losing work.
+/// The fact travels in the image's static [`IrqSignal`] of the worker's
+/// interrupt-mode executor; only that executor's context observes it.
 pub struct ModemLpTimerWorkerWakeCell {
-    pending: AtomicBool,
+    signal: &'static IrqSignal,
 }
 
 impl ModemLpTimerWorkerWakeCell {
-    /// Construct one idle wake epoch.
-    pub const fn new() -> Self {
-        Self {
-            pending: AtomicBool::new(false),
-        }
+    /// The idle wake epoch of `signal`, the image's source-127 signal of the
+    /// worker's executor.
+    pub const fn new(signal: &'static IrqSignal) -> Self {
+        Self { signal }
     }
 
     #[cfg(any(target_arch = "riscv32", test))]
     fn publish_from_interrupt(&self) -> ModemLpTimerWorkerWakePublication {
-        if self.pending.swap(true, Ordering::AcqRel) {
-            ModemLpTimerWorkerWakePublication::Coalesced
+        if self.signal.raise(WORKER_PENDING) {
+            ModemLpTimerWorkerWakePublication::Pended
         } else {
-            ModemLpTimerWorkerWakePublication::WakeWorker
+            ModemLpTimerWorkerWakePublication::Coalesced
         }
     }
 
     /// Close the current wake epoch after task context acquired the owner.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) fn take(&self) -> bool {
-        self.pending.swap(false, Ordering::AcqRel)
+    pub(crate) fn take(&self) -> Result<bool, ForeignContext> {
+        self.signal.take().map(|facts| facts != 0)
     }
 
     /// Whether stable source-127 task work is waiting for acquisition.
-    pub fn is_pending(&self) -> bool {
-        self.pending.load(Ordering::Acquire)
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn is_pending(&self) -> Result<bool, ForeignContext> {
+        self.signal.has_pending()
     }
-}
 
-impl Default for ModemLpTimerWorkerWakeCell {
-    fn default() -> Self {
-        Self::new()
+    /// Register the worker's waker, then report whether task work waits,
+    /// leaving it for the acquisition; pending while there is none.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn poll_pending(&self, cx: &mut Context<'_>) -> Poll<Result<(), ForeignContext>> {
+        self.signal.poll_pending(cx)
     }
 }
 
