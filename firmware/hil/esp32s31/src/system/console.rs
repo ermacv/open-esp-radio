@@ -145,7 +145,9 @@ mod usb_off {
 async fn test_watchdog(service: &'static DeadlineWatchdog) {
     loop {
         let (request, mode) = TESTS.receive().await;
-        let budget = DeadlineBudget::from_micros(core::num::NonZeroU32::new(1_000_000).unwrap());
+        let budget = DeadlineBudget::from_micros(
+            core::num::NonZeroU32::new(1_000_000).expect("one second is nonzero"),
+        );
         let Ok(lease) = service.arm(budget) else {
             let refused = Rejected(RejectReason::InvalidState);
             CONSOLE

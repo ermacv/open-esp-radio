@@ -726,14 +726,11 @@ impl PhyPowerAttenuationTransition {
                 && selector == self.request.tone_selector
                 && attenuation == self.attenuation as u8 =>
             {
-                Step::ToneSar(
-                    PhyToneSarTransition::new(PhyToneSarRequest {
-                        measurement: self.iteration,
-                        samples: 2,
-                        clear_tone_after_ready: false,
-                    })
-                    .unwrap(),
-                )
+                Step::ToneSar(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
+                    measurement: self.iteration,
+                    samples: 2,
+                    clear_tone_after_ready: false,
+                }))
             }
             (Step::ToneSar(mut transition), PhyPowerAttenuationCompletion::ToneSar(completion)) => {
                 transition
@@ -947,14 +944,11 @@ impl PhyTxCapSearchTransition {
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
                 self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
-                    TxCapSearchStep::Measure(
-                        PhyToneSarTransition::new(PhyToneSarRequest {
-                            measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
-                            samples: 1,
-                            clear_tone_after_ready: self.request.clear_tone_after_ready,
-                        })
-                        .unwrap(),
-                    )
+                    TxCapSearchStep::Measure(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
+                        measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
+                        samples: 1,
+                        clear_tone_after_ready: self.request.clear_tone_after_ready,
+                    }))
                 } else {
                     TxCapSearchStep::WriteCandidate(transition)
                 };

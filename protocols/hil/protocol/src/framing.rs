@@ -411,14 +411,28 @@ impl FrameDecoder {
         }
         self.counters.frames = self.counters.frames.saturating_add(1);
         let field = |range: core::ops::Range<usize>| &self.encoded[range];
-        let u64_at = |at: usize| u64::from_le_bytes(field(at..at + 8).try_into().unwrap());
-        let u32_at = |at: usize| u32::from_le_bytes(field(at..at + 4).try_into().unwrap());
+        let u64_at = |at: usize| {
+            u64::from_le_bytes(
+                field(at..at + 8)
+                    .try_into()
+                    .expect("header fields are fixed"),
+            )
+        };
+        let u32_at = |at: usize| {
+            u32::from_le_bytes(
+                field(at..at + 4)
+                    .try_into()
+                    .expect("header fields are fixed"),
+            )
+        };
         Ok(Frame {
             boot_id: u64_at(6),
             message_sequence: u32_at(14),
             session_id: u64_at(18),
             request_id: u32_at(26),
-            key: Key(field(KEY_RANGE).try_into().unwrap()),
+            key: Key(field(KEY_RANGE)
+                .try_into()
+                .expect("header fields are fixed")),
             payload: &self.encoded[WIRE_HEADER_BYTES..protected_length],
         })
     }

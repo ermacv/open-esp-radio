@@ -917,7 +917,10 @@ fn extract_mpdu_allowing_consumed_trailer(
             return Err(RxError::Chain);
         }
     }
-    if !segments.last().unwrap().descriptor_word0.rx_done() {
+    if segments
+        .last()
+        .is_none_or(|segment| !segment.descriptor_word0.rx_done())
+    {
         return Err(RxError::Chain);
     }
 
