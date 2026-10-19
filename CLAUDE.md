@@ -28,7 +28,7 @@ without vendor radio binaries. Owner decisions are in
 - **Hardware access.** MMIO only through typed PAC accessors. A missing field
   is added to `registers/` and regenerated (`cargo registers generate`), never
   written as a local mask or shift. `unsafe` stays narrow and carries
-  `// SAFETY:` ([crates/UNSAFE.md](crates/UNSAFE.md)).
+  `// SAFETY:` ([docs/unsafe.md](docs/unsafe.md)).
 - **Execution.** An interrupt handler never shares a lock with a task. Driver
   code never blocks or spins; it yields to its executor.
 - **Panics.** Input from outside never panics: frames from the air, any peer
