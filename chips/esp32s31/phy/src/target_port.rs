@@ -1183,7 +1183,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 .execute_target(registers)
                 .map_err(|_| PhyTargetPortError::HardwareInvariant),
             PhyRxDcCalibrationExternalBinding::Pbus(binding) => {
-                complete_rx_dc_calibration_pbus(binding, registers)
+                complete_rx_dc_calibration_pbus(binding, registers, self.timer)
             }
             PhyRxDcCalibrationExternalBinding::Timer(binding) => {
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
@@ -1209,10 +1209,10 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 self.complete_rfpll(binding, platform, registers).await?,
             )),
             PhyRxGainDcExternalBinding::Pbus(binding) => {
-                complete_rx_gain_dc_pbus(binding, registers)
+                complete_rx_gain_dc_pbus(binding, registers, self.timer)
             }
             PhyRxGainDcExternalBinding::I2c(binding) => Ok(PhyRxGainDcCompletion::I2c(
-                complete_rx_gain_i2c(binding, registers)?,
+                complete_rx_gain_i2c(binding, registers, self.timer)?,
             )),
             PhyRxGainDcExternalBinding::Calibration(binding) => {
                 Ok(PhyRxGainDcCompletion::Calibration(
@@ -1234,7 +1234,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         match binding {
             PhyRxGainPublishExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
             PhyRxGainPublishExternalBinding::Pbus(binding) => {
-                complete_rx_gain_publish_pbus(binding, registers)
+                complete_rx_gain_publish_pbus(binding, registers, self.timer)
             }
             PhyRxGainPublishExternalBinding::Timer(binding) => {
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
@@ -1444,7 +1444,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 }
                 Ok(completion)
             }
-            PhyTxDcExternalBinding::Ready(binding) => Ok(binding.execute_target(registers)),
+            PhyTxDcExternalBinding::Ready(binding) => {
+                Ok(binding.execute_target(registers, self.timer))
+            }
             PhyTxDcExternalBinding::Timer(binding) => {
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
                 Ok(binding.into_completion())
@@ -1478,7 +1480,9 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 }
                 Ok(completion)
             }
-            PhyPwdetExternalBinding::Ready(binding) => Ok(binding.execute_target(registers)),
+            PhyPwdetExternalBinding::Ready(binding) => {
+                Ok(binding.execute_target(registers, self.timer))
+            }
             PhyPwdetExternalBinding::Timer(binding) => {
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await;
                 Ok(binding.into_completion())

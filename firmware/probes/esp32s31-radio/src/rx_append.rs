@@ -13,7 +13,7 @@
 use oer_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_completed_word,
     rx_dma::model::RxWalkerModel,
-    rx_ring::{RxReloadSettle, RxReloadSettleLimit},
+    rx_ring::{Settle, SettleLimit},
     rx_storage::{PlacedRxDma, RxDmaStorage},
 };
 use oer_time::{Clock, Duration, Instant};
@@ -151,13 +151,13 @@ oer_probe_macros::probe! {
             Err(_) => UNIT_FAILED,
         };
         let clock = OneMicrosecondPerRead(core::cell::Cell::new(0));
-        let Some(settle_limit) = RxReloadSettleLimit::new(Duration::from_micros(20)) else {
+        let Some(settle_limit) = SettleLimit::new(Duration::from_micros(20)) else {
             return RELOAD_FAILED;
         };
         let result = if recycled != 0 {
             recycled
         } else if ring
-            .complete_pending_reload(engine, RxReloadSettle::new(settle_limit, &clock))
+            .complete_pending_reload(engine, Settle::new(settle_limit, &clock))
             .is_ok()
         {
             0

@@ -11,9 +11,10 @@ use crate::interrupt::{
 };
 
 use oer_esp32s31_hal::bluetooth::{
-    BluetoothDiagnosticUnsettled, BluetoothSchedulerReferenceGateObservation,
-    BluetoothSchedulerWorkObservation, InterruptRegistersOwner,
+    BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,
+    InterruptRegistersOwner,
 };
+use oer_esp32s31_hal::settle::Unsettled;
 
 use oer_esp32s31_hal::bluetooth::{
     BluetoothPrimaryInterruptEpoch, BluetoothSchedulerHardwareListIndex,
@@ -108,7 +109,7 @@ trait PrimaryInterruptBackend {
     fn capture_primary_and_acknowledge(&mut self) -> BluetoothPrimaryInterruptEpoch;
     fn capture_scheduler_reference_gate(
         &mut self,
-    ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled>;
+    ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled>;
     fn clear_scheduler_reference(&mut self);
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation;
 }
@@ -126,7 +127,7 @@ impl PrimaryInterruptBackend for PrimaryHardware<'_> {
 
     fn capture_scheduler_reference_gate(
         &mut self,
-    ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled> {
+    ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
         self.interrupts
             .capture_scheduler_reference_gate(crate::diagnostic_settle(self.clock))
     }

@@ -316,33 +316,35 @@ macro_rules! define_i2c_executor {
 
 /// RX gain I2C command loop, using the immediate status observations in rev0
 /// phy_chip_i2c_readReg_org / phy_chip_i2c_writeReg. No settle is specified
-/// between command publication and status reads. Preserve the old total edge
-/// budget (including publication and terminal recognition), not a new deadline.
+/// between command publication and status reads. Publication and terminal
+/// recognition share one named settle.
 pub fn complete_rx_gain_i2c(
     mut binding: MaskedI2cWriteBinding,
     registers: &mut impl SharedPhyAccess,
+    clock: &dyn oer_time::Clock,
 ) -> Result<oer_espressif_analog::Completion<crate::analog::i2c::PhyI2cAddress>, PhyTargetPortError>
 {
-    let completed = crate::executor::wait::poll::bounded(|| {
+    let completed = crate::executor::wait::poll::settled(clock, || {
         match binding.action() {
             PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => {
                 match binding.start_target(registers) {
                     Ok(()) | Err(PhyColdI2cError::BusyAtStart) => {}
-                    Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
+                    Err(_) => return Some(Err(PhyTargetPortError::UnexpectedBinding)),
                 }
             }
             PhyColdI2cAction::AwaitReadCompletionEdge { .. }
             | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
-                binding
-                    .observe_target_edge(registers)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
+                if binding.observe_target_edge(registers).is_err() {
+                    return Some(Err(PhyTargetPortError::UnexpectedBinding));
+                }
             }
-            PhyColdI2cAction::Complete(_) => return Ok(true),
+            PhyColdI2cAction::Complete(_) => return Some(Ok(())),
         }
-        Ok(false)
-    })?;
-    if !completed {
-        return Err(PhyTargetPortError::HardwareEdgeTimedOut);
+        None
+    });
+    match completed {
+        Ok(observed) => observed?,
+        Err(_) => return Err(PhyTargetPortError::HardwareEdgeTimedOut),
     }
     binding
         .into_completion()
@@ -428,29 +430,26 @@ macro_rules! define_timeout_pbus_executor {
 
 // RX gain uses the direct rev0 phy_pbus_force_test completion loop
 // (command 0x2f82424e, status 0x2f824256). There is no intervening settle.
-// Keep the same finite per-phase attempt bound and parent timeout completion.
+// Each phase is a named settle and ends in the parent timeout completion.
 macro_rules! define_direct_timeout_pbus_executor {
     ($function:ident, $binding:ty, $completion:ty) => {
         pub fn $function(
             mut binding: $binding,
             registers: &mut impl SharedPhyAccess,
+            clock: &dyn oer_time::Clock,
         ) -> Result<$completion, PhyTargetPortError> {
-            use crate::executor::wait::poll::bounded;
-            let started = bounded::<core::convert::Infallible>(|| {
-                Ok(binding.start_target(registers).is_ok())
-            })
-            .unwrap_or_else(|never| match never {});
-            if !started {
+            use crate::executor::wait::poll::settled;
+            if settled(clock, || binding.start_target(registers).ok()).is_err() {
                 return Ok(binding.into_timeout_completion());
             }
-            let completed = bounded(|| {
-                binding
-                    .observe_target_edge(registers)
-                    .map(|edge| edge == PhyPbusHardwareObservation::EdgeConsumed)
-                    .map_err(|_| PhyTargetPortError::UnexpectedBinding)
-            })?;
-            if !completed {
-                return Ok(binding.into_timeout_completion());
+            let completed = settled(clock, || match binding.observe_target_edge(registers) {
+                Ok(PhyPbusHardwareObservation::EdgeConsumed) => Some(Ok(())),
+                Ok(_) => None,
+                Err(_) => Some(Err(PhyTargetPortError::UnexpectedBinding)),
+            });
+            match completed {
+                Ok(observed) => observed?,
+                Err(_) => return Ok(binding.into_timeout_completion()),
             }
             binding
                 .into_completion()

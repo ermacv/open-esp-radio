@@ -5,7 +5,7 @@ use oer_esp32s31_pac::{
     BluetoothSchedulerExecutionLockRequest, BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{BluetoothDiagnosticUnsettled, Control, step};
+use super::{Control, Unsettled, step};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
@@ -27,12 +27,12 @@ struct Model {
 impl Control for Model {
     type Published = ();
 
-    fn busy(&mut self) -> Result<bool, BluetoothDiagnosticUnsettled> {
+    fn busy(&mut self) -> Result<bool, Unsettled> {
         self.ops.push(Op::Busy);
         self.busy
             .pop_front()
             .unwrap_or(Some(false))
-            .ok_or(BluetoothDiagnosticUnsettled)
+            .ok_or(Unsettled)
     }
     fn engines_idle(&mut self) -> bool {
         self.ops.push(Op::EnginesIdle);
@@ -41,7 +41,7 @@ impl Control for Model {
     fn publish(&mut self, _: BluetoothSchedulerExecutionLockRequest) {
         self.ops.push(Op::Publish);
     }
-    fn observe(&mut self) -> Result<Disposition, BluetoothDiagnosticUnsettled> {
+    fn observe(&mut self) -> Result<Disposition, Unsettled> {
         self.ops.push(Op::Observe);
         Ok(self
             .observations
@@ -119,10 +119,7 @@ fn an_unsettled_busy_sample_fails_the_step_without_publishing() {
         ..Model::default()
     };
     let mut published = None;
-    assert_eq!(
-        step(request(), &mut published, &mut model),
-        Err(BluetoothDiagnosticUnsettled)
-    );
+    assert_eq!(step(request(), &mut published, &mut model), Err(Unsettled));
     assert_eq!(model.ops, [Op::Busy]);
     assert!(published.is_none());
 }

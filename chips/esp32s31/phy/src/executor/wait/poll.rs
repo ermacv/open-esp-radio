@@ -1,4 +1,25 @@
-//! Direct hardware observation with a finite attempt bound, not a time delay.
+//! Direct hardware observation: a named settle bounded in time, and the
+//! finite attempt bound of the observations not yet measured.
+
+use oer_esp32s31_hal::settle::{self, Settle, SettleLimit, Unsettled};
+use oer_time::{Clock, Duration};
+
+/// The longest a direct observation of a measured site may wait: the worst
+/// measured wait was 6 reads, 1698 cycles (about 10.6 µs at 160 MHz).
+const OBSERVATION_SETTLE_LIMIT: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
+    Some(limit) => limit,
+    None => panic!("the observation settle limit is within the settle bound"),
+};
+
+/// Observe until `attempt` yields a value or [`OBSERVATION_SETTLE_LIMIT`] has
+/// passed on `clock`; the first observation always runs.
+#[inline]
+pub(crate) fn settled<T>(
+    clock: &dyn Clock,
+    attempt: impl FnMut() -> Option<T>,
+) -> Result<T, Unsettled> {
+    settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, clock), attempt)
+}
 
 /// Read immediately and retry directly, as in the rev0 PBus completion loop.
 /// The bound counts observations; it does not promise a minimum elapsed time.
@@ -13,44 +34,41 @@ pub(crate) fn bounded<E>(mut observe: impl FnMut() -> Result<bool, E>) -> Result
     Ok(false)
 }
 
-/// Read a readiness flag immediately and retry directly, up to the same
-/// bound as [`bounded`]: the number of reads that were not ready before the
-/// first ready one, or `None` when every allowed read was not ready.
-#[inline]
-pub(crate) fn counted(mut ready: impl FnMut() -> bool) -> Option<u16> {
-    (0..crate::HARDWARE_EDGE_LIMIT).find(|_| ready())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn counted_reports_the_not_ready_reads_before_the_first_ready_one() {
-        for ready_at in [1, 2, crate::HARDWARE_EDGE_LIMIT] {
-            let mut reads = 0;
-            assert_eq!(
-                counted(|| {
-                    reads += 1;
-                    reads == ready_at
-                }),
-                Some(ready_at - 1)
-            );
-            assert_eq!(reads, ready_at);
-        }
+    use oer_time_virtual::VirtualClock;
+
+    /// Advance the clock by `step` microseconds at every read.
+    fn read_step(clock: &VirtualClock, step: u64) {
+        clock.advance(Duration::from_micros(step)).unwrap();
     }
 
     #[test]
-    fn counted_gives_up_after_the_last_allowed_read() {
+    fn a_settled_observation_stops_at_the_first_ready_read() {
+        let clock = VirtualClock::default();
         let mut reads = 0;
-        assert_eq!(
-            counted(|| {
-                reads += 1;
-                false
-            }),
+        let result = settled(&clock, || {
+            reads += 1;
+            read_step(&clock, 5);
+            (reads == 3).then_some(reads)
+        });
+        assert_eq!(result, Ok(3));
+    }
+
+    #[test]
+    fn a_settled_observation_gives_up_when_the_limit_has_passed() {
+        let clock = VirtualClock::default();
+        let mut reads = 0;
+        let result: Result<(), _> = settled(&clock, || {
+            reads += 1;
+            read_step(&clock, 6);
             None
-        );
-        assert_eq!(reads, crate::HARDWARE_EDGE_LIMIT);
+        });
+        assert_eq!(result, Err(Unsettled));
+        // 6 µs per read: the fourth read passes the 20 µs limit.
+        assert_eq!(reads, 4);
     }
 
     #[test]

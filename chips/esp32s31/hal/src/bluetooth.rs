@@ -34,19 +34,16 @@ use crate::{
 };
 
 mod controller_time;
-mod diagnostic;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
 mod shutdown;
 
+use crate::settle::{self, Settle, Unsettled};
 use controller_time::ControllerTimeLatch;
 pub use controller_time::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchRequest,
     BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError,
-};
-pub use diagnostic::{
-    BluetoothDiagnosticSettle, BluetoothDiagnosticSettleLimit, BluetoothDiagnosticUnsettled,
 };
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
@@ -993,9 +990,9 @@ impl InterruptRegistersOwner {
     /// source-3 reference gate, within `settle`.
     pub fn capture_scheduler_reference_gate(
         &mut self,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerReferenceGateObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(settle, || self.registers.capture_scheduler_reference_gate())
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
+        settle::settle(settle, || self.registers.capture_scheduler_reference_gate())
     }
 
     /// Clear the scheduler reference selected by the source-124 gate.
@@ -1017,9 +1014,9 @@ impl InterruptRegistersOwner {
     /// scheduler decision, within `settle`.
     pub fn capture_scheduler_busy(
         &mut self,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerBusyObservation, BluetoothDiagnosticUnsettled> {
-        diagnostic::settle(settle, || self.registers.capture_scheduler_busy())
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
+        settle::settle(settle, || self.registers.capture_scheduler_busy())
     }
 
     /// Acknowledge interrupt source 7 for one indexed scheduler
@@ -1037,10 +1034,9 @@ impl InterruptRegistersOwner {
     /// registers, within `settle`.
     pub fn capture_scheduler_lock_modify_interrupt(
         &mut self,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, BluetoothDiagnosticUnsettled>
-    {
-        diagnostic::settle(settle, || {
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, Unsettled> {
+        settle::settle(settle, || {
             self.registers.capture_scheduler_lock_modify_interrupt()
         })
     }
@@ -1071,20 +1067,17 @@ impl InterruptOutputAfterRoutesOwner {
     /// Sample scheduler BUSY within `settle` for one release step.
     fn capture_scheduler_busy(
         &self,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
-        diagnostic::settle(settle, || self._registers.capture_scheduler_busy()).map_err(
-            |BluetoothDiagnosticUnsettled| {
-                BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled
-            },
-        )
+        settle::settle(settle, || self._registers.capture_scheduler_busy())
+            .map_err(|Unsettled| BluetoothControllerOutputReleaseError::SchedulerBusyUnsettled)
     }
 
     /// Observe quiescence while retaining the prepared, unrouted output bank.
     pub fn validate_idle_controller(
         &self,
         task: &mut TaskOwner,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         if task.time_latch.in_flight() {
             return Err(BluetoothControllerOutputReleaseError::ControllerTimePending);
@@ -1099,7 +1092,7 @@ impl InterruptOutputAfterRoutesOwner {
     pub fn try_reactivate_idle_controller_output(
         self,
         task: &mut TaskOwner,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<InterruptRegistersOwner, (BluetoothControllerOutputReleaseError, Self)> {
         if let Err(error) = self.validate_idle_controller(task, settle) {
             return Err((error, self));
@@ -1120,7 +1113,7 @@ impl InterruptOutputAfterRoutesOwner {
     pub fn try_release_idle_controller_output(
         self,
         task: &mut TaskOwner,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<InterruptOutputReleasedOwner, (BluetoothControllerOutputReleaseError, Self)> {
         if task.time_latch.in_flight() {
             return Err((
@@ -1779,8 +1772,8 @@ impl ControllerHal<'_> {
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         lock: &mut BluetoothSchedulerExecutionLock,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerExecutionLockDisposition, BluetoothDiagnosticUnsettled> {
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerExecutionLockDisposition, Unsettled> {
         scheduler_execution_lock::step_hardware(
             self.registers,
             &mut interrupts.registers,
@@ -1827,8 +1820,8 @@ impl ControllerHal<'_> {
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         modify: &mut BluetoothSchedulerExecutionModify,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerExecutionModifyDisposition, BluetoothDiagnosticUnsettled> {
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerExecutionModifyDisposition, Unsettled> {
         scheduler_execution_modify::step_hardware(
             self.registers,
             &mut interrupts.registers,
@@ -1989,8 +1982,8 @@ impl ControllerHal<'_> {
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
         stop: BluetoothSchedulerStop,
-        settle: BluetoothDiagnosticSettle<'_>,
-    ) -> Result<BluetoothSchedulerStopStep, BluetoothDiagnosticUnsettled> {
+        settle: Settle<'_>,
+    ) -> Result<BluetoothSchedulerStopStep, Unsettled> {
         scheduler_stop::step_hardware(self.registers, &mut interrupts.registers, stop, settle)
     }
 

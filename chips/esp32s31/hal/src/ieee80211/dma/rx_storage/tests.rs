@@ -2,7 +2,7 @@ extern crate std;
 
 use self::std::boxed::Box;
 use super::*;
-use crate::ieee80211::dma::rx_ring::{RxReloadSettle, RxReloadSettleLimit};
+use crate::settle::{Settle, SettleLimit};
 use oer_time::{Clock, Duration, Instant};
 
 /// A clock which never moves: a reload that settles is never cut short.
@@ -14,9 +14,9 @@ impl Clock for Frozen {
     }
 }
 
-fn frozen_settle() -> RxReloadSettle<'static> {
-    RxReloadSettle::new(
-        RxReloadSettleLimit::new(Duration::from_micros(20)).unwrap(),
+fn frozen_settle() -> Settle<'static> {
+    Settle::new(
+        SettleLimit::new(Duration::from_micros(20)).unwrap(),
         &Frozen,
     )
 }
@@ -1897,10 +1897,7 @@ fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
     mmio.clear_operations();
 
     let clock = Stepping(Cell::new(100));
-    let settle = RxReloadSettle::new(
-        RxReloadSettleLimit::new(Duration::from_micros(5)).unwrap(),
-        &clock,
-    );
+    let settle = Settle::new(SettleLimit::new(Duration::from_micros(5)).unwrap(), &clock);
     assert_eq!(
         live.complete_pending_reload(&mut mmio, settle),
         Err(RxRingError::Busy)
@@ -1926,9 +1923,9 @@ fn a_reload_doorbell_that_never_clears_is_busy_after_the_limit() {
 
 #[test]
 fn a_settle_limit_is_nonzero_and_at_most_twenty_microseconds() {
-    assert_eq!(RxReloadSettleLimit::new(Duration::from_micros(0)), None);
-    assert_eq!(RxReloadSettleLimit::new(Duration::from_micros(21)), None);
-    assert!(RxReloadSettleLimit::new(Duration::from_micros(20)).is_some());
+    assert_eq!(SettleLimit::new(Duration::from_micros(0)), None);
+    assert_eq!(SettleLimit::new(Duration::from_micros(21)), None);
+    assert!(SettleLimit::new(Duration::from_micros(20)).is_some());
 }
 
 #[test]

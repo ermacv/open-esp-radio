@@ -21,7 +21,7 @@ use super::{
     transaction::{CompletedUnit, Counters, Preview, Publisher, service},
 };
 use crate::{datapath::DatapathRxProgress, rx::receive::RELOAD_SETTLE_LIMIT};
-use oer_esp32s31_hal::ieee80211::dma::rx_ring::RxReloadSettle;
+use oer_esp32s31_hal::settle::Settle;
 
 /// A MAC without the receive-buffer starvation counter.
 pub(crate) struct NoBufferFullCounter;
@@ -129,7 +129,7 @@ impl Ring {
                 },
                 &mut self.walker,
                 &mut NoBufferFullCounter,
-                RxReloadSettle::new(RELOAD_SETTLE_LIMIT, &clock),
+                Settle::new(RELOAD_SETTLE_LIMIT, &clock),
                 (),
             )
             .expect("received input never faults the ring");

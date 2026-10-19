@@ -13,7 +13,7 @@
 
 #![deny(unsafe_code)]
 
-use oer_esp32s31_hal::bluetooth::BluetoothDiagnosticSettle;
+use oer_esp32s31_hal::settle::Settle;
 
 use crate::ControllerSramLinkAddress;
 
@@ -76,7 +76,7 @@ pub(crate) trait SchedulerHardwareBackend {
     fn observe(
         &mut self,
         wait: SchedulerWait,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
         lock: Option<&mut Lock<Self>>,
         modify: Option<&mut Modify<Self>>,
         cancellation: Option<&mut Cancellation<Self>>,
@@ -246,7 +246,7 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         &mut self,
         backend: &mut B,
         wait: SchedulerWait,
-        settle: BluetoothDiagnosticSettle<'_>,
+        settle: Settle<'_>,
     ) -> Result<SchedulerObservation, SchedulerHardwareError> {
         let awaiting = match wait {
             SchedulerWait::ExecutionLock => self.lock.is_some(),
