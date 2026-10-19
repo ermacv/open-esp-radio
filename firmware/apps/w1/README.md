@@ -165,11 +165,11 @@ maximum of residual less the smallest residual, and `slope_ppm`, the slope
 less one in ppm (floored); `-` below two pairs.
 
 ```sh
-cargo fw run w1 --board s31-a --timeout 60s
+cargo fw run w1 --board s31-a
 ```
 
-The two hold cycles take 10 to 19 s, which makes a run longer than the
-default 30 s timeout.
+The two hold cycles take 10 to 19 s; with the report a run takes up to two
+minutes, w1's run time, which `cargo fw run` waits without `--timeout`.
 
 `cargo fw run w1` first brings the stand router to the W1 profile (the
 stand file's channel, HT 20 MHz, 100 TU beacons, the stand's SSID;
