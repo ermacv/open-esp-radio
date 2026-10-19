@@ -10,7 +10,7 @@ use std::path::Path;
 use oer_analysis_riscv_stack::Function;
 use serde::Deserialize;
 
-use crate::Result;
+use crate::stack::Result;
 
 /// The coverage review file (`stack-coverage.toml`, schema 1).
 #[derive(Clone, Debug, Deserialize)]

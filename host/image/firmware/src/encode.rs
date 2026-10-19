@@ -17,7 +17,7 @@ use espflash::{
 };
 
 use crate::Result;
-use oer_image_chip_profile as chip;
+use oer_image_profile as chip;
 
 /// The staged images' MMU page: the bootstrap keeps its text on 64-KiB pages.
 pub const MMU_PAGE_SIZE: u32 = 0x1_0000;
@@ -44,22 +44,22 @@ pub fn espflash_chip(name: &str) -> Result<Chip> {
     Chip::from_str(name).map_err(|_| format!("espflash knows no chip `{name}`").into())
 }
 
-fn mode(mode: chip::Mode) -> FlashMode {
+fn mode(mode: chip::FlashMode) -> FlashMode {
     match mode {
-        chip::Mode::Qio => FlashMode::Qio,
-        chip::Mode::Qout => FlashMode::Qout,
-        chip::Mode::Dio => FlashMode::Dio,
-        chip::Mode::Dout => FlashMode::Dout,
+        chip::FlashMode::Qio => FlashMode::Qio,
+        chip::FlashMode::Qout => FlashMode::Qout,
+        chip::FlashMode::Dio => FlashMode::Dio,
+        chip::FlashMode::Dout => FlashMode::Dout,
     }
 }
 
 /// The ESP image header's code of `mode` (byte 2).
-const fn mode_code(mode: chip::Mode) -> u8 {
+const fn mode_code(mode: chip::FlashMode) -> u8 {
     match mode {
-        chip::Mode::Qio => 0,
-        chip::Mode::Qout => 1,
-        chip::Mode::Dio => 2,
-        chip::Mode::Dout => 3,
+        chip::FlashMode::Qio => 0,
+        chip::FlashMode::Qout => 1,
+        chip::FlashMode::Dio => 2,
+        chip::FlashMode::Dout => 3,
     }
 }
 
@@ -89,7 +89,7 @@ fn espflash_segments(
     chip: Chip,
     flash: &chip::FlashMap,
     partitions: &Path,
-    flash_mode: chip::Mode,
+    flash_mode: chip::FlashMode,
 ) -> Result<Vec<(u32, Vec<u8>)>> {
     let settings = FlashSettings::new(
         Some(mode(flash_mode)),
@@ -119,8 +119,11 @@ fn espflash_segments(
 }
 
 /// Encode the bootstrap ELF `elf` as the flash contents of `chip`.
-pub fn encode(elf: &[u8], chip: &chip::Chip, root: &Path) -> Result<Segments> {
-    let flash = &chip.flash;
+pub fn encode(elf: &[u8], chip: &chip::Profile, root: &Path) -> Result<Segments> {
+    let flash = chip
+        .flash
+        .as_ref()
+        .ok_or_else(|| format!("chip {} has no flash map", chip.id))?;
     let espflash = espflash_chip(&chip.espflash_chip)?;
     let partitions = root.join(&flash.partitions);
     check_partitions(&std::fs::read_to_string(&partitions)?, flash)
@@ -184,7 +187,12 @@ pub fn encode(elf: &[u8], chip: &chip::Chip, root: &Path) -> Result<Segments> {
 }
 
 /// Fails unless `bytes` are an ESP image of `chip` whose header names `mode`.
-pub fn require_image_mode(name: &str, bytes: &[u8], chip: Chip, mode: chip::Mode) -> Result<()> {
+pub fn require_image_mode(
+    name: &str,
+    bytes: &[u8],
+    chip: Chip,
+    mode: chip::FlashMode,
+) -> Result<()> {
     const MAGIC: u8 = 0xe9;
     let header: &[u8; 24] = bytes
         .get(..24)
@@ -271,7 +279,10 @@ mod tests {
 
     fn flash() -> chip::FlashMap {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        chip::Chip::load(&root, "esp32s31").unwrap().flash
+        chip::Profile::load(&root, "esp32s31")
+            .unwrap()
+            .flash
+            .unwrap()
     }
 
     #[test]
@@ -312,12 +323,12 @@ mod tests {
         let mut image = vec![0_u8; 24];
         image[0] = 0xe9;
         image[1] = 1;
-        image[2] = mode_code(chip::Mode::Dio);
+        image[2] = mode_code(chip::FlashMode::Dio);
         image[12..14].copy_from_slice(&chip.id().to_le_bytes());
-        require_image_mode("bootloader", &image, chip, chip::Mode::Dio).unwrap();
-        assert!(require_image_mode("bootloader", &image, chip, chip::Mode::Qio).is_err());
+        require_image_mode("bootloader", &image, chip, chip::FlashMode::Dio).unwrap();
+        assert!(require_image_mode("bootloader", &image, chip, chip::FlashMode::Qio).is_err());
         image[12] ^= 1;
-        assert!(require_image_mode("bootloader", &image, chip, chip::Mode::Dio).is_err());
-        assert!(require_image_mode("bootloader", &[0; 8], chip, chip::Mode::Dio).is_err());
+        assert!(require_image_mode("bootloader", &image, chip, chip::FlashMode::Dio).is_err());
+        assert!(require_image_mode("bootloader", &[0; 8], chip, chip::FlashMode::Dio).is_err());
     }
 }

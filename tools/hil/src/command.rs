@@ -714,7 +714,7 @@ fn collect_objects(ctx: &Checkout) -> oer_hil_run_bundle::build::CollectedObject
     let mut total = oer_hil_run_bundle::build::CollectedObjects::default();
     for checkout in checkouts {
         // Build objects stay per chip.
-        let chips = oer_image_chip_profile::supported(&checkout).unwrap_or_default();
+        let chips = oer_image_profile::supported(&checkout).unwrap_or_default();
         for target in chips
             .iter()
             .map(|chip| checkout.join("target/hil").join(chip))

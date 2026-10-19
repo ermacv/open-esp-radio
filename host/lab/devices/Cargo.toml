@@ -11,11 +11,11 @@ description = "Board discovery, serial consoles, resets, OpenOCD and receipted i
 [features]
 default = []
 # Console and reset consumers do not need the espflash image writer.
-image = ["dep:espflash", "dep:oer-image-chip-profile", "dep:oer-image-bundle", "dep:serde_json", "dep:tempfile"]
+image = ["dep:espflash", "dep:oer-image-profile", "dep:oer-image-bundle", "dep:serde_json", "dep:tempfile"]
 
 [dependencies]
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"], optional = true }
-oer-image-chip-profile = { path = "../../image/chip-profile", optional = true }
+oer-image-profile = { path = "../../image/profile", optional = true }
 oer-lab-device-mac = { path = "../device-mac" }
 oer-lab-device-lock = { path = "../device-lock" }
 oer-os-durable = { path = "../../os/durable" }

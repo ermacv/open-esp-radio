@@ -7,7 +7,7 @@ Image packages share one directory, grouped by their contracts.
 | [pipeline](pipeline/README.md) (`oer-image-build`) | `build(ImageSpec) -> ImageBundle`, boot flows, build exclusion and source inputs |
 | `bundle/` (`oer-image-bundle`) | The bundle format, verified snapshots and flash segments; device writers consume it without the build pipeline |
 | `encode/` (`oer-image-encode`) | Build-time ESP image encoding and stage-two packing |
-| `policy/` (`oer-image-policy`) | Stack policy and compiler limits |
+| `policy/` (`oer-image-profile`) | Stack policy and compiler limits |
 | `checks/` (`oer-image-checks`) | Optional pipeline checks assembled for a caller |
 | `check/interrupts/`, `check/placement/`, `check/stack/` | Individual image audits over the shared ELF and RISC-V analysis layers |
 | `compare/` (`oer-image-compare`) | Function comparison modulo placement |

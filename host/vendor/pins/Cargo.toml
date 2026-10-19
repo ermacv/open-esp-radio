@@ -9,7 +9,7 @@ publish = false
 description = "The pins of a chip's vendor artifacts: the one reader of artifacts.toml and where a pinned artifact lies in a checkout"
 
 [dependencies]
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 

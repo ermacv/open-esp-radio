@@ -39,10 +39,10 @@ pub enum After {
 
 impl After {
     /// What a write followed by `start` leaves to the start.
-    pub const fn of(start: oer_image_chip_profile::Start) -> Self {
+    pub const fn of(start: oer_image_profile::Start) -> Self {
         match start {
-            oer_image_chip_profile::Start::Reset => Self::HardReset,
-            oer_image_chip_profile::Start::PowerOn => Self::StayInBootloader,
+            oer_image_profile::Start::Reset => Self::HardReset,
+            oer_image_profile::Start::PowerOn => Self::StayInBootloader,
         }
     }
 }

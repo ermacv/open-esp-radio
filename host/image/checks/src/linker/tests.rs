@@ -206,7 +206,7 @@ fn an_initialized_bss_section_fails_the_link_before_the_real_linker_runs() {
     fs::write(&object, object_with_initialized_bss()).unwrap();
     let output = directory.join("image.elf");
     // `rust-lld` would write the output; a refused link never reaches it.
-    let status = crate::run(
+    let status = crate::linker::run(
         vec![
             OsString::from(&object),
             OsString::from("-o"),

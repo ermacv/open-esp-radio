@@ -60,7 +60,7 @@ way.
 ## Flash map
 
 Each chip's `platform/<chip>/chip.toml` `[flash]` table
-([`oer-image-chip-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
+([`oer-image-profile`](../../chip-profile/src/lib.rs)'s `FlashMap`) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition table CSVs (`platform/esp32s31/partitions/`). The flash map is
 host data: no target code reads it (the bootstrap finds its payload through
@@ -104,7 +104,7 @@ records and every function of `oer-analysis-riscv-stack`'s inventory without a r
 that `stack-coverage.toml` does not review exactly once (assembly, vector data,
 compiler runtime or a linker script's section label; a review supplies no
 frame). The analysis of one image runs within
-`oer_image_check_stack::budget`: 10^9 work units, 512 MiB of working memory
+`oer_image_checks::stack::budget`: 10^9 work units, 512 MiB of working memory
 (everything the analysis of the image and its ROM holds, as the budget's
 rustdoc lists it) and 5 minutes, chosen by the owner from the measured
 analysis of every image class; running out fails the gate

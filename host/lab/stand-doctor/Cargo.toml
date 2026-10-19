@@ -9,7 +9,7 @@ publish = false
 description = "Whether the host is set up for the stand: the stand file, the udev rule, uhubctl without sudo, NetworkManager leaving wlan0"
 
 [dependencies]
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 oer-os-process = { path = "../../os/process" }
 oer-lab-model = { path = "../model" }
 oer-lab-stand-power = { path = "../stand-power" }

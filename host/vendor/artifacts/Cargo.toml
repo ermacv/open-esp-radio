@@ -11,7 +11,7 @@ description = "The pinned vendor artifacts of a chip: the host-wide store, fetch
 [dependencies]
 oer-os-process = { path = "../../os/process" }
 oer-os-durable = { path = "../../os/durable" }
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 oer-vendor-pins = { path = "../pins" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"

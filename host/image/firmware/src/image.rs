@@ -9,8 +9,6 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use oer_image_chip_profile::Chip;
-
 use crate::{Result, encode, gates, pack, placement, w1};
 
 /// The chip every image of `firmware/apps` is built for.
@@ -84,8 +82,8 @@ pub fn runtime_env(image: &str, w1: Option<&w1::Config>) -> Vec<(&'static str, O
 /// linker, which refuses bytes in an input section the boot zeroes.
 fn compiler<'a>(
     root: &'a Path,
-    profile: &'a oer_image_chip_profile::Profile,
-    policy: &oer_image_policy::StackPolicy,
+    profile: &'a oer_image_profile::Profile,
+    policy: &oer_image_profile::policy::StackPolicy,
 ) -> ImageCompiler<'a> {
     ImageCompiler {
         root,
@@ -232,12 +230,11 @@ fn refuse_test_support(root: &Path, package: &str, target: &str) -> Result<()> {
 }
 
 pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manifest, Vec<String>)> {
-    let chip = Chip::load(root, CHIP)?;
-    let profile = oer_image_chip_profile::Profile::load(root, CHIP)?;
+    let profile = oer_image_profile::Profile::load(root, CHIP)?;
     let policy = gates::policy(root, &profile)?;
     let compiler = compiler(root, &profile, &policy);
     let package = package(root, image)?;
-    refuse_test_support(root, &package, &chip.rust_target)?;
+    refuse_test_support(root, &package, &profile.rust_target)?;
     let output = output(root, image);
     std::fs::create_dir_all(&output)?;
 
@@ -284,7 +281,7 @@ pub fn build(root: &Path, image: &str, w1: Option<&w1::Config>) -> Result<(Manif
         .map_err(|error| format!("{}: {error}", bootstrap_elf.display()))?;
     std::fs::write(output.join("bootstrap.elf"), &bootstrap)?;
 
-    let segments = encode::encode(&bootstrap, &chip, root)?;
+    let segments = encode::encode(&bootstrap, &profile, root)?;
     let mut files = Vec::new();
     for segment in &segments {
         let file = format!("{}.bin", segment.name);

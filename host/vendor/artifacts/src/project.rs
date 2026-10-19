@@ -1,7 +1,7 @@
 //! The chips with a vendor verification project and its fixed layout.
 //!
 //! The supported chips are those with a profile
-//! ([`oer_image_chip_profile::Profile`]); a chip has a vendor verification project
+//! ([`oer_image_profile::Profile`]); a chip has a vendor verification project
 //! when its pins `knowledge/<chip>/vendor/artifacts.toml` also exist. Its verification
 //! files live at fixed paths below that directory, so no task keeps its own
 //! list of chips.
@@ -15,7 +15,7 @@ const KNOWLEDGE: &str = "knowledge";
 
 /// Every supported chip, sorted: the chips with a profile.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
-    oer_image_chip_profile::supported(root)
+    oer_image_profile::supported(root)
 }
 
 /// Directory of `chip`'s vendor scenario evidence shards, relative to the
@@ -48,7 +48,7 @@ impl Project {
     /// missing project.
     pub fn new(root: &Path, name: &str) -> Result<Self> {
         oer_vendor_pins::manifest_path(root, name)?;
-        Ok(Self(oer_image_chip_profile::Profile::load(root, name)?.id))
+        Ok(Self(oer_image_profile::Profile::load(root, name)?.id))
     }
 
     pub fn name(&self) -> &str {
@@ -74,8 +74,8 @@ impl Project {
     /// The chip's ROM as its profile's `[rom]` names it: the pinned ROM
     /// ELF's artifact id and the reviewed summaries of the ROM functions its
     /// images call, relative to the root; `None` for a chip without one.
-    pub fn rom(&self, root: &Path) -> Result<Option<oer_image_chip_profile::Rom>> {
-        Ok(oer_image_chip_profile::Profile::load(root, &self.0)?.rom)
+    pub fn rom(&self, root: &Path) -> Result<Option<oer_image_profile::Rom>> {
+        Ok(oer_image_profile::Profile::load(root, &self.0)?.rom)
     }
 
     /// The chip's reviewed acceptances of vendor roots its index retired or
@@ -110,10 +110,7 @@ mod tests {
     #[test]
     fn tracked_chips_are_supported_and_others_are_rejected_with_the_list() {
         let supported = supported(&root()).unwrap();
-        assert_eq!(
-            supported,
-            oer_image_chip_profile::supported(&root()).unwrap()
-        );
+        assert_eq!(supported, oer_image_profile::supported(&root()).unwrap());
         let error = Project::new(&root(), "chip-x").unwrap_err().to_string();
         assert!(error.contains("unsupported chip `chip-x`"), "{error}");
         assert!(error.contains(&supported.join(", ")), "{error}");

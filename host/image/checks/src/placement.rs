@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_image_chip_profile::{Memory, Placement, Region, Symbols};
+use oer_image_profile::{Memory, Placement, Region, Symbols};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// Audit the ELF `elf` and, when the contract names a flattened image, its

@@ -242,7 +242,7 @@ impl ResetCauseField {
     pub fn resolve(
         root: &std::path::Path,
         chip: &str,
-        profile: &oer_image_chip_profile::ResetCause,
+        profile: &oer_image_profile::ResetCause,
     ) -> crate::Result<Self> {
         let path = root.join(format!("registers/{chip}/published/platform.bindings.toml"));
         let index = oer_registers_bindings::BindingIndex::load(&path)?;
@@ -251,7 +251,7 @@ impl ResetCauseField {
 
     fn of(
         index: &oer_registers_bindings::BindingIndex,
-        profile: &oer_image_chip_profile::ResetCause,
+        profile: &oer_image_profile::ResetCause,
     ) -> std::result::Result<Self, String> {
         let (register, field) = profile
             .field

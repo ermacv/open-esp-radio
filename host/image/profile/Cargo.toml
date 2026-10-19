@@ -1,14 +1,15 @@
 [package]
-name = "oer-image-chip-profile"
+name = "oer-image-profile"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The chip facts an image build reads from firmware/platform/<chip>/chip.toml"
+description = "The chip profiles (chip.toml) and the stack policies (stack.toml) every image tool reads"
 
 [dependencies]
+oer-image-toolchain = { path = "../toolchain" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
 

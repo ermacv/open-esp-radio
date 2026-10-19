@@ -178,7 +178,7 @@ pub(super) fn create_provenance(
     // The files the image's build reads beside its sources, from the chip
     // profile: the agent's workspace and stack policy (and the policy it
     // extends), the profile itself and the partition table it names.
-    let profile = oer_image_chip_profile::Profile::load(root, chip)?;
+    let profile = oer_image_profile::Profile::load(root, chip)?;
     let policy = profile.hil_stack_policy();
     // The workspace lock is the embedded lock the record archives.
     let mut files = vec![

@@ -11,7 +11,7 @@ description = "A stand board's hub port power through uhubctl, and uhubctl's rep
 [dependencies]
 oer-lab-router = { path = "../router" }
 serde = { version = "=1.0.229", features = ["derive"] }
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 oer-lab-devices = { path = "../devices" }
 oer-lab-device-mac = { path = "../device-mac" }
 oer-os-process = { path = "../../os/process" }

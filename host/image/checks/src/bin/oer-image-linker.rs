@@ -4,8 +4,8 @@
 //! built).
 
 fn main() {
-    std::process::exit(oer_image_linker::run(
+    std::process::exit(oer_image_checks::linker::run(
         std::env::args_os().skip(1).collect(),
-        &oer_image_linker::zeroed_inputs(),
+        &oer_image_checks::linker::zeroed_inputs(),
     ));
 }

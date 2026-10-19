@@ -6,8 +6,8 @@ fn repository() -> std::path::PathBuf {
 }
 
 /// Every chip whose profile names a flash map for its images.
-fn chips(root: &Path) -> Vec<oer_image_chip_profile::Profile> {
-    let chips = oer_image_chip_profile::Profile::all(root)
+fn chips(root: &Path) -> Vec<oer_image_profile::Profile> {
+    let chips = oer_image_profile::Profile::all(root)
         .unwrap()
         .into_iter()
         .filter(|profile| profile.flash.is_some())
@@ -17,12 +17,12 @@ fn chips(root: &Path) -> Vec<oer_image_chip_profile::Profile> {
 }
 
 /// Byte 2 of an ESP image header: its flash mode.
-fn mode_byte(mode: oer_image_chip_profile::FlashMode) -> u8 {
+fn mode_byte(mode: oer_image_profile::FlashMode) -> u8 {
     match mode {
-        oer_image_chip_profile::FlashMode::Qio => 0,
-        oer_image_chip_profile::FlashMode::Qout => 1,
-        oer_image_chip_profile::FlashMode::Dio => 2,
-        oer_image_chip_profile::FlashMode::Dout => 3,
+        oer_image_profile::FlashMode::Qio => 0,
+        oer_image_profile::FlashMode::Qout => 1,
+        oer_image_profile::FlashMode::Dio => 2,
+        oer_image_profile::FlashMode::Dout => 3,
     }
 }
 

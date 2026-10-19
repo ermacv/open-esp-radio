@@ -17,7 +17,7 @@ table decides which relocation is an address word or a control transfer.
 (`stack_sizes`, `taken_addresses`, `waker_vtables`, `interrupt_table`,
 `vector_table`, `trap_entry`) charge the same control for each relocation,
 word, entry or step they read. The caller decides both; the image
-checks' budget is `oer_image_check_stack::budget`. Every structure that
+checks' budget is `oer_image_checks::stack::budget`. Every structure that
 grows with the image is admitted in that memory before it is made: what
 the analysis keeps (each function's facts, the DWARF facts and type facts
 of `read_debug`, the vtables, taken addresses, frame records and

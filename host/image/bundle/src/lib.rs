@@ -26,7 +26,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-pub use oer_image_chip_profile::profile::{Boot, FlashMap};
+pub use oer_image_profile::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -174,7 +174,7 @@ pub struct Snapshot {
     /// The chip the bundle is for.
     pub chip: String,
     /// How a written image starts.
-    pub start: oer_image_chip_profile::Start,
+    pub start: oer_image_profile::Start,
     /// Every segment in write order.
     pub segments: Vec<SnapshotSegment>,
 }
@@ -244,11 +244,7 @@ pub struct Segment {
 impl ImageBundle {
     /// An empty bundle of `profile`'s chip in `directory`, which a pipeline
     /// fills: no files yet, no gate run.
-    pub fn new(
-        directory: &Path,
-        profile: &oer_image_chip_profile::Profile,
-        flash: FlashMap,
-    ) -> Self {
+    pub fn new(directory: &Path, profile: &oer_image_profile::Profile, flash: FlashMap) -> Self {
         Self {
             schema: SCHEMA,
             directory: directory.to_owned(),

@@ -47,7 +47,7 @@ fn build_inputs(root: &Path) -> Artifacts {
     ] {
         write(&build.join(name), bytes);
     }
-    let profile: oer_image_chip_profile::Profile =
+    let profile: oer_image_profile::Profile =
         toml::from_str(oer_hil_run_bundle::run::test_support::TEST_CHIP_PROFILE).unwrap();
     let mut bundle =
         oer_image_bundle::ImageBundle::new(&build, &profile, profile.flash.clone().unwrap());

@@ -34,21 +34,21 @@ use std::{
 pub use build_log::{BuildLog, BuildStepFailed};
 
 pub use cargo::{LAYOUT_SEED_ENV, Overrides};
-pub use oer_image_chip_profile::profile::{Boot, FlashMap};
-use oer_image_policy::StackPolicy;
+use oer_image_profile::policy::StackPolicy;
+pub use oer_image_profile::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// The packages of the pipeline itself: a caller that records its builder
-/// sources starts from their closure. The image linker is a root of its
-/// own: no package depends on it, every image links with it.
-pub const PIPELINE: [&str; 2] = ["oer-image-build", "oer-image-linker"];
+/// sources starts from their closure. The checks package holds the image
+/// linker, which every image links with.
+pub const PIPELINE: [&str; 2] = ["oer-image-build", "oer-image-checks"];
 
 /// What a check of one of an image's ELF files reads.
 pub struct CheckInput<'a> {
     /// The tree the image is built from.
     pub root: &'a Path,
-    pub profile: &'a oer_image_chip_profile::Profile,
+    pub profile: &'a oer_image_profile::Profile,
     pub policy: &'a StackPolicy,
     pub elf: &'a Path,
     /// The staged runtime's flattened image, beside its ELF.
@@ -186,8 +186,8 @@ pub fn type_check(spec: &ImageSpec) -> Result<()> {
 }
 
 /// The profile of `chip` at `root`, which must name its flash map.
-pub fn profile(root: &Path, chip: &str) -> Result<oer_image_chip_profile::Profile> {
-    let profile = oer_image_chip_profile::Profile::load(root, chip)?;
+pub fn profile(root: &Path, chip: &str) -> Result<oer_image_profile::Profile> {
+    let profile = oer_image_profile::Profile::load(root, chip)?;
     if profile.flash.is_none() {
         return Err(
             format!("platform/{chip}/chip.toml names no [flash] map for its images").into(),
@@ -202,7 +202,7 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_image_chip_profile::Profil
 /// overridden.
 fn runtime_command(
     spec: &ImageSpec,
-    profile: &oer_image_chip_profile::Profile,
+    profile: &oer_image_profile::Profile,
     subcommand: &str,
     policy: &StackPolicy,
 ) -> Result<std::process::Command> {
@@ -236,7 +236,7 @@ fn runtime_command(
 /// which it refuses initialized bytes in.
 pub(crate) fn zeroed_inputs(
     command: &mut std::process::Command,
-    profile: &oer_image_chip_profile::Profile,
+    profile: &oer_image_profile::Profile,
 ) {
     command.env(
         oer_image_toolchain::image::ZEROED_INPUTS_ENV,

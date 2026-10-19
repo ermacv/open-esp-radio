@@ -1,4 +1,5 @@
-//! The chips this repository supports, from their tracked profiles.
+//! The chips this repository supports, from their tracked profiles, and
+//! the stack policy of their image families ([`policy`]).
 //!
 //! Every supported chip has `firmware/platform/<id>/chip.toml`, holding only what
 //! differs between chips and cannot be derived from the id: the chip family,
@@ -23,6 +24,8 @@ pub const SCHEMA: u32 = 1;
 const PLATFORM: &str = "firmware/platform";
 /// The profile file in a chip's platform directory.
 const PROFILE: &str = "chip.toml";
+
+pub mod policy;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

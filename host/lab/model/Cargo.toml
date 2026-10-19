@@ -10,7 +10,7 @@ description = "The owner's stand file: its one reader"
 
 [dependencies]
 oer-os-durable = { path = "../../os/durable" }
-oer-image-chip-profile = { path = "../../image/chip-profile" }
+oer-image-profile = { path = "../../image/profile" }
 oer-lab-device-mac = { path = "../device-mac" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
