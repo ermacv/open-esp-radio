@@ -122,3 +122,28 @@ fn join_bluetooth_prepared(
         .map(|joined| (joined.membership, joined.acquired))
         .map_err(|refused| refused.error)
 }
+
+#[test]
+fn btbb_is_taken_only_from_a_settled_registered_state() {
+    let (mut radio, partitions) = radio_domain(false);
+    let task = task(partitions);
+    let domain = &mut radio;
+    // Wi-Fi's entry makes the first tracking due: a tracking transition now
+    // holds the PHY state, and the domain is not settled.
+    assert_eq!(
+        enter_client(domain, RadioClient::Wifi, &VirtualClock::<8>::new()),
+        Ok(ConcurrentAcquire::TrackingDue)
+    );
+    assert!(domain.attachment().tracking_pending());
+    // Even with a forged ready proof the join publishes no gain and takes no
+    // BTBB.
+    assert!(matches!(
+        join_bluetooth_prepared(domain, &task, &VirtualClock::<8>::new()),
+        Err(BluetoothPhyClientError::Phy(
+            ConcurrentPhyError::TrackingPending
+        ))
+    ));
+    assert!(!domain.holds_btbb(RadioClient::Bluetooth));
+    // The settled acquisition writes BTBB registers, which a host test does
+    // not reach; `oer-esp32s31-hal` tests the published gain's admission.
+}

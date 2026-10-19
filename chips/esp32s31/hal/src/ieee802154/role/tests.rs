@@ -61,10 +61,15 @@ fn the_btbb_steps_require_the_ieee802154_reference() {
     let domain = &mut radio;
 
     assert_eq!(clocked.release_btbb(domain), Err(BtbbError::NotAcquired));
-    // SAFETY: the unregistered PHY is rejected before any register access.
-    #[allow(unsafe_code, reason = "exercises the rejection before MMIO")]
-    let acquired = unsafe { clocked.acquire_btbb(domain, 0) };
-    assert_eq!(acquired, Err(BtbbError::Unregistered));
+    let _epoch =
+        crate::owner::PhyInitializationAccess::begin_registration_epoch(&mut domain.phy_hal());
+    let replaced = domain.publish_btbb_gain(0x4f).unwrap();
+    let _latest = domain.publish_btbb_gain(0x4f).unwrap();
+    // The replaced gain is rejected before any register access.
+    assert_eq!(
+        clocked.acquire_btbb(domain, &replaced),
+        Err(BtbbError::Stale)
+    );
     assert!(!domain.holds_btbb(RadioClient::Ieee802154));
 }
 

@@ -101,18 +101,13 @@ pub fn join_bluetooth<'l>(
         }
     };
 
-    #[allow(
-        unsafe_code,
-        reason = "the gain byte is projected from the registration that describes the radio"
-    )]
-    let btbb = {
-        // SAFETY: the settled domain was registered by a completed target
-        // run whose epoch is the radio's current registration, and
-        // `gain_parameter` is the `phy_param` byte at 0x120 projected from
-        // that same registered state. `task` proves the Bluetooth module
-        // clocks.
-        unsafe { task.acquire_btbb(radio, gain_parameter) }
-    };
+    // The settled registered state publishes its current gain byte right
+    // before the acquisition, so BTBB starts with the value the vendor reads
+    // from `phy_param[0x120]` at that moment; a tracking or registration in
+    // progress leaves the domain unsettled, and no gain is published then.
+    let btbb = radio
+        .publish_btbb_gain(gain_parameter)
+        .and_then(|gain| task.acquire_btbb(radio, &gain));
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.

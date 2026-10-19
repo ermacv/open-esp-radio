@@ -519,29 +519,18 @@ impl TaskOwner {
     /// Take the shared BTBB baseband as the Bluetooth client.
     ///
     /// This owner holds the Bluetooth module clocks, which include the BTBB
-    /// clocks. Only the first holder runs `bt_bb_v2_init_cmplx(1)`.
+    /// clocks. Only the first holder runs `bt_bb_v2_init_cmplx(1)`, with
+    /// `gain`'s byte.
     ///
     /// # Errors
     ///
     /// As [`RadioDomain::btbb_acquire`].
-    ///
-    /// # Safety
-    ///
-    /// The shared PHY registration must be complete and `gain_parameter` must
-    /// be the byte at offset `0x120` of that registration's `phy_param`
-    /// state.
-    #[allow(
-        unsafe_code,
-        reason = "the unsafe signature carries the domain's common-PHY prerequisite"
-    )]
-    pub unsafe fn acquire_btbb<T>(
+    pub fn acquire_btbb<T>(
         &self,
         radio: &mut RadioDomain<T>,
-        gain_parameter: u8,
+        gain: &crate::domain::BtbbGain,
     ) -> Result<BtbbAcquired, BtbbError> {
-        // SAFETY: this owner holds the Bluetooth module clocks; the caller
-        // upholds the registration and gain provenance.
-        unsafe { radio.btbb_acquire(&self.registers, gain_parameter) }
+        radio.btbb_acquire(&self.registers, gain)
     }
 
     /// Leave the shared BTBB baseband.
