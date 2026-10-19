@@ -39,7 +39,7 @@ REGENERATED = [
                 r"|registers/[^/]+/published/[^/]+\.(?:svd|bindings\.toml))$"),
      "`cargo registers generate --manifest registers/<chip>/publication/<publication>.toml` "
      "after editing the register model or policy"),
-    (re.compile(r"(?:^|/)firmware/platform/[^/]+/linker/dma-window\.x$"),
+    (re.compile(r"(?:^|/)linker/dma-window\.x$"),
      "`cargo registers generate --manifest registers/<chip>/publication/registers.toml` "
      "after editing the memory map or the register model"),
     (re.compile(r"(?:^|/)knowledge/[^/]+/vendor/facts/(?:provenance\.toml|names/[^/]+\.toml)$"),
