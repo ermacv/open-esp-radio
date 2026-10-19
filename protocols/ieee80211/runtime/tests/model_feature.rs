@@ -37,10 +37,10 @@ use oer_ieee80211_mac::frame::FrameControl;
 use std::{rc::Rc, task::Waker};
 
 use oer_ieee80211_lower_mac::{
-    AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, CoexPriority, HeaderSpec,
-    InterfacePhase, LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection,
-    RetryPlan, RetryStage, RxBuffer, SizedFrame, Station, SupportedCoex, SupportedPower,
-    TxBufferPool, TxCompleted, TxFrame, TxPower, TxProtection, TxSource,
+    AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, HeaderSpec, InterfacePhase,
+    LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection, RetryPlan, RetryStage,
+    RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
+    TxPower, TxProtection, TxSource,
 };
 use oer_ieee80211_mac::{
     address::IndividualAddress,
@@ -290,7 +290,7 @@ impl PortBody<ModelBackend> for Owners {
                                 access_category: WmmAccessCategory::BestEffort,
                                 protection: Protection::None,
                                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                                coex_operation: TxOperation::Data,
                             })
                             .admit(),
                         )

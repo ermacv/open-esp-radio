@@ -2763,7 +2763,6 @@ dependencies = [
 name = "oer-esp32s31-knowledge"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
 ]
 
@@ -2851,6 +2850,8 @@ version = "0.1.0"
 name = "oer-espressif-coex"
 version = "0.1.0"
 dependencies = [
+ "oer-ieee80211-lower-mac",
+ "oer-ieee802154-mac",
  "oer-radio-coex",
 ]
 
@@ -3571,6 +3572,7 @@ dependencies = [
 name = "oer-ieee802154-mac"
 version = "0.1.0"
 dependencies = [
+ "oer-radio-coex",
  "oer-radio-port",
  "oer-radio-regulatory",
  "oer-test-ui-cases",

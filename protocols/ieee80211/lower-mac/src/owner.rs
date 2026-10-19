@@ -16,7 +16,7 @@
 //! | the receive rules a role may not request, a BSSID the role cannot take | [`SupportedFilter`] of the role, and the station's [`StationReceive`]; an access point's BSSID is its address |
 //! | busy (configuring an interface, removing a key an attempt in flight uses, closing the gate) | the operation returns at once and its end arrives as an event; never refused |
 //! | an unsupported rate | [`PhaseRate`], checked against the phase's channel; a BlockAckReq takes a [`LegacyPhaseRate`]; a retry plan's stages take checked rates |
-//! | an unsupported power or coexistence level | [`SupportedPower`], [`SupportedCoex`] |
+//! | an unsupported power | [`SupportedPower`] |
 //! | a response the frame or rate cannot carry | the buffer's [`TxFrame`] kind: an [`IndividualAddress`] or [`GroupAddress`] receiver, and for no ACK a [`NoAckHeader`] at a [`SupportedNoAck`] rate; the backend writes the QoS Ack Policy from the kind ([`QosControl`]) |
 //! | a busy queue, no free buffer | a transmit ticket and buffers of a class ([`TxBufferClass`](crate::TxBufferClass)), tokens the caller holds; the backend keeps an attempt its queue cannot take yet |
 //! | a duplicate attempt identifier | the ticket, which comes back with the terminal |
@@ -80,7 +80,6 @@
 //! #         tx_queues: 4,
 //! #         max_mpdu_length: 2304,
 //! #         tx_power_ceiling_min_dbm: Some(0),
-//! #         coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
 //! #         individual_no_ack: PhyFormatSet::NON_HT,
 //! #         station_receive_filters: ReceiveFilter::BSS_MEMBER,
 //! #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
@@ -122,7 +121,6 @@
 //! #         tx_queues: 4,
 //! #         max_mpdu_length: 2304,
 //! #         tx_power_ceiling_min_dbm: Some(0),
-//! #         coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
 //! #         individual_no_ack: PhyFormatSet::NON_HT,
 //! #         station_receive_filters: ReceiveFilter::BSS_MEMBER,
 //! #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
@@ -173,10 +171,7 @@ use oer_ieee80211_mac::{extensions::wmm::WmmParameterSet, sequence::SequenceNumb
 use oer_radio_port::PortBackend;
 use oer_radio_regulatory::Permitted;
 
-use crate::{
-    Channel, CoexPriority, LowerMacCapabilities, MacAddress, PhyRate, ReceiveFilter, TxPower,
-    VifRole,
-};
+use crate::{Channel, LowerMacCapabilities, MacAddress, PhyRate, ReceiveFilter, TxPower, VifRole};
 
 /// What a lower-MAC backend type supports, the same for every instance: the
 /// brand of its validated values.
@@ -357,32 +352,6 @@ impl<K: Ieee80211Capabilities> SupportedPower<K> {
     /// The power.
     pub const fn get(&self) -> TxPower {
         self.power
-    }
-}
-
-/// A coexistence level `K` maps onto its arbitration.
-#[derive(Debug)]
-pub struct SupportedCoex<K> {
-    priority: CoexPriority,
-    brand: PhantomData<fn() -> K>,
-}
-
-impl<K: Ieee80211Capabilities> SupportedCoex<K> {
-    /// `priority`, when `K` states it.
-    pub const fn new(priority: CoexPriority) -> Option<Self> {
-        if K::CAPS.coex_priorities.contains(priority) {
-            Some(Self {
-                priority,
-                brand: PhantomData,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// The level.
-    pub const fn get(&self) -> CoexPriority {
-        self.priority
     }
 }
 

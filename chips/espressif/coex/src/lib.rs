@@ -13,9 +13,11 @@
 //! radios' status and steps its phases; [`CoexScheduleExecutor`] adds its
 //! phase timer. A chip crate binds the ports to its HAL.
 //!
-//! The portable client and priority vocabulary is `oer-radio-coex`:
-//! [`CoexClient`], [`CoexStatusType`] and [`Ieee802154CoexLevel`] convert
-//! from it into the vendor's request kinds, status words and table events.
+//! The portable client vocabulary is `oer-radio-coex`: [`CoexClient`] and
+//! [`CoexStatusType`] convert from it into the vendor's request kinds and
+//! status words, and each protocol's operation maps to its table row
+//! ([`wifi_event`], [`ieee802154_event`]); the Bluetooth LE controller's lanes
+//! stay with its driver.
 
 #[cfg(test)]
 extern crate std;
@@ -24,6 +26,7 @@ mod clock;
 mod core;
 mod executor;
 mod model;
+mod operation;
 mod pti;
 mod schedule;
 mod timer;
@@ -35,9 +38,8 @@ pub use model::{
     COEX_TIMER_COUNT, CoexClient, CoexClientRequest, CoexError, CoexEventDurations, CoexTimerIndex,
     NoRequestKind, timer_index,
 };
-pub use pti::{
-    COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable, Ieee802154CoexLevel, wifi_events,
-};
+pub use operation::{ieee802154_event, wifi_event};
+pub use pti::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable, wifi_events};
 pub use schedule::{
     CoexPhase, CoexPhaseStep, CoexSchedule, CoexScheduleIdle, CoexScheme, CoexSchemeId,
     CoexStatusType, CoexStatusWords, EXTERNAL_COEX_STATUS, IEEE802154_COEX_STATUS, wifi_status,

@@ -1,11 +1,12 @@
 use crate::{
     AcceptListChange, AdvertisingChannel, AdvertisingChannels, AdvertisingConfiguration,
-    AdvertisingEvent, AdvertisingPdu, AdvertisingReception, AdvertisingSetId, CoexistenceLevel,
-    ConnectionEvent, ConnectionEventTiming, ConnectionId, DataChannel, DataPdu, DataPduKind,
-    LeCapabilities, LeConnectionCapabilities, LeInstant, LePhy, LePhys, LeRadioCapabilities,
-    LeWindow, LegacyAdvertisingTypes, LinkAcknowledgement, NoCapabilities, RadioDuration,
-    RadioTiming, ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration, ScannerId,
-    Supported, TestChannel, TestPayloadType, TestPhy, TestReceive, TestTransmit, TxPower, Unplaced,
+    AdvertisingEvent, AdvertisingEventKind, AdvertisingPdu, AdvertisingReception, AdvertisingSetId,
+    ConnectionEvent, ConnectionEventKind, ConnectionEventTiming, ConnectionId, DataChannel,
+    DataPdu, DataPduKind, LeCapabilities, LeConnectionCapabilities, LeInstant, LePhy, LePhys,
+    LeRadioCapabilities, LeWindow, LegacyAdvertisingTypes, LinkAcknowledgement, NoCapabilities,
+    RadioDuration, RadioTiming, ScanFilterPolicy, ScanType, ScanWindow, ScannerConfiguration,
+    ScannerId, Supported, TestChannel, TestPayloadType, TestPhy, TestReceive, TestTransmit,
+    TxPower, Unplaced,
 };
 
 /// LE 1M, a nonconnectable advertiser, a passive scanner and a peripheral
@@ -105,7 +106,7 @@ fn advertise(anchor: u64, spacing: u64) -> AdvertisingEvent {
         anchor: LeInstant::from_micros(anchor),
         channels: AdvertisingChannels::ALL,
         channel_spacing: RadioDuration::from_micros(spacing),
-        coexistence: CoexistenceLevel::Baseline,
+        coexistence: AdvertisingEventKind::Ordinary,
     }
 }
 
@@ -319,7 +320,7 @@ fn connection_event(timing: ConnectionEventTiming, priority: u8) -> ConnectionEv
         interval: RadioDuration::from_micros(30_000),
         timing,
         priority,
-        coexistence: CoexistenceLevel::Baseline,
+        coexistence: ConnectionEventKind::Ordinary,
     }
 }
 

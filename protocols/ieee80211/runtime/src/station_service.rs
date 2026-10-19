@@ -102,11 +102,11 @@ use oer_ieee80211_arbiter::{
     NoReservation, RetiredArbiter, RetuneRefused,
 };
 use oer_ieee80211_lower_mac::{
-    ClassFrame, CoexPriority, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes,
-    LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
-    PhaseTypes, PoolMpdu, PoolSource, Protection, Removed, RemovedKey, RetransmissionPlan,
-    ReturnedMpdu, RxBuffer, StationPhase, SupportedChannel, SupportedCoex, SupportedPower,
-    TxBufferClass, TxBufferPool, TxCompleted, TxMpdu, TxPower, TxProtection, TxSource,
+    ClassFrame, Ieee80211Capabilities, InstalledGroup, InterfacePhase, KeyTypes, LowerMacBackend,
+    LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome, PhaseTypes, PoolMpdu,
+    PoolSource, Protection, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu, RxBuffer,
+    StationPhase, SupportedChannel, SupportedPower, TxBufferClass, TxBufferPool, TxCompleted,
+    TxMpdu, TxPower, TxProtection, TxSource,
 };
 use oer_ieee80211_mac::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_ieee80211_sta::{
@@ -378,35 +378,12 @@ pub type PortArbiter<'id, B> = Arbiter<
     <<B as StationPort<'id>>::Types as PhaseTypes<'id>>::GatePath,
 >;
 
-/// The levels the service's attempts take, which its port must offer:
+/// The values the service's attempts take, which its port must offer:
 /// checked when the service's type is built, so a port without them builds
 /// no service.
 struct Levels<K>(PhantomData<fn() -> K>);
 
 impl<K: Ieee80211Capabilities> Levels<K> {
-    /// The station's connection frames (Authentication, Association,
-    /// EAPOL), which a coexisting radio lets through first.
-    const CONNECTION: SupportedCoex<K> = {
-        #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-        const fn checked<K: Ieee80211Capabilities>() -> SupportedCoex<K> {
-            match SupportedCoex::new(CoexPriority::Elevated) {
-                Some(level) => level,
-                None => panic!("a station's port raises its connection frames' coexistence level"),
-            }
-        }
-        checked::<K>()
-    };
-    /// Every other frame.
-    const NORMAL: SupportedCoex<K> = {
-        #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
-        const fn checked<K: Ieee80211Capabilities>() -> SupportedCoex<K> {
-            match SupportedCoex::new(CoexPriority::Normal) {
-                Some(level) => level,
-                None => panic!("a station's port sends at its normal coexistence level"),
-            }
-        }
-        checked::<K>()
-    };
     /// The calibrated power.
     const POWER: SupportedPower<K> = {
         #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
@@ -892,10 +869,8 @@ impl<
             <B::Types as PhaseTypes<'id>>::TicketPath,
         >,
     ) -> Self {
-        // The port's levels, checked as the type is built.
+        // The port's values, checked as the type is built.
         const {
-            let _connection = Levels::<B::Caps>::CONNECTION;
-            let _normal = Levels::<B::Caps>::NORMAL;
             let _power = Levels::<B::Caps>::POWER;
             #[cfg_attr(not(test), expect(clippy::panic, reason = "evaluated at build"))]
             const fn check(storage: usize, terminals: usize) {
@@ -1589,7 +1564,7 @@ impl<
                                     access_category,
                                     protection: Protection::None,
                                     power: Levels::<B::Caps>::POWER,
-                                    coex: Levels::<B::Caps>::NORMAL,
+                                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                                 })
                                 .admit(),
                             );
@@ -2124,9 +2099,9 @@ where
             });
         }
     };
-    let coex = match class {
-        StaFrameClass::Connection => Levels::<B::Caps>::CONNECTION,
-        StaFrameClass::Normal => Levels::<B::Caps>::NORMAL,
+    let coex_operation = match class {
+        StaFrameClass::Connection(frame) => oer_ieee80211_lower_mac::TxOperation::Connection(frame),
+        StaFrameClass::Normal => oer_ieee80211_lower_mac::TxOperation::Data,
     };
     let mut station = phase.station();
     admissions.insert(PendingTerminal::Transmit(ticket.index()));
@@ -2138,7 +2113,7 @@ where
             access_category: WmmAccessCategory::Voice,
             protection: Protection::None,
             power: Levels::<B::Caps>::POWER,
-            coex,
+            coex_operation,
         })
         .admit(),
     ) {

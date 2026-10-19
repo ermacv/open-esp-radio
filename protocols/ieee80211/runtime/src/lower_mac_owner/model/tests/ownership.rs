@@ -216,7 +216,7 @@ impl PortBody<Backend> for Operations {
                                     access_category: operation.category,
                                     protection: Protection::None,
                                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                    coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                                    coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                                 })
                                 .admit(),
                             )
@@ -425,7 +425,6 @@ impl PortBody<ModelBackend<ModelCaps, AggregateContext>> for AggregateOwners {
                         aggregate,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
                         min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                     })
                     .admit(),
@@ -630,7 +629,6 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                         aggregate,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
                         min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
                     })
                     .admit(),
@@ -660,7 +658,7 @@ impl PortBody<ModelBackend<ModelCaps, FaultContext>> for PublicationFault {
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                        coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                     })
                     .admit(),
                 );

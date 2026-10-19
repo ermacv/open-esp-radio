@@ -25,7 +25,6 @@ impl Ieee80211Capabilities for Caps {
         tx_queues: 4,
         max_mpdu_length: 2304,
         tx_power_ceiling_min_dbm: None,
-        coex_priorities: CoexPrioritySet::only(CoexPriority::Normal),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER
             .union(ReceiveFilter::OTHER_BSS_MANAGEMENT),

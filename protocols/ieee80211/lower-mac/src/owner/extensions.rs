@@ -22,7 +22,7 @@
 use oer_ieee80211_mac::tsf::{TsfDuration, TsfInstant};
 use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
 
-use super::{Ieee80211Capabilities, PhaseRate, SupportedCoex, SupportedPower, Tid};
+use super::{Ieee80211Capabilities, PhaseRate, SupportedPower, Tid};
 use crate::{
     AmpduCapabilities, PreparationError, Protection, TxBufferClass, TxBufferPool, TxProtection,
     phase::{GateOpen, InterfacePhase, LowerMacPhase, PhaseTypes, RoleKeys},
@@ -297,8 +297,6 @@ pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root> {
     pub protection: Protection,
     /// Its transmit power.
     pub power: SupportedPower<K>,
-    /// Its coexistence level.
-    pub coex: SupportedCoex<K>,
     /// The recipient's minimum MPDU start spacing.
     pub min_mpdu_start_spacing: MpduStartSpacing,
 }
@@ -315,8 +313,6 @@ pub struct AdmittedAggregate<'id, T, A: PhaseAggregate<'id>, K, X, Path: PoolPat
     pub protection: Protection,
     /// Transmit power selected by the caller.
     pub power: SupportedPower<K>,
-    /// Coexistence level selected by the caller.
-    pub coex: SupportedCoex<K>,
     /// Minimum MPDU start spacing of the recipient.
     pub min_mpdu_start_spacing: MpduStartSpacing,
     proof: core::marker::PhantomData<fn(A) -> A>,
@@ -333,7 +329,6 @@ impl<'id, T, A: PhaseAggregate<'id, State = NonEmptyAggregate>, K, X, Path: Pool
             execution,
             protection: self.protection,
             power: self.power,
-            coex: self.coex,
             min_mpdu_start_spacing: self.min_mpdu_start_spacing,
             proof: core::marker::PhantomData,
         }
@@ -441,9 +436,9 @@ pub struct TbttPlan {
     pub lead: TsfDuration,
     /// How far ahead of each TBTT the radio wakes to receive its beacon.
     pub wake_ahead: TsfDuration,
-    /// The window the radio keeps open for the beacon, and the
-    /// coexistence priority it asks for the air with; `None` keeps no
-    /// window.
+    /// The window the radio keeps open for the beacon, which it asks the air
+    /// for as [`Operation::BeaconWindow`](crate::Operation::BeaconWindow);
+    /// `None` keeps no window.
     pub beacon_window: Option<BeaconWindow>,
 }
 
@@ -452,8 +447,6 @@ pub struct TbttPlan {
 pub struct BeaconWindow {
     /// How long the window stays open after the TBTT.
     pub duration: TsfDuration,
-    /// The priority the window asks the radio's coexistence for.
-    pub priority: oer_radio_coex::CoexPriority,
 }
 
 /// An interface with a TSF and a TBTT schedule. Its settings take effect

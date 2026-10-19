@@ -13,20 +13,7 @@
 //! minimum of the frame and slice priorities as the scheduler priority.
 
 use core::future::Future;
-
-/// A connection frame the vendor requests the air for under the reconnect
-/// policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConnectionFrame {
-    /// Event 45.
-    ProbeRequest,
-    /// Event 46.
-    Authentication,
-    /// Event 46.
-    Association,
-    /// Event 46: an EAPOL frame, flagged by its EtherType at encapsulation.
-    Eapol,
-}
+use oer_ieee80211_lower_mac::ConnectionFrame;
 
 /// The priorities of a connection frame under the reconnect policy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

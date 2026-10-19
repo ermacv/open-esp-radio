@@ -67,6 +67,7 @@ pub use layout::{
 };
 pub mod control;
 pub mod extensions;
+pub mod operation;
 pub mod owner;
 pub mod phase;
 pub mod rx;
@@ -74,7 +75,6 @@ pub mod tx;
 
 pub use oer_ieee80211_mac::channel::{Band, Channel, ChannelError, ChannelWidth};
 pub use oer_ieee80211_mac::phy::PhyRate;
-pub use oer_radio_coex::CoexPriority;
 
 /// The clock domain of the IEEE 802.11 lower-MAC port: its instants never
 /// mix with another port's.
@@ -103,8 +103,7 @@ pub type Ieee80211ClockGeneration = oer_radio_port::Generation<Ieee80211Instant,
 pub type Ieee80211ClockSample = oer_radio_port::ClockSample<Ieee80211Radio>;
 
 pub use capabilities::{
-    BandSet, CoexPrioritySet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport,
-    WidthSet,
+    BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, WidthSet,
 };
 pub use control::{MacAddress, ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
@@ -116,12 +115,13 @@ pub use oer_radio_port::{
     ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
     Projected, ProjectionError, RelationRate,
 };
+pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AddressSetup, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPhaseRate, LowerMacBackend, LowerMacSetup,
     MpduLength, NoAckHeader, PhaseRate, QosAckPolicy, QosControl, ReceiverAddress, ResponseHeader,
-    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedCoex,
-    SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
+    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use owner::{
     AdmittedAggregate, AggregateAttempt, AggregatePushResult, AggregateRefused, AggregateState,

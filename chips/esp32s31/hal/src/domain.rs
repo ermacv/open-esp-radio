@@ -1009,12 +1009,6 @@ impl<T> RadioDomain<T> {
         self.state().coex_pti.pti(event)
     }
 
-    /// The current priority of an IEEE 802.15.4 coexistence level, as
-    /// `coex_ieee802154_pti_get` reads it.
-    pub fn coex_ieee802154_pti(&self, level: crate::coex::Ieee802154CoexLevel) -> CoexPti {
-        self.state().coex_pti.ieee802154_pti(level)
-    }
-
     /// The complete coexistence priority table.
     pub fn coex_pti_table(&self) -> CoexPtiTable {
         self.state().coex_pti

@@ -385,17 +385,12 @@ oer_probe_macros::probe! {
 /// level (1 high, 2 middle, 3 low, 4 idle), as libcoexist's local
 /// `coex_ieee802154_pti_get` reads it.
 fn ieee802154_level_pti(level: u32) -> Option<u32> {
-    use oer_esp32s31_hal::coex::{CoexPtiTable, Ieee802154CoexLevel};
-    let level = match level {
-        1 => Ieee802154CoexLevel::High,
-        2 => Ieee802154CoexLevel::Middle,
-        3 => Ieee802154CoexLevel::Low,
-        4 => Ieee802154CoexLevel::Idle,
-        _ => return None,
-    };
-    Some(u32::from(
-        CoexPtiTable::VENDOR.ieee802154_pti(level).value(),
-    ))
+    use oer_esp32s31_hal::coex::{CoexEventId, CoexPtiTable};
+    if !(1..=4).contains(&level) {
+        return None;
+    }
+    let event = CoexEventId::new(40 + u8::try_from(level).ok()?)?;
+    Some(u32::from(CoexPtiTable::VENDOR.pti(event).value()))
 }
 
 oer_probe_macros::probe! {

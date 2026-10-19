@@ -21,7 +21,7 @@
 //! compare it with the compiled vendor driver.
 
 use crate::channel::Ieee802154Channel;
-use crate::coex::{CoexPti, Ieee802154CoexScene, Ieee802154Coexistence};
+use crate::coex::{CoexPti, Ieee802154Coexistence, RadioOperation};
 use crate::tx_power::Ieee802154ResolvedTxPower;
 pub use crate::types::{
     Ieee802154CcaMode, Ieee802154DebugCounter, Ieee802154EdSampleMode, Ieee802154EtmChannel,
@@ -287,22 +287,22 @@ pub fn mac_init_registers<Ll: Ieee802154LowLevel + ?Sized>(
     ll.set_ed_sample_mode(Ieee802154EdSampleMode::Average);
     match coexistence {
         Ieee802154Coexistence::Software(priorities) => {
-            ll.set_ack_pti(priorities.ack());
-            ll.set_txrx_pti(priorities.scene(Ieee802154CoexScene::Idle));
+            ll.set_ack_pti(priorities.operation(RadioOperation::Ack));
+            ll.set_txrx_pti(priorities.operation(RadioOperation::Idle));
         }
         Ieee802154Coexistence::Disabled => ll.disable_coex(),
     }
 }
 
-/// `IEEE802154_SET_TXRX_PTI`: publish the TX/RX PTI of `scene`. A build
+/// `IEEE802154_SET_TXRX_PTI`: publish the TX/RX PTI of `operation`. A build
 /// without software coexistence compiles it to nothing.
 pub fn set_txrx_pti<Ll: Ieee802154LowLevel + ?Sized>(
     ll: &mut Ll,
     coexistence: &Ieee802154Coexistence,
-    scene: Ieee802154CoexScene,
+    operation: RadioOperation,
 ) {
     if let Ieee802154Coexistence::Software(priorities) = coexistence {
-        ll.set_txrx_pti(priorities.scene(scene));
+        ll.set_txrx_pti(priorities.operation(operation));
     }
 }
 

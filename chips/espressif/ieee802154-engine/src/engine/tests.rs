@@ -1299,10 +1299,8 @@ fn a_refused_transmission_counts_as_deferred() {
     assert_eq!((statistics.tx.nums, statistics.tx.deferred_nums), (0, 1));
 }
 
-/// The priorities the ESP32-S31 vendor table resolves for the driver's
-/// default scene levels (idle 1, TX/RX 3, timed TX/RX 8, ACK 8), as an
-/// example chip's coexistence.
+/// The priorities the vendor table resolves for the driver's default
+/// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
 fn vendor_priorities() -> Ieee802154CoexPriorities {
-    let pti = |value| CoexPti::new(value).expect("four-bit priority");
-    Ieee802154CoexPriorities::new(pti(1), pti(3), pti(8), pti(8))
+    Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
 }

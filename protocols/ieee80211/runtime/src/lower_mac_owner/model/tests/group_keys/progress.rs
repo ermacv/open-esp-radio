@@ -381,7 +381,7 @@ impl Exercise<'_> {
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex: SupportedCoex::new(CoexPriority::Normal).unwrap(),
+                        coex_operation: oer_ieee80211_lower_mac::TxOperation::Data,
                     })
                     .admit(),
                 )

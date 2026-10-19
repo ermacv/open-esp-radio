@@ -50,8 +50,9 @@ below the port.
   them is refused as unsupported and that refusal means nothing else. Why a
   backend lacks something is written in its documentation, not in code.
 - **Shared RF path.** Protocols name themselves with `RadioClient`
-  (`oer-radio-coex`) and state an operation's urgency as `CoexPriority`; the
-  backend maps both onto its arbitration below the port.
+  (`oer-radio-coex`) and name each request by the port's own `Operation`
+  enum; the chip family's coexistence owner maps both onto its arbitration
+  below the port. There is no urgency level.
 - **Names.** `*Port` is a portable contract trait, `*Service` a portable state
   machine that consumes ports, `*Hardware` a chip or family register seam
   below a port.

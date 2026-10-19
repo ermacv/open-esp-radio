@@ -48,7 +48,7 @@ fn mpdu(length: u32) -> TxRequest {
         initial_rate: OFDM54,
         receiver: TxReceiver::Individual,
         power: TxPower::Calibrated,
-        coex: CoexPriority::Normal,
+        coex_operation: TxOperation::Data,
         mpdu_retry_limit: 3,
         body: TxBody::Mpdu(MpduRequest {
             length,
@@ -173,7 +173,7 @@ fn ampdu_request(subframes: usize) -> TxRequest {
         initial_rate: OFDM54,
         receiver: TxReceiver::Individual,
         power: TxPower::Calibrated,
-        coex: CoexPriority::Normal,
+        coex_operation: TxOperation::Data,
         mpdu_retry_limit: 2,
         body: TxBody::Ampdu(
             AmpduRequest::new(

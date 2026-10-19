@@ -1,7 +1,5 @@
 //! IEEE 802.15.4 MAC owners and the ESP32-C5 data of the chip-neutral engine.
 
-pub mod coex;
-
 pub mod ll;
 
 pub mod mac;

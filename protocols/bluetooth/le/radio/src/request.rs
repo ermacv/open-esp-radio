@@ -2,7 +2,7 @@
 
 use core::num::NonZeroU64;
 
-use oer_radio_coex::CoexPriority;
+use oer_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
 
 use crate::{
     AdvertisingChannels, AdvertisingPdu, DataChannel, LeInstant, LePhy, LeRadio, LeWindow,
@@ -164,61 +164,62 @@ pub struct AdvertisingConfiguration<'pdu> {
     pub phy: LePhy,
 }
 
-/// How urgently one event needs the shared antenna.
+/// Why one advertising event asks the shared antenna as it does.
 ///
-/// A radio that shares the antenna with other protocols raises the event's
-/// coexistence priority with the level. A Controller derives it from
-/// the role's state: an advertising set periodically, a connection when it
-/// is new, has missed receptions or runs a control procedure.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
-pub enum CoexistenceLevel {
-    /// The role's ordinary priority.
+/// The Controller names the reason from the set's state; the radio's
+/// coexistence owner maps it to a priority. The rule that raises an event is
+/// recorded in `chips/esp32s31/notes/bluetooth/le-coexistence-priorities.md`.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum AdvertisingEventKind {
+    /// An event of no particular reason.
     #[default]
-    Baseline,
-    /// Above the ordinary priority.
-    Elevated,
-    /// The highest priority of the role.
-    Critical,
+    Ordinary,
+    /// One of the set's starting events, or an event its advertising
+    /// interval's period raises.
+    Raised,
 }
 
-impl CoexistenceLevel {
-    /// The portable priority of this level: `Baseline` is the ordinary
-    /// [`CoexPriority::Normal`].
-    pub const fn priority(self) -> CoexPriority {
+/// Why one connection event asks the shared antenna as it does.
+///
+/// The Controller names the reason from the link's state; the radio's
+/// coexistence owner maps it to a priority. The rule that raises an event is
+/// recorded in `chips/esp32s31/notes/bluetooth/le-coexistence-priorities.md`.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum ConnectionEventKind {
+    /// An event of no particular reason.
+    #[default]
+    Ordinary,
+    /// One of a connection's first events.
+    Opening,
+    /// An event after more events without a valid reception than the
+    /// interval allows.
+    MissedReceptions,
+    /// An event while a local control procedure runs.
+    ControlProcedure,
+    /// A central connection's event after repeated failed events. The
+    /// Controller decides when failures count as repeated.
+    CentralFailures,
+}
+
+/// An operation of the LE radio on the shared air.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Operation {
+    /// One advertising event.
+    AdvertisingEvent(AdvertisingEventKind),
+    /// One scan window.
+    ScanWindow,
+    /// One connection event.
+    ConnectionEvent(ConnectionEventKind),
+}
+
+impl CoexOperation for Operation {
+    const CLIENT: RadioClient = RadioClient::Bluetooth;
+
+    fn class(&self) -> AirClass {
         match self {
-            Self::Baseline => CoexPriority::Normal,
-            Self::Elevated => CoexPriority::Elevated,
-            Self::Critical => CoexPriority::Critical,
+            Self::AdvertisingEvent(_) | Self::ScanWindow => AirClass::PtiOnly,
+            Self::ConnectionEvent(_) => AirClass::HardDeadline,
         }
-    }
-
-    /// The level of a portable priority, or `None` for
-    /// [`CoexPriority::Idle`]: an event always runs an operation.
-    pub const fn from_priority(priority: CoexPriority) -> Option<Self> {
-        match priority {
-            CoexPriority::Idle => None,
-            CoexPriority::Normal => Some(Self::Baseline),
-            CoexPriority::Elevated => Some(Self::Elevated),
-            CoexPriority::Critical => Some(Self::Critical),
-        }
-    }
-}
-
-impl From<CoexistenceLevel> for CoexPriority {
-    fn from(level: CoexistenceLevel) -> Self {
-        level.priority()
-    }
-}
-
-/// [`CoexPriority::Idle`], which no Bluetooth LE event requests.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IdlePriority;
-
-impl TryFrom<CoexPriority> for CoexistenceLevel {
-    type Error = IdlePriority;
-
-    fn try_from(priority: CoexPriority) -> Result<Self, Self::Error> {
-        Self::from_priority(priority).ok_or(IdlePriority)
     }
 }
 
@@ -238,8 +239,8 @@ pub struct AdvertisingEvent {
     pub channels: AdvertisingChannels,
     /// Time between the anchors of consecutive channels.
     pub channel_spacing: RadioDuration<LeRadio>,
-    /// Coexistence urgency of the event.
-    pub coexistence: CoexistenceLevel,
+    /// Why the event asks the air as it does.
+    pub coexistence: AdvertisingEventKind,
 }
 
 impl AdvertisingEvent {
@@ -389,8 +390,8 @@ pub struct ConnectionEvent {
     pub timing: ConnectionEventTiming,
     /// Scheduling priority, 0 to 15.
     pub priority: u8,
-    /// Coexistence urgency of the event.
-    pub coexistence: CoexistenceLevel,
+    /// Why the event asks the air as it does.
+    pub coexistence: ConnectionEventKind,
 }
 
 /// One Direct Test Mode transmitter event.
@@ -531,8 +532,8 @@ impl RadioTiming {
 #[cfg(test)]
 mod tests {
     use super::{
-        AdvertisingEvent, AdvertisingSetId, CoexPriority, CoexistenceLevel, ConnectionAllowances,
-        IdlePriority, RadioTiming,
+        AdvertisingEvent, AdvertisingEventKind, AdvertisingSetId, ConnectionAllowances,
+        ConnectionEventKind, Operation, RadioTiming,
     };
     use crate::{
         AdvertisingChannel, AdvertisingChannels, LeInstant, LeWindow, NonZeroRadioDuration,
@@ -540,25 +541,18 @@ mod tests {
     };
     use core::num::NonZeroU64;
 
-    /// Every level keeps its order as a portable priority and returns from
-    /// it; the idle priority has no event level.
+    /// Only a connection event has a hard deadline.
     #[test]
-    fn coexistence_levels_round_trip_through_portable_priorities() {
-        let levels = [
-            CoexistenceLevel::Baseline,
-            CoexistenceLevel::Elevated,
-            CoexistenceLevel::Critical,
-        ];
-        let priorities = levels.map(CoexPriority::from);
-        assert!(priorities.windows(2).all(|pair| pair[0] < pair[1]));
-        assert_eq!(priorities.map(CoexistenceLevel::try_from), levels.map(Ok));
+    fn only_connection_events_have_hard_deadlines() {
+        use oer_radio_coex::{AirClass, Operation as _};
         assert_eq!(
-            CoexistenceLevel::try_from(CoexPriority::Idle),
-            Err(IdlePriority)
+            Operation::AdvertisingEvent(AdvertisingEventKind::Raised).class(),
+            AirClass::PtiOnly
         );
+        assert_eq!(Operation::ScanWindow.class(), AirClass::PtiOnly);
         assert_eq!(
-            CoexPriority::from(CoexistenceLevel::default()),
-            CoexPriority::default()
+            Operation::ConnectionEvent(ConnectionEventKind::CentralFailures).class(),
+            AirClass::HardDeadline
         );
     }
 
@@ -569,7 +563,7 @@ mod tests {
             anchor: LeInstant::from_micros(1_000),
             channels: AdvertisingChannels::new(false, true, true).unwrap(),
             channel_spacing: RadioDuration::from_micros(400),
-            coexistence: super::CoexistenceLevel::Baseline,
+            coexistence: AdvertisingEventKind::Ordinary,
         };
         assert_eq!(
             event.channel_anchor(1),

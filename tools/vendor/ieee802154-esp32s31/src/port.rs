@@ -11,11 +11,10 @@
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(feature = "sw-coex")]
-use oer_esp32s31_knowledge::ieee802154_coex::{Ieee802154CoexConfig, resolve_priorities};
 #[cfg(feature = "sw-coex")]
-use oer_espressif_coex::{CoexPtiTable, Ieee802154CoexLevel};
+use oer_espressif_coex::{CoexEventId, CoexPtiTable};
 #[cfg(feature = "sw-coex")]
-use oer_espressif_ieee802154_engine::coex::Ieee802154Coexistence;
+use oer_espressif_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154Coexistence};
 use oer_espressif_ieee802154_engine::engine::{
     FRAME_SIZE, Ieee802154Engine, Ieee802154EngineBuffers, Ieee802154EnhancedAck,
     Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck, Ieee802154RxSlot,
@@ -776,15 +775,11 @@ fn interface(index: u8) -> Result<Ieee802154MultipanIndex, &'static str> {
 #[cfg(feature = "sw-coex")]
 fn level_table() -> CoexPtiTable {
     let mut table = CoexPtiTable::VENDOR;
-    for level in [
-        Ieee802154CoexLevel::High,
-        Ieee802154CoexLevel::Middle,
-        Ieee802154CoexLevel::Low,
-        Ieee802154CoexLevel::Idle,
-    ] {
+    // The vendor driver's levels 1 (high) to 4 (idle) read events 41 to 44.
+    for level in 1..=4_u8 {
         table.set(
-            level.event(),
-            CoexPti::new(level as u8).expect("a level is a priority"),
+            CoexEventId::new(40 + level).expect("a level has an event"),
+            CoexPti::new(level).expect("a level is a priority"),
         );
     }
     table
@@ -834,10 +829,9 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     // The stand's software-coexistence build uses the driver's default
     // scene levels.
     #[cfg(feature = "sw-coex")]
-    engine.set_coexistence(Ieee802154Coexistence::Software(resolve_priorities(
-        Ieee802154CoexConfig::VENDOR,
-        &level_table(),
-    )));
+    engine.set_coexistence(Ieee802154Coexistence::Software(
+        Ieee802154CoexPriorities::resolve(&level_table()),
+    ));
     let shared = Rc::new(RefCell::new(Shared {
         model: LlModel::new((scenario.inputs)()),
         records: Vec::new(),

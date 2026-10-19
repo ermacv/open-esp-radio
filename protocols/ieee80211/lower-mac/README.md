@@ -95,7 +95,7 @@ back; its operations are synchronous and never wait:
   A retransmission takes the returned `Sent` MPDU and a phase-bound
   `RetransmissionPlan`: header, payload, body and installed-key identity
   remain inside that MPDU. SN and PN stay; only Retry changes in its bytes.
-  Rate, retry plan, RTS/CTS, power and coexistence belong to the new attempt.
+  Rate, retry plan, RTS/CTS, power and the coexistence operation belong to the new attempt.
   Retiring the original installation makes preparation refuse
   `RetransmissionKey`, even if the slot and key material are reused.
   An aggregate builder owns its receiver, TID, role, rate and one protection.
@@ -290,7 +290,7 @@ its type, and lists the world's outcomes that stay. Compile-fail tests in
 Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
 each subframe in a buffer of its own), `BeaconTimingPhase` (an interface's
 TSF, its samples and its TBTT plan with the wake lead and the beacon window
-and its `CoexPriority`) and `MonitorPhase`. Their values (`AmpduCapabilities`,
+the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities`,
 `TbttEvent`, `TsfSample`, `TsfRelation`, `VifTsf`, `MonitorCapabilities`)
 are in `extensions`.
 

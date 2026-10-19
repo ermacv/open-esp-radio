@@ -77,9 +77,10 @@ use oer_ieee80211_arbiter::{
     Purpose, Refusal, StationNotice, StationPlaceReturns, StationPlaces, UpstreamFact,
 };
 use oer_ieee80211_lower_mac::{
-    AckHeader, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength, ReceiveFilter,
-    ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole,
-    StationReceive, SupportedChannel, SupportedEdca, SupportedFilter, TxBufferMemory, TxOutcome,
+    AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
+    ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
+    Station as StationRole, StationReceive, SupportedChannel, SupportedEdca, SupportedFilter,
+    TxBufferMemory, TxOutcome,
 };
 use oer_ieee80211_mac::address::{Bssid, IndividualAddress, OwnAddress};
 use oer_ieee80211_mac::ccmp::{Ccmp128Key, CcmpRxReplayEpoch};
@@ -583,7 +584,7 @@ pub enum StaFrameClass {
     /// A frame of the connection's setup or keys: Authentication,
     /// Association and EAPOL, which a coexisting radio should let through
     /// first.
-    Connection,
+    Connection(ConnectionFrame),
     /// Any other frame.
     Normal,
 }
@@ -4372,7 +4373,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                 .encode(frame)
                 .ok()
             },
-            StaFrameClass::Connection,
+            StaFrameClass::Connection(ConnectionFrame::Eapol),
             purpose,
             StaRatePlan::Management,
         )?)
@@ -4964,7 +4965,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         .encode(frame)
                         .ok()
                     },
-                    StaFrameClass::Connection,
+                    StaFrameClass::Connection(ConnectionFrame::Authentication),
                     TxPurpose::SaeAuthentication,
                     StaRatePlan::Management,
                 );
@@ -5017,7 +5018,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                         .encode(frame)
                         .ok()
                     },
-                    StaFrameClass::Connection,
+                    StaFrameClass::Connection(ConnectionFrame::Authentication),
                     TxPurpose::Authentication {
                         attempt: attempt.ordinal,
                     },
@@ -5095,7 +5096,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
                                 .encode(frame, capabilities)
                                 .ok()
                             },
-                            StaFrameClass::Connection,
+                            StaFrameClass::Connection(ConnectionFrame::Association),
                             TxPurpose::Association,
                             StaRatePlan::Management,
                         );
@@ -5379,7 +5380,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities> Station<'id, T, K> {
         Ok(self.encode_reserved(
             credit,
             |buffer| frame.encode(buffer).ok(),
-            StaFrameClass::Connection,
+            StaFrameClass::Connection(ConnectionFrame::Eapol),
             purpose,
             StaRatePlan::Management,
         )?)

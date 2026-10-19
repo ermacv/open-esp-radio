@@ -16,11 +16,9 @@ use oer_esp32s31_pac::{
     CoexistenceLowPowerClockObservation, SharedRadioRegisters,
 };
 
-/// The event priority table and IEEE 802.15.4 levels every Espressif chip
+/// The event priority table every Espressif chip
 /// shares; the domain keeps one table as shared state.
-pub use oer_espressif_coex::{
-    COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable, Ieee802154CoexLevel,
-};
+pub use oer_espressif_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
 
 mod clock;
 
