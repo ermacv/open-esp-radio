@@ -32,7 +32,7 @@ Capture happens before `observe-call` stops and before captured/model
 dispatch. Target classification identifies the selected boundary, not execution
 of its body. Each `call-transfer` plus its `transfer-argument` rows consumes
 `max_events`, with whole-group admission and shared run limits. See
-[physical call contracts](../../../docs/design/contracts.md#physical-call-observations)
+[physical call contracts](../../../blobray-docs/design/contracts.md#physical-call-observations)
 for lifetime and claim scope.
 
 ## Internal physical timeline
@@ -65,7 +65,7 @@ remain ordered relative to selected call/MMIO/fence/delay events. Different
 intermediate states or read order can DIFF even when final memory matches.
 Unknown/inaccessible reads or incomplete execution cannot MATCH. Raw excluded
 observations remain available in the records. See
-[internal timeline contracts](../../../docs/design/contracts.md#internal-timeline).
+[internal timeline contracts](../../../blobray-docs/design/contracts.md#internal-timeline).
 
 
 ### Reviewed layout comparison
@@ -102,7 +102,7 @@ significant. Unmapped selected observations prevent MATCH.
 
 All projections are finite reviewed assumptions bound to captured sources and entries.
 A successful comparison establishes selected observations under those assumptions;
-it does not establish general equivalence. See [projection contracts](../../../docs/design/contracts.md#reviewed-layout-projections).
+it does not establish general equivalence. See [projection contracts](../../../blobray-docs/design/contracts.md#reviewed-layout-projections).
 
 ### Reviewed effect comparison
 
@@ -154,5 +154,5 @@ firmware equivalence. Incomplete execution cannot MATCH.
 The records retain all raw evidence, including omitted and added effects.
 Comparison composes with layout projections, selected internal timelines, return
 words and final RAM. See
-[effect contracts](../../../docs/design/contracts.md#reviewed-effect-contracts) for the
+[effect contracts](../../../blobray-docs/design/contracts.md#reviewed-effect-contracts) for the
 precise obligations, lifetime and limits.

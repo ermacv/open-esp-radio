@@ -4,12 +4,12 @@ This workspace runs the public ESP-IDF IEEE 802.15.4 driver on the host so the
 production port can be compared with the real vendor behavior. Unlike the PHY,
 Wi-Fi and Bluetooth libraries, this driver is published as source, so the stand
 compiles it directly instead of executing a captured binary. The
-[driver port map](../../../../docs/vendor/esp32s31/ieee802154-driver-port.md) identifies the pinned
+[driver port map](../../../chips/esp32s31/notes/ieee802154-driver-port.md) identifies the pinned
 sources and their production owners.
 
 ## What is compiled and what is recorded
 
-The chip's [`artifacts.toml`](../../artifacts.toml) pins every translation unit and
+The chip's [`artifacts.toml`](../../../chips/esp32s31/vendor/artifacts.toml) pins every translation unit and
 every ESP-IDF header the build uses, with its SHA-256 at the pinned revision.
 [`build.rs`](build.rs) refuses to build unless each file matches. The driver
 sources are compiled unmodified with the Kconfig defaults in
@@ -64,7 +64,7 @@ it as the stand's producer.
 The compiled driver keeps its state in C globals, so each process runs one
 scenario. `run` prints the scenario's boundary trace, one record per line;
 buffer addresses appear as `tx#n` (the `n`th transmitted frame) and `buf#n`
-(the `n`th distinct driver buffer). The [tests](tests/catalog.rs) check the
+(the `n`th distinct driver buffer). The [tests](../ieee802154-esp32s31-cli/tests/catalog.rs) check the
 catalog against expectations read from the pinned source.
 
 ## Comparing the production engine

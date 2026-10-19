@@ -1,6 +1,6 @@
 # Linux Bluetooth fixture
 
-Use the canonical [Linux fixture software installation](../fixtures.md#linux-fixture-software-installation)
+Use the canonical [Linux fixture software installation](../run/fixtures.md#linux-fixture-software-installation)
 route from the repository root:
 
 ```console
@@ -182,7 +182,7 @@ require their own evidence.
 
 The GATT and advertising workloads use a fixed ATT socket through the Linux
 kernel and BlueZ, implemented in
-[`fixture/bluetooth/att.rs`](../family/bluetooth/src/fixture/bluetooth/att.rs). It uses the
+[`fixture/bluetooth/att.rs`](../fixtures-bluetooth/src/att.rs). It uses the
 same runner adapter lease but does not enter the helper's exclusive HCI channel.
 The configured adapter must initially be powered off. BlueZ, `busctl` and user
 access to `/dev/rfkill` are required; the socket binds the selected adapter's
@@ -227,7 +227,7 @@ three attempts guards against the environment; it is no acceptance threshold.
 Whether a loss rate is acceptable is qualification's decision: the
 `secure-peripheral-gatt` requirement bounds `connections-not-established` over
 `connection-attempts` across the current runs of `bluetooth-trouble-secure-gatt`
-([measurement bounds](../../../qualification/README.md#measurement-bounds), ).
+(measurement bounds, ).
 
 ## Encryption and key-failure modes
 

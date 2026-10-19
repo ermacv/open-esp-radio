@@ -2,8 +2,8 @@
 
 - [System and PHY watchdogs](watchdogs.md)
 - [Stack measurements](memory.md)
-- [Host setup and fixture installation](../../host/README.md)
-- [Wire and evidence contracts](../../protocol/README.md)
+- [Host setup and fixture installation](../../../tools/hil/run/HOST.md)
+- [Wire and evidence contracts](../../../protocols/hil/protocol/README.md)
 
 This workspace selects the shared board boot and memory profile and owns the
 Embassy executor, the USB Serial/JTAG transport and the HIL workloads of the
@@ -23,7 +23,7 @@ separate HIL responsibility.
 ## Protocol families per image
 
 Each image enables only the HIL protocol families it serves
-([radio families](../../protocol/README.md#radio-families)): the radio-free
+([radio families](../../../protocols/hil/protocol/README.md#radio-families)): the radio-free
 `system-watchdog`, `diagnostic-usb-jtag-off` and `system-panic-reset` images
 read only the shared core, `system` module included.
 

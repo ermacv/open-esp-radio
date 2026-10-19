@@ -1,7 +1,7 @@
 # ESP32-C5 compiled verification probes
 
 These packages build retained Rust entry points that the
-[vendor scenarios](../../harness/README.md) compare with the ESP32-C5 vendor
+[vendor scenarios](../../tools/vendor/scenario/HARNESS.md) compare with the ESP32-C5 vendor
 artifacts. The probes depend on production crates; no production crate or
 firmware depends on them.
 

@@ -3,7 +3,7 @@
 `oer-hil-model` defines what a HIL scenario is, independently of how a run
 executes it.
 It is a `formats` package; execution lives in
-[`oer-hil-run`](../host/executor/README.md).
+[`oer-hil-run`](../executor/README.md).
 
 | Module | Owns |
 | --- | --- |
@@ -27,10 +27,10 @@ follows its port's harness template:
 the port's `no_std` conformance crate holds its `Bounds` type with `const
 CEILINGS`, its case and trace types with a `wire` feature, the harness, and
 a public pure `verify(case, &trace, &bounds)`; the HIL agent sends `(case,
-header, trace)` with the [`oer-hil-trace-header`](../trace-header/README.md)
+header, trace)` with the [`oer-hil-trace-header`](../../../protocols/hil/trace-header/README.md)
 header; a backend checks its own bounds against the ceilings at compile
 time. The executor's
-[`harness_template` test](../host/executor/tests/harness_template.rs) shows
+[`harness_template` test](../executor/tests/harness_template.rs) shows
 the shape on a toy port.
 
 The crate's `clippy.toml` belongs to the `hil-scenario` copy group: it is

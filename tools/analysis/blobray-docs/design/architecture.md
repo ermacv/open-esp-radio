@@ -74,7 +74,7 @@ links, such as the vendor scenarios, does not depend on the command line.
 | `oer-tool-analysis-cli` | CLI, JSON wire documents | Process entry point, rendering and concrete dependency selection | `oer-analysis-blobray-application`, `oer-analysis-blobray-domain`, `oer-analysis-blobray-riscv`, `oer-analysis-riscv-model`, `oer-analysis-riscv-lift` |
 
 The `oer-riscv-*` crates belong to the
-[shared RV32 layer](../../../riscv/README.md), which is Blobray's ISA layer:
+[shared RV32 layer](../../riscv-README.md), which is Blobray's ISA layer:
 decoding, lifting, function analysis and the static image view live there and
 the stack analyzer shares them. Application depends on the ISA-neutral model,
 the function analysis and the static image view; RV32 facts such as relocation
@@ -148,7 +148,7 @@ The graph leaves out the edges to `oer-analysis-riscv-model` (from every Blobray
 and from `oer-analysis-riscv-lift`, `oer-analysis-riscv-analysis` and `oer-analysis-riscv-program`) and to
 `oer-analysis-elf` (from `oer-analysis-blobray-artifacts`, `oer-analysis-riscv-lift` and `oer-analysis-riscv-program`). The table above lists
 the Blobray crates' edges, and the
-[shared layer's table](../../../riscv/README.md#dependency-table) lists the edges
+[shared layer's table](../../riscv-README.md#dependency-table) lists the edges
 of the `oer-riscv-*` crates.
 
 Arrows represent compile-time dependencies. Runtime calls through injected ports
@@ -195,7 +195,7 @@ execution. Blobray deliberately does not adopt automatic unresolved symbol
 stand-ins or automatic acceptance of analysis results. No runtime dependency on
 these engines is selected here.
 
-Register source publication is owned by [the register tool](../../../registers/README.md),
+Register source publication is owned by [the register tool](../../../registers/generate/README.md),
 with separate reviewed contracts/model/review modules and no execution
 dependency. Blobray's register accesses are observations of the given
 libraries; they have no generator or production dependencies.

@@ -3,7 +3,7 @@
 `oer-analysis-blobray-domain` owns Blobray's inventory, image, data, audit, execution,
 device and comparison records and its byte/record ports. Identities, errors,
 run control, working memory and the function decoding and lifting contracts
-belong to [`oer-analysis-riscv-model`](../../../riscv/model/README.md), its only internal
+belong to [`oer-analysis-riscv-model`](../riscv-model/README.md), its only internal
 dependency. It has no filesystem, database, backend or frontend dependencies.
 
 [Inventory records](src/lib.rs) retain lossless names and the
@@ -30,7 +30,7 @@ summary and `CheckVerdict`.
 Concrete execution values include exact targets, explicit scenarios, producer
 identities, observations and comparison evidence. `Executor` and `ExecutionMemory`
 are injected ports; domain selects neither an ISA nor an environment. Request
-validation bounds control cardinalities. See the [execution contract](../../cli/reference/execution/README.md#concrete-execution-and-comparison).
+validation bounds control cardinalities. See the [execution contract](../cli/reference/execution/README.md#concrete-execution-and-comparison).
 
 Concrete execution uses bounded optional RV32 ABI words: a0–a7 followed
 by ascending stack slots. `Invocation::entry_stack` validates placement within the

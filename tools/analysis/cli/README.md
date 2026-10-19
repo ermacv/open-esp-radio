@@ -2,20 +2,20 @@
 
 `oer-tool-analysis-cli` is the `blobray` command line and the JSON wire types in
 `oer_tool_analysis_cli::wire`; the Linux linker adapters live in
-[`oer-analysis-blobray-linker`](../crates/linker/src/lib.rs). Every operation runs
+[`oer-analysis-blobray-linker`](../blobray-linker/src/lib.rs). Every operation runs
 in the calling process over executables given as bytes and identified by
 content: inventory, whole-library analysis and register accesses, synthetic
 linking with explicit ROM companions, exact data export, final-image target
 audits and in-process execution and comparison. Nothing is imported, stored or
 published. `cargo blobray` runs this CLI.
-The [architecture](../docs/design/architecture.md) owns module authority;
-[contracts](../docs/design/contracts.md) owns identities, assessment and
-resource rules; [workflows](../docs/design/workflows.md) lists the supported
+The [architecture](../blobray-docs/design/architecture.md) owns module authority;
+[contracts](../blobray-docs/design/contracts.md) owns identities, assessment and
+resource rules; [workflows](../blobray-docs/design/workflows.md) lists the supported
 scenarios. This page indexes the current references.
 
 An operation's success is separate from its research coverage and from any
 comparison verdict: a returned result can describe partial research or a
-`DIFF`/`INCOMPLETE` comparison. See [result assessment](../docs/design/contracts.md#result-assessment).
+`DIFF`/`INCOMPLETE` comparison. See [result assessment](../blobray-docs/design/contracts.md#result-assessment).
 Unsupported ISA semantics remain explicit gaps. There is no general
 equivalence proof, TUI or allocation-free core.
 

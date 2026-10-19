@@ -33,12 +33,12 @@ clear image crosses this boundary. Sequencing and hardware qualification stay
 above the generated raw helper.
 
 It does not know about ELF files, discovery facts, ESP32-S31, PAC helper
-contents or output paths. The [register tool](../registers/README.md) composes it with
+contents or output paths. The [register tool](../../../chips/espressif/registers/README.md) composes it with
 explicitly selected reviewed publication inputs. RTOS, NVS,
 logging and delay semantics remain outside this crate.
 
 The format and editing workflow are documented by the
-[register tool](../registers/README.md).
+[register tool](../../../chips/espressif/registers/README.md).
 An absent physical register is created only by one reviewed
 `register-identity = "REGION.NAME"` assertion; the
 `register-declaration` and `register-name` kinds are rejected with an error. The

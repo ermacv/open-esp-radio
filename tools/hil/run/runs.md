@@ -165,7 +165,7 @@ ROM answered: the same RTS check must show the ROM booting.
 
 ## Operational commands without a rebuild
 
-`cargo hil` builds its binary, [`oer-tool-hil-cli`](cli/README.md), from the
+`cargo hil` builds its binary, [`oer-tool-hil-cli`](../cli/README.md), from the
 caller's working tree before every command, so an edit of a HIL host package
 rebuilds it. For the operational commands (`queue`, `lease`, `devices`,
 `board`, `runs`, `perf`, `dashboard`) use the installed tool instead:

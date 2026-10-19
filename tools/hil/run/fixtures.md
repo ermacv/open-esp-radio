@@ -3,7 +3,7 @@
 Network scenarios prepare and restore a controlled access point, clients and
 passive observers; Bluetooth and network helpers are installed once per host.
 This guide covers their preparation, evidence boundaries and installation; the
-[host guide](README.md) covers the stand file that names them.
+[host guide](HOST.md) covers the stand file that names them.
 
 No HIL scenario uses the network fixtures (`oer-hil-family-ieee80211-fixture`);
 the network sections below describe what they do and what a Wi-Fi scenario
@@ -324,7 +324,7 @@ packets with hardware publication and completion.
 `cargo stand fixture install --provider linux-net` first builds hostapd as
 `cargo stand fixture build-hostapd` does, without root, then installs the resulting binary, build provenance and helper through
 interactive sudo. The build uses the pinned hostapd release and reviewed
-[coexistence patch](linux-net/hostapd/README.md). It requires a C compiler,
+[coexistence patch](../linux-net/hostapd/README.md). It requires a C compiler,
 make, pkg-config, libnl3 and OpenSSL development files, curl, tar and patch.
 Verified cached outputs can be reused without downloading or compiling again.
 Updating the helper contract requires rerunning the installer.

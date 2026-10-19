@@ -3,11 +3,11 @@
 Vendor function provenance. A recovered fact names the vendor function it
 came from in a `SOURCE(<chip>):` block, and the citation is registered with
 that function's fingerprint in `verification/<chip>/facts/provenance.toml`
-(see the [vendor evidence rules](../../verification/README.md)).
+(see the [vendor evidence rules](../../analysis/blobray-verification/README.md)).
 
 `fingerprint` is the one fingerprint of vendor RV32 functions. It reads each
 defined function of an archive's members, or of one ELF, through
-[`oer-analysis-elf`](../elf/README.md) and clears exactly the bits each relocation
+[`oer-analysis-elf`](../../analysis/elf/README.md) and clears exactly the bits each relocation
 patches with that crate's RV32 relocation table. A `Function` carries:
 
 - `code`: the masked bytes and the name-free relocation shape (types, and
@@ -22,7 +22,7 @@ patches with that crate's RV32 relocation table. A `Function` carries:
 
 The other modules are the provenance check itself; `cargo vendor-check check
 provenance`, `cargo vendor-check provenance` and `cargo vendor-check diff`
-([verification](../../verification/README.md)) only parse arguments and call
+([verification](../../analysis/blobray-verification/README.md)) only parse arguments and call
 them:
 
 - `citation`: the one recogniser and parser of the `SOURCE` grammar

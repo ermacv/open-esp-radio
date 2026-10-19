@@ -2,13 +2,13 @@
 
 `oer-analysis-riscv-stack` computes worst-case stack bounds of a static RV32 image from
 its machine code, over the program model of
-[`oer-analysis-riscv-program`](../program/README.md),
-[`oer-analysis-riscv-analysis`](../analysis/README.md) and
-[`oer-analysis-riscv-lift`](../lift/README.md). It reads the image through one
+[`oer-analysis-riscv-program`](../riscv-program/README.md),
+[`oer-analysis-riscv-analysis`](../riscv-analysis/README.md) and
+[`oer-analysis-riscv-lift`](../riscv-lift/README.md). It reads the image through one
 `ImageFacts` of `oer-analysis-riscv-program` (functions with their aliases,
 executable ranges, read-only words, sized data objects, relocated address
 words and `.LJTI*` labels, parsed once) and its frame records, relocations
-and DWARF through [`oer-analysis-elf`](../../elf/README.md), whose RV32 relocation
+and DWARF through [`oer-analysis-elf`](../elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
 
 `analyze` works in the caller's `WorkingMemory` and charges the caller's
@@ -215,7 +215,7 @@ CLIC level and route writers to run inside the functions its contract
 allows (start-up, the IPC line's install, the table's routes).
 
 This is the repository's only stack analyzer. The firmware stack gate
-([`oer-image-build`](../../image/pipeline/README.md)'s `stack`) runs it on every
+(`oer-image-build`'s `stack`) runs it on every
 runtime and bootstrap ELF: the interrupt stacks above, and each task stack's
 root through `Analysis::bound_with` with the same resolutions. An ELF without
 `.stack_sizes` analyses here with observed frames only; the gate refuses it,

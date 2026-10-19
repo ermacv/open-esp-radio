@@ -13,7 +13,7 @@ cargo run -p oer-vendor-phy -- <archive.rlib> --source <crate>
 Repeat `--source` for each allowed crate. Crate names accept hyphens and
 are normalized to their Rust namespace spelling.
 
-ELF and archive containers are read through [`oer-analysis-elf`](../elf/README.md).
+ELF and archive containers are read through [`oer-analysis-elf`](../../analysis/elf/README.md).
 LLVM bitcode members use `llvm-nm` from the active Rust toolchain. Unknown
 members, compiled ELF members without symbol tables, tool failures and
 malformed symbol output fail the audit.

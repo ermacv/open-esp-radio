@@ -1,11 +1,11 @@
 # RV32 function decoding, relocation interpretation and lifting
 
 `oer-analysis-riscv-lift` owns the `FunctionDecoder` and `FunctionSemantics`
-implementations of [`oer-analysis-riscv-model`](../model/README.md) and RISC-V relocation
+implementations of [`oer-analysis-riscv-model`](../riscv-model/README.md) and RISC-V relocation
 interpretation. It receives bytes and structural facts, never a
 archive path or loader capability. Unsupported encodings remain
 explicit gaps. Relocation types are classified by the one RV32 relocation
-table of [`oer-analysis-elf`](../../elf/README.md) (`rv32::kind`), never a local list.
+table of [`oer-analysis-elf`](../elf/README.md) (`rv32::kind`), never a local list.
 
 `listing::normalize` writes a linked function as placement-independent lines:
 it decodes each instruction and replaces every address the code forms
@@ -14,7 +14,7 @@ registers, address words in code) by the location the caller's `Placement`
 names. `cargo fw compare` compares these listings instead of
 disassembler text.
 
-Decoding belongs to [`oer-analysis-riscv-decode`](../decode/README.md),
+Decoding belongs to [`oer-analysis-riscv-decode`](../riscv-decode/README.md),
 selected with every extension it decodes: ESP-IDF builds the ESP32-S31 for
 `rv32imafc_zba_zbb_zbs_zcb_zcmp_zcmt` with Zicsr, and only the Zcmt table
 jumps stay undecoded. Integer and Zcb memory forms lift to single operations;

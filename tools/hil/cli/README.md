@@ -23,7 +23,7 @@ a broken archive rule, 2 for a usage error and 3 for a failure of the
 environment.
 
 Commands and flags are documented in the [host guide](../../README.md), the
-[stand guide](../../stand.md) and the [runs guide](../../runs.md); `cargo hil --help`
+[stand guide](../run/stand.md) and the [runs guide](../run/runs.md); `cargo hil --help`
 prints them.
 
 ## Processes

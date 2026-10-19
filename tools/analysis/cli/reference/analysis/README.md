@@ -149,7 +149,7 @@ explicit assumption, and every JSON document records it as `call_returns`.
 ### Read-only windows
 
 A linked image is analyzed by its sections, as a firmware packer loads it
-([static RV32 images](../../../../riscv/program/README.md)), so an ESP-IDF
+([static RV32 images](../../../riscv-program/README.md)), so an ESP-IDF
 firmware ELF, with its IRAM code and DRAM data in one segment, its flash
 rodata placed after a reservation that overlaps code and its thread-local
 template, is analyzed whole. ESP-IDF flags its flash rodata writable, so no
@@ -210,7 +210,7 @@ the visit. No analysis or backend module opens a path. Graph allocations
 require working-capacity admission.
 
 The artifact view lays an image's memory out by its loaded sections
-([static RV32 images](../../../../riscv/program/README.md)): they must not
+([static RV32 images](../../../riscv-program/README.md)): they must not
 overlap, each must be the bytes a load segment carries at its address, and
 selected code must agree with an executable section in an executable segment.
 A thread-local template and a segment holding both code and data sections

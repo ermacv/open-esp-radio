@@ -27,7 +27,7 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
   views and this crate's `Error`. `object`, `gimli` and `addr2line` are this
   crate's to depend on; `oer-analysis-blobray-artifacts`, Blobray's metered streaming
   reader and object writer, is the one other owner of `object`
-  ([format libraries](../riscv/README.md#format-libraries)).
+  ([format libraries](../riscv-README.md#format-libraries)).
 - Relocations: `relocations(section)`, each with an explicit or implicit
   (`SHT_REL`, in the patched word) addend, and `target_address`. `rv32` is the
   one RV32 relocation table: each type's patched `Field` and its target's
@@ -40,7 +40,7 @@ through; nothing else parses `llvm-nm` or `llvm-objdump` output or walks
   bytes and relocation `Site`s, each target resolved to an offset in the
   function's own section (`Reference::Local`), a named symbol, an anonymous
   section, or nothing. The vendor fingerprints are computed over it
-  ([`oer-vendor-provenance`](../vendor-provenance/README.md)).
+  ([`oer-vendor-provenance`](../../vendor/provenance/README.md)).
 - `dwarf::Symbolizer::frames(address)`: the inline chain at an address with
   each frame's demangled function, file and line. `Symbolizer::new` copies
   each debug section; `Symbolizer::shared` reads them as ranges of the ELF's

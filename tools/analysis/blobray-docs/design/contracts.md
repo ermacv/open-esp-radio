@@ -181,7 +181,7 @@ object during one call.
 
 Artifacts owns the borrowed `ImageMemory` view over the image's loaded
 sections, each the bytes a load segment carries, with the caller's read-only
-windows ([static RV32 images](../../../riscv/program/README.md)); load
+windows ([static RV32 images](../../riscv-program/README.md)); load
 segments themselves are only the execution profile's. Analysis reads constant
 bytes through that narrow port and cannot load files or request mutable
 machine memory.
@@ -334,7 +334,7 @@ mapping. Unknown register copies and spills propagate as unknown values, even
 into filled stack memory, and stop execution only where they decide control flow,
 form an address or reach a device. The explicit-input regression in
 [session tests](../../cli/tests/execution/sessions.rs) checks both paths. The
-[PHY I2C scenario](../../../../verification/esp32s31/README.md#captured-i2c-command-memory-comparison)
+[PHY I2C scenario](../../../hil/acceptance/esp32s31/README.md#captured-i2c-command-memory-comparison)
 records this narrower input/observation scope and uses shipping HAL/PAC behavior.
 Chip-specific setup, addresses and expectations stay with the verification owner.
 
@@ -513,7 +513,7 @@ It does not replay ISA semantics to authenticate the physical trace. Verificatio
 borrows grouped slices without allocating or rescanning preceding calls. The
 [capture regressions](../../cli/tests/execution/capture.rs) exercise application,
 word/effect differences and resource atomicity;
-[record validation](../../crates/verification/src/records/capture.rs) rejects malformed
+[record validation](../../blobray-verification/src/records/capture.rs) rejects malformed
 groups. Layout projections require their explicit reviewed relation below; this
 physical profile infers none.
 
@@ -585,7 +585,7 @@ addresses require an explicitly selected reviewed projection.
 AMO/orderings and LR/SC, ordinary/compressed branches, intermediate differences
 with equal final RAM, call-model effects, phase capture, unknown/unreadable
 memory and capacity.
-[Record validation](../../crates/verification/src/records/timeline.rs) rejects malformed
+[Record validation](../../blobray-verification/src/records/timeline.rs) rejects malformed
 or unrequested transcripts and invented MATCH; application verifies capacity before
 atomic callback/mutation. No elapsed-time or real hardware equivalence is implied.
 
@@ -643,7 +643,7 @@ and path normalization are outside this profile and are never approximated.
 
 [Projection scenarios](../../cli/tests/execution/projections.rs) cover content
 selection, a missing projection, invalid geometry, final fields,
-unknown padding/fields and missing capture. [Verifier tests](../../crates/verification/src/projection.rs)
+unknown padding/fields and missing capture. [Verifier tests](../../blobray-verification/src/projection.rs)
 check ordered mapped memory/control and unknowns.
 
 ### Reviewed effect contracts
@@ -723,5 +723,5 @@ are retained alongside an independently established difference.
 Verification borrows the resolved contract and raw observations. Bounded per-side
 counters have no expanding heap allocation; every rule scan consumes the shared
 work budget. [Effect scenarios](../../cli/tests/execution/effects.rs) and
-[verifier tests](../../crates/verification/src/effects.rs) cover these boundaries
+[verifier tests](../../blobray-verification/src/effects.rs) cover these boundaries
 and policy composition.

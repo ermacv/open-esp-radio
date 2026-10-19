@@ -8,7 +8,7 @@ The diagnostic PSRAM and aggregate paths have separate admission contracts.
 ## Ordinary TX handoff and reuse
 
 Every ordinary and aggregate publication carries one control frame selected by
-the [protection policy](../mac/src/tx/protection.rs) for that PPDU's rate,
+the [protection policy](../../../../ieee80211/mac/src/tx/protection.rs) for that PPDU's rate,
 Address 1 receiver and PSDU length: none, CTS-to-self or RTS/CTS, with the
 control-frame rate and its calibrated power. Selection happens again on every
 retry and every retained-aggregate republication; it never rejects a
@@ -20,7 +20,7 @@ descriptor-bound preparation replaces both requests with the PPDU's explicit
 mode while the queue is idle. The RTS helper preserves CTS and spacing; cold HE
 initialization clears CTS and retains RTS and spacing. The RTS request, optional
 HE byte-threshold publication, threshold disable and cold-init reset follow the
-reviewed [queue argument provenance](../../../../registers/esp32s31/evidence/vendor-libpp.toml);
+reviewed [queue argument provenance](../../../../registers/evidence/vendor-libpp.toml);
 they have no native compiled vendor comparison. The pinned vendor never
 requests CTS-to-self, so that request has no vendor oracle; its on-air contract
 comes from hardware captures.
@@ -29,7 +29,7 @@ A CTS timeout means the data PPDU was not transmitted. The ordinary owner
 republishes the MPDU without the Retry bit; an aggregate owner republishes the
 unchanged aggregate, also without Retry bits, until the short-retry limit.
 
-Every arena is published by its DMA addresses in a [`DmaSpace`](src/space.rs):
+Every arena is published by its DMA addresses in a [`DmaSpace`](space.rs):
 `ChipDma` on the chip, where a field's address is its DMA address, and the
 host models' `HostDma` (test support), where it is `HOST_ARENA_BASE` plus the
 field's offset in its arena. Every storage is placed
@@ -42,7 +42,7 @@ the DMA window and off an address with zero low DMA address bits
 run time; what the walker reports back (NEXT, LAST) is resolved against the
 arena. The arena checks run the same code in both spaces. Test support supplies models of the hardware (the host
 space, the proofs a mock walker reports, and the shared register model of the
-RX walker, [`RxWalkerModel`](src/rx_dma/model.rs)), never bypasses of these
+RX walker, [`RxWalkerModel`](rx_dma/model.rs)), never bypasses of these
 checks. A walker stop proof names the arena whose binding it stopped; an RX
 ring halts or rebuilds only on a proof naming its own arena, and a proof for
 another arena poisons the arena until radio reset.
@@ -51,7 +51,7 @@ another arena poisons the arena until radio reset.
 
 The RX arena publishes a descriptor table: the ring and, right after it, a
 reserved descriptor R with its own buffer
-([`RxDescriptorTable`](src/rx_ring.rs)). `RX_DESCRIPTOR_BASE` names R and
+([`RxDescriptorTable`](rx_ring.rs)). `RX_DESCRIPTOR_BASE` names R and
 nothing else, by type: `RxDma::write_descriptor_base` takes only the binding.
 The cold publication of an epoch is the one BASE write: BASE = R, `R.next` =
 the ring head. A frame landing in R before the first ring take is counted and
@@ -67,9 +67,9 @@ on it instead of writing the lease; a NEXT naming one (read by the reload
 settle and the frozen cursor) is counted, `walker_on_detached`, and fails
 closed. The rules and
 their hardware basis are in
-[the RX walker notes](../../../../knowledge/esp32s31/wifi/rx-walker.md).
+[the RX walker notes](../../../../notes/wifi/rx-walker.md).
 
-[`PinnedTxDmaStorage`](src/tx_storage.rs) permanently retains its allocation.
+[`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its allocation.
 Dropping the movable owner does not free or detach hardware-visible memory.
 External aggregate retention takes only `PlacedBacking` leases (a placed
 TX pool's, `oer_esp32s31_hal::dma_static`), whose addresses it publishes
@@ -78,8 +78,8 @@ Only cancellation before publication or a proven detach releases them. Safe
 `forget` of an aggregate owner followed by destruction of its local retention
 arena leaks the allocations; neither destructor is needed to keep DMA memory
 alive. The arena itself is never referenced by a DMA descriptor.
-[`TxSlot`](../mac/src/tx.rs) adds the active queue and generation cookie;
-[`OrdinaryTxOwner`](../driver/src/ordinary_tx.rs) retains retry and deadline state.
+[`TxSlot`](../../../../ieee80211/mac/src/tx.rs) adds the active queue and generation cookie;
+[`OrdinaryTxOwner`](../../../../ieee80211/driver/src/ordinary_tx.rs) retains retry and deadline state.
 
 | State | Permitted operation | Memory ownership |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ is not proof that all radio DMA has stopped during global teardown.
 
 ## Vendor basis and executable boundary
 
-The reviewed [ordinary queue provenance](../../../../registers/esp32s31/evidence/vendor-libpp.toml)
+The reviewed [ordinary queue provenance](../../../../registers/evidence/vendor-libpp.toml)
 names the authenticated archive and complete function bodies. The production
 operations mirror three finite vendor queue operations:
 
@@ -132,8 +132,8 @@ trigger-flow state before calling the completion acknowledgement. Full result
 decoding, descriptor preparation and the enclosing release/abort root have no
 compiled vendor comparison either.
 
-The [storage tests](src/tx_storage/tests.rs) exercise publication authority and
-quarantine. The [MAC ownership tests](../mac/tests/cases/tx_ownership.rs) exercise
+The [storage tests](tx_storage/tests.rs) exercise publication authority and
+quarantine. The [MAC ownership tests](../../../../ieee80211/mac/tests/cases/tx_ownership.rs) exercise
 repeated generations, retained payload, stale release and failed detach. These
 are host models with explicit completion/detach inputs. An AP-loss/reconnect
 hardware run exercised ordinary authentication and association TX through the

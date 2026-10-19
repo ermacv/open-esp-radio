@@ -1,6 +1,6 @@
 # Radio execution
 
-[`ieee80211/runtime`](../../portable/ieee80211/runtime/) (`oer-ieee80211-runtime`) holds
+[`ieee80211/runtime`](../../../protocols/ieee80211/runtime/) (`oer-ieee80211-runtime`) holds
 the chip-independent Wi-Fi execution primitives (the station service, the
 lower-MAC owner glue, monitor handoffs), which no chip runtime uses yet. No
 Bluetooth LE or IEEE 802.15.4 runtime exists. Directory boundaries describe
@@ -12,7 +12,7 @@ A runtime exposes futures and never spawns, names or requires an executor; any
 executor that polls them is valid, and nothing below adapters and the
 integrating firmware depends on an executor. The portable primitives are
 `embassy-sync` (bounded mailboxes and signals over a caller-chosen raw mutex)
-and `embassy-futures` (select/join). Time is the [`oer-time`](../../portable/base/time/src/lib.rs)
+and `embassy-futures` (select/join). Time is the [`oer-time`](../../../portable/time/src/lib.rs)
 contract: a runtime reads and waits on time only through an `oer_time::Clock`
 or `Timer` value that it owns or receives from its caller, never through
 `embassy-time`, which only adapters and the integrating firmware use, dev
@@ -21,7 +21,7 @@ dependencies included. The integrating firmware passes
 final image links; runtime tests pass the per-instance `VirtualClock` or
 `SkipClock` of `oer-time-virtual`. A runtime does not assume which executor
 wakes its timers. The portable drivers below the runtime (the `service`
-packages under [`ieee80211/`](../../portable/ieee80211/), such as the station join, scan
+packages under [`ieee80211/`](../../../protocols/ieee80211/), such as the station join, scan
 and lifecycle drivers and the WPA2 handshake runners) take the same `Timer` port
 from the runtime, which polls them. The
 protocol state machines they drive never wait.
@@ -49,16 +49,16 @@ simultaneous port fault leaves that command owned by its queue.
 
 Owned timers follow the owner graph: each runtime carries the clock of its
 own deadlines. The platform executor/time ABI remains in
-[adapters](../../portable/adapters/embassy/README.md).
+[adapters](../../../portable/embassy/README.md).
 
 The integrating firmware (none exists yet) chooses memory budgets, claims
 static resources and owns the protocol lifecycles within the [documented
-capability boundaries](../esp32s31/FEATURES.md). No firmware depends on a
+capability boundaries](../../esp32s31/FEATURES.md). No firmware depends on a
 second runtime owner hidden in a task or network handle.
 
 ## Radio interrupt levels
 
-[`executor`](executor/src/lib.rs) (`oer-espressif-executor`) places
+[`executor`](src/lib.rs) (`oer-espressif-executor`) places
 the image's contexts on one core: the radio interrupts at P3 (the MAC and
 PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
 on `FROM_CPU` line 2) at P2, the application below it. `LevelOrder` checks

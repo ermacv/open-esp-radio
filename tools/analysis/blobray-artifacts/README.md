@@ -2,7 +2,7 @@
 
 `oer-analysis-blobray-artifacts` owns structural ELF/AR inventory over borrowed, already
 captured bytes. Its only internal dependency is
-[domain](../domain/README.md). It never resolves a filesystem path, acquires a
+[domain](../blobray-domain/README.md). It never resolves a filesystem path, acquires a
 writer, decodes instructions or selects a linker definition.
 
 `MemberCursor` enumerates physical payload ordinals from the domain `ByteSource`
@@ -24,13 +24,13 @@ range reads participate in cooperative work accounting. Sink failures preserve
 their original error and cannot become malformed-object diagnostics. The caller
 owns any retained record copies and their memory capacity. Borrowed views cannot
 outlive the admitted input buffer. See the
-[memory boundary](../../cli/reference/resources/README.md#current-memory-boundary) for admission
+[memory boundary](../cli/reference/resources/README.md#current-memory-boundary) for admission
 accounting and the single-ELF size limit.
 
 ELF inspection reads raw section/symbol/relocation tables, including null and
 local symbols and malformed-name entries. Table kind, section and entry index
 remain part of symbol identity. The
-[implemented scope](../../cli/reference/interfaces-formats/README.md#identity-and-schema-1) defines supported
+[implemented scope](../cli/reference/interfaces-formats/README.md#identity-and-schema-1) defines supported
 formats and coverage limits. No inference here establishes linking, target
 execution support or verification success.
 
@@ -50,7 +50,7 @@ structural records instead of fabricated external definitions.
 
 Static ET_EXEC functions use image virtual addresses and a borrowed `ImageMemory`
 view over the image's loaded sections, each the bytes a load segment carries
-([static RV32 images](../../../riscv/program/README.md)). Input buffers and the
+([static RV32 images](../riscv-program/README.md)). Input buffers and the
 section table retain working-capacity reservations until the consumer returns.
 Sections neither writable nor executable provide constants, and writable ones
 inside the caller's read-only windows (`with_prepared_object`'s `read_only`);
@@ -61,7 +61,7 @@ Static relocation metadata is retained without reapplying edits to linked bytes.
 
 Static RV32 image views, `execution_segments`, `executable_sections`, code
 symbols and the `$d`/`$x` mapping-symbol validation belong to
-[`oer-analysis-riscv-program`](../../../riscv/program/README.md); function views and
+[`oer-analysis-riscv-program`](../riscv-program/README.md); function views and
 image validation use them.
 
 `with_prepared_object` owns one captured buffer, ELF/program view and lazily prepared sections. Callback-borrowed function views share target names and section metadata; object scope releases their admitted capacity. `MemberIndex` traverses an archive once and preserves ordinal payload identity, including thin-member markers.

@@ -52,7 +52,7 @@ not HIL scenarios or runner commands.
 The ownership map and bundle contract are in the
 [execution and evidence architecture](architecture.md).
 
-`cargo hil` is the binary of [`oer-tool-hil-cli`](cli/README.md), apart from
+`cargo hil` is the binary of [`oer-tool-hil-cli`](../cli/README.md), apart from
 xtask. It handles the
 stand's commands itself and forwards every other command to the runner: it
 builds the observer and runs its private copy. Cargo uses `--locked` and, like every Cargo
@@ -76,7 +76,7 @@ cargo hil observer
 | [Runs and investigation](runs.md) | The shared run store, failure post-mortems and board recovery, enqueued runs, bisection, revision runs, A/B comparison, performance, profiles and layout seeds |
 | [Host fixtures](fixtures.md) | Network fixture preparation and restoration, evidence boundaries, Linux fixture software installation, probe load and air observers |
 | [Execution and evidence architecture](architecture.md) | Package ownership, the run lifecycle and the bundle contract |
-| [Stand arbiter](../../stand/arbiter/README.md) | The queue, claims, balances and state files |
+| [Stand arbiter](../../lab/arbiter/README.md) | The queue, claims, balances and state files |
 
 ## Configure the stand
 
@@ -92,7 +92,7 @@ cargo hil doctor
 The stand file is `~/.config/open-esp-radio/stand.toml` (or under
 `$XDG_CONFIG_HOME`), shared by every checkout of this user; `--stand-file`
 names another file. Its schema and rules, the one resolver of a board name and the paths of the
-stand's state belong to [`oer-lab-model`](../../stand/file/README.md). It is the only source for
+stand's state belong to `oer-lab-model`. It is the only source for
 the stand's identity, its hubs and pool of boards, STA/AP credentials and
 addresses and the fixtures; it lives outside the repository, and scenarios
 contain no lab secrets or machine-specific paths. The stand id and the
@@ -108,9 +108,9 @@ profile yet, fails only the runs that take it. With several candidates of the
 chip, `--board ID` names one, until the stand's scheduler assigns boards.
 
 Peer scenarios run against a reference peer board, an ESP32-C5 with an
-ESP-IDF catalog image: the [IEEE 802.15.4 peer](../peers/esp32c5-i/README.md),
-the [Thread peer](../peers/esp32c5-openthread/README.md) or the
-[Bluetooth LE Direct Test Mode peer](../peers/esp32c5-ble-dtm/README.md).
+ESP-IDF catalog image: the IEEE 802.15.4 peer,
+the [Thread peer](../../../firmware/peers/esp32c5-openthread/README.md) or the
+[Bluetooth LE Direct Test Mode peer](../../../firmware/peers/esp32c5-ble-dtm/README.md).
 The peer is a board of the pool with the `peer` role and the chip the run's
 peer images target (`hil/peers/*/firmware.toml`), other than the device under
 test; boards of other chips never compete for it, and `--peer-board ID` names
@@ -153,7 +153,7 @@ nor invalidates finished observations.
 
 `cargo hil run <scenario>` builds and flashes the required image before the
 scenario. `cargo hil image build <class>` builds the class's image bundle through the one image pipeline
-([`oer-image-build`](../../tools/image/pipeline/README.md)) with the same stack/move,
+(`oer-image-build`) with the same stack/move,
 placement and packed-image gates, encoding the bootloader, partition table
 and OTA selection at build time, without flashing or loading private stand
 file. Each successful build emits one JSON report on stdout with class, chip,

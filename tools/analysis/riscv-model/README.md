@@ -2,7 +2,7 @@
 
 `oer-analysis-riscv-model` owns the identities, errors, run control, working memory
 and the ISA-neutral function decoding and lifting contracts that the
-[analysis](../analysis/README.md), the [RV32 lifting](../lift/README.md) and
+[analysis](../riscv-analysis/README.md), the [RV32 lifting](../riscv-lift/README.md) and
 Blobray share. It has no internal dependency, no filesystem access and no ISA.
 
 [Identity types](src/lib.rs) retain content (`ArtifactId`), object and symbol
