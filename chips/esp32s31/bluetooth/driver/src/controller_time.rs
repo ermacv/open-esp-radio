@@ -5,8 +5,6 @@
 //! timer recheck; no state here spins, allocates, stores a waker or depends on
 //! an RTOS.
 
-#![forbid(unsafe_code)]
-
 /// Why controller-time ownership cannot cross the terminal task barrier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerTimeRetirementError {

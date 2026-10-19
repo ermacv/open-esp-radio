@@ -30,8 +30,8 @@ use {
     oer_esp32s31_hal::bluetooth::DirectionFindingDisabledBaselineOwner,
     oer_esp32s31_hal::bluetooth::InterruptOutputPreparedOwner,
     oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
-    oer_esp32s31_hal::domain::RadioDomain, oer_esp32s31_hal::types::BluetoothControllerSramAddress,
-    oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs,
+    oer_esp32s31_hal::bluetooth::{BlePhyHardwareObjects, DirectionFindingDescriptor},
+    oer_esp32s31_hal::domain::RadioDomain,
 };
 
 #[cfg(any(target_arch = "riscv32", test))]
@@ -150,25 +150,15 @@ impl TaskResources {
     /// hardware component while the upper lifecycle retains initialized
     /// Controller software and an inactive route.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the matching powered scheduler/HCI epoch, must not
-    /// have installed source 127, and must retain the returned disjoint timer
-    /// owner until verified route teardown.
+    /// The caller owns the matching powered scheduler/HCI epoch, has not
+    /// installed source 127, and retains the returned disjoint timer owner
+    /// until verified route teardown.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the upper lifecycle proves the powered software and inactive-route prerequisites"
-    )]
-    pub(crate) unsafe fn initialize_modem_lp_timer_hardware(
+    pub(crate) fn initialize_modem_lp_timer_hardware(
         &mut self,
     ) -> Result<ModemLpTimerLowPowerHardwareInitializedOwner, BluetoothModemLpTimerOwnerError> {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the lower transaction's prerequisites.
-        let prepared = unsafe { self.registers.prepare_modem_lp_timer_registers()? };
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the lower transaction's prerequisites.
-        Ok(unsafe { prepared.initialize_low_power_hardware(&mut self.registers) })
+        let prepared = self.registers.prepare_modem_lp_timer_registers()?;
+        Ok(prepared.initialize_low_power_hardware(&mut self.registers))
     }
 
     /// Remove every scheduler hardware-list head through one finite HAL borrow.
@@ -254,54 +244,30 @@ impl TaskResources {
     /// scheduler initialization. Later event/list, interrupt, PHY, BTBB and
     /// BLE stages remain separate prerequisites for a running controller.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain every prerequisite documented by the PAC
-    /// transaction and must not infer controller or HCI readiness from return.
+    /// The caller does not infer controller or HCI readiness from return.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the unsafe bridge retains the controller HAL-init clock and IRQ prerequisites"
-    )]
     #[allow(
         dead_code,
         reason = "only the target lifecycle and isolated validation probes invoke this component"
     )]
-    pub(crate) unsafe fn initialize_controller_hal(
-        &mut self,
-        config: BluetoothControllerHalInitConfig,
-    ) {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the lower transaction's prerequisites.
-        unsafe {
-            self.registers.initialize_controller_hal_transaction(config);
-        }
+    pub(crate) fn initialize_controller_hal(&mut self, config: BluetoothControllerHalInitConfig) {
+        self.registers.initialize_controller_hal_transaction(config);
     }
 
     /// Execute the complete BLE base-stack task-enable hardware transaction
     /// for a lifecycle that retains both address-bound storage objects.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the Bluetooth membership of the shared PHY
-    /// domain and BTBB, the inactive interrupt bank, and the storage
-    /// represented by `inputs` until all controller consumers are stopped by
-    /// a verified transition.
+    /// The caller retains the Bluetooth membership of the shared PHY domain
+    /// and BTBB and the inactive interrupt bank until all controller consumers
+    /// are stopped by a verified transition.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the upper typestate retains the complete PAC lifecycle and storage prerequisites"
-    )]
-    pub(crate) unsafe fn enable_ble_base_stack_hardware<T>(
+    pub(crate) fn enable_ble_base_stack_hardware<T>(
         &mut self,
         radio: &mut RadioDomain<T>,
-        inputs: BluetoothPhyRegisterInitInputs,
+        objects: &BlePhyHardwareObjects,
     ) {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the lower transaction's prerequisites.
-        unsafe {
-            self.registers.enable_ble_base_stack_hardware(radio, inputs);
-        }
+        self.registers
+            .enable_ble_base_stack_hardware(radio, objects);
     }
 
     /// Publish this epoch's public Controller identity after BLE PHY init.
@@ -318,26 +284,16 @@ impl TaskResources {
 
     /// Publish the controller-global disabled-CTE descriptor baseline.
     ///
-    /// # Safety
-    ///
-    /// The caller must retain the initialized pinned workspace and this
-    /// powered Controller epoch until a future reviewed retirement transition.
+    /// The caller retains this powered Controller epoch until a future
+    /// reviewed retirement transition.
     #[cfg(target_arch = "riscv32")]
-    #[allow(
-        unsafe_code,
-        reason = "the upper BLE-PHY lifecycle retains the workspace and powered task owner"
-    )]
-    pub(crate) unsafe fn prepare_direction_finding_disabled_baseline(
+    pub(crate) fn prepare_direction_finding_disabled_baseline(
         &mut self,
-        descriptor: BluetoothControllerSramAddress,
+        descriptor: &DirectionFindingDescriptor,
     ) -> DirectionFindingDisabledBaselineOwner {
-        // SAFETY: forwarded unchanged from this function's `# Safety` contract,
-        // which states the lower transaction's prerequisites.
-        unsafe {
-            self.registers
-                .borrow_bluetooth_controller()
-                .prepare_direction_finding_disabled_baseline(descriptor)
-        }
+        self.registers
+            .borrow_bluetooth_controller()
+            .prepare_direction_finding_disabled_baseline(descriptor)
     }
 
     /// Reunite a quiescent task owner with its inactive interrupt owner.
@@ -365,18 +321,10 @@ pub(crate) struct InterruptBankOwner {
 impl InterruptBankOwner {
     /// Prepare the controller output while retaining the affine IRQ partition.
     ///
-    /// # Safety
-    ///
-    /// The caller must own the matching completed Controller initialization
-    /// and prove that all three CPU routes remain inactive.
-    #[allow(
-        unsafe_code,
-        reason = "the upper Controller typestate discharges the HAL interrupt prerequisites"
-    )]
-    pub(crate) unsafe fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
-        // SAFETY: the caller retains the complete matching Controller epoch
-        // and the only route installers are still inaccessible.
-        unsafe { self._registers.prepare_controller_output() }
+    /// The caller owns the matching completed Controller initialization, and
+    /// all three CPU routes remain inactive.
+    pub(crate) fn prepare_controller_output(self) -> InterruptOutputPreparedOwner {
+        self._registers.prepare_controller_output()
     }
 }
 

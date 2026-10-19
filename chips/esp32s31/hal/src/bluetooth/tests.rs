@@ -288,3 +288,40 @@ fn an_unselected_low_power_clock_cannot_be_deselected() {
     );
     assert!(!radio.bluetooth_low_power_clock_selected());
 }
+
+#[test]
+fn a_scanner_starts_only_on_the_scanning_list_of_its_own_epoch() {
+    use super::{RxMemoryListPublished, ScanStartError};
+    use oer_esp32s31_pac::{BluetoothControllerSramAddress, BluetoothMemoryListSelector};
+
+    let (_shared, _partitions, clocked) = clocked();
+    let (task, interrupts) = clocked.separate_interrupt_owner();
+    let ended = task.epoch;
+    let clocked = match task.into_clocked(interrupts) {
+        Ok(clocked) => clocked,
+        Err(_) => panic!("an untouched task reunites"),
+    };
+    let (mut task, _interrupts) = clocked.separate_interrupt_owner();
+    let current = task.epoch;
+    assert_ne!(ended, current, "a new task owner starts a new epoch");
+    let head = BluetoothControllerSramAddress::new(0x2f00_1000).unwrap();
+    let published = |scanning, epoch| RxMemoryListPublished {
+        selector: BluetoothMemoryListSelector::One,
+        head,
+        scanning,
+        epoch,
+    };
+    let mut controller = task.borrow_bluetooth_controller();
+    // A publication of the epoch that ended no longer names the head the
+    // Controller holds, so it is refused before any register is written.
+    assert_eq!(
+        controller.publish_scan_start(&published(true, ended)).err(),
+        Some(ScanStartError::StaleList)
+    );
+    assert_eq!(
+        controller
+            .publish_scan_start(&published(false, current))
+            .err(),
+        Some(ScanStartError::NotScanningList)
+    );
+}

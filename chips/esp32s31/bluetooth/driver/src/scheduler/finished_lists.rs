@@ -4,8 +4,6 @@
 //! return to its executor between steps; this module has no polling loop,
 //! allocator, waker or RTOS dependency.
 
-#![forbid(unsafe_code)]
-
 use crate::interrupt::SchedulerWakeBatch;
 
 use oer_esp32s31_hal::bluetooth::{

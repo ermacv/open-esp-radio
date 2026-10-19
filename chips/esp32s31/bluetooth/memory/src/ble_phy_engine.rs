@@ -13,7 +13,7 @@
 //! deliberately does not assign semantics to still-unrecovered words or grant
 //! MMIO publication authority.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::{marker::PhantomPinned, pin::Pin};
 
@@ -366,6 +366,25 @@ impl BlePhyEngineCpuOwned {
     /// Borrow the stable address proof without changing ownership.
     pub const fn binding(&self) -> &BlePhyEngineBinding {
         &self.binding
+    }
+
+    /// The environment and resolving list of this storage, as the base-stack
+    /// enable points the hardware at them under the normal Controller
+    /// profile.
+    pub fn hardware_objects(&self) -> oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects {
+        let inputs =
+            oer_esp32s31_hal::types::BluetoothPhyRegisterInitInputs::normal_controller_profile(
+                self.binding.environment_address(),
+                self.binding.resolving_list_address(),
+            );
+        #[allow(unsafe_code, reason = "the owner of the storage vouches for it")]
+        // SAFETY: this owner holds the storage `Pin<&'static mut>` for as long
+        // as it lives, its binding names that storage's environment and
+        // resolving list, and both are `VolatileCell` arrays the CPU reaches
+        // only through volatile accesses.
+        unsafe {
+            oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects::bind(inputs)
+        }
     }
 
     /// Borrow the initialized LE 1M packet-start calibration by value.

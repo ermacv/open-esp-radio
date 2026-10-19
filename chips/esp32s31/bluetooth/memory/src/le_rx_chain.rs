@@ -15,7 +15,7 @@
 //! packet moves to a spare header, taken from a packetless header that the
 //! walk removed earlier.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::{marker::PhantomPinned, pin::Pin};
 
@@ -592,6 +592,23 @@ impl<const PACKETS: usize> LeRxChain<PACKETS> {
     /// event of the class runs.
     pub const fn initial_cursor(&self) -> BluetoothControllerSramAddress {
         self.ring.cursor().controller_address()
+    }
+
+    /// The chain's initial header and list, as the RX-list publication
+    /// points the hardware at them.
+    pub fn publication_head(&self) -> oer_esp32s31_hal::bluetooth::RxChainHead {
+        #[allow(unsafe_code, reason = "the chain vouches for its storage")]
+        // SAFETY: the chain holds its nodes `Pin<&'static mut>`, its ring
+        // encodes every header link into those nodes only, and the headers
+        // are volatile cells the CPU reaches only through volatile accesses;
+        // the selector and the scanning flag are this chain's class.
+        unsafe {
+            oer_esp32s31_hal::bluetooth::RxChainHead::new(
+                self.class.selector(),
+                self.initial_cursor(),
+                matches!(self.class, RxMemoryListClass::Scanning),
+            )
+        }
     }
 
     /// Take the oldest completed packet recorded for `source` and return its

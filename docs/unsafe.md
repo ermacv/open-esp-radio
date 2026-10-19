@@ -74,10 +74,20 @@ smallest operation; a safe state machine in an audited crate remains safe.
 `esp32s31-bluetooth-memory` is the core of the controller-SRAM protocol:
 the controller walks and writes that memory, so, like the HAL's DMA modules,
 the crate whose codecs and scheduler lists encode every address the
-controller follows holds the narrow unsafe calls that publish them. Its one
-unsafe module, `scheduler::hardware::live`, publishes list-zero items only
-after resolving each address to a submitted item of the `'static` scheduler
-pools, in the executor's order.
+controller follows holds the narrow unsafe code that publishes them.
+`scheduler::hardware::live` publishes list-zero items only after resolving
+each address to a submitted item of the `'static` scheduler pools, in the
+executor's order. The BLE PHY engine, the direction-finding workspace, the
+device table and the receive chain each mint, in one place, the HAL proof of
+the storage the hardware is pointed at (`BlePhyHardwareObjects`,
+`DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`),
+whose constructor is unsafe; the HAL publications that take them are safe.
+An `unsafe` contract there states only the memory the hardware reaches: the
+Controller's lifecycle order, power and PHY membership are correctness,
+which the driver's typestate holds, and the driver forbids unsafe code. The
+scanner start takes the scanning list's publication of the same Controller
+epoch, so a list another epoch published, or a reset head, never starts
+it.
 
 `esp32s31-hal` has one module that makes typed DMA addresses,
 `dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and

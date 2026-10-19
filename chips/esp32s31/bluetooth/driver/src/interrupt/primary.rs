@@ -5,8 +5,6 @@
 //! those finite operations with the Controller classifier without callbacks,
 //! allocation, polling or an RTOS queue.
 
-#![forbid(unsafe_code)]
-
 use crate::interrupt::{
     PrimaryControllerFault, PrimaryInterruptClassification, SchedulerReferenceAction,
     SchedulerWakeCell, SchedulerWakePublication, SchedulerWorkerWake,

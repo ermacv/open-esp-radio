@@ -162,6 +162,7 @@ pub(super) fn shut_down<T>(
         modem_lp_timer: _,
         time_latch: _,
         reunitable: _,
+        epoch: _,
     } = task;
     Ok((
         ClockedOwner {
