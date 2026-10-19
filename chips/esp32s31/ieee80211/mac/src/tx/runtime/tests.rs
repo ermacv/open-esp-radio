@@ -142,7 +142,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
         queue,
         TxPhyRate::Legacy(LegacyRate::Ofdm54M),
         4,
-        OrdinaryFrameClass::Short,
+        FrameClass::Short,
     )
     .unwrap();
 
@@ -159,7 +159,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
     assert_eq!(retry.publications(), 2);
     assert_eq!(
         retry.counters(),
-        OrdinaryRetryCounters {
+        RetryCounters {
             mpdu: 1,
             short: 1,
             long: 0
@@ -180,7 +180,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
     assert_eq!(retry.publications(), 3);
     assert_eq!(
         retry.counters(),
-        OrdinaryRetryCounters {
+        RetryCounters {
             mpdu: 1,
             short: 2,
             long: 0
@@ -201,7 +201,7 @@ fn ordinary_retry_owns_rate_ladder_and_edca_transitions() {
 
 #[test]
 fn cts_failures_continue_the_rate_series_beyond_the_mpdu_retry_limit() {
-    for frame_class in [OrdinaryFrameClass::Short, OrdinaryFrameClass::Long] {
+    for frame_class in [FrameClass::Short, FrameClass::Long] {
         let queue = LegacyTxQueue::BestEffort;
         let mut policy = WifiTxRuntimePolicy::vendor_defaults();
         let mut retry = OrdinaryMpduRetryState::new(
@@ -244,7 +244,7 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
         queue,
         TxPhyRate::Legacy(LegacyRate::Ofdm6M),
         2,
-        OrdinaryFrameClass::Long,
+        FrameClass::Long,
     )
     .unwrap();
     assert_eq!(
@@ -278,7 +278,7 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
             queue,
             TxPhyRate::Legacy(LegacyRate::Ofdm6M),
             0,
-            OrdinaryFrameClass::Short,
+            FrameClass::Short,
         )
         .err(),
         Some(OrdinaryRetryError::ZeroMpduRetryLimit)
@@ -289,7 +289,7 @@ fn ordinary_retry_limit_collision_and_abort_restore_the_minimum_cw() {
 fn ordinary_he_retries_walk_the_dot11ax_record() {
     use crate::rx::HeGuardIntervalAndLtf;
     use crate::tx::{HeMcs, HeRate};
-    let counters = |failures| OrdinaryRetryCounters {
+    let counters = |failures| RetryCounters {
         mpdu: failures,
         short: 0,
         long: 0,
@@ -335,7 +335,7 @@ fn p2p_ht20_sgi_mcs0_through_mcs6_enter_same_mcs_lgi_retry_records() {
             initial,
             OrdinaryRetryRatePolicy::P2pHtSgiFallback(schedule),
             4,
-            OrdinaryFrameClass::Short,
+            FrameClass::Short,
         )
         .unwrap();
         let mut policy = WifiTxRuntimePolicy::vendor_defaults();
@@ -374,7 +374,7 @@ fn p2p_ht_sgi_bridge_rejects_a_different_mcs_retry_record() {
             initial,
             OrdinaryRetryRatePolicy::P2pHtSgiFallback(wrong),
             4,
-            OrdinaryFrameClass::Short,
+            FrameClass::Short,
         )
         .err(),
         Some(OrdinaryRetryError::P2pHtSgiFallbackMismatch {

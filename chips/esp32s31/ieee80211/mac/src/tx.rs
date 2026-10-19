@@ -27,7 +27,7 @@ use oer_esp32s31_hal::types::{
     MacTxProtection, MacTxQueueDetached,
 };
 
-pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState as TxSlotState;
+pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
 #[cfg(any(test, feature = "test-support"))]
 use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
 
@@ -3302,14 +3302,14 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
 
     pub fn reset_work(self: Pin<&mut Self>) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.state() != TxSlotState::Free {
+        if slot.state() != TxDmaState::Free {
             return Err(TxError::Busy);
         }
         slot.work = oer_ieee80211_softmac::MacTxWork::new();
         Ok(())
     }
 
-    pub fn state(&self) -> TxSlotState {
+    pub fn state(&self) -> TxDmaState {
         self.dma.state()
     }
 
@@ -3342,7 +3342,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         transfer_length: u32,
     ) -> Result<TxCookie, TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Free {
+        if slot.dma.state() != TxDmaState::Free {
             return Err(TxError::Busy);
         }
         let generation = slot
@@ -3367,7 +3367,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// a hardware detach transaction.
     pub fn cancel_reservation(self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Reserved || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
         slot.dma
@@ -3399,7 +3399,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         config: LegacyTxConfig,
     ) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Reserved || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let index = queue.index();
@@ -3458,7 +3458,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         config: HtTxConfig,
     ) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Reserved || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let index = queue.index();
@@ -3501,7 +3501,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         config: HeSmpduTxConfig,
     ) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Reserved || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::Reserved || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let index = queue.index();
@@ -3552,7 +3552,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
             return Ok(None);
         };
 
-        if slot.dma.state() != TxSlotState::HardwareOwned {
+        if slot.dma.state() != TxDmaState::HardwareOwned {
             slot.dma.quarantine();
             return Err(TxError::Stale);
         }
@@ -3580,7 +3580,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
             return Ok(None);
         };
 
-        if slot.dma.state() != TxSlotState::HardwareOwned {
+        if slot.dma.state() != TxDmaState::HardwareOwned {
             slot.dma.quarantine();
             return Err(TxError::Stale);
         }
@@ -3618,7 +3618,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         cookie: TxCookie,
     ) -> Result<bool, TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::HardwareOwned || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
         if !hardware.begin_tx_timeout_abort(slot.queue.index()) {
@@ -3635,7 +3635,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// owner, which performs a full reset before reconstructing TX storage.
     pub fn require_reset(self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::HardwareOwned || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
         slot.dma.require_reset().map_err(map_dma_storage_error)?;
@@ -3649,7 +3649,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         cookie: TxCookie,
     ) -> Result<bool, TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::HardwareOwned || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let descriptor_head = slot.dma.binding().descriptor_address();
@@ -3683,7 +3683,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         cookie: TxCookie,
     ) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::HardwareOwned || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let descriptor_head = slot.dma.binding().descriptor_address();
@@ -3714,7 +3714,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         cookie: TxCookie,
     ) -> Result<(), TxError> {
         let slot = self.get_mut();
-        if slot.dma.state() != TxSlotState::Completed || cookie != slot.active {
+        if slot.dma.state() != TxDmaState::Completed || cookie != slot.active {
             return Err(TxError::Stale);
         }
         let descriptor_head = slot.dma.binding().descriptor_address();

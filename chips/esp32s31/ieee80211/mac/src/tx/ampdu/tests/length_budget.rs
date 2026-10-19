@@ -73,7 +73,7 @@ fn fresh_budget_intersects_rate_limit_without_reserving_storage() {
         admitted += 1;
     }
     assert!(admitted > 0 && admitted < 32);
-    assert_eq!(storage.state(), crate::tx::TxSlotState::Free);
+    assert_eq!(storage.state(), crate::tx::TxDmaState::Free);
     assert_eq!(storage.frame_count(), 0);
 }
 

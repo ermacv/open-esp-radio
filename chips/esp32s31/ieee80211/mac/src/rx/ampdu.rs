@@ -12,7 +12,7 @@
 //! machines.
 
 use oer_ieee80211_mac::{
-    block_ack::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease},
+    block_ack::{RxReorderBuffer, RxReorderError, RxReorderRelease},
     sequence::SequenceNumber,
 };
 
@@ -30,15 +30,9 @@ use crate::{
 // hal_agreement_add_rx_ba` publishes that value in the seven-bit hardware
 // window. Keep the protocol/reorder window independent of the number of RX DMA
 // descriptors: descriptors are recycled while this sequence window remains
-// active. A reduced-memory build can still select eight explicitly.
-#[cfg(feature = "rx-ba-window-8")]
-pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 8;
-#[cfg(not(feature = "rx-ba-window-8"))]
+// active.
 pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 64;
 pub const RX_AMPDU_SLOT_CAPACITY: usize = RX_BLOCK_ACK_MAX_WINDOW as usize;
-#[cfg(feature = "large-rx-pool-48")]
-pub(crate) const RX_ESF_SLOT_ID_CAPACITY: usize = 48;
-#[cfg(not(feature = "large-rx-pool-48"))]
 pub(crate) const RX_ESF_SLOT_ID_CAPACITY: usize = 32;
 // Rare multi-descriptor MPDUs use a separate split SRAM/PSRAM pool. Its
 // IDs participate in reorder ownership, but must not inflate the ordinary
@@ -155,13 +149,6 @@ pub fn rx_block_ack_request_key(
         ])),
     })
 }
-
-/// One received MPDU of an agreement: the portable reorder value.
-pub type RxAmpduMpdu = RxReorderMpdu;
-
-/// Why the reorder owner refused an operation: the portable reorder error,
-/// whose `InvalidBank` names an agreement outside the eight hardware banks.
-pub type RxAmpduError = RxReorderError;
 
 pub use oer_ieee80211_mac::block_ack::{
     ADDBA_STATUS_REQUEST_DECLINED, RxAddbaResponseError, write_declined_addba_response,
@@ -803,10 +790,10 @@ impl<const SLOT_CAPACITY: usize> RxBlockAckReorderBanks<SLOT_CAPACITY> {
     pub fn start(
         &mut self,
         agreement: RxBlockAckSnapshot,
-    ) -> Result<Option<RxAmpduRelease>, RxAmpduError> {
+    ) -> Result<Option<RxAmpduRelease>, RxReorderError> {
         let bank = usize::from(agreement.hardware_index);
         if bank >= RX_BLOCK_ACK_BANK_COUNT {
-            return Err(RxAmpduError::InvalidBank(agreement.hardware_index));
+            return Err(RxReorderError::InvalidBank(agreement.hardware_index));
         }
         let state = RxBlockAckReorderState::new(agreement.starting_sequence, agreement.window)?;
         let released = self.stop_bank(bank);

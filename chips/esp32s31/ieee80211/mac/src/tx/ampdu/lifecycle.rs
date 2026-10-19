@@ -9,14 +9,14 @@ use super::{
     HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError, HtAmpduTxStorage, HtBlockAckObservation,
 };
 use crate::tx::{
-    CompletionObservation, TxCompletion, TxCookie, TxHardware, TxSlotState, decode_or_quarantine,
+    CompletionObservation, TxCompletion, TxCookie, TxDmaState, TxHardware, decode_or_quarantine,
 };
 
 impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Discard a software-owned partial batch.
     pub fn cancel(mut self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
         let storage = self.as_ref().get_ref();
-        if storage.state != TxSlotState::Reserved || storage.active != cookie {
+        if storage.state != TxDmaState::Reserved || storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         self.as_mut().release();
@@ -32,12 +32,12 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         let Some(registers) = hardware.take_block_ack_completion(storage.queue.index()) else {
             return Ok(None);
         };
-        if *storage.state != TxSlotState::HardwareOwned {
-            *storage.state = TxSlotState::ResetRequired;
+        if *storage.state != TxDmaState::HardwareOwned {
+            *storage.state = TxDmaState::ResetRequired;
             return Err(HtAmpduTxError::Stale);
         }
         match decode_or_quarantine(*storage.active, registers.tx(), || {
-            *storage.state = TxSlotState::ResetRequired;
+            *storage.state = TxDmaState::ResetRequired;
         })
         .map_err(HtAmpduTxError::Completion)?
         {
@@ -45,7 +45,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
                 if let Some(reservation) = storage.trigger_reservation.take() {
                     hardware.clear_he_trigger_based_queue(reservation);
                 }
-                *storage.state = TxSlotState::Completed;
+                *storage.state = TxDmaState::Completed;
                 Ok(Some(CompletionObservation::Observed(HtAmpduTxCompletion {
                     tx,
                     block_ack: HtBlockAckObservation::new(
@@ -72,7 +72,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
     ) -> Result<Option<MacHeTriggerTxQueueSnapshot>, HtAmpduTxError> {
         let storage = self.get_ref();
-        if storage.state != TxSlotState::HardwareOwned || storage.active != cookie {
+        if storage.state != TxDmaState::HardwareOwned || storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         Ok(storage.trigger_publication_snapshot)
@@ -91,17 +91,17 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         let Some(registers) = hardware.take_tx_completion(storage.queue.index()) else {
             return Ok(None);
         };
-        if *storage.state != TxSlotState::HardwareOwned || *storage.count != 1 {
-            *storage.state = TxSlotState::ResetRequired;
+        if *storage.state != TxDmaState::HardwareOwned || *storage.count != 1 {
+            *storage.state = TxDmaState::ResetRequired;
             return Err(HtAmpduTxError::Stale);
         }
         match decode_or_quarantine(*storage.active, registers, || {
-            *storage.state = TxSlotState::ResetRequired;
+            *storage.state = TxDmaState::ResetRequired;
         })
         .map_err(HtAmpduTxError::Completion)?
         {
             CompletionObservation::Observed(completion) => {
-                *storage.state = TxSlotState::Completed;
+                *storage.state = TxDmaState::Completed;
                 Ok(Some(CompletionObservation::Observed(completion)))
             }
             CompletionObservation::NoEffect => Ok(Some(CompletionObservation::NoEffect)),
@@ -114,7 +114,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
     ) -> Result<bool, HtAmpduTxError> {
         let storage = self.project();
-        if *storage.state != TxSlotState::HardwareOwned || *storage.active != cookie {
+        if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         Ok(hardware.begin_tx_timeout_abort(storage.queue.index()))
@@ -128,10 +128,10 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// potentially DMA-visible allocations writable by `embassy-net`.
     pub fn require_reset(self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
         let storage = self.project();
-        if *storage.state != TxSlotState::HardwareOwned || *storage.active != cookie {
+        if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
-        *storage.state = TxSlotState::ResetRequired;
+        *storage.state = TxDmaState::ResetRequired;
         Ok(())
     }
 
@@ -142,8 +142,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
     ) -> Result<(), HtAmpduTxError> {
         let storage = self.as_ref().get_ref();
-        if storage.state != TxSlotState::Completed || storage.active != cookie || !storage.detached
-        {
+        if storage.state != TxDmaState::Completed || storage.active != cookie || !storage.detached {
             return Err(HtAmpduTxError::Stale);
         }
         self.as_mut().release();
@@ -159,6 +158,6 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         *storage.trigger_reservation = None;
         *storage.trigger_publication_snapshot = None;
         *storage.detached = false;
-        *storage.state = TxSlotState::Free;
+        *storage.state = TxDmaState::Free;
     }
 }

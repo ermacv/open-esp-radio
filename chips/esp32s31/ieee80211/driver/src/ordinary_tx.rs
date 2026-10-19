@@ -20,14 +20,14 @@ use oer_esp32s31_ieee80211_mac::{
     tx::ampdu::HtBlockAckObservation,
     tx::protection::{ProtectedPpdu, TxProtection, TxProtectionDecision, TxPsdu, TxReceiver},
     tx::runtime::{
-        OrdinaryCollisionDecision, OrdinaryFrameClass, OrdinaryMpduRetryState,
-        OrdinaryRetryCounters, OrdinaryRetryDecision, OrdinaryRetryError, OrdinaryRetryRatePolicy,
-        VENDOR_RTS_THRESHOLD_BYTES, WifiTxRuntimePolicy,
+        FrameClass, OrdinaryCollisionDecision, OrdinaryMpduRetryState, OrdinaryRetryDecision,
+        OrdinaryRetryError, OrdinaryRetryRatePolicy, RetryCounters, VENDOR_RTS_THRESHOLD_BYTES,
+        WifiTxRuntimePolicy,
     },
     tx::{
         CompletionObservation, HeSmpduTxConfig, HtTxConfig, LegacyTxConfig, LegacyTxQueue,
-        MacLegacyTxResponse, TxCompletion, TxControlFrame, TxCookie, TxError, TxHardware,
-        TxPhyRate, TxSlot, TxSlotState,
+        MacLegacyTxResponse, TxCompletion, TxControlFrame, TxCookie, TxDmaState, TxError,
+        TxHardware, TxPhyRate, TxSlot,
     },
 };
 use oer_ieee80211_mac::frame::FrameControl;
@@ -139,7 +139,7 @@ pub struct OrdinaryTxRetryReport {
 /// by the real owner instead of maintaining a parallel verification model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OrdinaryTxActiveSnapshot {
-    pub counters: OrdinaryRetryCounters,
+    pub counters: RetryCounters,
     pub publications: u8,
     pub current_rate: TxPhyRate,
     pub retry_bit_set: bool,
@@ -599,7 +599,7 @@ where
     }
 
     /// Exact descriptor lifecycle state retained for ownership diagnostics.
-    pub fn slot_state(&self) -> TxSlotState {
+    pub fn slot_state(&self) -> TxDmaState {
         self.slot.as_ref().get_ref().state()
     }
 
@@ -611,9 +611,9 @@ where
     /// Portable distinction between normal queue pressure and a quarantined
     /// descriptor that requires a new radio epoch.
     pub fn queue_state(&self) -> MacTxQueueState {
-        if self.slot.as_ref().get_ref().state() == TxSlotState::ResetRequired {
+        if self.slot.as_ref().get_ref().state() == TxDmaState::ResetRequired {
             MacTxQueueState::ResetRequired
-        } else if self.active.is_some() || self.slot.as_ref().get_ref().state() != TxSlotState::Free
+        } else if self.active.is_some() || self.slot.as_ref().get_ref().state() != TxDmaState::Free
         {
             MacTxQueueState::Backpressured
         } else {
@@ -1063,9 +1063,9 @@ where
             retry_rate_policy,
             plan.exchange.publication_limit,
             if hardware_frame_length > VENDOR_RTS_THRESHOLD_BYTES {
-                OrdinaryFrameClass::Long
+                FrameClass::Long
             } else {
-                OrdinaryFrameClass::Short
+                FrameClass::Short
             },
         )?;
         {

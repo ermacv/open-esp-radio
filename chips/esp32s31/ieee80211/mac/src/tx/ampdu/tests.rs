@@ -370,7 +370,7 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
         assert_eq!(owner.held_backing_count(), 1);
     }
 
-    assert_eq!(storage.state(), TxSlotState::Free);
+    assert_eq!(storage.state(), TxDmaState::Free);
     assert_eq!(pool.claim_network(0).release(), 0);
 }
 
@@ -455,7 +455,7 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
         drop(owner);
     }
 
-    assert_eq!(storage.state(), TxSlotState::ResetRequired);
+    assert_eq!(storage.state(), TxDmaState::ResetRequired);
     assert_eq!(pool.claimed_slots(), 1);
 }
 
@@ -505,7 +505,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
         if detach_failed {
             assert_eq!(result, Err(HtAmpduTxError::DetachFailed));
             drop(owner);
-            assert_eq!(storage.state(), TxSlotState::ResetRequired);
+            assert_eq!(storage.state(), TxDmaState::ResetRequired);
             assert_eq!(pool.claimed_slots(), 1);
         } else {
             result.unwrap();
@@ -516,7 +516,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
                 Err(HtAmpduTxError::Stale)
             );
             drop(owner);
-            assert_eq!(storage.state(), TxSlotState::Free);
+            assert_eq!(storage.state(), TxDmaState::Free);
         }
     }
 }
@@ -713,9 +713,9 @@ fn owned_dma_pool_builds_two_mpdu_length_without_publishing_hardware() {
         }
     );
     assert_eq!(owner.frame_count(), 2);
-    assert_eq!(owner.state(), TxSlotState::Reserved);
+    assert_eq!(owner.state(), TxDmaState::Reserved);
     owner.cancel(cookie).unwrap();
-    assert_eq!(owner.state(), TxSlotState::Free);
+    assert_eq!(owner.state(), TxDmaState::Free);
 }
 
 #[test]
@@ -993,7 +993,7 @@ fn completion_exposes_publication_snapshot_then_clears_tb_enable() {
     };
     {
         let storage = storage.as_mut().project();
-        *storage.state = TxSlotState::HardwareOwned;
+        *storage.state = TxDmaState::HardwareOwned;
         *storage.queue = LegacyTxQueue::BestEffort;
         *storage.trigger_reservation = Some(reservation);
         *storage.trigger_publication_snapshot = Some(snapshot);
@@ -1103,7 +1103,7 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
             .unwrap()
             .is_some()
     );
-    assert_eq!(owner.state(), TxSlotState::Completed);
+    assert_eq!(owner.state(), TxDmaState::Completed);
     assert_eq!(owner.completed_frame(cookie, 0), Err(HtAmpduTxError::Stale));
     owner.detach_completed(&mut hardware, cookie).unwrap();
     let (frame, mic_length) = owner.completed_frame(cookie, 0).unwrap();
@@ -1111,7 +1111,7 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
     assert_eq!(mic_length, 8);
 
     owner.release_completed(cookie).unwrap();
-    assert_eq!(owner.state(), TxSlotState::Free);
+    assert_eq!(owner.state(), TxDmaState::Free);
     assert_eq!(owner.completed_frame(cookie, 0), Err(HtAmpduTxError::Stale));
 }
 
@@ -1143,7 +1143,7 @@ fn detached_pool_compacts_only_missing_frames_for_ampdu_retry() {
         .unwrap();
     assert_eq!(aggregate.subframes, 2);
     assert_eq!(owner.frame_count(), 2);
-    assert_eq!(owner.state(), TxSlotState::Reserved);
+    assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[0], committed[1]);
     assert_eq!(owner.buffer_addresses[1], committed[3]);
     owner.cancel(cookie).unwrap();
@@ -1189,7 +1189,7 @@ fn protection_failure_republishes_every_frame_without_the_retry_bit() {
         .retain_for_ampdu_retry(cookie, 0b111, AmpduRepublication::AfterProtectionFailure)
         .unwrap();
     assert_eq!(aggregate, original);
-    assert_eq!(owner.state(), TxSlotState::Reserved);
+    assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[..3], committed[..3]);
     owner.cancel(cookie).unwrap();
     for slot in 0..3 {
@@ -1680,7 +1680,7 @@ fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {
     let reservation = MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, 2, 2).unwrap();
     {
         let storage = storage.as_mut().project();
-        *storage.state = TxSlotState::HardwareOwned;
+        *storage.state = TxDmaState::HardwareOwned;
         *storage.queue = LegacyTxQueue::BestEffort;
         *storage.trigger_reservation = Some(reservation);
     }
@@ -1699,7 +1699,7 @@ fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {
         storage.as_mut().acknowledge_completion(&mut hardware),
         Ok(Some(CompletionObservation::NoEffect))
     );
-    assert_eq!(storage.state(), TxSlotState::HardwareOwned);
+    assert_eq!(storage.state(), TxDmaState::HardwareOwned);
     assert_eq!(hardware.cleared, None);
     assert_eq!(
         storage.as_mut().project().trigger_reservation,
@@ -1716,7 +1716,7 @@ fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {
         storage.as_mut().acknowledge_completion(&mut hardware),
         Ok(Some(CompletionObservation::Observed(_)))
     ));
-    assert_eq!(storage.state(), TxSlotState::Completed);
+    assert_eq!(storage.state(), TxDmaState::Completed);
     assert_eq!(hardware.cleared, Some(reservation));
     assert_eq!(cookie, storage.active);
 }

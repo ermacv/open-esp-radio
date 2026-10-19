@@ -175,7 +175,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     ) -> Result<HtAmpduLengthAccumulator, HtAmpduTxError> {
         if !matches!(
             self.state,
-            crate::tx::TxSlotState::Free | crate::tx::TxSlotState::Reserved
+            crate::tx::TxDmaState::Free | crate::tx::TxDmaState::Reserved
         ) {
             return Err(HtAmpduTxError::Stale);
         }

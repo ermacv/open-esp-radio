@@ -56,7 +56,7 @@ pub use request::{
 };
 
 use crate::tx::runtime::{AmpduRetryDecision, AmpduRetryError};
-use crate::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxSlotState};
+use crate::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
 pub const TX_AMPDU_METADATA_SIZE: usize = 8;
 const TX_FCS_SIZE: u16 = 4;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
@@ -65,7 +65,7 @@ const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
 pub enum HtAmpduTxError {
     /// A storage transition requiring software-owned idle state observed a
     /// different lifecycle state.
-    NotFree(TxSlotState),
+    NotFree(TxDmaState),
     /// A commit attempted to advance beyond the statically bounded slot set.
     SlotCapacity,
     Stale,
@@ -250,7 +250,7 @@ pub struct HtAmpduTxStorage<const SLOTS: usize> {
     hardware_he_control: [bool; SLOTS],
     empty_delimiters: [u8; SLOTS],
     descriptor_capacities: [u16; SLOTS],
-    state: TxSlotState,
+    state: TxDmaState,
     generation_cursor: u32,
     active: TxCookie,
     queue: LegacyTxQueue,
@@ -277,7 +277,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
             hardware_he_control: [false; SLOTS],
             empty_delimiters: [0; SLOTS],
             descriptor_capacities: [0; SLOTS],
-            state: TxSlotState::Free,
+            state: TxDmaState::Free,
             generation_cursor: 0,
             active: TxCookie(0),
             queue: LegacyTxQueue::BestEffort,
@@ -300,7 +300,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         Pin::static_mut(storage)
     }
 
-    pub const fn state(&self) -> TxSlotState {
+    pub const fn state(&self) -> TxDmaState {
         self.state
     }
 
@@ -327,7 +327,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         max_aggregate_bytes: u16,
     ) -> Result<(), HtAmpduTxError> {
         let storage = self.project();
-        if *storage.state != TxSlotState::Free {
+        if *storage.state != TxDmaState::Free {
             return Err(HtAmpduTxError::NotFree(*storage.state));
         }
         if max_aggregate_bytes == 0 {
@@ -340,7 +340,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Calculate the exact A-MPDU byte count for the committed software-owned
     /// prefix, before any DMA address is published.
     pub fn prepared_aggregate(&self, cookie: TxCookie) -> Result<HtAmpduLength, HtAmpduTxError> {
-        if self.state != TxSlotState::Reserved || self.active != cookie {
+        if self.state != TxDmaState::Reserved || self.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         // Both HT and HE can retain a one-subframe A-MPDU. Complete
@@ -363,7 +363,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         cookie: TxCookie,
         index: u8,
     ) -> Result<u8, HtAmpduTxError> {
-        if self.state != TxSlotState::Reserved || self.active != cookie {
+        if self.state != TxDmaState::Reserved || self.active != cookie {
             return Err(HtAmpduTxError::Stale);
         }
         let index = usize::from(index);
@@ -379,7 +379,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     /// Begin constructing one aggregate in the software-owned pool.
     pub fn begin(self: Pin<&mut Self>) -> Result<TxCookie, HtAmpduTxError> {
         let storage = self.project();
-        if *storage.state != TxSlotState::Free {
+        if *storage.state != TxDmaState::Free {
             return Err(HtAmpduTxError::NotFree(*storage.state));
         }
         if !(2..=TX_AMPDU_SLOT_CAPACITY).contains(&SLOTS) {
@@ -397,7 +397,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         *storage.trigger_reservation = None;
         *storage.trigger_publication_snapshot = None;
         *storage.detached = false;
-        *storage.state = TxSlotState::Reserved;
+        *storage.state = TxDmaState::Reserved;
         Ok(*storage.active)
     }
 }
