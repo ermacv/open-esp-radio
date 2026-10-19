@@ -21,6 +21,9 @@ oer-esp32s31-knowledge = { path = "../../../chips/esp32s31/knowledge" }
 oer-espressif-coex = { path = "../../../chips/espressif/coex" }
 oer-espressif-ieee802154-engine = { path = "../../../chips/espressif/ieee802154-engine" }
 oer-ieee802154-mac = { path = "../../../protocols/ieee802154/mac" }
+# The comparison runs scenarios on any channel and power the vendor driver
+# takes, so it uses the open domain.
+oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
 
 [features]
 # Build the vendor driver and the port with multi-PAN and two interfaces.

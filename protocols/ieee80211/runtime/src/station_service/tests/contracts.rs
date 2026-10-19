@@ -90,7 +90,15 @@ impl PortBody<ModelBackend<ModelCaps24, ServiceContexts>> for ContractBody {
                 panic!()
             };
             let (arbiter, places) = stopped
-                .restart(SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(), places)
+                .restart(
+                    SupportedChannel::new(
+                        oer_radio_regulatory::TEST_DOMAIN
+                            .permit(channel6())
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                    places,
+                )
                 .ok()
                 .unwrap()
                 .into_parts();

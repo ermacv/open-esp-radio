@@ -27,7 +27,11 @@ fn published(pib: &mut Ieee802154Pib) -> Vec<Call> {
 /// (esp_ieee802154_pib.c `ieee802154_pib_init`, `ieee802154_pib_update`).
 #[test]
 fn initial_pib_publishes_the_vendor_defaults_in_order() {
-    let mut pib = Ieee802154Pib::new(Ieee802154PibDefaults::default(), levels());
+    let mut pib = Ieee802154Pib::new(
+        Ieee802154PibDefaults::default(),
+        levels(),
+        super::test_permit(11, levels()),
+    );
     assert!(pib.is_pending());
     assert!(!pib.rx_when_idle());
     assert_eq!(pib.power_table(), [10; 16]);
@@ -54,10 +58,14 @@ fn initial_pib_publishes_the_vendor_defaults_in_order() {
 /// never does.
 #[test]
 fn only_a_changed_hardware_value_marks_the_pib_pending() {
-    let mut pib = Ieee802154Pib::new(Ieee802154PibDefaults::default(), levels());
+    let mut pib = Ieee802154Pib::new(
+        Ieee802154PibDefaults::default(),
+        levels(),
+        super::test_permit(11, levels()),
+    );
     let _ = published(&mut pib);
 
-    pib.set_channel(channel(11));
+    pib.set_channel(super::test_permit(11, levels()));
     pib.set_promiscuous(true);
     pib.set_cca_threshold(-75);
     pib.set_power(10);
@@ -75,9 +83,13 @@ fn only_a_changed_hardware_value_marks_the_pib_pending() {
 /// by the provider floor scan.
 #[test]
 fn power_follows_the_current_channel() {
-    let mut pib = Ieee802154Pib::new(Ieee802154PibDefaults::default(), levels());
+    let mut pib = Ieee802154Pib::new(
+        Ieee802154PibDefaults::default(),
+        levels(),
+        super::test_permit(11, levels()),
+    );
     pib.set_power_for_channel(channel(20), 0);
-    pib.set_channel(channel(20));
+    pib.set_channel(super::test_permit(20, levels()));
     assert_eq!(pib.power(), 0);
     let calls = published(&mut pib);
     assert!(calls.contains(&Call::SetChannel(20)));
@@ -94,7 +106,11 @@ fn enhanced_or_zigbee_pending_on_any_interface_selects_the_enhanced_lookup() {
         (AutoPendingMode::Enhanced, true),
         (AutoPendingMode::Zigbee, true),
     ] {
-        let mut pib = Ieee802154Pib::new(Ieee802154PibDefaults::default(), levels());
+        let mut pib = Ieee802154Pib::new(
+            Ieee802154PibDefaults::default(),
+            levels(),
+            super::test_permit(11, levels()),
+        );
         pib.set_pending_mode(Ieee802154MultipanIndex::CONTEXT2, mode);
         assert_eq!(pib.pending_mode(Ieee802154MultipanIndex::CONTEXT2), mode);
         assert_eq!(
@@ -130,4 +146,50 @@ fn defaults_hold_a_threshold_of_the_kconfig_range() {
 #[test]
 fn provider_levels_are_published_as_the_port_levels() {
     assert_eq!(levels().portable().levels_dbm(), &LEVELS);
+}
+
+fn permit_with_ceiling(
+    number: u8,
+    ceiling_mbm: i32,
+) -> Result<super::Ieee802154Permit, super::CeilingBelowLowestLevel> {
+    let permitted = oer_radio_regulatory::TEST_DOMAIN
+        .permit(channel(number))
+        .unwrap();
+    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: Some(ceiling_mbm),
+    });
+    super::Ieee802154Permit::new(permitted, ceiling, levels())
+}
+
+/// The ceiling bounds the requested power: a request above it radiates the
+/// ceiling's level, and a new channel brings its own ceiling.
+#[test]
+fn the_ceiling_bounds_the_published_power() {
+    let mut pib = Ieee802154Pib::new(
+        Ieee802154PibDefaults::default(),
+        levels(),
+        permit_with_ceiling(11, 500).unwrap(),
+    );
+    assert_eq!(pib.power(), 10);
+    assert_eq!(pib.ceiling_dbm(), 5);
+    // The provider level at or below 5 dBm is 4 (field code 2).
+    assert!(published(&mut pib).contains(&Call::SetTxPower(2)));
+    pib.set_channel(permit_with_ceiling(12, 1000).unwrap());
+    assert!(pib.is_pending());
+    assert!(published(&mut pib).contains(&Call::SetTxPower(3)));
+}
+
+/// A ceiling under the provider's lowest level cannot be honoured: the
+/// permit is refused instead of radiating the lowest level.
+#[test]
+fn a_ceiling_below_the_lowest_level_is_refused() {
+    assert_eq!(
+        permit_with_ceiling(11, -1000).unwrap_err(),
+        super::CeilingBelowLowestLevel {
+            ceiling_dbm: -10,
+            lowest_dbm: -9,
+        }
+    );
 }

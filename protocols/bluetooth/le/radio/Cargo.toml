@@ -9,7 +9,11 @@ description = "Allocation-free hardware-independent Bluetooth LE radio values"
 
 [dependencies]
 oer-radio-coex = { path = "../../../radio/coex" }
+oer-radio-regulatory = { path = "../../../radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
+
+[dev-dependencies]
+oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 
 [lints]
 workspace = true

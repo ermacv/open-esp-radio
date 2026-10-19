@@ -2564,6 +2564,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "oer-bluetooth-le-radio",
+ "oer-radio-regulatory",
 ]
 
 [[package]]
@@ -2571,6 +2572,7 @@ name = "oer-bluetooth-le-radio"
 version = "0.1.0"
 dependencies = [
  "oer-radio-coex",
+ "oer-radio-regulatory",
  "oer-time",
 ]
 
@@ -2930,6 +2932,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-ieee802154-mac",
  "oer-memory",
+ "oer-radio-regulatory",
 ]
 
 [[package]]
@@ -4170,6 +4173,7 @@ dependencies = [
  "oer-espressif-coex",
  "oer-espressif-ieee802154-engine",
  "oer-ieee802154-mac",
+ "oer-radio-regulatory",
  "oer-tool-pins",
 ]
 

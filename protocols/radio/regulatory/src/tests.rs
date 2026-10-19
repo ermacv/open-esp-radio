@@ -269,3 +269,24 @@ fn germany_permits_the_2_4_ghz_channels_one_to_thirteen_and_not_fourteen() {
 fn a_country_without_generated_rules_has_no_domain() {
     assert!(RegulatoryDomain::of(Country::new(*b"ZZ").unwrap()).is_none());
 }
+
+#[test]
+fn a_hopping_radio_is_bounded_by_the_width_of_one_hop() {
+    #[derive(Clone, Copy, Debug)]
+    struct Hopper;
+    impl RadioChannel for Hopper {
+        fn span(&self) -> FrequencySpan {
+            FrequencySpan::new(2_400_000, 2_483_500).unwrap()
+        }
+        fn bandwidth_khz(&self) -> u32 {
+            2_000
+        }
+    }
+    // The 83.5 MHz band exceeds the 40 MHz rule, one 2 MHz hop does not.
+    let permitted = domain().permit(Hopper).unwrap();
+    assert_eq!(permitted.eirp_limit_mbm(), 2000);
+    assert_eq!(
+        domain().permit(Span(2_400_000, 2_483_500)).unwrap_err(),
+        Refused::Bandwidth
+    );
+}

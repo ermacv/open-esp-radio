@@ -12,6 +12,7 @@ tools/
               cli/ is `blobray`
   chip/       the supported chips' profiles and stack policy
   pins/       `cargo pins`: fetch and verify the vendor pins
+  regulatory/ `cargo regdb`: generate the regulatory domain tables from wireless-regdb
   registers/  the register model and its generation; cli/ is `cargo registers`
   probe/      probe code generation and macros
   image/      the image pipeline: build, checks, comparison, ESP-IDF; cli/ is `cargo fw`,

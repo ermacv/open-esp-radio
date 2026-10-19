@@ -150,8 +150,13 @@ fn channel6() -> Channel {
 type TestConfig = (StaConfig<ModelCaps24>, StaSecurity);
 
 fn config(security: StaSecurity) -> TestConfig {
-    let channels =
-        heapless::Vec::from_slice(&[SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap()]).unwrap();
+    let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
+        oer_radio_regulatory::TEST_DOMAIN
+            .permit(channel6())
+            .unwrap(),
+    )
+    .unwrap()])
+    .unwrap();
     (
         StaConfig {
             address: oer_ieee80211_mac::address::OwnAddress::new(
@@ -625,7 +630,12 @@ where
             let small: [_; 4] = small.try_into().ok().unwrap();
             let large: [_; 4] = large.try_into().ok().unwrap();
 
-            let channel = SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap();
+            let channel = SupportedChannel::new(
+                oer_radio_regulatory::TEST_DOMAIN
+                    .permit(channel6())
+                    .unwrap(),
+            )
+            .unwrap();
             let (arbiter, place, absence) =
                 PortArbiter::<ModelBackend<ModelCaps24, ServiceContexts>>::new(
                     ArbiterPolicy::DEFAULT.checked(
@@ -883,7 +893,7 @@ where
 /// the access point by `script`.
 fn run<S>(security: StaSecurity, script: S)
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w>,
+    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
 {
     run_with(config(security), script);
 }
@@ -891,25 +901,47 @@ where
 /// Run the service on a 2.4 GHz model with `config`.
 fn run_with<S>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w>,
+    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
 {
     run_with_groups::<S, 2>(config, script)
 }
 
 fn run_with_groups<S, const GROUPS: usize>(config: TestConfig, script: S) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w>,
+    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
 {
     run_case::<S, GROUPS>(config, script, false)
 }
 
+/// The service future lives on the test's stack in a debug build and fills
+/// the default 2 MiB, so every case runs on a thread with a stack of its own.
 fn run_case<S, const GROUPS: usize>(
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
 ) -> ServiceCounters
 where
-    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w>,
+    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
+{
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(16 << 20)
+            .spawn_scoped(scope, move || {
+                run_case_on_this_thread::<S, GROUPS>(config, script, refuse_initial_enable)
+            })
+            .expect("a thread with a stack for the case")
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
+}
+
+fn run_case_on_this_thread<S, const GROUPS: usize>(
+    config: TestConfig,
+    script: S,
+    refuse_initial_enable: bool,
+) -> ServiceCounters
+where
+    S: for<'w, 'b> FnOnce(&'w World<'b>) -> Script<'w> + Send,
 {
     let (backend, air) = ModelBackend::<ModelCaps24, ServiceContexts>::new(
         channel6(),
@@ -1532,7 +1564,14 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
     config
         .0
         .channels
-        .push(SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap()).unwrap()).unwrap())
+        .push(
+            SupportedChannel::new(
+                oer_radio_regulatory::TEST_DOMAIN
+                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
         .unwrap();
     run_with(config, |world| {
         Box::pin(async move {
@@ -1618,7 +1657,14 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
     config
         .0
         .channels
-        .push(SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap()).unwrap()).unwrap())
+        .push(
+            SupportedChannel::new(
+                oer_radio_regulatory::TEST_DOMAIN
+                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
         .unwrap();
     run_with(config, |world| {
         Box::pin(async move {
@@ -1711,7 +1757,14 @@ fn beside_an_access_point_msdus_survive_an_absence() {
     config
         .0
         .channels
-        .push(SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap()).unwrap()).unwrap())
+        .push(
+            SupportedChannel::new(
+                oer_radio_regulatory::TEST_DOMAIN
+                    .permit(Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap())
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
         .unwrap();
     run_with(config, |world| {
         Box::pin(async move {
@@ -1729,7 +1782,12 @@ fn beside_an_access_point_msdus_survive_an_absence() {
             let tbtt = world.clock.now().saturating_add(Duration::from_millis(5));
             world
                 .command(ServiceCommand::AccessPoint(AccessPointFact::Running {
-                    channel: SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(channel6()).unwrap()).unwrap(),
+                    channel: SupportedChannel::new(
+                        oer_radio_regulatory::TEST_DOMAIN
+                            .permit(channel6())
+                            .unwrap(),
+                    )
+                    .unwrap(),
                     next_tbtt: tbtt,
                     beacon_interval: oer_ieee80211_arbiter::coordinator::BeaconInterval::new(
                         Duration::from_micros(102_400),

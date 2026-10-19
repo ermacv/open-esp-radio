@@ -129,6 +129,19 @@ lock-free wakers; PHY membership is a typestate (`Untracked`, `Tracked`,
 `Suspended`). It owns the HAL's `RadioDomain` by value. Coexistence claims
 are not implemented.
 
+## Regulatory domain
+
+`oer-radio-regulatory` decides which channels a country permits. A
+`RegulatoryDomain` is a validated list of frequency rules (a generated subset
+of `wireless-regdb`, `cargo regdb`); `permit` turns a protocol's channel
+(`RadioChannel`: Wi-Fi, IEEE 802.15.4, the Bluetooth LE band) into a
+`Permitted` channel, which every tune, install, scan and transmission takes.
+A channel in a no-initiating-radiation rule is listened on only, and a 5 GHz
+DFS channel is refused. One transmit power ceiling, the least of the domain's
+EIRP less the board's antenna gain, the chip's maximum and an owner cap,
+reaches the Wi-Fi PHY, the IEEE 802.15.4 PIB and the Bluetooth LE transmit
+power. The images take the country from the stand (`cargo fw`).
+
 ## Radio port
 
 `oer-radio-port` and the Wi-Fi lower-MAC port (`oer-ieee80211-lower-mac`) are

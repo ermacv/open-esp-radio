@@ -99,7 +99,12 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 .ok()
                 .unwrap();
             source.setup().set_channel(
-                SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()).unwrap()).unwrap(),
+                SupportedChannel::new(
+                    oer_radio_regulatory::TEST_DOMAIN
+                        .permit(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())
+                        .unwrap(),
+                )
+                .unwrap(),
             );
             let mut source = source.enable().await.ok().unwrap();
             {

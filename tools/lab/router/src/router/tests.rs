@@ -795,18 +795,12 @@ fn the_radio_country_is_read_without_changing_anything() {
 
 #[test]
 fn a_radio_without_a_valid_country_is_refused() {
-    for country in ["", "country='de'\n", "country='DEU'\n"] {
-        let text = show_before().replace(
-            "wireless.radio9.country='DE'\n",
-            &format!(
-                "{}",
-                if country.is_empty() {
-                    String::new()
-                } else {
-                    format!("wireless.radio9.{country}")
-                }
-            ),
-        );
+    for replacement in [
+        "",
+        "wireless.radio9.country='de'\n",
+        "wireless.radio9.country='DEU'\n",
+    ] {
+        let text = show_before().replace("wireless.radio9.country='DE'\n", replacement);
         let mut remote = Canned::new(vec![(SHOW_PREFIX, vec![Ok(text)])]);
         let error = radio_country(&mut remote, "radio9").unwrap_err();
         assert!(error.contains("country"), "{error}");

@@ -43,14 +43,84 @@ role_id!(
     ConnectionId
 );
 
-/// Requested transmit power in dBm; the backend rounds to what it supports.
+/// The whole 2.4 GHz band the Bluetooth LE channels hop over, as one regulatory
+/// span: a domain permits the radio on all of it or not at all. Its width
+/// limit applies to one hop.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LeBand;
+
+impl oer_radio_regulatory::RadioChannel for LeBand {
+    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+        match oer_radio_regulatory::FrequencySpan::new(2_400_000, 2_483_500) {
+            Some(span) => span,
+            None => unreachable!("the band is not empty"),
+        }
+    }
+
+    /// The widest LE channel (LE 2M): one hop, not the whole band.
+    fn bandwidth_khz(&self) -> u32 {
+        2_000
+    }
+}
+
+/// What the regulatory domain allows the radio on the LE band: the most any
+/// transmission radiates and whether it may start one. Taken once, when the
+/// radio is installed; every [`TxPower`] is checked against it.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LeTxCeiling {
+    dbm: i8,
+    initiate: oer_radio_regulatory::Initiate,
+}
+
+impl LeTxCeiling {
+    /// The band `band` under `ceiling`.
+    pub const fn new(
+        band: oer_radio_regulatory::Permitted<LeBand>,
+        ceiling: oer_radio_regulatory::TxCeiling,
+    ) -> Self {
+        Self {
+            dbm: ceiling.dbm(),
+            initiate: band.initiate(),
+        }
+    }
+
+    /// The most any transmission radiates, in dBm.
+    pub const fn dbm(self) -> i8 {
+        self.dbm
+    }
+
+    /// Whether the radio may start a transmission (advertise, send a scan or
+    /// connection request) or may only listen.
+    pub const fn initiate(self) -> oer_radio_regulatory::Initiate {
+        self.initiate
+    }
+}
+
+/// A requested power above the ceiling.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct AboveCeiling {
+    /// The request in dBm.
+    pub requested_dbm: i8,
+    /// The ceiling in dBm.
+    pub ceiling_dbm: i8,
+}
+
+/// Requested transmit power in dBm, at most the regulatory ceiling; the
+/// backend rounds to what it supports.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct TxPower(i8);
 
 impl TxPower {
-    /// Request `dbm`.
-    pub const fn from_dbm(dbm: i8) -> Self {
-        Self(dbm)
+    /// Request `dbm`, when it is within `ceiling`.
+    pub const fn within(ceiling: LeTxCeiling, dbm: i8) -> Result<Self, AboveCeiling> {
+        if dbm > ceiling.dbm {
+            Err(AboveCeiling {
+                requested_dbm: dbm,
+                ceiling_dbm: ceiling.dbm,
+            })
+        } else {
+            Ok(Self(dbm))
+        }
     }
 
     /// The requested power.

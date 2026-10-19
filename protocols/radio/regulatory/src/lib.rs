@@ -193,6 +193,7 @@ impl RegulatoryDomain {
     /// a DFS rule refuses it.
     pub fn permit<C: RadioChannel>(&self, channel: C) -> Result<Permitted<C>, Refused> {
         let span = channel.span();
+        let bandwidth_khz = channel.bandwidth_khz();
         let mut covered_to = span.low_khz;
         let mut ceiling_mbm = i32::MAX;
         let mut flags = RuleFlags::NONE;
@@ -203,7 +204,7 @@ impl RegulatoryDomain {
             if rule.span.low_khz > covered_to {
                 break;
             }
-            if span.width_khz() > rule.max_bandwidth_khz {
+            if bandwidth_khz > rule.max_bandwidth_khz {
                 return Err(Refused::Bandwidth);
             }
             ceiling_mbm = ceiling_mbm.min(rule.max_eirp_mbm);
@@ -233,7 +234,7 @@ impl RegulatoryDomain {
     }
 }
 
-/// A domain that permits the whole 2.4 GHz and 5 GHz range at 20 dBm, for the
+/// A domain that permits the whole 2.4 GHz and 5 GHz range at 30 dBm, for the
 /// tests of crates that take a [`Permitted`] channel.
 #[cfg(feature = "test-support")]
 pub const TEST_DOMAIN: RegulatoryDomain = {
@@ -244,7 +245,7 @@ pub const TEST_DOMAIN: RegulatoryDomain = {
                 None => panic!("test span"),
             },
             40_000,
-            2000,
+            3000,
             RuleFlags::NONE,
         ),
         Rule::new(
@@ -253,7 +254,7 @@ pub const TEST_DOMAIN: RegulatoryDomain = {
                 None => panic!("test span"),
             },
             160_000,
-            2000,
+            3000,
             RuleFlags::NONE,
         ),
     ];
@@ -267,6 +268,13 @@ pub const TEST_DOMAIN: RegulatoryDomain = {
 pub trait RadioChannel: Copy {
     /// Every frequency the channel occupies.
     fn span(&self) -> FrequencySpan;
+
+    /// The width of one transmission, which a rule's bandwidth limit bounds.
+    /// A channel that is one transmission wide leaves this as its span; a
+    /// radio that hops over a band names the width of one hop.
+    fn bandwidth_khz(&self) -> u32 {
+        self.span().width_khz()
+    }
 }
 
 /// Whether a radio may start a transmission on a permitted channel.
