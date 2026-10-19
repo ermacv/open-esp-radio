@@ -10,9 +10,9 @@ on:
   # so it dispatches this one.
   workflow_dispatch:
 
-# Every merge gets its own result: a newer run waits, it never cancels one.
+# Runs of one ref queue behind each other; runs of different refs never touch.
 concurrency:
-  group: ci-main
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
