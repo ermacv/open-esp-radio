@@ -5,7 +5,6 @@ use std::{
     fs,
     io::Write as _,
     os::unix::fs::PermissionsExt as _,
-    os::unix::process::CommandExt as _,
     path::Path,
     process::{Child, Command, Stdio},
     thread,
@@ -77,16 +76,7 @@ fn lease_shutdown_stops_escaped_writers_before_releasing_every_board() {
                 // Model a flasher starting an implicit daemon in a new session.
                 let mut writer = Command::new(std::env::current_exe().unwrap());
                 writer.args(["--exact", TEST]).env(ROLE, "writer");
-                // SAFETY: setsid acts on the new child, which is not a group
-                // leader yet, and has no memory preconditions.
-                unsafe {
-                    writer.pre_exec(|| {
-                        if libc::setsid() < 0 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                        Ok(())
-                    });
-                }
+                oer_os_process::child_setup::new_session(&mut writer);
                 let mut writer = writer.spawn().unwrap();
                 if std::env::var_os("OER_LEASE_TEST_NORMAL_EXIT").is_some() {
                     thread::spawn(move || {

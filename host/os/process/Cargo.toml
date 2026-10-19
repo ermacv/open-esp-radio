@@ -11,6 +11,8 @@ publish = false
 # (`linux_socket`); the HIL fixtures enable it, the root fixture installer
 # does not.
 linux-socket = ["rustix/net"]
+# Child setup only tests use: the unprivileged user namespace.
+test-support = ["rustix/thread"]
 
 [dependencies]
 serde_json = "=1.0.151"

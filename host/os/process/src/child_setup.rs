@@ -38,6 +38,52 @@ pub fn inherit(command: &mut Command, descriptors: Vec<OwnedFd>) {
     }
 }
 
+/// The child leads a new session and process group of its own, so a signal
+/// to that group reaches it and its descendants only.
+pub fn new_session(command: &mut Command) {
+    // SAFETY: after fork the closure only calls setsid on the new child,
+    // which is not a group leader yet; it allocates nothing and takes no lock.
+    unsafe {
+        std::os::unix::process::CommandExt::pre_exec(command, || {
+            rustix::process::setsid()
+                .map(|_| ())
+                .map_err(std::io::Error::from)
+        });
+    }
+}
+
+/// The child runs in a new user namespace that maps the caller's id to
+/// `outside`, so a test run as root sees an unprivileged user. Call
+/// [`new_session`] first if the child also needs its own session.
+#[cfg(feature = "test-support")]
+pub fn unprivileged_in_user_namespace(command: &mut Command, outside: u32) {
+    let uid_map = format!("{outside} 0 1");
+    // SAFETY: after fork the closure only calls unshare, single-threaded as
+    // the child is, and open, write and close on its own /proc files with
+    // buffers formatted before the fork; it allocates nothing and takes no
+    // lock.
+    unsafe {
+        std::os::unix::process::CommandExt::pre_exec(command, move || {
+            // The child runs one thread here, so no other thread shares the
+            // descriptor table or credentials unshare changes.
+            rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWUSER)?;
+            for (path, contents) in [
+                (c"/proc/self/setgroups", &b"deny"[..]),
+                (c"/proc/self/uid_map", uid_map.as_bytes()),
+                (c"/proc/self/gid_map", uid_map.as_bytes()),
+            ] {
+                let file =
+                    rustix::fs::open(path, rustix::fs::OFlags::WRONLY, rustix::fs::Mode::empty())?;
+                let written = rustix::io::write(&file, contents)?;
+                if written != contents.len() {
+                    return Err(std::io::Error::other("a short write to the namespace map"));
+                }
+            }
+            Ok(())
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read as _;

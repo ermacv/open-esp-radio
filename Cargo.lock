@@ -3666,7 +3666,6 @@ dependencies = [
 name = "oer-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "libc",
  "oer-lab-board",
  "oer-lab-model",
  "oer-os-durable",
@@ -4124,7 +4123,6 @@ name = "oer-tool-stand"
 version = "0.1.0"
 dependencies = [
  "clap",
- "libc",
  "oer-chip-profile",
  "oer-lab-arbiter",
  "oer-lab-board",

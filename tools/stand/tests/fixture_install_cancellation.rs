@@ -3,7 +3,7 @@
 
 use std::{
     fs,
-    os::unix::{fs::PermissionsExt, process::CommandExt},
+    os::unix::fs::PermissionsExt,
     process::{Child, Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -16,9 +16,11 @@ impl Drop for Session {
         if self.0.try_wait().is_ok_and(|status| status.is_some()) {
             return;
         }
-        // SAFETY: this child created its own session/process group. Kill only
+        // This child created its own session and process group. Kill only
         // that group while its leader is still owned and has not been reaped.
-        unsafe { libc::kill(-(self.0.id() as i32), libc::SIGKILL) };
+        if let Some(group) = rustix::process::Pid::from_raw(self.0.id() as i32) {
+            let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+        }
         let _ = self.0.wait();
     }
 }
@@ -68,37 +70,9 @@ fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
     // instead of the build it cancels. A user namespace mapping this process's
     // root to an unprivileged operator id keeps the files reachable while the
     // installer sees a non-root operator.
-    let unprivileged = unsafe { libc::geteuid() } == 0;
-    // SAFETY: before exec the child calls only setsid, unshare, open, write
-    // and close on its own /proc files, all async-signal-safe; it becomes the
-    // sole leader of a private process group owned by this test.
-    unsafe {
-        command.pre_exec(move || {
-            if libc::setsid() < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            if unprivileged {
-                if libc::unshare(libc::CLONE_NEWUSER) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                for (path, contents) in [
-                    (c"/proc/self/setgroups", &b"deny"[..]),
-                    (c"/proc/self/uid_map", &b"1000 0 1"[..]),
-                    (c"/proc/self/gid_map", &b"1000 0 1"[..]),
-                ] {
-                    let file = libc::open(path.as_ptr(), libc::O_WRONLY);
-                    if file < 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    let written = libc::write(file, contents.as_ptr().cast(), contents.len());
-                    libc::close(file);
-                    if written != contents.len() as isize {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                }
-            }
-            Ok(())
-        });
+    oer_os_process::child_setup::new_session(&mut command);
+    if rustix::process::geteuid().is_root() {
+        oer_os_process::child_setup::unprivileged_in_user_namespace(&mut command, 1000);
     }
     let mut session = Session(command.spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -106,11 +80,9 @@ fn cancellation_during_unprivileged_build_never_reaches_sudo_apply() {
         assert!(Instant::now() < deadline, "installer build did not start");
         thread::sleep(Duration::from_millis(10));
     }
-    // SAFETY: session still owns this live child PID; signal only that process.
-    assert_eq!(
-        unsafe { libc::kill(session.0.id() as i32, libc::SIGTERM) },
-        0
-    );
+    // The session still owns this live child; signal only that process.
+    let leader = rustix::process::Pid::from_raw(session.0.id() as i32).unwrap();
+    rustix::process::kill_process(leader, rustix::process::Signal::TERM).unwrap();
     let status = loop {
         if let Some(status) = session.0.try_wait().unwrap() {
             break status;
