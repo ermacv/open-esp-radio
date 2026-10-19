@@ -183,3 +183,36 @@ fn trigger_requests_are_complete_without_parameters() {
         assert_eq!(decoded.parameters, None);
     }
 }
+
+#[test]
+fn every_prefix_of_a_body_is_handled() {
+    let mut request = [0_u8; FTM_INITIAL_REQUEST_BODY_LEN];
+    request.copy_from_slice(&encode_initial_request(request_parameters()));
+    let mut measurement = [0_u8; FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN];
+    measurement[0] = PUBLIC_ACTION_CATEGORY;
+    measurement[1] = FTM_MEASUREMENT_PUBLIC_ACTION;
+    measurement[FTM_MEASUREMENT_PREFIX_LEN] = FTM_PARAMETERS_ELEMENT_ID;
+    measurement[FTM_MEASUREMENT_PREFIX_LEN + 1] = FTM_PARAMETERS_FIELD_LEN as u8;
+    for len in 0..=measurement.len() {
+        let _ = FtmRequest::decode_body(request.get(..len).unwrap_or(&request));
+        let _ = FtmMeasurement::decode_body(&measurement[..len]);
+        let mut output = [0_u8; FTM_MEASUREMENT_PREFIX_LEN];
+        let _ = encode_measurement(
+            FtmMeasurementFields {
+                dialog_token: 1,
+                follow_up_dialog_token: 0,
+                tod: FtmTimestampPs::ZERO,
+                toa: FtmTimestampPs::ZERO,
+                tod_error: FtmTodError {
+                    max_error_exponent: 0,
+                    not_continuous: false,
+                },
+                toa_error: FtmToaError {
+                    max_error_exponent: 0,
+                },
+            },
+            &measurement[FTM_MEASUREMENT_PREFIX_LEN..len.max(FTM_MEASUREMENT_PREFIX_LEN)],
+            &mut output[..len.min(FTM_MEASUREMENT_PREFIX_LEN)],
+        );
+    }
+}

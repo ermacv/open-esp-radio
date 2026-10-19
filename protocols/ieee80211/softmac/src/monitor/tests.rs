@@ -82,3 +82,14 @@ fn unavailable_rssi_does_not_satisfy_a_threshold() {
 
     assert!(!MonitorFilter::all().minimum_rssi_dbm(-100).accepts(&frame));
 }
+
+#[test]
+fn every_prefix_of_an_injection_frame_is_handled() {
+    let mut bytes = [0_u8; 40];
+    bytes[0] = 0x08;
+    for len in 0..=bytes.len() {
+        if let Ok(frame) = MonitorInjectionMpdu::from_no_fcs(&bytes[..len]) {
+            let _ = frame.is_group_addressed();
+        }
+    }
+}

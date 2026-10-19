@@ -466,3 +466,25 @@ fn every_parser_rejects_a_truncated_field() {
         Err(TriggerParseError::Truncated { required: 4 })
     );
 }
+
+#[test]
+fn every_prefix_of_a_trigger_frame_is_handled() {
+    let mut frame = [0xffu8; 40];
+    frame[0] = 0x24;
+    frame[1] = 0x00;
+    for len in 0..=frame.len() {
+        let bytes = &frame[..len];
+        if let Ok(parsed) = parse_trigger_frame(bytes) {
+            parsed.users().for_each(drop);
+        }
+        let _ = parse_trigger_common_info(bytes);
+        let _ = parse_trigger_user_ru(bytes);
+        let _ = parse_trigger_user_spatial_stream(bytes);
+        let _ = parse_trigger_basic_dependent(bytes);
+        let _ = parse_trigger_bfrp_dependent(bytes);
+        let _ = parse_trigger_mu_bar_dependent(bytes);
+        let _ = parse_trigger_nfrp_user(bytes);
+        let _ = parse_trigger_response_scheduling_control(bytes);
+        let _ = parse_uplink_power_headroom_control(bytes);
+    }
+}

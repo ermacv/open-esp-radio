@@ -182,18 +182,35 @@ impl HeMuMimoSpatialConfiguration {
         self.encoding
     }
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn nsts_for_user(self, user_index: u8) -> Option<u8> {
         if user_index >= self.user_count {
             return None;
         }
-        Some(self.nsts[usize::from(user_index)])
+        self.nsts.get(usize::from(user_index)).copied()
     }
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn total_nsts(self) -> u8 {
-        self.nsts[..usize::from(self.user_count)]
+        self.nsts
             .iter()
+            .take(usize::from(self.user_count))
             .copied()
-            .sum()
+            .fold(0, u8::saturating_add)
     }
 }
 
@@ -289,6 +306,10 @@ pub struct He20MuSigBRuAllocation {
 }
 
 impl He20MuSigBRuAllocation {
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "the 0..=15 arm bounds the index of the 16-entry table"
+    )]
     pub const fn try_new(encoding: u8) -> Result<Self, He20MuSigBRuAllocationError> {
         let user_count = match encoding {
             0..=15 => HE_MU_SIG_B_COMMON_RU_USER_COUNTS[encoding as usize],
@@ -316,6 +337,10 @@ impl He20MuSigBRuAllocation {
         self.user_count
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "the 0..=15 arm bounds the row of the 16-row table; the position is below the user count of at most nine"
+    )]
     pub const fn user(self, zero_based_position: u8) -> Option<He20MuSigBRuUser> {
         if zero_based_position >= self.user_count {
             return None;
@@ -435,14 +460,22 @@ pub const HE20_MU_SIG_B_MAX_USERS: u8 = 9;
 /// Maximum number of users retained by the blob's compressed/MU-MIMO parser.
 pub const HE20_MU_SIG_B_MIMO_MAX_USERS: u8 = 4;
 
-fn read_complete_sig_b_user(complete_bytes: &[u8], bit_offset: u16) -> u32 {
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
+fn read_complete_sig_b_user(complete_bytes: &[u8], bit_offset: u16) -> Option<u32> {
     let mut raw = 0_u32;
     for output_bit in 0..HE_MU_SIG_B_USER_BITS {
-        let source_bit = bit_offset + output_bit;
-        let source_byte = complete_bytes[usize::from(source_bit / 8)];
+        let source_bit = bit_offset.checked_add(output_bit)?;
+        let source_byte = *complete_bytes.get(usize::from(source_bit / 8))?;
         raw |= u32::from((source_byte >> (source_bit % 8)) & 1) << output_bit;
     }
-    raw
+    Some(raw)
 }
 
 /// A failure to construct a bounded HE20 non-MU-MIMO complete-SIG-B view.
@@ -545,9 +578,24 @@ impl<'a> He20MuSigBNonMimoUsers<'a> {
     /// `libpp[test_hal_rx_mu_sigb.o]::test_get_nonmumimo_common`, size `0xf6`.
     /// Bandwidth selector zero loads byte zero as the sole RU Allocation and
     /// returns an 18-bit common prefix.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn ru_allocation(self) -> Result<He20MuSigBRuAllocation, He20MuSigBRuStreamError> {
-        let allocation = He20MuSigBRuAllocation::try_new(self.complete_bytes[0])
-            .map_err(He20MuSigBRuStreamError::Allocation)?;
+        let common =
+            self.complete_bytes
+                .first()
+                .copied()
+                .ok_or(He20MuSigBRuStreamError::Allocation(
+                    He20MuSigBRuAllocationError::ReservedEncoding,
+                ))?;
+        let allocation =
+            He20MuSigBRuAllocation::try_new(common).map_err(He20MuSigBRuStreamError::Allocation)?;
         if allocation.user_count() != self.user_count {
             return Err(He20MuSigBRuStreamError::UserCountMismatch {
                 stream_users: self.user_count,
@@ -557,30 +605,48 @@ impl<'a> He20MuSigBNonMimoUsers<'a> {
         Ok(allocation)
     }
 
-    fn read_user_word(&self, index: u8) -> (u16, u32) {
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
+    fn read_user_word(&self, index: u8) -> Option<(u16, u32)> {
         let pair = u16::from(index / 2);
         let within_pair = if index & 1 == 0 {
             0
         } else {
             HE_MU_SIG_B_USER_BITS
         };
-        let bit_offset =
-            HE20_MU_SIG_B_COMMON_BITS + pair * HE20_MU_SIG_B_USER_PAIR_BITS + within_pair;
-        let raw = read_complete_sig_b_user(self.complete_bytes, bit_offset);
-        (bit_offset, raw)
+        let bit_offset = pair
+            .checked_mul(HE20_MU_SIG_B_USER_PAIR_BITS)?
+            .checked_add(HE20_MU_SIG_B_COMMON_BITS)?
+            .checked_add(within_pair)?;
+        let raw = read_complete_sig_b_user(self.complete_bytes, bit_offset)?;
+        Some((bit_offset, raw))
     }
 }
 
 impl Iterator for He20MuSigBNonMimoUsers<'_> {
     type Item = He20MuSigBNonMimoEntry;
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     fn next(&mut self) -> Option<Self::Item> {
         if self.next_user >= self.user_count {
             return None;
         }
         let index = self.next_user;
-        let (bit_offset, raw) = self.read_user_word(index);
-        self.next_user += 1;
+        let (bit_offset, raw) = self.read_user_word(index)?;
+        self.next_user = self.next_user.saturating_add(1);
         Some(He20MuSigBNonMimoEntry {
             index,
             bit_offset,
@@ -644,6 +710,14 @@ impl<'a> He20MuSigBMimoUsers<'a> {
     // reads. The last two are the blob's explicit `> 72` and `> 135` guards.
     const REQUIRED_BIT_LENGTHS: [u16; HE20_MU_SIG_B_MIMO_MAX_USERS as usize] = [21, 42, 73, 136];
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn try_new(
         complete_bytes: &'a [u8],
         bit_length: u16,
@@ -656,7 +730,11 @@ impl<'a> He20MuSigBMimoUsers<'a> {
         if complete_bytes.len() < required_bytes {
             return Err(He20MuSigBMimoStreamError::CompleteBytesTooShort);
         }
-        if bit_length < Self::REQUIRED_BIT_LENGTHS[usize::from(user_count - 1)] {
+        let required_bit_length = usize::from(user_count)
+            .checked_sub(1)
+            .and_then(|index| Self::REQUIRED_BIT_LENGTHS.get(index))
+            .ok_or(He20MuSigBMimoStreamError::UserCountOutOfRange)?;
+        if bit_length < *required_bit_length {
             return Err(He20MuSigBMimoStreamError::IncompleteUserField);
         }
         Ok(Self {
@@ -696,14 +774,22 @@ impl<'a> He20MuSigBMimoUsers<'a> {
 impl Iterator for He20MuSigBMimoUsers<'_> {
     type Item = He20MuSigBMimoEntry;
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     fn next(&mut self) -> Option<Self::Item> {
         if self.next_user >= self.user_count {
             return None;
         }
         let index = self.next_user;
-        let bit_offset = Self::USER_BIT_OFFSETS[usize::from(index)];
-        let raw = read_complete_sig_b_user(self.complete_bytes, bit_offset);
-        self.next_user += 1;
+        let bit_offset = *Self::USER_BIT_OFFSETS.get(usize::from(index))?;
+        let raw = read_complete_sig_b_user(self.complete_bytes, bit_offset)?;
+        self.next_user = self.next_user.saturating_add(1);
         Some(He20MuSigBMimoEntry {
             index,
             bit_offset,

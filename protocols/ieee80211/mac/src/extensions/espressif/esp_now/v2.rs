@@ -115,6 +115,14 @@ pub struct EspNowV2Elements<'payload> {
 impl<'payload> Iterator for EspNowV2Elements<'payload> {
     type Item = EspNowV2Element<'payload>;
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining_elements == 0 {
             return None;
@@ -130,16 +138,19 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
             }
             EspNowV2ElementSource::Encoded(remaining) => {
                 // Construction of this iterator is private and follows a full
-                // validation pass, so every fixed and declared extent exists.
-                let declared = usize::from(remaining[1]);
-                let encoded_length = 2 + declared;
-                let payload = &remaining[VENDOR_ELEMENT_ENCODED_OVERHEAD..encoded_length];
-                let more_data = remaining[6] & V2_MORE_DATA_FLAG != 0;
-                self.source = EspNowV2ElementSource::Encoded(&remaining[encoded_length..]);
-                EspNowV2Element { payload, more_data }
+                // validation pass; a body that no longer fits ends the walk.
+                let (&[_, length], body) = remaining.split_first_chunk::<2>()?;
+                let (body, tail) = body.split_at_checked(usize::from(length))?;
+                let (&[_, _, _, _, control], payload) =
+                    body.split_first_chunk::<VENDOR_ELEMENT_FIXED_BODY_LEN>()?;
+                self.source = EspNowV2ElementSource::Encoded(tail);
+                EspNowV2Element {
+                    payload,
+                    more_data: control & V2_MORE_DATA_FLAG != 0,
+                }
             }
         };
-        self.remaining_elements -= 1;
+        self.remaining_elements = self.remaining_elements.saturating_sub(1);
         Some(element)
     }
 
@@ -223,19 +234,29 @@ impl<'payload> EspNowV2Action<'payload> {
     /// Reassemble into caller storage after checking capacity up front.
     ///
     /// On a capacity failure `output` is left unchanged.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn copy_payload(self, output: &mut [u8]) -> Result<usize, EspNowV2WireError> {
-        if output.len() < self.payload_length {
-            return Err(EspNowV2WireError::OutputTooSmall {
-                required: self.payload_length,
-            });
-        }
-        let mut offset = 0;
+        let too_small = EspNowV2WireError::OutputTooSmall {
+            required: self.payload_length,
+        };
+        let mut rest = output.get_mut(..self.payload_length).ok_or(too_small)?;
+        let mut copied = 0_usize;
         for element in self.elements() {
-            let end = offset + element.payload.len();
-            output[offset..end].copy_from_slice(element.payload);
-            offset = end;
+            let (target, tail) = core::mem::take(&mut rest)
+                .split_at_mut_checked(element.payload.len())
+                .ok_or(too_small)?;
+            target.copy_from_slice(element.payload);
+            rest = tail;
+            copied = copied.saturating_add(element.payload.len());
         }
-        Ok(offset)
+        Ok(copied)
     }
 
     /// Encode category, Action OUI, random value and the complete v2 element
@@ -274,75 +295,90 @@ impl<'payload> EspNowV2Action<'payload> {
 
     /// Parse one complete v2 Action body and validate every element before
     /// returning an iterator over any application bytes.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
-        if input.len() < MIN_ACTION_LEN {
-            return Err(EspNowV2WireError::FrameTooShort {
-                minimum: MIN_ACTION_LEN,
-            });
-        }
         if input.len() > ESP_NOW_V2_MAX_ACTION_LEN {
             return Err(EspNowV2WireError::ActionBodyTooLong {
                 maximum: ESP_NOW_V2_MAX_ACTION_LEN,
                 actual: input.len(),
             });
         }
-        if input[0] != ESP_NOW_ACTION_CATEGORY {
-            return Err(EspNowV2WireError::UnsupportedActionCategory(input[0]));
+        let Some((&[category, a0, a1, a2, r0, r1, r2, r3], elements)) = input
+            .split_first_chunk::<ESP_NOW_V2_ACTION_PREFIX_LEN>()
+            .filter(|(_, elements)| elements.len() >= VENDOR_ELEMENT_ENCODED_OVERHEAD)
+        else {
+            return Err(EspNowV2WireError::FrameTooShort {
+                minimum: MIN_ACTION_LEN,
+            });
+        };
+        if category != ESP_NOW_ACTION_CATEGORY {
+            return Err(EspNowV2WireError::UnsupportedActionCategory(category));
         }
-        if input[1..4] != ESP_NOW_ORGANIZATION_IDENTIFIER {
+        if [a0, a1, a2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
             return Err(EspNowV2WireError::InvalidActionOrganizationIdentifier);
         }
 
-        let elements = &input[ESP_NOW_V2_ACTION_PREFIX_LEN..];
-        let mut offset = 0;
-        let mut element_count = 0;
-        let mut payload_length = 0;
-        while offset < elements.len() {
+        let mut rest = elements;
+        let mut element_count = 0_usize;
+        let mut payload_length = 0_usize;
+        while !rest.is_empty() {
             if element_count == ESP_NOW_V2_MAX_ELEMENT_COUNT {
                 return Err(EspNowV2WireError::TooManyElements {
                     maximum: ESP_NOW_V2_MAX_ELEMENT_COUNT,
                 });
             }
-            let remaining = &elements[offset..];
-            if remaining.len() < 2 {
+            let Some((&[id, length], after_header)) = rest.split_first_chunk::<2>() else {
                 return Err(EspNowV2WireError::TruncatedElementHeader {
                     element: element_count,
-                    remaining: remaining.len(),
+                    remaining: rest.len(),
                 });
-            }
-            if remaining[0] != ESP_NOW_VENDOR_ELEMENT_ID {
+            };
+            if id != ESP_NOW_VENDOR_ELEMENT_ID {
                 return Err(EspNowV2WireError::UnsupportedElementId {
                     element: element_count,
-                    id: remaining[0],
+                    id,
                 });
             }
-            let declared = usize::from(remaining[1]);
+            let declared = usize::from(length);
             if declared < VENDOR_ELEMENT_FIXED_BODY_LEN {
                 return Err(EspNowV2WireError::ElementBodyTooShort {
                     element: element_count,
-                    declared: remaining[1],
+                    declared: length,
                 });
             }
-            let encoded_length = 2 + declared;
-            if remaining.len() < encoded_length {
+            let Some((body, after)) = after_header.split_at_checked(declared) else {
                 return Err(EspNowV2WireError::ElementLengthMismatch {
                     element: element_count,
-                    declared: remaining[1],
-                    actual: remaining.len().saturating_sub(2),
+                    declared: length,
+                    actual: after_header.len(),
                 });
-            }
-            if remaining[2..5] != ESP_NOW_ORGANIZATION_IDENTIFIER {
+            };
+            let Some((&[o0, o1, o2, element_type, control], payload)) =
+                body.split_first_chunk::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
+            else {
+                return Err(EspNowV2WireError::ElementBodyTooShort {
+                    element: element_count,
+                    declared: length,
+                });
+            };
+            if [o0, o1, o2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
                 return Err(EspNowV2WireError::InvalidElementOrganizationIdentifier {
                     element: element_count,
                 });
             }
-            if remaining[5] != ESP_NOW_VENDOR_ELEMENT_TYPE {
+            if element_type != ESP_NOW_VENDOR_ELEMENT_TYPE {
                 return Err(EspNowV2WireError::UnsupportedElementType {
                     element: element_count,
-                    element_type: remaining[5],
+                    element_type,
                 });
             }
-            let control = remaining[6];
             if control & V2_RESERVED_MASK != 0 {
                 return Err(EspNowV2WireError::ReservedControlBitsSet {
                     element: element_count,
@@ -357,8 +393,7 @@ impl<'payload> EspNowV2Action<'payload> {
                 });
             }
 
-            let next_offset = offset + encoded_length;
-            let has_following_element = next_offset < elements.len();
+            let has_following_element = !after.is_empty();
             let more_data = control & V2_MORE_DATA_FLAG != 0;
             if has_following_element && !more_data {
                 return Err(EspNowV2WireError::MoreDataClearedBeforeFinal {
@@ -371,18 +406,18 @@ impl<'payload> EspNowV2Action<'payload> {
                 });
             }
 
-            payload_length += declared - VENDOR_ELEMENT_FIXED_BODY_LEN;
+            payload_length = payload_length.saturating_add(payload.len());
             if payload_length > ESP_NOW_V2_MAX_PAYLOAD_LEN {
                 return Err(EspNowV2WireError::PayloadTooLong {
                     length: payload_length,
                 });
             }
-            element_count += 1;
-            offset = next_offset;
+            element_count = element_count.saturating_add(1);
+            rest = after;
         }
 
         Ok(Self {
-            random_value: EspNowRandomValue::new([input[4], input[5], input[6], input[7]]),
+            random_value: EspNowRandomValue::new([r0, r1, r2, r3]),
             content: EspNowV2ActionContent::EncodedElements(elements),
             payload_length,
             element_count,
@@ -475,13 +510,21 @@ impl<'payload> EspNowV2Frame<'payload> {
     }
 
     /// Parse one complete unprotected, MAC-unfragmented v2 Action MPDU.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
-        if input.len() < ESP_NOW_MANAGEMENT_HEADER_LEN {
-            return Err(EspNowV2WireError::FrameTooShort {
+        let (header, action) = input
+            .split_first_chunk::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
+            .ok_or(EspNowV2WireError::FrameTooShort {
                 minimum: ESP_NOW_MANAGEMENT_HEADER_LEN,
-            });
-        }
-        let frame_control = u16::from_le_bytes([input[0], input[1]]);
+            })?;
+        let frame_control = u16::from_le_bytes([header[0], header[1]]);
         if frame_control & PROTOCOL_VERSION_MASK != 0
             || frame_control & FRAME_TYPE_AND_SUBTYPE_MASK != ACTION_FRAME_CONTROL
             || frame_control & TO_FROM_DS_MASK != 0
@@ -493,23 +536,24 @@ impl<'payload> EspNowV2Frame<'payload> {
             return Err(EspNowV2WireError::ProtectedFrameUnsupported);
         }
 
-        let destination =
-            EspNowDestination::new([input[4], input[5], input[6], input[7], input[8], input[9]])
-                .map_err(EspNowV2WireError::InvalidDestination)?;
+        let destination = EspNowDestination::new([
+            header[4], header[5], header[6], header[7], header[8], header[9],
+        ])
+        .map_err(EspNowV2WireError::InvalidDestination)?;
         let source = EspNowUnicastAddress::new([
-            input[10], input[11], input[12], input[13], input[14], input[15],
+            header[10], header[11], header[12], header[13], header[14], header[15],
         ])
         .map_err(EspNowV2WireError::InvalidSource)?;
-        if input[16..22] != BROADCAST_ADDRESS {
+        if header[16..22] != BROADCAST_ADDRESS {
             return Err(EspNowV2WireError::InvalidBssid);
         }
-        let sequence_control = u16::from_le_bytes([input[22], input[23]]);
+        let sequence_control = u16::from_le_bytes([header[22], header[23]]);
         if frame_control & MORE_FRAGMENTS_FLAG != 0 || sequence_control & 0x000f != 0 {
             return Err(EspNowV2WireError::FragmentedFrame(
                 (sequence_control & 0x000f) as u8,
             ));
         }
-        let action = EspNowV2Action::parse(&input[ESP_NOW_MANAGEMENT_HEADER_LEN..])?;
+        let action = EspNowV2Action::parse(action)?;
         Ok(Self {
             destination,
             source,

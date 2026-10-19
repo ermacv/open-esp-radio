@@ -49,6 +49,23 @@ impl EspNowRxPeerSlot {
         history: [None; ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY],
         next_history: 0,
     };
+
+    /// Remember `fingerprint` in place of the oldest entry.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
+    fn remember(&mut self, fingerprint: EspNowRxFingerprint) {
+        if let Some(entry) = self.history.get_mut(self.next_history) {
+            *entry = Some(fingerprint);
+        }
+        self.next_history =
+            self.next_history.wrapping_add(1) % ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY;
+    }
 }
 
 /// One standard OFDM rate explicitly selected for an ESP-NOW peer.
@@ -905,6 +922,14 @@ impl<const N: usize> EspNowRxEpoch<N> {
     /// both on-air collision domains: the opaque random value and the
     /// management sequence number. Suppression happens before any borrowed
     /// payload is published to an integration callback.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn receive_v1<'frame>(
         &mut self,
         bytes: &'frame [u8],
@@ -917,15 +942,14 @@ impl<const N: usize> EspNowRxEpoch<N> {
         }
 
         let source = frame.source();
-        let Some(slot) = self.slots.iter_mut().find(|slot| {
-            slot.peer
-                .is_some_and(|(_, configured_source, _, _)| configured_source == source)
+        let Some((slot, peer, _)) = self.slots.iter_mut().find_map(|slot| match slot.peer {
+            Some((peer, configured_source, capability, _)) if configured_source == source => {
+                Some((slot, peer, capability))
+            }
+            _ => None,
         }) else {
             return Err(EspNowReceiveError::UnknownPeer(source));
         };
-        let (peer, _, _, _) = slot
-            .peer
-            .expect("an ESP-NOW RX slot selected by source is occupied");
         let fingerprint = EspNowRxFingerprint {
             random_value: frame.action().random_value(),
             sequence_number: frame.sequence_number(),
@@ -933,8 +957,7 @@ impl<const N: usize> EspNowRxEpoch<N> {
         if slot.history.contains(&Some(fingerprint)) {
             return Ok(EspNowRxOutcome::Duplicate { peer });
         }
-        slot.history[slot.next_history] = Some(fingerprint);
-        slot.next_history = (slot.next_history + 1) % ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY;
+        slot.remember(fingerprint);
         Ok(EspNowRxOutcome::Received(EspNowReceivedV1 { peer, frame }))
     }
 
@@ -944,6 +967,14 @@ impl<const N: usize> EspNowRxEpoch<N> {
     /// with v1, so a live epoch cannot publish a duplicate merely because the
     /// sender changed its wire version. Capability is checked before the
     /// fingerprint is committed.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn receive_v2<'frame>(
         &mut self,
         bytes: &'frame [u8],
@@ -958,15 +989,16 @@ impl<const N: usize> EspNowRxEpoch<N> {
         }
 
         let source = frame.source();
-        let Some(slot) = self.slots.iter_mut().find(|slot| {
-            slot.peer
-                .is_some_and(|(_, configured_source, _, _)| configured_source == source)
-        }) else {
+        let Some((slot, peer, capability)) =
+            self.slots.iter_mut().find_map(|slot| match slot.peer {
+                Some((peer, configured_source, capability, _)) if configured_source == source => {
+                    Some((slot, peer, capability))
+                }
+                _ => None,
+            })
+        else {
             return Err(EspNowV2ReceiveError::UnknownPeer(source));
         };
-        let (peer, _, capability, _) = slot
-            .peer
-            .expect("an ESP-NOW RX slot selected by source is occupied");
         if !capability.supports_v2() {
             return Err(EspNowV2ReceiveError::PeerNotV2Capable { peer, capability });
         }
@@ -977,8 +1009,7 @@ impl<const N: usize> EspNowRxEpoch<N> {
         if slot.history.contains(&Some(fingerprint)) {
             return Ok(EspNowV2RxOutcome::Duplicate { peer });
         }
-        slot.history[slot.next_history] = Some(fingerprint);
-        slot.next_history = (slot.next_history + 1) % ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY;
+        slot.remember(fingerprint);
         Ok(EspNowV2RxOutcome::Received(EspNowReceivedV2 {
             peer,
             frame,
@@ -1186,11 +1217,21 @@ pub struct EspNowOwnedReceivedV1 {
 impl EspNowOwnedReceivedV1 {
     /// Copy one already-admitted borrowed datagram into fixed-capacity owned
     /// storage. The wire codec proves the payload length is at most 250.
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn copy_from(received: EspNowReceivedV1<'_>) -> Self {
         let frame = received.frame();
         let payload = frame.action().payload().bytes();
         let mut owned_payload = [0_u8; ESP_NOW_V1_MAX_PAYLOAD_LEN];
-        owned_payload[..payload.len()].copy_from_slice(payload);
+        for (out, byte) in owned_payload.iter_mut().zip(payload) {
+            *out = *byte;
+        }
         Self {
             peer: received.peer(),
             destination: frame.destination(),
@@ -1227,8 +1268,18 @@ impl EspNowOwnedReceivedV1 {
         self.retry
     }
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn payload(&self) -> &[u8] {
-        &self.payload[..usize::from(self.payload_length)]
+        self.payload
+            .get(..usize::from(self.payload_length))
+            .unwrap_or_default()
     }
 }
 
@@ -1289,8 +1340,18 @@ impl EspNowOwnedReceivedV2 {
         self.retry
     }
 
+    #[deny(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )]
     pub fn payload(&self) -> &[u8] {
-        &self.payload[..usize::from(self.payload_length)]
+        self.payload
+            .get(..usize::from(self.payload_length))
+            .unwrap_or_default()
     }
 }
 

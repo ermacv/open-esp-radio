@@ -1,4 +1,14 @@
 //! Allocation-free HE NDP Announcement parsing and encoding.
+//!
+//! Received bytes reach this module; nothing here panics on them.
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 
 use crate::sequence::SequenceNumber;
 
@@ -12,6 +22,7 @@ const MANAGEMENT_HEADER_SIZE: usize = 24;
 const HE_ACTION_CATEGORY: u8 = 30;
 const HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION: u8 = 0;
 const HE_MIMO_CONTROL_SIZE: usize = 5;
+const REPORT_FIXED_SIZE: usize = MANAGEMENT_HEADER_SIZE + 2 + HE_MIMO_CONTROL_SIZE;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HeNdpaError {
@@ -50,51 +61,55 @@ pub enum HeCompressedBeamformingReportError {
 /// `(mpdu.len() - 17) / 4`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeNdpa<'a> {
-    mpdu: &'a [u8],
+    header: &'a [u8; NDPA_HEADER_SIZE],
+    stations: &'a [u8],
 }
 
 impl<'a> HeNdpa<'a> {
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeNdpaError> {
-        if mpdu.len() < NDPA_HEADER_SIZE + HE_STA_INFO_SIZE {
+        let (header, stations) = mpdu
+            .split_first_chunk::<NDPA_HEADER_SIZE>()
+            .ok_or(HeNdpaError::TooShort)?;
+        if stations.len() < HE_STA_INFO_SIZE {
             return Err(HeNdpaError::TooShort);
         }
-        let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
+        let frame_control = u16::from_le_bytes([header[0], header[1]]);
         if frame_control & 0x00fc != NDPA_FRAME_CONTROL {
             return Err(HeNdpaError::NotNdpa);
         }
-        if mpdu[16] & HE_MARKER == 0 {
+        if header[16] & HE_MARKER == 0 {
             return Err(HeNdpaError::NotHe);
         }
-        if !(mpdu.len() - NDPA_HEADER_SIZE).is_multiple_of(HE_STA_INFO_SIZE) {
+        if !stations.len().is_multiple_of(HE_STA_INFO_SIZE) {
             return Err(HeNdpaError::MisalignedStationInfo);
         }
-        Ok(Self { mpdu })
+        Ok(Self { header, stations })
     }
 
     pub const fn frame_control(self) -> u16 {
-        u16::from_le_bytes([self.mpdu[0], self.mpdu[1]])
+        u16::from_le_bytes([self.header[0], self.header[1]])
     }
 
     pub const fn duration(self) -> u16 {
-        u16::from_le_bytes([self.mpdu[2], self.mpdu[3]])
+        u16::from_le_bytes([self.header[2], self.header[3]])
     }
 
     pub fn receiver_address(self) -> &'a [u8] {
-        &self.mpdu[4..10]
+        &self.header[4..10]
     }
 
     pub fn transmitter_address(self) -> &'a [u8] {
-        &self.mpdu[10..16]
+        &self.header[10..16]
     }
 
     /// Six-bit sounding-dialog token decoded by the complete blob leaf.
     pub const fn dialog_token(self) -> u8 {
-        (self.mpdu[16] >> 2) & 0x3f
+        (self.header[16] >> 2) & 0x3f
     }
 
     pub fn stations(self) -> HeNdpaStationIterator<'a> {
         HeNdpaStationIterator {
-            remaining: &self.mpdu[NDPA_HEADER_SIZE..],
+            remaining: self.stations,
         }
     }
 
@@ -208,7 +223,7 @@ pub struct HeNdpaEncoding<'a> {
 
 impl HeNdpaEncoding<'_> {
     pub const fn encoded_len(self) -> usize {
-        NDPA_HEADER_SIZE + self.stations.len() * HE_STA_INFO_SIZE
+        NDPA_HEADER_SIZE.saturating_add(self.stations.len().saturating_mul(HE_STA_INFO_SIZE))
     }
 
     pub fn encode(self, output: &mut [u8]) -> Result<usize, HeNdpaEncodingError> {
@@ -223,16 +238,21 @@ impl HeNdpaEncoding<'_> {
             return Err(HeNdpaEncodingError::OutputTooShort);
         }
 
-        output[..length].fill(0);
-        output[0..2].copy_from_slice(&NDPA_FRAME_CONTROL.to_le_bytes());
-        output[2..4].copy_from_slice(&self.duration.to_le_bytes());
-        output[4..10].copy_from_slice(&self.receiver_address);
-        output[10..16].copy_from_slice(&self.transmitter_address);
-        output[16] = (self.dialog_token << 2) | HE_MARKER;
-        for (index, station) in self.stations.iter().copied().enumerate() {
-            let raw = station.encode()?;
-            let offset = NDPA_HEADER_SIZE + index * HE_STA_INFO_SIZE;
-            output[offset..offset + HE_STA_INFO_SIZE].copy_from_slice(&raw.to_le_bytes());
+        let (head, body) = output
+            .split_at_mut_checked(NDPA_HEADER_SIZE)
+            .ok_or(HeNdpaEncodingError::OutputTooShort)?;
+        let header: [&[u8]; 5] = [
+            &NDPA_FRAME_CONTROL.to_le_bytes(),
+            &self.duration.to_le_bytes(),
+            &self.receiver_address,
+            &self.transmitter_address,
+            &[(self.dialog_token << 2) | HE_MARKER],
+        ];
+        for (out, byte) in head.iter_mut().zip(header.into_iter().flatten()) {
+            *out = *byte;
+        }
+        for (chunk, station) in body.chunks_exact_mut(HE_STA_INFO_SIZE).zip(self.stations) {
+            chunk.copy_from_slice(&station.encode()?.to_le_bytes());
         }
         Ok(length)
     }
@@ -247,17 +267,11 @@ impl Iterator for HeNdpaStationIterator<'_> {
     type Item = HeNdpaStationInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining.len() < HE_STA_INFO_SIZE {
-            return None;
-        }
-        let raw = u32::from_le_bytes([
-            self.remaining[0],
-            self.remaining[1],
-            self.remaining[2],
-            self.remaining[3],
-        ]);
-        self.remaining = &self.remaining[HE_STA_INFO_SIZE..];
-        Some(HeNdpaStationInfo { raw })
+        let (word, rest) = self.remaining.split_first_chunk::<HE_STA_INFO_SIZE>()?;
+        self.remaining = rest;
+        Some(HeNdpaStationInfo {
+            raw: u32::from_le_bytes(*word),
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -277,51 +291,59 @@ impl ExactSizeIterator for HeNdpaStationIterator<'_> {}
 /// it owns only the fixed control word needed to qualify the hardware report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeCompressedBeamformingReport<'a> {
-    mpdu: &'a [u8],
+    header: &'a [u8; MANAGEMENT_HEADER_SIZE],
     mimo_control: u64,
-    average_snr_end: usize,
+    average_snr: &'a [u8],
+    feedback_matrices: &'a [u8],
 }
 
 impl<'a> HeCompressedBeamformingReport<'a> {
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeCompressedBeamformingReportError> {
-        let fixed_end = MANAGEMENT_HEADER_SIZE + 2 + HE_MIMO_CONTROL_SIZE;
-        if mpdu.len() < fixed_end {
-            return Err(HeCompressedBeamformingReportError::TooShort);
-        }
-        let frame_control = u16::from_le_bytes([mpdu[0], mpdu[1]]);
+        let (fixed, rest) = mpdu
+            .split_first_chunk::<REPORT_FIXED_SIZE>()
+            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let (header, action) = fixed
+            .split_first_chunk::<MANAGEMENT_HEADER_SIZE>()
+            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let frame_control = u16::from_le_bytes([header[0], header[1]]);
         if frame_control & 0x00fc != ACTION_NO_ACK_FRAME_CONTROL {
             return Err(HeCompressedBeamformingReportError::NotActionNoAck);
         }
-        if mpdu[MANAGEMENT_HEADER_SIZE] != HE_ACTION_CATEGORY
-            || mpdu[MANAGEMENT_HEADER_SIZE + 1] != HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION
-        {
+        let (&[category, action], control) = action
+            .split_first_chunk::<2>()
+            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let [c0, c1, c2, c3, c4] = *control
+            .first_chunk::<HE_MIMO_CONTROL_SIZE>()
+            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        if category != HE_ACTION_CATEGORY || action != HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION {
             return Err(HeCompressedBeamformingReportError::NotHeCompressedBeamformingAndCqi);
         }
-        let control = &mpdu[MANAGEMENT_HEADER_SIZE + 2..fixed_end];
-        let mimo_control = u64::from_le_bytes([
-            control[0], control[1], control[2], control[3], control[4], 0, 0, 0,
-        ]);
-        let average_snr_end = fixed_end + ((mimo_control & 0x07) as usize + 1);
-        if mpdu.len() < average_snr_end {
-            return Err(HeCompressedBeamformingReportError::MissingAverageSnr);
-        }
+        let mimo_control = u64::from_le_bytes([c0, c1, c2, c3, c4, 0, 0, 0]);
+        let average_snr_len = ((mimo_control & 0x07) as usize).saturating_add(1);
+        let (average_snr, feedback_matrices) = rest
+            .split_at_checked(average_snr_len)
+            .ok_or(HeCompressedBeamformingReportError::MissingAverageSnr)?;
         Ok(Self {
-            mpdu,
+            header,
             mimo_control,
-            average_snr_end,
+            average_snr,
+            feedback_matrices,
         })
     }
 
     pub fn receiver_address(self) -> &'a [u8] {
-        &self.mpdu[4..10]
+        &self.header[4..10]
     }
 
     pub fn transmitter_address(self) -> &'a [u8] {
-        &self.mpdu[10..16]
+        &self.header[10..16]
     }
 
     pub const fn sequence_number(self) -> SequenceNumber {
-        SequenceNumber::from_sequence_control(u16::from_le_bytes([self.mpdu[22], self.mpdu[23]]))
+        SequenceNumber::from_sequence_control(u16::from_le_bytes([
+            self.header[22],
+            self.header[23],
+        ]))
     }
 
     pub const fn mimo_control(self) -> u64 {
@@ -329,11 +351,11 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 
     pub const fn column_count(self) -> u8 {
-        (self.mimo_control & 0x07) as u8 + 1
+        ((self.mimo_control & 0x07) as u8).saturating_add(1)
     }
 
     pub const fn row_count(self) -> u8 {
-        ((self.mimo_control >> 3) & 0x07) as u8 + 1
+        (((self.mimo_control >> 3) & 0x07) as u8).saturating_add(1)
     }
 
     pub const fn bandwidth_encoding(self) -> u8 {
@@ -377,11 +399,11 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 
     pub fn average_snr(self) -> &'a [u8] {
-        &self.mpdu[MANAGEMENT_HEADER_SIZE + 2 + HE_MIMO_CONTROL_SIZE..self.average_snr_end]
+        self.average_snr
     }
 
     pub fn feedback_matrices(self) -> &'a [u8] {
-        &self.mpdu[self.average_snr_end..]
+        self.feedback_matrices
     }
 }
 

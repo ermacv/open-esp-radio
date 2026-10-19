@@ -277,18 +277,27 @@ const ETHER_TYPE_IPV6: u16 = 0x86dd;
 /// An explicit VLAN PCP takes precedence over an encapsulated DSCP. Untagged
 /// non-IP and truncated headers remain best effort. The function never
 /// invents priority from transport ports or payload bytes.
+#[deny(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::arithmetic_side_effects
+)]
 pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
-    if ethernet.len() < ETHERNET_HEADER_LEN {
+    let Some((&[.., ether_type_high, ether_type_low], payload)) =
+        ethernet.split_first_chunk::<ETHERNET_HEADER_LEN>()
+    else {
         return WmmTrafficClass::BEST_EFFORT;
-    }
+    };
 
-    let ether_type = u16::from_be_bytes([ethernet[12], ethernet[13]]);
-    let payload_offset = ETHERNET_HEADER_LEN;
+    let ether_type = u16::from_be_bytes([ether_type_high, ether_type_low]);
     if matches!(ether_type, ETHER_TYPE_VLAN | ETHER_TYPE_PROVIDER_VLAN) {
-        let Some(tag) = ethernet.get(payload_offset..payload_offset + 4) else {
+        let Some(&[tci_high, _, _, _]) = payload.first_chunk::<4>() else {
             return WmmTrafficClass::BEST_EFFORT;
         };
-        let tci = u16::from_be_bytes([tag[0], tag[1]]);
+        let tci = u16::from_be_bytes([tci_high, 0]);
         let user_priority = WmmUserPriority::from_high_three_bits((tci >> 8) as u8);
         // The explicit outer PCP is authoritative even when it is zero.
         return WmmTrafficClass::from_user_priority(
@@ -299,22 +308,22 @@ pub fn classify_ethernet_wmm(ethernet: &[u8]) -> WmmTrafficClass {
 
     let dscp = match ether_type {
         ETHER_TYPE_IPV4 => {
-            let Some(header) = ethernet.get(payload_offset..payload_offset + 2) else {
+            let Some(&[version_and_length, services]) = payload.first_chunk::<2>() else {
                 return WmmTrafficClass::BEST_EFFORT;
             };
-            if header[0] >> 4 != 4 {
+            if version_and_length >> 4 != 4 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(header[1] >> 2)
+            Dscp(services >> 2)
         }
         ETHER_TYPE_IPV6 => {
-            let Some(header) = ethernet.get(payload_offset..payload_offset + 2) else {
+            let Some(&[version_and_class, class_and_label]) = payload.first_chunk::<2>() else {
                 return WmmTrafficClass::BEST_EFFORT;
             };
-            if header[0] >> 4 != 6 {
+            if version_and_class >> 4 != 6 {
                 return WmmTrafficClass::BEST_EFFORT;
             }
-            Dscp(((header[0] & 0x0f) << 2) | (header[1] >> 6))
+            Dscp(((version_and_class & 0x0f) << 2) | (class_and_label >> 6))
         }
         _ => return WmmTrafficClass::BEST_EFFORT,
     };
