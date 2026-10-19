@@ -754,7 +754,9 @@ fn failed_stop_quarantines_and_never_retries() {
         Some(WifiRxExit {
             cause: WifiRxCause::StopRequested,
             end: WifiRxEnd::Quarantined {
-                reason: WifiRxQuarantine::StopRefused(RxFrontierError::Ring(RxRingError::Busy)),
+                reason: WifiRxQuarantine::StopRefused(RxFrontierError::Ring(
+                    RxRingError::WalkerStopUnconfirmed
+                )),
                 walker_stopped: false,
             },
         })
