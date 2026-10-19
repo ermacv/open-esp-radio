@@ -2957,9 +2957,72 @@ fields = [
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 
 [[zero-based-field-writes]]
-name = "mac_key_table_entry_word"
+name = "mac_key_entry_peer_low"
 peripheral = "WIFI_MAC_KEY_TABLE"
-register = "ENTRY_WORD%s"
+register = "ENTRY_PEER_LOW%s"
+fields = ["PEER_LOW"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_peer_control"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_PEER_CONTROL%s"
+fields = ["PEER_HIGH", "BITS_16_17_OPAQUE", "ALGORITHM", "BIT_20_OPAQUE", "DIRECTION", "INTERFACE", "BIT_26_OPAQUE", "LOGICAL_INDEX_NOT_THREE", "BITS_28_29_OPAQUE", "LOGICAL_KEY_INDEX"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_key_word_0"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_KEY_WORD_0%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_key_word_1"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_KEY_WORD_1%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_key_word_2"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_KEY_WORD_2%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_key_word_3"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_KEY_WORD_3%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_tail_word_0"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_TAIL_WORD_0%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_tail_word_1"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_TAIL_WORD_1%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_tail_word_2"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_TAIL_WORD_2%s"
+fields = ["VALUE"]
+sources = ["BLOB_LIBPP_HAL_CRYPTO"]
+
+[[zero-based-field-writes]]
+name = "mac_key_entry_tail_word_3"
+peripheral = "WIFI_MAC_KEY_TABLE"
+register = "ENTRY_TAIL_WORD_3%s"
 fields = ["VALUE"]
 sources = ["BLOB_LIBPP_HAL_CRYPTO"]
 

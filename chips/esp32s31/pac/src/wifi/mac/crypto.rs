@@ -4,10 +4,12 @@
 
 use crate::{MacInterface, MacKeyEntryIndex, WifiRadioRegisters, device_fence, svd};
 
-const KEY_ENTRY_WORDS: usize = 10;
 const KEY_ENTRY_COUNT: usize = 25;
-const CCMP_ALGORITHM: u32 = 3;
-const PAIRWISE_LOGICAL_KEY_INDEX: u32 = 0;
+const CCMP_ALGORITHM: u8 = 3;
+const PAIRWISE_DIRECTION: u8 = 3;
+const GROUP_DIRECTION: u8 = 6;
+const PAIRWISE_LOGICAL_KEY_INDEX: u8 = 0;
+const LOGICAL_INDEX_WITHOUT_FLAG: u8 = 3;
 const MAX_GROUP_KEY_ID: u8 = 3;
 
 /// Hardware authentication of the QoS A-MSDU-present bit for one interface.
@@ -175,15 +177,16 @@ impl WifiRadioRegisters {
         temporal_key: &[u8; 16],
     ) -> MacKeyInstallOutcome {
         let (peer, direction, logical_key_index) = match identity {
-            MacCcmpKeyIdentity::Pairwise { peer } => (peer, 3_u32, PAIRWISE_LOGICAL_KEY_INDEX),
+            MacCcmpKeyIdentity::Pairwise { peer } => {
+                (peer, PAIRWISE_DIRECTION, PAIRWISE_LOGICAL_KEY_INDEX)
+            }
             MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => {
-                ([u8::MAX; 6], 6_u32, u32::from(key_id))
+                ([u8::MAX; 6], GROUP_DIRECTION, key_id)
             }
             MacCcmpKeyIdentity::Group { .. } => return MacKeyInstallOutcome::Rejected,
         };
         let index = index.get();
-        let interface_bits = interface.bits();
-        let interface_index = interface_bits as usize;
+        let interface_index = interface.bits() as usize;
         let mut validity = key_entry_validity(&self.peripherals.wifi_mac.wifi_mac_crypto_control);
         if validity[index as usize] {
             return MacKeyInstallOutcome::Occupied;
@@ -194,29 +197,29 @@ impl WifiRadioRegisters {
         let [a, b, c, d, e, f] = peer;
         let peer_low = u32::from_le_bytes([a, b, c, d]);
         let peer_high = u16::from_le_bytes([e, f]);
-        let cipher = CCMP_ALGORITHM << 18;
-        let control = (direction << 5)
-            | (interface_bits << 8)
-            | (u32::from(logical_key_index != 3) << 11)
-            | (logical_key_index << 14)
-            | ((cipher >> 16) & 0x341f);
-        crate::svd::zero_based_field_write::mac_key_table_entry_word(
+        svd::zero_based_field_write::mac_key_entry_peer_low(table, index as usize, peer_low);
+        svd::zero_based_field_write::mac_key_entry_peer_control(
             table,
-            index as usize * KEY_ENTRY_WORDS,
-            peer_low,
+            index as usize,
+            peer_high,
+            0,
+            CCMP_ALGORITHM,
+            false,
+            direction,
+            interface.bits() as u8,
+            false,
+            logical_key_index != LOGICAL_INDEX_WITHOUT_FLAG,
+            0,
+            logical_key_index,
         );
-        crate::svd::zero_based_field_write::mac_key_table_entry_word(
-            table,
-            index as usize * KEY_ENTRY_WORDS + 1,
-            u32::from(peer_high) | (control << 16),
-        );
-        for (word, bytes) in temporal_key.as_chunks::<4>().0.iter().enumerate() {
-            crate::svd::zero_based_field_write::mac_key_table_entry_word(
-                table,
-                index as usize * KEY_ENTRY_WORDS + word + 2,
-                u32::from_le_bytes(*bytes),
-            );
-        }
+        let [k0, k1, k2, k3] = temporal_key.as_chunks::<4>().0 else {
+            unreachable!("a 16-byte key has four words");
+        };
+        let at = index as usize;
+        svd::zero_based_field_write::mac_key_entry_key_word_0(table, at, u32::from_le_bytes(*k0));
+        svd::zero_based_field_write::mac_key_entry_key_word_1(table, at, u32::from_le_bytes(*k1));
+        svd::zero_based_field_write::mac_key_entry_key_word_2(table, at, u32::from_le_bytes(*k2));
+        svd::zero_based_field_write::mac_key_entry_key_word_3(table, at, u32::from_le_bytes(*k3));
 
         let control = &self.peripherals.wifi_mac.wifi_mac_crypto_control;
         validity[index as usize] = true;
@@ -252,13 +255,19 @@ impl WifiRadioRegisters {
 
     fn clear_mac_key_entry_words(&mut self, index: u32) {
         let table = &self.peripherals.wifi_mac.wifi_mac_key_table;
-        for word in 0..KEY_ENTRY_WORDS {
-            crate::svd::zero_based_field_write::mac_key_table_entry_word(
-                table,
-                index as usize * KEY_ENTRY_WORDS + word,
-                0,
-            );
-        }
+        let at = index as usize;
+        svd::zero_based_field_write::mac_key_entry_peer_low(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_peer_control(
+            table, at, 0, 0, 0, false, 0, 0, false, false, 0, 0,
+        );
+        svd::zero_based_field_write::mac_key_entry_key_word_0(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_key_word_1(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_key_word_2(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_key_word_3(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_tail_word_0(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_tail_word_1(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_tail_word_2(table, at, 0);
+        svd::zero_based_field_write::mac_key_entry_tail_word_3(table, at, 0);
     }
 }
 

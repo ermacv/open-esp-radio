@@ -17672,69 +17672,795 @@ pub mod wifi_mac_crypto_control {
         }
     }
 }
-#[doc = "Twenty-five entries of ten 32-bit words. Complete hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten ordered stores; set/get leaves prove the peer/control/key layout."]
+#[doc = "Twenty-five entries of ten 32-bit words. Complete hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten ordered stores; set/get leaves prove the peer/control/key layout: the peer address and control word, four words of temporal key and four words the CCMP transaction only clears."]
 pub type WifiMacKeyTable = crate::Periph<wifi_mac_key_table::RegisterBlock, 0x2010_5800>;
 impl core::fmt::Debug for WifiMacKeyTable {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         f.debug_struct("WifiMacKeyTable").finish()
     }
 }
-#[doc = "Twenty-five entries of ten 32-bit words. Complete hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten ordered stores; set/get leaves prove the peer/control/key layout."]
+#[doc = "Twenty-five entries of ten 32-bit words. Complete hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten ordered stores; set/get leaves prove the peer/control/key layout: the peer address and control word, four words of temporal key and four words the CCMP transaction only clears."]
 pub mod wifi_mac_key_table {
     #[repr(C)]
     #[doc = "Register block"]
     pub struct RegisterBlock {
-        entry_word: [EntryWord; 250],
+        entry_peer_low: (),
+        _reserved1: [u8; 0x04],
+        entry_peer_control: (),
+        _reserved2: [u8; 0x04],
+        entry_key_word_0: (),
+        _reserved3: [u8; 0x04],
+        entry_key_word_1: (),
+        _reserved4: [u8; 0x04],
+        entry_key_word_2: (),
+        _reserved5: [u8; 0x04],
+        entry_key_word_3: (),
+        _reserved6: [u8; 0x04],
+        entry_tail_word_0: (),
+        _reserved7: [u8; 0x04],
+        entry_tail_word_1: (),
+        _reserved8: [u8; 0x04],
+        entry_tail_word_2: (),
+        _reserved9: [u8; 0x04],
+        entry_tail_word_3: (),
     }
     impl RegisterBlock {
-        #[doc = "0x00..0x3e8 - Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction."]
+        #[doc = "0x00..0x64 - Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian."]
         #[inline(always)]
-        pub const fn entry_word(&self, n: usize) -> &EntryWord {
-            &self.entry_word[n]
+        pub const fn entry_peer_low(&self, n: usize) -> &EntryPeerLow {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe { &*core::ptr::from_ref(self).cast::<u8>().add(40 * n).cast() }
         }
         #[doc = "Iterator for array of:"]
-        #[doc = "0x00..0x3e8 - Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction."]
+        #[doc = "0x00..0x64 - Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian."]
         #[inline(always)]
-        pub fn entry_word_iter(&self) -> impl Iterator<Item = &EntryWord> {
-            self.entry_word.iter()
+        pub fn entry_peer_low_iter(&self) -> impl Iterator<Item = &EntryPeerLow> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self).cast::<u8>().add(40 * n).cast()
+            })
+        }
+        #[doc = "0x04..0x68 - Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes."]
+        #[inline(always)]
+        pub const fn entry_peer_control(&self, n: usize) -> &EntryPeerControl {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(4)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x04..0x68 - Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes."]
+        #[inline(always)]
+        pub fn entry_peer_control_iter(&self) -> impl Iterator<Item = &EntryPeerControl> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(4)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x08..0x6c - Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian."]
+        #[inline(always)]
+        pub const fn entry_key_word_0(&self, n: usize) -> &EntryKeyWord0 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(8)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x08..0x6c - Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian."]
+        #[inline(always)]
+        pub fn entry_key_word_0_iter(&self) -> impl Iterator<Item = &EntryKeyWord0> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(8)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x0c..0x70 - Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian."]
+        #[inline(always)]
+        pub const fn entry_key_word_1(&self, n: usize) -> &EntryKeyWord1 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(12)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x0c..0x70 - Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian."]
+        #[inline(always)]
+        pub fn entry_key_word_1_iter(&self) -> impl Iterator<Item = &EntryKeyWord1> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(12)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x10..0x74 - Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian."]
+        #[inline(always)]
+        pub const fn entry_key_word_2(&self, n: usize) -> &EntryKeyWord2 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(16)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x10..0x74 - Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian."]
+        #[inline(always)]
+        pub fn entry_key_word_2_iter(&self) -> impl Iterator<Item = &EntryKeyWord2> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(16)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x14..0x78 - Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian."]
+        #[inline(always)]
+        pub const fn entry_key_word_3(&self, n: usize) -> &EntryKeyWord3 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(20)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x14..0x78 - Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian."]
+        #[inline(always)]
+        pub fn entry_key_word_3_iter(&self) -> impl Iterator<Item = &EntryKeyWord3> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(20)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x18..0x7c - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub const fn entry_tail_word_0(&self, n: usize) -> &EntryTailWord0 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(24)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x18..0x7c - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub fn entry_tail_word_0_iter(&self) -> impl Iterator<Item = &EntryTailWord0> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(24)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x1c..0x80 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub const fn entry_tail_word_1(&self, n: usize) -> &EntryTailWord1 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(28)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x1c..0x80 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub fn entry_tail_word_1_iter(&self) -> impl Iterator<Item = &EntryTailWord1> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(28)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x20..0x84 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub const fn entry_tail_word_2(&self, n: usize) -> &EntryTailWord2 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(32)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x20..0x84 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub fn entry_tail_word_2_iter(&self) -> impl Iterator<Item = &EntryTailWord2> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(32)
+                    .add(40 * n)
+                    .cast()
+            })
+        }
+        #[doc = "0x24..0x88 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub const fn entry_tail_word_3(&self, n: usize) -> &EntryTailWord3 {
+            #[allow(clippy::no_effect)]
+            [(); 25][n];
+            unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(36)
+                    .add(40 * n)
+                    .cast()
+            }
+        }
+        #[doc = "Iterator for array of:"]
+        #[doc = "0x24..0x88 - Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+        #[inline(always)]
+        pub fn entry_tail_word_3_iter(&self) -> impl Iterator<Item = &EntryTailWord3> {
+            (0..25).map(move |n| unsafe {
+                &*core::ptr::from_ref(self)
+                    .cast::<u8>()
+                    .add(36)
+                    .add(40 * n)
+                    .cast()
+            })
         }
     }
-    #[doc = "ENTRY_WORD (rw) register accessor: Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_word::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_word::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_word`] module"]
-    #[doc(alias = "ENTRY_WORD")]
-    pub type EntryWord = crate::Reg<entry_word::EntryWordSpec>;
-    #[doc = "Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction."]
-    pub mod entry_word {
-        #[doc = "Register `ENTRY_WORD%s` reader"]
-        pub type R = crate::R<EntryWordSpec>;
-        #[doc = "Register `ENTRY_WORD%s` writer"]
-        pub type W = crate::W<EntryWordSpec>;
-        #[doc = "Field `VALUE` reader - Project-assigned name."]
+    #[doc = "ENTRY_PEER_LOW (rw) register accessor: Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_peer_low::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_peer_low::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_peer_low`] module"]
+    #[doc(alias = "ENTRY_PEER_LOW")]
+    pub type EntryPeerLow = crate::Reg<entry_peer_low::EntryPeerLowSpec>;
+    #[doc = "Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian."]
+    pub mod entry_peer_low {
+        #[doc = "Register `ENTRY_PEER_LOW%s` reader"]
+        pub type R = crate::R<EntryPeerLowSpec>;
+        #[doc = "Register `ENTRY_PEER_LOW%s` writer"]
+        pub type W = crate::W<EntryPeerLowSpec>;
+        #[doc = "Field `PEER_LOW` reader - Project-assigned name. Peer MAC address bytes 0 to 3, or 0xffffffff for a group key."]
+        pub type PeerLowR = crate::FieldReader<u32>;
+        #[doc = "Field `PEER_LOW` writer - Project-assigned name. Peer MAC address bytes 0 to 3, or 0xffffffff for a group key."]
+        pub type PeerLowW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Peer MAC address bytes 0 to 3, or 0xffffffff for a group key."]
+            #[inline(always)]
+            pub fn peer_low(&self) -> PeerLowR {
+                PeerLowR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Peer MAC address bytes 0 to 3, or 0xffffffff for a group key."]
+            #[inline(always)]
+            pub fn peer_low(&mut self) -> PeerLowW<'_, EntryPeerLowSpec> {
+                PeerLowW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_peer_low::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_peer_low::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryPeerLowSpec;
+        impl crate::RegisterSpec for EntryPeerLowSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_peer_low::R`](R) reader structure"]
+        impl crate::Readable for EntryPeerLowSpec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_peer_low::W`](W) writer structure"]
+        impl crate::Writable for EntryPeerLowSpec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_PEER_CONTROL (rw) register accessor: Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_peer_control::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_peer_control::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_peer_control`] module"]
+    #[doc(alias = "ENTRY_PEER_CONTROL")]
+    pub type EntryPeerControl = crate::Reg<entry_peer_control::EntryPeerControlSpec>;
+    #[doc = "Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes."]
+    pub mod entry_peer_control {
+        #[doc = "Register `ENTRY_PEER_CONTROL%s` reader"]
+        pub type R = crate::R<EntryPeerControlSpec>;
+        #[doc = "Register `ENTRY_PEER_CONTROL%s` writer"]
+        pub type W = crate::W<EntryPeerControlSpec>;
+        #[doc = "Field `PEER_HIGH` reader - Project-assigned name. Peer MAC address bytes 4 and 5, or 0xffff for a group key."]
+        pub type PeerHighR = crate::FieldReader<u16>;
+        #[doc = "Field `PEER_HIGH` writer - Project-assigned name. Peer MAC address bytes 4 and 5, or 0xffff for a group key."]
+        pub type PeerHighW<'a, REG> = crate::FieldWriter<'a, REG, 16, u16, crate::Safe>;
+        #[doc = "Field `BITS_16_17_OPAQUE` reader - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+        pub type Bits16_17OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_16_17_OPAQUE` writer - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+        pub type Bits16_17OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2, u8, crate::Safe>;
+        #[doc = "Field `ALGORITHM` reader - Project-assigned name. Cipher selector; 3 is CCMP."]
+        pub type AlgorithmR = crate::FieldReader;
+        #[doc = "Field `ALGORITHM` writer - Project-assigned name. Cipher selector; 3 is CCMP."]
+        pub type AlgorithmW<'a, REG> = crate::FieldWriter<'a, REG, 2, u8, crate::Safe>;
+        #[doc = "Field `BIT_20_OPAQUE` reader - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+        pub type Bit20OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_20_OPAQUE` writer - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+        pub type Bit20OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `DIRECTION` reader - Project-assigned name. Key use selector: 3 for a pairwise key, 6 for a group key."]
+        pub type DirectionR = crate::FieldReader;
+        #[doc = "Field `DIRECTION` writer - Project-assigned name. Key use selector: 3 for a pairwise key, 6 for a group key."]
+        pub type DirectionW<'a, REG> = crate::FieldWriter<'a, REG, 3, u8, crate::Safe>;
+        #[doc = "Field `INTERFACE` reader - Project-assigned name. Interface the key belongs to: 0 station, 1 access point."]
+        pub type InterfaceR = crate::FieldReader;
+        #[doc = "Field `INTERFACE` writer - Project-assigned name. Interface the key belongs to: 0 station, 1 access point."]
+        pub type InterfaceW<'a, REG> = crate::FieldWriter<'a, REG, 2, u8, crate::Safe>;
+        #[doc = "Field `BIT_26_OPAQUE` reader - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+        pub type Bit26OpaqueR = crate::BitReader;
+        #[doc = "Field `BIT_26_OPAQUE` writer - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+        pub type Bit26OpaqueW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `LOGICAL_INDEX_NOT_THREE` reader - Project-assigned name. Set unless the logical key index is three."]
+        pub type LogicalIndexNotThreeR = crate::BitReader;
+        #[doc = "Field `LOGICAL_INDEX_NOT_THREE` writer - Project-assigned name. Set unless the logical key index is three."]
+        pub type LogicalIndexNotThreeW<'a, REG> = crate::BitWriter<'a, REG>;
+        #[doc = "Field `BITS_28_29_OPAQUE` reader - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+        pub type Bits28_29OpaqueR = crate::FieldReader;
+        #[doc = "Field `BITS_28_29_OPAQUE` writer - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+        pub type Bits28_29OpaqueW<'a, REG> = crate::FieldWriter<'a, REG, 2, u8, crate::Safe>;
+        #[doc = "Field `LOGICAL_KEY_INDEX` reader - Project-assigned name. Logical key slot: zero for a pairwise key, the key identifier for a group key."]
+        pub type LogicalKeyIndexR = crate::FieldReader;
+        #[doc = "Field `LOGICAL_KEY_INDEX` writer - Project-assigned name. Logical key slot: zero for a pairwise key, the key identifier for a group key."]
+        pub type LogicalKeyIndexW<'a, REG> = crate::FieldWriter<'a, REG, 2, u8, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:15 - Project-assigned name. Peer MAC address bytes 4 and 5, or 0xffff for a group key."]
+            #[inline(always)]
+            pub fn peer_high(&self) -> PeerHighR {
+                PeerHighR::new((self.bits & 0xffff) as u16)
+            }
+            #[doc = "Bits 16:17 - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bits_16_17_opaque(&self) -> Bits16_17OpaqueR {
+                Bits16_17OpaqueR::new(((self.bits >> 16) & 3) as u8)
+            }
+            #[doc = "Bits 18:19 - Project-assigned name. Cipher selector; 3 is CCMP."]
+            #[inline(always)]
+            pub fn algorithm(&self) -> AlgorithmR {
+                AlgorithmR::new(((self.bits >> 18) & 3) as u8)
+            }
+            #[doc = "Bit 20 - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bit_20_opaque(&self) -> Bit20OpaqueR {
+                Bit20OpaqueR::new(((self.bits >> 20) & 1) != 0)
+            }
+            #[doc = "Bits 21:23 - Project-assigned name. Key use selector: 3 for a pairwise key, 6 for a group key."]
+            #[inline(always)]
+            pub fn direction(&self) -> DirectionR {
+                DirectionR::new(((self.bits >> 21) & 7) as u8)
+            }
+            #[doc = "Bits 24:25 - Project-assigned name. Interface the key belongs to: 0 station, 1 access point."]
+            #[inline(always)]
+            pub fn interface(&self) -> InterfaceR {
+                InterfaceR::new(((self.bits >> 24) & 3) as u8)
+            }
+            #[doc = "Bit 26 - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bit_26_opaque(&self) -> Bit26OpaqueR {
+                Bit26OpaqueR::new(((self.bits >> 26) & 1) != 0)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Set unless the logical key index is three."]
+            #[inline(always)]
+            pub fn logical_index_not_three(&self) -> LogicalIndexNotThreeR {
+                LogicalIndexNotThreeR::new(((self.bits >> 27) & 1) != 0)
+            }
+            #[doc = "Bits 28:29 - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bits_28_29_opaque(&self) -> Bits28_29OpaqueR {
+                Bits28_29OpaqueR::new(((self.bits >> 28) & 3) as u8)
+            }
+            #[doc = "Bits 30:31 - Project-assigned name. Logical key slot: zero for a pairwise key, the key identifier for a group key."]
+            #[inline(always)]
+            pub fn logical_key_index(&self) -> LogicalKeyIndexR {
+                LogicalKeyIndexR::new(((self.bits >> 30) & 3) as u8)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:15 - Project-assigned name. Peer MAC address bytes 4 and 5, or 0xffff for a group key."]
+            #[inline(always)]
+            pub fn peer_high(&mut self) -> PeerHighW<'_, EntryPeerControlSpec> {
+                PeerHighW::new(self, 0)
+            }
+            #[doc = "Bits 16:17 - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bits_16_17_opaque(&mut self) -> Bits16_17OpaqueW<'_, EntryPeerControlSpec> {
+                Bits16_17OpaqueW::new(self, 16)
+            }
+            #[doc = "Bits 18:19 - Project-assigned name. Cipher selector; 3 is CCMP."]
+            #[inline(always)]
+            pub fn algorithm(&mut self) -> AlgorithmW<'_, EntryPeerControlSpec> {
+                AlgorithmW::new(self, 18)
+            }
+            #[doc = "Bit 20 - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bit_20_opaque(&mut self) -> Bit20OpaqueW<'_, EntryPeerControlSpec> {
+                Bit20OpaqueW::new(self, 20)
+            }
+            #[doc = "Bits 21:23 - Project-assigned name. Key use selector: 3 for a pairwise key, 6 for a group key."]
+            #[inline(always)]
+            pub fn direction(&mut self) -> DirectionW<'_, EntryPeerControlSpec> {
+                DirectionW::new(self, 21)
+            }
+            #[doc = "Bits 24:25 - Project-assigned name. Interface the key belongs to: 0 station, 1 access point."]
+            #[inline(always)]
+            pub fn interface(&mut self) -> InterfaceW<'_, EntryPeerControlSpec> {
+                InterfaceW::new(self, 24)
+            }
+            #[doc = "Bit 26 - Opaque: meaning not established. Bit the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bit_26_opaque(&mut self) -> Bit26OpaqueW<'_, EntryPeerControlSpec> {
+                Bit26OpaqueW::new(self, 26)
+            }
+            #[doc = "Bit 27 - Project-assigned name. Set unless the logical key index is three."]
+            #[inline(always)]
+            pub fn logical_index_not_three(
+                &mut self,
+            ) -> LogicalIndexNotThreeW<'_, EntryPeerControlSpec> {
+                LogicalIndexNotThreeW::new(self, 27)
+            }
+            #[doc = "Bits 28:29 - Opaque: meaning not established. Bits the recovered CCMP transaction writes zero."]
+            #[inline(always)]
+            pub fn bits_28_29_opaque(&mut self) -> Bits28_29OpaqueW<'_, EntryPeerControlSpec> {
+                Bits28_29OpaqueW::new(self, 28)
+            }
+            #[doc = "Bits 30:31 - Project-assigned name. Logical key slot: zero for a pairwise key, the key identifier for a group key."]
+            #[inline(always)]
+            pub fn logical_key_index(&mut self) -> LogicalKeyIndexW<'_, EntryPeerControlSpec> {
+                LogicalKeyIndexW::new(self, 30)
+            }
+        }
+        #[doc = "Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_peer_control::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_peer_control::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryPeerControlSpec;
+        impl crate::RegisterSpec for EntryPeerControlSpec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_peer_control::R`](R) reader structure"]
+        impl crate::Readable for EntryPeerControlSpec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_peer_control::W`](W) writer structure"]
+        impl crate::Writable for EntryPeerControlSpec {
+            type Safety = crate::Unsafe;
+        }
+    }
+    #[doc = "ENTRY_KEY_WORD_0 (rw) register accessor: Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_0::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_0::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_key_word_0`] module"]
+    #[doc(alias = "ENTRY_KEY_WORD_0")]
+    pub type EntryKeyWord0 = crate::Reg<entry_key_word_0::EntryKeyWord0Spec>;
+    #[doc = "Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian."]
+    pub mod entry_key_word_0 {
+        #[doc = "Register `ENTRY_KEY_WORD_0%s` reader"]
+        pub type R = crate::R<EntryKeyWord0Spec>;
+        #[doc = "Register `ENTRY_KEY_WORD_0%s` writer"]
+        pub type W = crate::W<EntryKeyWord0Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Four temporal key bytes."]
         pub type ValueR = crate::FieldReader<u32>;
-        #[doc = "Field `VALUE` writer - Project-assigned name."]
+        #[doc = "Field `VALUE` writer - Project-assigned name. Four temporal key bytes."]
         pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
         impl R {
-            #[doc = "Bits 0:31 - Project-assigned name."]
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
             #[inline(always)]
             pub fn value(&self) -> ValueR {
                 ValueR::new(self.bits)
             }
         }
         impl W {
-            #[doc = "Bits 0:31 - Project-assigned name."]
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
             #[inline(always)]
-            pub fn value(&mut self) -> ValueW<'_, EntryWordSpec> {
+            pub fn value(&mut self) -> ValueW<'_, EntryKeyWord0Spec> {
                 ValueW::new(self, 0)
             }
         }
-        #[doc = "Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_word::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_word::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
-        pub struct EntryWordSpec;
-        impl crate::RegisterSpec for EntryWordSpec {
+        #[doc = "Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_0::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_0::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryKeyWord0Spec;
+        impl crate::RegisterSpec for EntryKeyWord0Spec {
             type Ux = u32;
         }
-        #[doc = "`read()` method returns [`entry_word::R`](R) reader structure"]
-        impl crate::Readable for EntryWordSpec {}
-        #[doc = "`write(|w| ..)` method takes [`entry_word::W`](W) writer structure"]
-        impl crate::Writable for EntryWordSpec {
+        #[doc = "`read()` method returns [`entry_key_word_0::R`](R) reader structure"]
+        impl crate::Readable for EntryKeyWord0Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_key_word_0::W`](W) writer structure"]
+        impl crate::Writable for EntryKeyWord0Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_KEY_WORD_1 (rw) register accessor: Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_1::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_1::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_key_word_1`] module"]
+    #[doc(alias = "ENTRY_KEY_WORD_1")]
+    pub type EntryKeyWord1 = crate::Reg<entry_key_word_1::EntryKeyWord1Spec>;
+    #[doc = "Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian."]
+    pub mod entry_key_word_1 {
+        #[doc = "Register `ENTRY_KEY_WORD_1%s` reader"]
+        pub type R = crate::R<EntryKeyWord1Spec>;
+        #[doc = "Register `ENTRY_KEY_WORD_1%s` writer"]
+        pub type W = crate::W<EntryKeyWord1Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Four temporal key bytes."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Four temporal key bytes."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryKeyWord1Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_1::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_1::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryKeyWord1Spec;
+        impl crate::RegisterSpec for EntryKeyWord1Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_key_word_1::R`](R) reader structure"]
+        impl crate::Readable for EntryKeyWord1Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_key_word_1::W`](W) writer structure"]
+        impl crate::Writable for EntryKeyWord1Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_KEY_WORD_2 (rw) register accessor: Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_2::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_2::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_key_word_2`] module"]
+    #[doc(alias = "ENTRY_KEY_WORD_2")]
+    pub type EntryKeyWord2 = crate::Reg<entry_key_word_2::EntryKeyWord2Spec>;
+    #[doc = "Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian."]
+    pub mod entry_key_word_2 {
+        #[doc = "Register `ENTRY_KEY_WORD_2%s` reader"]
+        pub type R = crate::R<EntryKeyWord2Spec>;
+        #[doc = "Register `ENTRY_KEY_WORD_2%s` writer"]
+        pub type W = crate::W<EntryKeyWord2Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Four temporal key bytes."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Four temporal key bytes."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryKeyWord2Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_2::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_2::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryKeyWord2Spec;
+        impl crate::RegisterSpec for EntryKeyWord2Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_key_word_2::R`](R) reader structure"]
+        impl crate::Readable for EntryKeyWord2Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_key_word_2::W`](W) writer structure"]
+        impl crate::Writable for EntryKeyWord2Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_KEY_WORD_3 (rw) register accessor: Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_3::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_3::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_key_word_3`] module"]
+    #[doc(alias = "ENTRY_KEY_WORD_3")]
+    pub type EntryKeyWord3 = crate::Reg<entry_key_word_3::EntryKeyWord3Spec>;
+    #[doc = "Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian."]
+    pub mod entry_key_word_3 {
+        #[doc = "Register `ENTRY_KEY_WORD_3%s` reader"]
+        pub type R = crate::R<EntryKeyWord3Spec>;
+        #[doc = "Register `ENTRY_KEY_WORD_3%s` writer"]
+        pub type W = crate::W<EntryKeyWord3Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Four temporal key bytes."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Four temporal key bytes."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Four temporal key bytes."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryKeyWord3Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_key_word_3::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_key_word_3::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryKeyWord3Spec;
+        impl crate::RegisterSpec for EntryKeyWord3Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_key_word_3::R`](R) reader structure"]
+        impl crate::Readable for EntryKeyWord3Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_key_word_3::W`](W) writer structure"]
+        impl crate::Writable for EntryKeyWord3Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_TAIL_WORD_0 (rw) register accessor: Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_0::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_0::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_tail_word_0`] module"]
+    #[doc(alias = "ENTRY_TAIL_WORD_0")]
+    pub type EntryTailWord0 = crate::Reg<entry_tail_word_0::EntryTailWord0Spec>;
+    #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+    pub mod entry_tail_word_0 {
+        #[doc = "Register `ENTRY_TAIL_WORD_0%s` reader"]
+        pub type R = crate::R<EntryTailWord0Spec>;
+        #[doc = "Register `ENTRY_TAIL_WORD_0%s` writer"]
+        pub type W = crate::W<EntryTailWord0Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryTailWord0Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_0::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_0::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryTailWord0Spec;
+        impl crate::RegisterSpec for EntryTailWord0Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_tail_word_0::R`](R) reader structure"]
+        impl crate::Readable for EntryTailWord0Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_tail_word_0::W`](W) writer structure"]
+        impl crate::Writable for EntryTailWord0Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_TAIL_WORD_1 (rw) register accessor: Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_1::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_1::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_tail_word_1`] module"]
+    #[doc(alias = "ENTRY_TAIL_WORD_1")]
+    pub type EntryTailWord1 = crate::Reg<entry_tail_word_1::EntryTailWord1Spec>;
+    #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+    pub mod entry_tail_word_1 {
+        #[doc = "Register `ENTRY_TAIL_WORD_1%s` reader"]
+        pub type R = crate::R<EntryTailWord1Spec>;
+        #[doc = "Register `ENTRY_TAIL_WORD_1%s` writer"]
+        pub type W = crate::W<EntryTailWord1Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryTailWord1Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_1::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_1::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryTailWord1Spec;
+        impl crate::RegisterSpec for EntryTailWord1Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_tail_word_1::R`](R) reader structure"]
+        impl crate::Readable for EntryTailWord1Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_tail_word_1::W`](W) writer structure"]
+        impl crate::Writable for EntryTailWord1Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_TAIL_WORD_2 (rw) register accessor: Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_2::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_2::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_tail_word_2`] module"]
+    #[doc(alias = "ENTRY_TAIL_WORD_2")]
+    pub type EntryTailWord2 = crate::Reg<entry_tail_word_2::EntryTailWord2Spec>;
+    #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+    pub mod entry_tail_word_2 {
+        #[doc = "Register `ENTRY_TAIL_WORD_2%s` reader"]
+        pub type R = crate::R<EntryTailWord2Spec>;
+        #[doc = "Register `ENTRY_TAIL_WORD_2%s` writer"]
+        pub type W = crate::W<EntryTailWord2Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryTailWord2Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_2::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_2::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryTailWord2Spec;
+        impl crate::RegisterSpec for EntryTailWord2Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_tail_word_2::R`](R) reader structure"]
+        impl crate::Readable for EntryTailWord2Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_tail_word_2::W`](W) writer structure"]
+        impl crate::Writable for EntryTailWord2Spec {
+            type Safety = crate::Safe;
+        }
+    }
+    #[doc = "ENTRY_TAIL_WORD_3 (rw) register accessor: Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_3::R`]. You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_3::W`]. You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api).\n\nFor information about available fields see [`mod@entry_tail_word_3`] module"]
+    #[doc(alias = "ENTRY_TAIL_WORD_3")]
+    pub type EntryTailWord3 = crate::Reg<entry_tail_word_3::EntryTailWord3Spec>;
+    #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered."]
+    pub mod entry_tail_word_3 {
+        #[doc = "Register `ENTRY_TAIL_WORD_3%s` reader"]
+        pub type R = crate::R<EntryTailWord3Spec>;
+        #[doc = "Register `ENTRY_TAIL_WORD_3%s` writer"]
+        pub type W = crate::W<EntryTailWord3Spec>;
+        #[doc = "Field `VALUE` reader - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueR = crate::FieldReader<u32>;
+        #[doc = "Field `VALUE` writer - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+        pub type ValueW<'a, REG> = crate::FieldWriter<'a, REG, 32, u32, crate::Safe>;
+        impl R {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&self) -> ValueR {
+                ValueR::new(self.bits)
+            }
+        }
+        impl W {
+            #[doc = "Bits 0:31 - Project-assigned name. Cleared by hal_crypto_clr_key_entry."]
+            #[inline(always)]
+            pub fn value(&mut self) -> ValueW<'_, EntryTailWord3Spec> {
+                ValueW::new(self, 0)
+            }
+        }
+        #[doc = "Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.\n\nYou can [`read`](crate::Reg::read) this register and get [`entry_tail_word_3::R`](R). You can [`write_with_zero`](crate::Reg::write_with_zero) this register using [`entry_tail_word_3::W`](W). You can also [`modify`](crate::Reg::modify) this register. See [API](https://docs.rs/svd2rust/#read--modify--write-api)."]
+        pub struct EntryTailWord3Spec;
+        impl crate::RegisterSpec for EntryTailWord3Spec {
+            type Ux = u32;
+        }
+        #[doc = "`read()` method returns [`entry_tail_word_3::R`](R) reader structure"]
+        impl crate::Readable for EntryTailWord3Spec {}
+        #[doc = "`write(|w| ..)` method takes [`entry_tail_word_3::W`](W) writer structure"]
+        impl crate::Writable for EntryTailWord3Spec {
             type Safety = crate::Safe;
         }
     }
@@ -64836,15 +65562,171 @@ pub mod zero_based_field_write {
         }
     }
 
-    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_WORD%s` while publishing zero to every other register bit.
+    /// Write `PEER_LOW` in `WIFI_MAC_KEY_TABLE`.`ENTRY_PEER_LOW%s` while publishing zero to every other register bit.
     #[inline]
-    pub fn mac_key_table_entry_word(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+    pub fn mac_key_entry_peer_low(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
         // SAFETY: the SVD extension explicitly qualifies the zero-based
         // transaction, and generator validation proves every selected field
         // accepts every value representable by its public argument type.
         unsafe {
             registers
-                .entry_word(index)
+                .entry_peer_low(index)
+                .write_with_zero(|writer| writer.peer_low().set(value));
+        }
+    }
+
+    /// Write `PEER_HIGH`, `BITS_16_17_OPAQUE`, `ALGORITHM`, `BIT_20_OPAQUE`, `DIRECTION`, `INTERFACE`, `BIT_26_OPAQUE`, `LOGICAL_INDEX_NOT_THREE`, `BITS_28_29_OPAQUE`, `LOGICAL_KEY_INDEX` in `WIFI_MAC_KEY_TABLE`.`ENTRY_PEER_CONTROL%s` while publishing zero to every other register bit.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "reviewed hardware transaction exposes one typed argument per field"
+    )]
+    #[inline]
+    pub fn mac_key_entry_peer_control(
+        registers: &crate::WifiMacKeyTable,
+        index: usize,
+        peer_high_value: u16,
+        bits_16_17_opaque_value: u8,
+        algorithm_value: u8,
+        bit_20_opaque_value: bool,
+        direction_value: u8,
+        interface_value: u8,
+        bit_26_opaque_value: bool,
+        logical_index_not_three_value: bool,
+        bits_28_29_opaque_value: u8,
+        logical_key_index_value: u8,
+    ) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_peer_control(index)
+                .write_with_zero(|writer| {
+                    writer
+                        .peer_high()
+                        .set(peer_high_value)
+                        .bits_16_17_opaque()
+                        .set(bits_16_17_opaque_value)
+                        .algorithm()
+                        .set(algorithm_value)
+                        .bit_20_opaque()
+                        .bit(bit_20_opaque_value)
+                        .direction()
+                        .set(direction_value)
+                        .interface()
+                        .set(interface_value)
+                        .bit_26_opaque()
+                        .bit(bit_26_opaque_value)
+                        .logical_index_not_three()
+                        .bit(logical_index_not_three_value)
+                        .bits_28_29_opaque()
+                        .set(bits_28_29_opaque_value)
+                        .logical_key_index()
+                        .set(logical_key_index_value)
+                });
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_KEY_WORD_0%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_key_word_0(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_key_word_0(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_KEY_WORD_1%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_key_word_1(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_key_word_1(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_KEY_WORD_2%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_key_word_2(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_key_word_2(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_KEY_WORD_3%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_key_word_3(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_key_word_3(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_TAIL_WORD_0%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_tail_word_0(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_tail_word_0(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_TAIL_WORD_1%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_tail_word_1(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_tail_word_1(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_TAIL_WORD_2%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_tail_word_2(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_tail_word_2(index)
+                .write_with_zero(|writer| writer.value().set(value));
+        }
+    }
+
+    /// Write `VALUE` in `WIFI_MAC_KEY_TABLE`.`ENTRY_TAIL_WORD_3%s` while publishing zero to every other register bit.
+    #[inline]
+    pub fn mac_key_entry_tail_word_3(registers: &crate::WifiMacKeyTable, index: usize, value: u32) {
+        // SAFETY: the SVD extension explicitly qualifies the zero-based
+        // transaction, and generator validation proves every selected field
+        // accepts every value representable by its public argument type.
+        unsafe {
+            registers
+                .entry_tail_word_3(index)
                 .write_with_zero(|writer| writer.value().set(value));
         }
     }

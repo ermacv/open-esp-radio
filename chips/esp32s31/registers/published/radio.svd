@@ -7615,22 +7615,348 @@
       <name>WIFI_MAC_KEY_TABLE</name>
       <description>Twenty-five entries of ten 32-bit words. Complete
         hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten
-        ordered stores; set/get leaves prove the peer/control/key layout.</description>
+        ordered stores; set/get leaves prove the peer/control/key layout:
+        the peer address and control word, four words of temporal key and
+        four words the CCMP transaction only clears.</description>
       <baseAddress>0x20105800</baseAddress>
       <registers>
         <register>
-          <dim>250</dim>
-          <dimIncrement>0x4</dimIncrement>
-          <dimIndex>0-249</dimIndex>
-          <name>ENTRY_WORD%s</name>
-          <description>Project-assigned name. Flat key-table word; entry is index/10 and word is index%10. Words zero and one carry peer/control, later words carry key material for the recovered CCMP transaction.</description>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_PEER_LOW%s</name>
+          <description>Project-assigned name. Word zero of an entry: the first four peer address bytes, little endian.</description>
           <addressOffset>0x0</addressOffset>
           <size>0x20</size>
           <access>read-write</access>
           <fields>
             <field>
+              <name>PEER_LOW</name>
+              <description>Project-assigned name. Peer MAC address bytes 0 to 3, or 0xffffffff for a group key.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_PEER_CONTROL%s</name>
+          <description>Project-assigned name. Word one of an entry: the last two peer address bytes and the control halfword hal_crypto_set_key_entry composes.</description>
+          <addressOffset>0x4</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>PEER_HIGH</name>
+              <description>Project-assigned name. Peer MAC address bytes 4 and 5, or 0xffff for a group key.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>16</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>65535</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BITS_16_17_OPAQUE</name>
+              <description>Opaque: meaning not established. Bits the recovered CCMP transaction writes zero.</description>
+              <bitOffset>16</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>ALGORITHM</name>
+              <description>Project-assigned name. Cipher selector; 3 is CCMP.</description>
+              <bitOffset>18</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BIT_20_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit the recovered CCMP transaction writes zero.</description>
+              <bitOffset>20</bitOffset>
+              <bitWidth>1</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>DIRECTION</name>
+              <description>Project-assigned name. Key use selector: 3 for a pairwise key, 6 for a group key.</description>
+              <bitOffset>21</bitOffset>
+              <bitWidth>3</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>7</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>INTERFACE</name>
+              <description>Project-assigned name. Interface the key belongs to: 0 station, 1 access point.</description>
+              <bitOffset>24</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BIT_26_OPAQUE</name>
+              <description>Opaque: meaning not established. Bit the recovered CCMP transaction writes zero.</description>
+              <bitOffset>26</bitOffset>
+              <bitWidth>1</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>LOGICAL_INDEX_NOT_THREE</name>
+              <description>Project-assigned name. Set unless the logical key index is three.</description>
+              <bitOffset>27</bitOffset>
+              <bitWidth>1</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>1</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>BITS_28_29_OPAQUE</name>
+              <description>Opaque: meaning not established. Bits the recovered CCMP transaction writes zero.</description>
+              <bitOffset>28</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+            <field>
+              <name>LOGICAL_KEY_INDEX</name>
+              <description>Project-assigned name. Logical key slot: zero for a pairwise key, the key identifier for a group key.</description>
+              <bitOffset>30</bitOffset>
+              <bitWidth>2</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>3</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_KEY_WORD_0%s</name>
+          <description>Project-assigned name. Temporal key bytes 0 to 3 of an entry, little endian.</description>
+          <addressOffset>0x8</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
               <name>VALUE</name>
-              <description>Project-assigned name.</description>
+              <description>Project-assigned name. Four temporal key bytes.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_KEY_WORD_1%s</name>
+          <description>Project-assigned name. Temporal key bytes 4 to 7 of an entry, little endian.</description>
+          <addressOffset>0xC</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Four temporal key bytes.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_KEY_WORD_2%s</name>
+          <description>Project-assigned name. Temporal key bytes 8 to 11 of an entry, little endian.</description>
+          <addressOffset>0x10</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Four temporal key bytes.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_KEY_WORD_3%s</name>
+          <description>Project-assigned name. Temporal key bytes 12 to 15 of an entry, little endian.</description>
+          <addressOffset>0x14</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Four temporal key bytes.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_TAIL_WORD_0%s</name>
+          <description>Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.</description>
+          <addressOffset>0x18</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Cleared by hal_crypto_clr_key_entry.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_TAIL_WORD_1%s</name>
+          <description>Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.</description>
+          <addressOffset>0x1C</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Cleared by hal_crypto_clr_key_entry.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_TAIL_WORD_2%s</name>
+          <description>Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.</description>
+          <addressOffset>0x20</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Cleared by hal_crypto_clr_key_entry.</description>
+              <bitOffset>0</bitOffset>
+              <bitWidth>32</bitWidth>
+              <writeConstraint>
+                <range>
+                  <minimum>0</minimum>
+                  <maximum>4294967295</maximum>
+                </range>
+              </writeConstraint>
+            </field>
+          </fields>
+        </register>
+        <register>
+          <dim>25</dim>
+          <dimIncrement>0x28</dimIncrement>
+          <dimIndex>0-24</dimIndex>
+          <name>ENTRY_TAIL_WORD_3%s</name>
+          <description>Project-assigned name. Word the CCMP transaction only clears; its other users are not recovered.</description>
+          <addressOffset>0x24</addressOffset>
+          <size>0x20</size>
+          <access>read-write</access>
+          <fields>
+            <field>
+              <name>VALUE</name>
+              <description>Project-assigned name. Cleared by hal_crypto_clr_key_entry.</description>
               <bitOffset>0</bitOffset>
               <bitWidth>32</bitWidth>
               <writeConstraint>
