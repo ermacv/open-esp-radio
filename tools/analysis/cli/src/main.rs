@@ -6,8 +6,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use oer_analysis_blobray_application as app;
 use oer_analysis_blobray_domain::CheckVerdict;
 use oer_analysis_riscv_model::{
-    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionDecoder, FunctionSemantics,
-    ReadOnlyWindow, Result,
+    CallAbi, DEFAULT_WORKING_BYTES, Error, ErrorCode, FunctionDecoder, FunctionIndex,
+    FunctionSemantics, ReadOnlyWindow, RecordPolicy, Result,
 };
 use std::io::Write;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
@@ -432,11 +432,10 @@ fn field_accesses(
                     partial_causes.add(analyzed.partial_causes(c)?);
                     unknown_addresses +=
                         oer_tool_analysis_cli::field::unknown_addresses(analyzed.records);
-                    let accesses = oer_tool_analysis_cli::field::field_accesses(
-                        analyzed.records,
-                        offset,
-                        width,
-                    );
+                    let facts =
+                        FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, &memory, c)?;
+                    let accesses =
+                        oer_tool_analysis_cli::field::field_accesses(&facts, offset, width, c)?;
                     if !accesses.is_empty() {
                         functions.push(oer_tool_analysis_cli::wire::FieldAccessFunction {
                             function: analyzed.function.clone(),
@@ -1437,11 +1436,11 @@ fn call_arguments(
                     let image = images
                         .get(analyzed.function.input as usize)
                         .and_then(Option::as_ref);
+                    let facts =
+                        FunctionIndex::new(analyzed.records, RecordPolicy::Dictionary, &memory, c)?;
                     let sites = oer_tool_analysis_cli::call_arguments::call_sites(
-                        analyzed.records,
-                        &symbols,
-                        image,
-                    );
+                        &facts, &symbols, image, c,
+                    )?;
                     if !sites.is_empty() {
                         callers.push(oer_tool_analysis_cli::wire::CallingFunction {
                             function: analyzed.function.clone(),

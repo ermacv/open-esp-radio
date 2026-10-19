@@ -713,10 +713,21 @@ mod tests {
             },
         ]);
         let facts = Facts::new(&records, &memory, &mut || Ok(())).unwrap();
-        let Expression::Integer { .. } = facts.expression(2).unwrap() else {
+        let Expression::Integer { .. } = facts
+            .expression(2, &mut || Ok(()))
+            .expect("lookup succeeds")
+            .expect("expression 2 exists")
+        else {
             panic!()
         };
-        let (_, width, mask) = read_mask(&facts, facts.expression(2).unwrap()).unwrap();
+        let (_, width, mask) = read_mask(
+            &facts,
+            facts
+                .expression(2, &mut || Ok(()))
+                .expect("lookup succeeds")
+                .expect("expression 2 exists"),
+        )
+        .unwrap();
         assert_eq!((width, mask.bits), (2, 0xf0));
         assert_eq!(
             write_mask(&facts, &number(0x20000), 2, &value(4))

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fmt, str::FromStr};
 
+mod navigation;
+pub use navigation::*;
 mod function;
 pub use function::*;
 mod resources;

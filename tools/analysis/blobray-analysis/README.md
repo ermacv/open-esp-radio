@@ -24,6 +24,8 @@ observation-followed transfers, which application's code coverage compares
 with executed instructions. Decoding shares the working capacity and run
 control; the function count is bounded.
 
-`navigation::Facts` indexes one function's flat record stream and interprets
-its memory accesses without storage, linking or binding authority; unknown
+`navigation::Facts` requires canonical records through the shared
+[`FunctionIndex`](../riscv-model/src/navigation.rs), preserving the earlier-ID DAG
+that the expression evaluators require. The wrapper owns no tables or scans;
+all structural lookups and memory-access visits use the model's index. Unknown
 addresses remain explicit.
