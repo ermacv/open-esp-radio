@@ -62,6 +62,8 @@ struct LayoutSource {
     words: Vec<UnitSource>,
     #[serde(default)]
     bytes: Vec<UnitSource>,
+    #[serde(default)]
+    array: Option<LayoutArray>,
 }
 
 #[derive(Deserialize)]
@@ -90,6 +92,34 @@ struct FieldSource {
     placement: Vec<String>,
     #[serde(default)]
     points_to: Option<String>,
+    #[serde(default)]
+    encoding: Option<PointerEncoding>,
+    #[serde(default)]
+    phases: Vec<LayoutPhase>,
+}
+
+/// A fixed-size array of another shared layout.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct LayoutArray {
+    pub element: String,
+    pub count: u32,
+}
+
+/// The controller's representation of a pointer field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PointerEncoding {
+    /// Nonzero 20-bit word index, reconstructed with the 0x2f SRAM prefix.
+    BleCompressed,
+}
+
+/// One named handover phase and its sole writer.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct LayoutPhase {
+    pub name: String,
+    pub writer: LayoutWriter,
 }
 
 /// How the CPU reaches a word or byte range.
@@ -109,6 +139,7 @@ pub enum LayoutAccess {
 pub enum LayoutWriter {
     Cpu,
     Hardware,
+    Phased,
 }
 
 impl LayoutWriter {
@@ -116,6 +147,7 @@ impl LayoutWriter {
         match self {
             Self::Cpu => "the CPU",
             Self::Hardware => "the hardware",
+            Self::Phased => "the participants in the declared phases",
         }
     }
 }
@@ -125,6 +157,7 @@ impl LayoutWriter {
 pub enum LayoutKind {
     Words,
     Bytes,
+    Array,
 }
 
 /// One validated memory layout.
@@ -139,6 +172,7 @@ pub struct MemoryLayout {
     /// The layout whose geometry this one repeats.
     pub same_geometry_as: Option<String>,
     pub kind: LayoutKind,
+    pub array: Option<LayoutArray>,
     /// Words or byte ranges, in offset order.
     pub units: Vec<LayoutUnit>,
     pub review: Vec<ReviewAnnotation>,
@@ -165,31 +199,38 @@ pub struct LayoutField {
     pub low: u32,
     pub width: u32,
     pub writer: LayoutWriter,
+    pub phases: Vec<LayoutPhase>,
     pub description: Option<String>,
     /// RAM regions an address this field holds must lie in.
     pub placement: Vec<String>,
     /// The layout an address this field holds points at.
     pub points_to: Option<String>,
+    pub encoding: Option<PointerEncoding>,
 }
 
 impl MemoryLayout {
     /// Whether a typed reference may point at this layout: a word layout
     /// placed in the DMA region only.
     pub fn is_dma_target(&self) -> bool {
-        self.kind == LayoutKind::Words && self.placement == [DMA_REGION]
+        matches!(self.kind, LayoutKind::Words | LayoutKind::Array) && self.placement == [DMA_REGION]
     }
 }
 
 impl LayoutUnit {
     /// Whether the CPU writes any field of this range.
     pub fn is_cpu_written(&self) -> bool {
-        self.fields
-            .iter()
-            .any(|field| field.writer == LayoutWriter::Cpu)
+        self.fields.iter().any(LayoutField::is_cpu_written)
     }
 }
 
 impl LayoutField {
+    fn is_cpu_written(&self) -> bool {
+        self.writer == LayoutWriter::Cpu
+            || self
+                .phases
+                .iter()
+                .any(|phase| phase.writer == LayoutWriter::Cpu)
+    }
     /// Whether this field holds an address: of a buffer or of a layout.
     pub fn is_address(&self) -> bool {
         !self.placement.is_empty() || self.points_to.is_some()
@@ -254,13 +295,24 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         ));
     }
     validate_regions(&source.placement).map_err(|reason| invalid(path, reason))?;
-    let (kind, sources) = match (source.words.is_empty(), source.bytes.is_empty()) {
-        (false, true) => (LayoutKind::Words, source.words),
-        (true, false) => (LayoutKind::Bytes, source.bytes),
+    let (kind, sources) = match (
+        source.words.is_empty(),
+        source.bytes.is_empty(),
+        &source.array,
+    ) {
+        (false, true, None) => (LayoutKind::Words, source.words),
+        (true, false, None) => (LayoutKind::Bytes, source.bytes),
+        (true, true, Some(array)) => {
+            validate_name(&array.element).map_err(|reason| invalid(path, reason))?;
+            if array.count == 0 {
+                return Err(invalid(path, "an array needs a nonzero count"));
+            }
+            (LayoutKind::Array, Vec::new())
+        }
         _ => {
             return Err(invalid(
                 path,
-                "a layout declares either [[layout.words]] or [[layout.bytes]]",
+                "a layout declares either [[layout.words]], [[layout.bytes]] or [layout.array]",
             ));
         }
     };
@@ -313,6 +365,7 @@ fn parse_layout(path: &Path, file: LayoutFile, naming: NamingRequirement) -> Res
         placement: source.placement,
         same_geometry_as: source.same_geometry_as,
         kind,
+        array: source.array,
         units,
         review: file.review,
     };
@@ -343,10 +396,12 @@ fn parse_unit(kind: LayoutKind, layout_size: u32, source: UnitSource) -> Result<
                 source.name
             )));
         }
+        (LayoutKind::Array, _) => return Err(Error::message("an array has no units")),
     };
     let expected = match kind {
         LayoutKind::Words => LayoutAccess::Shared,
         LayoutKind::Bytes => LayoutAccess::Owned,
+        LayoutKind::Array => return Err(Error::message("an array has no units")),
     };
     if source.access != expected {
         return Err(Error::message(format!(
@@ -434,10 +489,14 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
         )));
     }
     let width = high - low + 1;
+    if source.encoding.is_some() && source.points_to.is_none() {
+        return Err(Error::message("encoding requires points-to"));
+    }
     if !source.placement.is_empty() || source.points_to.is_some() {
-        if kind != LayoutKind::Words || width != 32 {
+        let expected_width = if source.encoding.is_some() { 20 } else { 32 };
+        if kind != LayoutKind::Words || width != expected_width {
             return Err(Error::message(format!(
-                "{}: only a whole-word address field of a word layout has a placement or points to a layout",
+                "{}: only a whole-word address (or 20-bit ble-compressed pointer) of a word layout has a placement or points to a layout",
                 source.name
             )));
         }
@@ -458,14 +517,32 @@ fn parse_field(kind: LayoutKind, unit_size: u32, source: FieldSource) -> Result<
     if let Some(layout) = &source.points_to {
         validate_name(layout)?;
     }
+    if source.writer == LayoutWriter::Phased {
+        let mut names = BTreeSet::new();
+        if source.phases.is_empty() {
+            return Err(Error::message("a phased writer needs nonempty phases"));
+        }
+        for phase in &source.phases {
+            if phase.name.trim().is_empty() || !names.insert(&phase.name) {
+                return Err(Error::message("phase names must be nonempty and unique"));
+            }
+            if phase.writer == LayoutWriter::Phased {
+                return Err(Error::message("a phase writer must be cpu or hardware"));
+            }
+        }
+    } else if !source.phases.is_empty() {
+        return Err(Error::message("only a phased writer declares phases"));
+    }
     Ok(LayoutField {
         name: source.name,
         low,
         width,
         writer: source.writer,
+        phases: source.phases,
         description: source.description,
         placement: source.placement,
         points_to: source.points_to,
+        encoding: source.encoding,
     })
 }
 
@@ -540,6 +617,28 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
         }
     }
     for layout in layouts {
+        if let Some(array) = &layout.array {
+            let element = layouts
+                .iter()
+                .find(|candidate| {
+                    candidate.name == array.element && candidate.kind == LayoutKind::Words
+                })
+                .ok_or_else(|| {
+                    Error::message(format!(
+                        "{} array element {} is not a word layout",
+                        layout.name, array.element
+                    ))
+                })?;
+            if element.size.checked_mul(array.count) != Some(layout.size)
+                || element.align != layout.align
+                || element.placement != layout.placement
+            {
+                return Err(Error::message(format!(
+                    "{} array size, alignment or placement differs from its elements",
+                    layout.name
+                )));
+            }
+        }
         if let Some(other) = &layout.same_geometry_as {
             let other = layouts
                 .iter()
@@ -558,7 +657,7 @@ fn validate_layout_set(layouts: &[MemoryLayout]) -> Result<()> {
                     continue;
                 };
                 let target_layout = layouts.iter().find(|candidate| {
-                    &candidate.name == target && candidate.kind == LayoutKind::Words
+                    &candidate.name == target && candidate.kind != LayoutKind::Bytes
                 });
                 match target_layout {
                     None => {
@@ -596,6 +695,9 @@ fn validate_same_geometry(layout: &MemoryLayout, other: &MemoryLayout) -> Result
     if layout.placement != other.placement {
         return Err(differs("placement"));
     }
+    if layout.array != other.array {
+        return Err(differs("array"));
+    }
     if layout.units.len() != other.units.len() {
         return Err(differs("set of words"));
     }
@@ -630,6 +732,7 @@ fn validate_reviews(layout: &MemoryLayout, naming: NamingRequirement) -> Result<
                 false,
             ),
             LayoutKind::Bytes => format!("BYTE_{:04X}{}", unit.offset, crate::OPAQUE_SUFFIX),
+            LayoutKind::Array => return Err(Error::message("an array has no units")),
         };
         entities.insert(path.clone(), Some(position));
         for field in &unit.fields {
@@ -825,6 +928,7 @@ pub(crate) fn render(
         match layout.kind {
             LayoutKind::Words => render_words(&mut output, layout),
             LayoutKind::Bytes => render_bytes(&mut output, layout),
+            LayoutKind::Array => render_array(&mut output, layout),
         }
     }
     output.push_str("}\n");
@@ -896,6 +1000,55 @@ fn render_addresses(output: &mut String, layouts: &[MemoryLayout]) {
             "impl sealed::Sealed for {ty} {{}}\nimpl DmaLayout for {ty} {{}}\n"
         );
     }
+    if layouts
+        .iter()
+        .flat_map(|layout| &layout.units)
+        .flat_map(|unit| &unit.fields)
+        .any(|field| field.encoding == Some(PointerEncoding::BleCompressed))
+    {
+        output.push_str(
+            "impl<L: DmaLayout> DmaRef<L> {\n\
+            /// The nonzero BLE word index, if the address is encodable.\n\
+            pub const fn ble_compressed(self) -> Option<u32> {\n\
+            let address = self.bits();\n\
+            let index = (address >> 2) & 0x000f_ffff;\n\
+            if address & 0xffc0_0003 != 0x2f00_0000 || index == 0 { None } else { Some(index) }\n\
+            }\n}\n",
+        );
+    }
+}
+
+fn render_array(output: &mut String, layout: &MemoryLayout) {
+    let Some(array) = &layout.array else { return };
+    let ty = camel(&layout.name);
+    let element = camel(&array.element);
+    let count = array.count;
+    push_doc(output, &layout.description, "");
+    if let Some(line) = sources_line(&layout.review, &layout.name) {
+        let _ = writeln!(output, "/// {line}");
+    }
+    let _ = writeln!(
+        output,
+        "#[repr(C, align({}))]\npub struct {ty} {{ entries: [{element}; {count}] }}\n\
+        const _: () = {{ assert!(core::mem::size_of::<{ty}>() == {});\n\
+        assert!(core::mem::align_of::<{ty}>() == {}); }};\n\
+        #[allow(unsafe_code, reason = \"an array of zeroable layouts is zeroable\")]\n\
+        // SAFETY: each element is a zeroable generated layout and there is no extra state.\n\
+        unsafe impl bytemuck::Zeroable for {ty} {{}}\n\
+        impl {ty} {{\n\
+        pub const SIZE: usize = {};\n\
+        pub const ALIGN: usize = {};\n\
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[{}];\n\
+        pub const fn zeroed() -> Self {{ Self {{ entries: [const {{ {element}::zeroed() }}; {count}] }} }}\n\
+        pub fn entry(&self, index: usize) -> Option<&{element}> {{ self.entries.get(index) }}\n\
+        }}\n",
+        layout.align,
+        layout.size,
+        layout.align,
+        layout.size,
+        layout.align,
+        placement_list(&layout.placement)
+    );
 }
 
 fn placement_list(regions: &[String]) -> String {
@@ -1066,6 +1219,9 @@ fn render_field(
         field.name,
         field.writer.label()
     );
+    for phase in &field.phases {
+        let _ = write!(doc, " Phase `{}`: {}.", phase.name, phase.writer.label());
+    }
     if !field.placement.is_empty() {
         let _ = write!(
             doc,
@@ -1106,6 +1262,38 @@ fn render_field(
         return;
     }
     if field.is_address() {
+        if field.encoding == Some(PointerEncoding::BleCompressed) {
+            let target = camel(
+                field
+                    .points_to
+                    .as_deref()
+                    .expect("validated pointer target"),
+            );
+            let low = field.low;
+            let _ = writeln!(
+                output,
+                "    pub const fn {name}(self) -> u32 {{ (self.0 >> {low}) & 0x{mask:x} }}\n\
+                /// The decoded address, without granting a reference to the memory.\n\
+                pub const fn {name}_address(self) -> Option<u32> {{\n\
+                let index = self.{name}();\n\
+                if index == 0 {{ None }} else {{ Some(0x2f00_0000 | (index << 2)) }}\n\
+                }}\n"
+            );
+            if builders {
+                let _ = writeln!(
+                    output,
+                    "    /// Set a nullable BLE link, preserving the other fields.\n\
+                    pub const fn with_{name}(self, value: Option<DmaRef<{target}>>) -> Option<Self> {{\n\
+                    let index = match value {{\n\
+                    None => 0,\n\
+                    Some(reference) => match reference.ble_compressed() {{ Some(index) => index, None => return None }},\n\
+                    }};\n\
+                    Some(Self((self.0 & 0x{keep:x}) | (index << {low})))\n\
+                    }}\n"
+                );
+            }
+            return;
+        }
         let _ = writeln!(
             output,
             "    pub const fn {name}(self) -> u32 {{ self.0 }}\n"
@@ -1275,7 +1463,7 @@ fn render_bytes(output: &mut String, layout: &MemoryLayout) {
                 unit,
                 field,
                 unit_type,
-                field.writer == LayoutWriter::Cpu,
+                field.is_cpu_written(),
             );
         }
         output.push_str("}\n\n");

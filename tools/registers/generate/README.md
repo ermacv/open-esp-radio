@@ -77,7 +77,7 @@ Each schema-1 file holds one `[layout]` with `name`, `description`, `size`,
 `[[layout.words]]` (`access = "shared"`, every 32-bit word declared, in
 offset order) or `[[layout.bytes]]` (`access = "owned"`, ranges of one, two
 or four little-endian bytes). A word or range has `fields` with `bits`
-(`"N"` or `"HIGH:LOW"`), `writer` (`cpu` or `hardware`) and an optional
+(`"N"` or `"HIGH:LOW"`), `writer` (`cpu`, `hardware` or `phased`) and an optional
 `description`; a whole-word address field names either the `placement` of
 the buffer it points at or, in `points-to`, the layout it links to. Typed
 addresses exist for the `dma-window` region only: such a field's placement,
@@ -86,6 +86,24 @@ not overlap. A layout
 that repeats another's geometry names it in `same-geometry-as`; the tool
 checks that size, alignment, placement, words and the bits of every field
 both name agree (the RX and TX DMA descriptors).
+
+`writer = "phased"` requires a nonempty ordered `phases` list of
+`{ name, writer }` entries. Names are unique and each phase's writer is
+`cpu` or `hardware`. Single-writer fields cannot declare phases. These
+declarations document handover; they do not implement its protocol.
+
+A 20-bit pointer field can name `points-to` with
+`encoding = "ble-compressed"`: a nonzero word index with a reconstructed
+`0x2f` SRAM prefix. Its builder accepts `Option<DmaRef<L>>` and returns
+`None` for an unencodable reference; clearing the pointer preserves other
+fields of the word. Its decoded-address getter grants no reference to
+hardware-written memory.
+
+Instead of words or byte ranges, a fixed array declares `[layout.array]`
+with `element = "<LAYOUT>"` and `count`. The element must be a shared word
+layout, with the same alignment and placement as the array, whose size is
+the element size times count. The generated array exposes checked
+`entry(index)` access and is itself a typed pointer target.
 
 Its `[[review]]` entries follow the register rules: for publication the
 layout, every word or range and every field carry sources, provenance (not
