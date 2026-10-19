@@ -1,4 +1,4 @@
-//! Execution of typed HIL scenarios ([#761]).
+//! Execution of typed HIL scenarios.
 //!
 //! A scenario is an [`oer_hil_model::Spec`]; executing it is [`Run<X>`]
 //! for an [`Executor`]: [`Model`] around a [`ModelDriver`], or [`Stand`]
@@ -124,8 +124,6 @@
 //! Its `clippy.toml`, a copy of the HIL scenario crates' group, forbids
 //! duration literals and `thread::sleep`: waits come from
 //! [`oer_hil_model::Wait`].
-//!
-//! [#761]: https://github.com/the predecessor repository/issues/761
 #![forbid(unsafe_code)]
 
 mod execute;

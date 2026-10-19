@@ -1,5 +1,4 @@
-//! The header every HIL conformance trace starts with ([#761], owner
-//! decision ).
+//! The header every HIL conformance trace starts with.
 //!
 //! A port's conformance crate owns its bounds as a type (`struct Bounds`
 //! with named fields and `const CEILINGS: Bounds`) and needs no HIL
@@ -9,8 +8,6 @@
 //! one run with [`check_run`]. The crate is `no_std` and allocation-free,
 //! so the firmware uses it as it is; the `wire` feature derives
 //! `postcard_schema::Schema` for the HIL protocol.
-//!
-//! [#761]: https://github.com/the predecessor repository/issues/761
 #![no_std]
 #![forbid(unsafe_code)]
 

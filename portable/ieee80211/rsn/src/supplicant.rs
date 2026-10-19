@@ -35,7 +35,7 @@ pub const RSN_STA_MESSAGE1_TIMEOUT: Duration = Duration::from_secs(3);
 /// wpa_supplicant_process_1_of_4` emits one Message 2 and does not register a
 /// retransmission timeout. A repeated Message 1 instead re-enters through
 /// `wpa_sm_rx_eapol` and produces another Message 2. The six-second value
-/// preserves the two former three-second hardware receive windows without
+/// covers two three-second hardware receive windows without
 /// inventing a station-originated Message 2 retry.
 pub const RSN_STA_MESSAGE3_TIMEOUT: Duration = Duration::from_secs(6);
 

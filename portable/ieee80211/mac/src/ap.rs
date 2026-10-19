@@ -1073,7 +1073,7 @@ pub enum ApPowerSaveObservation {
     PsPoll { peer: [u8; 6], association_id: u16 },
 }
 
-/// Parse the RX-derived power-save edge used by the migrated AP owner.
+/// Parse the RX-derived power-save edge the AP owner uses.
 ///
 /// Association validation is intentionally separate: the AP peer table must
 /// confirm that `peer` currently owns the reported association ID.

@@ -2,8 +2,8 @@
 
 The open radio role, runtime and Controller core that this page compares
 with the vendor are not in this repository; the passages that name them
-describe the predecessor repository's implementation, and the kept memory
-codecs, executor and portable pieces still follow them.
+describe an implementation outside this repository, which the memory
+codecs, executor and portable pieces here follow.
 
 This reference covers legacy LE 1M primary-channel scanning, passive and
 active, and the hardware observations needed for HCI LE Advertising Reports.
@@ -454,8 +454,8 @@ publishes the table's compressed first-entry address in
 `BTMAC_BLE_PHY_INIT.DEVICE_TABLE_FIRST_ENTRY` and its entry count in the low
 octet of `BTMAC_BLE_PHY_INIT.DEVICE_TABLE_CONTROL`, preserving the rest of
 that register; the vendor writes the first-entry address even for an empty
-list. The S31 build keeps 12 entries. The predecessor repository's device
-table owner keeps members packed from the first entry, so the count is the
+list. The S31 build keeps 12 entries. The device table owner of an
+implementation outside this repository keeps members packed from the first entry, so the count is the
 number of listed devices; it holds no resolving-list entries.
 
 ## Scope boundary

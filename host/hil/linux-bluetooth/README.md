@@ -207,11 +207,11 @@ still advertising. Every other failure ends the repetition. The host's
 connect alone proves nothing, because the kernel may report the socket
 connected before the first procedure. An attempt therefore succeeds only once
 the DUT reports that connection within two seconds; otherwise the host closes
-its side and the attempt is judged as above ().
+its side and the attempt is judged as above.
 
 Every attempt lands in the observation's `connection_attempts`, with its phase,
 the DUT connection number it was for, its attempt number, outcome and the
-host-side error, so the loss stays visible (). The outcome is
+host-side error, so the loss stays visible. The outcome is
 `established`, `not-established` (retried), `failed` (the DUT saw the
 connection) or `unobserved` (the DUT's own observation failed). A failed
 observation reports its own cause together with the attempt's host-side
@@ -221,7 +221,7 @@ better), which `cargo hil runs history` and `runs compare` follow. The
 plaintext GATT workload also publishes `connections-lost-before-att` (lower is
 better): a confirmed connection the DUT reports closed by supervision timeout
 (0x08) before any ATT exchange on it, listed as `lost_before_att` in the
-observation (). The repetition still fails; on the trace image the failed
+observation. The repetition still fails; on the trace image the failed
 cycle's trace lands in the post-mortem. The bound of
 three attempts guards against the environment; it is no acceptance threshold.
 Whether a loss rate is acceptable is qualification's decision: the

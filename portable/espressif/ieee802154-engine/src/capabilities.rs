@@ -2,10 +2,10 @@
 //! port reports them for the radio, and the capability table a chip
 //! publishes from its own transmit-power level set.
 //!
-//! The CCA threshold, CSL, enhanced-ACK capacities and the other values
-//! were the former IEEE 802.15.4 role's. The operation set is that role's
+//! The CCA threshold, CSL, enhanced-ACK capacities and the other values are
+//! those of an IEEE 802.15.4 radio role. The operation set is that role's
 //! without `CSMA_CA` and `TRANSMIT_RETRIES`, which belong above the port. No
-//! port backend publishes them now.
+//! port backend in this repository publishes them.
 
 use oer_ieee802154_mac::{
     CcaThresholdCapability, CslCapability, Ieee802154Capabilities, RadioCapabilities,

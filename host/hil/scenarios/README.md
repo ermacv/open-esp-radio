@@ -1,9 +1,7 @@
 # Versioned scenario catalog
 
 Folders identify the workload domain: system. No IEEE 802.11, Bluetooth,
-IEEE 802.15.4, coexistence or PHY scenario exists: they were deleted with the
-images they ran on (, tag `legacy-wifi-2026-10-16`; , tag
-`legacy-radio-2026-10-16`) and return with the HIL architecture of .
+IEEE 802.15.4, coexistence or PHY scenario exists.
 Scenario IDs are stable across folder moves. Tags select overlapping
 diagnostic and characterization uses; they do not assign ownership or make a
 hardware-readiness claim.
@@ -103,9 +101,9 @@ Both readers' tests use them; they are not part of this catalog.
 
 An optional top-level `[profile]` table (`harts = "both" | "core0" |
 "core1"`, `period-us` in 100..=100000) samples the program counter of the
-image's harts during the workload's measured window. The sampler (`pc-profile`)
-was deleted (, tag `legacy-wifi-2026-10-16`), so the runner refuses every profile request;
-when a class samples again, only
+image's harts during the workload's measured window. No image has the sampler
+(`pc-profile`), so the runner refuses every profile request;
+when a class samples, only
 an `investigation` scenario without the `performance` tag may request it:
 sampling perturbs timing. The table is part of the procedure, so a profiled scenario
 is a different scenario from its unprofiled copy, and its evidence never

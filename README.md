@@ -24,7 +24,7 @@ Not affiliated with or endorsed by Espressif Systems.
 | `tools/` | the host programs: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
 | `registers/` | the reviewed register model (`cargo registers` publishes its SVD and PAC) |
 | `knowledge/` | recovered hardware facts and research notes |
-| `docs/` | architecture, owner decisions, source policy, hardware errata |
+| `docs/` | architecture, decisions, source policy, hardware errata |
 
 ## Build
 

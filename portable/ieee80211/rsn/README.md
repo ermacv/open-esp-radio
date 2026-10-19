@@ -91,12 +91,12 @@ fixed-size fields as array references obtained with `split_first_chunk`.
 Variable-length envelopes must establish each boundary before those fields
 reach crypto and handshake transitions. Runtime expect/unwrap paths become
 retained type proofs or typed peer-input refusals, without mechanically
-replacing indexing with `.get()` or suppressing the lint. Policy is enabled at
-the crate root when that migration is complete.
+replacing indexing with `.get()` or suppressing the lint. The crate root does
+not enable the policy.
 
 ## Known defects
 
-Found in the predecessor's review of 2026-10-16 and still present.
+Found in a code review of 2026-10-16 (record outside this repository).
 
 - **The authenticator reuses the replay counter on M1/M3 retries.**
   `state/authenticator.rs::RsnApState::retry_transmit` resends the stored

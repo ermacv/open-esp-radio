@@ -195,8 +195,7 @@ pub struct Wait(Source);
 
 impl Wait {
     /// A contract's ceiling times a factor: the value of the port's own
-    /// `CEILINGS` constant, which no backend may exceed (, owner
-    /// decisions  and ).
+    /// `CEILINGS` constant, which no backend may exceed.
     pub const fn contract(ceiling: oer_base_time::Duration, factor: Factor) -> Self {
         Self(Source::Contract {
             ceiling_micros: ceiling.as_micros(),

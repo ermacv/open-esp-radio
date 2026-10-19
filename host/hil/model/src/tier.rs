@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub enum Tier {
     /// Every candidate a HIL change needs: minutes, one image.
     Smoke,
-    /// Rare, at a stage: about one hour (, owner decision 1).
+    /// Rare, at a gate: about one hour.
     StageGate,
     /// Before a milestone; its duration is reported, not capped.
     Full,
@@ -25,7 +25,6 @@ impl Tier {
         match self {
             //  architecture, section 6: smoke within five minutes.
             Self::Smoke => Some(5 * MINUTE),
-            //  owner decision 1: a stage gate targets about one hour.
             Self::StageGate => Some(60 * MINUTE),
             Self::Full | Self::Nightly => None,
         }

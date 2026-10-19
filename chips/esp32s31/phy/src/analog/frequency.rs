@@ -253,7 +253,7 @@ impl PhyFrequencyCapCorrection {
     }
 }
 
-/// Inputs formerly read by `phy_pll_cap_mem_update` from shared globals.
+/// Inputs that `phy_pll_cap_mem_update` reads from shared globals.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyFrequencyCapMemoryRequest {
     pub correction: PhyFrequencyCapCorrection,
@@ -1167,7 +1167,7 @@ enum PhyChannelFrequencyRfpllAdvance {
 /// Caller-driven replacement for the complete pinned
 /// `phy_set_chan_freq_hw_init(2, 4)` graph.
 ///
-/// The transition owns the former `phy_param[0xa4]` initialized bit. Every
+/// The transition owns the vendor's `phy_param[0xa4]` initialized bit. Every
 /// PHY-I2C transaction, RFPLL timer edge, frequency-memory publication, and
 /// final number-address register image is externally completed. There is no
 /// allocation, internal polling, delay loop, callback, or mutable C state.

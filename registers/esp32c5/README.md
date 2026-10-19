@@ -40,7 +40,7 @@ evidence lists a shift; the eight TX queue banks are `0x78` bytes apart
 instead of `0x7C`. Such reviews use `provenance = "derived"` and
 `completeness = "partial"`. Functions whose C5 bodies differ structurally are
 never evidence for these facts, and ESP32-S31 HIL observations are not
-carried over. The fragments publish register views only; no ESP32-C5 driver
+evidence for the ESP32-C5. The fragments publish register views only; no ESP32-C5 driver
 owns them.
 
 ```console
@@ -51,6 +51,5 @@ cargo registers generate --check --manifest registers/esp32c5/publication/regist
 The generated outputs are this directory's `published/` files. Do not edit
 them directly. No ESP32-C5 PAC crate exists yet: the publication selects
 neither `policy/api.toml` nor PAC outputs, so its binding index names no
-crate. The change that adds the PAC crates selects both again.
-Until then `policy/api.toml` is kept but checked by nothing; the PAC crates
-come in the predecessor port's C5 hardware wave.
+crate; `policy/api.toml` is kept but checked by nothing. A change that adds
+the PAC crates selects both.

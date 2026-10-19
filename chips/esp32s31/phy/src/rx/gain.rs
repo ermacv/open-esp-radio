@@ -682,7 +682,7 @@ impl PhyRxGainPublishExternalBinding {
     }
 }
 
-/// Explicit former `phy_param` inputs of complete
+/// Explicit vendor `phy_param` inputs of complete
 /// `libphy.a[phy_rx_gain.o]::phy_set_rx_gain_table`, size 650.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyRxGainInitParameters {

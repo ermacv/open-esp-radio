@@ -1,6 +1,6 @@
 # PHY acceptance scenarios: vendor calibration cross-check
 
-Predecessor HIL catalog, state of 2026-10-16.
+HIL catalog outside this repository, state of 2026-10-16; its run records are outside this repository too.
 
 These scenarios alternate two firmwares on the same ESP32-S31 board, in
 rounds: the pinned vendor firmware is flashed and booted, then the production
@@ -16,7 +16,7 @@ reference firmware (channel 15, 21 dBm).
 ## Gate: the vendor's own boot-to-boot spread
 
 The gate has no fixed ppm, dB or count tolerance; the reference is how much the
-vendor firmware itself varies from boot to boot (owner rule, 2026-09-27).
+vendor firmware itself varies from boot to boot.
 
 - **Calibration field:** its margin is the widest range that any single
   element spans across the vendor boots. A production element passes when it
@@ -69,15 +69,15 @@ The compared classes:
 - Checks: production calibrates cold (its startup artifact is Created) and
   publishes its calibration; this is compared to the vendor cold boot.
 - Gate: 10 boots per side; MATCH.
-- Hardware: not confirmed as a HIL scenario. A predecessor verification tool
-  reported cold MATCH on 2026-09-27: 155 of 155 registers, 35 of 35 fields.
+- Hardware: not confirmed as a HIL scenario. A verification tool outside
+  this repository reported cold MATCH on 2026-09-27: 155 of 155 registers, 35 of 35 fields.
 
 ## Calibration after a radio restart
 
 - Checks: the production radio restart reports RF closed and woken; the
   restarted state is compared with the vendor's.
 - Gate: 10 boots per side; MATCH.
-- Hardware: fail, predecessor HIL runs up to 2026-10-11. 162 of 163 registers
+- Hardware: fail, stand runs up to 2026-10-11. 162 of 163 registers
   matched. The differences were the coexistence low-power clock register and
   the temperature references. The earlier verification tool reported restart
   MATCH (156 of 156 registers, 38 of 38 fields) on 2026-09-27.
@@ -87,7 +87,7 @@ The compared classes:
 - Checks: production holds an 802.15.4 session receiving on channel 15. Only
   registers are compared; no calibration fields.
 - Gate: 5 boots per side; MATCH.
-- Hardware: fail, predecessor HIL runs up to 2026-10-11. One LSB lies outside
+- Hardware: fail, stand runs up to 2026-10-11. One LSB lies outside
   the vendor spread.
 
 ## Registers after an 802.15.4 session radio restart

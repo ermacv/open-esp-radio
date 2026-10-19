@@ -2,9 +2,8 @@
 
 Source: `esp32s31-bt-lib` `libbtdm_common.a` (pin `10c50778`), member `7.o`
 `r_sym_bt_aGdrujd2MUAzWYH75baR` with its configuration setter and byte-scaling
-helper, and the caller `r_btdm_task_init` in member `20.o`; extracted from
-the predecessor repository's `chips/esp32s31/pac/src/bluetooth/controller/init.rs`
-and its `init/tests.rs`.
+helper, and the caller `r_btdm_task_init` in member `20.o`; from a
+vendor-code analysis (record outside this repository).
 
 Facts only. Fixed values are the ones in the reviewed register model,
 `registers/esp32s31/policy/api.toml` (operations named

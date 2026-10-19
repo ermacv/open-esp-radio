@@ -9,7 +9,7 @@ the SSH that reaches it, and a lock per router.
 - **Boards** on the ports of USB hubs whose port power `uhubctl` switches;
   each board's USB Serial/JTAG serial number is its chip's MAC.
 - **The lab router**, an OpenWrt router whose 2.4 GHz radio serves the
-  stand's access point (the AP the boards hear and, from W3, join).
+  stand's access point (the AP the boards hear and join).
 - **The host** on the router's LAN: it reaches the router over SSH with a
   key (no password prompt is ever answered).
 
@@ -95,7 +95,6 @@ nothing else is read:
 | --- | --- |
 | boards, flashing, power | `schema`, `[[hub]]`, `[[board]]` |
 | W1 (`cargo fw run w1`, `cargo fw router`) | `[station_fixture]` `kind`, `ssh_target`, `wireless_interface`, `radio`, `ap_section`, `channel`; the SSID is generated per run |
-| W2, W3 (planned) | as W1, and what the probe and the open association need |
 | the stand services and HIL (`cargo stand`, `cargo hil`) | also `[stand]`, the boards' `radios`, `roles`, `reset`, `startup-artifact`, the hubs' `buttons`, `[station].ipv4`, `[access_point]` without credentials, `[air_observer]`, `[bluetooth]`, `[legacy_bss]` |
 
 **Secret** are the generated SSIDs and passphrases, `ssh_target` and the
@@ -178,8 +177,8 @@ One process at a time drives the router: `cargo fw` holds an exclusive lock
 
 ## Stand notes
 
-Carried from the predecessor stand (2026-09 to 2026-10). Not yet used by
-`oer-lab-router`; kept for the fixtures that return.
+Facts of the stand's Linux hosts, from stand use 2026-09 to 2026-10 (records
+outside this repository). `oer-lab-router` does not use them.
 
 ### Hub port power without sudo
 
@@ -216,10 +215,10 @@ unmanaged-devices=interface-name:wlan0
 ```
 
 `nmcli -t -f DEVICE,STATE device` then shows `wlan0` as `unmanaged` (or
-not at all). For a run only, the predecessor wrote
+not at all). For a run only, a fixture writes
 `/run/NetworkManager/conf.d/90-open-radio-hil.conf`, ran
 `nmcli general reload conf` and `nmcli device set wlan0 managed no`, and
-removed the file (and set `managed yes`) on release:
+removes the file (and sets `managed yes`) on release:
 
 ```ini
 [device-open-radio-hil]

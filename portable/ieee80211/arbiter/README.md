@@ -148,7 +148,7 @@ does not depend on missed beacons. If no future slot fits the clock range,
 
 ## Known defects
 
-Found in the predecessor's review of 2026-10-16 and still present.
+Found in a code review of 2026-10-16 (record outside this repository).
 
 - **An absence returns to the home channel, not to the primary lease's.**
   `lib.rs::Arbiter::lease_cycle` uses `Granted.returns: bool` and
@@ -173,7 +173,7 @@ Found in the predecessor's review of 2026-10-16 and still present.
   channels and requests their leases; `JoinFailed` resumes) describes
   behaviour the station does not emit yet (see the station's known defects).
 
-## Design decisions (owner, 2026-10-16; re-check when the station is built on the port at W3)
+## Design decisions
 
 - **Planned retunes.** `plan_absence` and `plan_move` take typed permits. A
   `PlannedRetune` token lives inside the lease and returns through

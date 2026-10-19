@@ -1,6 +1,5 @@
 //! Coexistence priorities of the radio's events, recovered from the vendor
-//! BLE Controller. The radio role that applied them was removed with the
-//! Bluetooth LE orchestration (, tag `legacy-radio-2026-10-16`).
+//! BLE Controller. No radio role in this repository applies them.
 //!
 //! Alone on the antenna, every event requests it at the highest priority;
 //! this equal standalone policy is a product choice. When another radio

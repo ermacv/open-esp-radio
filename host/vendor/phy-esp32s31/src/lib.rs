@@ -9,8 +9,7 @@
 //! defines the ESP32-S31's register images both sides read ([`registers`])
 //! and the comparison ([`compare`]) of the vendor
 //! object with the production projection the firmware itself computes from
-//! its retained calibration (the former HIL protocol's
-//! `phy/calibration-projection/read`, tag `legacy-wifi-2026-10-16`): the
+//! its retained calibration: the
 //! reviewed `phy_param` relation the tracking scenario compares, with
 //! `src/tolerances.toml` as the review, yielding a
 //! MATCH, DIFF or INCOMPLETE [`compare::Summary`].

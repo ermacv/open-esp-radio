@@ -1,8 +1,7 @@
 # HIL trace header
 
-`oer-hil-trace-header` is the header every HIL conformance trace starts with
-([#761](https://github.com/the predecessor repository/issues/761), owner
-decision ). It is `no_std` and allocation-free, so the target
+`oer-hil-trace-header` is the header every HIL conformance trace starts with.
+It is `no_std` and allocation-free, so the target
 firmware uses it as the host does, and it is a `formats` package.
 
 | Item | Owns |

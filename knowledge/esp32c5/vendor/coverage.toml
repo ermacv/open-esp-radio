@@ -1,13 +1,13 @@
-# ESP32-C5 vendor coverage decisions: the vendor code locations the
-# predecessor's ESP32-C5 vendor-comparison scenario (the analog-register I2C
-# transport of the pinned `libphy.a` against its own, over the v1.0 ROM)
-# never reached, each with the reason, and how this port stands against it.
+# ESP32-C5 vendor coverage decisions: the vendor code locations that the
+# ESP32-C5 vendor-comparison scenario of a stack outside this repository (the
+# analog-register I2C transport of the pinned `libphy.a` against its own, over
+# the v1.0 ROM) never reached, each with the reason, and how this port stands
+# against it.
 #
-# Carried from the predecessor's reviewed coverage exclusions (state of
-# 2026-10-16), in the format of `../../esp32s31/vendor/coverage.toml`, whose
-# header defines the fields. `reason` keeps the predecessor's wording;
-# "production" there means the predecessor's Rust stack. Data only: nothing
-# reads this file.
+# The reviewed coverage exclusions of that stack, state of 2026-10-16, in the
+# format of `../../esp32s31/vendor/coverage.toml`, whose header defines the
+# fields. `reason` keeps that review's wording; "production" there means that
+# stack. The provenance check reads the function names the decisions cite.
 schema = 1
 
 [[decision]]
@@ -41,7 +41,7 @@ port = [
 review = """
 the chip-independent field write, which observes each command's completion \
 before the next, is present; the ESP32-C5 bus that implements \
-`AnalogRegisterBus` exists only in the predecessor"""
+`AnalogRegisterBus` is not in this repository"""
 [[decision.place]]
 function = "phy_chip_i2c_writeReg.constprop.2"
 start = 0x40

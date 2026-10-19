@@ -1,6 +1,6 @@
 # Wi-Fi: A-MPDU completion in the vendor `libpp`
 
-Source: the predecessor's vendor comparison of
+Source: a vendor comparison outside this repository of
 `libpp.a[pp.o]::ppResortTxAMPDU` and the `lmac.o` retry path with the
 production retained A-MPDU owner (`oer-esp32s31-ieee80211-mac`), pinned
 ESP32-S31 archives (`knowledge/esp32s31/vendor/artifacts.toml`), last state
@@ -47,7 +47,7 @@ ESP32-S31 archives (`knowledge/esp32s31/vendor/artifacts.toml`), last state
   CTS never arrived: `lmacEndRetryAMPDUFail` keeps it and sends a BlockAckReq
   starting at its head, whose BlockAck drives the ordinary resort.
 
-## Where production differs (by design, at the predecessor's last comparison)
+## Where production differs (by design, at the last comparison)
 
 - The MPDU immediately left of the starting sequence: production treats it as
   acknowledged, the vendor retransmits it.

@@ -468,7 +468,7 @@ pub enum XtalDutyPrepareAction {
     Rfpll(RfpllFrequencyAction),
     /// Complete Rust MMIO replacement for
     /// `phy_start_tx_tone_step_new(1, 0x80, 0, 0, 0, 0)`, including both
-    /// former `g_phyFuns + 0x30` callback invocations.
+    /// the vendor's `g_phyFuns + 0x30` callback invocations.
     ConfigureCalibrationTone {
         enabled: bool,
         selector: u8,
@@ -704,7 +704,7 @@ impl XtalDutyPrepareTransition {
 pub enum XtalDutyRestoreAction {
     /// Complete Rust MMIO replacement for
     /// `phy_start_tx_tone_step_new(0, 0x80, 0x28, 0, 0, 0)`, including both
-    /// former `g_phyFuns + 0x30` callback invocations.
+    /// the vendor's `g_phyFuns + 0x30` callback invocations.
     ConfigureCalibrationTone {
         enabled: bool,
         selector: u8,

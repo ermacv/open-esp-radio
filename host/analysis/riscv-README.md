@@ -52,7 +52,6 @@ package may take it as a normal or build dependency
 `object` has one more owner, `oer-analysis-blobray-artifacts`, Blobray's streaming
 reader: it reads archive members and sections metered under Blobray's work
 budget, keeps the artifact identities its evidence names, and writes ELF
-objects, none of which the whole-file view of `oer-analysis-elf` does
-([decision](https://github.com/the predecessor repository/issues/334#issuecomment-)).
+objects, none of which the whole-file view of `oer-analysis-elf` does.
 An owner exposes only its own types, so the library's types cannot leak
 through another package's interface. Tests may use them for fixtures.

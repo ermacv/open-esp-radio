@@ -286,7 +286,7 @@ description = "libpp.a sha256 0c791ee12225e93dff3bc85fcbde2fb512e7db2964353c0117
 
 [[sources]]
 id = "BLOB_LIBPP_HAL_TX_POWER_INIT"
-description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o hal_init_tx_pwr size 0x50 and hal_get_tx_pwr size 0x1a; complete hal_mac_ctl.o hal_init_tb_power size 0x1a0, hal_init_imrsp_power size 0x2f8, hal_mac_set_tb_max_pwr size 0x160 including both complete relocation jump tables, and hal_init_tb_ru_power size 0xba. The parent queries rates 0 through 42 in order into 43 adjacent two-byte entries. Its three children publish 56 separate fresh-read RMW edges at 0x20104408..0x20104448. Migration source is the predecessor repository's migration/esp32s31-hybrid-runtime/src/lmac.rs: it consumed this same exported 86-byte s_phy_get_max_pwr table for open legacy and HT TX but did not reproduce its builder."
+description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_mac_tx.o hal_init_tx_pwr size 0x50 and hal_get_tx_pwr size 0x1a; complete hal_mac_ctl.o hal_init_tb_power size 0x1a0, hal_init_imrsp_power size 0x2f8, hal_mac_set_tb_max_pwr size 0x160 including both complete relocation jump tables, and hal_init_tb_ru_power size 0xba. The parent queries rates 0 through 42 in order into 43 adjacent two-byte entries. Its three children publish 56 separate fresh-read RMW edges at 0x20104408..0x20104448. The driver source outside this repository is migration/esp32s31-hybrid-runtime/src/lmac.rs: it consumed this same exported 86-byte s_phy_get_max_pwr table for open legacy and HT TX but did not reproduce its builder."
 
 [[sources]]
 id = "BLOB_LIBPP_HAL_HE_INIT_SUFFIX"

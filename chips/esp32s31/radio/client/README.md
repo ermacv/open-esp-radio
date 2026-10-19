@@ -20,5 +20,5 @@ PHY domain, without the actor itself.
   `track`, after the initial tracking, the RX enable and the initial channel;
   the driver lends its clocked client for that request and gets it back with
   the MAC up.
-- `ACTOR_STEP_BOUND` is the owner's provisional 50 µs bound of one actor
-  poll; the request bounds are added once W0 measures them.
+- `ACTOR_STEP_BOUND` is the provisional 50 µs bound of one actor poll; the
+  request bounds follow from measurements.

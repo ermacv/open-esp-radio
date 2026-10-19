@@ -33,7 +33,7 @@ pub enum Assumption {
     /// own type. Every fact found from the image's types rests on it: a waker
     /// vtable, an IPC callback or a field's function reaches a site only if
     /// no reinterpreted memory puts another function there. The points-to
-    /// analysis of the interrupt-reachable sites () is to prove it.
+    /// analysis of the interrupt-reachable sites is to prove it.
     ExecutorInvariant,
 }
 

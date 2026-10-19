@@ -160,30 +160,22 @@ The RV32 measurement uses two concrete backends and the same enable,
 disable, retire, detach and cancellation workload in
 [the lifecycle cost probe](examples/lifecycle_cost.rs). With Rust 1.97.1,
 `riscv32imafc-unknown-none-elf`, opt-level 3, one codegen unit, LTO and aborting
-panics, the former two lifecycle implementations measured 2282 bytes of
-`.text`; the shared lifecycle measures 6844 bytes (+4562). This is a small
-lifecycle ELF, not total firmware size or a hardware timing result.
-The prior by-value-driver version measured 5940 bytes and a 416-byte future;
-the complete quarantine/loan revision with once-only abandonment adds 488
-bytes of text and 16 bytes of future state. This comparison includes the
-cancellation guard before the first poll and retained outcomes/owners, not
-only the change in the loan. The one-call guard and monotonic cause add 212
-bytes of text and 8 bytes of future state over the 6216/424-byte loan version;
-the fixture has no backend stop memo whose removal could offset this cost.
-The fallible disable sink adds 416 bytes over that 6428-byte version;
-the future stays at 432 bytes. This measures the same always-accepting body
-and both concrete backends, including their rejection handling. The extra
-text is principally the two body state machines (424 → 630 bytes each),
-which now handle the sink's returned terminal and poisoning path.
-Changing only the event end to `EventEnd` leaves this same ELF at 6844 bytes
-of text and 432 bytes per future (delta 0/0 against the fallible-sink version).
-The fixture does not poll its event stream, so this measures lifecycle cost,
-not event-dispatch or total BLE firmware cost. Each migrated backend also
-keeps `Option<EventEnd<Fault>>` in `Local`; its size depends on the fault type.
+panics, the shared lifecycle measures 6844 bytes of `.text`; two separate
+per-protocol lifecycles measure 2282 bytes (record outside this repository).
+This is a small lifecycle ELF, not total firmware size or a hardware timing
+result. It includes the cancellation guard before the first poll and the
+retained outcomes and owners; the fixture has no backend stop memo whose
+removal could offset this cost. The future is 432 bytes per backend. The
+fallible disable sink accounts for 416 bytes of the text, mostly in the two
+body state machines (630 bytes each), which handle the sink's returned
+terminal and poisoning path; the `EventEnd` event end adds none. The fixture
+does not poll its event stream, so this measures lifecycle cost, not
+event-dispatch or total BLE firmware cost. Each backend also keeps
+`Option<EventEnd<Fault>>` in `Local`; its size depends on the fault type.
 
 | Checks | Code size | RAM and CPU | Signatures | Breakage | Alternatives | Reversal |
 | --- | --- | --- | --- | --- | --- | --- |
-| Typestate and opaque affine call/retire/poison/detach proofs are compile-time checks. Hardware refusal, poisoning and bounded waits remain runtime outcomes; lifecycle code has no explicit panic. | Test ELF `.text`: 2282 → 6844 bytes. Backend/body futures remain concrete monomorphizations; retirement and signal machinery add code. | No allocation. The measured RV32 future grows from 184 to 432 bytes per backend (+248). Three atomic waiter slots per installation: retirement, driver abandonment and core abandonment. Wake registration uses atomic synchronization; consuming proof and call tokens are zero-sized. Hot radio operations acquire no new lifecycle lock. | `Installed<B>`, `InstallParts<'id, B>`, static `drive(DriverLoan, held, retire)`, `DriverExit`, `Call`, `Quarantine`/`Abandon`/`HardwareStopped`/`Detach`, `Retired<'id, (Driver, State)>`, `Detached<'id>`, `Quarantined<S>`, `PortEnd<B, Out>`, `disable` sink returning `ControlFlow<Terminal>`, `EventEnd<Fault>` for `next_event`; owner borrows `&mut B`, `Ended<'id, B, Out>` has no borrow lifetime. | Both migrated blocks consume `Installed`, borrow one phase, and retain terminals rejected by disable. Always-accepting sinks return `Continue(())`. The IEEE 802.11 lower-MAC port is built on the same core. | Keeping two identical owners duplicates fixes. Moving `B` into its owner loses the core's asynchronous abandonment authority. A receiver-based `drive` needs an empty driver slot. Flag-only retirement loses wakes. | Rework signal/future representation if the added code or installation RAM exceeds the target image budget; preserve proofs, wakes and asynchronous teardown. Re-measure this ELF and the affected firmware before accepting that rework. |
+| Typestate and opaque affine call/retire/poison/detach proofs are compile-time checks. Hardware refusal, poisoning and bounded waits remain runtime outcomes; lifecycle code has no explicit panic. | Test ELF `.text`: 6844 bytes. Backend/body futures remain concrete monomorphizations; retirement and signal machinery add code. | No allocation. The measured RV32 future is 432 bytes per backend. Three atomic waiter slots per installation: retirement, driver abandonment and core abandonment. Wake registration uses atomic synchronization; consuming proof and call tokens are zero-sized. Hot radio operations acquire no new lifecycle lock. | `Installed<B>`, `InstallParts<'id, B>`, static `drive(DriverLoan, held, retire)`, `DriverExit`, `Call`, `Quarantine`/`Abandon`/`HardwareStopped`/`Detach`, `Retired<'id, (Driver, State)>`, `Detached<'id>`, `Quarantined<S>`, `PortEnd<B, Out>`, `disable` sink returning `ControlFlow<Terminal>`, `EventEnd<Fault>` for `next_event`; owner borrows `&mut B`, `Ended<'id, B, Out>` has no borrow lifetime. | Both blocks consume `Installed`, borrow one phase, and retain terminals rejected by disable. Always-accepting sinks return `Continue(())`. The IEEE 802.11 lower-MAC port is built on the same core. | Keeping two identical owners duplicates fixes. Moving `B` into its owner loses the core's asynchronous abandonment authority. A receiver-based `drive` needs an empty driver slot. Flag-only retirement loses wakes. | Rework signal/future representation if the added code or installation RAM exceeds the target image budget; preserve proofs, wakes and asynchronous teardown. Re-measure this ELF and the affected firmware before accepting that rework. |
 
 Most code is the concrete async state machines: the linked ELF attributes
 2256 bytes to each backend's polling entry, 630 bytes to each body future,
@@ -202,10 +194,9 @@ an abandon receiver would lose one of two independent wakes; discarding
 join state would lose returned ownership or delay retirement behind the
 body. Neither is an acceptable size reduction.
 
-Wi-Fi's migration updates the installation factory to return
-`Installed::new(backend, driver)`, moves its driver out of the backend, and
-implements static `drive(DriverLoan, held, retire)` returning the two proved
-exits. Driver operations work through the closed shared view; the future
+A backend's installation factory returns `Installed::new(backend, driver)`,
+its driver lives outside the backend, and it implements static
+`drive(DriverLoan, held, retire)` returning the two proved exits. Driver operations work through the closed shared view; the future
 holds no hardware owners. Retire consumes the loan; a fault first publishes
 poison and consumes both publication and loan in `DriverLoan::fail_stop`. Uninstall receives the retained driver with its
 completion state in `Retired`. Hardware-reachable backing stays static,
@@ -215,8 +206,8 @@ Backend calls take the core's affine `Call`; `enable` and `setup` also take
 held/local installation loans. Uninstall consumes `Retired` and `Detached`. `retire_bound` returns a future without a backend borrow.
 The disable sink uses the same `ControlFlow<Terminal>` rejection shape as
 the Wi-Fi port: consumers that accept every terminal return `Continue(())`.
-Only `next_event` changes its outer error to `EventEnd<Fault>`; other methods
-keep `PortResult`. The event consumer must remember its final variant and
+Only `next_event` has the outer error `EventEnd<Fault>`; other methods return
+`PortResult`. The event consumer must remember its final variant and
 cause across phase loans. StationService accounts every admitted terminal
 before accepting `Drained`; a remaining identity signals a contract violation.
 On `Quarantined` it leaves unfinished work with the core's quarantine and
@@ -230,8 +221,7 @@ returns `FailStopped`, which `Ended::fail_stopped(proof, output)` consumes.
 `run_port` returns `PortEnd`; `StationService` supplies its result as
 `PortBody::Output`. The generic phase, separate event/terminal types,
 consuming owner transitions, `Failed::{Refused, Poisoned}` and `PoisonedOwner`
-remain available. Integration must precede dependent Wi-Fi and S31 work
-being rebased onto this contract.
+are part of the contract.
 
 ## Known defects
 

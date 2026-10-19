@@ -12,7 +12,7 @@ use crate::{
     tracking::parameters::{PhyCalibrationTrackClass, temperature_to_tracking_power},
 };
 
-/// Caller-owned inputs formerly read from the shared `phy_param` image.
+/// Caller-owned inputs that the vendor reads from the shared `phy_param` image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxPowerTrackingParameters {
     pub current_temperature: i16,

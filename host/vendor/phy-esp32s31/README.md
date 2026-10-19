@@ -9,10 +9,7 @@ comparison probes (its `projection`).
 It does not depend on Blobray peripheral models.
 
 This package is a library: what is compared and how. No HIL scenario runs
-the capture now: the `phy` family's `vendor-calibration` workload and its
-scenarios were deleted with the production images they booted (), and
-return with the HIL architecture of ; the tag `legacy-wifi-2026-10-16`
-keeps them. The host comparison port is
+the capture. The host comparison port is
 [`oer-vendor-phy`](../../../host/family/phy/README.md). The capture below
 describes what the removed workload did and what a new one must reproduce.
 
@@ -36,9 +33,8 @@ table's `boots` rounds the workload takes these steps:
    startup artifact path, so the boot calibrates fully and publishes its
    retained calibration. Then read the radio-PHY register image at the
    indices the vendor boot of the round read, and the whole analog image
-   (one production analog-I2C read per register). The former HIL messages
-   `PhyRegisterImage` and `PhyAnalogImage` (tag `legacy-wifi-2026-10-16`) carried these reads;
-   no current image serves them.
+   (one production analog-I2C read per register). No image in this
+   repository serves these reads.
 
 `lifecycle = "ieee802154"` and `"ieee802154-restart"` read the registers
 with the IEEE 802.15.4 radio instead of Wi-Fi holding the PHY. The vendor
@@ -46,8 +42,8 @@ side is the [IEEE 802.15.4 reference firmware](../../../../verification/esp32s31
 configured on channel 15 at 21 dBm and receiving, after one driver disable
 and enable for the restart point, read through its `PEEK` and `ANALOG`
 commands; a read that resets or hangs the chip is recorded as unreadable
-after a board reset. Production ran the former `diagnostic-ieee802154-radio`
-image's IEEE 802.15.4 session on the same channel. These points compare
+after a board reset. The production side runs an IEEE 802.15.4 session on
+the same channel. These points compare
 register state only.
 
 At these points the vendor side can also investigate what production does

@@ -141,7 +141,7 @@ constants instead of an unknown result, one call level deep. A call names
 its callee by address in an image (a direct `jal`, or a register holding a
 known address) and by a global symbol in a relocatable object; a symbol
 defined with different results answers nothing. The first pass makes the
-analysis take about twice as long: on the former HIL correctness image it resolves no
+analysis take about twice as long: on a HIL correctness image it resolves no
 further address, while in the ESP32-S31 inventory it gives the ROM's
 `phy_pbus_rd` its PHY_PBUS read windows through `phy_pbus_rd_addr`. It is an
 explicit assumption, and every JSON document records it as `call_returns`.

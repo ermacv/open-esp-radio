@@ -322,7 +322,7 @@ pub(crate) fn arm_phy_power_detector_tone(registers: &mut impl SharedPhyAccess) 
     registers.set_power_detector_tone_armed(true);
 }
 
-/// Clear the temporary tone-arm bit selected by former `phy_param[0x1aa]`.
+/// Clear the temporary tone-arm bit selected by the vendor's `phy_param[0x1aa]`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn clear_phy_power_detector_tone_arm(registers: &mut impl SharedPhyAccess) {
     registers.set_power_detector_tone_armed(false);

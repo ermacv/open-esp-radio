@@ -5,11 +5,9 @@ passive observers; Bluetooth and network helpers are installed once per host.
 This guide covers their preparation, evidence boundaries and installation; the
 [host guide](README.md) covers the stand file that names them.
 
-No HIL scenario uses the network fixtures now: the Wi-Fi scenarios, their
-workloads and the target's Wi-Fi protocol were deleted (, tag
-`legacy-wifi-2026-10-16`). The fixtures remain (`oer-hil-family-ieee80211-fixture`),
-and the network sections below describe what they do and what the former
-scenarios relied on.
+No HIL scenario uses the network fixtures (`oer-hil-family-ieee80211-fixture`);
+the network sections below describe what they do and what a Wi-Fi scenario
+relies on.
 
 ## Prepare and restore network fixtures
 

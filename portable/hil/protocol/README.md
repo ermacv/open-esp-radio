@@ -52,9 +52,7 @@ message's schema changes its key, and the lock records the change for review.
 
 The crate compiles its radio families behind features of the observer
 registry's family names: `network` (the `network` module's traffic sessions,
-their evidence, UDP probes and stream patterns). The `bluetooth`,
-`i` and `phy` modules and the event trace went with the
-orchestration in  (tag `legacy-radio-2026-10-16`). The shared core is
+their evidence, UDP probes and stream patterns). The shared core is
 always compiled: framing, the envelope, keys and image keys, the `base` and
 `system` modules, boot and post-mortem evidence and the program-counter
 profile. An image enables only the families it serves, so its

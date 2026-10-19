@@ -51,7 +51,7 @@ impl PhyTxTargetPowerPair {
 /// `phy_wifi_get_target_power` (0x2f82_70fa), and `phy_rate_to_index`
 /// (0x2f82_491e), recovered from `esp32s31_rev0_rom.elf`.
 ///
-/// The profile owns the former `phy_param` inputs. It contains no pointer to
+/// The profile owns the vendor's `phy_param` inputs. It contains no pointer to
 /// the cold state and never reads the vendor `phy_param` pointer cell or
 /// `s_phy_get_max_pwr`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -710,7 +710,7 @@ impl PhyTxPowerTransition {
             initial_serial_error: (self.attenuation as i16).wrapping_sub(base_attenuation),
             power_offset: self.parameters.power_offset,
             reference_codes: self.reference_codes,
-            // `phy_tx_pwctrl_init_cal_new` forces former
+            // `phy_tx_pwctrl_init_cal_new` forces the vendor's
             // `phy_param[0x1aa] = 1` around all three point searches.
             clear_tone_after_ready: true,
         })

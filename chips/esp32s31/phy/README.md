@@ -355,7 +355,7 @@ What the runs show:
 - **Common bracket.** DCODE and RX gain calibration is the bracket traffic stretches, from ~6 ms idle to observed maxima of 13–18 ms under traffic (the table gives maxima only, no lower bound): interrupts compete with its polled measurements.
 - **Transmit bracket.** Stable at ~7 ms per class, ~13 ms with both classes.
 - **Bound.** The worst single bracket observed is 18.0 ms and the worst whole tick 30.1 ms.
-- **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from an earlier configuration of the predecessor tracking-hold scenario; its later form ran HT40 at 60 Mbit/s, and the scenario no longer exists, so those rows cannot be re-run as recorded.
+- **HT20 rows.** The HT20 30 Mbit/s rows, which set the 18.0 ms bracket, came from a tracking-hold scenario outside this repository in an HT20 configuration; that scenario's other form runs HT40 at 60 Mbit/s, and neither is in this repository, so those rows cannot be re-run as recorded.
 - **Spread.** Run-to-run spread under traffic is larger than the effect of the traffic rate. The figures are observed maxima of these runs, not a guaranteed bound.
 
 Against the protocols' tolerances:

@@ -15,8 +15,8 @@ writes S31 registers:
   into the core's `CoexTimerClock`, with the 40 MHz crystal of every
   supported board profile.
 
-No runtime composes the core and the schedule on the radio domain now;
-the policy the former radio runtime ran is recorded in the
+No runtime composes the core and the schedule on the radio domain; the
+policy a radio runtime runs is recorded in the
 [Espressif coexistence policy](../../../../portable/espressif/coex/README.md#participants-status-and-order).
 This crate does not implement
 RF grant notification. See [source capabilities](FEATURES.md) for those

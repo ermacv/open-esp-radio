@@ -1,7 +1,7 @@
 # PHY: facts from the vendor comparison
 
-Source: the predecessor's typed vendor comparison scenarios, last state
-2026-10-17. Each scenario executed the pinned vendor archive and ROM code
+Source: typed vendor comparison scenarios of a stack outside this repository,
+state of 2026-10-17. Each scenario executed the pinned vendor archive and ROM code
 (`knowledge/esp32s31/vendor/artifacts.toml`) and a compiled probe of the
 production PHY/HAL entry under declared peripheral inputs, and compared every
 MMIO, fence and requested-delay event. The scenarios and the binary-analysis

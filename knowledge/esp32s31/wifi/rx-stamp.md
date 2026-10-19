@@ -31,5 +31,5 @@ prefix offset 0x0c (`decode_rx_local_timestamp`,
 - **Consequence:** a per-frame delay computed as handoff − stamp is a
   reception latency only where the stamp is unique; on a busy channel only
   its trend over a window is meaningful. Per-frame timing that must hold
-  everywhere comes from another source, for example a beacon's own TSF.
-  This matters at W3 for TSF synchronisation and power save.
+  everywhere comes from another source, for example a beacon's own TSF; TSF
+  synchronisation and power save depend on it.

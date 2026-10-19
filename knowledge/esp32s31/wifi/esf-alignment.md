@@ -1,8 +1,7 @@
 # ESF alignment of a transmit MPDU
 
-The predecessor carried a stateless model of the vendor's `ieee80211_align_eb`
-leaf in the DMA crate. Nothing in the product used it, so it was removed;
-these are its facts. Source not recorded: the model named the "pinned
+Facts of a stateless model of the vendor's `ieee80211_align_eb` leaf outside
+this repository. Unverified: the model names the "pinned
 `ieee80211_align_eb` leaf" without an evidence entry.
 
 - **Admitted shapes:** the reservation in front of the data equals the
@@ -16,5 +15,4 @@ these are its facts. Source not recorded: the model named the "pinned
   31 and 30, and writes the moved length into bits 27:14:
   `(word & 0x1000_3fff) | 0xc000_0000 | length << 14`.
 
-Deferred to W6 (A-MPDU): it returns there on the TX descriptor layout, with
-real evidence for bits 28, 30 and 31 of the transmit word.
+Bits 28, 30 and 31 of the transmit word have no evidence of their own.

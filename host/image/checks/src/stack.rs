@@ -44,7 +44,7 @@ use crate::stack::contract::Contract;
 
 /// The assumptions a check admits in a bound, each by name: a bound resting
 /// on one is conditional and passes with a warning; any other fails. Each
-/// leaves this list in the pull request that proves it ().
+/// leaves this list in the pull request that proves it.
 pub const ADMITTED: &[oer_analysis_riscv_stack::Assumption] =
     &[oer_analysis_riscv_stack::Assumption::ExecutorInvariant];
 

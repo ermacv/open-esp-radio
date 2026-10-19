@@ -8,11 +8,7 @@ reference peer's line protocol. The crate names no chip; the captures it
 compares are the chip-neutral
 [`oer-vendor-phy`](../../../phy/capture).
 
-No HIL scenario family or workload runs the cross-check: its scenarios and the
-production images they booted were deleted with the old radio stacks (),
-and return with the HIL architecture of . The tag
-`legacy-wifi-2026-10-16` keeps the former `[phy]` family and its
-`vendor-calibration` workload.
+No HIL scenario family or workload runs the cross-check.
 
 ```console
 cargo test -p oer-vendor-phy

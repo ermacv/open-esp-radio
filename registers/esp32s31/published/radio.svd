@@ -6,7 +6,7 @@
   <series>ESP32-S31</series>
   <version>3.52</version>
   <description>Recovered ESP32-S31 modem/radio core plus the minimum platform dependencies
-    no longer delegated to an external platform PAC. Unclaimed MODEM_LPCON,
+    it does not delegate to an external platform PAC. Unclaimed MODEM_LPCON,
     PMU and HP_SYS_CLKRST words remain platform-owned.
     I2C_ANA_MST, PMU_RADIO, HP_SYS_CLKRST_RADIO, MODEM_SYSCON_RADIO, MODEM_LPCON_SHARED_CLOCK, MODEM_LPCON_PHY_TICK, LP_AON_CLKRST,
     LP_PERICLKRST and LP_TSENS are canonical reviewed radio-PHY dependencies.

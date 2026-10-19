@@ -399,7 +399,7 @@ KeyRemoved retires that MSDU and releases admission and resources. A barrier
 waits only the current publication; rate selection ignores every withdrawal.
 
 
-## Design decisions (owner, 2026-10-16; re-check when the station is built on the port at W3)
+## Design decisions
 
 - **Modem sleep.** Split first: `Connected` keeps only the deciding half, as
   a typed state. Null-frame retries belong to the driver's attempt plan; the
@@ -514,7 +514,7 @@ configuration replies.
 
 ## Known defects
 
-Found in the predecessor's review of 2026-10-16 and still present.
+Found in a code review of 2026-10-16 (record outside this repository).
 
 **Behaviour**
 

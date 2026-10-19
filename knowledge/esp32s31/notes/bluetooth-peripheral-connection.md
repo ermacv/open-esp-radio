@@ -2,8 +2,8 @@
 
 The open radio role, runtime and Controller core that this page compares
 with the vendor are not in this repository; the passages that name them
-describe the predecessor repository's implementation, and the kept memory
-codecs, executor and portable pieces still follow them.
+describe an implementation outside this repository, which the memory
+codecs, executor and portable pieces here follow.
 
 This reference describes reviewed hardware-facing facts consumed by the Rust
 driver. Vendor Controller architecture does not define the open ownership model.

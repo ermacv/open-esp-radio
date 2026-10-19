@@ -6,10 +6,9 @@ the modem low-power timer and the hardware scheduler with its event executor,
 list-zero hardware execution and finished lists. It knows no LE role. It also
 keeps the vendor Controller's event policy as pure values: coexistence
 priorities, the coexistence schedule status bits and the connection-event
-allowances. The radio role, runtime and composition that lowered the portable
-LE radio values onto the executor, and the Controller core that served HCI
-over them, were removed with the Bluetooth LE orchestration (); their last
-state is tag `legacy-radio-2026-10-16`.
+allowances. No radio role, runtime or composition in this repository lowers
+the portable LE radio values onto the executor, and no Controller core serves
+HCI over them.
 
 Portable HCI codecs and LE Link Layer codecs live in
 [`crates/protocols/bluetooth`](../../../../protocols/bluetooth/).
@@ -68,9 +67,7 @@ encoding the controller-SRAM fields.
 
 ## Bring-up and teardown order
 
-The removed composition (`composition/esp32s31/embassy/bluetooth`,
-`src/system.rs` at tag `legacy-radio-2026-10-16`) ran the typed primitives of
-this crate in the vendor order of
+A composition runs the typed primitives of this crate in the vendor order of
 [`bt.c`](https://github.com/espressif/esp-idf/blob//components/bt/controller/esp32s31/bt.c),
 [`btdm_lp.c`](https://github.com/espressif/esp-idf/blob//components/bt/porting_btdm/controller/btdm_common/src/btdm_lp.c),
 [`modem_clock_impl.c`](https://github.com/espressif/esp-idf/blob//components/esp_hw_support/modem/port/esp32s31/modem_clock_impl.c)

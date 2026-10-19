@@ -62,7 +62,7 @@ pub struct PhyChipChannelParameters {
     /// Added to the base with signed-byte wrapping before gain calculation.
     /// Independent of Bluetooth's subtractive attenuation; physical units unknown.
     pub tx_gain_adjustment: i8,
-    /// Former `phy_param[0xdc..=0xe1]`. Only bytes 0, 2 and 4 are selected
+    /// The vendor's `phy_param[0xdc..=0xe1]`. Only bytes 0, 2 and 4 are selected
     /// by complete ROM `phy_set_txcap_reg`.
     pub tx_capacitance: [u8; 6],
 }

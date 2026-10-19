@@ -1,6 +1,5 @@
 //! The S31 connection-event policy and Direct Test Mode notes recovered from
-//! the vendor BLE Controller. The radio role that applied them was removed
-//! with the Bluetooth LE orchestration (, tag `legacy-radio-2026-10-16`).
+//! the vendor BLE Controller. No radio role in this repository applies them.
 //!
 //! Direct Test Mode, as the vendor runs it:
 //! - the test event bodies stop the scheduler
