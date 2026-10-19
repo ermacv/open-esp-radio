@@ -301,16 +301,21 @@ pub enum TargetPhyRegisterError {
 /// The field is private to this module, so no sibling module can mint it even
 /// though the proof constructor can name the type through crate visibility.
 pub(crate) struct TargetRegistrationWitness {
-    epoch: oer_esp32s31_hal::owner::PhyRegistrationEpoch,
+    grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
 }
 
 impl TargetRegistrationWitness {
-    const fn new(epoch: oer_esp32s31_hal::owner::PhyRegistrationEpoch) -> Self {
-        Self { epoch }
+    const fn new(grant: oer_esp32s31_hal::owner::PhyRegistrationGrant) -> Self {
+        Self { grant }
     }
 
     pub(crate) const fn epoch(&self) -> oer_esp32s31_hal::owner::PhyRegistrationEpoch {
-        self.epoch
+        self.grant.epoch()
+    }
+
+    /// The registration's grant, which the registered state keeps.
+    pub(crate) fn into_grant(self) -> oer_esp32s31_hal::owner::PhyRegistrationGrant {
+        self.grant
     }
 }
 

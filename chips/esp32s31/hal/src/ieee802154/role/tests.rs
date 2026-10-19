@@ -61,10 +61,9 @@ fn the_btbb_steps_require_the_ieee802154_reference() {
     let domain = &mut radio;
 
     assert_eq!(clocked.release_btbb(domain), Err(BtbbError::NotAcquired));
-    let _epoch =
-        crate::owner::PhyInitializationAccess::begin_registration_epoch(&mut domain.phy_hal());
-    let replaced = domain.publish_btbb_gain(0x4f).unwrap();
-    let _latest = domain.publish_btbb_gain(0x4f).unwrap();
+    let grant = crate::owner::PhyInitializationAccess::begin_registration(&mut domain.phy_hal());
+    let replaced = domain.btbb_publisher().1.publish(&grant, 0x4f).unwrap();
+    let _latest = domain.btbb_publisher().1.publish(&grant, 0x4f).unwrap();
     // The replaced gain is rejected before any register access.
     assert_eq!(
         clocked.acquire_btbb(domain, &replaced),

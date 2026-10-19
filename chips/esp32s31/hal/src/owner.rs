@@ -15,7 +15,7 @@ use oer_esp32s31_pac::WifiRadioRegisters;
 
 pub mod maintenance;
 
-pub use crate::phy::registration::PhyRegistrationEpoch;
+pub use crate::phy::registration::{PhyRegistrationEpoch, PhyRegistrationGrant};
 
 /// One PAC-observed image of the Wi-Fi baseband enable condition.
 ///
@@ -273,14 +273,17 @@ pub trait SharedPhyContext: SharedPhyAccess + sealed::SharedPhyContext {
 /// sample it through the retained PAC owner; this capability conveys no Wi-Fi
 /// MAC or protocol-role ownership.
 pub trait PhyInitializationAccess: SharedPhyContext + sealed::PhyInitializationAccess {
-    /// Begin a registration and retire every earlier epoch of this partition.
+    /// Begin a registration, retire every earlier epoch of this partition and
+    /// give the registration's one grant.
     ///
     /// Registration calls this before its first hardware edge. Any other call
     /// only invalidates existing registration results; it cannot mint one.
-    fn begin_registration_epoch(&mut self) -> PhyRegistrationEpoch {
-        sealed::SharedPhyAccess::parts_mut(self)
-            .1
-            .begin_registration_epoch()
+    fn begin_registration(&mut self) -> PhyRegistrationGrant {
+        PhyRegistrationGrant::new(
+            sealed::SharedPhyAccess::parts_mut(self)
+                .1
+                .begin_registration_epoch(),
+        )
     }
 }
 

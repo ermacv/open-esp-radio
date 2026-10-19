@@ -70,21 +70,12 @@ pub fn join_bluetooth<'l>(
     let radio = ready.into_radio();
     // The ready proof checked that the settled registration describes the
     // radio.
-    let gain_parameter = match radio.attachment().settled() {
-        Ok(domain) => {
-            domain
-                .registered
-                .state()
-                .register_init_parameters()
-                .parameter_120
-        }
-        Err(error) => {
-            return Err(JoinRefused {
-                error: BluetoothPhyClientError::Phy(error),
-                radio,
-            });
-        }
-    };
+    if let Err(error) = radio.attachment().settled() {
+        return Err(JoinRefused {
+            error: BluetoothPhyClientError::Phy(error),
+            radio,
+        });
+    }
     if radio.holds_btbb(RadioClient::Bluetooth) {
         return Err(JoinRefused {
             error: BluetoothPhyClientError::Btbb(BtbbError::AlreadyAcquired),
@@ -105,9 +96,14 @@ pub fn join_bluetooth<'l>(
     // before the acquisition, so BTBB starts with the value the vendor reads
     // from `phy_param[0x120]` at that moment; a tracking or registration in
     // progress leaves the domain unsettled, and no gain is published then.
-    let btbb = radio
-        .publish_btbb_gain(gain_parameter)
-        .and_then(|gain| task.acquire_btbb(radio, &gain));
+    let gain = {
+        let (phy, publisher) = radio.btbb_publisher();
+        phy.settled()
+            .map_or(Err(BtbbError::Unregistered), |domain| {
+                domain.registered.publish_btbb_gain(publisher)
+            })
+    };
+    let btbb = gain.and_then(|gain| task.acquire_btbb(radio, &gain));
     if let Err(error) = btbb {
         // Both rejections were checked above; undo the client bit when the
         // domain still permits it.

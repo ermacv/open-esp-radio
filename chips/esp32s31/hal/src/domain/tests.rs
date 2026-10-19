@@ -29,7 +29,7 @@ fn registration_epoch_persists_in_the_domain() {
         assert_eq!(domain.registration_epoch(), None);
         // Protocol transactions and PHY operations borrow the same owner.
         let _shared = domain.registers_mut().radio_phy();
-        domain.phy_hal().begin_registration_epoch()
+        domain.phy_hal().begin_registration().epoch()
     };
     let domain = &mut radio;
     assert_eq!(domain.registration_epoch(), Some(epoch));
@@ -54,11 +54,9 @@ fn btbb_joins_an_initialized_baseband_without_register_access() {
     let mut radio = radio_domain();
     let domain = &mut radio;
 
-    // Without a registration no gain can be published.
-    assert_eq!(domain.publish_btbb_gain(0x4f), Err(BtbbError::Unregistered));
     assert_eq!(domain.btbb_release(&bluetooth), Err(BtbbError::NotAcquired));
-    let _epoch = domain.phy_hal().begin_registration_epoch();
-    let gain = domain.publish_btbb_gain(0x4f).unwrap();
+    let grant = domain.phy_hal().begin_registration();
+    let gain = domain.btbb_publisher().1.publish(&grant, 0x4f).unwrap();
     assert_eq!(gain.value(), 0x4f);
     drop(domain);
 
@@ -86,18 +84,23 @@ fn only_the_latest_gain_of_the_current_registration_admits_btbb() {
     let RadioPartitions { ieee802154, .. } = RadioPartitions::for_host_test();
     let (ieee802154, _interrupts) = oer_esp32s31_pac::Ieee802154TaskRegisters::new(ieee802154);
     let mut radio = radio_domain();
-    let _first = radio.phy_hal().begin_registration_epoch();
-    let earlier = radio.publish_btbb_gain(0x4e).unwrap();
-    let latest = radio.publish_btbb_gain(0x4f).unwrap();
+    let first = radio.phy_hal().begin_registration();
+    let earlier = radio.btbb_publisher().1.publish(&first, 0x4e).unwrap();
+    let latest = radio.btbb_publisher().1.publish(&first, 0x4f).unwrap();
     // A later publication replaces an earlier one, before any register access.
     assert_eq!(
         radio.btbb_acquire(&ieee802154, &earlier),
         Err(BtbbError::Stale)
     );
-    // A new registration replaces every gain of the earlier one.
-    let _second = radio.phy_hal().begin_registration_epoch();
+    // A new registration replaces every gain of the earlier one, and the
+    // earlier registration's grant publishes nothing.
+    let _second = radio.phy_hal().begin_registration();
     assert_eq!(
         radio.btbb_acquire(&ieee802154, &latest),
+        Err(BtbbError::Stale)
+    );
+    assert_eq!(
+        radio.btbb_publisher().1.publish(&first, 0x4f),
         Err(BtbbError::Stale)
     );
     assert!(!radio.holds_btbb(RadioClient::Ieee802154));

@@ -107,7 +107,7 @@ pub enum BtbbError {
 }
 
 /// The BTBB gain byte (`phy_param[0x120]`) one registered PHY state published
-/// to the domain ([`RadioDomain::publish_btbb_gain`]). Only the latest
+/// to the domain ([`BtbbPublisher::publish`]). Only the latest
 /// publication of the current registration admits [`RadioDomain::btbb_acquire`];
 /// any earlier one is [`BtbbError::Stale`].
 #[derive(Debug, Eq, PartialEq)]
@@ -121,6 +121,42 @@ impl BtbbGain {
     /// The published byte, as the vendor's `phy_param[0x120]`.
     pub const fn value(&self) -> u8 {
         self.value
+    }
+}
+
+/// The domain's right to publish a BTBB gain, borrowed beside its attachment
+/// ([`RadioDomain::btbb_publisher`]).
+pub struct BtbbPublisher<'d> {
+    current: Option<PhyRegistrationEpoch>,
+    generation: &'d mut u32,
+}
+
+impl BtbbPublisher<'_> {
+    /// Publish `value`, the BTBB gain byte of the registered PHY state that
+    /// `grant` is the right over, replacing every earlier publication. The
+    /// registered state's owner publishes its current byte right before a
+    /// BTBB acquisition, so the acquisition writes the value the vendor reads
+    /// from `phy_param[0x120]` at that moment.
+    ///
+    /// # Errors
+    ///
+    /// No registration describes the shared PHY, or `grant` is the right over
+    /// an earlier one ([`BtbbError::Stale`]).
+    pub fn publish(
+        self,
+        grant: &crate::owner::PhyRegistrationGrant,
+        value: u8,
+    ) -> Result<BtbbGain, BtbbError> {
+        let epoch = self.current.ok_or(BtbbError::Unregistered)?;
+        if grant.epoch() != epoch {
+            return Err(BtbbError::Stale);
+        }
+        *self.generation = self.generation.wrapping_add(1);
+        Ok(BtbbGain {
+            epoch,
+            generation: *self.generation,
+            value,
+        })
     }
 }
 
@@ -567,27 +603,18 @@ impl<T> RadioDomain<T> {
         self.state().btbb_clients & client_bit(client) != 0
     }
 
-    /// Publish the BTBB gain byte of the registered PHY state that describes
-    /// the shared PHY, replacing every earlier publication. The registered
-    /// state's owner publishes its current byte right before a BTBB
-    /// acquisition, so the acquisition writes the value the vendor reads from
-    /// `phy_param[0x120]` at that moment.
-    ///
-    /// # Errors
-    ///
-    /// No registration describes the shared PHY.
-    pub fn publish_btbb_gain(&mut self, value: u8) -> Result<BtbbGain, BtbbError> {
+    /// The attachment beside the domain's BTBB gain publisher, borrowed
+    /// apart, so the registered PHY state the attachment holds can publish
+    /// its gain with its registration's grant ([`BtbbPublisher::publish`]).
+    pub fn btbb_publisher(&mut self) -> (&T, BtbbPublisher<'_>) {
         let state = self.state_mut();
-        let epoch = state
-            .phy
-            .registration_epoch()
-            .ok_or(BtbbError::Unregistered)?;
-        state.btbb_gain_generation = state.btbb_gain_generation.wrapping_add(1);
-        Ok(BtbbGain {
-            epoch,
-            generation: state.btbb_gain_generation,
-            value,
-        })
+        (
+            &state.attachment,
+            BtbbPublisher {
+                current: state.phy.registration_epoch(),
+                generation: &mut state.btbb_gain_generation,
+            },
+        )
     }
 
     /// Take the shared BTBB baseband as the protocol that owns `owner`.
