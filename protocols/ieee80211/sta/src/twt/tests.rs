@@ -40,7 +40,7 @@ fn proposal(implicit: bool) -> IndividualTwtProposal {
 fn generation_exhaustion_never_reissues_a_stale_identity() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     requester.generation = u32::MAX;
-    requester
+    idle_flow(&mut requester, proposal(true).parameters.flow_id)
         .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
         .unwrap();
 
@@ -77,7 +77,7 @@ fn explicit_proposal_reports_the_exact_information_frontier() {
 #[test]
 fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
-    requester
+    idle_flow(&mut requester, proposal(true).parameters.flow_id)
         .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
         .unwrap();
     let IndividualTwtService::Transmit(transmission) = requester
@@ -235,4 +235,119 @@ fn wake_guard_before_epoch_is_an_error_even_when_now_would_clip_it() {
         plan_agreement_wake(beyond, tsf(u64::MAX - 255), TsfDuration::from_micros(0)),
         Err(IndividualTwtWakePlanError::BeyondTsfRange)
     );
+}
+
+fn idle_flow(
+    requester: &mut IndividualTwtRequester,
+    flow_id: IndividualTwtFlowId,
+) -> IndividualTwtIdleFlow<'_> {
+    let IndividualTwtFlowAccess::Idle(idle) = requester.flow(flow_id) else {
+        panic!("fixture owns the idle flow");
+    };
+    idle
+}
+
+#[test]
+fn queue_authority_follows_the_selected_flow_through_transmission() {
+    use oer_time::Clock as _;
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut requester = IndividualTwtRequester::new(CONFIG);
+    let flow = proposal(true).parameters.flow_id;
+    idle_flow(&mut requester, flow)
+        .queue_setup(proposal(true), clock.now())
+        .unwrap();
+    assert!(matches!(
+        requester.flow(flow),
+        IndividualTwtFlowAccess::TeardownReady(_)
+    ));
+    let IndividualTwtService::Transmit(transmission) = requester.service(clock.now()).unwrap()
+    else {
+        panic!("queued setup transmits");
+    };
+    assert!(matches!(
+        requester.flow(flow),
+        IndividualTwtFlowAccess::Transmitting(_)
+    ));
+    clock.advance(oer_time::Duration::from_micros(10)).unwrap();
+    requester
+        .complete_transmission(transmission, true, clock.now())
+        .unwrap();
+    let IndividualTwtFlowAccess::TeardownReady(teardown) = requester.flow(flow) else {
+        panic!("completed transmission permits teardown");
+    };
+    teardown.queue_teardown(clock.now());
+    let IndividualTwtService::Transmit(transmission) = requester.service(clock.now()).unwrap()
+    else {
+        panic!("queued teardown transmits");
+    };
+    assert_eq!(transmission.kind, IndividualTwtTxKind::Teardown);
+    requester
+        .complete_transmission(transmission, true, clock.now())
+        .unwrap();
+    assert!(matches!(
+        requester.flow(flow),
+        IndividualTwtFlowAccess::Idle(_)
+    ));
+}
+
+#[test]
+fn a_foreign_proposal_does_not_mutate_either_flow() {
+    use oer_time::Clock as _;
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let mut requester = IndividualTwtRequester::new(CONFIG);
+    let proposal = proposal(true);
+    let selected = IndividualTwtFlowId::new(1).unwrap();
+    assert_eq!(
+        idle_flow(&mut requester, selected).queue_setup(proposal, clock.now()),
+        Err(IndividualTwtRequesterError::ProposalFlowMismatch {
+            selected,
+            proposed: proposal.parameters.flow_id,
+        })
+    );
+    assert_eq!(requester.status(selected), IndividualTwtFlowStatus::Idle);
+    assert_eq!(
+        requester.status(proposal.parameters.flow_id),
+        IndividualTwtFlowStatus::Idle
+    );
+}
+
+#[test]
+fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
+    use oer_time::Clock as _;
+    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let flow = proposal(true).parameters.flow_id;
+    for phase in [
+        FlowPhase::SetupQueued {
+            proposal: proposal(true),
+            attempts_remaining: 2,
+            ready_at: clock.now(),
+        },
+        FlowPhase::AwaitingResponse {
+            proposal: proposal(true),
+            dialog_token: 1,
+            generation: 1,
+            attempts_remaining: 1,
+            deadline: clock.now(),
+        },
+        FlowPhase::AwaitingHardwareInstall {
+            generation: 1,
+            agreement: agreement(2, 10_000, 1_024, 256),
+        },
+        FlowPhase::Active(agreement(2, 10_000, 1_024, 256)),
+        FlowPhase::TeardownQueued {
+            attempts_remaining: 1,
+            ready_at: clock.now(),
+        },
+    ] {
+        let mut requester = IndividualTwtRequester::new(CONFIG);
+        *flow.select_mut(&mut requester.flows) = phase;
+        let IndividualTwtFlowAccess::TeardownReady(teardown) = requester.flow(flow) else {
+            panic!("occupied nontransmitting phase permits teardown");
+        };
+        teardown.queue_teardown(clock.now());
+        assert_eq!(
+            requester.status(flow),
+            IndividualTwtFlowStatus::TeardownQueued
+        );
+    }
 }

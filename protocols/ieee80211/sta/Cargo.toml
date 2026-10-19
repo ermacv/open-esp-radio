@@ -24,6 +24,7 @@ oer-radio-port = { path = "../../radio/port" }
 oer-radio-regulatory = { path = "../../radio/regulatory" }
 
 [dev-dependencies]
+oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../radio/regulatory", features = ["test-support"] }
 oer-ieee80211-mac = { path = "../mac", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
