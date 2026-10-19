@@ -1,5 +1,17 @@
 use super::*;
-use crate::tests::{compiled, debug, ledger, with_facts};
+use crate::dwarf::Reader;
+use crate::dwarf::locations::LocalLocations;
+use crate::tests::{compiled, ledger, with_facts};
+
+fn typed_debug(elf: &[u8]) -> (crate::Dwarf, TypeFacts) {
+    crate::read_debug(
+        &std::rc::Rc::from(elf),
+        crate::DebugMetadata::TypedLocations,
+        &mut ledger(),
+        &mut || Ok(()),
+    )
+    .unwrap()
+}
 
 const PROGRAM: &str = r#"
 #![no_std]
@@ -47,7 +59,7 @@ fn named(analysis: &Analysis, needle: &str) -> u32 {
 #[test]
 fn a_pointer_parameter_names_its_function_field_at_the_load() {
     let elf = compiled(PROGRAM);
-    let (_, types) = debug(&elf);
+    let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
         let mut analysis = crate::analyze(
@@ -58,7 +70,11 @@ fn a_pointer_parameter_names_its_function_field_at_the_load() {
             &mut keep,
             &mut || Ok(()),
         )?;
-        let locations = Locations::read(image, &mut keep, &mut || Ok(()))?;
+        let mut locations = Locations {
+            debug: types.locations.as_ref().unwrap(),
+            aliases: BTreeMap::new(),
+        };
+        locations.read_aliases(image, &mut keep, &mut || Ok(()))?;
         let start = named(&analysis, "_start");
         let transfer = analysis.functions[&start]
             .transfers
@@ -106,7 +122,7 @@ fn one_erased_address_use_keeps_an_incompatible_declaration_a_candidate() {
         "black_box(&OTHER); black_box(different as *const () as usize);",
     );
     let elf = compiled(&source);
-    let (_, types) = debug(&elf);
+    let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
         let analysis = crate::analyze(
@@ -150,7 +166,7 @@ fn a_function_stored_after_a_signature_cast_has_its_storage_type() {
         "pub static OTHER: fn(u32) -> u32 = unsafe { core::mem::transmute(different as fn(u16) -> u16) };",
     );
     let elf = compiled(&source);
-    let (_, types) = debug(&elf);
+    let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
         let analysis = crate::analyze(image, &[], &[], &UnknownCallBehavior, &mut keep, &mut || Ok(()))?;
@@ -165,22 +181,22 @@ fn a_function_stored_after_a_signature_cast_has_its_storage_type() {
 #[test]
 fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
     let elf = compiled(PROGRAM);
-    let (_, types) = debug(&elf);
+    let (_, types) = typed_debug(&elf);
     let ty = types
         .types
         .iter()
         .find(|(_, ty)| ty.name.as_deref() == Some("Callbacks"))
         .unwrap()
         .0;
-    let mut locations = Locations::default();
-    locations.variables.insert(0, (Some(*ty), None));
+    let mut prepared = LocalLocations::default();
+    prepared.variables.insert(0, (Some(*ty), None));
     // marker (4 bytes) has no location. run lives in sp+36, with its
     // original aggregate offset still four bytes.
     let expression = gimli::Expression(Reader::new(
         &[0x93, 4, 0x72, 36, 0x93, 4],
         gimli::RunTimeEndian::Little,
     ));
-    locations
+    prepared
         .expression(
             expression,
             gimli::Encoding {
@@ -194,6 +210,10 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
             &mut || Ok(()),
         )
         .unwrap();
+    let locations = Locations {
+        debug: &prepared,
+        aliases: BTreeMap::new(),
+    };
     assert!(
         locations
             .field(&types, 100, 2, 36, &mut || Ok(()))
@@ -219,17 +239,16 @@ fn an_optimized_out_piece_does_not_shift_the_next_stack_field() {
 #[test]
 fn reading_locations_respects_the_work_budget() {
     let elf = compiled(PROGRAM);
-    with_facts(&elf, |image| {
-        let mut keep = ledger();
-        let error = Locations::read(image, &mut keep, &mut || {
-            Err(Error::new(ErrorCode::Cancelled, "cancelled"))
-        })
-        .err()
-        .expect("cancelled while walking DWARF");
-        assert_eq!(error.code, ErrorCode::Cancelled);
-        Ok(())
-    })
-    .unwrap();
+    let mut keep = ledger();
+    let error = crate::read_debug(
+        &std::rc::Rc::from(&elf[..]),
+        crate::DebugMetadata::TypedLocations,
+        &mut keep,
+        &mut || Err(Error::new(ErrorCode::Cancelled, "cancelled")),
+    )
+    .err()
+    .expect("cancelled while walking DWARF");
+    assert_eq!(error.code, ErrorCode::Cancelled);
 }
 
 #[test]
@@ -274,7 +293,7 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
     };
     // Keep the symbol identity and addend, but make the role unfamiliar.
     elf[at] = 0xff;
-    let (_, types) = debug(&elf);
+    let (_, types) = typed_debug(&elf);
     with_facts(&elf, |image| {
         let mut keep = ledger();
         let analysis = crate::analyze(
@@ -312,6 +331,77 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
                 .targets
                 .contains(&different)
         );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn the_resolver_requires_prepared_locations_without_implicitly_loading_them() {
+    let elf = compiled(PROGRAM);
+    let (_, types) = crate::tests::debug(&elf);
+    with_facts(&elf, |image| {
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let error =
+            typed_function_pointer_resolutions(image, &analysis, &types, &mut keep, &mut || Ok(()))
+                .err()
+                .unwrap();
+        assert_eq!(error.code, ErrorCode::Incompatible);
+        assert!(error.message.contains("not requested"));
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_again() {
+    let mut elf = compiled(PROGRAM);
+    let (_, types) = typed_debug(&elf);
+    let info = oer_analysis_elf::Elf::parse(&elf)
+        .unwrap()
+        .section_by_name(".debug_info")
+        .unwrap()
+        .index;
+    let shoff = u32::from_le_bytes(elf[32..36].try_into().unwrap()) as usize;
+    let flags = shoff + info * 40 + 8;
+    // Marking the already prepared debug section compressed makes any
+    // subsequent DebugSections::load fail while preserving machine code.
+    elf[flags..flags + 4].copy_from_slice(&object::elf::SHF_COMPRESSED.to_le_bytes());
+    with_facts(&elf, |image| {
+        assert!(oer_analysis_elf::dwarf::DebugSections::load(image.file()).is_err());
+        let mut keep = ledger();
+        let analysis = crate::analyze(
+            image,
+            &[],
+            &[],
+            &UnknownCallBehavior,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let resolutions = typed_function_pointer_resolutions(
+            image,
+            &analysis,
+            &types,
+            &mut keep,
+            &mut || Ok(()),
+        )?;
+        let site = analysis.functions[&named(&analysis, "_start")]
+            .transfers
+            .iter()
+            .find(|transfer| transfer.target.is_none())
+            .unwrap()
+            .site;
+        let resolution = resolutions.get(site).unwrap();
+        assert!(resolution.targets.contains(&named(&analysis, "target")));
+        assert!(!resolution.targets.contains(&named(&analysis, "different")));
         Ok(())
     })
     .unwrap();

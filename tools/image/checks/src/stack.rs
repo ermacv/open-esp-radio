@@ -28,7 +28,7 @@ use std::rc::Rc;
 use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
 use oer_analysis_riscv_program::facts::ImageFacts;
 use oer_analysis_riscv_stack::{
-    Analysis, Bound, Dwarf, Function, Reason, Resolutions, Summary, analyze,
+    Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
     function_pointer_resolutions, parse_summaries, read_debug, stack_sizes, taken_addresses,
     task_poll_resolutions, waker_resolutions, waker_vtables,
 };
@@ -168,7 +168,7 @@ impl Image {
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
         let mut keep = Ledger::new(&memory, &mut control)?;
-        let (dwarf, types) = read_debug(&elf, &mut keep, &mut control)?;
+        let (dwarf, types) = read_debug(&elf, DebugMetadata::Standard, &mut keep, &mut control)?;
         let analysis = analyze(
             &facts,
             &companions,
