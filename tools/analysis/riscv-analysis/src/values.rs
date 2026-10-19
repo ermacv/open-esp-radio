@@ -1510,7 +1510,8 @@ fn evaluate(
 
 /// The callee of the call `op` at `node` makes: the address or relocated
 /// global symbol its instruction names, or, in an image, the address the
-/// register it jumps through holds before the call.
+/// register it jumps through holds before the call. A paired object call
+/// also needs its exact relocated upper in that register on every path.
 fn callee<'a>(
     op: Operation,
     node: &Node,
@@ -1520,7 +1521,23 @@ fn callee<'a>(
     match op.callee {
         Some(CalleeAt::Address(address)) => Some(Callee::Address(address)),
         Some(CalleeAt::Relocation(site)) => {
-            let target = &input.relocations.normalized(site).target;
+            let reference = input.relocations.normalized(site);
+            if input.relocations.get(site)?.offset != node.offset {
+                let (base, ..) = node.decoded.flow.through_register()?;
+                let upper = Value::Upper {
+                    symbol: input.relocations.symbol(site)?,
+                    addend: reference.addend?,
+                    site,
+                    pc: true,
+                };
+                // Adjacency identifies a candidate pair, not a dataflow
+                // proof. A bypass, overwrite or different upper at a join
+                // must not lend this relocation's callee to either port.
+                if incoming.get(usize::from(base)) != Some(&upper) {
+                    return None;
+                }
+            }
+            let target = &reference.target;
             // Only a global symbol names one function across objects.
             (target.binding == 1 && !target.name.is_empty()).then_some(Callee::Symbol(&target.name))
         }

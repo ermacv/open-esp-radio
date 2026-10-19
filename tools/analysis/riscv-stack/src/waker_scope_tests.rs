@@ -217,6 +217,117 @@ const LOAD_BY_REF: u32 = 0x0085_2783; // lw a5, 8(a0).
 const UNIMP: u32 = 0x0000_0000; // Two compressed unimp instructions.
 
 #[test]
+fn an_object_call_requires_the_same_relocated_upper_on_every_path() {
+    use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences};
+    use oer_analysis_riscv_lift::RiscvDecoder;
+    use oer_analysis_riscv_model::*;
+    struct Behavior;
+    impl CallBehavior for Behavior {
+        fn noreturn(&self, callee: Callee<'_>) -> bool {
+            callee == Callee::Symbol(b"never")
+        }
+    }
+    #[derive(Default)]
+    struct Saved(Vec<FunctionRecord>);
+    impl FunctionSink for Saved {
+        fn record(&mut self, record: &FunctionRecord, _: &mut dyn RunControl) -> Result<()> {
+            self.0.push(record.clone());
+            Ok(())
+        }
+    }
+    const NOP: u32 = 0x0000_0013;
+    const AUIPC_RA: u32 = 0x0000_0097;
+    const CALL_RA: u32 = 0x0000_80e7;
+    for (words, uppers, call, may_return) in [
+        // Both paths execute the same AUIPC before entering JALR.
+        (
+            vec![0x0005_0463, NOP, AUIPC_RA, CALL_RA, UNIMP],
+            vec![8],
+            12,
+            false,
+        ),
+        // The review reproducer: one path enters JALR with unknown entry RA.
+        (
+            vec![0x0005_0663, NOP, AUIPC_RA, CALL_RA, UNIMP],
+            vec![8],
+            12,
+            true,
+        ),
+        // Both paths carry uppers for the same symbol and addend, but from
+        // different physical relocations: the adjacent one is not proven.
+        (
+            vec![AUIPC_RA, 0x0005_0663, NOP, AUIPC_RA, CALL_RA, UNIMP],
+            vec![0, 12],
+            16,
+            true,
+        ),
+    ] {
+        let memory = WorkingMemory::new(1024 * 1024).unwrap();
+        let target = std::sync::Arc::new(ReferenceTarget {
+            binding: 1,
+            definition: SymbolDefinition::Undefined,
+            symbol: SymbolId {
+                object: ObjectId {
+                    artifact: ArtifactId::of_bytes(b"object-call-upper"),
+                    location: ObjectLocation::Standalone,
+                },
+                table: SymbolTableKind::Static,
+                table_section: 3,
+                index: 1,
+            },
+            name: b"never".to_vec(),
+            section: None,
+            offset: 0,
+            symbol_type: 2,
+        });
+        let relocations: Vec<_> = uppers
+            .into_iter()
+            .enumerate()
+            .map(|(index, offset)| FunctionRelocation {
+                section: 2,
+                index: index as u64,
+                offset,
+                relocation_type: 18,
+                addend: Some(0),
+                target: target.clone(),
+            })
+            .collect();
+        let refs = PreparedReferences::new(&relocations, 1, &RiscvDecoder, &memory, &mut || Ok(()))
+            .unwrap();
+        let bytes: Vec<u8> = words.into_iter().flat_map(u32::to_le_bytes).collect();
+        let mut saved = Saved::default();
+        let summary = oer_analysis_riscv_analysis::research(
+            FunctionInput {
+                image: None,
+                section: 1,
+                extent: CodeRange {
+                    start: 0,
+                    length: bytes.len() as u64,
+                },
+                bytes: &bytes,
+                relocations: &refs,
+                data_ranges: &[],
+                jumps: &[],
+                returns: &NoReturns,
+                call_behavior: &Behavior,
+            },
+            &RiscvDecoder,
+            &memory,
+            &mut || Ok(()),
+            &mut saved,
+            Some(CallAbi::RiscvInteger),
+        )
+        .unwrap();
+        let continuation = saved.0.iter().any(|record| matches!(record,
+            FunctionRecord::Edge { from, relation: EdgeKind::PossibleContinuation, .. } if *from == call));
+        assert_eq!(continuation, may_return);
+        assert_eq!(summary.coverage.decoding, !may_return);
+        assert!(saved.0.iter().any(|record| matches!(record,
+            FunctionRecord::Edge { from, relation: EdgeKind::Call, .. } if *from == call)));
+    }
+}
+
+#[test]
 fn a_noreturn_panic_branch_preserves_the_waker_proof_and_the_callees_stack() {
     // The panic target has a 64-byte frame, deeper than either Waker slot.
     let (analysis, dwarf, targets) = fixture_with(

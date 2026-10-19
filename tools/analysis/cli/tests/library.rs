@@ -1627,6 +1627,39 @@ fn an_object_call_takes_its_global_callees_returned_constants() {
 }
 
 #[test]
+fn an_object_call_bypassing_its_upper_does_not_take_the_relocated_callees_results() {
+    let helper = functions_object(&[0x2010_1537, 0x0000_8067], &[("helper", 0, 8)], &[]);
+    for relocation in [object::elf::R_RISCV_CALL, object::elf::R_RISCV_CALL_PLT] {
+        for (branch, expected) in [
+            (0x0005_0463, vec![0x2010_1000]), // Both paths execute AUIPC.
+            (0x0005_0663, vec![]),            // One path enters JALR with unknown entry RA.
+        ] {
+            let caller = functions_object(
+                &[
+                    branch,
+                    0x0000_0013, // nop
+                    0x0000_0097, // auipc ra, 0, relocated to helper
+                    0x0000_80e7, // jalr ra, 0(ra)
+                    0x0005_2503, // lw a0, 0(a0): uses the call's result
+                    0x0000_8067, // ret
+                ],
+                &[("caller", 0, 24)],
+                &[(8, "helper", relocation)],
+            );
+            let library = Executable::new(support::archive(
+                &[(b"helper.o", &helper), (b"caller.o", &caller)],
+                false,
+            ));
+            assert_eq!(
+                returned_addresses(&[library], "caller"),
+                expected,
+                "branch={branch:#x}, relocation={relocation}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_symbol_defined_with_other_results_answers_nothing() {
     // helper: lui a0, 0x20101; ret.
     let helper = functions_object(&[0x2010_1537, 0x0000_8067], &[("helper", 0, 8)], &[]);
