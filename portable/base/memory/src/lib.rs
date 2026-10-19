@@ -12,6 +12,8 @@
 //! and integration crates use only these safe capabilities. [`zeroed`] gives
 //! statics in regions the boot zeroes an initializer that is all zero bytes;
 //! [`HandlerCell`] in such a static hands one value to an interrupt handler.
+//! [`RequestSlot`] carries one request at a time from a client to a server
+//! and its answer back, without a lock.
 
 use core::marker::PhantomData;
 
@@ -19,9 +21,12 @@ mod affine_spsc;
 mod handler_cell;
 mod indexed_custody;
 mod pinned_tx;
+mod request_slot;
 mod rx_external_handoff;
 mod rx_handoff;
 pub mod zeroed;
+
+pub use request_slot::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 
 pub use affine_spsc::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,

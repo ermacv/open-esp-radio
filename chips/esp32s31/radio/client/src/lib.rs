@@ -1,5 +1,5 @@
 #![no_std]
-#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 //! The client contract of the ESP32-S31 radio system.
 //!
@@ -14,7 +14,7 @@
 //!   claimed once with the actor's end by [`claim`], which returns `None` on a
 //!   second call. Posting consumes the cell token and the answer returns it,
 //!   so a cell holds at most one request. The protocol is lock-free: two
-//!   atomic wakers and a CAS on the cell's state (`cell`). Dropping a
+//!   atomic wakers and a CAS on the cell's state (`oer_base_memory::RequestSlot`). Dropping a
 //!   [`Pending`] future loses nothing: the answer stays in the cell for the
 //!   next poll of the same `Pending`.
 //! - **Membership.** `join` answers [`Member<K, Untracked>`](Member) and the
@@ -31,7 +31,6 @@
 //!   actor poll; the request bounds follow from measurements and are added
 //!   then.
 
-mod cell;
 mod lp_clock;
 mod member;
 pub mod wifi;
@@ -40,13 +39,12 @@ use core::{
     future::Future,
     marker::PhantomData,
     pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
 
-pub use cell::{Doorbell, Responder, Slot};
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
+pub use oer_base_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 
 /// The provisional bound of one poll of the actor future
 /// (docs/decisions.md, "Radio system").
@@ -173,12 +171,12 @@ pub struct Left<K: Client> {
     pub domain: DomainHealth,
 }
 
-type ClientSlot<K> = Slot<Request<K>, Answer<K>>;
+type ClientSlot<K> = RequestSlot<Request<K>, Answer<K>>;
 
 /// A client's one cell to the actor.
 #[must_use = "the cell is the client's only way to the actor"]
 pub struct MembershipCell<K: Client> {
-    slot: &'static ClientSlot<K>,
+    poster: Poster<Request<K>, Answer<K>>,
 }
 
 impl<K: Client> core::fmt::Debug for MembershipCell<K> {
@@ -190,11 +188,13 @@ impl<K: Client> core::fmt::Debug for MembershipCell<K> {
 impl<K: Client> MembershipCell<K> {
     /// Join the PHY domain: register it, or wake closed RF, and enter `K`.
     pub fn join(self, join: K::Join) -> Pending<K, JoinAnswer<K>> {
-        self.slot.post(Request::Join(join));
-        Pending::new(self.slot, |answer| match answer {
-            Answer::Join(answer) => answer,
-            _ => unreachable!("the actor answers a join with a join answer"),
-        })
+        Pending::new(
+            self.poster.post(Request::Join(join)),
+            |answer| match answer {
+                Answer::Join(answer) => answer,
+                _ => unreachable!("the actor answers a join with a join answer"),
+            },
+        )
     }
 
     /// Run the member's initial tracking.
@@ -203,20 +203,24 @@ impl<K: Client> MembershipCell<K> {
         member: Member<K, Untracked>,
         track: K::Track,
     ) -> Pending<K, TrackAnswer<K>> {
-        self.slot.post(Request::Track(member, track));
-        Pending::new(self.slot, |answer| match answer {
-            Answer::Track(answer) => answer,
-            _ => unreachable!("the actor answers a track with a track answer"),
-        })
+        Pending::new(
+            self.poster.post(Request::Track(member, track)),
+            |answer| match answer {
+                Answer::Track(answer) => answer,
+                _ => unreachable!("the actor answers a track with a track answer"),
+            },
+        )
     }
 
     /// Leave the PHY domain; the last member's leave closes RF.
     pub fn leave(self, member: Leaving<K>, leave: K::Leave) -> Pending<K, Left<K>> {
-        self.slot.post(Request::Leave(member, leave));
-        Pending::new(self.slot, |answer| match answer {
-            Answer::Leave(answer) => answer,
-            _ => unreachable!("the actor answers a leave with a leave answer"),
-        })
+        Pending::new(
+            self.poster.post(Request::Leave(member, leave)),
+            |answer| match answer {
+                Answer::Leave(answer) => answer,
+                _ => unreachable!("the actor answers a leave with a leave answer"),
+            },
+        )
     }
 }
 
@@ -226,15 +230,15 @@ impl<K: Client> MembershipCell<K> {
 /// answer stays in the cell. After it gave its answer it stays pending.
 #[must_use = "the cell returns only with the answer"]
 pub struct Pending<K: Client, O> {
-    slot: Option<&'static ClientSlot<K>>,
+    awaiting: Awaiting<Request<K>, Answer<K>>,
     extract: fn(Answer<K>) -> O,
     output: PhantomData<fn() -> O>,
 }
 
 impl<K: Client, O> Pending<K, O> {
-    fn new(slot: &'static ClientSlot<K>, extract: fn(Answer<K>) -> O) -> Self {
+    fn new(awaiting: Awaiting<Request<K>, Answer<K>>, extract: fn(Answer<K>) -> O) -> Self {
         Self {
-            slot: Some(slot),
+            awaiting,
             extract,
             output: PhantomData,
         }
@@ -245,16 +249,8 @@ impl<K: Client, O> Future for Pending<K, O> {
     type Output = (MembershipCell<K>, O);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Some(slot) = self.slot else {
-            return Poll::Pending;
-        };
-        match slot.poll_answer(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(answer) => {
-                self.slot = None;
-                Poll::Ready((MembershipCell { slot }, (self.extract)(answer)))
-            }
-        }
+        let (poster, answer) = core::task::ready!(self.awaiting.poll_answer(cx));
+        Poll::Ready((MembershipCell { poster }, (self.extract)(answer)))
     }
 }
 
@@ -293,32 +289,30 @@ pub struct ClientCells {
 }
 
 static DOORBELL: Doorbell = Doorbell::new();
-static WIFI: ClientSlot<wifi::Wifi> = Slot::new(&DOORBELL, wifi::BIT);
-static CLAIMED: AtomicBool = AtomicBool::new(false);
+static WIFI: ClientSlot<wifi::Wifi> = RequestSlot::new(&DOORBELL, wifi::BIT);
 
 /// The actor's end and the clients' cells, once per image; `None` after the
 /// first call.
 pub fn claim() -> Option<(ActorEnd, ClientCells)> {
-    if CLAIMED.swap(true, Ordering::AcqRel) {
-        return None;
-    }
-    Some(ends(&DOORBELL, &WIFI))
+    ends(&DOORBELL, &WIFI)
 }
 
+/// The ends over `wifi`'s slot, once: its one poster is claimed here.
 fn ends(
     doorbell: &'static Doorbell,
     wifi: &'static ClientSlot<wifi::Wifi>,
-) -> (ActorEnd, ClientCells) {
-    (
+) -> Option<(ActorEnd, ClientCells)> {
+    let poster = wifi.claim()?;
+    Some((
         ActorEnd {
             doorbell,
             wifi: ClientInbox { slot: wifi },
             mint: MemberMint::new(),
         },
         ClientCells {
-            wifi: MembershipCell { slot: wifi },
+            wifi: MembershipCell { poster },
         },
-    )
+    ))
 }
 
 /// Fresh ends in leaked backing, for one host test; the static claim stays
@@ -327,8 +321,8 @@ fn ends(
 pub fn claim_for_host_test() -> (ActorEnd, ClientCells) {
     extern crate std;
     let doorbell: &'static Doorbell = std::boxed::Box::leak(std::boxed::Box::new(Doorbell::new()));
-    let wifi = std::boxed::Box::leak(std::boxed::Box::new(Slot::new(doorbell, wifi::BIT)));
-    ends(doorbell, wifi)
+    let wifi = std::boxed::Box::leak(std::boxed::Box::new(RequestSlot::new(doorbell, wifi::BIT)));
+    ends(doorbell, wifi).expect("a fresh slot has its poster")
 }
 
 #[cfg(test)]
